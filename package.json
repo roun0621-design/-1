@@ -1,0 +1,25 @@
+{
+  "name": "pacerise-competition-os",
+  "version": "0.1.0",
+  "description": "Pace Rise Competition Operation OS — Demo Prototype",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "athletics",
+    "competition",
+    "operation"
+  ],
+  "author": "Pace Rise",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "express": "^5.2.1",
+    "html2canvas-pro": "^1.6.7",
+    "playwright": "^1.58.2",
+    "puppeteer": "^24.37.5",
+    "xlsx": "^0.18.5"
+  }
+}

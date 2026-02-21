@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACE RISE : SCOPE — 관리자</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">SCOPE</span></h1>
+            <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
+        </div>
+        <nav class="page-nav" id="page-nav"></nav>
+    </header>
+
+    <main class="main-content">
+        <div class="page-title-bar">
+            <a href="/demo/" class="back-link">← 대시보드</a>
+            <h2>관리자 <span class="page-sub">Admin Panel</span></h2>
+        </div>
+
+        <div id="admin-login" class="admin-login-card">
+            <h3>관리자 인증</h3>
+            <p style="font-size:12px;color:var(--text-muted);margin:8px 0 14px;">관리자 키를 입력하세요</p>
+            <div style="display:flex;gap:8px;">
+                <input type="password" id="admin-key-input" placeholder="관리자 키" style="flex:1;padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
+                <button class="btn btn-primary" onclick="verifyAdminLogin()">인증</button>
+            </div>
+            <div id="admin-login-error" style="display:none;color:var(--danger);font-size:12px;margin-top:8px;font-weight:600;"></div>
+        </div>
+
+        <div id="admin-panel" style="display:none;">
+            <!-- System Status -->
+            <div class="admin-section">
+                <h3>시스템 상태</h3>
+                <div class="admin-status-grid" id="admin-status-grid"></div>
+            </div>
+
+            <!-- Data Backup -->
+            <div class="admin-section">
+                <h3>데이터 백업</h3>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">전체 데이터베이스를 JSON 파일로 백업합니다. 주기적으로 백업하세요.</p>
+                <button class="btn btn-accent" onclick="downloadBackup()">데이터 백업 다운로드 (JSON)</button>
+            </div>
+
+            <!-- Real-time Status -->
+            <div class="admin-section">
+                <h3>실시간 연결 상태</h3>
+                <div id="sse-status" style="padding:8px 12px;background:var(--green-light);border-radius:var(--radius);font-size:12px;font-weight:600;color:var(--green);">SSE 연결 활성</div>
+            </div>
+
+            <!-- Quick Links -->
+            <div class="admin-section">
+                <h3>빠른 이동</h3>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <a href="/demo/" class="btn btn-outline">대시보드</a>
+                    <a href="/demo/callroom.html" class="btn btn-outline">소집실</a>
+                    <a href="/demo/record.html" class="btn btn-outline">기록입력</a>
+                    <a href="/demo/results.html" class="btn btn-outline">결과확인</a>
+                    <a href="/demo/public.html" class="btn btn-outline" target="_blank">외부 뷰어</a>
+                </div>
+            </div>
+
+            <!-- Audit Log (last 30) -->
+            <div class="admin-section">
+                <h3>감사 로그 (최근 30건)</h3>
+                <div id="admin-audit-log" style="max-height:400px;overflow-y:auto;background:var(--bg);border-radius:var(--radius);padding:8px;"></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="common.js"></script>
+    <script>
+        renderPageNav('admin');
+
+        async function verifyAdminLogin() {
+            const key = document.getElementById('admin-key-input').value;
+            try {
+                await API.verifyAdmin(key);
+                document.getElementById('admin-login').style.display = 'none';
+                document.getElementById('admin-panel').style.display = 'block';
+                loadAdminData();
+            } catch (e) {
+                const err = document.getElementById('admin-login-error');
+                err.textContent = '관리자 키가 올바르지 않습니다.';
+                err.style.display = 'block';
+            }
+        }
+
+        document.getElementById('admin-key-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter') verifyAdminLogin();
+        });
+
+        async function loadAdminData() {
+            // Load system status
+            const events = await API.getAllEvents();
+            const mainEvents = events.filter(e => !e.parent_event_id);
+            const completed = mainEvents.filter(e => e.round_status === 'completed').length;
+            const inProgress = mainEvents.filter(e => e.round_status === 'in_progress').length;
+            const created = mainEvents.filter(e => e.round_status === 'created' || e.round_status === 'heats_generated').length;
+
+            document.getElementById('admin-status-grid').innerHTML = `
+                <div class="stat-card" style="border-top-color:var(--text)"><div class="stat-number">${mainEvents.length}</div><div class="stat-label">전체 종목</div></div>
+                <div class="stat-card" style="border-top-color:var(--green)"><div class="stat-number" style="color:var(--green)">${completed}</div><div class="stat-label">완료</div></div>
+                <div class="stat-card" style="border-top-color:var(--blue)"><div class="stat-number" style="color:var(--blue)">${inProgress}</div><div class="stat-label">진행중</div></div>
+                <div class="stat-card" style="border-top-color:var(--warning)"><div class="stat-number" style="color:var(--warning)">${created}</div><div class="stat-label">대기</div></div>
+            `;
+
+            // Load audit log
+            const logs = await API.getAuditLog();
+            document.getElementById('admin-audit-log').innerHTML = logs.map(l =>
+                `<div class="audit-entry"><strong>[${l.action}]</strong> ${l.table_name} #${l.record_id} — ${l.performed_by} — ${l.created_at}</div>`
+            ).join('') || '<div class="audit-entry">기록 없음</div>';
+        }
+
+        function downloadBackup() {
+            window.open('/api/admin/backup', '_blank');
+        }
+    </script>
+</body>
+</html>

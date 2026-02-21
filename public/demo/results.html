@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACE RISE : SCOPE — 결과확인</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">SCOPE</span></h1>
+            <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
+        </div>
+        <nav class="page-nav" id="page-nav"></nav>
+    </header>
+
+    <main class="main-content">
+        <div class="page-title-bar">
+            <a href="/demo/" class="back-link">← 대시보드</a>
+            <h2>결과확인 <span class="page-sub">Results</span></h2>
+        </div>
+
+        <!-- Competition Info -->
+        <div class="comp-info">
+            <table>
+                <tr><th>대회명</th><td>2026 Pace Rise Invitational</td></tr>
+                <tr><th>일자</th><td>2026.02.19 — 2026.02.21</td></tr>
+                <tr><th>장소</th><td>PACE RISE 종합운동장</td></tr>
+            </table>
+        </div>
+
+        <!-- Side-by-side Results Matrix (No gender tabs) -->
+        <div id="results-matrix-container"></div>
+
+        <!-- Detail overlay for viewing specific result -->
+        <div id="result-detail-overlay" class="result-detail-overlay" style="display:none;">
+            <div class="result-detail-modal">
+                <div class="result-detail-header">
+                    <h3 id="result-detail-title"></h3>
+                    <button class="btn btn-ghost btn-sm" onclick="closeResultDetail()">✕ 닫기</button>
+                </div>
+                <div id="result-detail-content" class="result-detail-content">
+                    <div id="results-content" class="results-content">
+                        <div id="results-header-area" class="results-header-area"></div>
+                        <table class="data-table" id="results-table">
+                            <thead id="results-thead"></thead>
+                            <tbody id="results-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="result-detail-footer">
+                    <div id="all-groups-download-area" class="all-groups-download" style="display:none;">
+                        <span style="font-size:11px;font-weight:600;color:#6b7280;margin-right:8px;">전체 조:</span>
+                        <button class="btn btn-accent btn-sm" onclick="downloadAllGroups('excel')">전체 Excel</button>
+                        <button class="btn btn-outline btn-sm" onclick="downloadAllGroups('pdf')">전체 PDF</button>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-accent" onclick="exportExcel()">Excel</button>
+                        <button class="btn btn-primary" onclick="exportPNG()">PNG</button>
+                        <button class="btn btn-outline" onclick="exportPDF()">PDF</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <details><summary>Audit Log</summary><div id="audit-log-container"></div></details>
+    </footer>
+
+    <script src="/lib/xlsx.full.min.js"></script>
+    <script src="/lib/html2canvas-pro.min.js"></script>
+    <script src="common.js"></script>
+    <script src="results.js"></script>
+</body>
+</html>

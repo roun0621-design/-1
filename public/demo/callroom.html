@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACE RISE : SCOPE — 소집실</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">SCOPE</span></h1>
+            <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
+        </div>
+        <nav class="page-nav" id="page-nav"></nav>
+    </header>
+
+    <main class="main-content">
+        <div class="page-title-bar">
+            <a href="/demo/" class="back-link">← 대시보드</a>
+            <h2>소집실 <span class="page-sub">Call Room Dashboard</span></h2>
+        </div>
+
+        <!-- Competition Info -->
+        <div class="comp-info">
+            <table>
+                <tr><th>대회명</th><td>2026 Pace Rise Invitational</td></tr>
+                <tr><th>일자</th><td>2026.02.19 — 2026.02.21</td></tr>
+                <tr><th>장소</th><td>PACE RISE 종합운동장</td></tr>
+            </table>
+        </div>
+
+        <!-- Dashboard layout: left matrix + right detail -->
+        <div class="callroom-dashboard">
+            <!-- LEFT: Event Matrix -->
+            <div class="callroom-matrix-panel">
+                <div class="gender-tabs-fixed">
+                    <div class="gender-tabs" id="gender-tabs" style="margin-bottom:0;">
+                        <button class="gender-tab active" data-gender="M">남자</button>
+                        <button class="gender-tab" data-gender="F">여자</button>
+                        <button class="gender-tab" data-gender="X">혼성</button>
+                    </div>
+                </div>
+                <div class="matrix-scroll-area" id="callroom-matrix-container"></div>
+            </div>
+
+            <!-- RIGHT: Callroom detail area -->
+            <div class="callroom-detail-panel" id="callroom-detail">
+                <div class="detail-placeholder">
+                    <div class="placeholder-icon">📋</div>
+                    <p>왼쪽에서 종목을 선택하세요</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <details><summary>Audit Log</summary><div id="audit-log-container"></div></details>
+    </footer>
+
+    <script src="common.js"></script>
+    <script src="callroom.js"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACE RISE : SCOPE — 기록입력</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">SCOPE</span></h1>
+            <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
+        </div>
+        <nav class="page-nav" id="page-nav"></nav>
+    </header>
+
+    <main class="main-content">
+        <div class="page-title-bar">
+            <a href="/demo/" class="back-link">← 대시보드</a>
+            <h2>기록입력 <span class="page-sub">Record Entry Dashboard</span></h2>
+        </div>
+
+        <!-- Competition Info -->
+        <div class="comp-info">
+            <table>
+                <tr><th>대회명</th><td>2026 Pace Rise Invitational</td></tr>
+                <tr><th>일자</th><td>2026.02.19 — 2026.02.21</td></tr>
+                <tr><th>장소</th><td>PACE RISE 종합운동장</td></tr>
+            </table>
+        </div>
+
+        <!-- Dashboard layout: left matrix + right detail -->
+        <div class="record-dashboard">
+            <!-- LEFT: Event Matrix -->
+            <div class="record-matrix-panel">
+                <div class="gender-tabs-fixed">
+                    <div class="gender-tabs" id="gender-tabs" style="margin-bottom:0;">
+                        <button class="gender-tab active" data-gender="M">남자</button>
+                        <button class="gender-tab" data-gender="F">여자</button>
+                        <button class="gender-tab" data-gender="X">혼성</button>
+                    </div>
+                </div>
+                <div class="matrix-scroll-area" id="record-matrix"></div>
+            </div>
+
+            <!-- RIGHT: Record entry area -->
+            <div class="record-detail-panel" id="record-detail">
+                <div class="detail-placeholder">
+                    <div class="placeholder-icon">📝</div>
+                    <p>왼쪽에서 종목을 선택하세요</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Field Distance Modal (kept for backward compat, hidden by default) -->
+    <div id="field-modal-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal"><div class="modal-header"><div class="modal-title" id="modal-athlete-info"></div><div class="modal-subtitle" id="modal-event-info"></div></div></div>
+    </div>
+
+    <!-- Height Modal -->
+    <div id="height-modal-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="hmodal-athlete-info"></div>
+                <div class="modal-subtitle" id="hmodal-event-info"></div>
+            </div>
+            <div class="modal-records" id="hmodal-records"></div>
+            <div class="modal-error" id="hmodal-error" style="display:none;"></div>
+            <div class="modal-form">
+                <div class="form-row">
+                    <label>바 높이</label>
+                    <input type="number" id="hmodal-height-input" step="0.01" readonly>
+                </div>
+                <div class="form-row">
+                    <label>시도</label>
+                    <select id="hmodal-attempt-select">
+                        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label>결과</label>
+                    <div class="height-result-btns">
+                        <button class="btn btn-success height-mark-btn" data-mark="O">O</button>
+                        <button class="btn btn-danger height-mark-btn" data-mark="X">X</button>
+                        <button class="btn btn-ghost height-mark-btn" data-mark="PASS">P</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="hmodal-cancel-btn" class="btn btn-ghost">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm dialog for unsaved changes -->
+    <div id="confirm-overlay" class="modal-overlay" style="display:none;">
+        <div class="modal modal-sm">
+            <div class="modal-header"><div class="modal-title">저장되지 않은 변경사항</div></div>
+            <div class="modal-form"><p style="padding:8px 0;">현재 입력 중인 기록이 저장되지 않았습니다.<br>이동하시겠습니까?</p></div>
+            <div class="modal-footer">
+                <button id="confirm-stay-btn" class="btn btn-ghost">취소 (머무르기)</button>
+                <button id="confirm-leave-btn" class="btn btn-danger">저장 안함 (이동)</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <details><summary>Audit Log</summary><div id="audit-log-container"></div></details>
+    </footer>
+
+    <script src="common.js"></script>
+    <script src="record.js"></script>
+</body>
+</html>
