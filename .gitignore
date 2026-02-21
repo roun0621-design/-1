@@ -1,0 +1,4 @@
+node_modules/
+db/competition.db
+db/competition.db-shm
+db/competition.db-wal

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACE RISE : SCOPE — 대시보드</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">SCOPE</span></h1>
+            <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
+        </div>
+        <nav class="page-nav" id="page-nav"></nav>
+    </header>
+
+    <main class="main-content">
+        <div class="comp-info">
+            <table>
+                <tr><th>대회명</th><td>2026 Pace Rise Invitational</td></tr>
+                <tr><th>일자</th><td>2026.02.19 — 2026.02.21</td></tr>
+                <tr><th>장소</th><td>PACE RISE 종합운동장</td></tr>
+            </table>
+        </div>
+
+        <!-- Admin mode toggle -->
+        <div id="admin-mode-bar" class="admin-mode-bar">
+            <div class="admin-mode-info">
+                <span class="live-dot-sm"></span>
+                <span id="mode-label">실시간 뷰어 모드</span>
+            </div>
+            <button id="admin-toggle-btn" class="btn btn-sm btn-outline" onclick="toggleAdminMode()">관리자 모드</button>
+        </div>
+
+        <!-- Admin login modal (hidden) -->
+        <div id="admin-login-overlay" class="modal-overlay" style="display:none;">
+            <div class="modal modal-sm">
+                <div class="modal-header"><div class="modal-title">관리자 인증</div></div>
+                <div class="modal-form" style="padding:16px;">
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">관리자 키를 입력하세요</p>
+                    <div style="display:flex;gap:8px;">
+                        <input type="password" id="admin-key-input" placeholder="관리자 키" style="flex:1;padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
+                        <button class="btn btn-primary" onclick="verifyAdminKey()">인증</button>
+                    </div>
+                    <div id="admin-login-error" style="display:none;color:var(--danger);font-size:12px;margin-top:8px;font-weight:600;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" onclick="closeAdminLogin()">취소</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="gender-tabs" id="gender-tabs">
+            <button class="gender-tab active" data-gender="M">남자</button>
+            <button class="gender-tab" data-gender="F">여자</button>
+            <button class="gender-tab" data-gender="X">혼성</button>
+        </div>
+
+        <div id="matrix-container"></div>
+
+        <!-- Result detail overlay (shown in-place for viewer mode) -->
+        <div id="result-detail-overlay" class="modal-overlay" style="display:none;">
+            <div class="modal" style="max-width:700px;max-height:85vh;overflow-y:auto;">
+                <div class="modal-header">
+                    <div class="modal-title" id="result-modal-title">결과</div>
+                    <button class="btn btn-sm btn-ghost" onclick="closeResultModal()">닫기</button>
+                </div>
+                <div id="result-modal-content" style="padding:16px;"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <details><summary>Audit Log</summary><div id="audit-log-container"></div></details>
+    </footer>
+
+    <script src="common.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+</html>

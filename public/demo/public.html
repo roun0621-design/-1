@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACE RISE : SCOPE — 실시간 현황</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .public-header {
+            text-align: center; padding: 16px 14px 10px;
+            background: linear-gradient(135deg, #1a1f2b 0%, #2d3748 100%);
+            color: #fff;
+        }
+        .public-header h1 { font-family: var(--font-brand); font-size: 22px; letter-spacing: 2px; }
+        .public-header .colon { color: var(--green); }
+        .public-header .scope { color: #60a5fa; }
+        .public-header p { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+        .public-badge { display: inline-block; background: var(--green); color: #fff; padding: 2px 10px; border-radius: 99px; font-size: 10px; font-weight: 700; margin-top: 6px; }
+        .public-event-card {
+            background: var(--white); border-radius: var(--radius-lg);
+            padding: 14px 18px; margin-bottom: 10px; box-shadow: var(--shadow);
+            border-left: 4px solid var(--green);
+        }
+        .public-event-card.callroom-done { border-left-color: var(--blue); }
+        .public-event-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .public-event-name { font-size: 15px; font-weight: 700; }
+        .public-round-badge { font-size: 11px; padding: 2px 10px; border-radius: 99px; font-weight: 600; }
+        .public-round-completed { background: var(--green-light); color: var(--green); }
+        .public-round-progress { background: var(--blue-light); color: var(--accent); }
+        .public-results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .public-results-table th { background: var(--gray-light); padding: 5px 8px; font-size: 10px; text-align: center; }
+        .public-results-table td { padding: 5px 8px; text-align: center; border-bottom: 1px solid #f0f2f5; }
+        .public-cr-status { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+        .public-cr-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+        .public-cr-badge.done { background: var(--green-light); color: var(--green); }
+        .public-cr-badge.pending { background: var(--warning-light); color: #7a6400; }
+        .public-refresh-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 14px; margin-bottom: 10px;
+            background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow-sm);
+            font-size: 11px; color: var(--text-muted);
+        }
+        .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 4px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .public-filter { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+        .public-filter-btn { padding: 4px 12px; border: 1px solid var(--gray); border-radius: 99px; background: var(--white); font-size: 11px; font-weight: 600; cursor: pointer; color: var(--text-muted); }
+        .public-filter-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
+    </style>
+</head>
+<body style="background:#f0f2f5;">
+
+    <div class="public-header">
+        <h1>PACE RISE <span class="colon">:</span> <span class="scope">SCOPE</span></h1>
+        <p>2026 Pace Rise Invitational</p>
+        <div class="public-badge">LIVE</div>
+    </div>
+
+    <main style="max-width:800px;margin:0 auto;padding:12px;">
+        <div class="public-refresh-bar">
+            <span><span class="live-dot"></span>실시간 업데이트 중</span>
+            <span id="last-update"></span>
+        </div>
+
+        <div class="public-filter" id="public-filter">
+            <button class="public-filter-btn active" data-filter="all" onclick="setPublicFilter('all',this)">전체</button>
+            <button class="public-filter-btn" data-filter="callroom" onclick="setPublicFilter('callroom',this)">소집 완료</button>
+            <button class="public-filter-btn" data-filter="results" onclick="setPublicFilter('results',this)">기록/결과</button>
+        </div>
+
+        <div id="public-content"></div>
+    </main>
+
+    <script src="common.js"></script>
+    <script>
+        let publicEvents = [];
+        let callroomDoneIds = new Set();
+        let publicFilter = 'all';
+
+        async function loadPublicData() {
+            try {
+                publicEvents = await API.getPublicEvents();
+                const crStatus = await API.getCallroomStatus();
+                callroomDoneIds = new Set(crStatus.completed_event_ids || []);
+                renderPublicContent();
+                document.getElementById('last-update').textContent = new Date().toLocaleTimeString('ko-KR');
+            } catch (e) { console.error(e); }
+        }
+
+        function setPublicFilter(filter, btn) {
+            publicFilter = filter;
+            document.querySelectorAll('.public-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderPublicContent();
+        }
+
+        function renderPublicContent() {
+            const container = document.getElementById('public-content');
+            let events = publicEvents;
+
+            if (publicFilter === 'callroom') {
+                events = events.filter(e => callroomDoneIds.has(e.id));
+            } else if (publicFilter === 'results') {
+                events = events.filter(e => e.round_status === 'completed' || e.round_status === 'in_progress');
+            }
+
+            if (events.length === 0) {
+                container.innerHTML = '<div class="empty-state">현재 표시할 데이터가 없습니다.</div>';
+                return;
+            }
+
+            const genderLabel = { M: '남자', F: '여자', X: '혼성' };
+
+            container.innerHTML = events.map(evt => {
+                const gL = genderLabel[evt.gender] || '';
+                const roundLabel = fmtRound(evt.round_type);
+                const isDone = evt.round_status === 'completed';
+                const crDone = callroomDoneIds.has(evt.id);
+                const statusBadge = isDone
+                    ? '<span class="public-round-badge public-round-completed">완료</span>'
+                    : '<span class="public-round-badge public-round-progress">진행중</span>';
+
+                let statusIndicators = '';
+                if (crDone) statusIndicators += '<span class="public-cr-badge done">소집 완료</span>';
+                if (isDone) statusIndicators += '<span class="public-cr-badge done">기록 완료</span>';
+                else statusIndicators += '<span class="public-cr-badge pending">기록 진행중</span>';
+
+                return `<div class="public-event-card ${crDone ? 'callroom-done' : ''}">
+                    <div class="public-event-header">
+                        <div>
+                            <span class="public-event-name">${evt.name}</span>
+                            <span style="font-size:11px;color:var(--text-muted);margin-left:6px;">${gL} ${roundLabel}</span>
+                        </div>
+                        ${statusBadge}
+                    </div>
+                    <div class="public-cr-status">${statusIndicators}</div>
+                </div>`;
+            }).join('');
+        }
+
+        // Initial load
+        loadPublicData();
+
+        // SSE real-time updates
+        onSSE('callroom_complete', () => loadPublicData());
+        onSSE('event_completed', () => loadPublicData());
+        onSSE('result_update', () => loadPublicData());
+        onSSE('entry_status', () => loadPublicData());
+
+        // Fallback: refresh every 30 seconds
+        setInterval(loadPublicData, 30000);
+    </script>
+</body>
+</html>
