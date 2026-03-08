@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+    <meta name="theme-color" content="#03C75A">
+    <title>PACE RISE : Node — 운영 로그</title>
+    <link rel="stylesheet" href="styles.css?v=33">
+    <style>
+        .oplog-container { max-width: 900px; margin: 0 auto; }
+        .oplog-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
+        }
+        .oplog-header h2 { font-size: 17px; font-weight: 700; }
+        .oplog-filters { display: flex; gap: 4px; flex-wrap: wrap; }
+        .oplog-filter-btn {
+            padding: 4px 12px; border: 1px solid var(--gray); border-radius: 99px;
+            background: var(--white); font-size: 11px; font-weight: 600;
+            cursor: pointer; color: var(--text-muted); transition: all 0.12s;
+        }
+        .oplog-filter-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
+        .oplog-filter-btn:hover { background: var(--gray-light); }
+        .oplog-filter-btn.active:hover { background: #258a69; }
+        .oplog-list { display: flex; flex-direction: column; gap: 6px; }
+        .oplog-entry {
+            display: flex; gap: 12px; align-items: flex-start;
+            padding: 10px 16px; background: var(--white);
+            border-radius: var(--radius); box-shadow: var(--shadow-sm);
+            border-left: 4px solid var(--gray);
+            font-size: 13px; line-height: 1.5;
+        }
+        .oplog-entry.cat-callroom { border-left-color: var(--blue); }
+        .oplog-entry.cat-completion { border-left-color: var(--green); }
+        .oplog-entry.cat-round { border-left-color: var(--accent); }
+        .oplog-entry.cat-revert { border-left-color: var(--danger); }
+        .oplog-entry.cat-general { border-left-color: var(--gray-mid); }
+        .oplog-time {
+            font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);
+            white-space: nowrap; min-width: 140px;
+        }
+        .oplog-cat {
+            display: inline-block; padding: 1px 8px; border-radius: 99px;
+            font-size: 10px; font-weight: 700; white-space: nowrap;
+        }
+        .oplog-cat.cat-callroom { background: var(--blue-light); color: var(--accent); }
+        .oplog-cat.cat-completion { background: var(--green-light); color: var(--green); }
+        .oplog-cat.cat-round { background: var(--accent-light); color: var(--accent); }
+        .oplog-cat.cat-revert { background: var(--danger-light); color: var(--danger); }
+        .oplog-cat.cat-general { background: var(--gray-light); color: var(--gray-dark); }
+        .oplog-msg { flex: 1; font-weight: 500; }
+        .oplog-live { display: flex; align-items: center; gap: 6px; }
+        .oplog-live .live-dot-sm { background: var(--green); }
+        .oplog-live-label { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+        .oplog-empty { text-align: center; padding: 40px; color: var(--text-muted); }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">Node</span></h1>
+            <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
+        </div>
+        <nav class="page-nav" id="page-nav"></nav>
+    </header>
+
+    <main class="main-content">
+        <div class="oplog-container">
+            <div class="oplog-header">
+                <h2>운영 로그 <span class="page-sub">Operation Log</span></h2>
+                <div class="oplog-live">
+                    <span class="live-dot-sm"></span>
+                    <span class="oplog-live-label">실시간 업데이트</span>
+                </div>
+            </div>
+
+            <div class="oplog-filters" id="oplog-filters">
+                <button class="oplog-filter-btn active" data-filter="all" onclick="setFilter('all',this)">전체</button>
+                <button class="oplog-filter-btn" data-filter="callroom" onclick="setFilter('callroom',this)">소집</button>
+                <button class="oplog-filter-btn" data-filter="completion" onclick="setFilter('completion',this)">경기완료</button>
+                <button class="oplog-filter-btn" data-filter="round" onclick="setFilter('round',this)">라운드</button>
+                <button class="oplog-filter-btn" data-filter="revert" onclick="setFilter('revert',this)">취소</button>
+            </div>
+
+            <div class="oplog-list" id="oplog-list">
+                <div class="oplog-empty">로그를 불러오는 중...</div>
+            </div>
+        </div>
+    </main>
+
+    <script src="common.js?v=33"></script>
+    <script>
+        let allLogs = [];
+        let currentFilter = 'all';
+        const catLabels = {
+            callroom: '소집', completion: '완료', round: '라운드', revert: '취소', general: '일반'
+        };
+
+        async function loadLogs() {
+            try {
+                allLogs = await API.getOperationLog(200);
+                renderLogs();
+            } catch (e) { console.error(e); }
+        }
+
+        function setFilter(filter, btn) {
+            currentFilter = filter;
+            document.querySelectorAll('.oplog-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderLogs();
+        }
+
+        function renderLogs() {
+            const list = document.getElementById('oplog-list');
+            let logs = allLogs;
+            if (currentFilter !== 'all') {
+                logs = logs.filter(l => l.category === currentFilter);
+            }
+            if (logs.length === 0) {
+                list.innerHTML = '<div class="oplog-empty">표시할 로그가 없습니다.</div>';
+                return;
+            }
+            list.innerHTML = logs.map(l => {
+                const dt = new Date(l.created_at + 'Z');
+                const timeStr = dt.toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                return `<div class="oplog-entry cat-${l.category}">
+                    <span class="oplog-time">${timeStr}</span>
+                    <span class="oplog-cat cat-${l.category}">${catLabels[l.category] || l.category}</span>
+                    <span class="oplog-msg">${l.message}</span>
+                </div>`;
+            }).join('');
+        }
+
+        // Initial load
+        renderPageNav('oplog');
+        loadLogs();
+
+        // SSE real-time
+        onSSE('operation_log', (data) => {
+            allLogs.unshift(data);
+            renderLogs();
+        });
+
+        // Fallback refresh
+        setInterval(loadLogs, 30000);
+    </script>
+</body>
+</html>

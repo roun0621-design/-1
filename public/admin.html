@@ -1,0 +1,2809 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+    <meta name="theme-color" content="#03C75A">
+    <title>PACE RISE : Node — 관리자</title>
+    <link rel="stylesheet" href="styles.css?v=33">
+    <style>
+        .admin-tabs { display:flex; gap:0; border-bottom:2px solid var(--gray); margin-bottom:20px; flex-wrap:wrap; }
+        .admin-tab { padding:10px 18px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--text-muted); border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; }
+        .admin-tab:hover { color:var(--text); background:var(--bg); }
+        .admin-tab.active { color:var(--blue); border-bottom-color:var(--blue); }
+        .admin-tab-panel { display:none; }
+        .admin-tab-panel.active { display:block; }
+        .crud-table { width:100%; border-collapse:collapse; font-size:12px; }
+        .crud-table th { background:var(--bg-dark); padding:8px 10px; text-align:left; font-weight:600; position:sticky; top:0; white-space:nowrap; }
+        .crud-table td { padding:6px 10px; border-bottom:1px solid var(--gray); vertical-align:middle; }
+        .crud-table tr:hover td { background:var(--bg); }
+        .crud-table tr.selected-row td { background:#e3f2fd; }
+        .crud-table input, .crud-table select { font-size:12px; padding:4px 6px; border:1px solid var(--gray); border-radius:4px; width:100%; box-sizing:border-box; }
+        .crud-scroll { max-height:500px; overflow-y:auto; border:1px solid var(--gray); border-radius:var(--radius); }
+        .admin-form-row { display:flex; gap:12px; margin-bottom:12px; align-items:flex-end; flex-wrap:wrap; }
+        .admin-form-group { display:flex; flex-direction:column; gap:4px; }
+        .admin-form-group label { font-size:11px; font-weight:600; color:var(--text-muted); }
+        .admin-form-group input, .admin-form-group select { padding:6px 10px; border:1.5px solid var(--gray); border-radius:var(--radius); font-size:13px; }
+        .admin-card { background:var(--white); border:1px solid var(--gray); border-radius:var(--radius); padding:16px; margin-bottom:16px; }
+        .admin-card h4 { margin:0 0 12px; font-size:14px; }
+        .evt-card:hover { border-color:#93c5fd !important; box-shadow:0 1px 4px rgba(37,99,235,0.08) !important; }
+        .evt-card-selected { border-color:var(--primary) !important; box-shadow:0 2px 8px rgba(37,99,235,0.15) !important; }
+        .evt-gender-btn.active, .evt-cat-btn.active { background:#03C75A !important; color:#fff !important; border-color:#03C75A !important; }
+        .evt-gender-btn, .evt-cat-btn { color:#03C75A !important; border-color:#03C75A !important; }
+        .evt-filter-group { background:#f3f4f6; border-radius:6px; padding:2px; display:flex; gap:2px; }
+        /* Event card section/grid styles */
+        .evt-section { margin-bottom:14px; }
+        .evt-section-title { font-size:11px; font-weight:700; color:var(--text-muted); padding:4px 10px; background:#f3f4f6; border-radius:4px; margin-bottom:6px; letter-spacing:1px; text-transform:uppercase; display:flex; align-items:center; gap:6px; }
+        .evt-section-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+        .evt-section-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:8px; }
+        .evt-card { background:#fff; border:1px solid #e5e7eb; border-left:3px solid #9ca3af; border-radius:8px; padding:10px 12px; cursor:pointer; transition:all 0.12s; }
+        .evt-card-inner { display:flex; align-items:center; gap:8px; }
+        .evt-card-name { font-weight:600; font-size:13px; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .evt-card-meta { display:flex; align-items:center; gap:5px; flex-shrink:0; }
+        .evt-card-badge { font-size:9px; font-weight:700; padding:1px 5px; border-radius:3px; }
+        .evt-card-status-dot { width:7px; height:7px; border-radius:50%; display:inline-block; flex-shrink:0; }
+        .evt-card-round { font-size:10px; color:#9ca3af; }
+        .evt-card-video { font-size:12px; cursor:pointer; opacity:0.6; transition:opacity 0.12s; }
+        .evt-card-video:hover { opacity:1; }
+        .evt-card-edit { font-size:10px; padding:2px 7px; opacity:0; transition:opacity 0.12s; }
+        .evt-card:hover .evt-card-edit { opacity:1; }
+        .btn-xs { padding:3px 8px; font-size:11px; }
+        .search-bar { display:flex; gap:8px; margin-bottom:12px; }
+        .search-bar input { flex:1; padding:8px 12px; border:1.5px solid var(--gray); border-radius:var(--radius); font-size:13px; }
+        .gender-badge { display:inline-block; padding:1px 6px; border-radius:8px; font-size:10px; font-weight:700; }
+        .gender-badge.M { background:#e3f2fd; color:#1565c0; }
+        .gender-badge.F { background:#fce4ec; color:#c62828; }
+        .gender-badge.X { background:#fffde7; color:#f57f17; }
+        .key-display { font-family:monospace; background:var(--bg-dark); padding:4px 10px; border-radius:4px; font-size:14px; letter-spacing:1px; user-select:all; }
+        .toast { position:fixed; bottom:20px; right:20px; padding:12px 20px; border-radius:var(--radius); color:var(--white); font-size:13px; font-weight:600; z-index:9999; animation:fadeInUp .3s; }
+        .toast.success { background:var(--green); }
+        .toast.error { background:var(--danger); }
+        @keyframes fadeInUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+        .danger-zone { border:2px solid var(--danger); border-radius:var(--radius); padding:16px; margin-top:20px; }
+        .danger-zone h4 { color:var(--danger); margin:0 0 8px; }
+        .comp-info-line { display:flex; align-items:center; gap:8px; padding:8px 16px; background:var(--bg-dark); border-radius:var(--radius); font-size:13px; margin-bottom:16px; flex-wrap:wrap; }
+        .comp-info-name { font-weight:700; }
+        .comp-info-sep { color:var(--text-muted); }
+        .comp-selector { display:flex; gap:8px; align-items:center; margin-bottom:16px; }
+        .comp-selector select { padding:8px 12px; border:1.5px solid var(--gray); border-radius:var(--radius); font-size:13px; min-width:200px; }
+
+        /* Heat management panel */
+        /* (heat-mgmt-panel removed — heat management is now inside the event modal) */
+        .heat-tabs-row { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+        .heat-tab-btn { padding:6px 14px; font-size:12px; font-weight:600; border:1.5px solid var(--gray); border-radius:var(--radius); background:var(--white); cursor:pointer; transition:all .15s; }
+        .heat-tab-btn:hover { border-color:var(--blue); }
+        .heat-tab-btn.active { background:var(--blue); color:var(--white); border-color:var(--blue); }
+        .heat-entries-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
+        .heat-entries-table th { background:var(--bg); padding:6px 10px; text-align:left; font-weight:600; font-size:11px; }
+        .heat-entries-table td { padding:6px 10px; border-bottom:1px solid var(--gray-light); }
+        .heat-entries-table tr:hover td { background:#f8f9ff; }
+        .heat-move-select { padding:3px 6px; font-size:11px; border:1px solid var(--gray); border-radius:4px; }
+        .heat-summary { display:flex; gap:16px; margin-bottom:10px; font-size:12px; color:var(--text-muted); flex-wrap:wrap; }
+        .heat-summary strong { color:var(--text); }
+        /* Pacing Light styles */
+        .pacing-color-card { border:1.5px solid var(--gray); border-radius:8px; padding:12px; margin-bottom:10px; position:relative; transition:border-color .15s; }
+        .pacing-color-card:hover { border-color:#93c5fd; }
+        .pacing-color-card .color-dot { width:20px; height:20px; border-radius:50%; display:inline-block; border:2px solid rgba(0,0,0,.15); flex-shrink:0; }
+        .pacing-color-card .drag-handle { cursor:grab; color:#bbb; font-size:16px; padding:0 4px; user-select:none; }
+        .pacing-color-card .drag-handle:active { cursor:grabbing; }
+        .pacing-segment-row { display:flex; gap:6px; align-items:center; margin-bottom:4px; flex-wrap:wrap; }
+        .pacing-segment-row input { width:80px; padding:4px 6px; border:1px solid var(--gray); border-radius:4px; font-size:12px; font-family:monospace; text-align:right; }
+        .pacing-segment-row .cum-display { font-family:monospace; font-size:12px; font-weight:700; color:var(--primary); min-width:70px; }
+        .pacing-config-item { display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--gray); border-radius:6px; margin-bottom:4px; cursor:pointer; transition:all .12s; }
+        .pacing-config-item:hover { border-color:var(--primary); background:#f0f9ff; }
+        .pacing-config-item.active { border-color:var(--primary); background:#e3f2fd; }
+        .pacing-config-item .dots { display:flex; gap:3px; }
+        .pacing-config-item .dots span { width:10px; height:10px; border-radius:50%; display:inline-block; }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">Node</span></h1>
+            <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
+        </div>
+        <nav class="page-nav" id="page-nav"></nav>
+    </header>
+
+    <main class="main-content">
+        <div class="page-title-bar">
+            <a href="/" class="back-link">&larr; 홈</a>
+            <h2>관리자 <span class="page-sub">Admin Panel</span></h2>
+        </div>
+
+        <!-- LOGIN -->
+        <div id="admin-login" class="admin-login-card">
+            <h3>관리 페이지 인증</h3>
+            <p style="font-size:12px;color:var(--text-muted);margin:8px 0 14px;">관리자 키 또는 운영키를 입력하세요.<br><span style="font-size:11px;">운영키: 선수·종목 조회 / 관리자키: 전체 기능</span></p>
+            <div style="display:flex;gap:8px;">
+                <input type="password" id="admin-key-input" placeholder="관리자 키 또는 운영키" style="flex:1;padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
+                <button class="btn btn-primary" onclick="verifyAdminLogin()">인증</button>
+            </div>
+            <div id="admin-login-error" style="display:none;color:var(--danger);font-size:12px;margin-top:8px;font-weight:600;"></div>
+        </div>
+
+        <!-- ADMIN PANEL -->
+        <div id="admin-panel" style="display:none;">
+            <!-- Competition selector with year navigation -->
+            <div class="comp-selector" style="flex-direction:column;align-items:stretch;gap:8px;">
+                <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
+                    <button class="btn btn-sm btn-ghost" onclick="changeYear(-1)" style="font-size:20px;padding:4px 10px;color:var(--text-muted);font-weight:300;line-height:1;" title="이전 연도">&#x2039;</button>
+                    <span id="year-display" style="font-family:'Audiowide','Noto Sans KR',sans-serif;font-size:18px;font-weight:400;letter-spacing:3px;min-width:70px;text-align:center;color:var(--text);">2026</span>
+                    <button class="btn btn-sm btn-ghost" onclick="changeYear(1)" style="font-size:20px;padding:4px 10px;color:var(--text-muted);font-weight:300;line-height:1;" title="다음 연도">&#x203A;</button>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <label style="font-weight:600;font-size:13px;white-space:nowrap;">대회:</label>
+                    <select id="admin-comp-select" onchange="onCompChange()" style="flex:1;"></select>
+                </div>
+            </div>
+
+            <div class="admin-tabs">
+                <button class="admin-tab active" data-tab="overview" onclick="switchTab('overview',this)">현황</button>
+                <button class="admin-tab" data-tab="athletes" onclick="switchTab('athletes',this)">선수 관리</button>
+                <button class="admin-tab" data-tab="events" onclick="switchTab('events',this)">종목 관리</button>
+                <button class="admin-tab" data-tab="upload" onclick="switchTab('upload',this)">엑셀 업로드</button>
+                <button class="admin-tab" data-tab="competition" onclick="switchTab('competition',this)">대회 설정</button>
+                <button class="admin-tab" data-tab="settings" onclick="switchTab('settings',this)">시스템 설정</button>
+                <button class="admin-tab" data-tab="pacing" onclick="switchTab('pacing',this)">페이싱 라이트</button>
+                <!-- 릴레이 관리 탭 삭제됨: 종목관리 탭에서 릴레이 팀 관리 가능 -->
+            </div>
+
+            <!-- TAB: Overview -->
+            <div id="tab-overview" class="admin-tab-panel active">
+                <div class="admin-status-grid" id="admin-status-grid"></div>
+                <div class="admin-card" style="margin-top:16px;">
+                    <h4>빠른 이동</h4>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <a href="/" class="btn btn-outline">홈</a>
+                        <a href="/dashboard.html" class="btn btn-outline">대시보드</a>
+                        <a href="/callroom.html" class="btn btn-outline">소집실</a>
+                        <a href="/record.html" class="btn btn-outline">기록입력</a>
+                        <a href="/results.html" class="btn btn-outline">결과확인</a>
+                    </div>
+                </div>
+                <div class="admin-card">
+                    <h4>감사 로그 (최근 20건)</h4>
+                    <div id="admin-audit-log" style="max-height:300px;overflow-y:auto;font-size:12px;"></div>
+                </div>
+            </div>
+
+            <!-- TAB: Athletes -->
+            <div id="tab-athletes" class="admin-tab-panel">
+                <div class="search-bar">
+                    <input type="text" id="ath-search" placeholder="선수명, BIB, 소속 검색..." oninput="filterAthletes()">
+                    <button class="btn btn-primary" onclick="showAddAthlete()">+ 선수 추가</button>
+                </div>
+                <div id="add-athlete-form" style="display:none;" class="admin-card">
+                    <h4>새 선수 추가</h4>
+                    <div class="admin-form-row">
+                        <div class="admin-form-group"><label>선수명 *</label><input id="new-ath-name"></div>
+                        <div class="admin-form-group"><label>BIB *</label><input id="new-ath-bib" style="width:80px;"></div>
+                        <div class="admin-form-group"><label>소속</label><input id="new-ath-team"></div>
+                        <div class="admin-form-group"><label>성별 *</label><select id="new-ath-gender"><option value="M">남</option><option value="F">여</option></select></div>
+                        <div class="admin-form-group"><label>바코드</label><input id="new-ath-barcode" style="width:100px;"></div>
+                        <button class="btn btn-primary" onclick="addAthlete()">추가</button>
+                        <button class="btn btn-ghost" onclick="document.getElementById('add-athlete-form').style.display='none'">취소</button>
+                    </div>
+                </div>
+                <div class="crud-scroll" id="athlete-table-wrap">
+                    <table class="crud-table" id="athlete-table">
+                        <thead><tr><th style="width:50px">ID</th><th style="width:70px">BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th><th style="width:40px">성별</th><th style="width:100px">바코드</th></tr></thead>
+                        <tbody id="athlete-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="ath-count" style="margin-top:8px;font-size:12px;color:var(--text-muted);"></div>
+            </div>
+
+            <!-- TAB: Events -->
+            <div id="tab-events" class="admin-tab-panel">
+                <div class="search-bar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+                    <input type="text" id="evt-search" placeholder="종목명 검색..." oninput="filterEvents()" style="flex:1;min-width:160px;">
+                    <div class="evt-filter-group" style="display:flex;gap:4px;">
+                        <button class="btn btn-xs evt-gender-btn active" data-g="all" onclick="filterEvtGender('all',this)">전체</button>
+                        <button class="btn btn-xs evt-gender-btn" data-g="M" onclick="filterEvtGender('M',this)">남</button>
+                        <button class="btn btn-xs evt-gender-btn" data-g="F" onclick="filterEvtGender('F',this)">여</button>
+                    </div>
+                    <div class="evt-filter-group" style="display:flex;gap:4px;">
+                        <button class="btn btn-xs evt-cat-btn active" data-c="all" onclick="filterEvtCat('all',this)">전체</button>
+                        <button class="btn btn-xs evt-cat-btn" data-c="track" onclick="filterEvtCat('track',this)">트랙</button>
+                        <button class="btn btn-xs evt-cat-btn" data-c="field_distance" onclick="filterEvtCat('field_distance',this)">필드(거리)</button>
+                        <button class="btn btn-xs evt-cat-btn" data-c="field_height" onclick="filterEvtCat('field_height',this)">필드(높이)</button>
+                        <button class="btn btn-xs evt-cat-btn" data-c="relay" onclick="filterEvtCat('relay',this)">릴레이</button>
+                        <button class="btn btn-xs evt-cat-btn" data-c="combined" onclick="filterEvtCat('combined',this)">혼성</button>
+                        <button class="btn btn-xs evt-cat-btn" data-c="road" onclick="filterEvtCat('road',this)">도로</button>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="showAddEvent()">+ 종목 추가</button>
+                    <button class="btn btn-outline btn-sm" onclick="autoSortEvents()" title="표준 육상 종목 순서로 자동 정렬">자동정렬</button>
+                </div>
+                <div id="add-event-form" style="display:none;" class="admin-card">
+                    <h4>새 종목 추가</h4>
+                    <div class="admin-form-row">
+                        <div class="admin-form-group"><label>종목명 *</label><input id="new-evt-name" placeholder="예: 100m" style="width:140px;"></div>
+                        <div class="admin-form-group"><label>카테고리 *</label><select id="new-evt-cat"><option value="track">Track</option><option value="field_distance">Field 거리</option><option value="field_height">Field 높이</option><option value="relay">Relay</option><option value="combined">Combined</option><option value="road">Road</option></select></div>
+                        <div class="admin-form-group"><label>성별 *</label><select id="new-evt-gender"><option value="M">남</option><option value="F">여</option><option value="X">혼성</option></select></div>
+                        <div class="admin-form-group"><label>라운드</label><select id="new-evt-round"><option value="final">결승</option><option value="preliminary">예선</option><option value="semifinal">준결승</option></select></div>
+                        <div class="admin-form-group"><label>정렬순서</label><input type="number" id="new-evt-sort" value="0" style="width:60px;"></div>
+                        <button class="btn btn-primary" onclick="addEvent()">추가</button>
+                        <button class="btn btn-ghost" onclick="document.getElementById('add-event-form').style.display='none'">취소</button>
+                    </div>
+                </div>
+                <div id="evt-card-grid" style="max-height:480px;overflow-y:auto;padding:4px;"></div>
+                <div id="evt-count" style="margin-top:8px;font-size:12px;color:var(--text-muted);"></div>
+            </div>
+
+            <!-- TAB: Upload -->
+            <div id="tab-upload" class="admin-tab-panel">
+                <!-- Template Download -->
+                <div class="admin-card" style="border-left:4px solid #3b82f6;margin-bottom:12px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                        <div>
+                            <h4 style="color:#3b82f6;margin:0;">엑셀 양식 다운로드</h4>
+                            <p style="font-size:11px;color:var(--text-muted);margin:4px 0 0;">선수명단 + 조편성 + 당일조편성 + 작성가이드 포함</p>
+                        </div>
+                        <a href="/PACERISE_upload_template.xlsx" download class="btn btn-primary btn-sm" style="text-decoration:none;">양식 다운로드 (.xlsx)</a>
+                    </div>
+                </div>
+
+                <!-- Step 1: Federation Roster -->
+                <div class="admin-card">
+                    <h4>1단계: 연맹 명단 업로드</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">연맹 엑셀 파일을 업로드하면 <strong>선수 + 종목 + 출전배정</strong>이 한번에 자동 등록됩니다.</p>
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                        <strong>엑셀 양식 (열 순서 고정):</strong><br>
+                        A열: <code>팀명 *</code> | B열: <code>선수명 *</code> | C열: <code>성별(남/여) *</code> | D열: <code>생년월일</code> | E열: <code>종목1</code> | F열: <code>종목2</code><br>
+                        G열~K열: <code>릴레이(4x100mR, 4x400mR, Mixed 등)</code> — 참가 시 <code>O</code> 입력<br>
+                        L열: <code>바코드</code> — 사용자가 직접 등록한 바코드 번호<br>
+                        <span style="color:#ef4444;font-weight:600;">* 배번(BIB)은 이 단계에서 등록하지 않음 (조편성에서 배번 배정)</span><br>
+                        <span style="color:#ef4444;font-weight:600;">* 바코드는 시스템이 자동 생성하지 않음 (사용자 직접 입력)</span><br>
+                        <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터. 종목 열 비워두면 선수만 등록됩니다.</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <input type="file" id="fed-file" accept=".xlsx,.xls" style="font-size:13px;">
+                            <button class="btn btn-outline" onclick="previewFederation()">미리보기</button>
+                            <button class="btn btn-primary" onclick="importFederation()" id="fed-import-btn" disabled>가져오기 실행</button>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
+                                <input type="checkbox" id="fed-clear"> 기존 데이터 초기화 후 가져오기
+                            </label>
+                            <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
+                                조 크기: <input type="number" id="fed-heat-size" value="8" min="4" max="16" style="width:50px;padding:4px;border:1px solid var(--gray);border-radius:4px;font-size:12px;">
+                            </label>
+                        </div>
+                        <div id="fed-preview" style="display:none;background:var(--bg);border-radius:var(--radius);padding:12px;font-size:12px;"></div>
+                        <div id="fed-result" style="display:none;padding:12px;border-radius:var(--radius);font-size:13px;font-weight:600;"></div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Heat Assignment Upload (조편성) -->
+                <div class="admin-card" style="border-left:4px solid #ef4444;">
+                    <h4 style="color:#ef4444;">2단계: 조편성 업로드</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+                        조편성 엑셀 파일을 업로드하면 <strong>해당 종목의 조/레인/배번</strong>이 배정됩니다.<br>
+                        <span style="color:#ef4444;">파일에 포함된 종목만 변경되며, 포함되지 않은 종목은 영향 없습니다.</span>
+                    </p>
+                    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                        <strong>엑셀 양식:</strong><br>
+                        A열: <code>성별(남/여/혼성)</code> | B열: <code>종목</code> | C열: <code>라운드(예선/결승)</code><br>
+                        D열: <code>조</code> | E열: <code>그룹(A/B)</code> — 5000m/10000m만 해당<br>
+                        F열: <code>순서(레인)</code> | G열: <code>배번</code> | H열: <code>성명</code> | I열: <code>소속</code><br>
+                        <span style="color:#6b7280;">릴레이: 배번 비우고 성명에 팀명 입력 | 배번 비워두면 NULL 저장 (자동 배정 없음)</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <input type="file" id="ha-file" accept=".xlsx,.xls" style="font-size:13px;">
+                            <button class="btn btn-outline" onclick="previewHeatAssignment()">미리보기</button>
+                        </div>
+                        <div id="ha-preview" style="display:none;"></div>
+                        <div id="ha-result" style="display:none;padding:12px;border-radius:var(--radius);font-size:13px;font-weight:600;"></div>
+                    </div>
+                </div>
+
+                <!-- Athlete Upload -->
+                <div class="admin-card">
+                    <h4>선수 명단 엑셀 업로드 (별도)</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">종목 배정 없이 선수만 등록합니다. <strong style="color:#f59e0b;">종목 배정은 소집실 → 선수 추가 또는 관리탭에서 별도 진행하세요.</strong></p>
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                        <strong>엑셀 양식 (열 순서 고정):</strong><br>
+                        A열: <code>배번(BIB)</code> — 비워둘 수 있음 | B열: <code>선수명 *</code> | C열: <code>소속</code> | D열: <code>성별(남/여) *</code> | E열: <code>바코드</code>(선택)<br>
+                        <span style="color:#ef4444;font-weight:600;">* 배번/바코드를 비워두면 NULL 저장 (자동 생성하지 않음)</span><br>
+                        <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터</span>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+                        <input type="file" id="ath-upload-file" accept=".xlsx,.xls" style="font-size:13px;">
+                        <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
+                            <input type="checkbox" id="ath-upload-clear"> 기존 선수 초기화
+                        </label>
+                        <button class="btn btn-primary btn-sm" onclick="uploadAthletes()">업로드</button>
+                    </div>
+                    <div id="ath-upload-result" style="display:none;padding:10px;border-radius:var(--radius);font-size:13px;font-weight:600;"></div>
+                </div>
+
+                <!-- Event Upload -->
+                <div class="admin-card">
+                    <h4>종목 리스트 엑셀 업로드</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">종목만 일괄 등록합니다. (혼성경기는 세부 종목 자동 생성)</p>
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                        <strong>엑셀 양식 (열 순서 고정):</strong><br>
+                        A열: <code>종목명 *</code> | B열: <code>카테고리</code> | C열: <code>성별</code> | D열: <code>라운드</code><br>
+                        <span style="color:#6b7280;">카테고리: track, 트랙, field_distance, 필드(거리), field_height, 필드(높이), relay, 릴레이, combined, 혼성, road, 도로</span><br>
+                        <span style="color:#6b7280;">성별: 남/M, 여/F, 혼성/X &nbsp;|&nbsp; 라운드: 결승/final(기본), 예선/preliminary, 준결승/semifinal</span><br>
+                        <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터. 카테고리/성별/라운드 미입력 시 기본값: track/남/결승</span>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+                        <input type="file" id="evt-upload-file" accept=".xlsx,.xls" style="font-size:13px;">
+                        <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
+                            <input type="checkbox" id="evt-upload-clear"> 기존 종목 초기화
+                        </label>
+                        <button class="btn btn-primary btn-sm" onclick="uploadEvents()">업로드</button>
+                    </div>
+                    <div id="evt-upload-result" style="display:none;padding:10px;border-radius:var(--radius);font-size:13px;font-weight:600;"></div>
+                </div>
+            </div>
+
+            <!-- TAB: Competition Settings -->
+            <div id="tab-competition" class="admin-tab-panel">
+                <div class="admin-card">
+                    <h4>대회 정보 수정</h4>
+                    <div class="admin-form-row">
+                        <div class="admin-form-group" style="flex:1;min-width:200px;"><label>대회명</label><input id="comp-edit-name"></div>
+                    </div>
+                    <div class="admin-form-row">
+                        <div class="admin-form-group"><label>시작일</label><input type="date" id="comp-edit-start"></div>
+                        <div class="admin-form-group"><label>종료일</label><input type="date" id="comp-edit-end"></div>
+                    </div>
+                    <div class="admin-form-row">
+                        <div class="admin-form-group" style="flex:1;"><label>장소</label><input id="comp-edit-venue"></div>
+                        <div class="admin-form-group"><label>상태</label>
+                            <select id="comp-edit-status"><option value="upcoming">예정</option><option value="active">진행중</option><option value="completed">종료</option></select>
+                        </div>
+                        <div class="admin-form-group"><label>연맹</label>
+                            <select id="comp-edit-federation">
+                                <option value="">없음</option>
+                                <!-- Dynamically populated from federation_list -->
+                            </select>
+                        </div>
+                    </div>
+                    <div class="admin-form-row">
+                        <div class="admin-form-group" style="flex:1;"><label>대표 영상 URL (YouTube)</label><input id="comp-edit-video" placeholder="https://youtube.com/watch?v=..."></div>
+                        <button class="btn btn-outline" style="margin-top:20px;white-space:nowrap;" onclick="previewCompVideo()">미리보기</button>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveCompSettings()">저장</button>
+                </div>
+                <div class="admin-card">
+                    <h4>데이터 백업</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">현재 선택된 대회의 전체 데이터(선수, 종목, 기록, 조편성)를 백업합니다.</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <button class="btn btn-outline" onclick="downloadBackup('json')">📄 JSON 백업</button>
+                        <button class="btn btn-outline" onclick="downloadBackup('xlsx')">📊 Excel (XLSX) 백업</button>
+                        <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;margin-left:8px;">
+                            <input type="checkbox" id="backup-comp-only" checked> 현재 대회만
+                        </label>
+                    </div>
+                </div>
+                <div class="danger-zone">
+                    <h4>대회 데이터 초기화</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">이 대회의 모든 선수, 종목, 기록을 삭제합니다.</p>
+                    <button class="btn btn-danger" onclick="resetCompDB()">대회 데이터 초기화</button>
+                </div>
+                <div class="danger-zone" style="margin-top:12px;">
+                    <h4>대회 삭제</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">이 대회를 완전히 삭제합니다. 관련된 모든 데이터(선수, 종목, 기록, 조편성, 로그)가 영구 삭제되며 복구할 수 없습니다.</p>
+                    <button class="btn btn-danger" onclick="deleteCompetition()">대회 완전 삭제</button>
+                </div>
+            </div>
+
+            <!-- TAB: System Settings -->
+            <div id="tab-settings" class="admin-tab-panel">
+                <div class="admin-card">
+                    <h4>기본 접근 키 관리</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">기본 운영키와 관리자키를 변경할 수 있습니다.</p>
+                    <div id="current-keys"></div>
+                    <div class="admin-form-row" style="margin-top:12px;">
+                        <div class="admin-form-group"><label>새 운영키</label><input id="new-op-key" type="password" placeholder="비워두면 유지"></div>
+                        <div class="admin-form-group"><label>새 관리자키</label><input id="new-admin-key" type="password" placeholder="비워두면 유지"></div>
+                        <button class="btn btn-primary" onclick="changeKeys()">키 변경</button>
+                    </div>
+                </div>
+                <div class="admin-card">
+                    <h4>심판별 운영키 관리</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">심판별로 고유한 운영키를 생성하면, 로그에 심판 이름이 자동으로 표시됩니다.</p>
+                    <div class="admin-form-row" style="margin-bottom:12px;">
+                        <div class="admin-form-group"><label>심판명 *</label><input id="new-judge-name" placeholder="예: 김심판"></div>
+                        <div class="admin-form-group"><label>운영키 (4자 이상) *</label><input id="new-judge-key" placeholder="예: kim2026"></div>
+                        <div class="admin-form-group"><label style="white-space:nowrap;">관리 권한</label>
+                            <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;"><input type="checkbox" id="new-judge-can-manage"> 관리자 권한 부여</label>
+                        </div>
+                        <button class="btn btn-primary" onclick="addJudgeKey()">추가</button>
+                    </div>
+                    <div class="crud-scroll" style="max-height:300px;">
+                        <table class="crud-table" id="judge-keys-table">
+                            <thead><tr><th style="width:40px">ID</th><th>심판명</th><th>키</th><th style="width:60px">권한</th><th style="width:60px">상태</th><th style="width:50px">생성일</th><th style="width:80px">작업</th></tr></thead>
+                            <tbody id="judge-keys-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- Federation Management -->
+                <div class="admin-card">
+                    <h4>연맹 관리</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">대회에 배정할 수 있는 연맹 목록을 관리합니다. 드래그 또는 ↑↓ 버튼으로 순서를 변경할 수 있습니다.</p>
+                    <div class="admin-form-row" style="margin-bottom:12px;align-items:flex-end;">
+                        <div class="admin-form-group"><label>코드 *</label><input id="new-fed-code" placeholder="예: KTFL" style="text-transform:uppercase;width:100px;"></div>
+                        <div class="admin-form-group" style="flex:1;"><label>명칭</label><input id="new-fed-name" placeholder="예: 한국실업육상연맹"></div>
+                        <div class="admin-form-group"><label>배지 배경색</label><input type="color" id="new-fed-bg" value="#e3f2fd" style="width:50px;height:32px;padding:2px;cursor:pointer;"></div>
+                        <div class="admin-form-group"><label>글자색</label><input type="color" id="new-fed-color" value="#1565c0" style="width:50px;height:32px;padding:2px;cursor:pointer;"></div>
+                        <button class="btn btn-primary" onclick="addFederation()">추가</button>
+                    </div>
+                    <div id="federation-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+                </div>
+                <!-- Site Config: Install Guide & Manual Editor -->
+                <div class="admin-card">
+                    <h4>홈 페이지 콘텐츠 관리</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">홈 화면의 앱 설치 안내, 운영 매뉴얼 내용을 편집합니다. HTML 태그를 사용할 수 있습니다. 비워두면 기본 내용이 표시됩니다.</p>
+                    <div style="margin-bottom:16px;">
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">Android 설치 안내 (HTML)</label>
+                        <textarea id="sc-install-android" rows="6" style="width:100%;padding:10px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:12px;font-family:monospace;resize:vertical;" placeholder="기본 안내 사용 (비워두기)"></textarea>
+                    </div>
+                    <div style="margin-bottom:16px;">
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">iOS 설치 안내 (HTML)</label>
+                        <textarea id="sc-install-ios" rows="6" style="width:100%;padding:10px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:12px;font-family:monospace;resize:vertical;" placeholder="기본 안내 사용 (비워두기)"></textarea>
+                    </div>
+                    <div style="margin-bottom:16px;">
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">운영 매뉴얼 (HTML)</label>
+                        <textarea id="sc-manual-html" rows="10" style="width:100%;padding:10px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:12px;font-family:monospace;resize:vertical;" placeholder="기본 매뉴얼 사용 (비워두기)"></textarea>
+                    </div>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                        <button class="btn btn-ghost" onclick="loadSiteConfigAdmin()">초기화 (서버에서 불러오기)</button>
+                        <button class="btn btn-primary" onclick="saveSiteConfig()">사이트 설정 저장</button>
+                    </div>
+                </div>
+
+                <!-- Home Popup CMS -->
+                <div class="admin-card" style="border-left:4px solid #6366f1;">
+                    <h4 style="display:flex;align-items:center;gap:8px;">📢 홈 팝업 관리 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">홈 화면 자동 팝업 설정</span></h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">홈 진입 시 자동으로 표시되는 팝업을 관리합니다. 일반 유저용 / 관리자용 각각 설정 가능합니다.</p>
+                    <div style="display:flex;gap:8px;margin-bottom:16px;">
+                        <button class="btn btn-sm btn-primary" onclick="openPopupEditor('public')">+ 일반 유저 팝업</button>
+                        <button class="btn btn-sm btn-outline" onclick="openPopupEditor('admin')">+ 관리자 팝업</button>
+                        <button class="btn btn-sm btn-ghost" onclick="loadHomePopups()">새로고침</button>
+                    </div>
+                    <div id="home-popups-list"></div>
+                </div>
+
+                <!-- Popup Editor Modal (inline) -->
+                <div id="popup-editor-wrap" style="display:none;">
+                    <div class="admin-card" style="border:2px solid #6366f1;background:#fafafe;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <h4 id="popup-editor-heading" style="margin:0;">팝업 편집</h4>
+                            <button class="btn btn-sm btn-ghost" onclick="closePopupEditor()">✕ 닫기</button>
+                        </div>
+                        <div class="admin-form-row" style="margin-bottom:10px;">
+                            <div class="admin-form-group"><label>팝업 종류</label>
+                                <select id="pe-type"><option value="public">일반 유저</option><option value="admin">관리자/운영자</option></select>
+                            </div>
+                            <div class="admin-form-group"><label>활성화</label>
+                                <select id="pe-active"><option value="1">ON</option><option value="0">OFF</option></select>
+                            </div>
+                            <div class="admin-form-group"><label>시작일</label><input type="date" id="pe-from"></div>
+                            <div class="admin-form-group"><label>종료일</label><input type="date" id="pe-until"></div>
+                        </div>
+                        <div class="admin-form-row" style="margin-bottom:10px;">
+                            <div class="admin-form-group" style="flex:1;"><label>제목</label><input id="pe-title" placeholder="예: PACE RISE : Node"></div>
+                        </div>
+                        <div class="admin-form-row" style="margin-bottom:10px;">
+                            <div class="admin-form-group" style="flex:1;"><label>부제목</label><input id="pe-subtitle" placeholder="예: Athletics Competition OS"></div>
+                        </div>
+                        <div class="admin-form-group" style="margin-bottom:10px;">
+                            <label>소개 문구</label>
+                            <textarea id="pe-intro" rows="3" style="width:100%;padding:8px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:12px;resize:vertical;" placeholder="HTML 가능"></textarea>
+                        </div>
+
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <label style="font-weight:600;font-size:13px;">섹션 (접기/펼치기 항목)</label>
+                            <button class="btn btn-xs btn-outline" onclick="addPopupSection()">+ 섹션 추가</button>
+                        </div>
+                        <div id="pe-sections" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+
+                        <div style="border-top:1px solid var(--gray);padding-top:12px;margin-bottom:12px;">
+                            <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">하단 둘러보기 버튼</label>
+                            <div class="admin-form-row">
+                                <div class="admin-form-group" style="flex:1;"><label>버튼 텍스트</label><input id="pe-btn-text" placeholder="예: 🏃 둘러보기"></div>
+                                <div class="admin-form-group"><label>활성화</label>
+                                    <select id="pe-btn-active"><option value="1">ON</option><option value="0">OFF</option></select>
+                                </div>
+                            </div>
+                            <div class="admin-form-row">
+                                <div class="admin-form-group" style="flex:1;"><label>설명</label><input id="pe-btn-desc" placeholder="예: 제36회 KTFL 전국실업단대항육상경기대회"></div>
+                                <div class="admin-form-group" style="flex:1;"><label>이동 링크</label><input id="pe-btn-link" placeholder="예: /dashboard.html?comp=1"></div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex;gap:8px;justify-content:flex-end;">
+                            <button class="btn btn-ghost" onclick="previewPopup()">미리보기</button>
+                            <button class="btn btn-primary" onclick="savePopup()">저장</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: Pacing Light (페이싱 라이트) -->
+            <div id="tab-pacing" class="admin-tab-panel">
+                <!-- Notice area -->
+                <div class="admin-card" style="border-left:4px solid #03C75A;">
+                    <h4 style="display:flex;align-items:center;gap:8px;">💡 페이싱 라이트 관리 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">WaveLight / Pacing Light Configuration</span></h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:0;">종목별 페이스 컬러를 설정하면 대시보드에 W/L Target 버튼이 노출됩니다. 구간별 랩타임을 입력하면 누적 시간이 자동 계산됩니다.</p>
+                </div>
+
+                <!-- Event selector + config list -->
+                <div class="admin-card">
+                    <div style="margin-bottom:14px;">
+                        <label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">① 성별 선택</label>
+                        <div style="display:flex;gap:6px;">
+                            <button class="btn btn-sm" id="pacing-gender-M" onclick="switchPacingGender('M')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;">🚹 남자</button>
+                            <button class="btn btn-sm btn-outline" id="pacing-gender-F" onclick="switchPacingGender('F')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;">🚺 여자</button>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:14px;">
+                        <label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">② 종목 선택 (트랙 800m 이상 + 혼성경기)</label>
+                        <div id="pacing-event-btns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                    </div>
+                    <input type="hidden" id="pacing-event-select" value="">
+                    <div id="pacing-configs-list" style="font-size:12px;color:var(--text-muted);">설정된 페이싱 종목이 없습니다.</div>
+                </div>
+
+                <!-- Pacing Editor (visible when an event is selected) -->
+                <div id="pacing-editor" style="display:none;">
+                    <div class="admin-card" style="overflow-x:auto;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <h4 id="pacing-editor-title" style="margin:0;">800m 페이싱 설정</h4>
+                            <div style="display:flex;gap:6px;">
+                                <button class="btn btn-sm btn-outline" onclick="addPacingSegmentAll()">+ 구간</button>
+                                <button class="btn btn-sm btn-danger" onclick="deletePacingConfig()">삭제</button>
+                                <button class="btn btn-sm btn-primary" onclick="savePacingConfig()">💾 저장</button>
+                            </div>
+                        </div>
+                        <!-- Notice text -->
+                        <div class="admin-form-group" style="margin-bottom:12px;">
+                            <label>상단 공지 (대시보드 팝업에 표시됨)</label>
+                            <input id="pacing-notice" placeholder="예: 한국실업육상연맹 2026 페이스메이커 설정" style="width:100%;">
+                        </div>
+                        <!-- 4-color side-by-side table rendered here -->
+                        <div id="pacing-grid-container"></div>
+                        <div id="pacing-dist-warning" style="margin-top:6px;"></div>
+                    </div>
+
+                    <!-- Seconds conversion tool -->
+                    <div class="admin-card" style="border-left:4px solid #1565C0;">
+                        <h4 style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">⏱️ 시간 → 초 변환기 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">WaveLight 시스템 입력용</span></h4>
+                        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+                            <div class="admin-form-group">
+                                <label>분</label>
+                                <input type="number" id="conv-min" value="0" min="0" style="width:60px;" oninput="updateConversion()">
+                            </div>
+                            <div class="admin-form-group">
+                                <label>초</label>
+                                <input type="number" id="conv-sec" value="0" min="0" step="0.01" style="width:80px;" oninput="updateConversion()">
+                            </div>
+                            <div style="font-size:20px;padding:0 4px;color:var(--text-muted);">=</div>
+                            <div class="admin-form-group">
+                                <label>총 초 (s)</label>
+                                <input type="text" id="conv-result" readonly style="width:120px;font-family:monospace;font-weight:700;font-size:16px;background:#f0f9ff;border-color:#1565C0;">
+                            </div>
+                            <button class="btn btn-sm btn-outline" onclick="copyConvResult()" title="클립보드 복사">📋 복사</button>
+                        </div>
+                        <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">분:초 형태의 시간을 초 단위로 변환합니다. 웨이브라이트 시스템에 입력할 때 사용하세요.</div>
+                    </div>
+                </div>
+            </div>
+
+    <div id="ath-detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center;">
+        <div style="background:var(--white);border-radius:12px;padding:24px;width:420px;max-width:92vw;max-height:90vh;overflow-y:auto;">
+            <h3 style="margin:0 0 16px;font-size:16px;" id="ath-modal-title">선수 상세</h3>
+            <div class="admin-form-row" style="flex-direction:column;gap:10px;">
+                <div class="admin-form-group" style="width:100%;"><label>선수명 *</label><input id="am-name"></div>
+                <div style="display:flex;gap:10px;">
+                    <div class="admin-form-group" style="flex:1;"><label>BIB *</label><input id="am-bib"></div>
+                    <div class="admin-form-group" style="flex:1;"><label>성별</label><select id="am-gender"><option value="M">남</option><option value="F">여</option></select></div>
+                </div>
+                <div class="admin-form-group" style="width:100%;"><label>소속</label><input id="am-team"></div>
+                <div class="admin-form-group" style="width:100%;"><label>바코드</label><input id="am-barcode" style="font-family:monospace;"></div>
+            </div>
+            <hr style="margin:14px 0;border:none;border-top:1px solid var(--gray);">
+            <h4 style="font-size:13px;margin-bottom:8px;">출전 종목</h4>
+            <div id="am-events-list" style="max-height:150px;overflow-y:auto;font-size:12px;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <select id="am-add-event-select" style="flex:1;padding:5px 8px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:12px;"></select>
+                <button class="btn btn-xs btn-primary" onclick="addEventToAthlete()">추가</button>
+            </div>
+            <input type="hidden" id="am-id">
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+                <button class="btn btn-danger" onclick="deleteAthleteFromModal()" id="am-delete-btn">삭제</button>
+                <button class="btn btn-ghost" onclick="closeAthModal()">닫기</button>
+                <button class="btn btn-primary" onclick="saveAthleteFromModal()">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Detail Modal (with heat management) -->
+    <div id="evt-detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center;">
+        <div style="background:var(--white);border-radius:12px;padding:24px;width:850px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+            <h3 style="margin:0 0 16px;font-size:16px;" id="evt-modal-title">종목 상세</h3>
+            <div class="admin-form-row" style="flex-direction:column;gap:10px;">
+                <div class="admin-form-group" style="width:100%;"><label>종목명 *</label><input id="em-name"></div>
+                <div style="display:flex;gap:10px;">
+                    <div class="admin-form-group" style="flex:1;"><label>카테고리</label><select id="em-category"><option value="track">Track</option><option value="field_distance">Field 거리</option><option value="field_height">Field 높이</option><option value="relay">Relay</option><option value="combined">Combined</option><option value="road">Road</option></select></div>
+                    <div class="admin-form-group" style="flex:1;"><label>성별</label><select id="em-gender"><option value="M">남</option><option value="F">여</option><option value="X">혼성</option></select></div>
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <div class="admin-form-group" style="flex:1;"><label>라운드</label><select id="em-round"><option value="final">결승</option><option value="preliminary">예선</option><option value="semifinal">준결승</option></select></div>
+                    <div class="admin-form-group" style="flex:1;"><label>상태</label><select id="em-status"><option value="created">생성</option><option value="heats_generated">조편성</option><option value="in_progress">진행중</option><option value="completed">완료</option></select></div>
+                </div>
+                <div class="admin-form-group"><label>정렬순서</label><input type="number" id="em-sort" style="width:80px;"></div>
+                <div class="admin-form-group" style="width:100%;"><label>영상 URL (YouTube)</label>
+                    <div style="display:flex;gap:6px;">
+                        <input id="em-video-url" placeholder="https://youtube.com/watch?v=..." style="flex:1;">
+                        <button class="btn btn-sm btn-outline" onclick="previewEvtVideo()" title="미리보기">▶</button>
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" id="em-id">
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+                <button class="btn btn-danger" onclick="deleteEventFromModal()">삭제</button>
+                <button class="btn btn-ghost" onclick="closeEvtModal()">닫기</button>
+                <button class="btn btn-primary" onclick="saveEventFromModal()">저장</button>
+            </div>
+            <!-- Heat Management inside modal -->
+            <hr style="margin:16px 0;border:none;border-top:1px solid var(--gray);">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <h4 style="font-size:14px;margin-bottom:8px;">조편성 관리</h4>
+                <button class="btn btn-sm btn-primary" onclick="showEmAddAthleteModal()" title="이 종목에 선수를 추가합니다">+ 선수 추가</button>
+            </div>
+            <div id="em-heat-summary" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;"></div>
+            <div id="em-heat-tabs" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center;"></div>
+            <div id="em-heat-entries" style="max-height:300px;overflow-y:auto;"></div>
+            <!-- Batch move / merge controls -->
+            <div id="em-batch-controls" style="display:none;margin-top:10px;padding:10px;background:var(--bg);border-radius:var(--radius);font-size:12px;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <span>선택한 선수를</span>
+                    <select id="em-batch-target-heat" style="padding:4px 8px;border:1px solid var(--gray);border-radius:4px;font-size:12px;"></select>
+                    <button class="btn btn-xs btn-primary" onclick="batchMoveEntries()">이동</button>
+                    <button class="btn btn-xs btn-outline" onclick="mergeAllToOneHeat()">전체 합조</button>
+                </div>
+                <div id="em-ab-controls" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--gray);">
+                    <span style="font-weight:600;">A/B 그룹 배정:</span>
+                    <button class="btn btn-xs btn-outline" onclick="assignGroupToChecked('A')" style="margin-left:6px;">선택 → A조</button>
+                    <button class="btn btn-xs btn-outline" onclick="assignGroupToChecked('B')" style="margin-left:4px;">선택 → B조</button>
+                    <button class="btn btn-xs btn-ghost" onclick="autoAssignABGroups()" style="margin-left:6px;" title="선수를 반으로 나눠 자동 A/B 배정">자동 A/B 배정</button>
+                </div>
+            </div>
+
+            <!-- TAB: Relay Management -->
+            <div id="tab-relay" class="admin-tab-panel">
+                <div class="admin-card" style="border-left:4px solid #7c3aed;">
+                    <h4 style="display:flex;align-items:center;gap:8px;">🏃 릴레이 팀 주자 관리</h4>
+                    <p style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.8;">
+                        릴레이 주자 관리는 <strong style="color:var(--blue);">종목 관리</strong> 탭에서 진행합니다.<br>
+                        <span style="font-size:12px;color:var(--text-muted);">① 종목 관리 탭 → ② 카테고리 필터에서 <strong>"릴레이"</strong> 선택 → ③ 릴레이 종목 카드 클릭 → ④ 조(Heat) 안의 <span style="color:var(--blue);text-decoration:underline;cursor:pointer;" onclick="switchTab('events',document.querySelector('[data-tab=events]'))">팀명을 클릭</span>하면 선수 추가/제거/순서변경이 가능합니다.</span>
+                    </p>
+                    <div style="margin-top:12px;">
+                        <button class="btn btn-primary btn-sm" onclick="switchTab('events',document.querySelector('[data-tab=events]'))">종목 관리로 이동 →</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="common.js?v=33"></script>
+    <script>
+        renderPageNav('admin');
+        // Helper: display bib_number safely (null/undefined → '—')
+        function bib(val) { return val != null && val !== '' ? val : '—'; }
+        const AK = () => sessionStorage.getItem('pace_admin_key') || sessionStorage.getItem('accessKey') || '';
+        let _allAthletes = [], _allAdminEvents = [], _competitions = [], _selectedCompId = null;
+        let _adminRole = 'admin'; // 'admin' or 'operation'
+        let _selectedYear = new Date().getFullYear();
+        let _evtFilterGender = 'all', _evtFilterCat = 'all';
+
+
+        // Sync _selectedCompId from global localStorage on load
+        {
+            const globalCompId = getCompetitionId();
+            if (globalCompId) {
+                _selectedCompId = parseInt(globalCompId);
+                const y = new Date().getFullYear(); // default, will be corrected after competitions load
+            }
+        }
+
+        // ---- AUTO LOGIN ----
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (AK()) {
+                try {
+                    const r = await API.verifyAuth(AK());
+                    _adminRole = r.role;
+                    document.getElementById('admin-login').style.display = 'none';
+                    document.getElementById('admin-panel').style.display = 'block';
+                    applyRoleRestrictions();
+                    await loadCompetitionSelector();
+                    loadOverview();
+                } catch (e) {}
+            }
+        });
+
+        // ---- LOGIN ----
+        async function verifyAdminLogin() {
+            const key = document.getElementById('admin-key-input').value;
+            try {
+                const r = await API.verifyAuth(key);
+                if (r.role !== 'admin' && r.role !== 'operation') throw new Error('권한 없음');
+                sessionStorage.setItem('pace_admin_key', key);
+                sessionStorage.setItem('pace_role', r.role);
+                _adminRole = r.role;
+                document.getElementById('admin-login').style.display = 'none';
+                document.getElementById('admin-panel').style.display = 'block';
+                applyRoleRestrictions();
+                await loadCompetitionSelector();
+                loadOverview();
+            } catch (e) {
+                const err = document.getElementById('admin-login-error');
+                err.textContent = '인증 실패. 올바른 키를 입력하세요.';
+                err.style.display = 'block';
+            }
+        }
+
+        function applyRoleRestrictions() {
+            const adminOnlyTabs = ['upload', 'competition', 'settings', 'pacing'];
+            document.querySelectorAll('.admin-tab').forEach(tab => {
+                if (adminOnlyTabs.includes(tab.dataset.tab)) {
+                    tab.style.display = _adminRole === 'admin' ? '' : 'none';
+                }
+            });
+        }
+        document.getElementById('admin-key-input').addEventListener('keydown', e => { if (e.key === 'Enter') verifyAdminLogin(); });
+
+        // ---- COMPETITION SELECTOR ----
+        async function loadCompetitionSelector() {
+            _competitions = await API.getCompetitions();
+            // If we have a saved competition, find its year
+            if (_selectedCompId) {
+                const saved = _competitions.find(c => c.id === _selectedCompId);
+                if (saved && saved.start_date) {
+                    _selectedYear = parseInt(saved.start_date.substring(0, 4));
+                }
+            }
+            renderCompetitionsByYear();
+        }
+        function renderCompetitionsByYear() {
+            const sel = document.getElementById('admin-comp-select');
+            document.getElementById('year-display').textContent = _selectedYear;
+            const filtered = _competitions.filter(c => {
+                const y = c.start_date ? parseInt(c.start_date.substring(0, 4)) : 0;
+                return y === _selectedYear;
+            });
+            if (filtered.length === 0) {
+                sel.innerHTML = '<option value="">해당 연도 대회 없음</option>';
+                _selectedCompId = null;
+            } else {
+                sel.innerHTML = filtered.map(c =>
+                    `<option value="${c.id}">${c.name} (${c.start_date})</option>`
+                ).join('');
+                // Keep previous selection if still in list, otherwise pick first
+                const prev = filtered.find(c => c.id === _selectedCompId);
+                if (prev) {
+                    sel.value = prev.id;
+                } else {
+                    _selectedCompId = filtered[0].id;
+                    sel.value = _selectedCompId;
+                }
+                // Always sync to global
+                if (_selectedCompId) setCompetitionId(_selectedCompId);
+            }
+        }
+        function changeYear(delta) {
+            _selectedYear += delta;
+            renderCompetitionsByYear();
+            onCompChange();
+        }
+        function onCompChange() {
+            const val = document.getElementById('admin-comp-select').value;
+            _selectedCompId = val ? parseInt(val) : null;
+            // Sync to global localStorage for all pages
+            if (_selectedCompId) setCompetitionId(_selectedCompId);
+            // Reload current tab
+            const activeTab = document.querySelector('.admin-tab.active');
+            if (activeTab) switchTab(activeTab.dataset.tab, activeTab);
+        }
+
+        // ---- TABS ----
+        function switchTab(name, btn) {
+            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + name).classList.add('active');
+            if (name === 'overview') loadOverview();
+            if (name === 'athletes') loadAthletes();
+            if (name === 'events') loadEvents();
+            if (name === 'competition') loadCompEdit();
+            if (name === 'settings') { loadSystemSettings(); loadFederations(); loadSiteConfigAdmin(); loadHomePopups(); }
+            if (name === 'pacing') loadPacingTab();
+            if (name === 'relay') loadRelayTab();
+        }
+
+        function toast(msg, type = 'success') {
+            const t = document.createElement('div'); t.className = 'toast ' + type; t.textContent = msg;
+            document.body.appendChild(t); setTimeout(() => t.remove(), 3000);
+        }
+
+        // ---- OVERVIEW ----
+        async function loadOverview() {
+            if (!_selectedCompId) return;
+            const events = await API.getAllEvents(_selectedCompId);
+            const main = events.filter(e => !e.parent_event_id);
+            const done = main.filter(e => e.round_status === 'completed').length;
+            const prog = main.filter(e => e.round_status === 'in_progress').length;
+            const wait = main.filter(e => e.round_status === 'created' || e.round_status === 'heats_generated').length;
+            document.getElementById('admin-status-grid').innerHTML = `
+                <div class="stat-card" style="border-top-color:var(--text)"><div class="stat-number">${main.length}</div><div class="stat-label">전체 종목</div></div>
+                <div class="stat-card" style="border-top-color:var(--green)"><div class="stat-number" style="color:var(--green)">${done}</div><div class="stat-label">완료</div></div>
+                <div class="stat-card" style="border-top-color:var(--blue)"><div class="stat-number" style="color:var(--blue)">${prog}</div><div class="stat-label">진행중</div></div>
+                <div class="stat-card" style="border-top-color:var(--warning)"><div class="stat-number" style="color:var(--warning)">${wait}</div><div class="stat-label">대기</div></div>`;
+            try {
+                const logs = await API.getOperationLog(20, _selectedCompId);
+                document.getElementById('admin-audit-log').innerHTML = logs.map(l => {
+                    const time = l.created_at ? l.created_at.substring(5, 16).replace('T', ' ') : '';
+                    const catBadge = l.category === 'callroom' ? '소집' : l.category === 'completion' ? '완료' : l.category === 'round' ? '라운드' : l.category === 'import' ? '업로드' : l.category === 'admin' ? '관리' : l.category || '';
+                    return `<div style="padding:4px 0;border-bottom:1px solid var(--gray);"><strong>[${catBadge}]</strong> ${l.message} — ${time}</div>`;
+                }).join('') || '<div>기록 없음</div>';
+            } catch (e) {}
+        }
+
+        // ---- ATHLETES ----
+        async function loadAthletes() {
+            if (!_selectedCompId) return;
+            try {
+                _allAthletes = await API.getAthletes(AK(), _selectedCompId);
+                renderAthletes(_allAthletes);
+            } catch (e) { toast('선수 목록 로드 실패', 'error'); }
+        }
+        function filterAthletes() {
+            const q = document.getElementById('ath-search').value.toLowerCase();
+            renderAthletes(_allAthletes.filter(a => a.name.toLowerCase().includes(q) || (a.bib_number||'').includes(q) || (a.team||'').toLowerCase().includes(q)));
+        }
+        function renderAthletes(list) {
+            document.getElementById('athlete-tbody').innerHTML = list.map(a => `<tr data-id="${a.id}" style="cursor:pointer;" onclick="openAthModal(${a.id})">
+                <td>${a.id}</td>
+                <td>${bib(a.bib_number)}</td>
+                <td><strong>${a.name}</strong></td>
+                <td>${a.team||''}</td>
+                <td><span class="gender-badge ${a.gender}">${a.gender==='M'?'남':a.gender==='F'?'여':'혼성'}</span></td>
+                <td style="font-family:monospace;font-size:11px;">${a.barcode||''}</td>
+            </tr>`).join('');
+            document.getElementById('ath-count').textContent = `총 ${list.length}명`;
+        }
+        function showAddAthlete() { document.getElementById('add-athlete-form').style.display = 'block'; document.getElementById('new-ath-name').focus(); }
+        async function addAthlete() {
+            const name = document.getElementById('new-ath-name').value.trim();
+            const bib = document.getElementById('new-ath-bib').value.trim();
+            const team = document.getElementById('new-ath-team').value.trim();
+            const gender = document.getElementById('new-ath-gender').value;
+            const barcode = document.getElementById('new-ath-barcode').value.trim();
+            if (!name || !bib) { toast('선수명과 BIB은 필수입니다', 'error'); return; }
+            try {
+                await API.createAthlete({ competition_id: _selectedCompId, name, bib_number: bib, team, gender, barcode: barcode || undefined }, AK());
+                toast('선수 추가 완료');
+                document.getElementById('add-athlete-form').style.display = 'none';
+                loadAthletes();
+            } catch (e) { toast(e.error || '추가 실패', 'error'); }
+        }
+        async function saveAthlete(id) {
+            const row = document.querySelector(`tr[data-id="${id}"]`);
+            try {
+                await API.updateAthlete(id, {
+                    name: row.querySelector('[data-field="name"]').value,
+                    bib_number: row.querySelector('[data-field="bib"]').value,
+                    team: row.querySelector('[data-field="team"]').value,
+                    gender: row.querySelector('[data-field="gender"]').value,
+                    barcode: row.querySelector('[data-field="barcode"]').value
+                }, AK());
+                toast('저장 완료');
+            } catch (e) { toast(e.error || '저장 실패', 'error'); }
+        }
+        async function deleteAthlete(id, name) {
+            if (!confirm(`"${name}" 선수를 삭제하시겠습니까?`)) return;
+            try { await API.deleteAthlete(id, AK()); toast('삭제 완료'); loadAthletes(); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
+        }
+
+        // ---- EVENTS ----
+        async function loadEvents() {
+            if (!_selectedCompId) return;
+            try { _allAdminEvents = await API.adminGetEvents(AK(), _selectedCompId); applyEvtFilters(); } catch (e) { toast('종목 로드 실패', 'error'); }
+        }
+        function filterEvents() { applyEvtFilters(); }
+        function filterEvtGender(g, btn) {
+            _evtFilterGender = g;
+            document.querySelectorAll('.evt-gender-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            applyEvtFilters();
+        }
+        function filterEvtCat(c, btn) {
+            _evtFilterCat = c;
+            document.querySelectorAll('.evt-cat-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            applyEvtFilters();
+        }
+        function applyEvtFilters() {
+            const q = (document.getElementById('evt-search')?.value || '').toLowerCase();
+            let list = _allAdminEvents.filter(e => !e.parent_event_id);
+            if (q) list = list.filter(e => e.name.toLowerCase().includes(q));
+            if (_evtFilterGender !== 'all') list = list.filter(e => e.gender === _evtFilterGender);
+            if (_evtFilterCat !== 'all') list = list.filter(e => e.category === _evtFilterCat);
+            renderEvents(list);
+        }
+        const CAT_LABEL = { track:'트랙', field_distance:'필드(거리)', field_height:'필드(높이)', relay:'릴레이', combined:'혼성경기', road:'도로' };
+        const CAT_SHORT = { track:'T', field_distance:'FD', field_height:'FH', relay:'R', combined:'C', road:'RD' };
+        const CAT_COLOR = { track:'#2563eb', field_distance:'#16a34a', field_height:'#ea580c', relay:'#7c3aed', combined:'#db2777', road:'#0891b2' };
+        const STATUS_LABEL = { created:'생성', heats_generated:'조편성', in_progress:'진행중', completed:'완료' };
+        const STATUS_COLOR = { created:'#9ca3af', heats_generated:'#f59e0b', in_progress:'#3b82f6', completed:'#22c55e' };
+        const ROUND_LABEL = { preliminary:'예선', semifinal:'준결승', final:'결승' };
+        function renderEvents(list) {
+            const grid = document.getElementById('evt-card-grid');
+            const GENDER_LABEL = { M:'남', F:'여', X:'혼' };
+            const GENDER_BG = { M:'#e3f2fd', F:'#fce4ec', X:'#fffde7' };
+            const GENDER_FG = { M:'#1565c0', F:'#c62828', X:'#f57f17' };
+            // Group by category
+            const catOrder = ['track','field_distance','field_height','relay','combined','road'];
+            const groups = {};
+            list.forEach(e => {
+                const c = e.category || 'track';
+                if (!groups[c]) groups[c] = [];
+                groups[c].push(e);
+            });
+            let html = '';
+            catOrder.forEach(cat => {
+                const items = groups[cat];
+                if (!items || items.length === 0) return;
+                const catColor = CAT_COLOR[cat] || '#6b7280';
+                html += `<div class="evt-section">
+                    <div class="evt-section-title"><span class="evt-section-dot" style="background:${catColor}"></span>${CAT_LABEL[cat]||cat} <span style="font-weight:400;color:#bbb;font-size:10px;">(${items.length})</span></div>
+                    <div class="evt-section-grid">`;
+                items.forEach(e => {
+                    const stColor = STATUS_COLOR[e.round_status] || '#9ca3af';
+                    const stLabel = STATUS_LABEL[e.round_status] || e.round_status;
+                    const gLabel = GENDER_LABEL[e.gender] || '';
+                    const gBg = GENDER_BG[e.gender] || '#f3f4f6';
+                    const gFg = GENDER_FG[e.gender] || '#666';
+                    const roundLabel = ROUND_LABEL[e.round_type] || e.round_type;
+                    const hasVideo = e.video_url ? `<span class="evt-card-video" onclick="event.stopPropagation();openVideoModal('${e.video_url.replace(/'/g,"\\'")}','${e.name.replace(/'/g,"\\'")}');" title="영상 재생">\ud83c\udfac</span>` : '';
+
+                    html += `<div class="evt-card" data-eid="${e.id}" onclick="openEvtModal(${e.id})"
+                        style="border-left-color:${catColor};cursor:pointer;">
+                        <div class="evt-card-inner">
+                            <span class="evt-card-status-dot" style="background:${stColor};" title="${stLabel}"></span>
+                            <span class="evt-card-name" title="${e.name}">${e.name}</span>
+                            <span class="evt-card-meta">
+                                ${hasVideo}
+                                <span class="evt-card-badge" style="background:${gBg};color:${gFg};">${gLabel}</span>
+                                <span class="evt-card-round">${roundLabel}</span>
+                            </span>
+                        </div>
+                    </div>`;
+                });
+                html += `</div></div>`;
+            });
+            grid.innerHTML = html || '<div style="text-align:center;padding:24px;color:var(--text-muted);">종목이 없습니다.</div>';
+            const total = _allAdminEvents.filter(e => !e.parent_event_id).length;
+            document.getElementById('evt-count').textContent = `표시: ${list.length}개 / 전체: ${total}개 (세부 포함: ${_allAdminEvents.length}개)`;
+        }
+        // ---- HEAT MANAGEMENT ----
+        // (Heat management is now integrated into the event detail modal)
+
+        function showAddEvent() { document.getElementById('add-event-form').style.display = 'block'; document.getElementById('new-evt-name').focus(); }
+        async function addEvent() {
+            const name = document.getElementById('new-evt-name').value.trim();
+            const cat = document.getElementById('new-evt-cat').value;
+            const gender = document.getElementById('new-evt-gender').value;
+            const round = document.getElementById('new-evt-round').value;
+            const sort = parseInt(document.getElementById('new-evt-sort').value) || 0;
+            if (!name) { toast('종목명은 필수입니다', 'error'); return; }
+            try {
+                await API.adminCreateEvent({ competition_id: _selectedCompId, name, category: cat, gender, round_type: round, sort_order: sort }, AK());
+                toast('종목 추가 완료');
+                document.getElementById('add-event-form').style.display = 'none';
+                loadEvents();
+            } catch (e) { toast(e.error || '추가 실패', 'error'); }
+        }
+        async function saveEvent(id) {
+            const row = document.querySelector(`tr[data-eid="${id}"]`);
+            try {
+                await API.adminUpdateEvent(id, {
+                    name: row.querySelector('[data-field="name"]').value,
+                    category: row.querySelector('[data-field="category"]').value,
+                    gender: row.querySelector('[data-field="gender"]').value,
+                    round_type: row.querySelector('[data-field="round_type"]').value,
+                    round_status: row.querySelector('[data-field="round_status"]').value,
+                    sort_order: parseInt(row.querySelector('[data-field="sort"]').value) || 0
+                }, AK());
+                toast('저장 완료');
+            } catch (e) { toast(e.error||'저장 실패', 'error'); }
+        }
+        async function deleteEvent(id, name) {
+            if (!confirm(`"${name}" 종목을 삭제하시겠습니까?`)) return;
+            try { await API.adminDeleteEvent(id, AK()); toast('삭제 완료'); loadEvents(); } catch (e) { toast(e.error||'삭제 실패', 'error'); }
+        }
+        async function autoSortEvents() {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            if (!confirm('모든 종목을 표준 육상 순서(100m→200m→...→마라톤)로 자동 정렬하시겠습니까?')) return;
+            try {
+                const r = await API.autoSortEvents(_selectedCompId, AK());
+                toast(r.message || '자동정렬 완료');
+                loadEvents();
+            } catch (e) { toast(e.error || '자동정렬 실패', 'error'); }
+        }
+        async function forceEventStatus(id) {
+            const row = document.querySelector(`tr[data-eid="${id}"]`);
+            if (!row) return;
+            const round_status = row.querySelector('[data-field="round_status"]').value;
+            const round_type = row.querySelector('[data-field="round_type"]').value;
+            if (!confirm(`종목 #${id}를 강제로 ${round_type}/${round_status}로 변경합니다.\n(일반 저장과 달리 검증 없이 바로 적용됩니다)`)) return;
+            try {
+                await API.forceEventStatus(id, round_status, round_type, AK());
+                toast('강제 상태변경 완료');
+                loadEvents();
+            } catch (e) { toast(e.error || '강제 변경 실패', 'error'); }
+        }
+
+        // ---- COMPETITION EDIT ----
+        async function loadCompEdit() {
+            if (!_selectedCompId) return;
+            try {
+                const c = await API.getCompetition(_selectedCompId);
+                document.getElementById('comp-edit-name').value = c.name || '';
+                document.getElementById('comp-edit-start').value = c.start_date || '';
+                document.getElementById('comp-edit-end').value = c.end_date || '';
+                document.getElementById('comp-edit-venue').value = c.venue || '';
+                document.getElementById('comp-edit-status').value = c.status || 'upcoming';
+                document.getElementById('comp-edit-video').value = c.video_url || '';
+                // Populate federation dropdown from DB
+                const fedSelect = document.getElementById('comp-edit-federation');
+                const feds = await API.getFederations();
+                fedSelect.innerHTML = '<option value="">없음</option>' + feds.map(f =>
+                    `<option value="${f.code}" ${c.federation === f.code ? 'selected' : ''}>${f.code}${f.name ? ' (' + f.name + ')' : ''}</option>`
+                ).join('');
+                if (!feds.find(f => f.code === c.federation)) fedSelect.value = c.federation || '';
+            } catch (e) {}
+        }
+        async function saveCompSettings() {
+            try {
+                await API.updateCompetition(_selectedCompId, {
+                    name: document.getElementById('comp-edit-name').value,
+                    start_date: document.getElementById('comp-edit-start').value,
+                    end_date: document.getElementById('comp-edit-end').value,
+                    venue: document.getElementById('comp-edit-venue').value,
+                    status: document.getElementById('comp-edit-status').value,
+                    video_url: document.getElementById('comp-edit-video').value,
+                    federation: document.getElementById('comp-edit-federation').value,
+                }, AK());
+                toast('대회 정보 저장 완료');
+                await loadCompetitionSelector();
+            } catch (e) { toast(e.error || e.message || '저장 실패', 'error'); }
+        }
+        function previewCompVideo() {
+            const url = document.getElementById('comp-edit-video').value.trim();
+            if (!url) { toast('영상 URL을 입력하세요.', 'warning'); return; }
+            openVideoModal(url, '대회 대표 영상');
+        }
+        async function resetCompDB() {
+            if (!confirm('이 대회의 모든 데이터를 초기화합니다. 되돌릴 수 없습니다!')) return;
+            if (!confirm('마지막 확인: 계속하시겠습니까?')) return;
+            try { await API.adminResetDB(AK(), _selectedCompId); toast('초기화 완료'); loadOverview(); } catch (e) { toast(e.error||'실패', 'error'); }
+        }
+
+        // ---- SYSTEM SETTINGS ----
+        async function loadSystemSettings() {
+            try {
+                const k = await api('GET', '/api/admin/current-keys?key=' + encodeURIComponent(AK()));
+                document.getElementById('current-keys').innerHTML = `
+                    <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                        <div><span style="font-size:12px;color:var(--text-muted);">현재 운영키:</span> <span class="key-display">${k.operation}</span></div>
+                        <div><span style="font-size:12px;color:var(--text-muted);">관리자 ID:</span> <span class="key-display">${k.admin_id}</span></div>
+                        <div><span style="font-size:12px;color:var(--text-muted);">관리자 비밀번호:</span> <span style="color:var(--green);font-size:12px;">●●●●●● (암호화됨)</span></div>
+                    </div>`;
+            } catch (e) {}
+            // Load judge keys
+            try {
+                const keys = await API.getOperationKeys(AK());
+                document.getElementById('judge-keys-tbody').innerHTML = keys.map(k => `<tr>
+                    <td>${k.id}</td>
+                    <td style="font-weight:600;">${k.judge_name}</td>
+                    <td><span class="key-display" style="font-size:12px;">${k.key_value}</span></td>
+                    <td><span style="color:${k.can_manage ? 'var(--blue)' : 'var(--text-muted)'};font-weight:600;cursor:pointer;" onclick="toggleJudgeManage(${k.id},${k.can_manage ? 0 : 1})" title="클릭하여 권한 변경">${k.can_manage ? '관리자' : '운영'} ✎</span></td>
+                    <td><span style="color:${k.active ? 'var(--green)' : 'var(--danger)'};font-weight:600;">${k.active ? '활성' : '비활성'}</span></td>
+                    <td style="font-size:10px;color:var(--text-muted);">${(k.created_at||'').slice(0,10)}</td>
+                    <td>
+                        <button class="btn btn-xs ${k.active ? 'btn-outline' : 'btn-primary'}" onclick="toggleJudgeKey(${k.id},${k.active ? 0 : 1})">${k.active ? '비활성' : '활성'}</button>
+                        <button class="btn btn-xs btn-danger" onclick="deleteJudgeKey(${k.id},'${k.judge_name}')">삭제</button>
+                    </td>
+                </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">등록된 심판 운영키가 없습니다.</td></tr>';
+            } catch (e) {}
+        }
+        async function addJudgeKey() {
+            const name = document.getElementById('new-judge-name').value.trim();
+            const key = document.getElementById('new-judge-key').value.trim();
+            const canManage = document.getElementById('new-judge-can-manage')?.checked || false;
+            if (!name || !key || key.length < 4) { toast('심판명과 키(4자 이상)를 입력하세요', 'error'); return; }
+            try {
+                await API.createOperationKey(AK(), name, key, canManage);
+                toast(`${name} 운영키 생성 완료${canManage ? ' (관리 권한 포함)' : ''}`);
+                document.getElementById('new-judge-name').value = '';
+                document.getElementById('new-judge-key').value = '';
+                if (document.getElementById('new-judge-can-manage')) document.getElementById('new-judge-can-manage').checked = false;
+                loadSystemSettings();
+            } catch (e) { toast(e.error || '키 생성 실패 (중복?)', 'error'); }
+        }
+        async function deleteJudgeKey(id, name) {
+            if (!confirm(`"${name}" 운영키를 삭제하시겠습니까?`)) return;
+            try { await API.deleteOperationKey(id, AK()); toast('삭제 완료'); loadSystemSettings(); } catch (e) { toast(e.error||'삭제 실패', 'error'); }
+        }
+        async function toggleJudgeKey(id, active) {
+            try { await API.toggleOperationKey(id, active, AK()); loadSystemSettings(); } catch (e) { toast('변경 실패', 'error'); }
+        }
+        async function toggleJudgeManage(id, canManage) {
+            const action = canManage ? '관리자 권한을 부여' : '운영 권한으로 변경';
+            if (!confirm(`이 심판에게 ${action}하시겠습니까?`)) return;
+            try { await API.toggleOperationKeyManage(id, canManage, AK()); toast(`권한 변경 완료`); loadSystemSettings(); } catch (e) { toast('변경 실패', 'error'); }
+        }
+        async function changeKeys() {
+            const opKey = document.getElementById('new-op-key').value;
+            const adminKey = document.getElementById('new-admin-key').value;
+            if (!opKey && !adminKey) { toast('변경할 키를 입력하세요', 'error'); return; }
+            if ((opKey && opKey.length < 4) || (adminKey && adminKey.length < 4)) { toast('키는 최소 4자 이상이어야 합니다', 'error'); return; }
+            try {
+                await API.changeKeys(AK(), opKey || undefined, adminKey || undefined);
+                if (adminKey) { sessionStorage.setItem('pace_admin_key', adminKey); }
+                toast('키 변경 완료');
+                document.getElementById('new-op-key').value = '';
+                document.getElementById('new-admin-key').value = '';
+                loadSystemSettings();
+            } catch (e) { toast(e.error || '키 변경 실패', 'error'); }
+        }
+
+        // ---- FEDERATION MANAGEMENT ----
+        let _federations = [];
+        async function loadFederations() {
+            try { _federations = await API.getFederations(); } catch(e) { _federations = []; }
+            renderFederationList();
+        }
+        function renderFederationList() {
+            const wrap = document.getElementById('federation-list');
+            if (!wrap) return;
+            if (!_federations.length) { wrap.innerHTML = '<span style="font-size:12px;color:var(--text-muted);">등록된 연맹이 없습니다.</span>'; return; }
+            wrap.innerHTML = _federations.map((f, idx) => `
+                <div class="pacing-config-item" style="cursor:default;justify-content:space-between;" data-fed-id="${f.id}">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="color:#bbb;font-size:12px;min-width:20px;">${idx+1}</span>
+                        <span style="background:${f.badge_bg};color:${f.badge_color};padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;">${f.code}</span>
+                        <span style="font-size:13px;">${f.name || ''}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:4px;">
+                        ${idx > 0 ? `<button class="btn btn-xs btn-ghost" onclick="moveFed(${f.id},-1)" title="위로">↑</button>` : ''}
+                        ${idx < _federations.length-1 ? `<button class="btn btn-xs btn-ghost" onclick="moveFed(${f.id},1)" title="아래로">↓</button>` : ''}
+                        <button class="btn btn-xs btn-ghost" onclick="editFed(${f.id})" title="수정">✏️</button>
+                        <button class="btn btn-xs btn-danger" onclick="deleteFed(${f.id})" title="삭제" style="padding:2px 6px;font-size:10px;">✕</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        async function addFederation() {
+            const code = document.getElementById('new-fed-code').value.trim();
+            const name = document.getElementById('new-fed-name').value.trim();
+            const badge_bg = document.getElementById('new-fed-bg').value;
+            const badge_color = document.getElementById('new-fed-color').value;
+            if (!code) { toast('연맹 코드를 입력하세요.', 'warning'); return; }
+            try {
+                await API.createFederation({ code, name, badge_bg, badge_color }, AK());
+                document.getElementById('new-fed-code').value = '';
+                document.getElementById('new-fed-name').value = '';
+                toast('연맹 추가 완료');
+                await loadFederations();
+            } catch (e) { toast(e.error || '연맹 추가 실패', 'error'); }
+        }
+        async function deleteFed(id) {
+            if (!confirm('이 연맹을 삭제하시겠습니까?')) return;
+            try { await API.deleteFederation(id, AK()); toast('삭제 완료'); await loadFederations(); }
+            catch (e) { toast(e.error || '삭제 실패', 'error'); }
+        }
+        async function editFed(id) {
+            const f = _federations.find(x => x.id === id);
+            if (!f) return;
+            const newName = prompt('연맹 명칭 수정:', f.name || '');
+            if (newName === null) return;
+            try { await API.updateFederation(id, { name: newName, code: f.code, badge_bg: f.badge_bg, badge_color: f.badge_color }, AK()); toast('수정 완료'); await loadFederations(); }
+            catch (e) { toast(e.error || '수정 실패', 'error'); }
+        }
+        async function moveFed(id, dir) {
+            const idx = _federations.findIndex(x => x.id === id);
+            if (idx < 0) return;
+            const newIdx = idx + dir;
+            if (newIdx < 0 || newIdx >= _federations.length) return;
+            const order = _federations.map(f => f.id);
+            [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
+            try { await API.reorderFederations(order, AK()); await loadFederations(); }
+            catch (e) { toast('순서 변경 실패', 'error'); }
+        }
+
+        // ---- SITE CONFIG (Install Guide & Manual Editor) ----
+        async function loadSiteConfigAdmin() {
+            try {
+                const cfg = await fetch('/api/site-config').then(r => r.json());
+                document.getElementById('sc-install-android').value = cfg.site_install_android || '';
+                document.getElementById('sc-install-ios').value = cfg.site_install_ios || '';
+                document.getElementById('sc-manual-html').value = cfg.site_manual_html || '';
+            } catch (e) { console.error(e); }
+        }
+        async function saveSiteConfig() {
+            const configs = {
+                site_install_android: document.getElementById('sc-install-android').value,
+                site_install_ios: document.getElementById('sc-install-ios').value,
+                site_manual_html: document.getElementById('sc-manual-html').value
+            };
+            try {
+                await api('POST', '/api/admin/site-config', { admin_key: AK(), configs });
+                toast('사이트 설정 저장 완료');
+            } catch (e) { toast(e.error || '저장 실패', 'error'); }
+        }
+
+        // ---- HOME POPUP CMS ----
+        let _homePopups = [];
+        let _editingPopupId = null;
+        let _popupSections = [];
+
+        async function loadHomePopups() {
+            try { _homePopups = await API.getHomePopups(); } catch(e) { _homePopups = []; }
+            renderHomePopupsList();
+        }
+        function renderHomePopupsList() {
+            const wrap = document.getElementById('home-popups-list');
+            if (!wrap) return;
+            if (!_homePopups.length) { wrap.innerHTML = '<span style="font-size:12px;color:var(--text-muted);">등록된 팝업이 없습니다. 위 버튼으로 추가하세요.</span>'; return; }
+            wrap.innerHTML = _homePopups.map((p, i) => {
+                const typeLabel = p.popup_type === 'admin' ? '🔒 관리자용' : '👥 일반 유저용';
+                const activeLabel = p.is_active ? '<span style="color:#2d9d78;font-size:11px;">● ON</span>' : '<span style="color:#999;font-size:11px;">○ OFF</span>';
+                const period = (p.show_from || p.show_until) ? `<span style="font-size:10px;color:var(--text-muted);">${p.show_from||'시작없음'} ~ ${p.show_until||'종료없음'}</span>` : '';
+                const orderLabel = `<span style="font-size:10px;color:var(--text-muted);font-weight:600;min-width:20px;text-align:center;">#${i+1}</span>`;
+                return `<div class="pacing-config-item" style="cursor:default;justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                        ${orderLabel}
+                        <button class="btn btn-xs btn-ghost" onclick="movePopup(${i},-1)" style="padding:1px 5px;font-size:14px;line-height:1;" ${i===0?'disabled':''}  title="위로">↑</button>
+                        <button class="btn btn-xs btn-ghost" onclick="movePopup(${i},1)" style="padding:1px 5px;font-size:14px;line-height:1;" ${i===_homePopups.length-1?'disabled':''} title="아래로">↓</button>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+                        <span style="font-size:11px;font-weight:600;white-space:nowrap;">${typeLabel}</span>
+                        ${activeLabel}
+                        <span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.title || '(제목 없음)'}</span>
+                        ${period}
+                        <span style="font-size:10px;color:var(--text-muted);">${(p.sections||[]).length}개 섹션</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                        <button class="btn btn-xs btn-ghost" onclick="editPopup(${p.id})">✏️ 수정</button>
+                        <button class="btn btn-xs btn-danger" onclick="deletePopup(${p.id})" style="padding:2px 6px;font-size:10px;">삭제</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+        async function movePopup(index, direction) {
+            const newIndex = index + direction;
+            if (newIndex < 0 || newIndex >= _homePopups.length) return;
+            // Swap in local array
+            [_homePopups[index], _homePopups[newIndex]] = [_homePopups[newIndex], _homePopups[index]];
+            renderHomePopupsList();
+            // Save order to server
+            try {
+                const order = _homePopups.map(p => p.id);
+                await api('PUT', '/api/home-popups/reorder', { admin_key: currentKey, order });
+                showToast('팝업 순서 변경됨');
+            } catch(e) { showToast(e.error || '순서 변경 실패', 'error'); }
+        }
+        function openPopupEditor(type) {
+            _editingPopupId = null;
+            _popupSections = [];
+            document.getElementById('pe-type').value = type || 'public';
+            document.getElementById('pe-active').value = '1';
+            document.getElementById('pe-from').value = '';
+            document.getElementById('pe-until').value = '';
+            document.getElementById('pe-title').value = '';
+            document.getElementById('pe-subtitle').value = '';
+            document.getElementById('pe-intro').value = '';
+            document.getElementById('pe-btn-text').value = '';
+            document.getElementById('pe-btn-desc').value = '';
+            document.getElementById('pe-btn-link').value = '';
+            document.getElementById('pe-btn-active').value = '1';
+            document.getElementById('popup-editor-heading').textContent = '새 팝업 생성';
+            renderPopupSections();
+            document.getElementById('popup-editor-wrap').style.display = 'block';
+            document.getElementById('popup-editor-wrap').scrollIntoView({ behavior: 'smooth' });
+        }
+        function closePopupEditor() {
+            document.getElementById('popup-editor-wrap').style.display = 'none';
+            _editingPopupId = null;
+        }
+        function editPopup(id) {
+            const p = _homePopups.find(x => x.id === id);
+            if (!p) return;
+            _editingPopupId = p.id;
+            _popupSections = (p.sections || []).map(s => ({ ...s }));
+            document.getElementById('pe-type').value = p.popup_type || 'public';
+            document.getElementById('pe-active').value = String(p.is_active ?? 1);
+            document.getElementById('pe-from').value = p.show_from || '';
+            document.getElementById('pe-until').value = p.show_until || '';
+            document.getElementById('pe-title').value = p.title || '';
+            document.getElementById('pe-subtitle').value = p.subtitle || '';
+            document.getElementById('pe-intro').value = p.intro_text || '';
+            document.getElementById('pe-btn-text').value = p.bottom_btn_text || '';
+            document.getElementById('pe-btn-desc').value = p.bottom_btn_desc || '';
+            document.getElementById('pe-btn-link').value = p.bottom_btn_link || '';
+            document.getElementById('pe-btn-active').value = String(p.bottom_btn_active ?? 1);
+            document.getElementById('popup-editor-heading').textContent = '팝업 수정';
+            renderPopupSections();
+            document.getElementById('popup-editor-wrap').style.display = 'block';
+            document.getElementById('popup-editor-wrap').scrollIntoView({ behavior: 'smooth' });
+        }
+        function renderPopupSections() {
+            const wrap = document.getElementById('pe-sections');
+            if (!_popupSections.length) { wrap.innerHTML = '<span style="font-size:12px;color:var(--text-muted);">섹션이 없습니다. + 섹션 추가를 눌러 추가하세요.</span>'; return; }
+            wrap.innerHTML = _popupSections.map((s, i) => `
+                <div style="border:1px solid var(--gray);border-radius:8px;padding:10px;position:relative;background:#fff;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <span style="font-size:11px;font-weight:600;color:var(--text-muted);">섹션 ${i+1}</span>
+                        <div style="display:flex;gap:4px;">
+                            ${i > 0 ? `<button class="btn btn-xs btn-ghost" onclick="moveSection(${i},-1)">↑</button>` : ''}
+                            ${i < _popupSections.length-1 ? `<button class="btn btn-xs btn-ghost" onclick="moveSection(${i},1)">↓</button>` : ''}
+                            <label style="font-size:10px;display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" ${s.is_active !== 0 ? 'checked' : ''} onchange="toggleSectionActive(${i},this.checked)"> 활성</label>
+                            <button class="btn btn-xs btn-danger" onclick="removeSection(${i})" style="padding:2px 6px;font-size:10px;">✕</button>
+                        </div>
+                    </div>
+                    <div class="admin-form-group" style="margin-bottom:6px;"><label style="font-size:11px;">제목</label><input value="${(s.title||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].title=this.value" style="width:100%;"></div>
+                    <div class="admin-form-group" style="margin-bottom:6px;"><label style="font-size:11px;">내용 (HTML 가능, • 으로 줄바꿈)</label><textarea rows="3" onchange="_popupSections[${i}].content=this.value" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:4px;font-size:11px;resize:vertical;">${(s.content||'').replace(/</g,'&lt;')}</textarea></div>
+                    <div class="admin-form-row" style="gap:6px;">
+                        <div class="admin-form-group" style="flex:1;"><label style="font-size:11px;">링크 버튼 텍스트</label><input value="${(s.link_btn_text||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].link_btn_text=this.value" placeholder="비워두면 표시 안함"></div>
+                        <div class="admin-form-group" style="flex:1;"><label style="font-size:11px;">링크 URL</label><input value="${(s.link_btn_url||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].link_btn_url=this.value" placeholder="/dashboard.html?comp=1"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        function addPopupSection() {
+            _popupSections.push({ title: '', content: '', link_btn_text: '', link_btn_url: '', is_active: 1 });
+            renderPopupSections();
+        }
+        function removeSection(i) { _popupSections.splice(i, 1); renderPopupSections(); }
+        function moveSection(i, dir) {
+            const j = i + dir;
+            if (j < 0 || j >= _popupSections.length) return;
+            [_popupSections[i], _popupSections[j]] = [_popupSections[j], _popupSections[i]];
+            renderPopupSections();
+        }
+        function toggleSectionActive(i, active) { _popupSections[i].is_active = active ? 1 : 0; }
+
+        async function savePopup() {
+            // Sync section content from textareas (in case onchange didn't fire)
+            document.querySelectorAll('#pe-sections textarea').forEach((ta, i) => {
+                if (_popupSections[i]) _popupSections[i].content = ta.value;
+            });
+            document.querySelectorAll('#pe-sections input').forEach(inp => {
+                const m = inp.getAttribute('onchange')?.match(/_popupSections\[(\d+)\]\.(\w+)/);
+                if (m) _popupSections[parseInt(m[1])][m[2]] = inp.value;
+            });
+
+            const data = {
+                popup_type: document.getElementById('pe-type').value,
+                is_active: parseInt(document.getElementById('pe-active').value),
+                show_from: document.getElementById('pe-from').value || null,
+                show_until: document.getElementById('pe-until').value || null,
+                title: document.getElementById('pe-title').value,
+                subtitle: document.getElementById('pe-subtitle').value,
+                intro_text: document.getElementById('pe-intro').value,
+                bottom_btn_text: document.getElementById('pe-btn-text').value,
+                bottom_btn_desc: document.getElementById('pe-btn-desc').value,
+                bottom_btn_link: document.getElementById('pe-btn-link').value,
+                bottom_btn_active: parseInt(document.getElementById('pe-btn-active').value),
+                sections: _popupSections.map((s, i) => ({ ...s, sort_order: i })),
+            };
+            try {
+                if (_editingPopupId) {
+                    await API.updateHomePopup(_editingPopupId, data, AK());
+                } else {
+                    await API.createHomePopup(data, AK());
+                }
+                toast('팝업 저장 완료');
+                closePopupEditor();
+                await loadHomePopups();
+            } catch (e) { toast(e.error || '저장 실패', 'error'); }
+        }
+        async function deletePopup(id) {
+            if (!confirm('이 팝업을 삭제하시겠습니까?')) return;
+            try { await API.deleteHomePopup(id, AK()); toast('삭제 완료'); await loadHomePopups(); }
+            catch (e) { toast(e.error || '삭제 실패', 'error'); }
+        }
+        function previewPopup() {
+            const title = document.getElementById('pe-title').value || 'PACE RISE : Node';
+            const subtitle = document.getElementById('pe-subtitle').value || '';
+            const intro = document.getElementById('pe-intro').value || '';
+            // Sync sections
+            document.querySelectorAll('#pe-sections textarea').forEach((ta, i) => { if (_popupSections[i]) _popupSections[i].content = ta.value; });
+            document.querySelectorAll('#pe-sections input').forEach(inp => {
+                const m = inp.getAttribute('onchange')?.match(/_popupSections\[(\d+)\]\.(\w+)/);
+                if (m) _popupSections[parseInt(m[1])][m[2]] = inp.value;
+            });
+            const btnText = document.getElementById('pe-btn-text').value;
+            const btnDesc = document.getElementById('pe-btn-desc').value;
+            const btnLink = document.getElementById('pe-btn-link').value;
+            const btnActive = document.getElementById('pe-btn-active').value === '1';
+
+            let html = `<div style="max-width:480px;margin:0 auto;padding:24px;background:#fff;border-radius:12px;border:1.5px solid var(--gray);max-height:80vh;overflow-y:auto;">
+                <div style="text-align:center;margin-bottom:16px;">
+                    <div style="font-family:'Audiowide',sans-serif;font-size:18px;letter-spacing:2px;">${title}</div>
+                    ${subtitle ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${subtitle}</div>` : ''}
+                </div>
+                ${intro ? `<div style="font-size:13px;line-height:1.6;margin-bottom:16px;">${intro}</div>` : ''}`;
+            _popupSections.filter(s => s.is_active !== 0).forEach(s => {
+                html += `<details style="margin-bottom:8px;border:1px solid var(--gray);border-radius:8px;overflow:hidden;">
+                    <summary style="padding:10px 14px;font-weight:600;font-size:13px;cursor:pointer;background:#f9fafb;">${s.title || '(제목 없음)'}</summary>
+                    <div style="padding:10px 14px;font-size:12px;line-height:1.7;">${(s.content||'').replace(/\n/g,'<br>')}</div>
+                    ${s.link_btn_text ? `<div style="padding:0 14px 10px;"><a href="${s.link_btn_url||'#'}" style="font-size:12px;color:var(--primary);">${s.link_btn_text} →</a></div>` : ''}
+                </details>`;
+            });
+            if (btnActive && btnText) {
+                html += `<div style="margin-top:16px;padding:16px;background:#f0f9ff;border-radius:8px;text-align:center;border:1px solid #90caf9;">
+                    <div style="font-size:14px;font-weight:600;">${btnText}</div>
+                    ${btnDesc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${btnDesc}</div>` : ''}
+                    ${btnLink ? `<div style="margin-top:8px;"><a href="${btnLink}" style="font-size:12px;color:var(--primary);font-weight:600;">이동 →</a></div>` : ''}
+                </div>`;
+            }
+            html += `<div style="display:flex;gap:8px;justify-content:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--gray);">
+                <button style="padding:8px 20px;background:#f5f5f5;border:1px solid var(--gray);border-radius:6px;font-size:12px;cursor:pointer;">오늘 하루 보지 않음</button>
+                <button style="padding:8px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;" onclick="this.closest('.info-modal').classList.remove('show')">닫기</button>
+            </div></div>`;
+
+            // Show in a modal
+            let modal = document.getElementById('popup-preview-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'popup-preview-modal';
+                modal.className = 'info-modal';
+                modal.innerHTML = '<div class="info-modal-inner" style="max-width:520px;" id="popup-preview-content"></div>';
+                modal.onclick = function(e) { if (e.target === modal) modal.classList.remove('show'); };
+                document.body.appendChild(modal);
+            }
+            document.getElementById('popup-preview-content').innerHTML = html;
+            modal.classList.add('show');
+        }
+
+        // ---- UPLOAD ----
+        function downloadBackup(format = 'json') {
+            let url = '/api/admin/backup?key=' + encodeURIComponent(AK()) + '&format=' + format;
+            const compOnly = document.getElementById('backup-comp-only')?.checked;
+            if (compOnly) {
+                const compId = getCompetitionId();
+                if (compId) url += '&competition_id=' + compId;
+            }
+            window.open(url, '_blank');
+        }
+        async function deleteCompetition() {
+            const compId = getCompetitionId();
+            if (!compId) { toast('대회를 선택하세요', 'error'); return; }
+            const adminKey = prompt('대회를 완전히 삭제합니다.\n이 작업은 복구할 수 없습니다.\n\n관리자 키를 입력하세요:');
+            if (!adminKey) return;
+            const compName = document.getElementById('comp-name')?.value || '선택된 대회';
+            if (!confirm(`정말로 "${compName}" 대회를 삭제하시겠습니까?\n\n모든 선수, 종목, 기록, 로그가 영구 삭제됩니다.`)) return;
+            try {
+                await API.deleteCompetition(compId, adminKey);
+                toast('대회가 삭제되었습니다.');
+                sessionStorage.removeItem('selectedCompetitionId');
+                location.reload();
+            } catch (e) { toast(e.error || '대회 삭제 실패', 'error'); }
+        }
+        async function previewFederation() {
+            const fileInput = document.getElementById('fed-file');
+            const previewDiv = document.getElementById('fed-preview');
+            const resultDiv = document.getElementById('fed-result');
+            resultDiv.style.display = 'none';
+            if (!fileInput.files.length) { toast('파일을 선택하세요', 'error'); return; }
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('admin_key', AK());
+            try {
+                previewDiv.innerHTML = '<div style="color:var(--blue)">분석 중...</div>';
+                previewDiv.style.display = 'block';
+                const res = await fetch('/api/federation/preview', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw data;
+                let html = `<div><strong>시트:</strong> ${data.sheetName} | <strong>선수:</strong> ${data.athleteCount}명</div>`;
+                html += `<div style="margin-top:6px;"><strong>개인 종목 (${data.individualEvents.length}개):</strong></div>`;
+                html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0;">';
+                data.individualEvents.forEach(e => { html += `<span style="background:var(--text);color:var(--white);padding:2px 8px;border-radius:12px;font-size:11px;">${e.name} ${e.gender==='M'?'M':'F'} (${e.count})</span>`; });
+                html += '</div>';
+                if (data.relayEvents.length > 0) {
+                    html += `<div><strong>릴레이 (${data.relayEvents.length}개):</strong></div>`;
+                    html += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+                    data.relayEvents.forEach(e => { html += `<span style="background:var(--accent);color:var(--white);padding:2px 8px;border-radius:12px;font-size:11px;">${e.name} (${e.teamCount}팀)</span>`; });
+                    html += '</div>';
+                }
+                previewDiv.innerHTML = html;
+                document.getElementById('fed-import-btn').disabled = false;
+            } catch (e) { previewDiv.innerHTML = `<div style="color:var(--danger)">오류: ${e.error||e.message||'알 수 없는 오류'}</div>`; }
+        }
+        async function importFederation() {
+            const fileInput = document.getElementById('fed-file');
+            const resultDiv = document.getElementById('fed-result');
+            if (!fileInput.files.length) { toast('파일을 선택하세요', 'error'); return; }
+            if (!_selectedCompId) { toast('대회를 선택하세요', 'error'); return; }
+            const clearExisting = document.getElementById('fed-clear').checked;
+            if (clearExisting && !confirm('기존 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?')) return;
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('admin_key', AK());
+            formData.append('competition_id', _selectedCompId);
+            formData.append('clear_existing', clearExisting);
+            formData.append('heat_size', document.getElementById('fed-heat-size').value);
+            try {
+                resultDiv.innerHTML = '<div style="color:var(--blue)">가져오는 중...</div>';
+                resultDiv.style.display = 'block';
+                const res = await fetch('/api/federation/import', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw data;
+                resultDiv.style.background = 'var(--green-light)'; resultDiv.style.color = 'var(--green)';
+                resultDiv.innerHTML = `선수 ${data.stats.athletes}명 | 종목 ${data.stats.events}개 | 엔트리 ${data.stats.entries}건 | 조 ${data.stats.heats}개`;
+                toast('업로드 완료');
+            } catch (e) {
+                resultDiv.style.background = '#fff0f0'; resultDiv.style.color = 'var(--danger)';
+                resultDiv.innerHTML = `오류: ${e.error||e.message||'알 수 없는 오류'}`;
+            }
+        }
+
+        // ---- HEAT ASSIGNMENT UPLOAD (조편성) ----
+        let _haPreviewData = null;
+        let _haFile = null;
+
+        async function previewHeatAssignment() {
+            const fileInput = document.getElementById('ha-file');
+            const previewDiv = document.getElementById('ha-preview');
+            const resultDiv = document.getElementById('ha-result');
+            resultDiv.style.display = 'none';
+            if (!fileInput.files.length) { toast('파일을 선택하세요', 'error'); return; }
+            if (!_selectedCompId) { toast('대회를 선택하세요', 'error'); return; }
+            _haFile = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', _haFile);
+            formData.append('admin_key', AK());
+            formData.append('competition_id', _selectedCompId);
+            try {
+                previewDiv.style.display = 'block';
+                previewDiv.innerHTML = '<div style="padding:16px;text-align:center;color:var(--blue);">분석 중...</div>';
+                const res = await fetch('/api/heat-assignment/preview', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw data;
+                _haPreviewData = data;
+
+                let html = `<div style="background:var(--bg);border:1px solid #e5e7eb;border-radius:8px;padding:16px;">`;
+                html += `<div style="font-size:13px;font-weight:600;margin-bottom:12px;">📋 조편성 미리보기 — ${data.eventCount}개 종목 감지 (총 ${data.totalRows}행)</div>`;
+
+                const changed = data.preview.filter(p => p.status === 'changed');
+                const hasResults = data.preview.filter(p => p.status === 'has_results');
+                const unchanged = data.preview.filter(p => p.status === 'unchanged');
+                const notFound = data.preview.filter(p => p.status === 'not_found');
+
+                // Summary bar
+                html += `<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">`;
+                if (changed.length) html += `<span style="background:#dcfce7;color:#166534;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">✅ 변경 적용: ${changed.length}개</span>`;
+                if (hasResults.length) html += `<span style="background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">⚠️ 기록있음: ${hasResults.length}개</span>`;
+                if (unchanged.length) html += `<span style="background:#f3f4f6;color:#6b7280;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">⏭ 변경없음: ${unchanged.length}개</span>`;
+                if (notFound.length) html += `<span style="background:#fef2f2;color:#dc2626;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">❌ 미발견: ${notFound.length}개</span>`;
+                html += `</div>`;
+
+                // Detail table
+                html += `<table style="width:100%;font-size:12px;border-collapse:collapse;">`;
+                html += `<thead><tr style="background:#f9fafb;"><th style="padding:6px 8px;text-align:left;border-bottom:1px solid #e5e7eb;">종목</th><th style="padding:6px;text-align:center;border-bottom:1px solid #e5e7eb;">엑셀</th><th style="padding:6px;text-align:center;border-bottom:1px solid #e5e7eb;">DB</th><th style="padding:6px;text-align:center;border-bottom:1px solid #e5e7eb;">상태</th><th style="padding:6px;text-align:left;border-bottom:1px solid #e5e7eb;">변경사항</th></tr></thead><tbody>`;
+
+                for (const item of data.preview) {
+                    const statusColors = {
+                        changed: { bg: '#dcfce7', color: '#166534', label: '✅ 변경' },
+                        has_results: { bg: '#fef3c7', color: '#92400e', label: '⚠️ 기록있음' },
+                        unchanged: { bg: '#f3f4f6', color: '#9ca3af', label: '⏭ 스킵' },
+                        not_found: { bg: '#fef2f2', color: '#dc2626', label: '❌ 미발견' }
+                    };
+                    const sc = statusColors[item.status] || statusColors.not_found;
+
+                    let changeText = '';
+                    if (item.changes && item.changes.length > 0) {
+                        const added = item.changes.filter(c => c.type === 'added');
+                        const removed = item.changes.filter(c => c.type === 'removed');
+                        const heatChange = item.changes.find(c => c.type === 'heat_count');
+                        const parts = [];
+                        if (heatChange) parts.push(`조: ${heatChange.from}→${heatChange.to}`);
+                        if (added.length) parts.push(`+${added.length}명`);
+                        if (removed.length) parts.push(`-${removed.length}명`);
+                        if (!parts.length) parts.push('레인 변경');
+                        changeText = parts.join(', ');
+                    }
+
+                    let forceCheckbox = '';
+                    if (item.status === 'has_results') {
+                        forceCheckbox = `<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#92400e;cursor:pointer;margin-top:2px;"><input type="checkbox" class="ha-force-check" data-event-id="${item.eventId}" style="margin:0;"> 강제 변경</label>`;
+                    }
+
+                    html += `<tr style="border-bottom:1px solid #f3f4f6;">`;
+                    html += `<td style="padding:6px 8px;font-weight:500;">${item.eventName}${item.status === 'has_results' ? ` <span style="font-size:10px;color:#92400e;">(${item.resultCount}건)</span>` : ''}</td>`;
+                    html += `<td style="padding:6px;text-align:center;">${item.excelEntries}명${item.excelHeats ? ` / ${item.excelHeats}조` : ''}</td>`;
+                    html += `<td style="padding:6px;text-align:center;">${item.dbEntries}명</td>`;
+                    html += `<td style="padding:6px;text-align:center;"><span style="background:${sc.bg};color:${sc.color};padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600;">${sc.label}</span>${forceCheckbox}</td>`;
+                    html += `<td style="padding:6px;font-size:11px;color:#6b7280;">${changeText || item.message}</td>`;
+                    html += `</tr>`;
+                }
+                html += `</tbody></table>`;
+
+                // Action buttons
+                const hasChanges = changed.length > 0 || hasResults.length > 0;
+                if (hasChanges) {
+                    html += `<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">`;
+                    html += `<button class="btn btn-outline" onclick="cancelHeatAssignment()">취소</button>`;
+                    html += `<button class="btn btn-primary" onclick="applyHeatAssignment()" style="background:#ef4444;border-color:#ef4444;">적용하기</button>`;
+                    html += `</div>`;
+                } else if (unchanged.length > 0 && changed.length === 0) {
+                    html += `<div style="margin-top:12px;padding:10px;background:#f0fdf4;border-radius:6px;text-align:center;font-size:13px;color:#166534;font-weight:600;">모든 종목 변경사항 없음 — 기존 데이터가 유지됩니다.</div>`;
+                }
+
+                html += `</div>`;
+                previewDiv.innerHTML = html;
+            } catch (e) {
+                previewDiv.innerHTML = `<div style="padding:12px;color:var(--danger);background:#fef2f2;border-radius:6px;">오류: ${e.error||e.message||'알 수 없는 오류'}</div>`;
+            }
+        }
+
+        function cancelHeatAssignment() {
+            document.getElementById('ha-preview').style.display = 'none';
+            _haPreviewData = null;
+            _haFile = null;
+        }
+
+        async function applyHeatAssignment() {
+            if (!_haFile || !_selectedCompId) return;
+
+            // Collect force-checked event IDs
+            const forceIds = [];
+            document.querySelectorAll('.ha-force-check:checked').forEach(cb => {
+                forceIds.push(cb.dataset.eventId);
+            });
+
+            // Confirm if force-changing events with results
+            const hasForced = forceIds.length > 0;
+            if (hasForced) {
+                if (!confirm(`⚠️ ${forceIds.length}개 종목의 기록이 초기화됩니다. 정말 진행하시겠습니까?`)) return;
+            }
+
+            if (!confirm('조편성을 적용합니다. 계속하시겠습니까?')) return;
+
+            const formData = new FormData();
+            formData.append('file', _haFile);
+            formData.append('admin_key', AK());
+            formData.append('competition_id', _selectedCompId);
+            if (forceIds.length) formData.append('force_event_ids', forceIds.join(','));
+
+            const resultDiv = document.getElementById('ha-result');
+            try {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<div style="color:var(--blue)">적용 중...</div>';
+                const res = await fetch('/api/heat-assignment/apply', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw data;
+
+                resultDiv.style.background = '#ecfdf5'; resultDiv.style.color = '#166534';
+                let msg = `✅ 조편성 적용 완료<br>`;
+                msg += `변경: ${data.stats.updated}개 종목 | 스킵(변경없음): ${data.stats.skippedUnchanged}개 | 스킵(기록보호): ${data.stats.skippedHasResults}개`;
+                if (data.stats.notFound) msg += ` | 미발견: ${data.stats.notFound}개`;
+                if (data.stats.athletesAdded) msg += ` | 신규선수: ${data.stats.athletesAdded}명`;
+                resultDiv.innerHTML = msg;
+                toast('조편성 적용 완료');
+
+                // Reset
+                document.getElementById('ha-preview').style.display = 'none';
+                _haPreviewData = null;
+                _haFile = null;
+            } catch (e) {
+                resultDiv.style.background = '#fef2f2'; resultDiv.style.color = '#dc2626';
+                resultDiv.innerHTML = `오류: ${e.error||e.message||'알 수 없는 오류'}`;
+            }
+        }
+
+        // ---- ATHLETE UPLOAD (선수 명단 전용) ----
+        async function uploadAthletes() {
+            const fileInput = document.getElementById('ath-upload-file');
+            const resultDiv = document.getElementById('ath-upload-result');
+            if (!fileInput.files.length) { toast('파일을 선택하세요', 'error'); return; }
+            if (!_selectedCompId) { toast('대회를 선택하세요', 'error'); return; }
+            const clearExisting = document.getElementById('ath-upload-clear').checked;
+            if (clearExisting && !confirm('기존 선수 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?')) return;
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('admin_key', AK());
+            formData.append('competition_id', _selectedCompId);
+            formData.append('clear_existing', clearExisting);
+            try {
+                resultDiv.innerHTML = '<div style="color:var(--blue)">업로드 중...</div>';
+                resultDiv.style.display = 'block';
+                const res = await fetch('/api/athletes/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw data;
+                resultDiv.style.background = 'var(--green-light,#ecfdf5)'; resultDiv.style.color = 'var(--green,#16a34a)';
+                resultDiv.innerHTML = `✅ 선수 ${data.stats.added}명 추가 | ${data.stats.skipped}명 스킵`;
+                toast('선수 업로드 완료');
+                loadAthletes();
+            } catch (e) {
+                resultDiv.style.background = '#fff0f0'; resultDiv.style.color = 'var(--danger)';
+                resultDiv.innerHTML = `오류: ${e.error||e.message||'알 수 없는 오류'}`;
+            }
+        }
+
+        // ---- EVENT UPLOAD (종목 리스트 전용) ----
+        async function uploadEvents() {
+            const fileInput = document.getElementById('evt-upload-file');
+            const resultDiv = document.getElementById('evt-upload-result');
+            if (!fileInput.files.length) { toast('파일을 선택하세요', 'error'); return; }
+            if (!_selectedCompId) { toast('대회를 선택하세요', 'error'); return; }
+            const clearExisting = document.getElementById('evt-upload-clear').checked;
+            if (clearExisting && !confirm('기존 종목 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?')) return;
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('admin_key', AK());
+            formData.append('competition_id', _selectedCompId);
+            formData.append('clear_existing', clearExisting);
+            try {
+                resultDiv.innerHTML = '<div style="color:var(--blue)">업로드 중...</div>';
+                resultDiv.style.display = 'block';
+                const res = await fetch('/api/events/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw data;
+                resultDiv.style.background = 'var(--green-light,#ecfdf5)'; resultDiv.style.color = 'var(--green,#16a34a)';
+                resultDiv.innerHTML = `✅ 종목 ${data.stats.added}개 추가 | ${data.stats.skipped}개 스킵`;
+                toast('종목 업로드 완료');
+                loadEvents();
+            } catch (e) {
+                resultDiv.style.background = '#fff0f0'; resultDiv.style.color = 'var(--danger)';
+                resultDiv.innerHTML = `오류: ${e.error||e.message||'알 수 없는 오류'}`;
+            }
+        }
+
+        // ---- ATHLETE DETAIL MODAL ----
+        function openAthModal(id) {
+            const a = _allAthletes.find(x => x.id === id);
+            if (!a) return;
+            document.getElementById('am-id').value = a.id;
+            document.getElementById('am-name').value = a.name;
+            document.getElementById('am-bib').value = a.bib_number || '';
+            document.getElementById('am-team').value = a.team || '';
+            document.getElementById('am-gender').value = a.gender;
+            document.getElementById('am-barcode').value = a.barcode || '';
+
+            document.getElementById('ath-modal-title').textContent = `${a.name} (BIB: ${bib(a.bib_number)})`;
+            const modal = document.getElementById('ath-detail-modal');
+            modal.style.display = 'flex';
+            modal.onclick = e => { if (e.target === modal) closeAthModal(); };
+            loadAthleteEvents(a.id);
+        }
+        function closeAthModal() { document.getElementById('ath-detail-modal').style.display = 'none'; }
+        async function saveAthleteFromModal() {
+            const id = document.getElementById('am-id').value;
+            try {
+                await API.updateAthlete(id, {
+                    name: document.getElementById('am-name').value,
+                    bib_number: document.getElementById('am-bib').value,
+                    team: document.getElementById('am-team').value,
+                    gender: document.getElementById('am-gender').value,
+                    barcode: document.getElementById('am-barcode').value
+                }, AK());
+                toast('저장 완료'); closeAthModal(); loadAthletes();
+            } catch (e) { toast(e.error || '저장 실패', 'error'); }
+        }
+        async function deleteAthleteFromModal() {
+            const id = document.getElementById('am-id').value;
+            const name = document.getElementById('am-name').value;
+            if (!confirm(`"${name}" 선수를 삭제하시겠습니까?`)) return;
+            try { await API.deleteAthlete(id, AK()); toast('삭제 완료'); closeAthModal(); loadAthletes(); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
+        }
+
+        async function loadAthleteEvents(athleteId) {
+            const listEl = document.getElementById('am-events-list');
+            const selEl = document.getElementById('am-add-event-select');
+            listEl.innerHTML = '<span style="color:var(--text-muted);">로딩중...</span>';
+            try {
+                const entries = await API.getAthleteEvents(athleteId, AK());
+                if (entries.length === 0) {
+                    listEl.innerHTML = '<span style="color:var(--text-muted);">출전 종목 없음</span>';
+                } else {
+                    listEl.innerHTML = entries.map(e =>
+                        `<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--gray-light);">
+                            <span>${e.event_name} <span style="color:var(--text-muted);font-size:10px;">${fmtRound(e.round_type)}</span></span>
+                            <button class="btn btn-xs btn-danger" onclick="removeEventFromAthlete(${athleteId},${e.event_entry_id})">제거</button>
+                        </div>`
+                    ).join('');
+                }
+                // Populate event dropdown (exclude already assigned)
+                const assignedIds = new Set(entries.map(e => e.event_id));
+                const mainEvents = _allAdminEvents.filter(e => !e.parent_event_id && !assignedIds.has(e.id));
+                selEl.innerHTML = mainEvents.length === 0
+                    ? '<option value="">추가 가능한 종목 없음</option>'
+                    : mainEvents.map(e => `<option value="${e.id}">${e.name} (${e.gender==='M'?'남':e.gender==='F'?'여':'혼성'} ${fmtRound(e.round_type)})</option>`).join('');
+            } catch (e) { listEl.innerHTML = '<span style="color:var(--danger);">로드 실패</span>'; }
+        }
+        async function addEventToAthlete() {
+            const athleteId = document.getElementById('am-id').value;
+            const eventId = document.getElementById('am-add-event-select').value;
+            if (!eventId) return;
+            try {
+                await API.addAthleteEvent(athleteId, parseInt(eventId), AK());
+                toast('종목 추가 완료');
+                loadAthleteEvents(athleteId);
+            } catch (e) {
+                const msg = e.error || e.message || '추가 실패';
+                toast(msg, 'error');
+            }
+        }
+        async function removeEventFromAthlete(athleteId, entryId) {
+            if (!confirm('이 종목 배정을 제거하시겠습니까?')) return;
+            try {
+                await API.removeAthleteEvent(athleteId, entryId, AK());
+                toast('제거 완료');
+                loadAthleteEvents(athleteId);
+            } catch (e) { toast(e.error || '제거 실패', 'error'); }
+        }
+
+        // ---- EVENT DETAIL MODAL (with integrated heat management) ----
+        let _emHeats = [], _emSelectedHeatId = null, _emEventId = null;
+        
+        async function openEvtModal(id) {
+            const e = _allAdminEvents.find(x => x.id === id);
+            if (!e) return;
+            _emEventId = id;
+            document.getElementById('em-id').value = e.id;
+            document.getElementById('em-name').value = e.name;
+            document.getElementById('em-category').value = e.category;
+            document.getElementById('em-gender').value = e.gender;
+            document.getElementById('em-round').value = e.round_type;
+            document.getElementById('em-status').value = e.round_status;
+            document.getElementById('em-sort').value = e.sort_order || 0;
+            // Load video URL
+            try {
+                const vr = await API.getEventVideoUrl(id);
+                document.getElementById('em-video-url').value = vr.video_url || '';
+            } catch(ex) { document.getElementById('em-video-url').value = ''; }
+            document.getElementById('evt-modal-title').textContent = `${e.name} (${ROUND_LABEL[e.round_type]||e.round_type})`;
+            const modal = document.getElementById('evt-detail-modal');
+            modal.style.display = 'flex';
+            modal.onclick = ev => { if (ev.target === modal) closeEvtModal(); };
+            // Load heat management inside modal
+            await loadEvtModalHeats(id);
+        }
+        
+        async function loadEvtModalHeats(eventId) {
+            _emHeats = await API.getHeats(eventId);
+            const entries = await API.getEventEntries(eventId);
+            document.getElementById('em-heat-summary').innerHTML = `총 선수: <strong>${entries.length}명</strong> | 조 수: <strong>${_emHeats.length}개</strong>`;
+            
+            let tabsHtml = _emHeats.map((h, i) => {
+                const active = (_emSelectedHeatId === h.id || (i === 0 && !_emSelectedHeatId)) ? 'active' : '';
+                const label = h.heat_name || (h.heat_number + '조');
+                return `<span style="display:inline-flex;align-items:center;gap:2px;position:relative;">
+                    <button class="heat-tab-btn ${active}" onclick="switchEmHeat(${h.id}, this)" title="클릭: 선수 보기">${label}</button>
+                    <button class="btn btn-xs btn-ghost" style="padding:2px 4px;font-size:11px;min-width:0;line-height:1;" onclick="emRenameHeatInline(${h.id})" title="조 이름 수정">✏️</button>
+                </span>`;
+            }).join('');
+            tabsHtml += `<button class="btn btn-xs btn-primary" onclick="emAddHeat(${eventId})">+ 조 추가</button>`;
+            document.getElementById('em-heat-tabs').innerHTML = tabsHtml;
+            
+            if (_emHeats.length > 0) {
+                _emSelectedHeatId = _emSelectedHeatId || _emHeats[0].id;
+                await loadEmHeatEntries(_emSelectedHeatId);
+                document.getElementById('em-batch-controls').style.display = 'block';
+                // Update batch target dropdown
+                const targetSel = document.getElementById('em-batch-target-heat');
+                targetSel.innerHTML = _emHeats.map((h, i) => `<option value="${h.id}">${h.heat_name || (h.heat_number + '조')}</option>`).join('');
+                // Show A/B group controls for 5000m, 10000m events
+                const evtData = _allAdminEvents.find(x => x.id === eventId);
+                const isLongDist = evtData && (evtData.name.includes('5000') || evtData.name.includes('10000') || evtData.name.includes('10,000'));
+                document.getElementById('em-ab-controls').style.display = isLongDist ? 'block' : 'none';
+            } else {
+                _emSelectedHeatId = null;
+                document.getElementById('em-heat-entries').innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">조가 없습니다.</div>';
+                document.getElementById('em-batch-controls').style.display = 'none';
+            }
+        }
+        
+        function switchEmHeat(heatId, btn) {
+            _emSelectedHeatId = heatId;
+            document.querySelectorAll('#em-heat-tabs .heat-tab-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            loadEmHeatEntries(heatId);
+        }
+        
+        async function loadEmHeatEntries(heatId) {
+            const entries = await API.getHeatEntries(heatId);
+            const area = document.getElementById('em-heat-entries');
+            const emEvt = _allAdminEvents.find(x => x.id === _emEventId);
+            const isRelay = emEvt && emEvt.category === 'relay';
+            if (entries.length === 0) {
+                area.innerHTML = `<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">이 조에 배정된 선수가 없습니다.</div>
+                    <div style="text-align:right;margin-top:6px;"><button class="btn btn-xs btn-danger" onclick="emDeleteHeat(${heatId})">이 조 삭제</button></div>`;
+                return;
+            }
+            const moveOpts = _emHeats.filter(h => h.id !== heatId).map(h => `<option value="${h.id}">${h.heat_name || (h.heat_number + '조')}</option>`).join('');
+
+            if (isRelay) {
+                // Relay: fetch members per team
+                let relayBatch = {};
+                try { relayBatch = await api('GET', `/api/relay-members/batch?event_id=${_emEventId}`); } catch(e) {}
+                let html = `<table class="heat-entries-table"><thead><tr>
+                    <th style="width:55px">레인</th><th style="text-align:left;">팀명</th><th style="width:50px">인원</th>
+                    <th>1주</th><th>2주</th><th>3주</th><th>4주</th>
+                    <th style="width:50px">제거</th>
+                </tr></thead><tbody>`;
+                entries.forEach(e => {
+                    const td = relayBatch[e.event_entry_id];
+                    const members = td ? td.members : [];
+                    const legs = [null, null, null, null];
+                    members.forEach(m => { if (m.leg_order >= 1 && m.leg_order <= 4) legs[m.leg_order - 1] = m; });
+                    const legCells = legs.map(m => {
+                        if (!m) return '<td style="color:#ccc;text-align:center;font-size:11px;">—</td>';
+                        return `<td style="text-align:center;font-size:11px;"><strong>${bib(m.bib_number)}</strong> ${m.name}</td>`;
+                    }).join('');
+                    const escapedName = (e.name || '').replace(/'/g, "\\'");
+                    html += `<tr>
+                        <td style="text-align:center;"><input type="number" value="${e.lane_number || ''}" min="0" max="99" placeholder="—" data-heat-id="${heatId}" data-entry-id="${e.event_entry_id}" onchange="emSaveLane(this)" style="width:42px;padding:3px 4px;border:1px solid var(--gray);border-radius:4px;text-align:center;font-size:12px;font-weight:700;"></td>
+                        <td style="text-align:left;font-weight:600;cursor:pointer;color:var(--blue);text-decoration:underline;" onclick="openRelayMemberModal(${e.event_entry_id},'${escapedName}',${_emEventId})">${e.name} <span style="font-size:10px;color:var(--text-muted);">(${members.length}명) ✎</span></td>
+                        <td style="text-align:center;">${members.length}</td>
+                        ${legCells}
+                        <td><button class="btn btn-xs btn-danger" onclick="emRemoveEntry(${heatId},${e.event_entry_id},'${escapedName}')" title="이 조에서 제거">&times;</button></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                html += `<div style="display:flex;justify-content:space-between;margin-top:6px;align-items:center;">
+                    <span style="font-size:12px;color:var(--text-muted);">${entries.length}팀 배정</span>
+                    <button class="btn btn-xs btn-danger" onclick="emDeleteHeat(${heatId})">이 조 삭제</button>
+                </div>`;
+                area.innerHTML = html;
+            } else {
+            let html = `<table class="heat-entries-table"><thead><tr>
+                <th style="width:30px;"><input type="checkbox" onchange="toggleAllEmChecks(this)"></th>
+                <th style="width:55px">레인/순번</th><th style="width:60px">BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>
+                <th style="width:55px">상태</th><th style="width:80px">그룹</th><th style="width:80px">이동</th><th style="width:50px">제거</th>
+            </tr></thead><tbody>`;
+            entries.forEach(e => {
+                const stLabel = {registered:'등록',checked_in:'소집',no_show:'불참'}[e.status] || e.status;
+                const groupLabel = e.sub_group || '—';
+                html += `<tr>
+                    <td><input type="checkbox" class="em-entry-check" value="${e.event_entry_id}"></td>
+                    <td style="text-align:center;"><input type="number" value="${e.lane_number || ''}" min="0" max="99" placeholder="—" data-heat-id="${heatId}" data-entry-id="${e.event_entry_id}" onchange="emSaveLane(this)" style="width:42px;padding:3px 4px;border:1px solid var(--gray);border-radius:4px;text-align:center;font-size:12px;font-weight:700;"></td>
+                    <td><strong>${bib(e.bib_number)}</strong></td>
+                    <td>${e.name}</td>
+                    <td style="font-size:11px;">${e.team || ''}</td>
+                    <td style="font-size:11px;">${stLabel}</td>
+                    <td>
+                        <select class="heat-move-select" style="font-size:10px;padding:2px 4px;" onchange="setEntryGroup(${e.heat_entry_id || 0},${e.event_entry_id},this.value)">
+                            <option value="">—</option>
+                            <option value="A" ${groupLabel==='A'?'selected':''}>A</option>
+                            <option value="B" ${groupLabel==='B'?'selected':''}>B</option>
+                        </select>
+                    </td>
+                    <td>${moveOpts ? `<select class="heat-move-select" style="font-size:10px;padding:2px 4px;" onchange="emMoveEntry(${heatId},${e.event_entry_id},this.value);this.selectedIndex=0;"><option value="">이동...</option>${moveOpts}</select>` : '—'}</td>
+                    <td><button class="btn btn-xs btn-danger" onclick="emRemoveEntry(${heatId},${e.event_entry_id},'${e.name.replace(/'/g,"\\'")}')" title="이 조에서 제거">&times;</button></td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            html += `<div style="display:flex;justify-content:space-between;margin-top:6px;align-items:center;">
+                <span style="font-size:12px;color:var(--text-muted);">${entries.length}명 배정</span>
+                <button class="btn btn-xs btn-danger" onclick="emDeleteHeat(${heatId})">이 조 삭제</button>
+            </div>`;
+            area.innerHTML = html;
+            }
+        }
+        
+        function toggleAllEmChecks(master) {
+            document.querySelectorAll('.em-entry-check').forEach(cb => cb.checked = master.checked);
+        }
+        
+        async function batchMoveEntries() {
+            const targetHeatId = document.getElementById('em-batch-target-heat').value;
+            if (!targetHeatId) { toast('대상 조를 선택하세요', 'error'); return; }
+            const checked = [...document.querySelectorAll('.em-entry-check:checked')].map(cb => parseInt(cb.value));
+            if (checked.length === 0) { toast('이동할 선수를 선택하세요', 'error'); return; }
+            try {
+                for (const entryId of checked) {
+                    await API.moveHeatEntry(_emSelectedHeatId, entryId, parseInt(targetHeatId), null, AK());
+                }
+                toast(`${checked.length}명 이동 완료`);
+                await loadEvtModalHeats(_emEventId);
+            } catch (e) { toast(e.error || '이동 실패', 'error'); }
+        }
+        
+        async function mergeAllToOneHeat() {
+            if (_emHeats.length <= 1) { toast('이미 1개 조입니다', 'error'); return; }
+            if (!confirm('모든 선수를 1조로 합칩니다. 계속하시겠습니까?')) return;
+            const targetHeat = _emHeats[0];
+            try {
+                for (let i = 1; i < _emHeats.length; i++) {
+                    const entries = await API.getHeatEntries(_emHeats[i].id);
+                    for (const e of entries) {
+                        await API.moveHeatEntry(_emHeats[i].id, e.event_entry_id, targetHeat.id, null, AK());
+                    }
+                    await API.deleteHeat(_emHeats[i].id, AK());
+                }
+                toast('합조 완료');
+                _emSelectedHeatId = targetHeat.id;
+                await loadEvtModalHeats(_emEventId);
+            } catch (e) { toast(e.error || '합조 실패', 'error'); }
+        }
+        
+        async function setEntryGroup(heatEntryId, eventEntryId, group) {
+            if (!group) return;
+            try {
+                const resp = await fetch('/api/admin/heat-entry/set-group', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ heat_entry_id: heatEntryId, event_entry_id: eventEntryId, heat_id: _emSelectedHeatId, sub_group: group, admin_key: AK() })
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw data;
+                toast(`그룹 ${group} 배정`);
+                await loadEmHeatEntries(_emSelectedHeatId);
+            } catch (e) { toast(e.error || '그룹 변경 실패', 'error'); }
+        }
+        
+        async function assignGroupToChecked(group) {
+            const checked = [...document.querySelectorAll('.em-entry-check:checked')].map(cb => parseInt(cb.value));
+            if (checked.length === 0) { toast('선수를 선택하세요', 'error'); return; }
+            try {
+                for (const entryId of checked) {
+                    await fetch('/api/admin/heat-entry/set-group', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ event_entry_id: entryId, heat_id: _emSelectedHeatId, sub_group: group, admin_key: AK() })
+                    });
+                }
+                toast(`${checked.length}명 그룹 ${group} 배정 완료`);
+                await loadEmHeatEntries(_emSelectedHeatId);
+            } catch (e) { toast(e.error || '그룹 배정 실패', 'error'); }
+        }
+        
+        async function autoAssignABGroups() {
+            if (!_emSelectedHeatId) return;
+            if (!confirm('선수를 반으로 나눠 A/B 그룹에 자동 배정합니다. 계속하시겠습니까?')) return;
+            try {
+                const entries = await API.getHeatEntries(_emSelectedHeatId);
+                const half = Math.ceil(entries.length / 2);
+                for (let i = 0; i < entries.length; i++) {
+                    const lane = i < half ? 1 : 51; // A: lane 1, B: lane 51
+                    await API.moveHeatEntry(_emSelectedHeatId, entries[i].event_entry_id, _emSelectedHeatId, lane, AK());
+                }
+                toast(`A조 ${half}명, B조 ${entries.length - half}명 자동 배정 완료`);
+                await loadEmHeatEntries(_emSelectedHeatId);
+            } catch (e) { toast(e.error || '자동 배정 실패', 'error'); }
+        }
+        
+        async function emMoveEntry(fromHeatId, entryId, toHeatId) {
+            if (!toHeatId) return;
+            try {
+                await API.moveHeatEntry(fromHeatId, entryId, parseInt(toHeatId), null, AK());
+                toast('선수 이동 완료');
+                await loadEmHeatEntries(fromHeatId);
+            } catch (e) { toast(e.error || '이동 실패', 'error'); }
+        }
+        async function emRemoveEntry(heatId, eventEntryId, name) {
+            const action = confirm(`"${name}" 선수를 이 조에서 제거하시겠습니까?\n\n[확인] = 조에서만 제거 (종목 등록 유지)`);
+            if (!action) return;
+            try {
+                await API.removeHeatEntry(heatId, eventEntryId, false, AK());
+                toast('선수 제거 완료');
+                await loadEvtModalHeats(_emEventId);
+            } catch (e) { toast(e.error || '제거 실패', 'error'); }
+        }
+        
+        async function emAddHeat(eventId) {
+            try {
+                const r = await API.addHeat(eventId, AK());
+                toast(`${r.heat_number}조 추가 완료`);
+                await loadEvtModalHeats(eventId);
+            } catch (e) { toast(e.error || '조 추가 실패', 'error'); }
+        }
+        
+        async function emDeleteHeat(heatId) {
+            if (!confirm('이 조를 삭제하시겠습니까?')) return;
+            try {
+                await API.deleteHeat(heatId, AK());
+                _emSelectedHeatId = null;
+                toast('조 삭제 완료');
+                if (_emEventId) await loadEvtModalHeats(_emEventId);
+            } catch (e) { toast(e.error || '조 삭제 실패', 'error'); }
+        }
+
+        async function emRenameHeatInline(heatId) {
+            const heat = _emHeats.find(h => h.id === heatId);
+            if (!heat) return;
+            const currentName = heat.heat_name || '';
+            const newName = prompt(`조 이름 변경\n현재: ${heat.heat_name || (heat.heat_number + '조')}\n\n새 이름 입력 (빈칸=기본값 ${heat.heat_number}조):`, currentName);
+            if (newName === null) return;
+            try {
+                await API.renameHeat(heatId, newName.trim(), AK());
+                heat.heat_name = newName.trim() || null;
+                toast('조 이름 변경 완료');
+                await loadEvtModalHeats(_emEventId);
+            } catch(e) { toast(e.error || '조 이름 변경 실패', 'error'); }
+        }
+
+        // Lane/sequence editing inside modal
+        async function emSaveLane(inp) {
+            const heatId = +inp.dataset.heatId;
+            const entryId = +inp.dataset.entryId;
+            const lane = inp.value.trim() ? parseInt(inp.value) : null;
+            try {
+                await API.assignLanes(heatId, [{ event_entry_id: entryId, lane_number: lane || 0 }]);
+                inp.style.borderColor = 'var(--green)';
+                setTimeout(() => { inp.style.borderColor = ''; }, 1000);
+            } catch (e) { toast(e.error || '레인 저장 실패', 'error'); inp.style.borderColor = 'var(--danger)'; }
+        }
+
+        // Add athlete modal inside event modal
+        async function showEmAddAthleteModal() {
+            if (!_emEventId) return;
+            const evt = _allAdminEvents.find(x => x.id === _emEventId);
+            if (!evt || !_selectedCompId) return;
+            let athletes = [];
+            try { athletes = await api('GET', `/api/athletes?competition_id=${_selectedCompId}`); } catch(e) {}
+            if (evt.gender && evt.gender !== 'X') {
+                athletes = athletes.filter(a => a.gender === evt.gender);
+            }
+            const existingEntries = await API.getEventEntries(_emEventId);
+            const existingIds = new Set(existingEntries.map(e => e.athlete_id));
+            const available = athletes.filter(a => !existingIds.has(a.id));
+            const gLabel = {M:'남자',F:'여자',X:'혼성'}[evt.gender]||'';
+            const overlay = document.createElement('div');
+            overlay.id = 'em-add-athlete-modal';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;display:flex;align-items:center;justify-content:center;';
+            overlay.innerHTML = `<div style="background:var(--white);border-radius:12px;padding:20px;width:560px;max-width:95vw;max-height:85vh;overflow-y:auto;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h4 style="margin:0;font-size:15px;">${evt.name} ${gLabel} — 선수 추가 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(${available.length}명)</span></h4>
+                    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('em-add-athlete-modal').remove()">닫기</button>
+                </div>
+                <input type="text" id="em-add-ath-search" placeholder="선수명 또는 BIB 검색..." style="width:100%;padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:13px;margin-bottom:12px;" oninput="filterEmAddAthletes()">
+                <div id="em-add-ath-list" style="max-height:400px;overflow-y:auto;">
+                    ${_renderEmAddAthList(available)}
+                </div>
+            </div>`;
+            document.body.appendChild(overlay);
+            overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+            window._emAddAthAvailable = available;
+            setTimeout(() => document.getElementById('em-add-ath-search')?.focus(), 100);
+        }
+        function _renderEmAddAthList(list) {
+            if (list.length === 0) return '<p style="color:var(--text-muted);text-align:center;padding:16px;">추가 가능한 선수가 없습니다.</p>';
+            return `<table class="heat-entries-table" style="font-size:12px;">
+                <thead><tr><th style="width:60px">BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th><th style="width:50px"></th></tr></thead>
+                <tbody>${list.map(a => `<tr id="em-add-row-${a.id}">
+                    <td><strong>${bib(a.bib_number)}</strong></td>
+                    <td>${a.name}</td>
+                    <td style="font-size:11px;">${a.team||''}</td>
+                    <td><button class="btn btn-xs btn-primary" onclick="doEmAddAthlete(${a.id})">추가</button></td>
+                </tr>`).join('')}</tbody>
+            </table>`;
+        }
+        function filterEmAddAthletes() {
+            const q = (document.getElementById('em-add-ath-search')?.value || '').toLowerCase().trim();
+            const list = (window._emAddAthAvailable || []).filter(a =>
+                !q || a.name.toLowerCase().includes(q) || (a.bib_number||'').includes(q)
+            );
+            document.getElementById('em-add-ath-list').innerHTML = _renderEmAddAthList(list);
+        }
+        async function doEmAddAthlete(athleteId) {
+            if (!_emEventId || !_emSelectedHeatId) { toast('조를 먼저 선택하세요', 'error'); return; }
+            try {
+                await api('POST', '/api/heat-entries/add', { heat_id: _emSelectedHeatId, athlete_id: athleteId, event_id: _emEventId });
+                const row = document.getElementById(`em-add-row-${athleteId}`);
+                if (row) { row.style.opacity = '0.3'; row.querySelector('button').disabled = true; row.querySelector('button').textContent = '추가됨'; }
+                await loadEvtModalHeats(_emEventId);
+                toast('선수 추가 완료');
+            } catch (e) { toast(e.error || '추가 실패', 'error'); }
+        }
+
+        function closeEvtModal() { 
+            document.getElementById('evt-detail-modal').style.display = 'none'; 
+            _emSelectedHeatId = null; _emEventId = null; _emHeats = [];
+        }
+        async function saveEventFromModal() {
+            const id = document.getElementById('em-id').value;
+            try {
+                await API.adminUpdateEvent(id, {
+                    name: document.getElementById('em-name').value,
+                    category: document.getElementById('em-category').value,
+                    gender: document.getElementById('em-gender').value,
+                    round_type: document.getElementById('em-round').value,
+                    round_status: document.getElementById('em-status').value,
+                    sort_order: parseInt(document.getElementById('em-sort').value) || 0,
+                    video_url: document.getElementById('em-video-url').value.trim()
+                }, AK());
+                // Also save video_url via dedicated endpoint
+                try { await API.setEventVideoUrl(id, document.getElementById('em-video-url').value.trim(), AK()); } catch(ex) {}
+                toast('저장 완료'); closeEvtModal(); loadEvents();
+            } catch (e) { toast(e.error || '저장 실패', 'error'); }
+        }
+        function previewEvtVideo() {
+            const url = document.getElementById('em-video-url').value.trim();
+            if (!url) { toast('영상 URL을 입력하세요.', 'warning'); return; }
+            openVideoModal(url, document.getElementById('em-name').value || '종목 영상');
+        }
+        async function deleteEventFromModal() {
+            const id = document.getElementById('em-id').value;
+            const name = document.getElementById('em-name').value;
+            if (!confirm(`"${name}" 종목을 삭제하시겠습니까?`)) return;
+            try { await API.deleteEvent(id, AK()); toast('삭제 완료'); closeEvtModal(); loadEvents(); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
+        }
+
+        // ============================================================
+        // PACING LIGHT TAB (페이싱 라이트)
+        // ============================================================
+        let _pacingConfigs = [];
+        let _pacingCurrentEvent = null;
+        let _pacingEditData = null;
+        let _pacingGender = 'M';
+        let _pacingTrackEvents = []; // [{name, genders: Set}]
+
+        const PACING_COLORS = [
+            { key: 'green', label: 'Green',  hex: '#03C75A', text: '#fff' },
+            { key: 'red',   label: 'Red',    hex: '#FF0000', text: '#fff' },
+            { key: 'white', label: 'White',  hex: '#E0E0E0', text: '#333' },
+            { key: 'blue',  label: 'Blue',   hex: '#1565C0', text: '#fff' },
+        ];
+        const PACING_DEFAULTS = {
+            '800m':      { dist: 800,   segs: [200, 200, 400] },
+            '1500m':     { dist: 1500,  segs: [300, 400, 400, 400] },
+            '3000mSC':   { dist: 3000,  segs: [3000] },
+            '3000m장애물': { dist: 3000, segs: [3000] },
+            '5000m':     { dist: 5000,  segs: [1000, 1000, 1000, 1000, 1000] },
+            '10000m':    { dist: 10000, segs: [5000, 5000] },
+            '10,000m':   { dist: 10000, segs: [5000, 5000] },
+        };
+
+        function _pEvtDist(name) {
+            if (!name) return 0;
+            const clean = name.replace(/\s*\((남|여|혼성)\)\s*$/, '');
+            const m = clean.replace(/,/g,'').match(/(\d+)m/i);
+            return m ? parseInt(m[1]) : 0;
+        }
+        function _pDefSegs(name) {
+            const clean = name.replace(/\s*\((남|여|혼성)\)\s*$/, '');
+            for (const [k, v] of Object.entries(PACING_DEFAULTS)) {
+                if (clean.replace(/\s/g,'').includes(k.replace(/\s/g,''))) return v.segs;
+            }
+            const d = _pEvtDist(name);
+            return d > 0 ? [d] : [0];
+        }
+        function _pFmtTime(s) {
+            if (!s || s <= 0) return '—';
+            if (s >= 60) { const m = Math.floor(s/60), r = s - m*60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(2); }
+            return s.toFixed(2);
+        }
+        function _pParseTime(str) {
+            if (!str || !str.trim()) return 0;
+            str = str.trim();
+            if (str.includes(':')) { const p = str.split(':'); return (parseInt(p[0])||0)*60 + (parseFloat(p[1])||0); }
+            return parseFloat(str) || 0;
+        }
+        function _pFmtInput(s) {
+            if (!s || s <= 0) return '';
+            if (s >= 60) { const m = Math.floor(s/60), r = s - m*60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(2); }
+            return s.toFixed(2);
+        }
+
+        async function loadPacingTab() {
+            if (!_selectedCompId) return;
+            try { _pacingConfigs = await API.getPacingConfigs(_selectedCompId); } catch(e) { _pacingConfigs = []; }
+            // Fetch track events (800m+) AND combined events (10종/7종), group by name with genders
+            _pacingTrackEvents = [];
+            try {
+                const allEvts = await API.getAllEvents(_selectedCompId);
+                const eligible = allEvts.filter(e => {
+                    if (e.parent_event_id) return false;
+                    // Track events >= 800m
+                    if (e.category === 'track') {
+                        const dist = parseInt((e.name.replace(/,/g,'').match(/(\d+)m/i)||[])[1]) || 0;
+                        return dist >= 800;
+                    }
+                    // Combined events (10종, 7종)
+                    if (e.category === 'combined') return true;
+                    return false;
+                });
+                const map = {};
+                eligible.forEach(e => {
+                    if (!map[e.name]) map[e.name] = { genders: new Set(), category: e.category };
+                    map[e.name].genders.add(e.gender);
+                });
+                _pacingTrackEvents = Object.entries(map).map(([name, data]) => ({ name, genders: data.genders, category: data.category }));
+                // Sort: track by distance, combined at end
+                _pacingTrackEvents.sort((a, b) => {
+                    if (a.category === 'combined' && b.category !== 'combined') return 1;
+                    if (a.category !== 'combined' && b.category === 'combined') return -1;
+                    const dA = parseInt((a.name.replace(/,/g,'').match(/(\d+)m/i)||[])[1]) || 0;
+                    const dB = parseInt((b.name.replace(/,/g,'').match(/(\d+)m/i)||[])[1]) || 0;
+                    return dA - dB;
+                });
+            } catch(e) {}
+            renderPacingGenderBtns();
+            renderPacingEventBtns();
+            renderPacingConfigsList();
+            if (_pacingCurrentEvent) {
+                const cfg = _pacingConfigs.find(c => c.event_name === _pacingCurrentEvent);
+                if (cfg) loadPacingEditor(cfg);
+                else { document.getElementById('pacing-editor').style.display = 'none'; _pacingCurrentEvent = null; }
+            } else {
+                document.getElementById('pacing-editor').style.display = 'none';
+            }
+        }
+
+        function renderPacingGenderBtns() {
+            const mBtn = document.getElementById('pacing-gender-M');
+            const fBtn = document.getElementById('pacing-gender-F');
+            mBtn.className = 'btn btn-sm' + (_pacingGender === 'M' ? '' : ' btn-outline');
+            fBtn.className = 'btn btn-sm' + (_pacingGender === 'F' ? '' : ' btn-outline');
+        }
+
+        function switchPacingGender(g) {
+            _pacingGender = g;
+            renderPacingGenderBtns();
+            renderPacingEventBtns();
+            renderPacingConfigsList();
+        }
+
+        function renderPacingEventBtns() {
+            const gLabel = _pacingGender === 'M' ? '남' : '여';
+            const wrap = document.getElementById('pacing-event-btns');
+            const available = _pacingTrackEvents.filter(e => e.genders.has(_pacingGender));
+            if (!available.length) { wrap.innerHTML = '<span style="font-size:12px;color:var(--text-muted);">해당 성별의 트랙 종목(800m 이상) 또는 혼성 종목이 없습니다.</span>'; return; }
+            wrap.innerHTML = available.map(e => {
+                const key = `${e.name} (${gLabel})`;
+                const hasConfig = _pacingConfigs.some(c => c.event_name === key);
+                const isActive = _pacingCurrentEvent === key;
+                let btnStyle = 'font-size:13px;padding:8px 16px;border-radius:8px;font-weight:600;';
+                if (isActive) btnStyle += 'background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 2px 6px rgba(0,100,255,.25);';
+                else if (hasConfig) btnStyle += 'background:#e3f2fd;color:#1565C0;border-color:#90caf9;';
+                return `<button class="btn btn-sm btn-outline" style="${btnStyle}" onclick="selectPacingEvent('${key.replace(/'/g,"\\'")}')">${e.name}${hasConfig ? ' ✅' : ''}</button>`;
+            }).join('');
+        }
+
+        function selectPacingEvent(key) {
+            // If config exists, load it; else create new
+            const cfg = _pacingConfigs.find(c => c.event_name === key);
+            if (cfg) {
+                selectPacingConfig(key);
+            } else {
+                // Create new config
+                document.getElementById('pacing-event-select').value = key;
+                addPacingEvent();
+            }
+            renderPacingEventBtns();
+        }
+
+        function renderPacingConfigsList() {
+            const wrap = document.getElementById('pacing-configs-list');
+            const gLabel = _pacingGender === 'M' ? '남' : _pacingGender === 'F' ? '여' : '';
+            // Filter configs by current gender
+            const filtered = _pacingConfigs.filter(c => c.event_name.includes(`(${gLabel})`));
+            if (!filtered.length) { wrap.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">설정된 종목이 없습니다.</div>'; return; }
+            wrap.innerHTML = filtered.map(cfg => {
+                const dots = cfg.colors.map(c => {
+                    const cm = PACING_COLORS.find(x=>x.key===c.color_key) || {hex:'#ccc'};
+                    return `<span style="background:${cm.hex};width:10px;height:10px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.15);"></span>`;
+                }).join('');
+                const active = _pacingCurrentEvent === cfg.event_name;
+                return `<div class="pacing-config-item ${active?'active':''}" onclick="selectPacingConfig('${cfg.event_name.replace(/'/g,"\\'")}')">
+                    <strong>${cfg.event_name}</strong><div class="dots">${dots}</div>
+                    <span style="font-size:11px;color:var(--text-muted);margin-left:auto;">${cfg.colors.length}색</span></div>`;
+            }).join('');
+        }
+
+        function selectPacingConfig(name) {
+            _pacingCurrentEvent = name;
+            const cfg = _pacingConfigs.find(c => c.event_name === name);
+            if (cfg) loadPacingEditor(cfg);
+            renderPacingConfigsList();
+            renderPacingEventBtns();
+        }
+
+        function addPacingEvent() {
+            const name = document.getElementById('pacing-event-select').value;
+            if (!name) { toast('종목을 선택하세요', 'error'); return; }
+            if (_pacingConfigs.find(c => c.event_name === name)) { selectPacingConfig(name); return; }
+            const defSegs = _pDefSegs(name);
+            _pacingCurrentEvent = name;
+            // Create all 4 colors with default segments
+            _pacingEditData = {
+                notice: '',
+                colors: PACING_COLORS.map((pc, i) => ({
+                    color_key: pc.key, sort_order: i, remark: '',
+                    segments: defSegs.map((d, si) => ({ segment_order: si, distance_meters: d, lap_seconds: 0 }))
+                }))
+            };
+            document.getElementById('pacing-editor').style.display = 'block';
+            document.getElementById('pacing-editor-title').textContent = name + ' 페이싱 설정';
+            document.getElementById('pacing-notice').value = '';
+            renderPacingGrid();
+            renderPacingConfigsList();
+        }
+
+        function loadPacingEditor(cfg) {
+            _pacingCurrentEvent = cfg.event_name;
+            // Ensure all 4 colors exist (fill missing with empty segments)
+            const defSegs = _pDefSegs(cfg.event_name);
+            const existColors = cfg.colors.map(c => ({
+                color_key: c.color_key, sort_order: c.sort_order, remark: c.remark || '',
+                segments: c.segments.map(s => ({ segment_order: s.segment_order, distance_meters: s.distance_meters, lap_seconds: s.lap_seconds }))
+            }));
+            // Add missing colors
+            PACING_COLORS.forEach((pc, i) => {
+                if (!existColors.find(c => c.color_key === pc.key)) {
+                    const refSegs = existColors[0]?.segments || defSegs.map((d, si) => ({ segment_order: si, distance_meters: d, lap_seconds: 0 }));
+                    existColors.push({
+                        color_key: pc.key, sort_order: existColors.length, remark: '',
+                        segments: refSegs.map(s => ({ segment_order: s.segment_order, distance_meters: s.distance_meters, lap_seconds: 0 }))
+                    });
+                }
+            });
+            // Sort by PACING_COLORS order for consistent display
+            existColors.sort((a, b) => {
+                const ai = PACING_COLORS.findIndex(p => p.key === a.color_key);
+                const bi = PACING_COLORS.findIndex(p => p.key === b.color_key);
+                return ai - bi;
+            });
+            _pacingEditData = { id: cfg.id, notice: cfg.notice || '', colors: existColors };
+            document.getElementById('pacing-editor').style.display = 'block';
+            document.getElementById('pacing-editor-title').textContent = cfg.event_name + ' 페이싱 설정';
+            document.getElementById('pacing-notice').value = cfg.notice || '';
+            renderPacingGrid();
+        }
+
+        // ---- Side-by-side grid rendering ----
+        // Color-specific light background tints for column readability
+        const PACING_BG = { green: '#f0faf4', red: '#fef2f2', white: '#f5f5f5', blue: '#eff6ff' };
+        const PACING_BG_DARK = { green: '#dcf5e7', red: '#fde8e8', white: '#e8e8e8', blue: '#dbeafe' };
+        const PACING_BORDER = { green: '#03C75A', red: '#FF0000', white: '#bbb', blue: '#1565C0' };
+
+        function renderPacingGrid() {
+            const container = document.getElementById('pacing-grid-container');
+            if (!_pacingEditData) { container.innerHTML = ''; return; }
+            const colors = _pacingEditData.colors;
+            const eventDist = _pEvtDist(_pacingCurrentEvent);
+            const segCount = Math.max(...colors.map(c => c.segments.length), 0);
+
+            // Helper: thick left-border for first cell of each color group
+            const colBorderL = (ci) => ci > 0 ? `border-left:3px solid ${PACING_BORDER[colors[ci].color_key] || '#ccc'};` : '';
+
+            let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:auto;"><thead>';
+
+            // ── Row 1: Color headers ──
+            html += '<tr><th style="padding:8px 10px;text-align:left;font-size:11px;background:#fafafa;border-bottom:3px solid #ddd;min-width:100px;">구간</th>';
+            colors.forEach((c, ci) => {
+                const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#ccc',label:c.color_key};
+                const bg = PACING_BG_DARK[c.color_key] || '#f0f0f0';
+                const borderL = ci > 0 ? `border-left:3px solid ${PACING_BORDER[c.color_key] || '#ccc'};` : '';
+                html += `<th colspan="2" style="padding:10px 6px;text-align:center;background:${bg};border-bottom:3px solid ${pc.hex};min-width:170px;${borderL}">
+                    <span style="background:${pc.hex};width:20px;height:20px;border-radius:50%;display:inline-block;vertical-align:middle;border:2px solid rgba(0,0,0,.15);margin-right:6px;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>
+                    <span style="font-weight:800;font-size:14px;color:${pc.hex==='#E0E0E0'?'#555':pc.hex};letter-spacing:0.5px;">${pc.label}</span>
+                    <button class="btn btn-xs btn-ghost" onclick="removePacingColor(${ci})" style="color:#aaa;font-size:10px;padding:0 3px;margin-left:4px;" title="삭제">✕</button>
+                </th>`;
+            });
+            html += '</tr>';
+
+            // ── Row 2: Sub-headers (랩타임 | 누적) ──
+            html += '<tr><th style="padding:4px 10px;font-size:10px;color:var(--text-muted);background:#fafafa;border-bottom:2px solid #ddd;"></th>';
+            colors.forEach((c, ci) => {
+                const bg = PACING_BG[c.color_key] || '#f8f8f8';
+                const borderL = ci > 0 ? `border-left:3px solid ${PACING_BORDER[c.color_key] || '#ccc'};` : '';
+                html += `<th style="padding:4px 4px;font-size:10px;color:#666;background:${bg};border-bottom:2px solid #ddd;text-align:center;font-weight:600;${borderL}">랩타임</th>`;
+                html += `<th style="padding:4px 4px;font-size:10px;color:#666;background:${bg};border-bottom:2px solid #ddd;text-align:center;font-weight:600;">누적</th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            // ── Segment rows ──
+            for (let si = 0; si < segCount; si++) {
+                const distVal = colors[0]?.segments[si]?.distance_meters || 0;
+                let cumDist = 0;
+                for (let k = 0; k <= si; k++) cumDist += (colors[0]?.segments[k]?.distance_meters || 0);
+                const rowBg = si % 2 === 0 ? '#fff' : '#fcfcfc';
+
+                html += `<tr><td style="padding:5px 10px;border-bottom:1px solid #eee;white-space:nowrap;background:${rowBg};">
+                    <input type="number" value="${distVal||''}" min="1" style="width:58px;padding:3px 5px;border:1px solid #ccc;border-radius:4px;font-size:11px;font-family:monospace;text-align:right;"
+                        onchange="_pSetDist(${si},this.value)">
+                    <span style="font-size:10px;color:#888;">m</span>
+                    <span style="font-size:9px;color:#aaa;margin-left:3px;">(${cumDist}m)</span>
+                    <button class="btn btn-xs btn-ghost" onclick="_pRemSeg(${si})" style="color:var(--danger);padding:0 3px;font-size:10px;margin-left:3px;" title="구간 삭제">×</button>
+                </td>`;
+                colors.forEach((c, ci) => {
+                    const seg = c.segments[si];
+                    const lap = seg ? seg.lap_seconds : 0;
+                    let cum = 0;
+                    for (let k = 0; k <= si; k++) cum += (c.segments[k]?.lap_seconds || 0);
+                    const bg = PACING_BG[c.color_key] || '#f8f8f8';
+                    const borderL = ci > 0 ? `border-left:3px solid ${PACING_BORDER[c.color_key] || '#ccc'};` : '';
+                    const cumColor = PACING_COLORS.find(p=>p.key===c.color_key)?.hex || 'var(--primary)';
+                    html += `<td style="padding:4px 3px;border-bottom:1px solid #eee;text-align:center;background:${bg};${borderL}">
+                        <input type="text" value="${_pFmtInput(lap)}" placeholder="0.00"
+                            onchange="_pSetLap(${ci},${si},this.value)"
+                            style="width:72px;padding:3px 5px;border:1px solid #ccc;border-radius:4px;font-size:11px;font-family:monospace;text-align:right;background:#fff;">
+                    </td>`;
+                    html += `<td style="padding:4px 6px;border-bottom:1px solid #eee;text-align:center;font-family:'Courier New',monospace;font-size:12px;font-weight:700;color:${cumColor==='#E0E0E0'?'#555':cumColor};background:${bg};">${cum > 0 ? _pFmtTime(cum) : '—'}</td>`;
+                });
+                html += '</tr>';
+            }
+
+            // ── Row: 총 기록 (total time — prominent, between segments and remark) ──
+            html += '<tr><td style="padding:10px 10px;font-weight:800;font-size:13px;color:#222;background:#f0f0f0;border-bottom:3px solid #bbb;border-top:3px solid #bbb;">🏆 총 기록</td>';
+            colors.forEach((c, ci) => {
+                const total = c.segments.reduce((s, seg) => s + (seg.lap_seconds || 0), 0);
+                const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#333'};
+                const bgDark = PACING_BG_DARK[c.color_key] || '#e8e8e8';
+                const borderL = ci > 0 ? `border-left:3px solid ${PACING_BORDER[c.color_key] || '#ccc'};` : '';
+                html += `<td colspan="2" style="padding:10px 6px;text-align:center;font-family:'Courier New',monospace;font-weight:900;font-size:18px;color:${pc.hex==='#E0E0E0'?'#333':pc.hex};background:${bgDark};border-bottom:3px solid #bbb;border-top:3px solid #bbb;letter-spacing:1px;${borderL}">${_pFmtTime(total)}</td>`;
+            });
+            html += '</tr>';
+
+            // ── Row: 비고 (remark) ──
+            html += '<tr><td style="padding:6px 10px;font-weight:700;font-size:11px;color:#555;background:#fafafa;border-bottom:1px solid #ddd;">비고</td>';
+            colors.forEach((c, ci) => {
+                const bg = PACING_BG[c.color_key] || '#f8f8f8';
+                const borderL = ci > 0 ? `border-left:3px solid ${PACING_BORDER[c.color_key] || '#ccc'};` : '';
+                html += `<td colspan="2" style="padding:5px 6px;background:${bg};border-bottom:1px solid #ddd;${borderL}">
+                    <input type="text" value="${(c.remark||'').replace(/"/g,'&quot;')}" placeholder="예: WR 페이스"
+                        onchange="_pSetRemark(${ci},this.value)" style="width:100%;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:11px;box-sizing:border-box;background:#fff;"></td>`;
+            });
+            html += '</tr>';
+
+            // ── 합계 row (bottom total) ──
+            html += '<tr><td style="padding:10px 10px;font-weight:800;font-size:13px;color:#222;background:#f0f0f0;border-top:3px solid #bbb;">📊 합계</td>';
+            colors.forEach((c, ci) => {
+                const total = c.segments.reduce((s, seg) => s + (seg.lap_seconds || 0), 0);
+                const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#333'};
+                const bgDark = PACING_BG_DARK[c.color_key] || '#e8e8e8';
+                const borderL = ci > 0 ? `border-left:3px solid ${PACING_BORDER[c.color_key] || '#ccc'};` : '';
+                html += `<td colspan="2" style="padding:10px 6px;text-align:center;font-family:'Courier New',monospace;font-weight:900;font-size:17px;color:${pc.hex==='#E0E0E0'?'#333':pc.hex};background:${bgDark};border-top:3px solid #bbb;letter-spacing:1px;${borderL}">${_pFmtTime(total)}</td>`;
+            });
+            html += '</tr>';
+            html += '</tbody></table>';
+
+            container.innerHTML = html;
+
+            // Distance validation warning
+            const warnEl = document.getElementById('pacing-dist-warning');
+            if (eventDist > 0) {
+                const totalDist = (colors[0]?.segments || []).reduce((s, seg) => s + (seg.distance_meters || 0), 0);
+                if (totalDist !== eventDist) {
+                    warnEl.innerHTML = `<div style="color:var(--danger);font-size:12px;font-weight:600;">⚠️ 구간 합계 ${totalDist}m ≠ 종목 거리 ${eventDist}m</div>`;
+                } else {
+                    warnEl.innerHTML = `<div style="color:var(--green);font-size:11px;">✅ 구간 합계 ${totalDist}m = ${eventDist}m</div>`;
+                }
+            } else { warnEl.innerHTML = ''; }
+        }
+
+        // ---- Grid manipulation functions ----
+        function _pSetDist(si, val) {
+            const d = parseInt(val) || 0;
+            _pacingEditData.colors.forEach(c => { if (c.segments[si]) c.segments[si].distance_meters = d; });
+            renderPacingGrid();
+        }
+        function _pSetLap(ci, si, val) {
+            if (_pacingEditData.colors[ci]?.segments[si]) {
+                _pacingEditData.colors[ci].segments[si].lap_seconds = _pParseTime(val);
+            }
+            renderPacingGrid();
+        }
+        function _pSetRemark(ci, val) {
+            if (_pacingEditData.colors[ci]) _pacingEditData.colors[ci].remark = val;
+        }
+        function _pRemSeg(si) {
+            _pacingEditData.colors.forEach(c => { c.segments.splice(si, 1); c.segments.forEach((s, i) => s.segment_order = i); });
+            renderPacingGrid();
+        }
+        function addPacingSegmentAll() {
+            _pacingEditData.colors.forEach(c => {
+                c.segments.push({ segment_order: c.segments.length, distance_meters: 0, lap_seconds: 0 });
+            });
+            renderPacingGrid();
+        }
+        function removePacingColor(ci) {
+            _pacingEditData.colors.splice(ci, 1);
+            renderPacingGrid();
+        }
+
+        // ---- Save / Delete ----
+        async function savePacingConfig() {
+            if (!_selectedCompId || !_pacingCurrentEvent || !_pacingEditData) return;
+            const eventDist = _pEvtDist(_pacingCurrentEvent);
+            // Validate distance
+            const totalDist = (_pacingEditData.colors[0]?.segments || []).reduce((s, seg) => s + (seg.distance_meters || 0), 0);
+            if (eventDist > 0 && totalDist !== eventDist) {
+                toast(`구간 합계 ${totalDist}m ≠ ${eventDist}m`, 'error'); return;
+            }
+            // Filter out colors with no lap data at all
+            const colorsToSave = _pacingEditData.colors.filter(c => c.segments.some(s => s.lap_seconds > 0));
+            if (!colorsToSave.length) { toast('최소 하나의 컬러에 랩타임을 입력하세요', 'error'); return; }
+            try {
+                await API.savePacingConfig({
+                    competition_id: _selectedCompId,
+                    event_name: _pacingCurrentEvent,
+                    notice: document.getElementById('pacing-notice').value.trim(),
+                    admin_key: AK(),
+                    colors: colorsToSave.map((c, i) => ({
+                        color_key: c.color_key, sort_order: i, remark: c.remark || '',
+                        segments: c.segments.map((s, si) => ({ segment_order: si, distance_meters: s.distance_meters, lap_seconds: s.lap_seconds }))
+                    }))
+                });
+                toast('페이싱 설정 저장 완료');
+                await loadPacingTab();
+            } catch(e) { toast(e.error || '저장 실패', 'error'); }
+        }
+
+        async function deletePacingConfig() {
+            if (!_pacingEditData?.id) {
+                _pacingCurrentEvent = null; _pacingEditData = null;
+                document.getElementById('pacing-editor').style.display = 'none'; return;
+            }
+            if (!confirm(`"${_pacingCurrentEvent}" 페이싱 설정을 삭제하시겠습니까?`)) return;
+            try {
+                await API.deletePacingConfig(_pacingEditData.id, AK());
+                toast('삭제 완료');
+                _pacingCurrentEvent = null; _pacingEditData = null;
+                document.getElementById('pacing-editor').style.display = 'none';
+                await loadPacingTab();
+            } catch(e) { toast(e.error || '삭제 실패', 'error'); }
+        }
+
+        // ---- Seconds conversion tool ----
+        function updateConversion() {
+            const min = parseFloat(document.getElementById('conv-min').value) || 0;
+            const sec = parseFloat(document.getElementById('conv-sec').value) || 0;
+            document.getElementById('conv-result').value = (min * 60 + sec).toFixed(2);
+        }
+        function copyConvResult() {
+            const val = document.getElementById('conv-result').value;
+            if (navigator.clipboard) { navigator.clipboard.writeText(val).then(() => toast('복사 완료')).catch(() => toast('복사 실패', 'error')); }
+            else { const el = document.getElementById('conv-result'); el.select(); document.execCommand('copy'); toast('복사 완료'); }
+        }
+
+        // ============================================================
+        // RELAY TAB — Team member management
+        // ============================================================
+        async function loadRelayTab() {
+            // 릴레이 관리는 종목관리 탭에서 진행 — 별도 로딩 불필요
+        }
+
+
+        async function openRelayMemberModal(eventEntryId, teamName, eventId) {
+            try {
+                const members = await api('GET', `/api/relay-members?event_entry_id=${eventEntryId}`);
+                const compId = _selectedCompId;
+                let availableAthletes = [];
+                try {
+                    availableAthletes = await api('GET', `/api/athletes?competition_id=${compId}`);
+                    const memberIds = new Set(members.map(m => m.id));
+                    const evt = _allAdminEvents.find(e => e.id === eventId);
+                    const evtGender = evt ? evt.gender : 'X';
+                    availableAthletes = availableAthletes.filter(a => {
+                        if (memberIds.has(a.id)) return false;
+                        if (evtGender !== 'X' && a.gender !== evtGender) return false;
+                        return true;
+                    });
+                } catch(e) {}
+
+                const overlay = document.createElement('div');
+                overlay.id = 'relay-admin-modal';
+                overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+                overlay.innerHTML = `<div style="background:#fff;border-radius:12px;max-width:650px;width:95%;max-height:85vh;overflow-y:auto;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <h3 style="margin:0;font-size:16px;">${teamName} 출전선수 관리</h3>
+                        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('relay-admin-modal').remove()">✕</button>
+                    </div>
+                    <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">주자(1주~4주)를 추가/제거/순서 변경할 수 있습니다.</p>
+                    <h4 style="font-size:13px;margin-bottom:6px;">현재 구성원 (${members.length}명)</h4>
+                    ${members.length === 0 ? '<p style="color:var(--text-muted);text-align:center;padding:8px;">등록된 선수가 없습니다.</p>' :
+                    `<table class="crud-table" style="font-size:12px;margin-bottom:12px;">
+                        <thead><tr><th style="width:50px;">주자</th><th>BIB</th><th style="text-align:left;">선수명</th><th>성별</th><th style="width:50px;"></th></tr></thead>
+                        <tbody>${members.map((m, i) => `<tr>
+                            <td style="text-align:center;">
+                                <input type="number" min="1" max="10" value="${m.leg_order || i+1}" style="width:40px;text-align:center;font-weight:700;font-size:13px;border:1.5px solid var(--gray);border-radius:4px;padding:2px 4px;color:#7c3aed;"
+                                    onchange="changeRelayLegOrder(${eventEntryId},${m.id},this.value,'${teamName.replace(/'/g,"\\'")}',${eventId})" title="순서 숫자 입력">
+                            </td>
+                            <td><strong>${bib(m.bib_number)}</strong></td>
+                            <td style="text-align:left;">${m.name}</td>
+                            <td>${m.gender === 'M' ? '남' : '여'}</td>
+                            <td><button class="btn btn-xs btn-danger" onclick="removeRelayAdmin(${eventEntryId},${m.id},'${teamName.replace(/'/g,"\\'")}',${eventId})">제거</button></td>
+                        </tr>`).join('')}</tbody>
+                    </table>`}
+                    <hr style="margin:12px 0;border:none;border-top:1px solid var(--gray);">
+                    <h4 style="font-size:13px;margin-bottom:6px;">선수 추가</h4>
+                    <input type="text" id="relay-admin-search" placeholder="선수명 또는 BIB 검색..." style="width:100%;padding:6px 10px;border:1.5px solid var(--gray);border-radius:6px;font-size:12px;margin-bottom:8px;" oninput="filterRelayAdminAdd()">
+                    <div id="relay-admin-add-list" style="max-height:200px;overflow-y:auto;">
+                        <p style="color:var(--text-muted);font-size:11px;text-align:center;padding:8px;">선수명 또는 BIB를 검색하세요</p>
+                    </div>
+                </div>`;
+                document.body.appendChild(overlay);
+                overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+                window._relayAdminAvailable = availableAthletes;
+                window._relayAdminEEId = eventEntryId;
+                window._relayAdminTeam = teamName;
+                window._relayAdminEventId = eventId;
+            } catch (err) { alert('선수 명단 로드 실패: ' + (err.error || err.message || err)); }
+        }
+
+        function _renderRelayAdminAddList(list, eeId, teamName, eventId) {
+            if (list.length === 0) return '<p style="color:var(--text-muted);font-size:11px;text-align:center;">추가 가능한 선수가 없습니다.</p>';
+            return `<table class="crud-table" style="font-size:11px;">
+                <thead><tr><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th><th></th></tr></thead>
+                <tbody>${list.map(a => `<tr id="ra-add-${a.id}">
+                    <td><strong>${bib(a.bib_number)}</strong></td>
+                    <td style="text-align:left;">${a.name}</td>
+                    <td style="text-align:left;font-size:10px;">${a.team||''}</td>
+                    <td><button class="btn btn-xs btn-primary" onclick="addRelayAdmin(${eeId},${a.id},'${(teamName||'').replace(/'/g,"\\'")}',${eventId})">추가</button></td>
+                </tr>`).join('')}</tbody>
+            </table>`;
+        }
+
+        function filterRelayAdminAdd() {
+            const q = (document.getElementById('relay-admin-search')?.value || '').toLowerCase().trim();
+            const el = document.getElementById('relay-admin-add-list');
+            if (!el) return;
+            if (!q) {
+                el.innerHTML = '<p style="color:var(--text-muted);font-size:11px;text-align:center;padding:8px;">선수명 또는 BIB를 검색하세요</p>';
+                return;
+            }
+            const list = (window._relayAdminAvailable || []).filter(a =>
+                a.name.toLowerCase().includes(q) || (a.bib_number||'').includes(q) || (a.team||'').toLowerCase().includes(q)
+            ).slice(0, 50);
+            el.innerHTML = list.length > 0
+                ? _renderRelayAdminAddList(list, window._relayAdminEEId, window._relayAdminTeam, window._relayAdminEventId)
+                : '<p style="color:var(--text-muted);font-size:11px;text-align:center;padding:8px;">검색 결과가 없습니다.</p>';
+        }
+
+        async function addRelayAdmin(eeId, athleteId, teamName, eventId) {
+            try {
+                const members = await api('GET', `/api/relay-members?event_entry_id=${eeId}`);
+                const legOrder = (members.length || 0) + 1;
+                await api('POST', '/api/relay-members', { event_entry_id: eeId, athlete_id: athleteId, leg_order: legOrder });
+                toast('릴레이 멤버 추가 완료');
+                document.getElementById('relay-admin-modal')?.remove();
+                await openRelayMemberModal(eeId, teamName, eventId);
+                if (_emSelectedHeatId) loadEmHeatEntries(_emSelectedHeatId);
+            } catch(e) { alert('추가 실패: ' + (e.error || e.message || e)); }
+        }
+
+        async function removeRelayAdmin(eeId, athleteId, teamName, eventId) {
+            if (!confirm('이 선수를 릴레이 팀에서 제거하시겠습니까?')) return;
+            try {
+                await api('DELETE', '/api/relay-members', { event_entry_id: eeId, athlete_id: athleteId });
+                toast('릴레이 멤버 제거 완료');
+                document.getElementById('relay-admin-modal')?.remove();
+                await openRelayMemberModal(eeId, teamName, eventId);
+                if (_emSelectedHeatId) loadEmHeatEntries(_emSelectedHeatId);
+            } catch(e) { alert('제거 실패: ' + (e.error || e.message || e)); }
+        }
+
+        async function changeRelayLegOrder(eeId, athleteId, newLeg, teamName, eventId) {
+            const leg = parseInt(newLeg);
+            if (!leg || leg < 1) return;
+            try {
+                await api('PUT', '/api/relay-members/order', { event_entry_id: eeId, members: [{ athlete_id: athleteId, leg_order: leg }] });
+                toast(`주자 순서 → ${leg}번으로 변경`);
+                // Don't re-render modal — just background refresh
+                if (_emSelectedHeatId) loadEmHeatEntries(_emSelectedHeatId);
+            } catch(e) { alert('순서 변경 실패: ' + (e.error || e.message || e)); }
+        }
+    </script>
+</body>
+</html>
