@@ -1,0 +1,9 @@
+node_modules/
+.env
+db/competition.db
+db/competition.db-shm
+db/competition.db-wal
+uploads/
+*.xlsx
+!PACERISE_upload_template.xlsx
+!public/PACERISE_upload_template.xlsx

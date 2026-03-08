@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>PACE RISE : Node</title>
+<meta name="description" content="PACE RISE : Node — 육상 경기 실시간 운영 플랫폼">
+<meta property="og:type" content="website">
+<meta property="og:title" content="PACE RISE : Node">
+<meta property="og:description" content="육상 경기 실시간 운영 플랫폼 — 대회 기록, 결과, 영상을 실시간으로 확인하세요.">
+<meta property="og:image" content="https://pace-rise-node.com/icons/icon-512.png">
+<meta property="og:url" content="https://pace-rise-node.com/open">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;}
+  .container{text-align:center;padding:24px;max-width:400px;width:100%;}
+  .logo{font-family:'Audiowide',monospace;font-size:28px;letter-spacing:3px;margin-bottom:8px;}
+  .sub{font-size:12px;color:#888;margin-bottom:40px;}
+  .spinner{width:32px;height:32px;border:3px solid #333;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 20px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .status{font-size:14px;color:#aaa;margin-bottom:32px;line-height:1.6;}
+  .btn-chrome{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;background:#3b82f6;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none;transition:background .2s;}
+  .btn-chrome:hover{background:#2563eb;}
+  .btn-chrome svg{width:20px;height:20px;fill:#fff;}
+  .btn-fallback{display:inline-block;margin-top:16px;padding:10px 24px;background:transparent;color:#888;border:1px solid #333;border-radius:8px;font-size:13px;cursor:pointer;text-decoration:none;transition:all .2s;}
+  .btn-fallback:hover{color:#fff;border-color:#666;}
+  .hide{display:none;}
+  .info{margin-top:32px;font-size:11px;color:#555;line-height:1.6;}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+  <div class="logo">P — R : Node</div>
+  <div class="sub">PACE RISE : Node</div>
+
+  <!-- Android: 자동 리다이렉트 중 표시 -->
+  <div id="android-area" class="hide">
+    <div class="spinner" id="spinner"></div>
+    <div class="status" id="status-text">Chrome으로 이동 중...</div>
+    <button class="btn-chrome" id="btn-open-chrome" onclick="openInChrome()">
+      <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 3a7 7 0 0 1 6.33 4H12a3 3 0 0 0-2.83 2.03L6.76 6.97A6.97 6.97 0 0 1 12 5zM5 12c0-1.14.27-2.22.76-3.17l3.49 6.04A3 3 0 0 0 12 17h.17l-2.41 4.17A7 7 0 0 1 5 12zm7 7a6.97 6.97 0 0 0 4.83-1.94l-2.42-4.19A3 3 0 0 0 15 12h3.93A7 7 0 0 1 12 19z"/></svg>
+      Chrome에서 열기
+    </button>
+    <br>
+    <a href="https://pace-rise-node.com" class="btn-fallback" id="btn-fallback">
+      그냥 이 브라우저에서 열기
+    </a>
+    <div class="info">
+      카카오톡·인스타그램 등 앱 내 브라우저에서는<br>
+      Chrome으로 열어야 앱 설치(홈 화면 추가)가 가능합니다.
+    </div>
+  </div>
+
+  <!-- Non-Android: 바로 이동 -->
+  <div id="other-area" class="hide">
+    <div class="spinner"></div>
+    <div class="status">페이지로 이동 중...</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var TARGET_URL = "https://pace-rise-node.com";
+  var INTENT_URL = "intent://pace-rise-node.com/#Intent;scheme=https;package=com.android.chrome;end";
+  var isAndroid = /Android/i.test(navigator.userAgent);
+
+  if (isAndroid) {
+    // Android: intent 자동 실행 + fallback
+    document.getElementById('android-area').classList.remove('hide');
+
+    // 자동으로 intent 실행 시도
+    try {
+      window.location.href = INTENT_URL;
+    } catch(e) {}
+
+    // 1.5초 후 fallback (intent가 성공하면 이 페이지를 떠나므로 실행 안 됨)
+    setTimeout(function() {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('status-text').innerHTML = 
+        'Chrome이 자동으로 열리지 않았나요?<br>아래 버튼을 눌러주세요.';
+    }, 1500);
+
+  } else {
+    // iOS / PC: 바로 이동
+    document.getElementById('other-area').classList.remove('hide');
+    setTimeout(function() {
+      window.location.href = TARGET_URL;
+    }, 500);
+  }
+
+  // 수동 Chrome 열기 버튼
+  window.openInChrome = function() {
+    window.location.href = INTENT_URL;
+    setTimeout(function() {
+      // intent 실패 시 일반 URL로 이동
+      window.location.href = TARGET_URL;
+    }, 1500);
+  };
+})();
+</script>
+</body>
+</html>
