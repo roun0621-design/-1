@@ -1,1 +1,1 @@
-# FaceRise Competition OS
+# Pace Rise Competition OS

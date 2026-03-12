@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#ffffff"/>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Audiowide&amp;display=swap');
+    .t1 { font-family: 'Audiowide', sans-serif; font-size: 130px; fill: #2d3436; letter-spacing: 4px; }
+    .t2 { font-family: 'Audiowide', sans-serif; font-size: 120px; fill: #2d3436; letter-spacing: 6px; }
+  </style>
+  <text x="256" y="230" text-anchor="middle" class="t1">P-R :</text>
+  <text x="256" y="360" text-anchor="middle" class="t2">Node</text>
+</svg>
