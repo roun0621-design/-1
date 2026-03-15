@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACE RISE : Node</title>
+    <meta name="description" content="PACE RISE : Node — 육상 경기 실시간 운영 플랫폼. 대회 실시간 기록 확인, 소집실 운영, 기록 입력, 결과 조회를 한 곳에서.">
+    <!-- Open Graph (카카오톡, 인스타, 페이스북 공유 미리보기) -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="PACE RISE : Node">
+    <meta property="og:description" content="육상 경기 실시간 운영 플랫폼 — 대회 기록, 결과, 영상을 실시간으로 확인하세요.">
+    <meta property="og:image" content="https://pace-rise-node.com/icons/icon-512.png">
+    <meta property="og:url" content="https://pace-rise-node.com">
+    <meta property="og:site_name" content="PACE RISE : Node">
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="PACE RISE : Node">
+    <meta name="twitter:description" content="육상 경기 실시간 운영 플랫폼">
+    <meta name="twitter:image" content="https://pace-rise-node.com/icons/icon-512.png">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+    <meta name="theme-color" content="#03C75A">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="P-R:Node">
+    <link rel="stylesheet" href="styles.css?v=36">
+    <style>
+        .home-container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        .home-hero { text-align: left; padding: 40px 20px 20px; }
+        .home-hero h1 { font-family: var(--font-brand); font-size: 32px; font-weight: 400; letter-spacing: 2px; margin-bottom: 4px; }
+        .home-hero .hero-sub { font-family: var(--font-brand); font-size: 13px; color: var(--text-muted); letter-spacing: 1px; }
+        .comp-list { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+        .comp-card { display: flex; align-items: center; background: var(--white); border: 1.5px solid var(--gray); border-radius: var(--radius); padding: 16px 20px; cursor: pointer; transition: all .15s; gap: 16px; }
+        .comp-card:hover { border-color: var(--blue); box-shadow: 0 2px 8px rgba(33,150,243,.12); transform: translateY(-1px); }
+        .comp-card-status { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .comp-card-status.upcoming { background: #e5a100; }
+        .comp-card-status.active { background: #2d9d78; }
+        .comp-card-status.completed { background: #1a1f2b; }
+        .comp-card-info { flex: 1; }
+        .comp-card-name { font-family: var(--font-brand); font-size: 16px; font-weight: 400; margin-bottom: 2px; letter-spacing: 0.5px; }
+        .comp-card-meta { font-size: 12px; color: var(--text-muted); display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+        .comp-card-arrow { color: var(--text-muted); font-size: 20px; }
+        .comp-card-dday { font-family: var(--font-brand); font-size: 11px; font-weight: 400; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+        .comp-card-dday.upcoming { background: #fef6dc; color: #7a6400; }
+        .comp-card-dday.active { background: #edf8f4; color: #065f46; }
+        .comp-card-dday.completed { background: #f5f5f5; color: #616161; }
+        .comp-status-label { font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 99px; }
+        .comp-status-label.upcoming { background: #fef6dc; color: #7a6400; }
+        .comp-status-label.active { background: #edf8f4; color: #065f46; }
+        .comp-status-label.completed { background: #f5f5f5; color: #616161; }
+        .comp-empty { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+        .home-actions { display: flex; gap: 10px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
+        .add-comp-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000; align-items: center; justify-content: center; }
+        .add-comp-modal.show { display: flex; }
+        .add-comp-form { background: var(--white); border-radius: var(--radius); padding: 24px; width: 420px; max-width: 90vw; }
+        .add-comp-form h3 { margin: 0 0 16px; font-size: 18px; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+        .form-group label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+        .form-group input { padding: 8px 12px; border: 1.5px solid var(--gray); border-radius: var(--radius); font-size: 14px; }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+        .role-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .role-badge.admin { background: #e3f2fd; color: #1565c0; }
+        .role-badge.operation { background: #e8f5e9; color: #2e7d32; }
+        .role-badge.viewer { background: #f5f5f5; color: #757575; }
+        .comp-list-title { font-family: var(--font-brand); margin-top: 30px; font-size: 16px; font-weight: 400; letter-spacing: 1px; }
+        .fed-group summary::-webkit-details-marker { display:none; }
+        .fed-group summary::marker { display:none; content:''; }
+        .fed-group-header:hover { background: #e8edf2 !important; }
+
+        /* Header login button */
+        .header-login-btn { background: none; border: 1.5px solid var(--gray-mid); color: var(--text); font-family: var(--font-brand); font-size: 12px; padding: 5px 16px; border-radius: 99px; cursor: pointer; font-weight: 400; transition: all .2s; margin-left: auto; white-space: nowrap; letter-spacing: 0.5px; }
+        .header-login-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
+        .header-login-btn.logged-in { background: var(--green-light); border-color: var(--green); color: var(--green); }
+
+        /* Login modal */
+        .login-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 2000; align-items: center; justify-content: center; }
+        .login-modal.show { display: flex; }
+        .login-modal-inner { background: var(--white); border-radius: 12px; padding: 28px; width: 340px; max-width: 90vw; text-align: center; }
+        .login-modal-inner h3 { font-size: 16px; margin: 0 0 6px; }
+        .login-modal-inner .login-notice { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6; }
+        .login-modal-inner input { width: 100%; padding: 10px 14px; border: 1.5px solid var(--gray); border-radius: var(--radius); font-size: 14px; box-sizing: border-box; margin-bottom: 10px; }
+        .login-modal-inner .login-actions { display: flex; gap: 8px; }
+        .login-modal-inner .login-actions .btn { flex: 1; }
+        .login-modal-inner .login-error { font-size: 12px; color: var(--danger); margin-top: 6px; display: none; }
+
+        /* Home quick links */
+        .home-quick { display: flex; gap: 10px; justify-content: flex-start; margin-top: 16px; flex-wrap: wrap; }
+        .home-quick-btn { padding: 8px 16px; font-size: 12px; font-weight: 600; border: 1.5px solid var(--gray); border-radius: var(--radius); background: var(--white); cursor: pointer; transition: all .15s; color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+        .home-quick-btn:hover { border-color: var(--blue); color: var(--blue); }
+
+        /* About & guide modals */
+        .info-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 2000; align-items: center; justify-content: center; overflow-y: auto; padding: 20px; }
+        .info-modal.show { display: flex; }
+        .info-modal-inner { background: var(--white); border-radius: 12px; padding: 28px; width: 520px; max-width: 95vw; max-height: 85vh; overflow-y: auto; }
+        .info-modal-inner h3 { font-size: 18px; margin: 0 0 12px; }
+        .info-modal-inner h4 { font-size: 14px; margin: 16px 0 6px; color: var(--blue); }
+        .info-modal-inner p, .info-modal-inner li { font-size: 13px; color: var(--text); line-height: 1.7; }
+        .info-modal-inner ul { padding-left: 20px; margin: 4px 0 12px; }
+        .info-modal-inner .close-modal-btn { display: block; margin: 16px auto 0; padding: 8px 32px; }
+        .install-tabs { display: flex; gap: 0; margin-bottom: 12px; border-bottom: 2px solid var(--gray); }
+        .install-tab { padding: 8px 16px; font-size: 13px; font-weight: 600; border: none; background: none; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; }
+        .install-tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+        .install-content { display: none; font-size: 13px; line-height: 1.8; }
+        .install-content.active { display: block; }
+        .install-step { display: flex; gap: 10px; margin-bottom: 8px; align-items: flex-start; }
+        .install-step-num { background: var(--blue); color: #fff; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+
+        /* Home page dark mode overrides */
+        html.dark .comp-card { background: var(--bg-card); border-color: var(--gray); }
+        html.dark .comp-card:hover { border-color: var(--blue); box-shadow: 0 2px 8px rgba(90,156,245,.15); }
+        html.dark .comp-card-status.completed { background: var(--text-muted); }
+        html.dark .comp-card-dday.upcoming { background: var(--warning-light); color: var(--warning); }
+        html.dark .comp-card-dday.active { background: var(--green-light); color: var(--green); }
+        html.dark .comp-card-dday.completed { background: var(--gray-light); color: var(--text-muted); }
+        html.dark .comp-status-label.upcoming { background: var(--warning-light); color: var(--warning); }
+        html.dark .comp-status-label.active { background: var(--green-light); color: var(--green); }
+        html.dark .comp-status-label.completed { background: var(--gray-light); color: var(--text-muted); }
+        html.dark .role-badge.admin { background: var(--blue-light); color: var(--blue); }
+        html.dark .role-badge.operation { background: var(--green-light); color: var(--green); }
+        html.dark .role-badge.viewer { background: var(--gray-light); color: var(--text-muted); }
+        html.dark .add-comp-modal { background: rgba(0,0,0,.6); }
+        html.dark .login-modal { background: rgba(0,0,0,.6); }
+        html.dark .info-modal { background: rgba(0,0,0,.6); }
+        html.dark .fed-group-header:hover { background: var(--gray-light) !important; }
+    </style>
+</head>
+<body>
+
+    <header class="header" style="position:relative;">
+        <div class="header-inner">
+            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">Node</span></h1>
+            <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
+            <button class="header-login-btn" id="header-login-btn" onclick="toggleLogin()">
+                <span id="header-login-label">로그인</span>
+            </button>
+            <label class="dark-toggle" title="다크모드">
+                <input type="checkbox" id="dark-toggle" onchange="prToggleDark(this.checked)">
+                <span class="dark-toggle-track"></span>
+                <span class="dark-toggle-icon" id="dark-toggle-icon">◐</span>
+            </label>
+        </div>
+        <nav class="page-nav" id="page-nav"></nav>
+    </header>
+
+    <main class="home-container">
+        <div class="home-hero">
+            <h1>PACE RISE <span style="color:#03C75A">:</span> <span style="color:#03C75A">Node</span></h1>
+            <div class="hero-sub">Sport Competition Operation Platform for Excellence</div>
+        </div>
+
+        <!-- Quick links (visible to all) -->
+        <div class="home-quick">
+            <button class="home-quick-btn" onclick="openAbout()">P-R : Node에 관하여</button>
+            <button class="home-quick-btn" onclick="openInstallGuide()">앱 설치 안내</button>
+            <button class="home-quick-btn" id="btn-manual" style="display:none;" onclick="openManual()">운영 매뉴얼</button>
+        </div>
+
+        <!-- Role indicator (small, subtle) -->
+        <div style="margin:16px 0 0;">
+            <span class="role-badge viewer" id="role-badge" style="display:none;">뷰어</span>
+        </div>
+
+        <!-- Recent competitions (within 2 weeks) — auto shown -->
+        <div id="recent-comps-area" style="display:none;margin-bottom:20px;"></div>
+
+        <h3 class="comp-list-title">COMPETITION LIST</h3>
+        <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:12px;">
+            <button class="btn btn-sm btn-ghost" onclick="changeYear(-1)" style="font-size:20px;padding:4px 10px;color:var(--text-muted);font-weight:300;line-height:1;" title="이전 연도">&#x2039;</button>
+            <span id="year-display" style="font-family:'Audiowide','Noto Sans KR',sans-serif;font-size:20px;font-weight:400;letter-spacing:3px;min-width:70px;text-align:center;color:var(--text);"></span>
+            <button class="btn btn-sm btn-ghost" onclick="changeYear(1)" style="font-size:20px;padding:4px 10px;color:var(--text-muted);font-weight:300;line-height:1;" title="다음 연도">&#x203A;</button>
+        </div>
+        <div class="comp-list" id="comp-list">
+            <div class="comp-empty">로딩 중...</div>
+        </div>
+
+        <div class="home-actions" id="admin-actions" style="display:none;">
+            <button class="btn btn-primary" onclick="openAddComp()">+ 대회 추가</button>
+        </div>
+    </main>
+
+    <!-- Login Modal -->
+    <div class="login-modal" id="login-modal">
+        <div class="login-modal-inner">
+            <h3 style="font-size:18px;margin-bottom:10px;">운영진 전용 로그인</h3>
+            <div style="background:var(--warning-light);border:1.5px solid #e5a100;border-radius:8px;padding:12px 14px;margin-bottom:16px;text-align:left;">
+                <p style="font-size:13px;font-weight:700;color:#7a6400;margin-bottom:4px;">관리자 또는 심판 및 대회운영진만 로그인하세요.</p>
+                <p style="font-size:12px;color:#7a6400;line-height:1.6;">일반 관람자는 로그인 없이 대회를 선택하면<br>실시간 경기 결과를 확인할 수 있습니다.</p>
+            </div>
+            <input type="text" id="login-name" placeholder="심판명 또는 관리자 ID" autocomplete="off" style="margin-bottom:8px;">
+            <input type="password" id="login-key" placeholder="운영키 또는 관리자 비밀번호" autocomplete="off">
+            <div class="login-actions">
+                <button class="btn btn-ghost" onclick="closeLoginModal()">닫기</button>
+                <button class="btn btn-primary" onclick="doLogin()">로그인</button>
+            </div>
+            <div class="login-error" id="login-msg">심판명 또는 운영키가 일치하지 않습니다.</div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div class="info-modal" id="about-modal">
+        <div class="info-modal-inner">
+            <h3>P-R : Node에 관하여</h3>
+            <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Sport Competition Operation Platform for Excellence</p>
+
+            <h4>실시간 대회 결과 확인</h4>
+            <p>P-R : Node를 통해 육상 대회의 실시간 경기 결과를 확인할 수 있습니다. 대회를 선택한 후 대시보드에서 종목별 진행 상황과 결과를 바로 확인하세요.</p>
+
+            <h4>주요 기능</h4>
+            <ul>
+                <li><strong>대시보드</strong> — 전 종목의 진행 상황을 한눈에 확인, 영상 링크 바로가기</li>
+                <li><strong>실시간 결과</strong> — 경기가 끝나는 즉시 기록과 순위 확인 가능</li>
+                <li><strong>종합 순위</strong> — 여러 조로 진행되는 종목도 통합 순위로 확인</li>
+                <li><strong>실시간 현황</strong> — 소집 상태, 진행중인 경기 확인</li>
+                <li><strong>소집실 운영</strong> — 바코드/배번 스캔, 릴레이 팀 단위 체크인</li>
+                <li><strong>기록 입력</strong> — 트랙/필드/도로/복합 종목별 기록 관리</li>
+                <li><strong>관리자 패널</strong> — 선수/종목 관리, 조편성, 엑셀 업로드, 데이터 백업</li>
+            </ul>
+
+            <h4>즐겨찾기</h4>
+            <p>대시보드에서 관심 종목 옆의 별 아이콘을 눌러 즐겨찾기에 추가하면, 해당 종목이 상단에 고정되어 빠르게 확인할 수 있습니다.</p>
+
+            <button class="btn btn-ghost close-modal-btn" onclick="closeModal('about-modal')">닫기</button>
+        </div>
+    </div>
+
+    <!-- Install Guide Modal -->
+    <div class="info-modal" id="install-modal">
+        <div class="info-modal-inner">
+            <h3>앱 설치 안내</h3>
+            <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">홈 화면에 추가하면 앱처럼 빠르게 접근할 수 있습니다.</p>
+
+            <div class="install-tabs" id="install-tabs-container">
+                <button class="install-tab" id="install-tab-android" onclick="switchInstallTab('android',this)">Android (Chrome)</button>
+                <button class="install-tab" id="install-tab-ios" onclick="switchInstallTab('ios',this)">iOS (Safari)</button>
+            </div>
+            <div class="install-content" id="install-android">
+                <div id="install-android-steps">
+                    <div class="install-step"><div class="install-step-num">1</div><div>Chrome 브라우저로 이 페이지에 접속합니다.</div></div>
+                    <div class="install-step"><div class="install-step-num">2</div><div>우측 상단 <strong>메뉴 (&#8942;)</strong> 를 누릅니다.</div></div>
+                    <div class="install-step"><div class="install-step-num">3</div><div><strong>"홈 화면에 추가"</strong> 또는 <strong>"앱 설치"</strong>를 선택합니다.</div></div>
+                    <div class="install-step"><div class="install-step-num">4</div><div><strong>"추가"</strong>를 누르면 홈 화면에 아이콘이 생성됩니다.</div></div>
+                </div>
+                <div style="margin-top:12px;text-align:center;">
+                    <a href="/open" class="btn btn-primary" style="display:inline-block;text-decoration:none;font-size:13px;padding:10px 24px;" target="_blank" rel="noopener">Chrome으로 열기</a>
+                    <button class="btn btn-primary" id="pwa-install-btn" style="display:none;margin-top:8px;" onclick="doPWAInstall()">앱 설치하기</button>
+                    <p style="font-size:10px;color:var(--text-muted);margin-top:6px;">카카오톡·인스타 등 인앱브라우저에서도 Chrome으로 이동됩니다</p>
+                </div>
+            </div>
+            <div class="install-content" id="install-ios">
+                <div id="install-ios-steps">
+                    <div class="install-step"><div class="install-step-num">1</div><div><strong>Safari</strong> 브라우저로 이 페이지에 접속합니다. (Safari만 지원)</div></div>
+                    <div class="install-step"><div class="install-step-num">2</div><div>하단 (또는 상단) 의 <strong>공유 버튼</strong> (&#x2B06;&#xFE0E; 사각형+화살표)을 누릅니다.</div></div>
+                    <div class="install-step"><div class="install-step-num">3</div><div>목록에서 <strong>"홈 화면에 추가"</strong>를 선택합니다.</div></div>
+                    <div class="install-step"><div class="install-step-num">4</div><div><strong>"추가"</strong>를 누르면 홈 화면에 아이콘이 생성됩니다.</div></div>
+                </div>
+                <div style="text-align:center;margin-top:12px;">
+                    <a href="x-safari-https://pace-rise-node.com" class="btn btn-primary" style="display:inline-block;text-decoration:none;font-size:13px;padding:10px 24px;">Safari로 열기</a>
+                    <p style="font-size:10px;color:var(--text-muted);margin-top:6px;">Safari에서 열린 후 공유 → 홈 화면에 추가</p>
+                </div>
+            </div>
+
+            <p style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:12px;">위 단계를 따라 홈 화면에 추가하면 앱처럼 사용할 수 있습니다.</p>
+
+            <button class="btn btn-ghost close-modal-btn" onclick="closeModal('install-modal')">닫기</button>
+        </div>
+    </div>
+
+    <!-- Staff Manual Modal -->
+    <div class="info-modal" id="manual-modal">
+        <div class="info-modal-inner" style="width:600px;">
+            <h3>운영 매뉴얼</h3>
+            <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">P-R : Node 대회 운영 가이드</p>
+
+            <div id="manual-content-area">
+            <h4>1. 접속 및 로그인</h4>
+            <ul>
+                <li><strong>운영키</strong>: 소집실 운영, 기록 입력 등 일반 운영 기능에 접근</li>
+                <li><strong>관리자키</strong>: 모든 운영 기능 + 대회/종목/선수 관리, 시스템 설정</li>
+                <li>심판별 개별 운영키를 생성하면 로그에 심판명이 자동 기록됩니다</li>
+            </ul>
+
+            <h4>2. 대회 흐름</h4>
+            <p>대회 생성 → 엑셀 업로드(선수/종목) → 소집실 운영 → 기록 입력 → 결과 확인</p>
+
+            <h4>3. 소집실 운영 (Callroom)</h4>
+            <ul>
+                <li>좌측에서 종목 선택 → 우측에서 선수 체크인</li>
+                <li>바코드 스캐너 또는 배번(BIB) 직접 입력으로 체크인</li>
+                <li><strong>릴레이 종목</strong>: 팀 단위로 표시, 클릭하면 출전 선수 명단 확인 가능</li>
+                <li>전원 소집 확인 후 <strong>"소집 완료"</strong> 버튼 → 경기 상태가 '진행중'으로 전환</li>
+                <li>불참(No-show) 처리도 가능, 선수 추가 버튼으로 추가 등록</li>
+            </ul>
+
+            <h4>4. 기록 입력 (Record)</h4>
+            <ul>
+                <li><strong>트랙 종목</strong>: 시간을 초 단위로 입력 (예: 10.52)</li>
+                <li><strong>도로/단체 종목</strong>: H:MM:SS 형식 (예: 1:38:36), 소수점 없이 표시</li>
+                <li><strong>필드 거리 종목</strong>: 각 시기별 거리(m) 입력, 파울은 빈칸</li>
+                <li><strong>필드 높이 종목</strong>: 바 높이 설정 후 O/X/Pass 입력</li>
+                <li><strong>복합 종목</strong>: 서브이벤트별 기록 입력 → WA 점수 자동 계산</li>
+                <li><strong>비고란</strong>: 기록 저장 후 비고를 입력해도 기록이 유지됩니다</li>
+                <li>소집이 완료되지 않은 종목도 도로/단체 종목은 바로 기록 입력 가능</li>
+            </ul>
+
+            <h4>5. 결과 확인 (Results)</h4>
+            <ul>
+                <li>전체 종목의 결과를 조별/통합순위로 확인</li>
+                <li>여러 조로 진행된 종목은 <strong>"종합순위"</strong> 탭으로 전체 통합 확인</li>
+                <li>Excel, PDF, PNG로 내보내기 가능</li>
+            </ul>
+
+            <h4>6. 관리자 기능 (Admin)</h4>
+            <ul>
+                <li><strong>선수 관리</strong>: 추가/수정/삭제, BIB/바코드 관리</li>
+                <li><strong>종목 관리</strong>: 추가/수정/삭제, 자동정렬, 영상 URL 설정</li>
+                <li><strong>조편성</strong>: 종목 클릭 → 하단 패널에서 조 추가/삭제, 선수 이동, 스몰넘버(레인) 직접 편집</li>
+                <li><strong>엑셀 업로드</strong>: 연맹 명단 엑셀 업로드 → 선수, 종목, 조 자동 생성</li>
+                <li><strong>경기 완료/되돌리기</strong>: 라운드 완료 처리 (관리자키 필요 시 되돌리기)</li>
+                <li><strong>대회 삭제</strong>: 관리자키 인증 후 대회 전체 데이터 삭제 가능</li>
+                <li><strong>데이터 백업</strong>: JSON 형식으로 전체 대회 데이터 다운로드</li>
+            </ul>
+
+            <h4>7. 실시간 업데이트 (SSE)</h4>
+            <p>모든 페이지는 Server-Sent Events로 실시간 업데이트됩니다. 기록 입력, 소집 완료, 경기 완료 등의 변경사항이 모든 접속 기기에 즉시 반영됩니다.</p>
+
+            <h4>8. 문제 해결</h4>
+            <ul>
+                <li>데이터가 안 보이면 페이지 새로고침 시도</li>
+                <li>SSE 연결이 끊어지면 자동 재연결 (우측 하단 표시)</li>
+                <li>데이터 백업: 관리자 → 대회 설정 탭 → JSON 백업 다운로드</li>
+            </ul>
+            </div>
+
+            <button class="btn btn-ghost close-modal-btn" onclick="closeModal('manual-modal')">닫기</button>
+        </div>
+    </div>
+
+    <!-- Add competition modal -->
+    <div class="add-comp-modal" id="add-comp-modal">
+        <div class="add-comp-form">
+            <h3>대회 추가</h3>
+            <div class="form-group">
+                <label>대회명 *</label>
+                <input id="new-comp-name" placeholder="예: 2026 전국체전 육상">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>시작일 *</label>
+                    <input type="date" id="new-comp-start">
+                </div>
+                <div class="form-group">
+                    <label>종료일 *</label>
+                    <input type="date" id="new-comp-end">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>장소</label>
+                <input id="new-comp-venue" placeholder="예: 잠실 올림픽주경기장">
+            </div>
+            <div class="form-group">
+                <label>연맹</label>
+                <select id="new-comp-federation" style="padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
+                    <option value="">없음 (미지정)</option>
+                    <!-- Dynamically populated from federation_list -->
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeAddComp()">취소</button>
+                <button class="btn btn-primary" onclick="createComp()">생성</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="common.js?v=36"></script>
+    <script>
+        renderPageNav('home');
+
+        let currentRole = sessionStorage.getItem('pace_role') || 'viewer';
+        let currentKey = sessionStorage.getItem('pace_admin_key') || '';
+        let _federationList = []; // loaded from DB
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateRoleUI();
+            // Load federations first (needed by comp list + add-comp dropdown)
+            try { _federationList = await API.getFederations(); } catch(e) { _federationList = []; }
+            populateFedDropdown();
+            await loadCompetitions();
+            await loadRecentCompetitions();
+            await loadSiteConfig();
+            await showHomePopup();
+            // Auto-open login modal if redirected with ?action=login
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('action') === 'login' && currentRole === 'viewer') {
+                toggleLogin();
+                // Clean up URL
+                window.history.replaceState({}, '', '/');
+            }
+        });
+
+        function populateFedDropdown() {
+            const sel = document.getElementById('new-comp-federation');
+            if (!sel) return;
+            sel.innerHTML = '<option value="">없음 (미지정)</option>' +
+                _federationList.map(f => `<option value="${f.code}">${f.name ? f.name + ' (' + f.code + ')' : f.code}</option>`).join('');
+        }
+        function getFedLabel(code) {
+            const f = _federationList.find(x => x.code === code);
+            return f ? (f.name || f.code) : code;
+        }
+        function getFedBadge(code) {
+            const f = _federationList.find(x => x.code === code);
+            if (!f) return '';
+            return `<span style="background:${f.badge_bg};color:${f.badge_color};padding:2px 10px;border-radius:99px;font-size:10px;font-weight:600;">${f.code}</span>`;
+        }
+        function getFedBadgeStyle(code) {
+            const f = _federationList.find(x => x.code === code);
+            return f ? `background:${f.badge_bg};color:${f.badge_color};` : 'background:#f5f5f5;color:#616161;';
+        }
+
+        // ---- Login modal ----
+        window._headerLoginToggle = toggleLogin;
+        function toggleLogin() {
+            if (currentRole !== 'viewer') {
+                doLogout();
+                return;
+            }
+            document.getElementById('login-modal').classList.add('show');
+            document.getElementById('login-name').focus();
+            if (window.pushModalState) pushModalState(() => closeLoginModal());
+        }
+        function closeLoginModal() {
+            document.getElementById('login-modal').classList.remove('show');
+            document.getElementById('login-msg').style.display = 'none';
+            if (window.popModalState) popModalState();
+        }
+        async function doLogin() {
+            const judgeName = document.getElementById('login-name').value.trim();
+            const key = document.getElementById('login-key').value.trim();
+            if (!judgeName || !key) { document.getElementById('login-msg').textContent = '심판명과 운영키를 모두 입력하세요.'; document.getElementById('login-msg').style.display = 'block'; return; }
+            try {
+                const r = await fetch('/api/auth/verify', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ judge_name: judgeName, key }) }).then(res => { if (!res.ok) throw res; return res.json(); });
+                sessionStorage.setItem('pace_admin_key', key);
+                sessionStorage.setItem('pace_role', r.role);
+                sessionStorage.setItem('pace_judge_name', r.judge_name || judgeName);
+                currentRole = r.role;
+                currentKey = key;
+                document.getElementById('login-name').value = '';
+                document.getElementById('login-key').value = '';
+                closeLoginModal();
+                updateRoleUI();
+                renderPageNav('home');
+                await loadCompetitions();
+            } catch (e) {
+                document.getElementById('login-msg').textContent = '심판명 또는 운영키가 일치하지 않습니다.';
+                document.getElementById('login-msg').style.display = 'block';
+            }
+        }
+        document.getElementById('login-key').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+        document.getElementById('login-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('login-key').focus(); });
+        document.getElementById('login-modal').addEventListener('click', e => { if (e.target === document.getElementById('login-modal')) closeLoginModal(); });
+
+        function doLogout() {
+            sessionStorage.removeItem('pace_admin_key');
+            sessionStorage.removeItem('pace_role');
+            sessionStorage.removeItem('pace_judge_name');
+            currentRole = 'viewer';
+            currentKey = '';
+            updateRoleUI();
+            renderPageNav('home');
+            loadCompetitions();
+        }
+
+        function updateRoleUI() {
+            const badge = document.getElementById('role-badge');
+            const adminActions = document.getElementById('admin-actions');
+            const loginBtn = document.getElementById('header-login-btn');
+            const loginLabel = document.getElementById('header-login-label');
+            const manualBtn = document.getElementById('btn-manual');
+
+            if (currentRole === 'admin') {
+                badge.className = 'role-badge admin'; badge.textContent = '관리자'; badge.style.display = 'inline-block';
+                loginBtn.className = 'header-login-btn logged-in'; loginLabel.textContent = '로그아웃';
+                adminActions.style.display = 'flex';
+                manualBtn.style.display = 'inline-flex';
+            } else if (currentRole === 'operation') {
+                badge.className = 'role-badge operation'; badge.textContent = '운영(심판)'; badge.style.display = 'inline-block';
+                loginBtn.className = 'header-login-btn logged-in'; loginLabel.textContent = '로그아웃';
+                adminActions.style.display = 'none';
+                manualBtn.style.display = 'inline-flex';
+            } else {
+                badge.style.display = 'none';
+                loginBtn.className = 'header-login-btn'; loginLabel.textContent = '로그인';
+                adminActions.style.display = 'none';
+                manualBtn.style.display = 'none';
+            }
+        }
+
+        // ---- Modals ----
+        function openAbout() { document.getElementById('about-modal').classList.add('show'); }
+        // openInstallGuide is defined below with OS auto-detect
+        function openManual() { document.getElementById('manual-modal').classList.add('show'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+        // Close on outside click
+        ['about-modal','install-modal','manual-modal'].forEach(id => {
+            document.getElementById(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); });
+        });
+
+        function switchInstallTab(tab, btn) {
+            document.querySelectorAll('.install-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.install-content').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('install-' + tab).classList.add('active');
+        }
+
+        // ---- OS Auto-detect for install guide ----
+        function detectOS() {
+            const ua = navigator.userAgent || '';
+            if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'ios';
+            if (/android/i.test(ua)) return 'android';
+            return 'other';
+        }
+        function openInstallGuide() {
+            document.getElementById('install-modal').classList.add('show');
+            const os = detectOS();
+            if (os === 'ios') {
+                switchInstallTab('ios', document.getElementById('install-tab-ios'));
+            } else {
+                switchInstallTab('android', document.getElementById('install-tab-android'));
+            }
+        }
+        // PWA install prompt
+        let _deferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            _deferredPrompt = e;
+            const btn = document.getElementById('pwa-install-btn');
+            if (btn) btn.style.display = 'inline-flex';
+        });
+        function doPWAInstall() {
+            if (_deferredPrompt) {
+                _deferredPrompt.prompt();
+                _deferredPrompt.userChoice.then(r => {
+                    _deferredPrompt = null;
+                    document.getElementById('pwa-install-btn').style.display = 'none';
+                });
+            }
+        }
+
+        // ---- Competitions ----
+        let _allComps = [];
+        let _selectedYear = new Date().getFullYear();
+
+        function changeYear(delta) {
+            _selectedYear += delta;
+            renderCompsByYear();
+        }
+
+        function getDDay(dateStr) {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const d = new Date(dateStr); d.setHours(0,0,0,0);
+            const diff = Math.ceil((d - today) / (1000*60*60*24));
+            if (diff > 0) return `D-${diff}`;
+            if (diff === 0) return 'D-DAY';
+            return `D+${Math.abs(diff)}`;
+        }
+
+        async function loadCompetitions() {
+            const list = document.getElementById('comp-list');
+            try {
+                _allComps = await API.getCompetitions();
+                document.getElementById('year-display').textContent = _selectedYear;
+                renderCompsByYear();
+            } catch (e) { list.innerHTML = '<div class="comp-empty">대회 목록을 불러올 수 없습니다.</div>'; }
+        }
+
+        function renderCompsByYear() {
+            const list = document.getElementById('comp-list');
+            document.getElementById('year-display').textContent = _selectedYear;
+            const comps = _allComps.filter(c => {
+                const y = c.start_date ? parseInt(c.start_date.substring(0, 4)) : 0;
+                return y === _selectedYear;
+            });
+            if (comps.length === 0) { list.innerHTML = '<div class="comp-empty">해당 연도의 대회가 없습니다.</div>'; return; }
+            const sorted = [...comps].sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+
+            let html = '';
+
+            // 연맹별 그룹핑
+            const fedGroups = {};
+            sorted.forEach(c => {
+                const fed = c.federation || '';
+                if (!fedGroups[fed]) fedGroups[fed] = [];
+                fedGroups[fed].push(c);
+            });
+
+            // 연맹이 있는 그룹 먼저, 없는 그룹 나중에
+            const fedOrder = Object.keys(fedGroups).sort((a, b) => {
+                if (a && !b) return -1;
+                if (!a && b) return 1;
+                return a.localeCompare(b);
+            });
+
+            // 연맹이 1종류밖에 없고 그게 빈 문자열이면 그냥 플랫 리스트
+            const hasFederations = fedOrder.some(f => f !== '');
+
+            if (!hasFederations) {
+                // 연맹 구분 없이 플랫 리스트
+                html += renderCompCards(sorted);
+            } else {
+                fedOrder.forEach(fed => {
+                    const groupComps = fedGroups[fed];
+                    const fedInfo = fed ? _federationList.find(f => f.code === fed) : null;
+                    const label = fedInfo ? `${fed} ${fedInfo.name}` : (fed || '기타 대회');
+                    const badge = fed ? getFedBadge(fed) : '';
+                    const countLabel = `<span style="font-size:11px;color:var(--text-muted);margin-left:6px;">${groupComps.length}개 대회</span>`;
+
+                    html += `<details class="fed-group" style="margin-bottom:4px;">
+                        <summary class="fed-group-header" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:var(--radius);background:var(--gray-bg);user-select:none;list-style:none;transition:background 0.15s;">
+                            <span class="fed-toggle-icon" style="font-size:12px;color:var(--text-muted);transition:transform 0.2s;display:inline-block;">▶</span>
+                            <span style="font-family:var(--font-brand);font-size:14px;font-weight:400;letter-spacing:1px;flex:1;">${label}</span>
+                            ${badge} ${countLabel}
+                        </summary>
+                        <div style="padding:6px 0 0;">
+                            ${renderCompCards(groupComps)}
+                        </div>
+                    </details>`;
+                });
+            }
+
+            list.innerHTML = html;
+
+            // 접이식 토글 아이콘 회전
+            list.querySelectorAll('details.fed-group').forEach(d => {
+                d.addEventListener('toggle', () => {
+                    const icon = d.querySelector('.fed-toggle-icon');
+                    if (icon) icon.style.transform = d.open ? 'rotate(90deg)' : 'rotate(0deg)';
+                });
+            });
+        }
+
+        function renderCompCards(comps) {
+            return comps.map(c => {
+                const statusLabel = { upcoming: '예정', active: '진행중', completed: '종료' }[c.status] || c.status;
+                const dday = c.status === 'upcoming' ? getDDay(c.start_date) : c.status === 'active' ? 'LIVE' : '';
+                return `<div class="comp-card" onclick="selectCompetition(${c.id})">
+                    <div class="comp-card-status ${c.status}"></div>
+                    <div class="comp-card-info">
+                        <div class="comp-card-name">${c.name}</div>
+                        <div class="comp-card-meta">
+                            <span>${c.start_date} ~ ${c.end_date}</span>
+                            <span>${c.venue || ''}</span>
+                            <span class="comp-status-label ${c.status}">${statusLabel}</span>
+                            ${dday ? `<span class="comp-card-dday ${c.status}">${dday}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="comp-card-arrow">&rsaquo;</div>
+                </div>`;
+            }).join('');
+        }
+
+        function selectCompetition(compId) {
+            setCompetitionId(compId);
+            const role = sessionStorage.getItem('pace_role') || 'viewer';
+            if (role === 'admin') {
+                window.location.href = `/admin.html?comp=${compId}`;
+            } else if (role === 'operation') {
+                window.location.href = `/callroom.html?comp=${compId}`;
+            } else {
+                window.location.href = `/dashboard.html?comp=${compId}`;
+            }
+        }
+
+        // ---- Recent competitions (within 2 weeks) ----
+        async function loadRecentCompetitions() {
+            try {
+                const recent = await API.getRecentCompetitions();
+                const area = document.getElementById('recent-comps-area');
+                if (!recent || !recent.length) { area.style.display = 'none'; return; }
+                area.style.display = 'block';
+                let html = `<div style="padding:16px;background:linear-gradient(135deg,#edf8f4,#e3f2fd);border:1.5px solid #2d9d78;border-radius:var(--radius);">
+                    <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#065f46;letter-spacing:1px;margin-bottom:10px;">RECENT • 최근 2주 대회</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">`;
+                recent.forEach(c => {
+                    const isLive = c.status === 'active';
+                    const fedBadge = c.federation ? getFedBadge(c.federation) : '';
+                    const statusBadge = isLive
+                        ? '<span class="comp-card-dday active">LIVE</span>'
+                        : `<span class="comp-card-dday ${c.status}">${{upcoming:'예정',completed:'종료'}[c.status]||c.status}</span>`;
+                    html += `<div class="comp-card" onclick="selectCompetition(${c.id})" style="${isLive?'border-color:#2d9d78;':''}">
+                        <div class="comp-card-status ${c.status}"></div>
+                        <div class="comp-card-info">
+                            <div class="comp-card-name">${c.name} ${fedBadge}</div>
+                            <div class="comp-card-meta">
+                                <span>${c.start_date} ~ ${c.end_date}</span>
+                                <span>${c.venue || ''}</span>
+                                ${statusBadge}
+                            </div>
+                        </div>
+                        <div class="comp-card-arrow">&rsaquo;</div>
+                    </div>`;
+                });
+                html += `</div></div>`;
+                area.innerHTML = html;
+            } catch(e) { console.error(e); }
+        }
+
+        // ---- Home Popup (auto-show on entry) ----
+        let _popupQueue = [];
+        let _popupQueueIndex = 0;
+
+        async function showHomePopup() {
+            try {
+                const popups = await API.getHomePopups();
+                if (!popups || !popups.length) return;
+                const role = sessionStorage.getItem('pace_role') || 'viewer';
+                const isAdmin = role === 'admin' || role === 'operation';
+                const today = new Date().toISOString().slice(0, 10);
+                const now = Date.now();
+
+                // Filter all applicable popups (not just first one)
+                const applicable = popups.filter(p => {
+                    if (!p.is_active) return false;
+                    if (p.popup_type === 'admin' && !isAdmin) return false;
+                    if (p.show_from && today < p.show_from) return false;
+                    if (p.show_until && today > p.show_until) return false;
+                    // Check "오늘 하루 보지 않음"
+                    const dismissedAt = localStorage.getItem(`popup_dismiss_${p.id}`);
+                    if (dismissedAt && (now - parseInt(dismissedAt)) < 24 * 60 * 60 * 1000) return false;
+                    return true;
+                });
+
+                if (!applicable.length) return;
+
+                _popupQueue = applicable;
+                _popupQueueIndex = 0;
+                renderHomePopupModal(_popupQueue[0]);
+            } catch(e) { console.error('Popup load error:', e); }
+        }
+
+        function showNextPopup() {
+            _popupQueueIndex++;
+            if (_popupQueueIndex < _popupQueue.length) {
+                renderHomePopupModal(_popupQueue[_popupQueueIndex]);
+            } else {
+                closeModal('home-popup-modal');
+            }
+        }
+
+        function renderHomePopupModal(p) {
+            const hasNext = _popupQueueIndex < _popupQueue.length - 1;
+            const counter = _popupQueue.length > 1 ? `<span style="font-size:10px;color:var(--text-muted);margin-left:8px;">(${_popupQueueIndex + 1}/${_popupQueue.length})</span>` : '';
+
+            let html = `<div style="text-align:center;margin-bottom:16px;">
+                <div style="font-family:'Audiowide',sans-serif;font-size:18px;letter-spacing:2px;">${p.title || 'PACE RISE : Node'} ${counter}</div>
+                ${p.subtitle ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${p.subtitle}</div>` : ''}
+            </div>`;
+            if (p.intro_text) html += `<div style="font-size:13px;line-height:1.6;margin-bottom:16px;">${p.intro_text}</div>`;
+
+            const activeSections = (p.sections || []).filter(s => s.is_active !== 0);
+            activeSections.forEach(s => {
+                html += `<details style="margin-bottom:8px;border:1px solid var(--gray);border-radius:8px;overflow:hidden;">
+                    <summary style="padding:10px 14px;font-weight:600;font-size:13px;cursor:pointer;background:#f9fafb;">${s.title || ''}</summary>
+                    <div style="padding:10px 14px;font-size:12px;line-height:1.7;">${(s.content||'').replace(/\n/g,'<br>')}</div>
+                    ${s.link_btn_text ? `<div style="padding:0 14px 10px;"><a href="${s.link_btn_url||'#'}" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="font-size:12px;color:var(--primary);font-weight:600;text-decoration:none;">${s.link_btn_text} →</a></div>` : ''}
+                </details>`;
+            });
+
+            if (p.bottom_btn_active && p.bottom_btn_text) {
+                html += `<div style="margin-top:16px;padding:16px;background:#f0f9ff;border-radius:8px;text-align:center;border:1px solid #90caf9;">
+                    <div style="font-size:14px;font-weight:600;">${p.bottom_btn_text}</div>
+                    ${p.bottom_btn_desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${p.bottom_btn_desc}</div>` : ''}
+                    ${p.bottom_btn_link ? `<div style="margin-top:8px;"><a href="${p.bottom_btn_link}" onclick="event.stopPropagation();closeModal('home-popup-modal');" style="display:inline-block;padding:8px 20px;background:var(--primary);color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;">이동 →</a></div>` : ''}
+                </div>`;
+            }
+
+            html += `<div style="display:flex;gap:8px;justify-content:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--gray);">
+                <button class="btn btn-ghost" onclick="dismissPopupToday(${p.id})" style="font-size:12px;">오늘 하루 보지 않음</button>
+                ${hasNext
+                    ? `<button class="btn btn-primary" onclick="showNextPopup()" style="font-size:12px;">다음 →</button>`
+                    : `<button class="btn btn-primary" onclick="closeModal('home-popup-modal')" style="font-size:12px;">닫기</button>`
+                }
+            </div>`;
+
+            let modal = document.getElementById('home-popup-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'home-popup-modal';
+                modal.className = 'info-modal';
+                modal.innerHTML = '<div class="info-modal-inner" style="max-width:480px;max-height:85vh;overflow-y:auto;" id="home-popup-content"></div>';
+                modal.onclick = function(e) { if (e.target === modal) modal.classList.remove('show'); };
+                document.body.appendChild(modal);
+            }
+            document.getElementById('home-popup-content').innerHTML = html;
+            modal.classList.add('show');
+        }
+
+        function dismissPopupToday(popupId) {
+            localStorage.setItem(`popup_dismiss_${popupId}`, Date.now().toString());
+            showNextPopup();
+        }
+
+        // ---- Add competition ----
+        function openAddComp() { document.getElementById('add-comp-modal').classList.add('show'); document.getElementById('new-comp-name').focus(); }
+        function closeAddComp() { document.getElementById('add-comp-modal').classList.remove('show'); }
+        async function createComp() {
+            const name = document.getElementById('new-comp-name').value.trim();
+            const start = document.getElementById('new-comp-start').value;
+            const end = document.getElementById('new-comp-end').value;
+            const venue = document.getElementById('new-comp-venue').value.trim();
+            const federation = document.getElementById('new-comp-federation').value;
+            if (!name || !start || !end) { alert('대회명, 시작일, 종료일은 필수입니다.'); return; }
+            try { await API.createCompetition({ name, start_date: start, end_date: end, venue, federation }, currentKey); closeAddComp(); await loadCompetitions(); } catch (e) { alert(e.error || '생성 실패'); }
+        }
+        document.getElementById('add-comp-modal').addEventListener('click', e => { if (e.target === document.getElementById('add-comp-modal')) closeAddComp(); });
+
+        // ---- Dynamic Site Config ----
+        async function loadSiteConfig() {
+            try {
+                const cfg = await fetch('/api/site-config').then(r => r.json());
+                // Install guide: override steps if configured
+                if (cfg.site_install_android) {
+                    const el = document.getElementById('install-android-steps');
+                    if (el) el.innerHTML = cfg.site_install_android;
+                }
+                if (cfg.site_install_ios) {
+                    const el = document.getElementById('install-ios-steps');
+                    if (el) el.innerHTML = cfg.site_install_ios;
+                }
+                // Manual: override content if configured
+                if (cfg.site_manual_html) {
+                    const el = document.getElementById('manual-content-area');
+                    if (el) el.innerHTML = cfg.site_manual_html;
+                }
+            } catch (e) { /* use default static content */ }
+        }
+    </script>
+
+    <!-- Loading spinner overlay -->
+    <div class="pr-loading-overlay" id="pr-loading"><div class="pr-loading-spinner"></div></div>
+
+    <!-- Dark mode + Loading spinner shared utilities -->
+    <script>
+    // --- Dark Mode ---
+    function prToggleDark(on) {
+        document.documentElement.classList.toggle('dark', on);
+        localStorage.setItem('pr-dark', on ? '1' : '0');
+        const icon = document.getElementById('dark-toggle-icon');
+        if (icon) icon.textContent = on ? '◑' : '◐';
+    }
+    (function initDark() {
+        const saved = localStorage.getItem('pr-dark');
+        const on = saved === '1';
+        document.documentElement.classList.toggle('dark', on);
+        const cb = document.getElementById('dark-toggle');
+        if (cb) cb.checked = on;
+        const icon = document.getElementById('dark-toggle-icon');
+        if (icon) icon.textContent = on ? '◑' : '◐';
+    })();
+
+    // --- Loading Spinner ---
+    function prShowLoading() { const el = document.getElementById('pr-loading'); if (el) el.classList.add('show'); }
+    function prHideLoading() { const el = document.getElementById('pr-loading'); if (el) el.classList.remove('show'); }
+
+    // Wrap fetch globally to show/hide spinner
+    (function() {
+        let activeRequests = 0;
+        const origFetch = window.fetch;
+        window.fetch = function() {
+            activeRequests++;
+            if (activeRequests === 1) prShowLoading();
+            return origFetch.apply(this, arguments).finally(() => {
+                activeRequests--;
+                if (activeRequests <= 0) { activeRequests = 0; prHideLoading(); }
+            });
+        };
+    })();
+    </script>
+</body>
+</html>

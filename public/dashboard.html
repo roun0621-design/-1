@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+    <meta name="theme-color" content="#03C75A">
+    <title>PACE RISE : Node — 대시보드</title>
+    <link rel="stylesheet" href="styles.css?v=36">
+    <style>
+        .comp-info-line { display:flex; align-items:center; gap:8px; padding:8px 16px; background:var(--bg-dark); border-radius:var(--radius); font-size:13px; flex-wrap:wrap; }
+        .comp-info-name { font-weight:700; }
+        .comp-info-sep { color:var(--text-muted); }
+        .comp-info-dates, .comp-info-venue { color:var(--text-muted); }
+        .gender-tabs-bar { display:flex; gap:0; background:var(--white); padding:8px 0; border-bottom:2px solid var(--gray); }
+        .gender-tab-btn { flex:1; padding:10px 0; text-align:center; font-size:14px; font-weight:700; border:none; cursor:pointer; border-bottom:3px solid transparent; transition:all .15s; background:none; }
+        .gender-tab-btn[data-gender="M"] { color:#1565c0; }
+        .gender-tab-btn[data-gender="F"] { color:#c62828; }
+        .gender-tab-btn[data-gender="X"] { color:#f57f17; }
+        .gender-tab-btn.active[data-gender="M"] { border-bottom-color:#2196F3; background:#e3f2fd; }
+        .gender-tab-btn.active[data-gender="F"] { border-bottom-color:#F8BBD0; background:#fce4ec; }
+        .gender-tab-btn.active[data-gender="X"] { border-bottom-color:#FFF176; background:#fffde7; }
+        .events-scroll { flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; padding:8px 0; }
+        .dashboard-layout { display:flex; flex-direction:column; height:calc(100vh - 60px); overflow:hidden; }
+        .matrix-section { margin-bottom:16px; }
+        .matrix-section-title { font-size:12px; font-weight:700; color:var(--text-muted); padding:4px 8px; background:var(--bg); border-radius:4px; margin-bottom:6px; letter-spacing:1px; }
+        .matrix-scroll-wrap { overflow-x:hidden; }
+        .matrix-table { width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
+        .matrix-table th { padding:6px 4px; text-align:center; font-size:11px; font-weight:600; color:var(--text-muted); border-bottom:1px solid var(--gray); white-space:nowrap; overflow:hidden; }
+        .matrix-table td { padding:6px 4px; text-align:center; border-bottom:1px solid #f0f0f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .matrix-table td.event-name { text-align:left; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .round-btn { display:inline-block; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:600; text-decoration:none; cursor:pointer; transition:all .12s; }
+        .round-btn.btn-wait { background:#f5f5f5; color:#9e9e9e; cursor:default; }
+        .round-btn.btn-summon { background:#fff3e0; color:#e65100; }
+        .round-btn.btn-summon:hover { background:#ffe0b2; }
+        .round-btn.btn-result { background:#e8f5e9; color:#2e7d32; }
+        .round-btn.btn-result:hover { background:#c8e6c9; }
+        .round-btn.btn-disabled { background:#f5f5f5; color:#bdbdbd; cursor:not-allowed; opacity:.6; }
+        .round-btn.btn-done { background:#e0e0e0; color:#616161; }
+        .admin-toggle { position:fixed; bottom:16px; right:16px; z-index:100; }
+        .result-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:500; align-items:center; justify-content:center; }
+        .result-overlay.show { display:flex; }
+        .result-panel { background:var(--white); border-radius:var(--radius-lg); width:90vw; max-width:800px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column; }
+        .result-panel-header { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:var(--white); border-bottom:2px solid var(--gray); flex-shrink:0; position:sticky; top:0; z-index:10; }
+        .result-panel-header h3 { margin:0; font-size:15px; font-weight:700; }
+        .result-panel-close { width:42px; height:42px; border-radius:50%; border:none; background:var(--danger); font-size:22px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#fff; transition:all .15s; flex-shrink:0; box-shadow:0 2px 8px rgba(220,53,69,.35); line-height:1; padding:0; padding-bottom:3px; }
+        .result-panel-close:hover { background:#c82333; transform:scale(1.1); }
+        .result-panel-body { flex:1; overflow-y:auto; overflow-x:auto; padding:14px 16px; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
+        @media (max-width:768px) {
+            .result-panel-close { width:38px; height:38px; font-size:20px; padding-bottom:2px; }
+            .result-panel-header { padding:10px 14px; }
+            .result-panel-header h3 { font-size:13px; }
+            .result-panel-body { padding:10px 8px; }
+        }
+        .result-panel .data-table, .result-panel .field-table { width:100%; table-layout:auto; }
+
+        /* Dashboard dark mode overrides */
+        html.dark .gender-tabs-bar { background:var(--bg-card); border-bottom-color:var(--gray); }
+        html.dark .gender-tab-btn[data-gender="M"] { color:var(--blue); }
+        html.dark .gender-tab-btn[data-gender="F"] { color:#f06080; }
+        html.dark .gender-tab-btn[data-gender="X"] { color:var(--warning); }
+        html.dark .gender-tab-btn.active[data-gender="M"] { border-bottom-color:var(--blue); background:var(--blue-light); }
+        html.dark .gender-tab-btn.active[data-gender="F"] { border-bottom-color:#f06080; background:#2e1a24; }
+        html.dark .gender-tab-btn.active[data-gender="X"] { border-bottom-color:var(--warning); background:var(--warning-light); }
+        html.dark .matrix-table td { border-bottom-color:var(--gray); }
+        html.dark .round-btn.btn-wait { background:var(--gray-light); color:var(--text-muted); }
+        html.dark .round-btn.btn-summon { background:#3a2800; color:#f0b840; }
+        html.dark .round-btn.btn-summon:hover { background:#4a3500; }
+        html.dark .round-btn.btn-result { background:var(--green-light); color:var(--green); }
+        html.dark .round-btn.btn-result:hover { background:var(--green-soft); }
+        html.dark .round-btn.btn-disabled { background:var(--gray-light); color:var(--text-muted); }
+        html.dark .round-btn.btn-done { background:var(--gray); color:var(--text-light); }
+        html.dark .result-panel { background:var(--bg-card); }
+        html.dark .result-panel-header { background:var(--bg-card); border-bottom-color:var(--gray); }
+        html.dark .result-overlay { background:rgba(0,0,0,.7); }
+        html.dark .dashboard-footer { background:var(--bg-card) !important; border-top-color:var(--gray) !important; }
+    </style>
+</head>
+<body class="dashboard-mode">
+
+    <!-- Landscape overlay — shown only when modal opens on portrait mobile -->
+    <div class="landscape-overlay" id="landscape-overlay" style="display:none;">
+        <div class="rotate-icon">📱</div>
+        <div class="rotate-msg">가로 모드에서 더 잘 보입니다</div>
+        <div class="rotate-sub">기록표가 넓어 가로 모드를 추천합니다</div>
+        <button class="btn" style="color:#fff;background:rgba(255,255,255,.25);border:2px solid rgba(255,255,255,.6);margin-top:20px;padding:16px 48px;font-size:18px;font-weight:700;border-radius:12px;min-width:200px;text-align:center;display:flex;align-items:center;justify-content:center;" onclick="document.getElementById('landscape-overlay').style.display='none'">세로로 볼게요</button>
+    </div>
+
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">Node</span></h1>
+            <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
+        </div>
+        <nav class="page-nav" id="page-nav"></nav>
+    </header>
+
+    <main class="main-content dashboard-layout">
+        <!-- Single-line competition info -->
+        <div class="comp-info-line" id="comp-info-bar" style="flex-shrink:0;"></div>
+
+        <!-- Gender tabs (fixed at top) -->
+        <div class="gender-tabs-bar" id="gender-tabs" style="flex-shrink:0;position:static;">
+            <button class="gender-tab-btn active" data-gender="M" onclick="switchGender('M',this)">남자</button>
+            <button class="gender-tab-btn" data-gender="F" onclick="switchGender('F',this)">여자</button>
+            <button class="gender-tab-btn" data-gender="X" onclick="switchGender('X',this)">혼성</button>
+        </div>
+
+        <!-- Events matrix (scrollable middle) -->
+        <div class="events-scroll" id="events-container">
+            <div style="text-align:center;padding:40px;color:var(--text-muted);">로딩 중...</div>
+        </div>
+
+        <!-- Fixed bottom branding -->
+        <div class="dashboard-footer" style="flex-shrink:0;text-align:center;padding:10px 8px 8px;border-top:1px solid var(--gray);background:var(--white);">
+            <div style="font-family:'Audiowide','Noto Sans KR',sans-serif;font-size:11px;color:#9ca3af;letter-spacing:1.5px;text-transform:uppercase;">Competition Operating System</div>
+            <div style="font-size:10px;color:#b0b8c4;margin:2px 0 4px;">Powered by <span style="font-family:'Audiowide','Noto Sans KR',sans-serif;font-size:12px;color:#6b7280;letter-spacing:2px;">PACE RISE</span></div>
+            <div style="font-size:10px;color:#9ca3af;">
+                <a href="https://pace-rise.com" target="_blank" style="color:#6b7280;text-decoration:none;">pace-rise.com</a>
+                <span style="margin:0 6px;color:#d1d5db;">|</span>
+                <a href="https://instagram.com/pace.rise" target="_blank" style="color:#6b7280;text-decoration:none;">@pace.rise</a>
+                <span style="margin:0 6px;color:#d1d5db;">|</span>
+                <a href="mailto:pacerise.run@gmail.com" style="color:#6b7280;text-decoration:none;">pacerise.run@gmail.com</a>
+            </div>
+            <div style="font-size:9px;color:#b0b8c4;margin-top:4px;"><a href="#" onclick="event.preventDefault();document.getElementById('dash-privacy').style.display=document.getElementById('dash-privacy').style.display==='none'?'block':'none';" style="color:#9ca3af;text-decoration:none;">개인정보 처리 안내</a></div>
+            <div id="dash-privacy" style="display:none;text-align:left;font-size:9px;color:#6b7280;line-height:1.5;margin-top:6px;padding:8px;background:#f9fafb;border-radius:6px;max-height:200px;overflow-y:auto;">
+                <p style="margin-bottom:4px;"><strong style="color:#374151;">수집 주체</strong>: PACE RISE 및 대회 주최/주관 단체</p>
+                <p style="margin-bottom:4px;"><strong style="color:#374151;">수집 항목</strong>: 선수 정보(성명, 소속, 배번, 성별), 대회 정보, 운영 정보</p>
+                <p style="margin-bottom:4px;"><strong style="color:#374151;">이용 목적</strong>: 대회 운영, 실시간 기록 관리, 결과 공개, 시스템 개선</p>
+                <p style="margin-bottom:4px;"><strong style="color:#374151;">보유 기간</strong>: 경기 기록은 영구 보관</p>
+                <p style="margin-bottom:0;"><strong style="color:#374151;">문의</strong>: pacerise.run@gmail.com</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Result overlay modal -->
+    <div class="result-overlay" id="result-overlay" onclick="if(event.target===this){if(_liveEventId)closeLiveResult();else closeResult();}">
+        <div class="result-panel" id="result-panel"></div>
+    </div>
+
+    <script src="common.js?v=36"></script>
+    <script src="dashboard.js?v=33"></script>
+</body>
+</html>
