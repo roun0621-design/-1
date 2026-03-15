@@ -266,9 +266,9 @@ function buildVideoLinkHTML(evt) {
     const role = sessionStorage.getItem('pace_role');
     const canEdit = (role === 'admin' || role === 'operation');
     return `<div class="event-video-bar" id="event-video-bar" style="display:flex;align-items:center;gap:8px;margin:6px 0 4px;flex-wrap:wrap;">
-        <button class="btn btn-sm btn-outline" onclick="playEventVideo()" id="btn-play-video" style="display:none;" title="종목 영상 재생">🎬 영상</button>
-        ${canEdit ? `<button class="btn btn-sm btn-outline" onclick="editEventVideoUrl()" title="종목 영상 URL 입력/수정">🔗 영상 링크</button>` : ''}
-        <button class="btn btn-sm btn-outline" onclick="playCompVideo()" id="btn-play-comp-video" style="display:none;" title="대회 대표 영상 재생">📺 대회 영상</button>
+        <button class="btn btn-sm btn-outline" onclick="playEventVideo()" id="btn-play-video" style="display:none;" title="종목 영상 재생">▶ 영상</button>
+        ${canEdit ? `<button class="btn btn-sm btn-outline" onclick="editEventVideoUrl()" title="종목 영상 URL 입력/수정">↗ 영상 링크</button>` : ''}
+        <button class="btn btn-sm btn-outline" onclick="playCompVideo()" id="btn-play-comp-video" style="display:none;" title="대회 대표 영상 재생">▶ 대회 영상</button>
     </div>`;
 }
 async function loadEventVideoButtons() {
@@ -372,16 +372,16 @@ async function renderTrackDetail(evt) {
             <button class="btn btn-sm btn-primary" onclick="saveHeatWind()" title="현재 히트 풍속 저장" style="padding:8px 16px;font-size:13px;">저장</button>
             <span id="wind-status" style="font-size:12px;margin-left:6px;"></span>
             <span id="wind-record-badge" style="font-size:12px;margin-left:6px;"></span>
-            <span id="wind-warning-inline" style="display:none;font-size:11px;color:#ff9800;font-weight:700;margin-left:6px;">⚠️ 풍속 미입력</span>
+            <span id="wind-warning-inline" style="display:none;font-size:11px;color:#ff9800;font-weight:700;margin-left:6px;">⚠ 풍속 미입력</span>
         </div>` : ''}
         <div class="heat-tabs">
             ${heatTabs}
-            <button class="btn btn-sm btn-outline" onclick="showHeatEditModal(state.selectedEvent)" style="margin-left:auto;font-size:11px;" title="조/레인 수동 수정">🛠 조/레인 수정</button>
-            <button class="btn btn-sm btn-outline" onclick="validateWARegulations()" style="font-size:11px;" title="WA 규정 검증">✅ WA 검증</button>
+            <button class="btn btn-sm btn-outline" onclick="showHeatEditModal(state.selectedEvent)" style="margin-left:auto;font-size:11px;" title="조/레인 수동 수정">⚙ 조/레인 수정</button>
+            <button class="btn btn-sm btn-outline" onclick="validateWARegulations()" style="font-size:11px;" title="WA 규정 검증">✓ WA 검증</button>
         </div>
         <div id="track-content"></div>
         <div class="track-actions">
-            <button class="btn btn-primary" id="track-save-all-btn" onclick="saveAllTrackInline()" title="현재 조의 모든 기록을 한번에 저장합니다">💾 기록 저장</button>
+            <button class="btn btn-primary" id="track-save-all-btn" onclick="saveAllTrackInline()" title="현재 조의 모든 기록을 한번에 저장합니다">✓ 기록 저장</button>
             ${evt.round_type === 'preliminary' ? `
                 <button class="btn btn-outline" onclick="openSemifinalQualification()" title="모든 조의 결과를 통합하여 준결승 진출자를 선택합니다">준결승 진출자 선택</button>
                 <button class="btn btn-outline" onclick="openTrackQualification()" title="모든 조의 결과를 통합하여 결승 진출자를 선택합니다">결승 진출자 선택</button>
@@ -431,7 +431,7 @@ async function renderTrackTable() {
     if (state.heatEntries.length === 0) {
         document.getElementById('track-content').innerHTML = `
             <div class="empty-state" style="padding:30px 0;">
-                <div style="font-size:24px;margin-bottom:8px;">🚫</div>
+                <div style="font-size:24px;margin-bottom:8px;">∅</div>
                 <p style="font-weight:600;">소집이 완료된 선수가 없습니다</p>
                 <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">소집실에서 선수 출석 처리를 먼저 진행하세요</p>
                 <a href="/callroom.html?event_id=${state.selectedEventId}" class="btn btn-sm btn-primary" style="margin-top:12px;">소집실로 이동</a>
@@ -777,7 +777,7 @@ function renderFieldDistanceContent() {
     if (entries.length === 0) {
         document.getElementById('field-content').innerHTML = `
             <div class="empty-state" style="padding:30px 0;">
-                <div style="font-size:24px;margin-bottom:8px;">🚫</div>
+                <div style="font-size:24px;margin-bottom:8px;">∅</div>
                 <p style="font-weight:600;">소집이 완료된 선수가 없습니다</p>
                 <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">소집실에서 선수 출석 처리를 먼저 진행하세요</p>
                 <a href="/callroom.html?event_id=${state.selectedEventId}" class="btn btn-sm btn-primary" style="margin-top:12px;">소집실로 이동</a>
@@ -1315,7 +1315,7 @@ function showWindWarning(entryId, attempt) {
         notice.id = 'wind-warning-notice';
         document.body.appendChild(notice);
     }
-    notice.textContent = '⚠️ 풍속을 입력하세요!';
+    notice.textContent = '⚠ 풍속을 입력하세요!';
     notice.style.display = 'block';
     notice.style.opacity = '1';
     setTimeout(() => { notice.style.opacity = '0'; setTimeout(() => { notice.style.display = 'none'; }, 300); }, 1500);
@@ -1563,7 +1563,7 @@ function renderHeightContent() {
     if (entries.length === 0) {
         document.getElementById('height-content').innerHTML = `
             <div class="empty-state" style="padding:30px 0;">
-                <div style="font-size:24px;margin-bottom:8px;">🚫</div>
+                <div style="font-size:24px;margin-bottom:8px;">∅</div>
                 <p style="font-weight:600;">소집이 완료된 선수가 없습니다</p>
                 <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">소집실에서 선수 출석 처리를 먼저 진행하세요</p>
                 <a href="/callroom.html?event_id=${state.selectedEventId}" class="btn btn-sm btn-primary" style="margin-top:12px;">소집실로 이동</a>
@@ -1929,9 +1929,9 @@ async function _renderScoreboard(container) {
         <p style="margin-top:6px;font-size:11px;color:var(--text-muted);">💡 종목명을 클릭하면 해당 종목 기록 입력으로 이동합니다.</p>
         <div class="track-actions" style="margin-top:12px;">
             ${evt.round_status === 'completed'
-                ? `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#e8f5e9;border-radius:var(--radius);color:#2e7d32;font-weight:600;font-size:13px;">✅ 경기 완료됨</div>
+                ? `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#e8f5e9;border-radius:var(--radius);color:#2e7d32;font-weight:600;font-size:13px;">✓ 경기 완료됨</div>
                    <button class="btn btn-warning btn-sm" onclick="revertCombinedComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`
-                : `<button class="btn btn-success" onclick="completeCombinedEvent()" title="모든 세부종목 기록을 최종 확정하고 경기를 완료합니다">🏁 모든 경기 완료</button>`}
+                : `<button class="btn btn-success" onclick="completeCombinedEvent()" title="모든 세부종목 기록을 최종 확정하고 경기를 완료합니다">⚑ 모든 경기 완료</button>`}
         </div>`;
 }
 
@@ -2010,7 +2010,7 @@ async function doCompleteCombined() {
         }
         
         document.getElementById('complete-modal-overlay').remove();
-        showToast('✅ ' + evt.name + ' 경기 완료', 'success', 3000);
+        showToast('✓ ' + evt.name + ' 경기 완료', 'success', 3000);
         
         // ★ Re-fetch fresh data from server (same pattern as doCompleteRound)
         state.events = await API.getAllEvents(getCompetitionId());
@@ -3337,7 +3337,7 @@ async function approveSemifinalQualification() {
 // ============================================================
 function _buildCompleteUI(evt) {
     if (evt.round_status === 'completed') {
-        return `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#e8f5e9;border-radius:var(--radius);color:#2e7d32;font-weight:600;font-size:13px;">✅ 경기 완료됨</div>
+        return `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#e8f5e9;border-radius:var(--radius);color:#2e7d32;font-weight:600;font-size:13px;">✓ 경기 완료됨</div>
                 <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`;
     }
     return `<button class="btn btn-success" onclick="completeRound()" title="모든 기록이 저장된 후 경기를 최종 완료 처리합니다">경기 완료</button>`;
@@ -3467,7 +3467,7 @@ async function doCompleteRound() {
     try {
         await API.completeEvent(state.selectedEventId, judgeName, adminKey);
         document.getElementById('complete-modal-overlay').remove();
-        showToast('✅ ' + (state.selectedEvent?.name || '') + ' 경기 완료', 'success', 3000);
+        showToast('✓ ' + (state.selectedEvent?.name || '') + ' 경기 완료', 'success', 3000);
         state.events = await API.getAllEvents(getCompetitionId());
         state.selectedEvent = await API.getEvent(state.selectedEventId);
         renderMatrix();

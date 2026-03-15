@@ -387,9 +387,9 @@ async function loadResultsData() {
     let videoHtml = '';
     try {
         const vRes = await API.getEventVideoUrl(rSelectedEvent.id);
-        if (vRes.video_url) videoHtml += `<button class="btn btn-sm btn-outline" onclick="openVideoModal('${vRes.video_url.replace(/'/g,"\\'")}', '${rSelectedEvent.name.replace(/'/g,"\\'")}')">🎬 영상</button> `;
+        if (vRes.video_url) videoHtml += `<button class="btn btn-sm btn-outline" onclick="openVideoModal('${vRes.video_url.replace(/'/g,"\\'")}', '${rSelectedEvent.name.replace(/'/g,"\\'")}')">▶ 영상</button> `;
     } catch(e){}
-    if (compInfo.video_url) videoHtml += `<button class="btn btn-sm btn-outline" onclick="openVideoModal('${compInfo.video_url.replace(/'/g,"\\'")}', '대회 대표 영상')">📺 대회 영상</button>`;
+    if (compInfo.video_url) videoHtml += `<button class="btn btn-sm btn-outline" onclick="openVideoModal('${compInfo.video_url.replace(/'/g,"\\'")}', '대회 대표 영상')">▶ 대회 영상</button>`;
     document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date().toLocaleDateString('ko-KR')}</p>${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
 
     const allArea = document.getElementById('results-all-area');

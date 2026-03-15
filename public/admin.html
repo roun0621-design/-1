@@ -8,7 +8,7 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
     <meta name="theme-color" content="#03C75A">
     <title>PACE RISE : Node — 관리자</title>
-    <link rel="stylesheet" href="styles.css?v=33">
+    <link rel="stylesheet" href="styles.css?v=36">
     <style>
         .admin-tabs { display:flex; gap:0; border-bottom:2px solid var(--gray); margin-bottom:20px; flex-wrap:wrap; }
         .admin-tab { padding:10px 18px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--text-muted); border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; }
@@ -379,7 +379,7 @@
                     <h4>데이터 백업</h4>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">현재 선택된 대회의 전체 데이터(선수, 종목, 기록, 조편성)를 백업합니다.</p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                        <button class="btn btn-outline" onclick="downloadBackup('json')">📄 JSON 백업</button>
+                        <button class="btn btn-outline" onclick="downloadBackup('json')">☐ JSON 백업</button>
                         <button class="btn btn-outline" onclick="downloadBackup('xlsx')">📊 Excel (XLSX) 백업</button>
                         <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;margin-left:8px;">
                             <input type="checkbox" id="backup-comp-only" checked> 현재 대회만
@@ -512,7 +512,7 @@
                         <div style="border-top:1px solid var(--gray);padding-top:12px;margin-bottom:12px;">
                             <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">하단 둘러보기 버튼</label>
                             <div class="admin-form-row">
-                                <div class="admin-form-group" style="flex:1;"><label>버튼 텍스트</label><input id="pe-btn-text" placeholder="예: 🏃 둘러보기"></div>
+                                <div class="admin-form-group" style="flex:1;"><label>버튼 텍스트</label><input id="pe-btn-text" placeholder="예: → 둘러보기"></div>
                                 <div class="admin-form-group"><label>활성화</label>
                                     <select id="pe-btn-active"><option value="1">ON</option><option value="0">OFF</option></select>
                                 </div>
@@ -544,8 +544,8 @@
                     <div style="margin-bottom:14px;">
                         <label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">① 성별 선택</label>
                         <div style="display:flex;gap:6px;">
-                            <button class="btn btn-sm" id="pacing-gender-M" onclick="switchPacingGender('M')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;">🚹 남자</button>
-                            <button class="btn btn-sm btn-outline" id="pacing-gender-F" onclick="switchPacingGender('F')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;">🚺 여자</button>
+                            <button class="btn btn-sm" id="pacing-gender-M" onclick="switchPacingGender('M')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;">♂ 남자</button>
+                            <button class="btn btn-sm btn-outline" id="pacing-gender-F" onclick="switchPacingGender('F')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;">♀ 여자</button>
                         </div>
                     </div>
                     <div style="margin-bottom:14px;">
@@ -564,7 +564,7 @@
                             <div style="display:flex;gap:6px;">
                                 <button class="btn btn-sm btn-outline" onclick="addPacingSegmentAll()">+ 구간</button>
                                 <button class="btn btn-sm btn-danger" onclick="deletePacingConfig()">삭제</button>
-                                <button class="btn btn-sm btn-primary" onclick="savePacingConfig()">💾 저장</button>
+                                <button class="btn btn-sm btn-primary" onclick="savePacingConfig()">✓ 저장</button>
                             </div>
                         </div>
                         <!-- Notice text -->
@@ -685,7 +685,7 @@
             <!-- TAB: Relay Management -->
             <div id="tab-relay" class="admin-tab-panel">
                 <div class="admin-card" style="border-left:4px solid #7c3aed;">
-                    <h4 style="display:flex;align-items:center;gap:8px;">🏃 릴레이 팀 주자 관리</h4>
+                    <h4 style="display:flex;align-items:center;gap:8px;">→ 릴레이 팀 주자 관리</h4>
                     <p style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.8;">
                         릴레이 주자 관리는 <strong style="color:var(--blue);">종목 관리</strong> 탭에서 진행합니다.<br>
                         <span style="font-size:12px;color:var(--text-muted);">① 종목 관리 탭 → ② 카테고리 필터에서 <strong>"릴레이"</strong> 선택 → ③ 릴레이 종목 카드 클릭 → ④ 조(Heat) 안의 <span style="color:var(--blue);text-decoration:underline;cursor:pointer;" onclick="switchTab('events',document.querySelector('[data-tab=events]'))">팀명을 클릭</span>하면 선수 추가/제거/순서변경이 가능합니다.</span>
@@ -699,7 +699,7 @@
         </div>
     </div>
 
-    <script src="common.js?v=34"></script>
+    <script src="common.js?v=36"></script>
     <script>
         renderPageNav('admin');
         // Helper: display bib_number safely (null/undefined → '—')
@@ -1121,7 +1121,7 @@
                     <td>${k.id}</td>
                     <td style="font-weight:600;">${k.judge_name}</td>
                     <td><span class="key-display" style="font-size:12px;">${k.key_value}</span></td>
-                    <td><span style="color:${k.can_manage ? 'var(--blue)' : 'var(--text-muted)'};font-weight:600;cursor:pointer;" onclick="toggleJudgeManage(${k.id},${k.can_manage ? 0 : 1})" title="클릭하여 권한 변경">${k.can_manage ? '관리자' : '운영'} ✎</span></td>
+                    <td><span style="color:${k.can_manage ? 'var(--blue)' : 'var(--text-muted)'};font-weight:600;cursor:pointer;" onclick="toggleJudgeManage(${k.id},${k.can_manage ? 0 : 1})" title="클릭하여 권한 변경">${k.can_manage ? '관리자' : '운영'} 📝</span></td>
                     <td><span style="color:${k.active ? 'var(--green)' : 'var(--danger)'};font-weight:600;">${k.active ? '활성' : '비활성'}</span></td>
                     <td style="font-size:10px;color:var(--text-muted);">${(k.created_at||'').slice(0,10)}</td>
                     <td>
@@ -1192,7 +1192,7 @@
                     <div style="display:flex;align-items:center;gap:4px;">
                         ${idx > 0 ? `<button class="btn btn-xs btn-ghost" onclick="moveFed(${f.id},-1)" title="위로">↑</button>` : ''}
                         ${idx < _federations.length-1 ? `<button class="btn btn-xs btn-ghost" onclick="moveFed(${f.id},1)" title="아래로">↓</button>` : ''}
-                        <button class="btn btn-xs btn-ghost" onclick="editFed(${f.id})" title="수정">✏️</button>
+                        <button class="btn btn-xs btn-ghost" onclick="editFed(${f.id})" title="수정">📝</button>
                         <button class="btn btn-xs btn-danger" onclick="deleteFed(${f.id})" title="삭제" style="padding:2px 6px;font-size:10px;">✕</button>
                     </div>
                 </div>
@@ -1271,7 +1271,7 @@
             if (!wrap) return;
             if (!_homePopups.length) { wrap.innerHTML = '<span style="font-size:12px;color:var(--text-muted);">등록된 팝업이 없습니다. 위 버튼으로 추가하세요.</span>'; return; }
             wrap.innerHTML = _homePopups.map((p, i) => {
-                const typeLabel = p.popup_type === 'admin' ? '🔒 관리자용' : '👥 일반 유저용';
+                const typeLabel = p.popup_type === 'admin' ? '🔐 관리자용' : '📊 일반 유저용';
                 const activeLabel = p.is_active ? '<span style="color:#2d9d78;font-size:11px;">● ON</span>' : '<span style="color:#999;font-size:11px;">○ OFF</span>';
                 const period = (p.show_from || p.show_until) ? `<span style="font-size:10px;color:var(--text-muted);">${p.show_from||'시작없음'} ~ ${p.show_until||'종료없음'}</span>` : '';
                 const orderLabel = `<span style="font-size:10px;color:var(--text-muted);font-weight:600;min-width:20px;text-align:center;">#${i+1}</span>`;
@@ -1289,7 +1289,7 @@
                         <span style="font-size:10px;color:var(--text-muted);">${(p.sections||[]).length}개 섹션</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
-                        <button class="btn btn-xs btn-ghost" onclick="editPopup(${p.id})">✏️ 수정</button>
+                        <button class="btn btn-xs btn-ghost" onclick="editPopup(${p.id})">📝 수정</button>
                         <button class="btn btn-xs btn-danger" onclick="deletePopup(${p.id})" style="padding:2px 6px;font-size:10px;">삭제</button>
                     </div>
                 </div>`;
@@ -1598,10 +1598,10 @@
 
                 // Summary bar
                 html += `<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">`;
-                if (changed.length) html += `<span style="background:#dcfce7;color:#166534;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">✅ 변경 적용: ${changed.length}개</span>`;
-                if (hasResults.length) html += `<span style="background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">⚠️ 기록있음: ${hasResults.length}개</span>`;
+                if (changed.length) html += `<span style="background:#dcfce7;color:#166534;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">✓ 변경 적용: ${changed.length}개</span>`;
+                if (hasResults.length) html += `<span style="background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">⚠ 기록있음: ${hasResults.length}개</span>`;
                 if (unchanged.length) html += `<span style="background:#f3f4f6;color:#6b7280;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">⏭ 변경없음: ${unchanged.length}개</span>`;
-                if (notFound.length) html += `<span style="background:#fef2f2;color:#dc2626;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">❌ 미발견: ${notFound.length}개</span>`;
+                if (notFound.length) html += `<span style="background:#fef2f2;color:#dc2626;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">✗ 미발견: ${notFound.length}개</span>`;
                 html += `</div>`;
 
                 // Detail table
@@ -1610,10 +1610,10 @@
 
                 for (const item of data.preview) {
                     const statusColors = {
-                        changed: { bg: '#dcfce7', color: '#166534', label: '✅ 변경' },
-                        has_results: { bg: '#fef3c7', color: '#92400e', label: '⚠️ 기록있음' },
+                        changed: { bg: '#dcfce7', color: '#166534', label: '✓ 변경' },
+                        has_results: { bg: '#fef3c7', color: '#92400e', label: '⚠ 기록있음' },
                         unchanged: { bg: '#f3f4f6', color: '#9ca3af', label: '⏭ 스킵' },
-                        not_found: { bg: '#fef2f2', color: '#dc2626', label: '❌ 미발견' }
+                        not_found: { bg: '#fef2f2', color: '#dc2626', label: '✗ 미발견' }
                     };
                     const sc = statusColors[item.status] || statusColors.not_found;
 
@@ -1681,7 +1681,7 @@
             // Confirm if force-changing events with results
             const hasForced = forceIds.length > 0;
             if (hasForced) {
-                if (!confirm(`⚠️ ${forceIds.length}개 종목의 기록이 초기화됩니다. 정말 진행하시겠습니까?`)) return;
+                if (!confirm(`⚠ ${forceIds.length}개 종목의 기록이 초기화됩니다. 정말 진행하시겠습니까?`)) return;
             }
 
             if (!confirm('조편성을 적용합니다. 계속하시겠습니까?')) return;
@@ -1701,7 +1701,7 @@
                 if (!res.ok) throw data;
 
                 resultDiv.style.background = '#ecfdf5'; resultDiv.style.color = '#166534';
-                let msg = `✅ 조편성 적용 완료<br>`;
+                let msg = `✓ 조편성 적용 완료<br>`;
                 msg += `변경: ${data.stats.updated}개 종목 | 스킵(변경없음): ${data.stats.skippedUnchanged}개 | 스킵(기록보호): ${data.stats.skippedHasResults}개`;
                 if (data.stats.notFound) msg += ` | 미발견: ${data.stats.notFound}개`;
                 if (data.stats.athletesAdded) msg += ` | 신규선수: ${data.stats.athletesAdded}명`;
@@ -1738,7 +1738,7 @@
                 const data = await res.json();
                 if (!res.ok) throw data;
                 resultDiv.style.background = 'var(--green-light,#ecfdf5)'; resultDiv.style.color = 'var(--green,#16a34a)';
-                resultDiv.innerHTML = `✅ 선수 ${data.stats.added}명 추가 | ${data.stats.skipped}명 스킵`;
+                resultDiv.innerHTML = `✓ 선수 ${data.stats.added}명 추가 | ${data.stats.skipped}명 스킵`;
                 toast('선수 업로드 완료');
                 loadAthletes();
             } catch (e) {
@@ -1767,7 +1767,7 @@
                 const data = await res.json();
                 if (!res.ok) throw data;
                 resultDiv.style.background = 'var(--green-light,#ecfdf5)'; resultDiv.style.color = 'var(--green,#16a34a)';
-                resultDiv.innerHTML = `✅ 종목 ${data.stats.added}개 추가 | ${data.stats.skipped}개 스킵`;
+                resultDiv.innerHTML = `✓ 종목 ${data.stats.added}개 추가 | ${data.stats.skipped}개 스킵`;
                 toast('종목 업로드 완료');
                 loadEvents();
             } catch (e) {
@@ -1897,7 +1897,7 @@
                 const label = h.heat_name || (h.heat_number + '조');
                 return `<span style="display:inline-flex;align-items:center;gap:2px;position:relative;">
                     <button class="heat-tab-btn ${active}" onclick="switchEmHeat(${h.id}, this)" title="클릭: 선수 보기">${label}</button>
-                    <button class="btn btn-xs btn-ghost" style="padding:2px 4px;font-size:11px;min-width:0;line-height:1;" onclick="emRenameHeatInline(${h.id})" title="조 이름 수정">✏️</button>
+                    <button class="btn btn-xs btn-ghost" style="padding:2px 4px;font-size:11px;min-width:0;line-height:1;" onclick="emRenameHeatInline(${h.id})" title="조 이름 수정">📝</button>
                 </span>`;
             }).join('');
             tabsHtml += `<button class="btn btn-xs btn-primary" onclick="emAddHeat(${eventId})">+ 조 추가</button>`;
@@ -1961,7 +1961,7 @@
                     const escapedName = (e.name || '').replace(/'/g, "\\'");
                     html += `<tr>
                         <td style="text-align:center;"><input type="number" value="${e.lane_number || ''}" min="0" max="99" placeholder="—" data-heat-id="${heatId}" data-entry-id="${e.event_entry_id}" onchange="emSaveLane(this)" style="width:42px;padding:3px 4px;border:1px solid var(--gray);border-radius:4px;text-align:center;font-size:12px;font-weight:700;"></td>
-                        <td style="text-align:left;font-weight:600;cursor:pointer;color:var(--blue);text-decoration:underline;" onclick="openRelayMemberModal(${e.event_entry_id},'${escapedName}',${_emEventId})">${e.name} <span style="font-size:10px;color:var(--text-muted);">(${members.length}명) ✎</span></td>
+                        <td style="text-align:left;font-weight:600;cursor:pointer;color:var(--blue);text-decoration:underline;" onclick="openRelayMemberModal(${e.event_entry_id},'${escapedName}',${_emEventId})">${e.name} <span style="font-size:10px;color:var(--text-muted);">(${members.length}명) 📝</span></td>
                         <td style="text-align:center;">${members.length}</td>
                         ${legCells}
                         <td><button class="btn btn-xs btn-danger" onclick="emRemoveEntry(${heatId},${e.event_entry_id},'${escapedName}')" title="이 조에서 제거">&times;</button></td>
@@ -2375,7 +2375,7 @@
                 let btnStyle = 'font-size:13px;padding:8px 16px;border-radius:8px;font-weight:600;';
                 if (isActive) btnStyle += 'background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 2px 6px rgba(0,100,255,.25);';
                 else if (hasConfig) btnStyle += 'background:#e3f2fd;color:#1565C0;border-color:#90caf9;';
-                return `<button class="btn btn-sm btn-outline" style="${btnStyle}" onclick="selectPacingEvent('${key.replace(/'/g,"\\'")}')">${e.name}${hasConfig ? ' ✅' : ''}</button>`;
+                return `<button class="btn btn-sm btn-outline" style="${btnStyle}" onclick="selectPacingEvent('${key.replace(/'/g,"\\'")}')">${e.name}${hasConfig ? ' ✓' : ''}</button>`;
             }).join('');
         }
 
@@ -2545,7 +2545,7 @@
             }
 
             // ── Row: 총 기록 (total time — prominent, between segments and remark) ──
-            html += '<tr><td style="padding:10px 10px;font-weight:800;font-size:13px;color:#222;background:#f0f0f0;border-bottom:3px solid #bbb;border-top:3px solid #bbb;">🏆 총 기록</td>';
+            html += '<tr><td style="padding:10px 10px;font-weight:800;font-size:13px;color:#222;background:#f0f0f0;border-bottom:3px solid #bbb;border-top:3px solid #bbb;">☆ 총 기록</td>';
             colors.forEach((c, ci) => {
                 const total = c.segments.reduce((s, seg) => s + (seg.lap_seconds || 0), 0);
                 const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#333'};
@@ -2585,9 +2585,9 @@
             if (eventDist > 0) {
                 const totalDist = (colors[0]?.segments || []).reduce((s, seg) => s + (seg.distance_meters || 0), 0);
                 if (totalDist !== eventDist) {
-                    warnEl.innerHTML = `<div style="color:var(--danger);font-size:12px;font-weight:600;">⚠️ 구간 합계 ${totalDist}m ≠ 종목 거리 ${eventDist}m</div>`;
+                    warnEl.innerHTML = `<div style="color:var(--danger);font-size:12px;font-weight:600;">⚠ 구간 합계 ${totalDist}m ≠ 종목 거리 ${eventDist}m</div>`;
                 } else {
-                    warnEl.innerHTML = `<div style="color:var(--green);font-size:11px;">✅ 구간 합계 ${totalDist}m = ${eventDist}m</div>`;
+                    warnEl.innerHTML = `<div style="color:var(--green);font-size:11px;">✓ 구간 합계 ${totalDist}m = ${eventDist}m</div>`;
                 }
             } else { warnEl.innerHTML = ''; }
         }

@@ -8,7 +8,7 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
     <meta name="theme-color" content="#03C75A">
     <title>PACE RISE : Node — 대시보드</title>
-    <link rel="stylesheet" href="styles.css?v=33">
+    <link rel="stylesheet" href="styles.css?v=36">
     <style>
         .comp-info-line { display:flex; align-items:center; gap:8px; padding:8px 16px; background:var(--bg-dark); border-radius:var(--radius); font-size:13px; flex-wrap:wrap; }
         .comp-info-name { font-weight:700; }
@@ -55,6 +55,27 @@
             .result-panel-body { padding:10px 8px; }
         }
         .result-panel .data-table, .result-panel .field-table { width:100%; table-layout:auto; }
+
+        /* Dashboard dark mode overrides */
+        html.dark .gender-tabs-bar { background:var(--bg-card); border-bottom-color:var(--gray); }
+        html.dark .gender-tab-btn[data-gender="M"] { color:var(--blue); }
+        html.dark .gender-tab-btn[data-gender="F"] { color:#f06080; }
+        html.dark .gender-tab-btn[data-gender="X"] { color:var(--warning); }
+        html.dark .gender-tab-btn.active[data-gender="M"] { border-bottom-color:var(--blue); background:var(--blue-light); }
+        html.dark .gender-tab-btn.active[data-gender="F"] { border-bottom-color:#f06080; background:#2e1a24; }
+        html.dark .gender-tab-btn.active[data-gender="X"] { border-bottom-color:var(--warning); background:var(--warning-light); }
+        html.dark .matrix-table td { border-bottom-color:var(--gray); }
+        html.dark .round-btn.btn-wait { background:var(--gray-light); color:var(--text-muted); }
+        html.dark .round-btn.btn-summon { background:#3a2800; color:#f0b840; }
+        html.dark .round-btn.btn-summon:hover { background:#4a3500; }
+        html.dark .round-btn.btn-result { background:var(--green-light); color:var(--green); }
+        html.dark .round-btn.btn-result:hover { background:var(--green-soft); }
+        html.dark .round-btn.btn-disabled { background:var(--gray-light); color:var(--text-muted); }
+        html.dark .round-btn.btn-done { background:var(--gray); color:var(--text-light); }
+        html.dark .result-panel { background:var(--bg-card); }
+        html.dark .result-panel-header { background:var(--bg-card); border-bottom-color:var(--gray); }
+        html.dark .result-overlay { background:rgba(0,0,0,.7); }
+        html.dark .dashboard-footer { background:var(--bg-card) !important; border-top-color:var(--gray) !important; }
     </style>
 </head>
 <body class="dashboard-mode">
@@ -118,7 +139,7 @@
         <div class="result-panel" id="result-panel"></div>
     </div>
 
-    <script src="common.js?v=34"></script>
+    <script src="common.js?v=36"></script>
     <script src="dashboard.js?v=33"></script>
 </body>
 </html>

@@ -38,6 +38,246 @@
     --font-mono: 'SF Mono','Fira Code','Cascadia Code',Monaco,Consolas,monospace;
 }
 
+/* ============================================================
+   DARK MODE
+   ============================================================ */
+html.dark {
+    --white: #1a1f2b;
+    --bg: #111318;
+    --bg-dark: #0d0f13;
+    --bg-card: #1e2330;
+    --green: #3ec99b;
+    --green-light: #1a2e28;
+    --green-soft: #1d3a30;
+    --blue: #5a9cf5;
+    --blue-light: #1a253a;
+    --blue-soft: #1d2f4a;
+    --gray: #2d333e;
+    --gray-light: #232830;
+    --gray-mid: #444c5a;
+    --gray-dark: #8b95a5;
+    --text: #e4e7ed;
+    --text-light: #7a8494;
+    --text-muted: #5a6370;
+    --danger: #f06070;
+    --danger-light: #2e1a1e;
+    --warning: #f0b840;
+    --warning-light: #2e2510;
+    --accent: #5a9cf5;
+    --accent-light: #1a253a;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+    --shadow: 0 1px 4px rgba(0,0,0,0.25);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+}
+html.dark body { background: var(--bg); color: var(--text); }
+html.dark input, html.dark select, html.dark textarea {
+    background: var(--bg-card); color: var(--text); border-color: var(--gray);
+}
+html.dark .header { background: var(--white); border-bottom-color: var(--gray); }
+html.dark .page-nav { background: var(--bg-card); border-bottom-color: var(--gray); }
+html.dark .page-nav a { color: var(--text-light); }
+html.dark .page-nav a.active { color: var(--text); border-bottom-color: var(--text); }
+html.dark .btn-ghost { color: var(--text); border-color: var(--gray); }
+html.dark .btn-ghost:hover { background: var(--gray-light); }
+html.dark .btn-outline { color: var(--text); border-color: var(--gray-mid); }
+html.dark .data-table th { background: var(--gray-light); color: var(--text); border-color: var(--gray); }
+html.dark .data-table td { border-color: var(--gray); }
+html.dark .info-modal-inner, html.dark .login-modal-inner, html.dark .add-comp-form { background: var(--bg-card); color: var(--text); }
+
+/* --- Dark Mode: Panels, Cards, Modals --- */
+html.dark .callroom-matrix-panel,
+html.dark .record-matrix-panel,
+html.dark .detail-placeholder,
+html.dark .cr-detail-header,
+html.dark .admin-login-card,
+html.dark .admin-section,
+html.dark .admin-mode-bar,
+html.dark .stat-card { background: var(--bg-card); box-shadow: var(--shadow); }
+
+html.dark .cr-event-btn { background: var(--bg-card); border-color: var(--gray); color: var(--text); }
+html.dark .cr-event-btn:hover { border-color: var(--blue); background: var(--blue-light); }
+html.dark .cr-event-btn.cr-active { border-color: var(--green); background: var(--green-light); }
+html.dark .cr-event-btn.cr-active-status { border-color: var(--blue-soft); background: var(--blue-light); }
+html.dark .cr-event-btn.cr-done { border-color: var(--green-soft); background: var(--green-light); }
+html.dark .cr-matrix-title { background: var(--gray-light); color: var(--gray-dark); border-bottom-color: var(--gray); }
+html.dark .cr-evt-round { color: var(--text-muted); }
+
+/* --- Dark Mode: Modals & Overlays --- */
+html.dark .result-detail-modal,
+html.dark .callroom-detail-modal { background: var(--bg-card); }
+html.dark .result-detail-header,
+html.dark .result-detail-footer { background: var(--gray-light); border-color: var(--gray); }
+html.dark .modal { background: var(--bg-card); color: var(--text); }
+html.dark .modal-overlay { background: rgba(0,0,0,0.6); }
+html.dark .modal-header { color: var(--text); }
+
+/* --- Dark Mode: Tables --- */
+html.dark .matrix-table th { color: var(--text-muted); border-bottom-color: var(--gray); }
+html.dark .matrix-table td { border-bottom-color: var(--gray); }
+html.dark .heat-tab { color: var(--text-muted); }
+html.dark .heat-tab.active { color: var(--green); }
+html.dark .heat-tabs { border-bottom-color: var(--gray); }
+
+/* --- Dark Mode: Results unified table --- */
+html.dark .results-unified-table .gender-header-male { background: var(--blue-light); color: var(--blue); border-bottom-color: var(--blue); }
+html.dark .results-unified-table .gender-header-female { background: #2e1a24; color: #f06080; border-bottom-color: #f06080; }
+html.dark .results-unified-table .round-col-male { background: var(--blue-light); color: var(--blue); }
+html.dark .results-unified-table .round-col-female { background: #2e1a24; color: #f06080; }
+html.dark .results-unified-table .gender-divider { background: var(--gray); border-color: var(--gray-mid); }
+html.dark .results-unified-table .gender-divider-cell { background: var(--gray-light); border-color: var(--gray); }
+
+/* --- Dark Mode: Round buttons --- */
+html.dark .round-btn { color: var(--text); }
+html.dark .round-btn.btn-wait { background: var(--gray-light); color: var(--text-muted); }
+html.dark .round-btn.btn-summon { background: #3a2800; color: #f0b840; }
+html.dark .round-btn.btn-result { background: var(--green-light); color: var(--green); }
+html.dark .round-btn.result-btn-male { background: var(--blue-light); color: var(--blue); border-color: var(--blue-soft); }
+html.dark .round-btn.result-btn-male:hover { background: var(--blue-soft); }
+html.dark .round-btn.result-btn-male.status-done { background: var(--blue); color: #fff; }
+html.dark .round-btn.result-btn-female { background: #2e1a24; color: #f06080; border-color: #4a2030; }
+html.dark .round-btn.result-btn-female:hover { background: #3e2030; }
+html.dark .round-btn.result-btn-female.status-done { background: #e84080; color: #fff; }
+
+/* --- Dark Mode: Callroom row status --- */
+html.dark .row-checked-in { background: var(--green-light) !important; }
+html.dark .row-checked-in:hover { background: var(--green-soft) !important; }
+html.dark .row-no-show { background: var(--danger-light) !important; }
+html.dark .row-no-show:hover { background: #3e1a1e !important; }
+html.dark .row-saved { background: var(--green-light) !important; }
+html.dark .row-saved:hover { background: var(--green-soft) !important; }
+html.dark .row-dns { background: var(--gray-light); opacity: 0.45; }
+
+/* --- Dark Mode: Field 2-row table --- */
+html.dark .field-2row-table thead th { background: #1a2040; color: #c8d6f0; border-color: #2a3060; }
+html.dark .field-2row-table thead th.wind-header { background: #1a2540; color: #8098c0; }
+html.dark .field-2row-table .field-row1 td { color: var(--text); border-bottom-color: var(--gray) !important; }
+html.dark .field-2row-table .field-row2 td { color: var(--text-light); border-bottom-color: var(--text-muted) !important; }
+html.dark .field-2row-table .field-row2 td.team-cell { color: var(--text-muted); }
+html.dark .field-2row-table td.best-cell { color: var(--blue); }
+html.dark .field-2row-table td.best-cell .best-wind { color: var(--text-muted); }
+html.dark .field-2row-table .field-row1.top8-highlight td,
+html.dark .field-2row-table .field-row2.top8-highlight td { background: var(--green-light) !important; }
+html.dark .field-2row-table tbody tr.field-row1:nth-of-type(4n+3) td,
+html.dark .field-2row-table tbody tr.field-row2:nth-of-type(4n+4) td { background: var(--gray-light); }
+html.dark .field-wind-input-2row { background: var(--bg-card); color: var(--text); border-color: var(--blue); }
+
+/* --- Dark Mode: Height toggle buttons --- */
+html.dark .height-toggle-btn { background: var(--bg-card); border-color: var(--gray); color: var(--text-muted); }
+html.dark .height-toggle-btn:hover:not(:disabled) { background: var(--gray-light); border-color: var(--gray-mid); }
+html.dark .height-toggle-btn.mark-O { background: var(--green-light); border-color: var(--green); color: var(--green); }
+html.dark .height-toggle-btn.mark-X { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+html.dark .height-toggle-btn.mark-PASS,
+html.dark .height-toggle-btn.mark-- { background: var(--blue-light); border-color: var(--blue); color: var(--blue); }
+
+/* --- Dark Mode: Wind input bars --- */
+html.dark .wind-input-bar { background: var(--blue-light); border-color: var(--blue-soft); color: var(--text); }
+html.dark .field-wind-input { background: var(--bg-card); color: var(--text); border-color: var(--blue); }
+html.dark .wind-input-bar-large { background: var(--blue-light) !important; border-color: var(--blue-soft) !important; }
+
+/* --- Dark Mode: Status badges --- */
+html.dark .sc-badge.sc-DQ { background: var(--danger-light); color: var(--danger); }
+html.dark .sc-badge.sc-DNS { background: var(--warning-light); color: var(--warning); }
+html.dark .sc-badge.sc-DNF { background: var(--blue-light); color: var(--blue); }
+html.dark .sc-select { background: var(--bg-card); color: var(--text); border-color: var(--gray); }
+html.dark .remark-input { background: var(--bg-card); color: var(--text); border-color: var(--gray); }
+
+/* --- Dark Mode: Relay member tags --- */
+html.dark .relay-member-tag { background: var(--blue-light); color: var(--blue); border-color: var(--blue-soft); }
+
+/* --- Dark Mode: Qualification panel --- */
+html.dark .row-qual-selected { background: var(--green-light) !important; }
+html.dark .qual-badge.qual-none { background: var(--gray-light); color: var(--text-muted); }
+
+/* --- Dark Mode: Barcode banner & input --- */
+html.dark .barcode-banner { border-radius: var(--radius); }
+html.dark .barcode-input-area input { background: var(--bg-card); color: var(--text); border-color: var(--gray); }
+
+/* --- Dark Mode: Stat cards --- */
+html.dark .stat-card { background: var(--bg-card); border-color: var(--gray); }
+
+/* --- Dark Mode: Footer --- */
+html.dark .footer { background: var(--bg-card); border-top-color: var(--gray); color: var(--text-muted); }
+html.dark .footer details summary { color: var(--text-muted); }
+html.dark #pacerise-footer { background: var(--bg); border-top-color: var(--gray); }
+html.dark #pacerise-footer .pr-footer-brand { color: var(--text-muted); }
+html.dark #pacerise-footer .pr-footer-logo { color: var(--text-light); }
+html.dark #pacerise-footer .pr-footer-links a { color: var(--text-light); }
+html.dark #pacerise-footer .pr-footer-privacy summary { color: var(--text-muted); }
+html.dark #pacerise-footer .pr-privacy-content { color: var(--text-light); }
+html.dark #pacerise-footer .pr-privacy-content strong { color: var(--text); }
+
+/* --- Dark Mode: Dashboard-specific --- */
+html.dark .gender-tab-btn[data-gender="M"] { color: var(--blue); }
+html.dark .gender-tab-btn[data-gender="F"] { color: #f06080; }
+html.dark .gender-tab-btn[data-gender="X"] { color: var(--warning); }
+html.dark .gender-tab-btn.active[data-gender="M"] { border-bottom-color: var(--blue); background: var(--blue-light); }
+html.dark .gender-tab-btn.active[data-gender="F"] { border-bottom-color: #f06080; background: #2e1a24; }
+html.dark .gender-tab-btn.active[data-gender="X"] { border-bottom-color: var(--warning); background: var(--warning-light); }
+html.dark .matrix-section-title { background: var(--gray-light); color: var(--text-muted); }
+
+/* --- Dark Mode: Admin mode bar --- */
+html.dark .admin-mode-bar.admin-active { background: linear-gradient(135deg, var(--warning-light) 0%, var(--bg-card) 50%); border-color: var(--warning); }
+
+/* --- Dark Mode: Gender tabs --- */
+html.dark .gender-tab { background: var(--bg-card); color: var(--text-light); }
+html.dark .gender-tab.active { color: var(--green); border-bottom-color: var(--green); }
+html.dark .gender-tabs { border-bottom-color: var(--gray); }
+
+/* --- Dark Mode: Buttons --- */
+html.dark .btn { color: var(--text); }
+html.dark .btn-success { background: var(--green); color: #fff; }
+html.dark .btn-danger { background: var(--danger); color: #fff; }
+html.dark .btn-accent { background: var(--gray-light); color: var(--text); border-color: var(--gray-mid); }
+html.dark .btn-accent:hover:not(:disabled) { background: var(--gray); }
+
+/* --- Dark Mode: Comp info bar --- */
+html.dark .comp-info-line { background: var(--bg-dark); }
+
+/* --- Dark Mode: Record matrix compact --- */
+html.dark .rec-round-btn.rec-btn-active { background: var(--green) !important; color: #fff !important; }
+html.dark .matrix-table-compact th { background: var(--gray-light); color: var(--text-muted); }
+
+/* --- Dark Mode: Section label --- */
+html.dark .section-label { color: var(--gray-dark); border-bottom-color: var(--gray); }
+
+/* --- Dark Mode: Home page specific --- */
+html.dark .comp-card { background: var(--bg-card); border-color: var(--gray); }
+html.dark .comp-card:hover { border-color: var(--gray-mid); }
+html.dark .home-quick-btn { background: var(--bg-card); border-color: var(--gray); color: var(--text); }
+html.dark .home-quick-btn:hover { background: var(--gray-light); }
+html.dark .header-login-btn { border-color: var(--gray-mid); color: var(--text); }
+html.dark .header-refresh-btn { color: var(--text); border-color: var(--gray-mid); }
+html.dark .header-nav-btn { color: var(--text); border-color: var(--gray-mid); }
+
+/* iOS-style dark mode toggle switch */
+.dark-toggle { position: relative; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.dark-toggle input { display: none; }
+.dark-toggle-track { width: 44px; height: 24px; background: var(--gray-mid); border-radius: 12px; position: relative; transition: background .3s; flex-shrink: 0; }
+.dark-toggle-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: transform .3s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.dark-toggle input:checked + .dark-toggle-track { background: var(--blue); }
+.dark-toggle input:checked + .dark-toggle-track::after { transform: translateX(20px); }
+.dark-toggle-icon { font-size: 18px; line-height: 1; color: var(--text-light); font-weight: 700; }
+
+/* ============================================================
+   LOADING SPINNER OVERLAY
+   ============================================================ */
+.pr-loading-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.25); z-index: 9999; align-items: center; justify-content: center; }
+.pr-loading-overlay.show { display: flex; }
+html.dark .pr-loading-overlay { background: rgba(0,0,0,.5); }
+.pr-loading-spinner { width: 40px; height: 40px; border: 3.5px solid var(--gray); border-top-color: var(--green); border-radius: 50%; animation: pr-spin .7s linear infinite; }
+@keyframes pr-spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   FONT SIZE CONTROL (A+/A-)
+   ============================================================ */
+.font-size-ctrl { display: inline-flex; align-items: center; gap: 2px; background: var(--gray-light); border-radius: 6px; padding: 2px; }
+.font-size-ctrl button { background: none; border: none; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text); width: 30px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background .15s; }
+.font-size-ctrl button:hover { background: var(--gray); }
+.font-size-ctrl .font-size-label { font-size: 10px; color: var(--text-muted); min-width: 32px; text-align: center; }
+html.dark .font-size-ctrl { background: var(--gray); }
+html.dark .font-size-ctrl button { color: var(--text); }
+html.dark .font-size-ctrl button:hover { background: var(--gray-mid); }
+
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
     font-family: 'Noto Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','맑은 고딕','Segoe UI','Inter',Roboto,'Helvetica Neue',Arial,sans-serif;
@@ -74,6 +314,9 @@ body {
 
 /* Header login button (global) */
 .header-btn-group { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.header-nav-btn { background: none; border: 1.5px solid var(--gray-mid); color: var(--text); font-size: 12px; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .2s; padding: 0; line-height: 1; }
+.header-nav-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
+.header-nav-btn:active { transform: scale(0.9); }
 .header-refresh-btn { background: none; border: 1.5px solid var(--gray-mid); color: var(--text); font-size: 15px; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .2s; padding: 0; line-height: 1; }
 .header-refresh-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
 .header-refresh-btn:active { transform: rotate(180deg); }

@@ -472,12 +472,28 @@ function renderPageNav(currentPage) {
         const btnGroup = document.createElement('div');
         btnGroup.className = 'header-btn-group';
 
+        // Back button (for PWA / standalone mode)
+        const backBtn = document.createElement('button');
+        backBtn.className = 'header-nav-btn';
+        backBtn.id = 'header-back-btn';
+        backBtn.title = '\ub4a4\ub85c'; // 뒤로
+        backBtn.innerHTML = '◀';
+        backBtn.onclick = function() { history.back(); };
+
+        // Forward button (for PWA / standalone mode)
+        const fwdBtn = document.createElement('button');
+        fwdBtn.className = 'header-nav-btn';
+        fwdBtn.id = 'header-fwd-btn';
+        fwdBtn.title = '\uc55e\uc73c\ub85c'; // 앞으로
+        fwdBtn.innerHTML = '▶';
+        fwdBtn.onclick = function() { history.forward(); };
+
         // Refresh button
         const refreshBtn = document.createElement('button');
         refreshBtn.className = 'header-refresh-btn';
         refreshBtn.id = 'header-refresh-btn';
         refreshBtn.title = '\uc0c8\ub85c\uace0\uce68'; // 새로고침
-        refreshBtn.innerHTML = '\u21bb'; // ↻
+        refreshBtn.innerHTML = '🔄';
         refreshBtn.onclick = function() {
             location.reload();
         };
@@ -502,6 +518,8 @@ function renderPageNav(currentPage) {
             }
         };
 
+        btnGroup.appendChild(backBtn);
+        btnGroup.appendChild(fwdBtn);
         btnGroup.appendChild(refreshBtn);
         btnGroup.appendChild(loginBtn);
         headerInner.appendChild(btnGroup);
@@ -773,3 +791,114 @@ if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
     });
 }
+
+// ============================================================
+// DARK MODE (shared across all pages)
+// ============================================================
+(function initDarkMode() {
+    const on = localStorage.getItem('pr-dark') === '1';
+    document.documentElement.classList.toggle('dark', on);
+})();
+
+window.prToggleDark = function(on) {
+    document.documentElement.classList.toggle('dark', on);
+    localStorage.setItem('pr-dark', on ? '1' : '0');
+    document.querySelectorAll('.dark-toggle-icon').forEach(el => el.textContent = on ? '\u25D1' : '\u25D0');
+    document.querySelectorAll('.dark-toggle input').forEach(cb => cb.checked = on);
+    // Update theme-color meta for PWA/mobile browser chrome
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = on ? '#111318' : '#03C75A';
+};
+
+// Inject dark mode toggle + loading spinner into page (auto on DOMContentLoaded)
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Dark toggle: inject into header-inner if not already present ---
+    const headerInner = document.querySelector('.header-inner');
+    if (headerInner && !document.getElementById('dark-toggle')) {
+        const wrap = document.createElement('label');
+        wrap.className = 'dark-toggle';
+        wrap.title = '\ub2e4\ud06c\ubaa8\ub4dc';
+        wrap.style.marginLeft = '8px';
+        const isDark = document.documentElement.classList.contains('dark');
+        wrap.innerHTML = '<input type="checkbox" id="dark-toggle"' + (isDark ? ' checked' : '') + ' onchange="prToggleDark(this.checked)">'
+            + '<span class="dark-toggle-track"></span>'
+            + '<span class="dark-toggle-icon" id="dark-toggle-icon">' + (isDark ? '\u25D1' : '\u25D0') + '</span>';
+        headerInner.appendChild(wrap);
+    }
+
+    // --- Loading spinner overlay: inject if not present ---
+    if (!document.getElementById('pr-loading')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'pr-loading-overlay';
+        overlay.id = 'pr-loading';
+        overlay.innerHTML = '<div class="pr-loading-spinner"></div>';
+        document.body.appendChild(overlay);
+    }
+
+    // --- Font size control (A+/A-): auto-inject for callroom & record pages ---
+    const pageTitle = document.title.toLowerCase();
+    const isCallroom = pageTitle.includes('\uc18c\uc9d1\uc2e4') || pageTitle.includes('callroom');
+    const isRecord = pageTitle.includes('\uae30\ub85d\uc785\ub825') || pageTitle.includes('record');
+    if ((isCallroom || isRecord) && !document.getElementById('pr-font-ctrl')) {
+        const pageTitleBar = document.querySelector('.page-title-bar');
+        if (pageTitleBar) {
+            const ctrl = document.createElement('div');
+            ctrl.className = 'font-size-ctrl';
+            ctrl.id = 'pr-font-ctrl';
+            ctrl.innerHTML = '<button onclick="prFontDown()" title="\uae00\uc528 \ucd95\uc18c">A\u2212</button>'
+                + '<span class="font-size-label">100%</span>'
+                + '<button onclick="prFontUp()" title="\uae00\uc528 \ud655\ub300">A+</button>';
+            pageTitleBar.style.display = 'flex';
+            pageTitleBar.style.alignItems = 'center';
+            pageTitleBar.style.justifyContent = 'space-between';
+            pageTitleBar.style.flexWrap = 'wrap';
+            pageTitleBar.appendChild(ctrl);
+            // Initialize font size on the main content area
+            const targetSel = isCallroom ? '.callroom-dashboard' : '.record-dashboard';
+            prInitFontSize(targetSel);
+        }
+    }
+});
+
+// ============================================================
+// LOADING SPINNER (wrap global fetch)
+// ============================================================
+window.prShowLoading = function() { const el = document.getElementById('pr-loading'); if (el) el.classList.add('show'); };
+window.prHideLoading = function() { const el = document.getElementById('pr-loading'); if (el) el.classList.remove('show'); };
+(function() {
+    let activeReqs = 0;
+    const origFetch = window.fetch;
+    window.fetch = function() {
+        activeReqs++;
+        if (activeReqs === 1) prShowLoading();
+        return origFetch.apply(this, arguments).finally(function() {
+            activeReqs--;
+            if (activeReqs <= 0) { activeReqs = 0; prHideLoading(); }
+        });
+    };
+})();
+
+// ============================================================
+// FONT SIZE CONTROL (A+/A-) — for callroom & record pages
+// ============================================================
+window.prInitFontSize = function(targetSelector) {
+    const STEPS = [100, 110, 120, 130, 140, 150];
+    const KEY = 'pr-font-zoom';
+    let currentIdx = STEPS.indexOf(parseInt(localStorage.getItem(KEY)) || 100);
+    if (currentIdx < 0) currentIdx = 0;
+
+    function apply() {
+        const pct = STEPS[currentIdx];
+        localStorage.setItem(KEY, pct);
+        const target = document.querySelector(targetSelector);
+        if (target) target.style.zoom = (pct / 100);
+        const label = document.querySelector('.font-size-label');
+        if (label) label.textContent = pct + '%';
+    }
+
+    window.prFontUp = function() { if (currentIdx < STEPS.length - 1) { currentIdx++; apply(); } };
+    window.prFontDown = function() { if (currentIdx > 0) { currentIdx--; apply(); } };
+    window.prFontReset = function() { currentIdx = 0; apply(); };
+
+    apply();
+};

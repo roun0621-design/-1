@@ -26,7 +26,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="P-R:Node">
-    <link rel="stylesheet" href="styles.css?v=33">
+    <link rel="stylesheet" href="styles.css?v=36">
     <style>
         .home-container { max-width: 900px; margin: 0 auto; padding: 20px; }
         .home-hero { text-align: left; padding: 40px 20px 20px; }
@@ -109,6 +109,24 @@
         .install-content.active { display: block; }
         .install-step { display: flex; gap: 10px; margin-bottom: 8px; align-items: flex-start; }
         .install-step-num { background: var(--blue); color: #fff; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+
+        /* Home page dark mode overrides */
+        html.dark .comp-card { background: var(--bg-card); border-color: var(--gray); }
+        html.dark .comp-card:hover { border-color: var(--blue); box-shadow: 0 2px 8px rgba(90,156,245,.15); }
+        html.dark .comp-card-status.completed { background: var(--text-muted); }
+        html.dark .comp-card-dday.upcoming { background: var(--warning-light); color: var(--warning); }
+        html.dark .comp-card-dday.active { background: var(--green-light); color: var(--green); }
+        html.dark .comp-card-dday.completed { background: var(--gray-light); color: var(--text-muted); }
+        html.dark .comp-status-label.upcoming { background: var(--warning-light); color: var(--warning); }
+        html.dark .comp-status-label.active { background: var(--green-light); color: var(--green); }
+        html.dark .comp-status-label.completed { background: var(--gray-light); color: var(--text-muted); }
+        html.dark .role-badge.admin { background: var(--blue-light); color: var(--blue); }
+        html.dark .role-badge.operation { background: var(--green-light); color: var(--green); }
+        html.dark .role-badge.viewer { background: var(--gray-light); color: var(--text-muted); }
+        html.dark .add-comp-modal { background: rgba(0,0,0,.6); }
+        html.dark .login-modal { background: rgba(0,0,0,.6); }
+        html.dark .info-modal { background: rgba(0,0,0,.6); }
+        html.dark .fed-group-header:hover { background: var(--gray-light) !important; }
     </style>
 </head>
 <body>
@@ -120,6 +138,11 @@
             <button class="header-login-btn" id="header-login-btn" onclick="toggleLogin()">
                 <span id="header-login-label">로그인</span>
             </button>
+            <label class="dark-toggle" title="다크모드">
+                <input type="checkbox" id="dark-toggle" onchange="prToggleDark(this.checked)">
+                <span class="dark-toggle-track"></span>
+                <span class="dark-toggle-icon" id="dark-toggle-icon">◐</span>
+            </label>
         </div>
         <nav class="page-nav" id="page-nav"></nav>
     </header>
@@ -353,7 +376,7 @@
         </div>
     </div>
 
-    <script src="common.js?v=34"></script>
+    <script src="common.js?v=36"></script>
     <script>
         renderPageNav('home');
 
@@ -815,6 +838,47 @@
                 }
             } catch (e) { /* use default static content */ }
         }
+    </script>
+
+    <!-- Loading spinner overlay -->
+    <div class="pr-loading-overlay" id="pr-loading"><div class="pr-loading-spinner"></div></div>
+
+    <!-- Dark mode + Loading spinner shared utilities -->
+    <script>
+    // --- Dark Mode ---
+    function prToggleDark(on) {
+        document.documentElement.classList.toggle('dark', on);
+        localStorage.setItem('pr-dark', on ? '1' : '0');
+        const icon = document.getElementById('dark-toggle-icon');
+        if (icon) icon.textContent = on ? '◑' : '◐';
+    }
+    (function initDark() {
+        const saved = localStorage.getItem('pr-dark');
+        const on = saved === '1';
+        document.documentElement.classList.toggle('dark', on);
+        const cb = document.getElementById('dark-toggle');
+        if (cb) cb.checked = on;
+        const icon = document.getElementById('dark-toggle-icon');
+        if (icon) icon.textContent = on ? '◑' : '◐';
+    })();
+
+    // --- Loading Spinner ---
+    function prShowLoading() { const el = document.getElementById('pr-loading'); if (el) el.classList.add('show'); }
+    function prHideLoading() { const el = document.getElementById('pr-loading'); if (el) el.classList.remove('show'); }
+
+    // Wrap fetch globally to show/hide spinner
+    (function() {
+        let activeRequests = 0;
+        const origFetch = window.fetch;
+        window.fetch = function() {
+            activeRequests++;
+            if (activeRequests === 1) prShowLoading();
+            return origFetch.apply(this, arguments).finally(() => {
+                activeRequests--;
+                if (activeRequests <= 0) { activeRequests = 0; prHideLoading(); }
+            });
+        };
+    })();
     </script>
 </body>
 </html>

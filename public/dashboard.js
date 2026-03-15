@@ -94,7 +94,7 @@ function renderCompVideoButton() {
         btn.id = 'comp-video-btn';
         btn.className = 'btn btn-sm btn-outline';
         btn.style.cssText = 'margin-left:auto;white-space:nowrap;font-size:12px;padding:5px 12px;display:none;';
-        btn.innerHTML = '📺 대회 영상';
+        btn.innerHTML = '▶ 대회 영상';
         btn.onclick = () => {
             if (_compVideoUrl) openVideoModal(_compVideoUrl, '대회 대표 영상');
         };
@@ -153,7 +153,7 @@ function renderMatrix() {
     const liveGroups = allGroups.filter(g => g.rounds.some(r => r.round_status === 'in_progress'));
     if (liveGroups.length > 0) {
         html += `<div style="margin-bottom:16px;padding:12px;background:linear-gradient(135deg,#fff3e0,#fbe9e7);border:1.5px solid #e65100;border-radius:var(--radius);">
-            <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#e65100;letter-spacing:1px;margin-bottom:8px;">🔴 LIVE • 진행중인 경기</div>`;
+            <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#e65100;letter-spacing:1px;margin-bottom:8px;">● LIVE • 진행중인 경기</div>`;
         html += renderCategoryTable(liveGroups, 'LIVE', true);
         html += `</div>`;
     }
@@ -391,7 +391,7 @@ async function openLiveResult(eventId) {
     _liveEventId = eventId;
     const overlay = document.getElementById('result-overlay');
     const panel = document.getElementById('result-panel');
-    panel.innerHTML = '<div class="result-panel-header"><h3><span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">🔴 LIVE</span>로딩 중...</h3><button class="result-panel-close" onclick="closeLiveResult()">&times;</button></div><div class="result-panel-body" style="text-align:center;padding:40px;">실시간 기록 불러오는 중...</div>';
+    panel.innerHTML = '<div class="result-panel-header"><h3><span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>로딩 중...</h3><button class="result-panel-close" onclick="closeLiveResult()">&times;</button></div><div class="result-panel-body" style="text-align:center;padding:40px;">실시간 기록 불러오는 중...</div>';
     overlay.classList.add('show');
     _showLandscapeHint();
     if (window.pushModalState) pushModalState(() => closeLiveResult());
@@ -436,7 +436,7 @@ async function refreshLiveResult() {
         bodyHtml += `<div style="margin-top:12px;font-size:11px;color:var(--text-muted);text-align:center;">자동 새로고침 | ${new Date().toLocaleTimeString('ko-KR')}</div>`;
 
         panel.innerHTML = `<div class="result-panel-header">
-            <h3><span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">🔴 LIVE</span>${evt.name} ${roundL} ${gL}</h3>
+            <h3><span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>${evt.name} ${roundL} ${gL}</h3>
             <button class="result-panel-close" onclick="closeLiveResult()">&times;</button>
         </div><div class="result-panel-body">${bodyHtml}</div>`;
         // Restore video closed state after SSE refresh
@@ -863,7 +863,7 @@ async function _loadCombinedResultsAsync(evt) {
                     }).join('')}</tbody>
                 </table>
             </div>
-            <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">🏆 ${evt.gender === 'M' ? '10종경기' : '7종경기'} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
+            <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">☆ ${evt.gender === 'M' ? '10종경기' : '7종경기'} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
             <div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border);">
                 <div style="font-weight:700;font-size:13px;margin-bottom:6px;">📋 종목별 세부기록</div>
                 <div style="margin-bottom:4px;">
@@ -1284,7 +1284,7 @@ function openPacingPopup(eventName) {
                 </div>`;
 
             if (c.remark) {
-                html += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">💬 ${c.remark}</div>`;
+                html += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">… ${c.remark}</div>`;
             }
 
             // Show cumulative splits table
@@ -1311,7 +1311,7 @@ function openPacingPopup(eventName) {
     }
 
     panel.innerHTML = `<div class="result-panel-header">
-        <h3>🔦 ${eventName} W/L Target</h3>
+        <h3>⌖ ${eventName} W/L Target</h3>
         <button class="result-panel-close" onclick="closePacingPopup()">&times;</button>
     </div><div class="result-panel-body">${html}</div>`;
     overlay.classList.add('show');

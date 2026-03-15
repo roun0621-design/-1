@@ -13,7 +13,11 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const { initDatabase } = require('./db/init');
 
-const upload = multer({ dest: '/tmp/uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
+// Ensure upload temp directory exists (fixes deployment upload failures)
+const fs = require('fs');
+const UPLOAD_TMP = '/tmp/uploads/';
+if (!fs.existsSync(UPLOAD_TMP)) fs.mkdirSync(UPLOAD_TMP, { recursive: true });
+const upload = multer({ dest: UPLOAD_TMP, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // ---- KST (한국표준시, UTC+9) Helper ----
 function kstNow() {
