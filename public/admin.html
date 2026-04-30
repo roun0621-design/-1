@@ -281,6 +281,7 @@
                         <div style="padding:6px 10px;border-top:1px solid var(--gray);font-size:11px;color:var(--text-muted);background:#fafafa;display:flex;justify-content:space-between;align-items:center;gap:4px;">
                             <span id="evt-count"></span>
                             <div style="display:flex;gap:4px;">
+                                <button class="btn btn-outline btn-sm" onclick="cleanupUndefinedEvents()" style="font-size:11px;padding:4px 10px;color:#c62828;border-color:#ef9a9a;" title="부별이 빈 '미지정' 종목을 부별 있는 동일 종목으로 흡수하거나 삭제합니다">미지정 정리</button>
                                 <button class="btn btn-outline btn-sm" onclick="autoSortEvents()" style="font-size:11px;padding:4px 10px;" title="표준 육상 순서로 종목을 자동 정렬합니다">종목 재정렬</button>
                                 <button class="btn btn-primary btn-sm" onclick="showAddEvent()" style="font-size:11px;padding:4px 12px;">+ 종목 추가</button>
                             </div>
@@ -1963,6 +1964,67 @@
                 await loadEventsMatrix();
             } catch (e) {
                 toast('재정렬 실패: ' + (e.error || e.message || e), 'error');
+            }
+        }
+
+        // 부별이 비어있는 "미지정" 종목을 일괄 정리 (병합/삭제)
+        async function cleanupUndefinedEvents() {
+            const compId = _selectedCompId;
+            if (!compId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            try {
+                // 1) 미리보기
+                const previewRes = await fetch(`/api/display/cleanup-undefined/${compId}?admin_key=${encodeURIComponent(AK())}`);
+                const preview = await previewRes.json();
+                if (!preview.success) throw new Error(preview.error || '미리보기 실패');
+                if (preview.total === 0) {
+                    toast('정리할 미지정 종목이 없습니다');
+                    return;
+                }
+                // 2) 사용자 확인
+                let msg = `미지정 종목 정리 미리보기:\n\n`;
+                msg += `• 총 ${preview.total}개 미지정 종목\n`;
+                msg += `• 자동 흡수 (1개 후보): ${preview.merge_count}개\n`;
+                msg += `• 단순 삭제 (후보 없음): ${preview.delete_count}개\n`;
+                msg += `• 수동 선택 필요 (후보 다수): ${preview.orphan_count}개\n\n`;
+                if (preview.plan && preview.plan.length > 0) {
+                    msg += `샘플 (최대 5개):\n`;
+                    preview.plan.slice(0, 5).forEach(p => {
+                        const u = p.undefined_event;
+                        const label = `${u.name} ${u.gender==='M'?'남':u.gender==='F'?'여':'X'} ${u.round_type}`;
+                        if (p.action === 'merge') msg += `  • [흡수] ${label} → ${p.target_event.division}\n`;
+                        else if (p.action === 'delete') msg += `  • [삭제] ${label}\n`;
+                        else msg += `  • [수동] ${label} (${p.candidates.length}개 후보)\n`;
+                    });
+                    msg += `\n`;
+                }
+                msg += `자동 처리 (흡수+단순삭제만, 수동 선택 필요한 건 건너뜀)을 진행하시겠습니까?`;
+                if (!confirm(msg)) return;
+                // 3) 실행
+                const runRes = await fetch(`/api/display/cleanup-undefined/${compId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK(), mode: 'auto' })
+                });
+                const run = await runRes.json();
+                if (!run.success) throw new Error(run.error || '정리 실패');
+                toast(`완료: 흡수 ${run.merged}, 삭제 ${run.deleted}, 스킵 ${run.skipped}`);
+                await loadEvents();
+                if (run.skipped > 0) {
+                    setTimeout(() => {
+                        if (confirm(`수동 선택 필요한 ${run.skipped}개를 강제 삭제하시겠습니까? (timetable/명단 연결 끊김)`)) {
+                            fetch(`/api/display/cleanup-undefined/${compId}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ admin_key: AK(), mode: 'force_delete' })
+                            }).then(r => r.json()).then(r => {
+                                toast(`강제 삭제 완료: ${r.deleted}개`);
+                                loadEvents();
+                            });
+                        }
+                    }, 800);
+                }
+            } catch (e) {
+                toast('정리 실패: ' + (e.error || e.message || e), 'error');
             }
         }
 

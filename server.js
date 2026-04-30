@@ -2607,7 +2607,13 @@ app.delete('/api/events/:id', (req, res) => {
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
-    if (event.round_type === 'preliminary' && !event.parent_event_id) return res.status(400).json({ error: '예선은 삭제할 수 없습니다.' });
+    // FIX: 노출용(display) 모드 대회는 자동 결승 생성 로직이 없으므로 예선 삭제 허용
+    // 운영용(operation) 대회에서만 예선 삭제 보호 가드 적용
+    const _comp = db.prepare('SELECT mode FROM competition WHERE id=?').get(event.competition_id);
+    const _isDisplayMode = _comp && _comp.mode === 'display';
+    if (!_isDisplayMode && event.round_type === 'preliminary' && !event.parent_event_id) {
+        return res.status(400).json({ error: '예선은 삭제할 수 없습니다.' });
+    }
     db.transaction(() => {
         const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(event.id);
         for (const h of heats) {
@@ -9419,11 +9425,13 @@ app.get('/api/documents/:compId', (req, res) => {
 
 // --- Helper: parse 종별 (e.g. "남고", "여자(아시아)", "남고(U20포함)", "중학교부") ---
 function parseJongbyul(jb) {
-    const s = (jb || '').trim();
+    const raw = (jb || '').trim();
+    // FIX: 공백 제거한 형태로 매칭(엑셀에 "남자 대학부"처럼 공백이 들어간 라벨 처리)
+    const s = raw.replace(/\s+/g, '');
     // Mixed relay division labels
-    if (/^중학교부$/.test(s)) return { gender: 'X', division: '중등부' };
-    if (/^고등부$/.test(s) || /^고등학교부$/.test(s)) return { gender: 'X', division: '고등부' };
-    if (/^대학부$/.test(s) || /^대학교부$/.test(s)) return { gender: 'X', division: '대학부' };
+    if (/^중학교부$|^중학부$|^중등부$/.test(s)) return { gender: 'X', division: '중등부' };
+    if (/^고등부$|^고등학교부$/.test(s)) return { gender: 'X', division: '고등부' };
+    if (/^대학부$|^대학교부$/.test(s)) return { gender: 'X', division: '대학부' };
     if (/^일반부$/.test(s)) return { gender: 'X', division: '일반부' };
     // U20
     if (/남고\(U20/i.test(s) || /남자고등.*U20/i.test(s)) return { gender: 'M', division: 'U20' };
@@ -9441,13 +9449,17 @@ function parseJongbyul(jb) {
         '남일': { gender: 'M', division: '일반부' }, '여일': { gender: 'F', division: '일반부' },
     };
     if (map[s]) return map[s];
-    // Roster-style labels: "남자중학교부" → M, 중등부
+    // FIX: "남자중학부", "남자 중학부" (공백 제거 후 매칭) 처리 강화
+    // 중학(부|교) 패턴
     if (/남자중학/.test(s)) return { gender: 'M', division: '중등부' };
     if (/여자중학/.test(s)) return { gender: 'F', division: '중등부' };
+    // 고등(부|학교부) 패턴
     if (/남자고등/.test(s)) return { gender: 'M', division: '고등부' };
     if (/여자고등/.test(s)) return { gender: 'F', division: '고등부' };
+    // 대학(부|교부) 패턴
     if (/남자대학/.test(s)) return { gender: 'M', division: '대학부' };
     if (/여자대학/.test(s)) return { gender: 'F', division: '대학부' };
+    // 일반부 패턴
     if (/남자일반/.test(s)) return { gender: 'M', division: '일반부' };
     if (/여자일반/.test(s)) return { gender: 'F', division: '일반부' };
     // Fallback: try prefix
@@ -9610,8 +9622,8 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
                 scheduledDate = dd.toISOString().split('T')[0];
             }
 
-            // Split jongbyul by "/" for multi-division entries
-            const jbParts = jongbyul ? jongbyul.split('/').map(s => s.trim()).filter(Boolean) : [''];
+            // FIX: jongbyul을 "/" 또는 "," 로 분리 (엑셀에 "남자 대학부, 남자 일반부, 여자 일반부" 같은 콤마 구분 입력 처리)
+            const jbParts = jongbyul ? jongbyul.split(/[\/,]/).map(s => s.trim()).filter(Boolean) : [''];
             const parsedRound = parseDisplayRound(rawRound);
 
             for (const jbPart of jbParts) {
@@ -10557,6 +10569,134 @@ app.delete('/api/display/roster/:compId/:day', (req, res) => {
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
     db.prepare('DELETE FROM display_roster WHERE competition_id=? AND day=?').run(req.params.compId, parseInt(req.params.day));
     res.json({ success: true });
+});
+
+// ─── 미지정(division 빈 값) 종목 일괄 정리 API ───
+// GET  /api/display/cleanup-undefined/:compId  — 미리보기 (dry-run)
+// POST /api/display/cleanup-undefined/:compId  — 실제 정리 실행
+//
+// 동작:
+//   1) division이 비어있고 gender='X'가 아닌 종목들을 찾는다 (= "미지정" 종목)
+//   2) 각각에 대해 같은 (name, gender, round_type)을 가지면서 division이 채워진 동일 종목이 있는지 확인
+//   3) 흡수 가능: 미지정 종목에 연결된 timetable.event_id, display_roster.event_id를 흡수 대상에 재연결 후 미지정 종목 삭제
+//   4) 흡수 불가능 (동일 종목 없음): 단순 삭제 (timetable.event_id NULL로 끊고 display_roster도 NULL로 끊음)
+function _findUndefinedEvents(compId) {
+    return db.prepare(`
+        SELECT id, name, gender, division, round_type, category, sort_order
+        FROM event
+        WHERE competition_id=?
+          AND (division IS NULL OR division='')
+          AND gender != 'X'
+          AND parent_event_id IS NULL
+    `).all(compId);
+}
+function _planCleanupUndefined(compId) {
+    const undefinedEvents = _findUndefinedEvents(compId);
+    const allEvents = db.prepare(`
+        SELECT id, name, gender, division, round_type
+        FROM event
+        WHERE competition_id=? AND parent_event_id IS NULL
+    `).all(compId);
+    const plan = [];
+    undefinedEvents.forEach(u => {
+        // 같은 name + gender + round_type, division이 채워진 후보 찾기
+        const candidates = allEvents.filter(e =>
+            e.id !== u.id &&
+            e.name === u.name &&
+            e.gender === u.gender &&
+            e.round_type === u.round_type &&
+            e.division && e.division.trim()
+        );
+        // 가장 우선순위 높은 후보(중등→고등→대학→일반→U20→국제 순) 선택
+        const order = ['중등부','고등부','대학부','일반부','U20','국제'];
+        candidates.sort((a, b) => {
+            const ai = order.indexOf(a.division);
+            const bi = order.indexOf(b.division);
+            return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+        });
+        const ttCnt = db.prepare('SELECT COUNT(*) AS c FROM timetable WHERE event_id=?').get(u.id).c;
+        const rosterCnt = db.prepare('SELECT COUNT(*) AS c FROM display_roster WHERE event_id=?').get(u.id).c;
+        if (candidates.length === 1) {
+            // 후보가 1개뿐이면 자동 흡수
+            plan.push({
+                action: 'merge',
+                undefined_event: u,
+                target_event: candidates[0],
+                timetable_count: ttCnt,
+                roster_count: rosterCnt,
+                note: `1개 후보 → 자동 흡수`
+            });
+        } else if (candidates.length > 1) {
+            // 후보가 여러 개면 사용자 결정 필요 → 일단 삭제 후보로 보고 (timetable/roster 끊기)
+            plan.push({
+                action: 'orphan',
+                undefined_event: u,
+                candidates,
+                timetable_count: ttCnt,
+                roster_count: rosterCnt,
+                note: `${candidates.length}개 후보 존재 → 수동 선택 필요`
+            });
+        } else {
+            // 후보가 없으면 단순 삭제
+            plan.push({
+                action: 'delete',
+                undefined_event: u,
+                timetable_count: ttCnt,
+                roster_count: rosterCnt,
+                note: `흡수 대상 없음 → 단순 삭제`
+            });
+        }
+    });
+    return plan;
+}
+app.get('/api/display/cleanup-undefined/:compId', (req, res) => {
+    const { admin_key } = req.query;
+    if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+    const plan = _planCleanupUndefined(parseInt(req.params.compId));
+    res.json({
+        success: true,
+        total: plan.length,
+        merge_count: plan.filter(p => p.action === 'merge').length,
+        delete_count: plan.filter(p => p.action === 'delete').length,
+        orphan_count: plan.filter(p => p.action === 'orphan').length,
+        plan
+    });
+});
+app.post('/api/display/cleanup-undefined/:compId', (req, res) => {
+    const { admin_key, mode } = req.body;
+    // mode: 'auto' (merge+delete만 자동 처리, orphan 제외) | 'force_delete' (orphan도 삭제)
+    if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+    const compId = parseInt(req.params.compId);
+    const plan = _planCleanupUndefined(compId);
+    let merged = 0, deleted = 0, skipped = 0;
+    const tx = db.transaction(() => {
+        plan.forEach(p => {
+            if (p.action === 'merge') {
+                // timetable / display_roster 의 event_id 재연결
+                db.prepare('UPDATE timetable SET event_id=? WHERE event_id=?').run(p.target_event.id, p.undefined_event.id);
+                db.prepare('UPDATE display_roster SET event_id=? WHERE event_id=?').run(p.target_event.id, p.undefined_event.id);
+                db.prepare('DELETE FROM event WHERE id=?').run(p.undefined_event.id);
+                merged++;
+            } else if (p.action === 'delete') {
+                db.prepare('UPDATE timetable SET event_id=NULL WHERE event_id=?').run(p.undefined_event.id);
+                db.prepare('UPDATE display_roster SET event_id=NULL WHERE event_id=?').run(p.undefined_event.id);
+                db.prepare('DELETE FROM event WHERE id=?').run(p.undefined_event.id);
+                deleted++;
+            } else if (p.action === 'orphan') {
+                if (mode === 'force_delete') {
+                    db.prepare('UPDATE timetable SET event_id=NULL WHERE event_id=?').run(p.undefined_event.id);
+                    db.prepare('UPDATE display_roster SET event_id=NULL WHERE event_id=?').run(p.undefined_event.id);
+                    db.prepare('DELETE FROM event WHERE id=?').run(p.undefined_event.id);
+                    deleted++;
+                } else {
+                    skipped++;
+                }
+            }
+        });
+    });
+    tx();
+    opLog(`미지정 종목 정리 (병합 ${merged}, 삭제 ${deleted}, 스킵 ${skipped})`, 'admin', 'admin', compId);
+    res.json({ success: true, merged, deleted, skipped, total: plan.length });
 });
 
 // ─── Display roster: 단일 행 CRUD (인라인 편집 / 릴레이 팀 편집) ───

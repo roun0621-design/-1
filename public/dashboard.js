@@ -190,6 +190,11 @@ function switchDivision(div, btn) {
 function renderMatrix() {
     const container = document.getElementById('events-container');
     let events = allEvents.filter(e => e.gender === currentGender && !e.parent_event_id);
+    // FIX: 노출(display) 모드에서는 부별이 비어있는 "미지정" 종목을 화면에서 제외
+    // (단, 혼성 릴레이처럼 의도적으로 gender='X'인 종목은 division이 채워져 있으므로 영향 없음)
+    if (_isDisplayMode) {
+        events = events.filter(e => (e.division && e.division.trim()) || e.gender === 'X');
+    }
     // Apply division filter for display mode
     if (_isDisplayMode && _currentDivision !== '전체') {
         events = events.filter(e => e.division === _currentDivision);
