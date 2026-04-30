@@ -82,6 +82,29 @@
 .roster-table .name-cell { font-weight:600; }
 .roster-table .team-cell { color:#555; }
 
+/* ═══════ RELAY (팀 단위 표시) ═══════ */
+.relay-team-card { border:1px solid #e5e7eb; border-radius:8px; margin:8px 12px; overflow:hidden; background:#fff; }
+.relay-team-card:hover { border-color: var(--gold); box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+.relay-team-head { display:flex; justify-content:space-between; align-items:center; padding:9px 14px; background:linear-gradient(90deg,#fefcf3 0%,#fff 100%); border-bottom:1px solid #f0f0f0; cursor:pointer; gap:10px; }
+.relay-team-head .rt-left { display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
+.relay-team-head .rt-lane { display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:28px; padding:0 9px; background:var(--gold); color:#fff; border-radius:6px; font-weight:800; font-size:13px; }
+.relay-team-head .rt-lane.no-lane { background:#e5e7eb; color:#999; }
+.relay-team-head .rt-team { font-weight:700; font-size:14px; color:#222; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.relay-team-head .rt-meta { font-size:11px; color:var(--muted); display:flex; gap:8px; align-items:center; flex-shrink:0; }
+.relay-team-head .rt-edit-btn { background:#fff; border:1px solid #d1d5db; border-radius:5px; padding:3px 8px; font-size:11px; cursor:pointer; color:#555; }
+.relay-team-head .rt-edit-btn:hover { background:var(--gold-bg); border-color:var(--gold); color:var(--gold-dark); }
+.relay-members { padding:6px 14px 10px 50px; display:flex; flex-direction:column; gap:4px; background:#fafbfc; }
+.relay-member-row { display:flex; align-items:center; gap:10px; padding:5px 8px; background:#fff; border-radius:5px; border:1px solid #f0f0f0; font-size:12px; }
+.relay-member-row .rm-leg { display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:22px; background:#f3f4f6; color:#555; border-radius:4px; font-weight:700; font-size:10px; }
+.relay-member-row .rm-leg.leg-1 { background:#fef3c7; color:#92400e; }
+.relay-member-row .rm-leg.leg-2 { background:#dbeafe; color:#1e40af; }
+.relay-member-row .rm-leg.leg-3 { background:#dcfce7; color:#166534; }
+.relay-member-row .rm-leg.leg-4 { background:#fce7f3; color:#9f1239; }
+.relay-member-row .rm-bib { min-width:50px; text-align:center; font-weight:800; font-size:12px; color:#333; }
+.relay-member-row .rm-name { font-weight:600; flex:1; color:#222; }
+.relay-member-row.no-team { background:#fef2f2; border-color:#fecaca; }
+.relay-team-empty { padding:8px 14px 10px 50px; font-size:11px; color:#999; font-style:italic; background:#fafbfc; }
+
 /* ═══════ EVENTS / RESULTS GRID ═══════ */
 .events-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px; }
 .event-card { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px 14px; cursor:pointer; transition:all .12s; display:flex; justify-content:space-between; align-items:center; }
@@ -692,41 +715,145 @@ function renderRoster(el){
             const prefix = (GENDER_SHORT[g.gender]||'')+(DIV_SHORT[g.division]||g.division||'');
             const heatCount = g.heats.size;
             const matchBadge = g.matched ? '<span class="badge-sm badge-green">매칭</span>' : '<span class="badge-sm badge-red">미매칭</span>';
-            
-            h += `<div class="roster-group">
+            const isRelay = isRelayEvent(g.event);
+
+            // 릴레이는 "팀 수" 표시 (멤버 수가 아니라)
+            let countLabel;
+            if(isRelay){
+                const teamCount = countRelayTeams(g.athletes);
+                countLabel = `<span title="릴레이 팀 수">${teamCount}팀</span> <span style="color:#aaa;">(${g.athletes.length}명)</span>`;
+            } else {
+                countLabel = `<span>${g.athletes.length}명</span>`;
+            }
+
+            h += `<div class="roster-group${isRelay?' is-relay':''}">
                 <div class="roster-group-head" onclick="toggleRosterGroup(this)">
-                    <div class="rg-title">${prefix} ${esc(g.event)} ${esc(g.round)}</div>
+                    <div class="rg-title">${isRelay?'<span class="badge-sm" style="background:#dbeafe;color:#1e40af;margin-right:6px;">릴레이</span>':''}${prefix} ${esc(g.event)} ${esc(g.round)}</div>
                     <div class="rg-meta">
-                        <span>${g.athletes.length}명</span>
+                        ${countLabel}
                         ${heatCount>0?`<span style="color:var(--gold-dark);">${heatCount}조</span>`:''}
                         ${matchBadge}
                     </div>
                 </div>
                 <div class="roster-group-body" style="display:none;">`;
-            
+
             // Group athletes by heat
             const heats = {};
             g.athletes.forEach(r=>{ const hk=r.heat||0; if(!heats[hk])heats[hk]=[]; heats[hk].push(r); });
             const heatKeys = Object.keys(heats).sort((a,b)=>a-b);
-            
+
             heatKeys.forEach(hk=>{
-                const hItems = heats[hk].sort((a,b)=>(a.lane||99)-(b.lane||99));
-                if(heatKeys.length>1 || hk!=0){
-                    h += `<div class="heat-section"><div class="heat-header"><span>${hk==0?'조 미지정':hk+'조'}</span><span>${hItems.length}명</span></div>`;
+                const hItems = heats[hk];
+
+                if(isRelay){
+                    // 릴레이: 팀 단위로 묶어서 표시
+                    const teams = groupRelayTeams(hItems);
+                    if(heatKeys.length>1 || hk!=0){
+                        h += `<div class="heat-section"><div class="heat-header"><span>${hk==0?'조 미지정':hk+'조'}</span><span>${teams.length}팀 / ${hItems.length}명</span></div>`;
+                    } else {
+                        h += '<div class="heat-section">';
+                    }
+                    teams.forEach(team=>{
+                        const laneStr = team.lane ? team.lane : '';
+                        const teamName = team.team || '<span style="color:#c62828;">소속 미상</span>';
+                        const memberIds = team.members.map(m=>m.id);
+                        h += `<div class="relay-team-card">
+                            <div class="relay-team-head" onclick="openRelayTeamEdit(${JSON.stringify(memberIds).replace(/"/g,'&quot;')})">
+                                <div class="rt-left">
+                                    <span class="rt-lane ${laneStr?'':'no-lane'}">${laneStr?laneStr+'레인':'레인—'}</span>
+                                    <span class="rt-team">${esc(team.team)||'<span style=\"color:#c62828;\">소속 미상</span>'}</span>
+                                </div>
+                                <div class="rt-meta">
+                                    <span>${team.members.length}명</span>
+                                    <button class="rt-edit-btn" onclick="event.stopPropagation();openRelayTeamEdit(${JSON.stringify(memberIds).replace(/"/g,'&quot;')})">수정</button>
+                                </div>
+                            </div>`;
+                        if(team.members.length===0){
+                            h += '<div class="relay-team-empty">멤버가 없습니다.</div>';
+                        } else {
+                            h += '<div class="relay-members">';
+                            team.members.forEach((m,idx)=>{
+                                const legNum = idx+1;
+                                const noTeam = !m.team ? ' no-team' : '';
+                                h += `<div class="relay-member-row${noTeam}">
+                                    <span class="rm-leg leg-${legNum<=4?legNum:''}">${legNum}走</span>
+                                    <span class="rm-bib">${m.bib_number||'—'}</span>
+                                    <span class="rm-name">${esc(m.athlete_name)}</span>
+                                </div>`;
+                            });
+                            h += '</div>';
+                        }
+                        h += '</div>';
+                    });
+                    h += '</div>';
                 } else {
-                    h += '<div class="heat-section">';
+                    // 일반 종목: 기존 표 형식 유지
+                    const sortedItems = hItems.sort((a,b)=>(a.lane||99)-(b.lane||99));
+                    if(heatKeys.length>1 || hk!=0){
+                        h += `<div class="heat-section"><div class="heat-header"><span>${hk==0?'조 미지정':hk+'조'}</span><span>${sortedItems.length}명</span></div>`;
+                    } else {
+                        h += '<div class="heat-section">';
+                    }
+                    h += `<table class="roster-table"><thead><tr><th style="width:50px;">레인</th><th style="width:55px;">배번</th><th>성명</th><th>소속</th></tr></thead><tbody>`;
+                    sortedItems.forEach(a=>{
+                        h += `<tr><td class="lane-cell">${a.lane||'—'}</td><td class="bib-cell">${a.bib_number}</td><td class="name-cell">${esc(a.athlete_name)}</td><td class="team-cell">${esc(a.team)}</td></tr>`;
+                    });
+                    h += '</tbody></table></div>';
                 }
-                h += `<table class="roster-table"><thead><tr><th style="width:50px;">레인</th><th style="width:55px;">배번</th><th>성명</th><th>소속</th></tr></thead><tbody>`;
-                hItems.forEach(a=>{
-                    h += `<tr><td class="lane-cell">${a.lane||'—'}</td><td class="bib-cell">${a.bib_number}</td><td class="name-cell">${esc(a.athlete_name)}</td><td class="team-cell">${esc(a.team)}</td></tr>`;
-                });
-                h += '</tbody></table></div>';
             });
-            
+
             h += '</div></div>';
         });
     });
     el.innerHTML = h;
+}
+
+// 릴레이 종목 판별
+function isRelayEvent(eventName){
+    const n = (eventName||'').trim();
+    return /릴레이|계주|[Rr]$|4\s*[x×X]\s*\d/.test(n);
+}
+
+// 릴레이 멤버 행들을 팀 단위로 묶음
+// 같은 팀명이고, 인접한 sort_order(연속된 4명)이며, 첫 멤버에 lane이 있으면 팀 시작점으로 인식
+function groupRelayTeams(rows){
+    // sort_order 순으로 정렬
+    const sorted = [...rows].sort((a,b)=>{
+        if(a.lane && !b.lane) return -1;
+        if(!a.lane && b.lane) return 1;
+        return (a.sort_order||0) - (b.sort_order||0);
+    });
+    const teams = [];
+    let currentTeam = null;
+    sorted.forEach(r=>{
+        // 새 팀 시작 조건: lane이 있거나, team이 이전과 다르거나, 이전 팀이 4명 이상이면
+        const startNew = !currentTeam
+            || (r.lane && r.lane !== currentTeam.lane)
+            || (r.team && currentTeam.team && r.team !== currentTeam.team)
+            || currentTeam.members.length >= 4;
+        if(startNew){
+            currentTeam = {
+                team: r.team || '',
+                lane: r.lane || null,
+                heat: r.heat || null,
+                members: [r]
+            };
+            teams.push(currentTeam);
+        } else {
+            // 기존 팀에 합류 (team이 비어있으면 첫 멤버의 팀으로 보충)
+            if(!currentTeam.team && r.team) currentTeam.team = r.team;
+            if(!r.team && currentTeam.team) r.team = currentTeam.team;
+            currentTeam.members.push(r);
+        }
+    });
+    // lane 우선 정렬
+    teams.sort((a,b)=>(a.lane||99)-(b.lane||99));
+    return teams;
+}
+
+// 릴레이 팀 수 카운트
+function countRelayTeams(rows){
+    return groupRelayTeams(rows).length;
 }
 
 function toggleRosterGroup(head){
@@ -984,6 +1111,211 @@ function openLinkEdit(evId){
 }
 
 function closeLinkEdit(){ document.getElementById('link-modal').style.display='none'; }
+
+// ═══════ 릴레이 팀 편집 모달 ═══════
+function openRelayTeamEdit(memberIds){
+    if(!Array.isArray(memberIds)) memberIds = [memberIds];
+    const members = memberIds.map(id => _roster.find(r=>r.id===id)).filter(Boolean);
+    if(members.length===0){ toast('멤버를 찾을 수 없습니다','error'); return; }
+    // 첫 멤버를 팀 리더로 가정 (lane / heat / team 정보)
+    const leader = members[0];
+    const teamName = leader.team || '';
+    const lane = leader.lane || '';
+    const heat = leader.heat || '';
+    const day = leader.day;
+    const eventName = leader.event_name;
+    const round = leader.round;
+    const gender = leader.gender;
+    const division = leader.division;
+
+    // sort_order 순 정렬
+    const sortedMembers = [...members].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+
+    let memberRows = sortedMembers.map((m,idx)=>{
+        const legNum = idx+1;
+        return `<div class="rt-member-edit-row" data-id="${m.id}" data-leg="${legNum}" style="display:flex;gap:8px;align-items:center;padding:6px;border:1px solid #eee;border-radius:5px;margin-bottom:4px;background:#fff;">
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:24px;background:${legNum===1?'#fef3c7':legNum===2?'#dbeafe':legNum===3?'#dcfce7':legNum===4?'#fce7f3':'#f3f4f6'};color:${legNum===1?'#92400e':legNum===2?'#1e40af':legNum===3?'#166534':legNum===4?'#9f1239':'#555'};border-radius:4px;font-weight:700;font-size:11px;">${legNum}走</span>
+            <input type="text" class="rt-bib" placeholder="배번" value="${(m.bib_number||'').replace(/"/g,'&quot;')}" style="width:80px;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+            <input type="text" class="rt-name" placeholder="선수명" value="${(m.athlete_name||'').replace(/"/g,'&quot;')}" style="flex:1;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+            <button onclick="this.closest('.rt-member-edit-row').remove();updateLegNumbers()" title="이 주자 삭제" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:4px;padding:4px 8px;font-size:11px;cursor:pointer;">삭제</button>
+        </div>`;
+    }).join('');
+
+    document.getElementById('link-modal').innerHTML = `
+        <div class="link-edit-overlay" onclick="if(event.target===this)closeLinkEdit()">
+            <div class="link-edit-modal" style="max-width:680px;">
+                <h3 style="margin-bottom:6px;">릴레이 팀 수정 — ${esc(eventName)} ${esc(round||'')}</h3>
+                <div style="font-size:11px;color:#777;margin-bottom:14px;">${day}일차 · ${esc(division||'')} · ${gender==='M'?'남':gender==='F'?'여':'혼성'}</div>
+
+                <div style="display:flex;gap:8px;margin-bottom:12px;">
+                    <div style="flex:2;">
+                        <label style="font-size:11px;color:#555;">팀명 (소속) *</label>
+                        <input id="rt-team-name" value="${teamName.replace(/"/g,'&quot;')}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:5px;font-weight:700;">
+                    </div>
+                    <div style="width:80px;">
+                        <label style="font-size:11px;color:#555;">레인</label>
+                        <input id="rt-lane" type="number" min="1" max="9" value="${lane}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:5px;text-align:center;">
+                    </div>
+                    <div style="width:80px;">
+                        <label style="font-size:11px;color:#555;">조</label>
+                        <input id="rt-heat" type="number" min="1" value="${heat}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:5px;text-align:center;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+                    <strong style="font-size:13px;">주자 (1走 → 4走 순서)</strong>
+                    <button onclick="addRelayMemberRow()" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;">+ 주자 추가</button>
+                </div>
+                <div id="rt-members-list" style="margin-bottom:14px;max-height:280px;overflow-y:auto;background:#fafafa;padding:8px;border-radius:6px;border:1px solid #eee;">
+                    ${memberRows || '<div style="color:#999;font-size:12px;padding:10px;text-align:center;">주자가 없습니다. + 주자 추가 버튼으로 추가하세요.</div>'}
+                </div>
+
+                <div style="display:flex;gap:6px;justify-content:flex-end;border-top:1px solid #eee;padding-top:10px;">
+                    <button onclick="deleteRelayTeam(${JSON.stringify(memberIds).replace(/"/g,'&quot;')})" style="background:#fff;color:#991b1b;border:1px solid #fecaca;border-radius:5px;padding:7px 14px;font-size:12px;cursor:pointer;margin-right:auto;">팀 전체 삭제</button>
+                    <button class="btn-outline" onclick="closeLinkEdit()">취소</button>
+                    <button class="btn-gold" onclick='saveRelayTeam(${JSON.stringify(memberIds).replace(/'/g,"\\'")}, ${JSON.stringify({day,event_name:eventName,round,gender,division}).replace(/'/g,"\\'")})'>저장</button>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('link-modal').style.display='block';
+}
+
+function addRelayMemberRow(){
+    const list = document.getElementById('rt-members-list');
+    // 빈 메시지 제거
+    if(list.children.length===1 && list.children[0].tagName==='DIV' && !list.children[0].classList.contains('rt-member-edit-row')){
+        list.innerHTML = '';
+    }
+    const legNum = list.querySelectorAll('.rt-member-edit-row').length + 1;
+    const colorMap = {1:['#fef3c7','#92400e'],2:['#dbeafe','#1e40af'],3:['#dcfce7','#166534'],4:['#fce7f3','#9f1239']};
+    const [bg,fg] = colorMap[legNum] || ['#f3f4f6','#555'];
+    const row = document.createElement('div');
+    row.className = 'rt-member-edit-row';
+    row.dataset.id = '';  // 새 멤버
+    row.dataset.leg = legNum;
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:6px;border:1px solid #eee;border-radius:5px;margin-bottom:4px;background:#fff;';
+    row.innerHTML = `
+        <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:24px;background:${bg};color:${fg};border-radius:4px;font-weight:700;font-size:11px;">${legNum}走</span>
+        <input type="text" class="rt-bib" placeholder="배번" style="width:80px;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+        <input type="text" class="rt-name" placeholder="선수명" style="flex:1;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+        <button onclick="this.closest('.rt-member-edit-row').remove();updateLegNumbers()" title="이 주자 삭제" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:4px;padding:4px 8px;font-size:11px;cursor:pointer;">삭제</button>`;
+    list.appendChild(row);
+}
+
+function updateLegNumbers(){
+    const rows = document.querySelectorAll('#rt-members-list .rt-member-edit-row');
+    const colorMap = {1:['#fef3c7','#92400e'],2:['#dbeafe','#1e40af'],3:['#dcfce7','#166534'],4:['#fce7f3','#9f1239']};
+    rows.forEach((row,idx)=>{
+        const legNum = idx+1;
+        row.dataset.leg = legNum;
+        const [bg,fg] = colorMap[legNum] || ['#f3f4f6','#555'];
+        const span = row.querySelector('span');
+        if(span){
+            span.style.background = bg;
+            span.style.color = fg;
+            span.textContent = legNum + '走';
+        }
+    });
+    if(rows.length===0){
+        document.getElementById('rt-members-list').innerHTML = '<div style="color:#999;font-size:12px;padding:10px;text-align:center;">주자가 없습니다. + 주자 추가 버튼으로 추가하세요.</div>';
+    }
+}
+
+async function saveRelayTeam(originalIds, ctx){
+    const teamName = document.getElementById('rt-team-name').value.trim();
+    const lane = parseInt(document.getElementById('rt-lane').value)||null;
+    const heat = parseInt(document.getElementById('rt-heat').value)||null;
+    if(!teamName){ toast('팀명(소속)은 필수입니다','error'); return; }
+    const rows = [...document.querySelectorAll('#rt-members-list .rt-member-edit-row')];
+    if(rows.length===0){ toast('주자를 1명 이상 추가하세요','error'); return; }
+
+    const adminKey = getKey();
+    const compId = getCompId();
+    let okCount=0, failCount=0;
+
+    // 1) 기존 멤버 업데이트 또는 신규 추가
+    const keptIds = [];
+    for(let i=0;i<rows.length;i++){
+        const row = rows[i];
+        const id = row.dataset.id ? parseInt(row.dataset.id) : null;
+        const bib = row.querySelector('.rt-bib').value.trim();
+        const name = row.querySelector('.rt-name').value.trim();
+        if(!name){ failCount++; continue; }
+        const sortOrder = (ctx.sort_base||0) + i;
+        const memberLane = (i===0) ? lane : null;  // 첫 주자에만 레인 부여
+        const body = {
+            admin_key: adminKey,
+            competition_id: compId,
+            day: ctx.day,
+            event_name: ctx.event_name,
+            round: ctx.round || '',
+            division: ctx.division || '',
+            gender: ctx.gender || '',
+            bib_number: bib,
+            athlete_name: name,
+            team: teamName,
+            heat: heat,
+            lane: memberLane,
+            sort_order: sortOrder
+        };
+        try {
+            if(id){
+                const r = await fetch('/api/display/roster/entry/'+id, {
+                    method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+                }).then(r=>r.json());
+                if(r.success){ okCount++; keptIds.push(id); } else failCount++;
+            } else {
+                const r = await fetch('/api/display/roster/entry', {
+                    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+                }).then(r=>r.json());
+                if(r.success || r.id){ okCount++; if(r.id) keptIds.push(r.id); } else failCount++;
+            }
+        } catch(e){ failCount++; }
+    }
+
+    // 2) 삭제된 멤버 처리 (originalIds 중 keptIds에 없는 것)
+    const toDelete = originalIds.filter(id=>!keptIds.includes(id));
+    for(const id of toDelete){
+        try {
+            await fetch('/api/display/roster/entry/'+id, {
+                method:'DELETE', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ admin_key: adminKey })
+            });
+        } catch(e){}
+    }
+
+    if(failCount===0){
+        toast(`${okCount}명 저장 완료`);
+        closeLinkEdit();
+        await loadAll();
+    } else {
+        toast(`${okCount}명 성공 / ${failCount}명 실패`,'error');
+        await loadAll();
+    }
+}
+
+async function deleteRelayTeam(memberIds){
+    if(!confirm(`이 릴레이 팀(${memberIds.length}명)을 모두 삭제하시겠습니까?`)) return;
+    const adminKey = getKey();
+    let okCount=0;
+    for(const id of memberIds){
+        try {
+            const r = await fetch('/api/display/roster/entry/'+id, {
+                method:'DELETE', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ admin_key: adminKey })
+            }).then(r=>r.json());
+            if(r.success) okCount++;
+        } catch(e){}
+    }
+    toast(`${okCount}명 삭제됨`);
+    closeLinkEdit();
+    await loadAll();
+}
+
+// 대회 ID 헬퍼 (안전 장치 — 모듈 최상단의 compId를 우선 사용)
+function getCompId(){
+    return (typeof compId !== 'undefined' && compId) ? compId : (getCompetitionId() || 0);
+}
 
 async function saveEventEdit(evId){
     const name = document.getElementById('edit-name').value.trim();

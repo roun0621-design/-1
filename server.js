@@ -10549,6 +10549,82 @@ app.delete('/api/display/roster/:compId/:day', (req, res) => {
     res.json({ success: true });
 });
 
+// ─── Display roster: 단일 행 CRUD (인라인 편집 / 릴레이 팀 편집) ───
+// PUT  /api/display/roster/entry/:id  — 개별 행 수정
+app.put('/api/display/roster/entry/:id', (req, res) => {
+    try {
+        const { admin_key, day, event_name, round, division, gender, bib_number, athlete_name, team, heat, lane, sort_order, event_id } = req.body;
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        const old = db.prepare('SELECT * FROM display_roster WHERE id=?').get(req.params.id);
+        if (!old) return res.status(404).json({ error: '명단 행을 찾을 수 없습니다.' });
+        db.prepare(`UPDATE display_roster SET
+            day=?, event_name=?, round=?, division=?, gender=?,
+            bib_number=?, athlete_name=?, team=?,
+            heat=?, lane=?, sort_order=?, event_id=?
+            WHERE id=?`).run(
+            day != null ? parseInt(day) : old.day,
+            event_name != null ? event_name : old.event_name,
+            round != null ? round : old.round,
+            division != null ? division : old.division,
+            gender != null ? gender : old.gender,
+            bib_number != null ? String(bib_number) : old.bib_number,
+            athlete_name != null ? athlete_name : old.athlete_name,
+            team != null ? team : old.team,
+            heat != null && heat !== '' ? parseInt(heat) : null,
+            lane != null && lane !== '' ? parseInt(lane) : null,
+            sort_order != null ? parseInt(sort_order) : old.sort_order,
+            event_id != null ? (event_id || null) : old.event_id,
+            old.id
+        );
+        res.json({ success: true, id: old.id });
+    } catch (e) {
+        res.status(500).json({ error: '수정 실패: ' + e.message });
+    }
+});
+
+// POST /api/display/roster/entry — 새 행 추가
+app.post('/api/display/roster/entry', (req, res) => {
+    try {
+        const { admin_key, competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, heat, lane, sort_order, event_id } = req.body;
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        if (!competition_id || !athlete_name) return res.status(400).json({ error: 'competition_id, athlete_name 필수' });
+        const info = db.prepare(`INSERT INTO display_roster
+            (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, event_id, heat, lane)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+            parseInt(competition_id),
+            parseInt(day) || 1,
+            event_name || '',
+            round || '',
+            division || '',
+            gender || '',
+            bib_number != null ? String(bib_number) : '',
+            athlete_name,
+            team || '',
+            sort_order != null ? parseInt(sort_order) : 0,
+            event_id || null,
+            heat != null && heat !== '' ? parseInt(heat) : null,
+            lane != null && lane !== '' ? parseInt(lane) : null
+        );
+        // 자동 매칭 시도
+        try { autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) {}
+        res.json({ success: true, id: info.lastInsertRowid });
+    } catch (e) {
+        res.status(500).json({ error: '추가 실패: ' + e.message });
+    }
+});
+
+// DELETE /api/display/roster/entry/:id — 개별 행 삭제
+app.delete('/api/display/roster/entry/:id', (req, res) => {
+    try {
+        const { admin_key } = req.body;
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        const info = db.prepare('DELETE FROM display_roster WHERE id=?').run(req.params.id);
+        res.json({ success: true, deleted: info.changes });
+    } catch (e) {
+        res.status(500).json({ error: '삭제 실패: ' + e.message });
+    }
+});
+
 // Serve display-manage page
 app.get('/display-manage', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'display-manage.html'));
