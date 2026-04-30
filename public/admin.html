@@ -1956,12 +1956,15 @@
         }
 
         async function autoSortEvents() {
-            if (!confirm('모든 종목을 표준 육상 순서로 재정렬하시겠습니까?')) return;
+            if (!confirm('모든 종목을 WA 표준 육상 순서로 재정렬하시겠습니까?')) return;
             try {
-                const compId = getCompetitionId();
+                const compId = CID();
+                if (!compId) { toast('대회를 먼저 선택하세요', 'error'); return; }
                 const result = await API.autoSortEvents(compId, AK());
                 toast(result.message || '종목 재정렬 완료');
-                await loadEventsMatrix();
+                // 캐시 무효화 후 종목 매트릭스 재로드
+                _allAdminEvents = [];
+                await loadEvents();
             } catch (e) {
                 toast('재정렬 실패: ' + (e.error || e.message || e), 'error');
             }

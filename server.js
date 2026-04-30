@@ -3389,23 +3389,109 @@ app.get('/api/admin/events', (req, res) => {
     if (compId) return res.json(db.prepare('SELECT * FROM event WHERE competition_id=? ORDER BY sort_order, id').all(compId));
     res.json(db.prepare('SELECT * FROM event ORDER BY sort_order, id').all());
 });
-// Standard athletics event order (reusable)
+// Standard athletics event order (WA + KAAF) - reusable
+// Order: Sprints(100~400) → Middle(800~1500) → Long(3000~10000) → Hurdles → SC → Walks(track) → Road → Jumps → Throws → Combined → Relays
 const STANDARD_EVENT_ORDER = [
-    '100m','200m','400m','800m','1500m','3000m',
-    '5000m','5000mW','10,000m','10000m','10,000mW','10000mW',
-    '100mH','110mH','400mH','3000mSC','3000m장애물',
-    '멀리뛰기','세단뛰기','높이뛰기','장대높이뛰기',
+    // Sprints
+    '100m','200m','400m',
+    // Middle distance
+    '800m','1500m','1마일','Mile',
+    // Long distance
+    '3000m','5000m','10000m',
+    // Hurdles
+    '100mH','110mH','400mH',
+    // Steeplechase
+    '2000mSC','3000mSC',
+    // Track walks
+    '3000mW','5000mW','10000mW',
+    // Road walks
+    '20kmW','35kmW','50kmW',
+    // Road running
+    '하프마라톤','마라톤',
+    // Vertical jumps
+    '높이뛰기','장대높이뛰기',
+    // Horizontal jumps
+    '멀리뛰기','세단뛰기',
+    // Throws
     '포환던지기','원반던지기','해머던지기','창던지기',
-    '10종경기','7종경기',
-    '4X100mR','4x100m 릴레이','4X400mR','4x400m 릴레이',
-    '4X400mR(Mixed)','혼성 4x400m 릴레이',
-    '4×800mR','4×1500mR',
-    '하프마라톤','마라톤','20KmW','35kmW',
+    // Combined
+    '7종경기','10종경기',
+    // Relays
+    '4x100mR','4x400mR','4x400mR(혼성)','4x800mR','4x1500mR',
 ];
+// Normalize event name for robust matching (whitespace removed, lowercase, unified relay/walk/hurdle/SC/marathon tokens)
+function _normEvtName(s) {
+    if (!s) return '';
+    let t = String(s).trim().toLowerCase();
+    // Unify relay multiplication signs and remove spaces
+    t = t.replace(/[×x✕✖＊*]/g, 'x');
+    t = t.replace(/\s+/g, '');
+    t = t.replace(/,/g, '');
+    // Relay normalization: "4x100m릴레이" / "4x100r" → "4x100mr"
+    t = t.replace(/(\d+)x(\d+)m?릴레이/g, '$1x$2mr');
+    t = t.replace(/(\d+)x(\d+)r(?![a-z0-9])/g, '$1x$2mr');
+    // Mixed relay
+    t = t.replace(/mixed/g, '혼성');
+    t = t.replace(/\(mix\)/g, '(혼성)');
+    // If "혼성" appears before a relay token, convert to suffix form: "혼성4x400mr" → "4x400mr(혼성)"
+    t = t.replace(/혼성(\d+x\d+mr)/g, '$1(혼성)');
+    // Walk normalization: "20km경보" / "20킬로경보" → "20kmw"
+    t = t.replace(/(\d+)\s*km\s*(?:경보|w)\b/gi, '$1kmw');
+    t = t.replace(/(\d+)\s*m\s*(?:경보|w)\b/gi, '$1mw');
+    t = t.replace(/(\d+)킬로경보/g, '$1kmw');
+    t = t.replace(/경보/g, 'w');
+    // Hurdles: "100m허들" → "100mh"
+    t = t.replace(/(\d+)m?허들/g, '$1mh');
+    t = t.replace(/허들/g, 'h');
+    // Steeplechase: "3000m장애물" → "3000msc"
+    t = t.replace(/(\d+)m?장애물/g, '$1msc');
+    t = t.replace(/장애물/g, 'sc');
+    // Marathon variants
+    t = t.replace(/하프\s*마라톤/g, '하프마라톤');
+    t = t.replace(/halfmarathon/g, '하프마라톤');
+    t = t.replace(/marathon/g, '마라톤');
+    return t;
+}
 function getStandardSortOrder(eventName) {
-    let idx = STANDARD_EVENT_ORDER.findIndex(s => s === eventName);
-    if (idx === -1) idx = STANDARD_EVENT_ORDER.findIndex(s => eventName.includes(s) || s.includes(eventName));
-    return idx >= 0 ? (idx + 1) * 10 : 9990;
+    if (!eventName) return 9990;
+    const normTarget = _normEvtName(eventName);
+    // 1) Exact match (after normalization)
+    let idx = STANDARD_EVENT_ORDER.findIndex(s => _normEvtName(s) === normTarget);
+    if (idx >= 0) return (idx + 1) * 10;
+    // 2) Pattern-based fallback by category keyword
+    //    Use regex to avoid the "100m matches 100mH" trap
+    const patterns = [
+        // Track walks
+        { re: /^(\d+)mw$/, get: m => `${m[1]}mw` },
+        // Road walks
+        { re: /^(\d+)kmw$/, get: m => `${m[1]}kmw` },
+        // Hurdles
+        { re: /^(\d+)mh$/, get: m => `${m[1]}mh` },
+        // Steeplechase
+        { re: /^(\d+)msc$/, get: m => `${m[1]}msc` },
+        // Relays
+        { re: /^(\d+)x(\d+)mr(\(혼성\))?$/, get: m => `${m[1]}x${m[2]}mr${m[3]||''}` },
+        // Plain track distance
+        { re: /^(\d+)m$/, get: m => `${m[1]}m` },
+    ];
+    for (const p of patterns) {
+        const mt = normTarget.match(p.re);
+        if (!mt) continue;
+        const probe = p.get(mt);
+        const j = STANDARD_EVENT_ORDER.findIndex(s => _normEvtName(s) === probe);
+        if (j >= 0) return (j + 1) * 10;
+    }
+    // 3) Substring fallback - but exclude track-distance vs hurdle/walk/SC confusion
+    //    Only allow substring match if normalized target does NOT contain extra suffixes
+    const safeForSubstr = !/[hwc]|sc|mr/.test(normTarget) || /^(\d+)(m|km)/.test(normTarget) === false;
+    if (safeForSubstr) {
+        idx = STANDARD_EVENT_ORDER.findIndex(s => {
+            const ns = _normEvtName(s);
+            return ns.length >= 2 && (normTarget.includes(ns) || ns.includes(normTarget));
+        });
+        if (idx >= 0) return (idx + 1) * 10;
+    }
+    return 9990;
 }
 function autoSortCompetitionEvents(competitionId) {
     const events = db.prepare('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL').all(competitionId);
@@ -3462,14 +3548,15 @@ app.get('/api/events/:id/video-url', (req, res) => {
     res.json({ video_url: evt.video_url || '' });
 });
 
-// Auto-sort events by standard athletics order
+// Auto-sort events by standard athletics order (WA + KAAF)
+// Allow operation key as well so on-site staff can trigger this without master admin key
 app.post('/api/admin/events/auto-sort', (req, res) => {
     const { admin_key, competition_id } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
     autoSortCompetitionEvents(competition_id);
     const count = db.prepare('SELECT COUNT(*) as cnt FROM event WHERE competition_id=? AND parent_event_id IS NULL').get(competition_id).cnt;
-    res.json({ success: true, message: `${count}개 종목 자동정렬 완료` });
+    res.json({ success: true, message: `${count}개 종목 자동정렬 완료 (WA 표준 순서)` });
 });
 
 app.delete('/api/admin/events/:id', (req, res) => {
