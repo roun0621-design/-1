@@ -112,8 +112,10 @@
 .link-edit-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.4); z-index:999; display:flex; align-items:center; justify-content:center; }
 .link-edit-modal { background:#fff; border-radius:12px; padding:24px; width:90%; max-width:500px; box-shadow:0 20px 60px rgba(0,0,0,.2); }
 .link-edit-modal h3 { font-size:16px; font-weight:800; margin-bottom:16px; }
-.link-input { width:100%; padding:10px 14px; border:1.5px solid #ddd; border-radius:8px; font-size:13px; margin-bottom:12px; }
+.link-input { width:100%; padding:10px 14px; border:1.5px solid #ddd; border-radius:8px; font-size:13px; margin-bottom:12px; box-sizing:border-box; }
 .link-input:focus { border-color:var(--gold); outline:none; box-shadow:0 0 0 3px rgba(183,159,88,.12); }
+.tt-edit-label { font-size:11px; font-weight:700; color:var(--muted); display:block; margin-bottom:4px; }
+.section-title { display:flex; align-items:center; }
 
 /* ═══════ BUTTONS ═══════ */
 .btn-gold { background:var(--gold); color:#fff; border:none; padding:9px 18px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; transition:all .12s; }
@@ -288,6 +290,12 @@ function renderTimetable(el){
                 <div class="upload-sub">.pdf — 자동 파싱 + 종목 매칭</div>
             </div>
         </div>
+        <div style="margin-top:12px;padding:10px 12px;background:#f8f4ea;border-radius:8px;font-size:12px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="upload-force" style="margin:0;">
+                <span><b>강제 덮어쓰기</b> — 체크 시 과거 일차도 모두 새로 등록 (기본: 스마트 머지 — 과거 보존, 변경분만 반영)</span>
+            </label>
+        </div>
         <div id="upload-day-select" style="margin-top:12px;display:none;">
             <label style="font-size:12px;font-weight:600;">업로드 일차: </label>
             <select id="upload-day" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
@@ -329,8 +337,11 @@ function renderTimetable(el){
             }
         });
 
-        h += `<div class="section-title" style="margin-top:${d===filteredDays[0]?'0':'20'}px;">${d}일차 <span class="st-count">${grouped.length}개 종목</span></div>`;
-        h += `<table class="tt-table"><thead><tr><th style="width:60px;">시간</th><th>종목</th><th style="width:50px;">연결</th></tr></thead><tbody>`;
+        h += `<div class="section-title" style="margin-top:${d===filteredDays[0]?'0':'20'}px;">
+            ${d}일차 <span class="st-count">${grouped.length}개 종목</span>
+            <button class="btn-outline" style="margin-left:auto;font-size:11px;padding:4px 10px;" onclick="openTTAdd(${d})">＋ 행 추가</button>
+        </div>`;
+        h += `<table class="tt-table"><thead><tr><th style="width:60px;">시간</th><th>종목</th><th style="width:80px;">연결/결과</th><th style="width:60px;">수정</th></tr></thead><tbody>`;
         
         grouped.forEach(g=>{
             const cats = g.categories.join('/');
@@ -357,20 +368,287 @@ function renderTimetable(el){
             const linked = g.event_ids.filter(Boolean).length;
             const total = g.ids.length;
             const linkBadge = linked===total ? '<span class="badge badge-linked">●</span>' : linked>0 ? '<span class="badge" style="background:#fff3e0;color:#e65100;">△</span>' : '<span class="badge badge-unlinked">○</span>';
-            // result_url 확인 - 클릭 시 외부 링크 열기
+            // result_url 확인 - 별도 버튼으로 외부 링크 열기
             const eventId = g.event_ids.find(Boolean);
             const ev = eventId ? _events.find(e=>e.id===eventId) : null;
             const resultUrl = ev && ev.result_url ? ev.result_url : '';
-            const clickAttr = resultUrl ? `onclick="window.open('${resultUrl.replace(/'/g,"\\'")}','_blank')" style="cursor:pointer;"` : '';
-            h += `<tr ${clickAttr}>
+            const resultBtn = resultUrl
+                ? `<a href="${esc(resultUrl)}" target="_blank" onclick="event.stopPropagation()" class="badge" style="background:#e8f5e9;color:#2e7d32;text-decoration:none;margin-left:4px;">결과↗</a>`
+                : '';
+            // 행 클릭 → 수정 모달
+            const idsJson = JSON.stringify(g.ids).replace(/"/g,'&quot;');
+            h += `<tr onclick="openTTEdit(${idsJson})" style="cursor:pointer;">
                 <td class="time-cell">${g.time||'—'}</td>
                 <td class="event-cell"><span>${esc(eventLabel)}</span><span style="display:flex;gap:2px;flex-shrink:0;">${rightTags}</span></td>
-                <td style="text-align:center;">${linkBadge}</td>
+                <td style="text-align:center;white-space:nowrap;">${linkBadge}${resultBtn}</td>
+                <td style="text-align:center;"><span style="color:var(--gold);font-size:14px;">✏️</span></td>
             </tr>`;
         });
         h += '</tbody></table>';
     });
     el.innerHTML = h;
+}
+
+// ═══════════════════════════════════════════════════════════
+// TIMETABLE INLINE EDIT
+// ═══════════════════════════════════════════════════════════
+// 시간표 행 수정 모달 — 그룹화된 행은 첫 번째 ID만 수정 (또는 전체 일괄)
+function openTTEdit(ids){
+    if(!Array.isArray(ids)||ids.length===0)return;
+    // Find the timetable entries by ID
+    const allTT = [];
+    Object.values(_timetable.days||{}).forEach(d=>{
+        ['track','field','road'].forEach(s=>{ (d[s]||[]).forEach(it=>allTT.push(it)); });
+    });
+    const entries = ids.map(id=>allTT.find(t=>t.id===id)).filter(Boolean);
+    if(entries.length===0){ toast('항목을 찾을 수 없습니다','error'); return; }
+
+    const first = entries[0];
+    const isMulti = entries.length>1;
+    const sectionOpts = [{v:'track',l:'트랙'},{v:'field',l:'필드'},{v:'road',l:'도로'}];
+    const roundFull = (first.round||'').trim();
+    const bracketMatch = roundFull.match(/\(([^)]+)\)/);
+    const roundBase = roundFull.replace(/\([^)]*\)/g,'').trim();
+
+    // Find linked event for result_url editing
+    const linkedEvId = first.event_id;
+    const linkedEv = linkedEvId ? _events.find(e=>e.id===linkedEvId) : null;
+    const resultUrl = linkedEv && linkedEv.result_url ? linkedEv.result_url : '';
+
+    // Multi-row: show all categories
+    const allCats = entries.map(e=>e.category||'').filter(Boolean);
+
+    document.getElementById('link-modal').innerHTML = `
+        <div class="link-edit-overlay" onclick="if(event.target===this)closeLinkEdit()">
+            <div class="link-edit-modal" style="max-width:680px;max-height:90vh;overflow-y:auto;">
+                <h3 style="margin-bottom:8px;">시간표 항목 수정 ${isMulti?`<span style="font-size:11px;color:var(--muted);">(${entries.length}건 일괄)</span>`:''}</h3>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${first.scheduled_date||''} · ${first.day}일차</div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label class="tt-edit-label">일차</label>
+                        <input id="tt-edit-day" class="link-input" type="number" min="1" max="10" value="${first.day||1}" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">시간 (HH:MM)</label>
+                        <input id="tt-edit-time" class="link-input" value="${esc(first.time||'')}" placeholder="14:30" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">콜룸 시간</label>
+                        <input id="tt-edit-callroom" class="link-input" value="${esc(first.callroom_time||'')}" placeholder="자동 계산" style="margin-bottom:0;">
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label class="tt-edit-label">종목명 ${isMulti?'<span style="color:var(--danger);">(전체 적용)</span>':''}</label>
+                        <input id="tt-edit-name" class="link-input" value="${esc(first.event_name||'')}" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">구분</label>
+                        <select id="tt-edit-section" class="link-input" style="margin-bottom:0;">
+                            ${sectionOpts.map(s=>`<option value="${s.v}" ${first.section===s.v?'selected':''}>${s.l}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+
+                ${isMulti ? `
+                <div style="background:#fff8e1;border:1px solid #ffd54f;border-radius:6px;padding:10px;margin-bottom:12px;">
+                    <div style="font-size:11px;font-weight:700;color:#bf8f00;margin-bottom:6px;">⚠️ 부(종별) 일괄 수정 — 같은 시간/종목/라운드 묶음 ${entries.length}건</div>
+                    <div style="display:grid;grid-template-columns:repeat(${Math.min(entries.length,3)},1fr);gap:8px;">
+                        ${entries.map((e,i)=>`
+                            <div>
+                                <label class="tt-edit-label">행 ${i+1} 부(종별)</label>
+                                <input class="link-input tt-edit-cat-multi" data-id="${e.id}" value="${esc(e.category||'')}" placeholder="예: 남고/여중" style="margin-bottom:0;font-size:12px;">
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>` : `
+                <div style="margin-bottom:12px;">
+                    <label class="tt-edit-label">부(종별) <span style="color:var(--muted);font-weight:400;">예: 남고, 여중, 대학(남), 대학/실업(여)</span></label>
+                    <input id="tt-edit-category" class="link-input" value="${esc(first.category||'')}" style="margin-bottom:0;">
+                </div>`}
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label class="tt-edit-label">라운드 (전체) <span style="color:var(--muted);font-weight:400;">예: 결승, 예선(5-2+6)</span></label>
+                        <input id="tt-edit-round" class="link-input" value="${esc(first.round||'')}" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">비고</label>
+                        <input id="tt-edit-note" class="link-input" value="${esc(first.note||'')}" style="margin-bottom:0;">
+                    </div>
+                </div>
+
+                ${linkedEv ? `
+                <div style="background:#f5f5f5;border-radius:6px;padding:10px;margin-bottom:12px;">
+                    <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">연결된 종목: <b>${esc(fmtEvent(linkedEv))}</b></div>
+                    <label class="tt-edit-label">결과 링크 (URL)</label>
+                    <input id="tt-edit-result-url" class="link-input" value="${esc(resultUrl)}" placeholder="https://..." style="margin-bottom:0;">
+                    <div style="font-size:10px;color:var(--muted);margin-top:4px;">※ 종목 단위로 저장됩니다 (이 종목이 시간표 다른 행에도 노출되면 함께 적용)</div>
+                </div>` : ''}
+
+                <div style="display:flex;justify-content:space-between;gap:8px;border-top:1px solid #eee;padding-top:12px;">
+                    <button class="btn-outline" style="color:var(--danger);border-color:var(--danger);" onclick="deleteTTEntries(${JSON.stringify(ids).replace(/"/g,'&quot;')})">🗑 ${isMulti?'전체':'행'} 삭제</button>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn-outline" onclick="closeLinkEdit()">취소</button>
+                        <button class="btn-gold" onclick="saveTTEdit(${JSON.stringify(ids).replace(/"/g,'&quot;')}, ${linkedEvId||'null'})">저장</button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('link-modal').style.display='block';
+}
+
+async function saveTTEdit(ids, linkedEvId){
+    const day = parseInt(document.getElementById('tt-edit-day').value)||1;
+    const time = document.getElementById('tt-edit-time').value.trim();
+    const callroom_time = document.getElementById('tt-edit-callroom').value.trim();
+    const event_name = document.getElementById('tt-edit-name').value.trim();
+    const section = document.getElementById('tt-edit-section').value;
+    const round = document.getElementById('tt-edit-round').value.trim();
+    const note = document.getElementById('tt-edit-note').value.trim();
+    const isMulti = ids.length>1;
+
+    if(!time||!event_name){ toast('시간과 종목명은 필수입니다','error'); return; }
+
+    // Per-row category for multi mode
+    const catMap = {};
+    if(isMulti){
+        document.querySelectorAll('.tt-edit-cat-multi').forEach(inp=>{
+            catMap[inp.dataset.id] = inp.value.trim();
+        });
+    } else {
+        catMap[ids[0]] = document.getElementById('tt-edit-category').value.trim();
+    }
+
+    const adminKey = getKey();
+    let okCount = 0, failCount = 0;
+    for(const id of ids){
+        const body = { admin_key: adminKey, day, time, event_name, section, round, note, category: catMap[id]||'' };
+        if(callroom_time) body.callroom_time = callroom_time;
+        const r = await fetch('/api/timetable/entry/'+id, {
+            method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+        }).then(r=>r.json()).catch(e=>({error:e.message}));
+        if(r.success) okCount++; else failCount++;
+    }
+
+    // Save result_url to linked event
+    const resultUrlInp = document.getElementById('tt-edit-result-url');
+    if(linkedEvId && resultUrlInp){
+        const newUrl = resultUrlInp.value.trim();
+        const ev = _events.find(e=>e.id===linkedEvId);
+        if(ev && newUrl !== (ev.result_url||'')){
+            await fetch('/api/admin/events/'+linkedEvId, {
+                method:'PUT', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ admin_key: adminKey, name: ev.name, category: ev.category, gender: ev.gender, round_type: ev.round_type, result_url: newUrl })
+            }).catch(()=>{});
+        }
+    }
+
+    if(failCount===0){
+        toast(`${okCount}건 저장 완료`);
+        closeLinkEdit();
+        await loadAll();
+    } else {
+        toast(`${okCount}건 성공 / ${failCount}건 실패`,'error');
+    }
+}
+
+async function deleteTTEntries(ids){
+    if(!confirm(`${ids.length}건의 시간표 행을 삭제하시겠습니까?\n(연결된 종목/명단은 유지됩니다)`)) return;
+    const adminKey = getKey();
+    let okCount = 0;
+    for(const id of ids){
+        const r = await fetch('/api/timetable/entry/'+id, {
+            method:'DELETE', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ admin_key: adminKey })
+        }).then(r=>r.json()).catch(e=>({error:e.message}));
+        if(r.success) okCount++;
+    }
+    toast(`${okCount}건 삭제됨`);
+    closeLinkEdit();
+    await loadAll();
+}
+
+// 새 시간표 행 추가
+function openTTAdd(day){
+    const sectionOpts = [{v:'track',l:'트랙'},{v:'field',l:'필드'},{v:'road',l:'도로'}];
+    document.getElementById('link-modal').innerHTML = `
+        <div class="link-edit-overlay" onclick="if(event.target===this)closeLinkEdit()">
+            <div class="link-edit-modal" style="max-width:560px;">
+                <h3 style="margin-bottom:14px;">${day}일차 — 시간표 행 추가</h3>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label class="tt-edit-label">일차</label>
+                        <input id="tt-add-day" class="link-input" type="number" min="1" max="10" value="${day}" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">시간</label>
+                        <input id="tt-add-time" class="link-input" placeholder="14:30" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">구분</label>
+                        <select id="tt-add-section" class="link-input" style="margin-bottom:0;">
+                            ${sectionOpts.map(s=>`<option value="${s.v}">${s.l}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <label class="tt-edit-label">종목명</label>
+                    <input id="tt-add-name" class="link-input" placeholder="예: 100m, 멀리뛰기" style="margin-bottom:0;">
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label class="tt-edit-label">부(종별)</label>
+                        <input id="tt-add-category" class="link-input" placeholder="예: 남고, 여중" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">라운드</label>
+                        <input id="tt-add-round" class="link-input" placeholder="예: 결승, 예선" style="margin-bottom:0;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom:14px;">
+                    <label class="tt-edit-label">비고</label>
+                    <input id="tt-add-note" class="link-input" placeholder="(선택)" style="margin-bottom:0;">
+                </div>
+
+                <div style="display:flex;gap:8px;justify-content:flex-end;border-top:1px solid #eee;padding-top:12px;">
+                    <button class="btn-outline" onclick="closeLinkEdit()">취소</button>
+                    <button class="btn-gold" onclick="saveTTAdd()">추가</button>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('link-modal').style.display='block';
+}
+
+async function saveTTAdd(){
+    const day = parseInt(document.getElementById('tt-add-day').value)||1;
+    const time = document.getElementById('tt-add-time').value.trim();
+    const section = document.getElementById('tt-add-section').value;
+    const event_name = document.getElementById('tt-add-name').value.trim();
+    const category = document.getElementById('tt-add-category').value.trim();
+    const round = document.getElementById('tt-add-round').value.trim();
+    const note = document.getElementById('tt-add-note').value.trim();
+
+    if(!time||!event_name){ toast('시간과 종목명은 필수입니다','error'); return; }
+
+    const r = await fetch('/api/timetable/entry', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ admin_key: getKey(), competition_id: compId, day, section, time, event_name, category, round, note })
+    }).then(r=>r.json()).catch(e=>({error:e.message}));
+
+    if(r.success){
+        toast('행 추가 완료');
+        closeLinkEdit();
+        await loadAll();
+    } else {
+        toast('추가 실패: '+(r.error||''),'error');
+    }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -613,11 +891,30 @@ function setCat(c){ _filterCat=c; renderTab(); }
 // Upload handlers
 async function uploadTT(inp){
     const file=inp.files[0]; if(!file)return;
-    const fd=new FormData(); fd.append('file',file); fd.append('competition_id',compId); fd.append('admin_key',getKey());
+    const forceMode = document.getElementById('upload-force')?.checked;
+    if(forceMode){
+        if(!confirm('⚠️ 강제 덮어쓰기 모드입니다.\n\n과거 일차의 시간표도 모두 삭제 후 새로 등록되며, 결과 링크나 수동 수정 사항이 사라질 수 있습니다.\n\n계속하시겠습니까?')){
+            inp.value=''; return;
+        }
+    }
+    const fd=new FormData();
+    fd.append('file',file); fd.append('competition_id',compId); fd.append('admin_key',getKey());
+    fd.append('overwrite_mode', forceMode ? 'force' : 'smart');
     document.getElementById('upload-msg').innerHTML='<span style="color:var(--gold);">⏳ 업로드 중...</span>';
     const r=await fetch('/api/display/timetable/upload',{method:'POST',body:fd}).then(r=>r.json()).catch(e=>({error:e.message}));
-    if(r.success){ toast('시간표 업로드 완료: '+r.message); await loadAll(); }
-    else { document.getElementById('upload-msg').innerHTML=`<span style="color:var(--danger);">❌ ${r.error}</span>`; }
+    if(r.success){
+        // Detailed result message
+        let detail = r.message || '완료';
+        if(r.skippedPastDays && r.skippedPastDays.length>0){
+            detail += ` (과거 ${r.skippedPastDays.map(d=>d+'일차').join('·')} 보존됨)`;
+        }
+        document.getElementById('upload-msg').innerHTML=`<span style="color:var(--success,#2e7d32);">✅ ${esc(detail)}</span>`;
+        toast('시간표 업로드 완료');
+        inp.value='';
+        await loadAll();
+    } else {
+        document.getElementById('upload-msg').innerHTML=`<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+    }
 }
 
 async function uploadRoster(inp){

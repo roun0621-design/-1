@@ -6933,16 +6933,112 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
         // Determine which days are in the uploaded file
         const uploadedDays = [...new Set(allEntries.map(e => e.day))].sort((a, b) => a - b);
 
-        // Delete ONLY the uploaded days (preserve other days)
-        const deleteDayStmt = db.prepare('DELETE FROM timetable WHERE competition_id=? AND day=?');
-        const insert = db.prepare('INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        const tx = db.transaction((entries, days) => {
-            days.forEach(d => deleteDayStmt.run(parseInt(competition_id), d));
-            entries.forEach(e => {
-                insert.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order);
+        // ─── OPTION C: PRESERVE PAST + DIFF MERGE FOR FUTURE/TODAY ───
+        const todayStr = new Date().toISOString().split('T')[0];
+        const overwriteMode = req.body.overwrite_mode || 'smart'; // 'smart' (default) | 'force'
+
+        // Compute scheduled_date for each entry (based on competition start_date)
+        const compRow = db.prepare('SELECT start_date FROM competition WHERE id=?').get(parseInt(competition_id));
+        if (compRow && compRow.start_date) {
+            const startDate = new Date(compRow.start_date + 'T00:00:00');
+            allEntries.forEach(e => {
+                const dd = new Date(startDate);
+                dd.setDate(dd.getDate() + e.day - 1);
+                e.scheduled_date = dd.toISOString().split('T')[0];
             });
-        });
-        tx(allEntries, uploadedDays);
+        }
+
+        // Filter out past-day entries unless force mode
+        let filteredEntries = allEntries;
+        let skippedPastDays = [];
+        if (overwriteMode !== 'force') {
+            const pastDaysSet = new Set();
+            filteredEntries = allEntries.filter(e => {
+                if (e.scheduled_date && e.scheduled_date < todayStr) {
+                    pastDaysSet.add(e.day);
+                    return false;
+                }
+                return true;
+            });
+            skippedPastDays = [...pastDaysSet].sort((a, b) => a - b);
+        }
+        const effectiveDays = [...new Set(filteredEntries.map(e => e.day))].sort((a, b) => a - b);
+
+        let mergeStats = { addedCount: 0, updatedCount: 0, deletedCount: 0, preservedCount: 0 };
+
+        if (overwriteMode === 'force') {
+            // LEGACY: full delete for uploaded days
+            const deleteDayStmt = db.prepare('DELETE FROM timetable WHERE competition_id=? AND day=?');
+            const insert = db.prepare('INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            const tx = db.transaction((entries, days) => {
+                days.forEach(d => deleteDayStmt.run(parseInt(competition_id), d));
+                entries.forEach(e => {
+                    insert.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order);
+                });
+            });
+            tx(allEntries, uploadedDays);
+            mergeStats.addedCount = allEntries.length;
+        } else {
+            // SMART MERGE: 행 단위 diff (과거 일차 보존)
+            const insert = db.prepare('INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            const updateStmt = db.prepare('UPDATE timetable SET section=?, note=?, sort_order=? WHERE id=?');
+            const delOne = db.prepare('DELETE FROM timetable WHERE id=?');
+
+            const tx = db.transaction(() => {
+                effectiveDays.forEach(day => {
+                    const existingRows = db.prepare(
+                        'SELECT * FROM timetable WHERE competition_id=? AND day=?'
+                    ).all(parseInt(competition_id), day);
+
+                    // Safety: skip if past day
+                    const sampleRow = existingRows[0];
+                    if (sampleRow && sampleRow.scheduled_date && sampleRow.scheduled_date < todayStr) {
+                        mergeStats.preservedCount += existingRows.length;
+                        return;
+                    }
+
+                    const buildKey = (r) => `${r.time||''}|${(r.event_name||'').trim()}|${(r.category||'').trim()}|${(r.round||'').trim()}`;
+                    const existingByKey = new Map();
+                    existingRows.forEach(r => {
+                        const k = buildKey(r);
+                        if (!existingByKey.has(k)) existingByKey.set(k, []);
+                        existingByKey.get(k).push(r);
+                    });
+
+                    const newEntries = filteredEntries.filter(e => e.day === day);
+                    const matchedIds = new Set();
+
+                    newEntries.forEach(e => {
+                        const k = buildKey(e);
+                        const candidates = existingByKey.get(k);
+                        if (candidates && candidates.length > 0) {
+                            const target = candidates.shift();
+                            matchedIds.add(target.id);
+                            updateStmt.run(e.section, e.note || target.note, e.sort_order, target.id);
+                            mergeStats.updatedCount++;
+                        } else {
+                            insert.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order);
+                            mergeStats.addedCount++;
+                        }
+                    });
+
+                    existingRows.forEach(r => {
+                        if (!matchedIds.has(r.id)) {
+                            delOne.run(r.id);
+                            mergeStats.deletedCount++;
+                        }
+                    });
+                });
+
+                if (skippedPastDays.length > 0) {
+                    const cnt = db.prepare(
+                        `SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND day IN (${skippedPastDays.map(()=>'?').join(',')})`
+                    ).get(parseInt(competition_id), ...skippedPastDays);
+                    mergeStats.preservedCount += (cnt && cnt.c) || 0;
+                }
+            });
+            tx();
+        }
 
         // Auto-link timetable entries to events
         try {
@@ -6970,13 +7066,13 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
             console.warn('Callroom time auto-compute warning:', crErr.message);
         }
 
-        // Compute scheduled_date from competition start_date + day offset
+        // Compute scheduled_date for any rows still missing it
         try {
             const comp = db.prepare('SELECT start_date FROM competition WHERE id=?').get(parseInt(competition_id));
             if (comp && comp.start_date) {
                 const startDate = new Date(comp.start_date + 'T00:00:00');
                 const updateDateStmt = db.prepare('UPDATE timetable SET scheduled_date=? WHERE competition_id=? AND day=? AND scheduled_date IS NULL');
-                uploadedDays.forEach(d => {
+                effectiveDays.forEach(d => {
                     const dayDate = new Date(startDate);
                     dayDate.setDate(dayDate.getDate() + d - 1);
                     const dateStr = dayDate.toISOString().split('T')[0];
@@ -6990,9 +7086,29 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
         // Clean up temp file
         try { fs.unlinkSync(req.file.path); } catch(e) {}
 
-        const dayLabel = uploadedDays.map(d => d + '일차').join(', ');
-        opLog(`시간표 업로드 (${dayLabel}, ${allEntries.length}건, 대회ID=${competition_id})`, 'admin', 'admin');
-        res.json({ success: true, count: allEntries.length, days: uploadedDays, message: `${dayLabel} 시간표 ${allEntries.length}건이 등록되었습니다.` });
+        // Build human-readable message
+        let msg;
+        if (overwriteMode === 'force') {
+            msg = `[강제덮어쓰기] ${effectiveDays.map(d=>d+'일차').join(', ')} 시간표 ${allEntries.length}건 등록됨`;
+        } else {
+            const parts = [];
+            if (mergeStats.addedCount) parts.push(`추가 ${mergeStats.addedCount}`);
+            if (mergeStats.updatedCount) parts.push(`수정 ${mergeStats.updatedCount}`);
+            if (mergeStats.deletedCount) parts.push(`삭제 ${mergeStats.deletedCount}`);
+            if (skippedPastDays.length > 0) parts.push(`과거 ${skippedPastDays.map(d=>d+'일차').join('·')} 보존`);
+            msg = `[스마트머지] ${parts.join(' · ') || '변경 없음'}`;
+        }
+
+        opLog(`시간표 업로드 (대회ID=${competition_id}, ${msg})`, 'admin', 'admin');
+        res.json({
+            success: true,
+            count: filteredEntries.length,
+            days: effectiveDays,
+            skippedPastDays,
+            mode: overwriteMode,
+            ...mergeStats,
+            message: msg
+        });
     } catch(e) {
         console.error('Timetable upload error:', e);
         try { if (req.file) fs.unlinkSync(req.file.path); } catch(ex) {}
@@ -7053,6 +7169,127 @@ app.put('/api/timetable/:id/unlink', (req, res) => {
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
     db.prepare('UPDATE timetable SET event_id=NULL WHERE id=?').run(req.params.id);
     res.json({ success: true });
+});
+
+// Edit single timetable entry (inline edit from display-manage)
+// Allows editing: time, event_name, category(jongbyul), round, note, callroom_time, section, day, scheduled_date
+app.put('/api/timetable/entry/:id', (req, res) => {
+    try {
+        const { admin_key, time, event_name, category, round, note, callroom_time, section, day, scheduled_date, event_id } = req.body || {};
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        const tt = db.prepare('SELECT * FROM timetable WHERE id=?').get(req.params.id);
+        if (!tt) return res.status(404).json({ error: '시간표 항목 없음' });
+
+        const fields = [];
+        const values = [];
+        const setIf = (col, val) => { if (val !== undefined) { fields.push(`${col}=?`); values.push(val); } };
+        setIf('time', time);
+        setIf('event_name', event_name);
+        setIf('category', category);
+        setIf('round', round);
+        setIf('note', note);
+        setIf('callroom_time', callroom_time);
+        setIf('section', section);
+        setIf('day', day !== undefined ? parseInt(day) : undefined);
+        setIf('scheduled_date', scheduled_date);
+        if (event_id !== undefined) {
+            // event_id can be null to unlink
+            fields.push('event_id=?');
+            values.push(event_id || null);
+        }
+        if (fields.length === 0) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
+
+        values.push(req.params.id);
+        db.prepare(`UPDATE timetable SET ${fields.join(', ')} WHERE id=?`).run(...values);
+
+        // If time changed and callroom_time wasn't explicitly provided, recompute it
+        if (time !== undefined && callroom_time === undefined) {
+            const updated = db.prepare('SELECT * FROM timetable WHERE id=?').get(req.params.id);
+            const m = (updated.time || '').match(/^(\d{1,2}):(\d{2})/);
+            if (m) {
+                let h = parseInt(m[1]), min = parseInt(m[2]);
+                const offset = (updated.section === 'field') ? 45 : 30;
+                min -= offset;
+                while (min < 0) { min += 60; h -= 1; }
+                if (h >= 0) {
+                    const crTime = String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+                    db.prepare('UPDATE timetable SET callroom_time=? WHERE id=?').run(crTime, req.params.id);
+                }
+            }
+        }
+
+        opLog(`시간표 항목 수정 (ID=${req.params.id}, 대회ID=${tt.competition_id})`, 'admin', 'admin', tt.competition_id);
+        res.json({ success: true });
+    } catch(e) {
+        console.error('Timetable entry edit error:', e);
+        res.status(500).json({ error: '수정 실패: ' + e.message });
+    }
+});
+
+// Add new timetable entry (single row)
+app.post('/api/timetable/entry', (req, res) => {
+    try {
+        const { admin_key, competition_id, day, section, time, event_name, category, round, note, callroom_time, scheduled_date } = req.body || {};
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
+        if (!day || !time || !event_name) return res.status(400).json({ error: 'day, time, event_name 필수' });
+
+        // Compute scheduled_date if not provided
+        let schedDate = scheduled_date || null;
+        if (!schedDate) {
+            const comp = db.prepare('SELECT start_date FROM competition WHERE id=?').get(parseInt(competition_id));
+            if (comp && comp.start_date) {
+                const d = new Date(comp.start_date + 'T00:00:00');
+                d.setDate(d.getDate() + parseInt(day) - 1);
+                schedDate = d.toISOString().split('T')[0];
+            }
+        }
+
+        // Compute callroom_time if not provided
+        let cr = callroom_time || null;
+        if (!cr && time) {
+            const m = time.match(/^(\d{1,2}):(\d{2})/);
+            if (m) {
+                let h = parseInt(m[1]), min = parseInt(m[2]);
+                const offset = (section === 'field') ? 45 : 30;
+                min -= offset;
+                while (min < 0) { min += 60; h -= 1; }
+                if (h >= 0) cr = String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+            }
+        }
+
+        // Get next sort_order for the day
+        const maxSort = db.prepare('SELECT MAX(sort_order) AS m FROM timetable WHERE competition_id=? AND day=?').get(parseInt(competition_id), parseInt(day));
+        const sortOrder = (maxSort && maxSort.m !== null ? maxSort.m : -1) + 1;
+
+        const result = db.prepare(`INSERT INTO timetable
+            (competition_id, day, section, time, event_name, category, round, note, sort_order, callroom_time, scheduled_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            parseInt(competition_id), parseInt(day), section || 'track', time,
+            event_name, category || '', round || '', note || '', sortOrder, cr, schedDate
+        );
+        opLog(`시간표 항목 추가 (대회ID=${competition_id}, ${day}일차, ${event_name})`, 'admin', 'admin', parseInt(competition_id));
+        res.json({ success: true, id: result.lastInsertRowid });
+    } catch(e) {
+        console.error('Timetable entry add error:', e);
+        res.status(500).json({ error: '추가 실패: ' + e.message });
+    }
+});
+
+// Delete single timetable entry
+app.delete('/api/timetable/entry/:id', (req, res) => {
+    try {
+        const adminKey = req.body?.admin_key || req.query?.admin_key || req.headers['x-admin-key'];
+        if (!isOperationKey(adminKey) && !isAdminKey(adminKey)) return res.status(403).json({ error: '권한 없음' });
+        const tt = db.prepare('SELECT * FROM timetable WHERE id=?').get(req.params.id);
+        if (!tt) return res.status(404).json({ error: '시간표 항목 없음' });
+        db.prepare('DELETE FROM timetable WHERE id=?').run(req.params.id);
+        opLog(`시간표 항목 삭제 (ID=${req.params.id}, 대회ID=${tt.competition_id}, ${tt.event_name})`, 'admin', 'admin', tt.competition_id);
+        res.json({ success: true });
+    } catch(e) {
+        console.error('Timetable entry delete error:', e);
+        res.status(500).json({ error: '삭제 실패: ' + e.message });
+    }
 });
 
 // ---- Shared timetable auto-link function ----
@@ -9430,17 +9667,119 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
 
         const uploadedDays = [...new Set(timetableEntries.map(e => e.day))].sort((a, b) => a - b);
 
-        // Transaction: insert timetable + create events
-        const tx = db.transaction(() => {
-            // Delete uploaded days from timetable
-            const delTT = db.prepare('DELETE FROM timetable WHERE competition_id=? AND day=?');
-            uploadedDays.forEach(d => delTT.run(parseInt(competition_id), d));
+        // ─── OPTION C: PRESERVE PAST + DIFF MERGE FOR FUTURE/TODAY ───
+        // 1) Determine "today" in local server timezone (YYYY-MM-DD)
+        const todayStr = new Date().toISOString().split('T')[0];
+        const overwriteMode = req.body.overwrite_mode || 'smart'; // 'smart' (default) | 'force' (legacy: full delete)
 
-            // Insert timetable
-            const insTT = db.prepare('INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, note, sort_order, scheduled_date) VALUES (?,?,?,?,?,?,?,?,?,?)');
-            timetableEntries.forEach(e => {
-                insTT.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order, e.scheduled_date);
+        // 2) Filter out entries for past days (scheduled_date < today) UNLESS force mode
+        let filteredEntries = timetableEntries;
+        let skippedPastDays = [];
+        if (overwriteMode !== 'force') {
+            const pastDaysSet = new Set();
+            filteredEntries = timetableEntries.filter(e => {
+                if (e.scheduled_date && e.scheduled_date < todayStr) {
+                    pastDaysSet.add(e.day);
+                    return false;
+                }
+                return true;
             });
+            skippedPastDays = [...pastDaysSet].sort((a, b) => a - b);
+        }
+
+        const effectiveDays = [...new Set(filteredEntries.map(e => e.day))].sort((a, b) => a - b);
+
+        // Transaction: smart-merge timetable + create events
+        const tx = db.transaction(() => {
+            let addedCount = 0;
+            let updatedCount = 0;
+            let deletedCount = 0;
+            let preservedCount = 0;
+
+            if (overwriteMode === 'force') {
+                // LEGACY: full delete for uploaded days
+                const delTT = db.prepare('DELETE FROM timetable WHERE competition_id=? AND day=?');
+                uploadedDays.forEach(d => delTT.run(parseInt(competition_id), d));
+                const insTT = db.prepare('INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, note, sort_order, scheduled_date) VALUES (?,?,?,?,?,?,?,?,?,?)');
+                timetableEntries.forEach(e => {
+                    insTT.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order, e.scheduled_date);
+                    addedCount++;
+                });
+            } else {
+                // SMART MERGE (옵션 C):
+                //   - 과거 일차(scheduled_date < today): 절대 건드리지 않음
+                //   - 오늘/미래 일차: 행 단위 diff 머지
+                //     * 매칭 키: (day, time, event_name, category, round)
+                //     * 매칭 시 → UPDATE (event_id, callroom_time, note 등 보존)
+                //     * 신규 → INSERT
+                //     * 엑셀에 없는 기존 미래 행 → DELETE
+                const insTT = db.prepare(`INSERT INTO timetable
+                    (competition_id, day, section, time, event_name, category, round, note, sort_order, scheduled_date)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)`);
+                const updTT = db.prepare(`UPDATE timetable SET
+                    section=?, note=?, sort_order=?, scheduled_date=?
+                    WHERE id=?`);
+                const delOne = db.prepare('DELETE FROM timetable WHERE id=?');
+
+                effectiveDays.forEach(day => {
+                    // Existing rows for this day (only future/today, since past days are filtered upstream)
+                    const existingRows = db.prepare(
+                        'SELECT * FROM timetable WHERE competition_id=? AND day=?'
+                    ).all(parseInt(competition_id), day);
+
+                    // Skip if this day is in the past (safety)
+                    const sampleRow = existingRows[0];
+                    if (sampleRow && sampleRow.scheduled_date && sampleRow.scheduled_date < todayStr) {
+                        preservedCount += existingRows.length;
+                        return;
+                    }
+
+                    // Build match key for existing rows
+                    const buildKey = (r) => `${r.time||''}|${(r.event_name||'').trim()}|${(r.category||'').trim()}|${(r.round||'').trim()}`;
+                    const existingByKey = new Map();
+                    existingRows.forEach(r => {
+                        const k = buildKey(r);
+                        if (!existingByKey.has(k)) existingByKey.set(k, []);
+                        existingByKey.get(k).push(r);
+                    });
+
+                    // New entries for this day
+                    const newEntries = filteredEntries.filter(e => e.day === day);
+                    const matchedExistingIds = new Set();
+
+                    newEntries.forEach(e => {
+                        const k = buildKey(e);
+                        const candidates = existingByKey.get(k);
+                        if (candidates && candidates.length > 0) {
+                            // UPDATE: take first unmatched candidate
+                            const target = candidates.shift();
+                            matchedExistingIds.add(target.id);
+                            updTT.run(e.section, e.note || target.note, e.sort_order, e.scheduled_date, target.id);
+                            updatedCount++;
+                        } else {
+                            // INSERT new row
+                            insTT.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order, e.scheduled_date);
+                            addedCount++;
+                        }
+                    });
+
+                    // DELETE existing rows that are not in the new upload
+                    existingRows.forEach(r => {
+                        if (!matchedExistingIds.has(r.id)) {
+                            delOne.run(r.id);
+                            deletedCount++;
+                        }
+                    });
+                });
+
+                // Count preserved (past) days
+                if (skippedPastDays.length > 0) {
+                    const cnt = db.prepare(
+                        `SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND day IN (${skippedPastDays.map(()=>'?').join(',')})`
+                    ).get(parseInt(competition_id), ...skippedPastDays);
+                    preservedCount += (cnt && cnt.c) || 0;
+                }
+            }
 
             // Create events (skip if already exists for this competition)
             const existingEvents = db.prepare('SELECT id, name, gender, division, round_type FROM event WHERE competition_id=?').all(parseInt(competition_id));
@@ -9452,14 +9791,12 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
 
             Object.values(eventMap).forEach(ev => {
                 const rounds = ev.rounds.size > 0 ? [...ev.rounds] : ['final'];
-                // Ensure proper round hierarchy: if has preliminary, create all rounds
                 const hasP = rounds.includes('preliminary');
                 const hasS = rounds.includes('semifinal');
                 const roundsToCreate = [];
                 if (hasP) roundsToCreate.push('preliminary');
                 if (hasS) roundsToCreate.push('semifinal');
                 roundsToCreate.push('final');
-                // Remove duplicates
                 const uniqueRounds = [...new Set(roundsToCreate)];
 
                 uniqueRounds.forEach(rt => {
@@ -9472,7 +9809,14 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
                 });
             });
 
-            return { ttCount: timetableEntries.length, eventCount, days: uploadedDays };
+            return {
+                ttCount: filteredEntries.length,
+                eventCount,
+                days: effectiveDays,
+                skippedPastDays,
+                addedCount, updatedCount, deletedCount, preservedCount,
+                mode: overwriteMode
+            };
         });
 
         const result = tx();
@@ -9495,8 +9839,23 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
         } catch(e) {}
 
         try { fs.unlinkSync(req.file.path); } catch(e) {}
-        opLog(`노출용 시간표 업로드 (${result.days.map(d=>d+'일차').join(', ')}, 항목 ${result.ttCount}건, 종목 ${result.eventCount}개 생성)`, 'admin', 'admin', parseInt(competition_id));
-        res.json({ success: true, ...result, message: `시간표 ${result.ttCount}건, 종목 ${result.eventCount}개 생성됨` });
+
+        // Build human-readable message
+        let msg;
+        if (result.mode === 'force') {
+            msg = `[강제덮어쓰기] 시간표 ${result.ttCount}건 등록, 종목 ${result.eventCount}개 생성됨`;
+        } else {
+            const parts = [];
+            if (result.addedCount) parts.push(`추가 ${result.addedCount}`);
+            if (result.updatedCount) parts.push(`수정 ${result.updatedCount}`);
+            if (result.deletedCount) parts.push(`삭제 ${result.deletedCount}`);
+            if (result.skippedPastDays.length > 0) parts.push(`과거 ${result.skippedPastDays.map(d=>d+'일차').join('·')} 보존`);
+            if (result.eventCount) parts.push(`종목 ${result.eventCount}개 신규`);
+            msg = `[스마트머지] ${parts.join(' · ') || '변경 없음'}`;
+        }
+
+        opLog(`노출용 시간표 업로드 (${result.days.map(d=>d+'일차').join(', ') || '없음'}, ${msg})`, 'admin', 'admin', parseInt(competition_id));
+        res.json({ success: true, ...result, message: msg });
     } catch(e) {
         console.error('Display timetable upload error:', e);
         try { if (req.file) fs.unlinkSync(req.file.path); } catch(ex) {}
