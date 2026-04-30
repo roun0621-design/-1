@@ -15,6 +15,8 @@ let currentRole = localStorage.getItem('pace_role') || 'viewer';
 let _compVideoUrl = ''; // Competition-level video URL
 let _pacingMap = {}; // event_name → pacing config (for W/L Target buttons)
 let _scheduleMap = {}; // event_id → { time, callroom_time, is_today } from timetable
+let _timetableFull = { days: {}, start_date: null }; // 전체 시간표 (히어로 카드 + 모달)
+let _ttModalDay = null; // 시간표 모달에서 선택된 일차
 let _isDisplayMode = false; // 노출용 대회 모드
 let _displayRoster = []; // 노출용 대회 명단
 let _currentDivision = '전체'; // 부별 필터
@@ -126,10 +128,202 @@ async function loadData() {
         const sched = await fetch('/api/timetable/' + compId + '/event-schedule').then(r => r.json());
         _scheduleMap = sched || {};
     } catch(e) { _scheduleMap = {}; }
+    // Load full timetable (for hero card + modal)
+    try {
+        const tt = await fetch('/api/timetable/' + compId).then(r => r.json());
+        _timetableFull = tt || { days: {}, start_date: null };
+    } catch(e) { _timetableFull = { days: {}, start_date: null }; }
     renderCompVideoButton();
+    renderHeroSchedule();
     // Render division filter tabs when events have divisions (regardless of mode setting)
     renderDivisionTabs();
     renderMatrix();
+    // Auto-refresh hero card every 30s (live status)
+    if (!window._heroRefreshTimer) {
+        window._heroRefreshTimer = setInterval(renderHeroSchedule, 30000);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// HERO SCHEDULE CARD + TIMETABLE MODAL
+// ═══════════════════════════════════════════════════════════
+
+// 시간 문자열 "HH:MM" → 분 단위 변환
+function _ttToMin(t) {
+    if (!t) return -1;
+    const m = String(t).match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return -1;
+    return parseInt(m[1],10)*60 + parseInt(m[2],10);
+}
+
+// 오늘 날짜 기준 day 번호 계산 (start_date가 있으면 사용)
+function _ttGetTodayDay() {
+    const sd = _timetableFull.start_date;
+    if (!sd) return null;
+    const start = new Date(sd + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const diff = Math.floor((today - start) / 86400000);
+    return diff >= 0 ? diff + 1 : null;
+}
+
+// 시간표 행을 평탄화해서 시간순으로 반환
+function _ttFlattenDay(dayNum) {
+    const day = (_timetableFull.days || {})[dayNum];
+    if (!day) return [];
+    const all = [];
+    ['track','field'].forEach(sec => {
+        (day[sec] || []).forEach(r => all.push({ ...r, section: sec }));
+    });
+    all.sort((a,b) => _ttToMin(a.time) - _ttToMin(b.time) || (a.sort_order||0) - (b.sort_order||0));
+    return all;
+}
+
+// 히어로 시간표 카드 갱신
+function renderHeroSchedule() {
+    const card = document.getElementById('hero-schedule');
+    if (!card) return;
+    const days = _timetableFull.days || {};
+    const dayKeys = Object.keys(days).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+    if (dayKeys.length === 0) {
+        // 시간표 없음 → 카드 숨김
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = 'flex';
+
+    const todayDay = _ttGetTodayDay();
+    const targetDay = (todayDay && days[todayDay]) ? todayDay : dayKeys[0];
+    const dayItems = _ttFlattenDay(targetDay);
+
+    // 현재 시각 기준 진행중/다음 종목 찾기
+    const now = new Date();
+    const nowMin = now.getHours()*60 + now.getMinutes();
+    const isToday = (todayDay === targetDay);
+
+    let liveItem = null, nextItem = null;
+    if (isToday) {
+        for (const it of dayItems) {
+            const tMin = _ttToMin(it.time);
+            if (tMin < 0) continue;
+            // 진행중 판정: 현재 시각이 종목 시간 ~ +25분 사이
+            if (tMin <= nowMin && nowMin < tMin + 25) {
+                if (!liveItem) liveItem = it;
+            } else if (tMin > nowMin && !nextItem) {
+                nextItem = it;
+            }
+        }
+    }
+    if (!nextItem && dayItems.length > 0) nextItem = dayItems[0];
+
+    const totalCount = dayItems.length;
+    const titleEl = document.getElementById('hero-title');
+    const subEl = document.getElementById('hero-sub');
+    const iconEl = document.getElementById('hero-icon');
+
+    if (liveItem) {
+        card.classList.add('live');
+        iconEl.textContent = '🔴';
+        titleEl.innerHTML = `<span class="hero-live-dot"></span> LIVE 진행중 <span class="hero-day-chip">DAY ${targetDay}</span>`;
+        const nextTxt = nextItem ? ` · 다음 <strong>${_esc(nextItem.event_name)}</strong> ${nextItem.time}` : '';
+        subEl.innerHTML = `<strong>${_esc(liveItem.event_name)}</strong> ${_esc(liveItem.round||'')} · ${liveItem.time}${nextTxt}`;
+    } else if (isToday && nextItem) {
+        card.classList.remove('live');
+        iconEl.textContent = '📅';
+        titleEl.innerHTML = `오늘의 시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
+        subEl.innerHTML = `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`;
+    } else {
+        card.classList.remove('live');
+        iconEl.textContent = '📅';
+        titleEl.innerHTML = `시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
+        subEl.innerHTML = `총 ${totalCount}경기 예정`;
+    }
+}
+
+function _esc(s) {
+    return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// 시간표 모달 열기
+function openTimetableModal() {
+    const overlay = document.getElementById('tt-overlay');
+    if (!overlay) return;
+    const todayDay = _ttGetTodayDay();
+    const days = _timetableFull.days || {};
+    const dayKeys = Object.keys(days).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+    if (dayKeys.length === 0) {
+        alert('등록된 시간표가 없습니다.');
+        return;
+    }
+    _ttModalDay = (todayDay && days[todayDay]) ? todayDay : dayKeys[0];
+    renderTimetableModal();
+    overlay.classList.add('show');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeTimetableModal() {
+    const overlay = document.getElementById('tt-overlay');
+    if (overlay) overlay.classList.remove('show');
+    document.body.style.overflow = '';
+}
+
+function renderTimetableModal() {
+    const days = _timetableFull.days || {};
+    const dayKeys = Object.keys(days).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+    const todayDay = _ttGetTodayDay();
+
+    // Day tabs
+    const tabsEl = document.getElementById('tt-day-tabs');
+    tabsEl.innerHTML = dayKeys.map(d => {
+        const isToday = d === todayDay;
+        const active = d === _ttModalDay;
+        return `<button class="tt-day-tab${active?' active':''}${isToday?' today':''}" onclick="switchTtDay(${d})">DAY ${d}${isToday?' · 오늘':''}</button>`;
+    }).join('');
+
+    // Title
+    const titleEl = document.getElementById('tt-title');
+    if (titleEl) titleEl.innerHTML = `📅 전체 시간표 — DAY ${_ttModalDay}${_ttModalDay===todayDay?' (오늘)':''}`;
+
+    // Body
+    const items = _ttFlattenDay(_ttModalDay);
+    const bodyEl = document.getElementById('tt-body');
+    if (items.length === 0) {
+        bodyEl.innerHTML = `<div style="text-align:center;padding:40px;color:#888;">DAY ${_ttModalDay}에 등록된 종목이 없습니다.</div>`;
+        return;
+    }
+
+    const isToday = _ttModalDay === todayDay;
+    const now = new Date();
+    const nowMin = now.getHours()*60 + now.getMinutes();
+
+    let html = '';
+    items.forEach(it => {
+        const tMin = _ttToMin(it.time);
+        let statusClass = 'upcoming', statusLabel = '예정', rowClass = '';
+        if (isToday && tMin >= 0) {
+            if (tMin <= nowMin && nowMin < tMin + 25) {
+                statusClass = 'now'; statusLabel = '진행중'; rowClass = 'is-now';
+            } else if (tMin + 25 <= nowMin) {
+                statusClass = 'done'; statusLabel = '종료'; rowClass = 'is-done';
+            }
+        }
+        const secTag = it.section === 'field' ? '<span class="tt-section-tag field">필드</span>'
+                     : it.category === 'road' ? '<span class="tt-section-tag road">도로</span>'
+                     : '<span class="tt-section-tag track">트랙</span>';
+        const roundTxt = it.round ? `<span class="tt-event-meta">${_esc(it.round)}</span>` : '';
+        html += `<div class="tt-row ${rowClass}">
+            <div class="tt-time">${_esc(it.time||'—')}</div>
+            <div class="tt-event">${_esc(it.event_name)}${roundTxt}</div>
+            <div>${secTag}</div>
+            <div class="tt-status ${statusClass}">${statusLabel}</div>
+        </div>`;
+    });
+    bodyEl.innerHTML = html;
+}
+
+function switchTtDay(d) {
+    _ttModalDay = d;
+    renderTimetableModal();
 }
 
 // Render competition-level video button next to comp-info-bar
