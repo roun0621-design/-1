@@ -339,17 +339,29 @@ function renderTimetable(el){
     dayNums.forEach(d=>{ h += `<button class="day-tab ${_dayFilter==d?'active':''}" onclick="setDayFilter(${d})">${d}일차</button>`; });
     h += '</div>';
 
-    // Build timetable with combined categories
-    const filteredDays = _dayFilter===0 ? dayNums : [String(_dayFilter)];
+    // FIX: 일자 필터를 정확히 매칭 (number/string 혼용 방지)
+    const filteredDays = _dayFilter===0 ? dayNums : dayNums.filter(d => String(d) === String(_dayFilter));
     filteredDays.forEach(d=>{
         if(!days[d]) return;
-        let items = [...(days[d]?.track||[]),...(days[d]?.field||[])].sort((a,b)=>(a.time||'').localeCompare(b.time||'')||evIdx(a.event_name)-evIdx(b.event_name));
-        
-        // Group same time+event+round → combine categories with /
+        // FIX: 시간을 분 단위로 파싱해서 정렬 (문자열 정렬은 "9:00" vs "10:00" 같은 케이스에서 깨짐)
+        const toMin = (t) => {
+            if(!t) return 99999;
+            const m = String(t).trim().match(/^(\d{1,2})\s*[:.]?\s*(\d{2})?/);
+            if(!m) return 99999;
+            return parseInt(m[1])*60 + parseInt(m[2]||'0');
+        };
+        let items = [...(days[d]?.track||[]),...(days[d]?.field||[])].sort((a,b)=>{
+            const dt = toMin(a.time) - toMin(b.time);
+            if(dt !== 0) return dt;
+            return evIdx(a.event_name) - evIdx(b.event_name);
+        });
+
+        // Group same time+event+round → combine categories with / (시간 정규화로 미세 차이 방지)
         const grouped = [];
         const seen = {};
         items.forEach(item=>{
-            const k = item.time+'|'+item.event_name+'|'+item.round;
+            const timeKey = (item.time||'').trim();
+            const k = timeKey+'|'+(item.event_name||'').trim()+'|'+(item.round||'').trim();
             if(!seen[k]){
                 seen[k] = {...item, categories:[item.category], ids:[item.id], event_ids:[item.event_id]};
                 grouped.push(seen[k]);
@@ -581,15 +593,22 @@ async function saveTTEdit(ids, linkedEvId){
 async function deleteTTEntries(ids){
     if(!confirm(`${ids.length}건의 시간표 행을 삭제하시겠습니까?\n(연결된 종목/명단은 유지됩니다)`)) return;
     const adminKey = getKey();
-    let okCount = 0;
+    let okCount = 0, failMsgs = [];
     for(const id of ids){
         const r = await fetch('/api/timetable/entry/'+id, {
             method:'DELETE', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ admin_key: adminKey })
         }).then(r=>r.json()).catch(e=>({error:e.message}));
         if(r.success) okCount++;
+        else failMsgs.push(r.error||'알 수 없는 오류');
     }
-    toast(`${okCount}건 삭제됨`);
+    if(okCount === ids.length){
+        toast(`${okCount}건 삭제됨`);
+    } else {
+        toast(`${okCount}/${ids.length}건 삭제. 실패: ${failMsgs[0]||''}`,'error');
+    }
+    // FIX: 캐시 강제 무효화 후 재로딩 (간헐적으로 이전 데이터가 남아있는 문제 방지)
+    _timetable = {};
     closeLinkEdit();
     await loadAll();
 }

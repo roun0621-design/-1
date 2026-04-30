@@ -4793,11 +4793,15 @@ app.post('/api/heat-assignment/create-events', express.json(), (req, res) => {
     function detectCategory(name) {
         const n = name.toLowerCase();
         if (n.includes('릴레이') || n.includes('relay') || /^\d+x\d+m/i.test(n)) return 'relay';
-        if (n.includes('마라톤') || n.includes('하프') || n.includes('10k') || n.includes('5k') || n.includes('half') || n.includes('road') || n.includes('km')) return 'road';
+        // FIX: 트랙 경보(5000mW, 10000mW 등)는 트랙. 도로 경보(20kmW, 35kmW, 50kmW)만 road.
+        if (/\d+\s*km\s*w/i.test(n)) return 'road'; // 20kmW, 35kmW, 50kmW (도로경보)
+        if (/\d+\s*m\s*w$/i.test(n)) return 'track'; // 5000mW, 10000mW (트랙경보)
+        if (n.includes('마라톤') || n.includes('하프') || n.includes('half') || n.includes('road')) return 'road';
+        if (/\d+\s*k(m)?\b/i.test(n)) return 'road'; // 5K, 10K, 10km (도로)
         if (n.includes('높이') || n.includes('장대') || n.includes('high') || n.includes('pole')) return 'field_height';
         if (n.includes('멀리') || n.includes('세단') || n.includes('포환') || n.includes('원반') || n.includes('창') || n.includes('해머') || n.includes('투척') || n.includes('long') || n.includes('triple') || n.includes('shot') || n.includes('discus') || n.includes('javelin') || n.includes('hammer')) return 'field_distance';
         if (n.includes('10종') || n.includes('7종') || n.includes('decathlon') || n.includes('heptathlon') || n.includes('combined')) return 'combined';
-        return 'road'; // default for unknown events like "10K 국제 남자부"
+        return 'track'; // default: 알 수 없는 종목은 트랙으로 처리 (이전엔 road 기본값으로 잘못 처리됨)
     }
 
     const created = [];
@@ -6863,7 +6867,8 @@ try { db.exec('ALTER TABLE timetable ADD COLUMN event_ids TEXT DEFAULT NULL'); }
 
 // GET timetable for a competition
 app.get('/api/timetable/:compId', (req, res) => {
-    const rows = db.prepare('SELECT * FROM timetable WHERE competition_id=? ORDER BY day, section, sort_order, time').all(req.params.compId);
+    // FIX: time 우선 정렬 (HH:MM 문자열 정렬은 24시간 형식에서 안전), 같은 시간이면 sort_order
+    const rows = db.prepare('SELECT * FROM timetable WHERE competition_id=? ORDER BY day, time, section, sort_order').all(req.params.compId);
     // Include competition start_date for auto-day detection
     const comp = db.prepare('SELECT start_date FROM competition WHERE id=?').get(req.params.compId);
     // Group by day
@@ -9499,7 +9504,12 @@ function guessEventCategory(eventName) {
     if (/높이뛰기|장대높이/.test(n)) return 'field_height';
     if (/멀리뛰기|세단뛰기|포환|원반|창던지기|해머/.test(n)) return 'field_distance';
     if (/종경기$/.test(n)) return 'combined';
-    if (/[Ww]$|경보|마라톤|하프마라톤|road/i.test(n)) return 'road';
+    // FIX: 트랙 경보(예: 5000mW, 10000mW)는 트랙 경기. 도로 경보(20kmW, 35kmW, 50kmW)만 road.
+    // 마라톤/하프마라톤/도로(km)는 road
+    if (/마라톤|하프마라톤|road/i.test(n)) return 'road';
+    if (/^\d+\s*[kK]m\s*[wW]$/.test(n) || /\d+\s*[kK][mM][wW]/.test(n)) return 'road'; // 20kmW, 35kmW
+    if (/\d+\s*m\s*[wW]$/i.test(n)) return 'track'; // 5000mW, 10000mW (트랙 경보)
+    if (/경보/.test(n)) return 'track'; // 한글 "경보"는 보통 트랙
     return 'track';
 }
 
