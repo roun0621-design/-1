@@ -3,6 +3,12 @@ node_modules/
 db/competition.db
 db/competition.db-shm
 db/competition.db-wal
+pacerise.db
+pacerise.db-shm
+pacerise.db-wal
+competition.db
+competition.db-shm
+competition.db-wal
 uploads/
 *.xlsx
 !PACERISE_upload_template.xlsx
