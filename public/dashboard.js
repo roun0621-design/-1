@@ -217,8 +217,63 @@ function renderMatrix() {
     });
 
     const allGroups = [];
-    const EVENT_SORT_ORDER = ['60m','100m','200m','400m','800m','1500m','3000m','5000m','10000m','60mH','100mH','110mH','400mH','3000mSC','5000mW','10000mW','10kmW','20kmW','50kmW','높이뛰기','장대높이뛰기','멀리뛰기','세단뛰기','포환던지기','원반던지기','해머던지기','창던지기','4x100mR','4x400mR','4x800mR','4x1500mR','4x400mR(믹스)','7종경기','10종경기'];
-    function _evSortIdx(name) { const n=(name||'').replace(/\s/g,''); for(let i=0;i<EVENT_SORT_ORDER.length;i++){if(n===EVENT_SORT_ORDER[i]||n.startsWith(EVENT_SORT_ORDER[i]))return i;} return 999; }
+    // WA 표준 순서: 단거리 → 중거리 → 장거리 → 허들 → 장애물 → 트랙경보 → 도로경보 → 도로 → 점프 → 투척 → 혼성 → 릴레이
+    const EVENT_SORT_ORDER = [
+        '60m','100m','200m','400m',
+        '800m','1500m',
+        '3000m','5000m','10000m',
+        '60mH','100mH','110mH','400mH',
+        '2000mSC','3000mSC',
+        '3000mW','5000mW','10000mW',
+        '10kmW','20kmW','35kmW','50kmW',
+        '하프마라톤','마라톤',
+        '높이뛰기','장대높이뛰기',
+        '멀리뛰기','세단뛰기',
+        '포환던지기','원반던지기','해머던지기','창던지기',
+        '7종경기','10종경기',
+        '4x100mR','4x400mR','4x400mR(혼성)','4x400mR(믹스)','4x800mR','4x1500mR'
+    ];
+    // 종목명 정규화 (공백·콤마 제거, ×→x, Mixed→혼성, 허들/경보/장애물 표기 통일)
+    function _normEv(s) {
+        if (!s) return '';
+        let t = String(s).trim().toLowerCase().replace(/[\s\u3000,]/g,'').replace(/[×✕✖＊*]/g,'x');
+        t = t.replace(/(\d+)x(\d+)m?릴레이/g, '$1x$2mr');
+        t = t.replace(/(\d+)x(\d+)r(?![a-z0-9])/g, '$1x$2mr');
+        t = t.replace(/mixed/g, '혼성').replace(/\(mix\)/g, '(혼성)');
+        t = t.replace(/혼성(\d+x\d+mr)/g, '$1(혼성)');
+        t = t.replace(/(\d+)\s*km\s*(?:경보|w)\b/gi, '$1kmw');
+        t = t.replace(/(\d+)\s*m\s*(?:경보|w)\b/gi, '$1mw');
+        t = t.replace(/(\d+)m?허들/g, '$1mh').replace(/허들/g, 'h');
+        t = t.replace(/(\d+)m?장애물/g, '$1msc').replace(/장애물/g, 'sc');
+        t = t.replace(/하프\s*마라톤|halfmarathon/g, '하프마라톤').replace(/marathon/g, '마라톤');
+        return t;
+    }
+    function _evSortIdx(name) {
+        const target = _normEv(name);
+        if (!target) return 999;
+        // 1) 정확매칭
+        for (let i=0; i<EVENT_SORT_ORDER.length; i++) {
+            if (_normEv(EVENT_SORT_ORDER[i]) === target) return i;
+        }
+        // 2) 카테고리 패턴 매칭 (100mH가 100m에 잡히는 사고 방지)
+        const patterns = [
+            { re: /^(\d+)mw$/, probe: m => `${m[1]}mw` },
+            { re: /^(\d+)kmw$/, probe: m => `${m[1]}kmw` },
+            { re: /^(\d+)mh$/, probe: m => `${m[1]}mh` },
+            { re: /^(\d+)msc$/, probe: m => `${m[1]}msc` },
+            { re: /^(\d+)x(\d+)mr(\(혼성\))?$/, probe: m => `${m[1]}x${m[2]}mr${m[3]||''}` },
+            { re: /^(\d+)m$/, probe: m => `${m[1]}m` },
+        ];
+        for (const p of patterns) {
+            const mt = target.match(p.re);
+            if (!mt) continue;
+            const probe = p.probe(mt);
+            for (let i=0; i<EVENT_SORT_ORDER.length; i++) {
+                if (_normEv(EVENT_SORT_ORDER[i]) === probe) return i;
+            }
+        }
+        return 999;
+    }
     function _divSortIdx(div) { const idx=DIVISION_ORDER.indexOf(div); return idx>=0?idx:999; }
     categories.forEach(cat => {
         const groups = Object.values(eventGroups).filter(g => cat.match(g.category));
