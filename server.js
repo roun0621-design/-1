@@ -3414,26 +3414,30 @@ function autoSortCompetitionEvents(competitionId) {
 }
 
 app.post('/api/admin/events', (req, res) => {
-    const { admin_key, competition_id, name, category, gender, round_type, sort_order } = req.body;
+    const { admin_key, competition_id, name, category, gender, round_type, sort_order, division, video_url, result_url } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!name || !category || !gender || !competition_id) return res.status(400).json({ error: '필수 항목이 누락되었습니다.' });
     try {
         const autoOrder = sort_order || getStandardSortOrder(name);
-        const info = db.prepare('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order) VALUES (?,?,?,?,?,?,?)')
-            .run(competition_id, name, category, gender, round_type || 'final', 'created', autoOrder);
+        const info = db.prepare('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order,division,video_url,result_url) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            .run(competition_id, name, category, gender, round_type || 'final', 'created', autoOrder, division || '', video_url || '', result_url || '');
         const evt = db.prepare('SELECT * FROM event WHERE id=?').get(info.lastInsertRowid);
         db.prepare('INSERT INTO heat (event_id,heat_number) VALUES (?,1)').run(evt.id);
         res.json(evt);
     } catch (e) { res.status(400).json({ error: '추가 오류: ' + e.message }); }
 });
 app.put('/api/admin/events/:id', (req, res) => {
-    const { admin_key, name, category, gender, round_type, sort_order, round_status, video_url } = req.body;
+    const { admin_key, name, category, gender, round_type, sort_order, round_status, video_url, division, result_url } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const old = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
-    db.prepare('UPDATE event SET name=?,category=?,gender=?,round_type=?,sort_order=?,round_status=?,video_url=? WHERE id=?')
+    db.prepare('UPDATE event SET name=?,category=?,gender=?,round_type=?,sort_order=?,round_status=?,video_url=?,division=?,result_url=? WHERE id=?')
         .run(name || old.name, category || old.category, gender || old.gender, round_type || old.round_type,
-             sort_order ?? old.sort_order, round_status || old.round_status, video_url ?? old.video_url ?? '', old.id);
+             sort_order ?? old.sort_order, round_status || old.round_status,
+             video_url ?? old.video_url ?? '',
+             division ?? old.division ?? '',
+             result_url ?? old.result_url ?? '',
+             old.id);
     res.json(db.prepare('SELECT * FROM event WHERE id=?').get(old.id));
 });
 

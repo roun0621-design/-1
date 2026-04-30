@@ -46,6 +46,10 @@
             background: var(--white); overflow: hidden;
         }
         .admin-evt-matrix-panel .gender-tabs-fixed { padding: 8px 10px; border-bottom: 1px solid var(--gray); background: #fafafa; }
+        .evt-div-tab { padding: 3px 10px; border: 1px solid var(--gray); background: #fff; border-radius: 12px; font-size: 11px; cursor: pointer; color: #555; transition: all .12s; }
+        .evt-div-tab:hover { border-color: var(--accent); color: var(--accent); }
+        .evt-div-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+        .evt-div-tab .div-count { margin-left: 4px; font-size: 10px; opacity: 0.8; }
         .admin-evt-detail-panel {
             flex: 1; display: flex; flex-direction: column;
             background: var(--white); overflow: hidden;
@@ -260,10 +264,17 @@
                     <div class="admin-evt-matrix-panel">
                         <div id="comp-selector-evt"></div>
                         <div class="gender-tabs-fixed">
-                            <div class="gender-tabs" style="margin-bottom:0;">
-                                <button class="gender-tab active" data-gender="M" onclick="switchEvtGender('M',this)">남자</button>
-                                <button class="gender-tab" data-gender="F" onclick="switchEvtGender('F',this)">여자</button>
-                                <button class="gender-tab" data-gender="X" onclick="switchEvtGender('X',this)">혼성</button>
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                <div class="gender-tabs" style="margin-bottom:0;">
+                                    <button class="gender-tab active" data-gender="M" onclick="switchEvtGender('M',this)">남자</button>
+                                    <button class="gender-tab" data-gender="F" onclick="switchEvtGender('F',this)">여자</button>
+                                    <button class="gender-tab" data-gender="X" onclick="switchEvtGender('X',this)">혼성</button>
+                                </div>
+                                <span class="comp-mode-badge" style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;background:#dbeafe;color:#1e40af;">운영 모드</span>
+                            </div>
+                            <!-- 부별 필터 (division) -->
+                            <div class="evt-div-tabs" id="evt-div-tabs" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;padding-top:6px;border-top:1px dashed #e5e5e5;">
+                                <!-- dynamically rendered -->
                             </div>
                         </div>
                         <div class="matrix-scroll-area" id="evt-matrix"></div>
@@ -1310,6 +1321,7 @@
         const AK = () => localStorage.getItem('pace_admin_key') || localStorage.getItem('accessKey') || '';
         let _allAthletes = [], _allAdminEvents = [], _competitions = [], _selectedCompId = null;
         let _adminRole = 'admin'; // 'admin' or 'operation'
+        let _selectedCompMode = 'operation'; // 'operation' | 'display' — 현재 선택된 대회의 모드
         // Helper: get current competition ID (used by joint event link panel)
         const CID = () => _selectedCompId || getCompetitionId();
         let _selectedYear = new Date().getFullYear();
@@ -1404,6 +1416,7 @@
             if (filtered.length === 0) {
                 sel.innerHTML = '<option value="">해당 연도 대회 없음</option>';
                 _selectedCompId = null;
+                _selectedCompMode = 'operation';
             } else {
                 sel.innerHTML = filtered.map(c =>
                     `<option value="${c.id}">${c.name} (${c.start_date})</option>`
@@ -1412,13 +1425,33 @@
                 const prev = filtered.find(c => c.id === _selectedCompId);
                 if (prev) {
                     sel.value = prev.id;
+                    _selectedCompMode = prev.mode || 'operation';
                 } else {
                     _selectedCompId = filtered[0].id;
                     sel.value = _selectedCompId;
+                    _selectedCompMode = filtered[0].mode || 'operation';
                 }
                 // Always sync to global
                 if (_selectedCompId) setCompetitionId(_selectedCompId);
             }
+            // Update mode badge wherever it is rendered
+            updateCompModeBadge();
+        }
+        function updateCompModeBadge() {
+            const badges = document.querySelectorAll('.comp-mode-badge');
+            badges.forEach(b => {
+                if (_selectedCompMode === 'display') {
+                    b.textContent = '노출 모드';
+                    b.style.background = '#fef3c7';
+                    b.style.color = '#92400e';
+                    b.title = '노출(Display) 모드 — 외부 노출/홍보용 화면 데이터';
+                } else {
+                    b.textContent = '운영 모드';
+                    b.style.background = '#dbeafe';
+                    b.style.color = '#1e40af';
+                    b.title = '운영(Operation) 모드 — 실제 대회 운영 데이터';
+                }
+            });
         }
         function changeYear(delta) {
             _selectedYear += delta;
@@ -1428,6 +1461,14 @@
         function onCompChange() {
             const val = document.getElementById('admin-comp-select').value;
             _selectedCompId = val ? parseInt(val) : null;
+            // Update mode from selected competition
+            if (_selectedCompId) {
+                const c = _competitions.find(x => x.id === _selectedCompId);
+                _selectedCompMode = (c && c.mode) || 'operation';
+            } else {
+                _selectedCompMode = 'operation';
+            }
+            updateCompModeBadge();
             // Sync to global localStorage for all pages
             if (_selectedCompId) setCompetitionId(_selectedCompId);
             // Reload current tab
@@ -1696,18 +1737,59 @@
 
         // ---- EVENTS (Callroom/Record-style Matrix) ----
         let _evtGender = 'M';
+        let _evtDivision = 'all'; // 'all' | '중등부' | '고등부' | '대학부' | '일반부' | 'U20' | '국제' | '' (미지정)
+        const DIV_ORDER_ADM = ['중등부','고등부','대학부','일반부','U20','국제'];
         async function loadEvents() {
             if (!_selectedCompId) return;
-            try { _allAdminEvents = await API.adminGetEvents(AK(), _selectedCompId); renderEvtMatrix(); } catch (e) { toast('종목 로드 실패', 'error'); }
+            try { _allAdminEvents = await API.adminGetEvents(AK(), _selectedCompId); renderEvtDivisionTabs(); renderEvtMatrix(); } catch (e) { toast('종목 로드 실패', 'error'); }
         }
         function switchEvtGender(g, btn) {
             _evtGender = g;
             document.querySelectorAll('#tab-events .gender-tab').forEach(b => b.classList.remove('active'));
             if (btn) btn.classList.add('active');
+            renderEvtDivisionTabs();
             renderEvtMatrix();
             // Clear right panel selection
             _emEventId = null;
             closeEvtModal();
+        }
+        function switchEvtDivision(d, btn) {
+            _evtDivision = d;
+            document.querySelectorAll('#evt-div-tabs .evt-div-tab').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            renderEvtMatrix();
+            _emEventId = null;
+            closeEvtModal();
+        }
+        function renderEvtDivisionTabs() {
+            const container = document.getElementById('evt-div-tabs');
+            if (!container) return;
+            // Get all divisions present in current gender
+            const genderEvents = _allAdminEvents.filter(e => e.gender === _evtGender && !e.parent_event_id);
+            const divCounts = {};
+            genderEvents.forEach(e => {
+                const d = e.division || '';
+                divCounts[d] = (divCounts[d] || 0) + 1;
+            });
+            // Build tabs: 전체 + 표준 부 순서 + 미지정(if any)
+            const totalCount = genderEvents.length;
+            let html = `<button class="evt-div-tab ${_evtDivision==='all'?'active':''}" onclick="switchEvtDivision('all',this)">전체<span class="div-count">${totalCount}</span></button>`;
+            DIV_ORDER_ADM.forEach(d => {
+                if (divCounts[d]) {
+                    html += `<button class="evt-div-tab ${_evtDivision===d?'active':''}" onclick="switchEvtDivision('${d}',this)">${d}<span class="div-count">${divCounts[d]}</span></button>`;
+                }
+            });
+            // Other divisions not in standard order
+            Object.keys(divCounts).forEach(d => {
+                if (d && !DIV_ORDER_ADM.includes(d)) {
+                    html += `<button class="evt-div-tab ${_evtDivision===d?'active':''}" onclick="switchEvtDivision('${d}',this)">${d}<span class="div-count">${divCounts[d]}</span></button>`;
+                }
+            });
+            // 미지정 (division empty)
+            if (divCounts['']) {
+                html += `<button class="evt-div-tab ${_evtDivision===''?'active':''}" onclick="switchEvtDivision('',this)" title="division 필드가 비어있는 종목">미지정<span class="div-count">${divCounts['']}</span></button>`;
+            }
+            container.innerHTML = html;
         }
         const CAT_LABEL = { track:'트랙', field_distance:'필드(거리)', field_height:'필드(높이)', relay:'릴레이', combined:'혼성경기', road:'도로' };
         const CAT_COLOR = { track:'#6b6b6b', field_distance:'#9a8548', field_height:'#ea580c', relay:'#8a7640', combined:'#db2777', road:'#0891b2' };
@@ -1736,7 +1818,11 @@
         }
         function renderEvtMatrix() {
             const container = document.getElementById('evt-matrix');
-            const events = _allAdminEvents.filter(e => e.gender === _evtGender && !e.parent_event_id);
+            // Apply gender + division filter
+            const allGenderEvents = _allAdminEvents.filter(e => e.gender === _evtGender && !e.parent_event_id);
+            const events = (_evtDivision === 'all')
+                ? allGenderEvents
+                : allGenderEvents.filter(e => (e.division || '') === _evtDivision);
             const subEvents = _allAdminEvents.filter(e => e.gender === _evtGender && e.parent_event_id);
             const categories = [
                 { key: 'track', label: 'TRACK', match: c => c === 'track' },
@@ -1745,17 +1831,41 @@
                 { key: 'relay', label: 'RELAY', match: c => c === 'relay' },
                 { key: 'road', label: 'ROAD', match: c => c === 'road' },
             ];
-            // Group by name+category
+            // Group by name + category + division (FIX: division 누락으로 인한 부별 중복/누락 방지)
             const eventGroups = {};
+            const groupOrder = []; // preserve insertion order
             events.forEach(e => {
-                const gKey = e.name + '|' + e.category;
-                if (!eventGroups[gKey]) eventGroups[gKey] = { name: e.name, category: e.category, rounds: [] };
+                const div = e.division || '';
+                const gKey = e.name + '|' + e.category + '|' + div;
+                if (!eventGroups[gKey]) {
+                    eventGroups[gKey] = { name: e.name, category: e.category, division: div, rounds: [] };
+                    groupOrder.push(gKey);
+                }
                 eventGroups[gKey].rounds.push(e);
             });
+            // Division badge color
+            const DIV_BADGE_COLOR = {
+                '중등부': { bg:'#e3f2fd', fg:'#1565c0' },
+                '고등부': { bg:'#fff3e0', fg:'#e65100' },
+                '대학부': { bg:'#f3e5f5', fg:'#6a1b9a' },
+                '일반부': { bg:'#e8f5e9', fg:'#2e7d32' },
+                'U20':    { bg:'#ffebee', fg:'#c62828' },
+                '국제':   { bg:'#e0f7fa', fg:'#00695c' },
+            };
+            // When showing 'all', sort groups by division within each category
+            const sortGroupsByDiv = (a, b) => {
+                const ai = DIV_ORDER_ADM.indexOf(a.division);
+                const bi = DIV_ORDER_ADM.indexOf(b.division);
+                const aRank = ai >= 0 ? ai : 99;
+                const bRank = bi >= 0 ? bi : 99;
+                if (aRank !== bRank) return aRank - bRank;
+                return (a.name || '').localeCompare(b.name || '');
+            };
             let html = '';
             categories.forEach(cat => {
-                const groups = Object.values(eventGroups).filter(g => cat.match(g.category));
+                let groups = Object.values(eventGroups).filter(g => cat.match(g.category));
                 if (groups.length === 0) return;
+                if (_evtDivision === 'all') groups = groups.sort(sortGroupsByDiv);
                 html += `<div class="matrix-section matrix-section-compact">
                     <div class="matrix-section-title">${cat.label}</div>
                     <table class="matrix-table matrix-table-compact">
@@ -1765,8 +1875,19 @@
                     const prelim = g.rounds.find(r => r.round_type === 'preliminary');
                     const semi = g.rounds.find(r => r.round_type === 'semifinal');
                     const fin = g.rounds.find(r => r.round_type === 'final');
+                    // Division badge (only in 'all' view to avoid redundancy)
+                    let divBadge = '';
+                    if (_evtDivision === 'all' && g.division) {
+                        const c = DIV_BADGE_COLOR[g.division] || { bg:'#eee', fg:'#555' };
+                        divBadge = `<span class="evt-div-badge" style="background:${c.bg};color:${c.fg};font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-right:4px;">${g.division}</span>`;
+                    } else if (_evtDivision === 'all' && !g.division) {
+                        divBadge = `<span class="evt-div-badge" style="background:#f5f5f5;color:#999;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-right:4px;" title="division 미지정">—</span>`;
+                    }
+                    // Indicator for events that have any link (result_url or video_url) to encourage usage
+                    const anyLink = g.rounds.some(r => (r.result_url && r.result_url.trim()) || (r.video_url && r.video_url.trim()));
+                    const linkDot = anyLink ? '<span title="링크 있음" style="color:#16a34a;margin-left:4px;font-size:11px;">🔗</span>' : '';
                     html += `<tr>
-                        <td class="rec-matrix-event">${g.name}</td>
+                        <td class="rec-matrix-event">${divBadge}${g.name}${linkDot}</td>
                         <td class="round-cell">${_admRoundBtn(prelim, '예선')}</td>
                         <td class="round-cell">${_admRoundBtn(semi, '준결')}</td>
                         <td class="round-cell">${_admRoundBtn(fin, '결승')}</td>
@@ -1806,11 +1927,17 @@
                 });
                 html += `</tbody></table></div>`;
             });
-            if (!html) html = '<div class="empty-state">해당 성별의 종목이 없습니다.</div>';
+            if (!html) {
+                const emptyMsg = (_evtDivision === 'all')
+                    ? '해당 성별의 종목이 없습니다.'
+                    : `해당 성별의 ${_evtDivision || '미지정'} 종목이 없습니다.`;
+                html = `<div class="empty-state">${emptyMsg}</div>`;
+            }
             container.innerHTML = html;
             const total = _allAdminEvents.filter(e => !e.parent_event_id).length;
             const gLabel = _evtGender === 'M' ? '남자' : _evtGender === 'F' ? '여자' : '혼성';
-            document.getElementById('evt-count').textContent = `${gLabel}: ${events.length}개 / 전체: ${total}개`;
+            const dLabel = (_evtDivision === 'all') ? '전체' : (_evtDivision || '미지정');
+            document.getElementById('evt-count').textContent = `${gLabel}·${dLabel}: ${events.length}개 / ${gLabel} 전체: ${_allAdminEvents.filter(e=>e.gender===_evtGender && !e.parent_event_id).length}개 / 대회 전체: ${total}개`;
             // Re-highlight selected
             _admHighlightSelected();
         }
@@ -1843,6 +1970,9 @@
             _emEventId = null;
             _admHighlightSelected();
             const panel = document.getElementById('evt-detail-panel');
+            // Default division: current filter, or 고등부 if 'all'
+            const defaultDiv = (_evtDivision !== 'all') ? _evtDivision : '';
+            const divOptions = ['','중등부','고등부','대학부','일반부','U20','국제'];
             panel.innerHTML = `<div style="padding:16px;">
                 <h3 style="margin:0 0 16px;font-size:16px;">새 종목 추가</h3>
                 <div class="admin-form-row" style="flex-direction:column;gap:8px;">
@@ -1852,10 +1982,11 @@
                         <div class="admin-form-group" style="flex:1;"><label>성별</label><select id="new-evt-gender"><option value="M" ${_evtGender==='M'?'selected':''}>남</option><option value="F" ${_evtGender==='F'?'selected':''}>여</option><option value="X" ${_evtGender==='X'?'selected':''}>혼성</option></select></div>
                     </div>
                     <div style="display:flex;gap:8px;">
+                        <div class="admin-form-group" style="flex:1;"><label>부(Division)</label><select id="new-evt-division">${divOptions.map(d=>`<option value="${d}" ${defaultDiv===d?'selected':''}>${d||'미지정'}</option>`).join('')}</select></div>
                         <div class="admin-form-group" style="flex:1;"><label>라운드</label><select id="new-evt-round"><option value="final">결승</option><option value="preliminary">예선</option><option value="semifinal">준결승</option></select></div>
                     </div>
                 </div>
-                <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">* 정렬순서는 표준 육상 순서로 자동 적용됩니다.</p>
+                <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">* 정렬순서는 표준 육상 순서로 자동 적용됩니다. 부(Division)는 같은 종목명이라도 부별로 별도 행으로 관리됩니다.</p>
                 <div style="display:flex;gap:8px;margin-top:12px;">
                     <button class="btn btn-primary" onclick="addEvent()">추가</button>
                     <button class="btn btn-ghost" onclick="closeEvtModal()">취소</button>
@@ -1867,17 +1998,20 @@
             const name = document.getElementById('new-evt-name').value.trim();
             const cat = document.getElementById('new-evt-cat').value;
             const gender = document.getElementById('new-evt-gender').value;
+            const division = document.getElementById('new-evt-division')?.value || '';
             const round = document.getElementById('new-evt-round').value;
             if (!name) { toast('종목명은 필수입니다', 'error'); return; }
             try {
-                const created = await API.adminCreateEvent({ competition_id: _selectedCompId, name, category: cat, gender, round_type: round }, AK());
+                const created = await API.adminCreateEvent({ competition_id: _selectedCompId, name, category: cat, gender, round_type: round, division }, AK());
                 toast('종목 추가 완료');
                 closeEvtModal();
                 await loadEvents();
                 // Auto-select the newly created event
                 if (created && created.id) {
                     _evtGender = gender;
+                    _evtDivision = division || 'all';
                     document.querySelectorAll('#tab-events .gender-tab').forEach(b => b.classList.toggle('active', b.dataset.gender === gender));
+                    renderEvtDivisionTabs();
                     renderEvtMatrix();
                     openEvtModal(created.id);
                 }
@@ -3069,11 +3203,24 @@
                             <div class="admin-form-group" style="flex:1;"><label>상태</label><select id="em-status"><option value="created" ${e.round_status==='created'?'selected':''}>생성</option><option value="heats_generated" ${e.round_status==='heats_generated'?'selected':''}>조편성</option><option value="in_progress" ${e.round_status==='in_progress'?'selected':''}>진행중</option><option value="completed" ${e.round_status==='completed'?'selected':''}>완료</option></select></div>
                         </div>
                         <div style="display:flex;gap:8px;">
+                            <div class="admin-form-group" style="flex:1;"><label>부(Division)</label>
+                                <select id="em-division">
+                                    ${['','중등부','고등부','대학부','일반부','U20','국제'].map(d=>`<option value="${d}" ${(e.division||'')===d?'selected':''}>${d||'미지정'}</option>`).join('')}
+                                </select>
+                            </div>
                             <div class="admin-form-group"><label>정렬순서</label><input type="number" id="em-sort" value="${e.sort_order||0}" style="width:80px;"></div>
-                            <div class="admin-form-group" style="flex:1;"><label>영상 URL</label>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <div class="admin-form-group" style="flex:1;"><label>영상 URL <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(YouTube 등)</span></label>
                                 <div style="display:flex;gap:6px;">
                                     <input id="em-video-url" placeholder="https://youtube.com/..." style="flex:1;" value="">
-                                    <button class="btn btn-sm btn-outline" onclick="previewEvtVideo()" title="미리보기">▶</button>
+                                    <button class="btn btn-sm btn-outline" onclick="previewEvtVideo()" title="영상 미리보기">▶</button>
+                                </div>
+                            </div>
+                            <div class="admin-form-group" style="flex:1;"><label>결과 링크 (Result URL) <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(외부 결과 페이지)</span></label>
+                                <div style="display:flex;gap:6px;">
+                                    <input id="em-result-url" placeholder="https://example.com/results..." style="flex:1;" value="${(e.result_url||'').replace(/"/g,'&quot;')}">
+                                    <button class="btn btn-sm btn-outline" onclick="openEvtResultUrl()" title="결과 링크 열기">↗</button>
                                 </div>
                             </div>
                         </div>
@@ -3648,6 +3795,9 @@
         async function saveEventFromModal() {
             const id = document.getElementById('em-id').value;
             try {
+                const videoUrl = document.getElementById('em-video-url').value.trim();
+                const resultUrl = (document.getElementById('em-result-url')?.value || '').trim();
+                const division = document.getElementById('em-division')?.value || '';
                 await API.adminUpdateEvent(id, {
                     name: document.getElementById('em-name').value,
                     category: document.getElementById('em-category').value,
@@ -3655,10 +3805,12 @@
                     round_type: document.getElementById('em-round').value,
                     round_status: document.getElementById('em-status').value,
                     sort_order: parseInt(document.getElementById('em-sort').value) || 0,
-                    video_url: document.getElementById('em-video-url').value.trim()
+                    division: division,
+                    video_url: videoUrl,
+                    result_url: resultUrl
                 }, AK());
-                // Also save video_url via dedicated endpoint
-                try { await API.setEventVideoUrl(id, document.getElementById('em-video-url').value.trim(), AK()); } catch(ex) {}
+                // Also save video_url via dedicated endpoint (legacy compat)
+                try { await API.setEventVideoUrl(id, videoUrl, AK()); } catch(ex) {}
                 toast('저장 완료'); loadEvents(); openEvtModal(parseInt(id));
             } catch (e) { toast(e.error || '저장 실패', 'error'); }
         }
@@ -3666,6 +3818,15 @@
             const url = document.getElementById('em-video-url').value.trim();
             if (!url) { toast('영상 URL을 입력하세요.', 'warning'); return; }
             openVideoModal(url, document.getElementById('em-name').value || '종목 영상');
+        }
+        function openEvtResultUrl() {
+            const url = (document.getElementById('em-result-url')?.value || '').trim();
+            if (!url) { toast('결과 링크를 먼저 입력/저장하세요.', 'warning'); return; }
+            try {
+                let u = url;
+                if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+                window.open(u, '_blank', 'noopener,noreferrer');
+            } catch (ex) { toast('잘못된 URL입니다.', 'error'); }
         }
         async function deleteEventFromModal() {
             const id = document.getElementById('em-id').value;
