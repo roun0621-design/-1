@@ -626,7 +626,9 @@ async function renderCompInfoBar(containerId) {
         const docBtnHtml = role !== 'viewer'
             ? `<button id="comp-doc-btn" style="${_cibBtnBase}margin-left:auto;background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
             : '';
-        const ttBtnHtml = `<button id="comp-tt-btn" style="${_cibBtnBase}${role === 'viewer' ? 'margin-left:auto;' : 'margin-left:6px;'}background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
+        // 대시보드 모드에서는 히어로 카드가 시간표 진입점을 대체하므로 상단 버튼 숨김
+        const isDashboardMode = document.body.classList.contains('dashboard-mode');
+        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}${role === 'viewer' ? 'margin-left:auto;' : 'margin-left:6px;'}background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
         el.innerHTML = `<span class="comp-info-name">${info.name || ''}</span>
             ${fedBadge}
             <span class="comp-info-sep">|</span>

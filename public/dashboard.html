@@ -81,43 +81,6 @@
             .hero-cta { padding:8px 12px; font-size:12px; }
         }
 
-        /* ── Timetable Modal ───────────────────────────────────────── */
-        .tt-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:600; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto; }
-        .tt-overlay.show { display:flex; }
-        .tt-panel { background:var(--white); border-radius:14px; width:100%; max-width:1000px; box-shadow:0 12px 40px rgba(0,0,0,.25); display:flex; flex-direction:column; max-height:calc(100vh - 40px); overflow:hidden; }
-        .tt-header { display:flex; justify-content:space-between; align-items:center; padding:16px 22px; background:linear-gradient(135deg,#1a2a5e,#2d3a6e); color:#fff; }
-        .tt-header h2 { margin:0; font-size:18px; font-weight:800; letter-spacing:0.3px; }
-        .tt-close { width:38px; height:38px; border-radius:50%; border:none; background:#e74c3c; color:#fff; font-size:20px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; padding:0; padding-bottom:2px; }
-        .tt-close:hover { background:#c0392b; }
-        .tt-day-tabs { display:flex; gap:4px; padding:10px 16px; background:#f8f4ea; border-bottom:1px solid #e5d9b5; overflow-x:auto; flex-shrink:0; }
-        .tt-day-tab { flex-shrink:0; padding:8px 14px; border-radius:8px; border:none; background:#fff; color:#555; font-size:13px; font-weight:700; cursor:pointer; transition:all .15s; white-space:nowrap; }
-        .tt-day-tab.active { background:#b79f58; color:#fff; box-shadow:0 2px 6px rgba(183,159,88,.4); }
-        .tt-day-tab.today { border:2px solid #b79f58; }
-        .tt-body { flex:1; overflow-y:auto; padding:14px 18px; -webkit-overflow-scrolling:touch; }
-        .tt-section-title { font-size:11px; font-weight:800; color:#888; letter-spacing:1.5px; padding:8px 0 6px; border-bottom:1px solid #e5e7eb; margin-bottom:6px; }
-        .tt-row { display:grid; grid-template-columns:70px 1fr 110px 100px; gap:10px; align-items:center; padding:9px 8px; border-bottom:1px solid #f3f4f6; font-size:13px; }
-        .tt-row:hover { background:#fafafa; }
-        .tt-row.is-now { background:linear-gradient(90deg, rgba(192,57,43,.08), rgba(192,57,43,0)); border-left:3px solid #c0392b; padding-left:5px; }
-        .tt-row.is-done { opacity:0.45; }
-        .tt-time { font-family:'Roboto Mono',monospace; font-weight:800; font-size:14px; color:#1a2a5e; }
-        .tt-event { font-weight:700; }
-        .tt-event-meta { font-size:11px; color:#888; margin-left:6px; }
-        .tt-section-tag { font-size:10px; padding:2px 6px; border-radius:4px; font-weight:700; display:inline-block; }
-        .tt-section-tag.track { background:#e3f2fd; color:#1565c0; }
-        .tt-section-tag.field { background:#e8f5e9; color:#2e7d32; }
-        .tt-section-tag.road { background:#fce4ec; color:#c62828; }
-        .tt-status { font-size:11px; font-weight:700; padding:3px 8px; border-radius:10px; text-align:center; }
-        .tt-status.upcoming { background:#f3f4f6; color:#666; }
-        .tt-status.now { background:#c0392b; color:#fff; }
-        .tt-status.done { background:#e0e0e0; color:#888; }
-        @media (max-width:640px) {
-            .tt-overlay { padding:0; }
-            .tt-panel { max-height:100vh; border-radius:0; }
-            .tt-row { grid-template-columns:60px 1fr 70px; gap:6px; font-size:12px; }
-            .tt-section-tag { display:none; }
-            .tt-time { font-size:13px; }
-        }
-
         .gender-tabs-bar { display:flex; gap:0; background:var(--white); padding:8px 0; border-bottom:2px solid var(--gray); }
         .gender-tab-btn { flex:1; padding:10px 0; text-align:center; font-size:14px; font-weight:800; border:none; cursor:pointer; border-bottom:3px solid transparent; transition:all .15s; background:none; letter-spacing:0.5px; }
         .gender-tab-btn[data-gender="M"] { color:#1a2a5e; }
@@ -177,8 +140,8 @@
         <!-- Single-line competition info -->
         <div class="comp-info-line" id="comp-info-bar" style="flex-shrink:0;"></div>
 
-        <!-- Hero Schedule Card (large CTA above gender tabs) -->
-        <div class="hero-schedule" id="hero-schedule" onclick="openTimetableModal()" style="flex-shrink:0;display:none;">
+        <!-- Hero Schedule Card (large CTA above gender tabs) — 기존 openTimetable() 재사용 -->
+        <div class="hero-schedule" id="hero-schedule" onclick="openTimetable()" style="flex-shrink:0;display:none;">
             <div class="hero-left">
                 <div class="hero-icon" id="hero-icon">📅</div>
                 <div class="hero-text">
@@ -232,17 +195,7 @@
         <div class="result-panel" id="result-panel"></div>
     </div>
 
-    <!-- Timetable modal (hero card opens this) -->
-    <div class="tt-overlay" id="tt-overlay" onclick="if(event.target===this)closeTimetableModal()">
-        <div class="tt-panel">
-            <div class="tt-header">
-                <h2 id="tt-title">📅 전체 시간표</h2>
-                <button class="tt-close" onclick="closeTimetableModal()" aria-label="닫기">×</button>
-            </div>
-            <div class="tt-day-tabs" id="tt-day-tabs"></div>
-            <div class="tt-body" id="tt-body"></div>
-        </div>
-    </div>
+
 
     <script src="common.js?v=62"></script>
     <script src="dashboard.js?v=46"></script>

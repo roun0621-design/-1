@@ -15,8 +15,7 @@ let currentRole = localStorage.getItem('pace_role') || 'viewer';
 let _compVideoUrl = ''; // Competition-level video URL
 let _pacingMap = {}; // event_name → pacing config (for W/L Target buttons)
 let _scheduleMap = {}; // event_id → { time, callroom_time, is_today } from timetable
-let _timetableFull = { days: {}, start_date: null }; // 전체 시간표 (히어로 카드 + 모달)
-let _ttModalDay = null; // 시간표 모달에서 선택된 일차
+let _timetableFull = { days: {}, start_date: null }; // 전체 시간표 (히어로 카드 표시용; 모달은 common.js openTimetable 사용)
 let _isDisplayMode = false; // 노출용 대회 모드
 let _displayRoster = []; // 노출용 대회 명단
 let _currentDivision = '전체'; // 부별 필터
@@ -244,87 +243,7 @@ function _esc(s) {
     return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// 시간표 모달 열기
-function openTimetableModal() {
-    const overlay = document.getElementById('tt-overlay');
-    if (!overlay) return;
-    const todayDay = _ttGetTodayDay();
-    const days = _timetableFull.days || {};
-    const dayKeys = Object.keys(days).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
-    if (dayKeys.length === 0) {
-        alert('등록된 시간표가 없습니다.');
-        return;
-    }
-    _ttModalDay = (todayDay && days[todayDay]) ? todayDay : dayKeys[0];
-    renderTimetableModal();
-    overlay.classList.add('show');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeTimetableModal() {
-    const overlay = document.getElementById('tt-overlay');
-    if (overlay) overlay.classList.remove('show');
-    document.body.style.overflow = '';
-}
-
-function renderTimetableModal() {
-    const days = _timetableFull.days || {};
-    const dayKeys = Object.keys(days).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
-    const todayDay = _ttGetTodayDay();
-
-    // Day tabs
-    const tabsEl = document.getElementById('tt-day-tabs');
-    tabsEl.innerHTML = dayKeys.map(d => {
-        const isToday = d === todayDay;
-        const active = d === _ttModalDay;
-        return `<button class="tt-day-tab${active?' active':''}${isToday?' today':''}" onclick="switchTtDay(${d})">DAY ${d}${isToday?' · 오늘':''}</button>`;
-    }).join('');
-
-    // Title
-    const titleEl = document.getElementById('tt-title');
-    if (titleEl) titleEl.innerHTML = `📅 전체 시간표 — DAY ${_ttModalDay}${_ttModalDay===todayDay?' (오늘)':''}`;
-
-    // Body
-    const items = _ttFlattenDay(_ttModalDay);
-    const bodyEl = document.getElementById('tt-body');
-    if (items.length === 0) {
-        bodyEl.innerHTML = `<div style="text-align:center;padding:40px;color:#888;">DAY ${_ttModalDay}에 등록된 종목이 없습니다.</div>`;
-        return;
-    }
-
-    const isToday = _ttModalDay === todayDay;
-    const now = new Date();
-    const nowMin = now.getHours()*60 + now.getMinutes();
-
-    let html = '';
-    items.forEach(it => {
-        const tMin = _ttToMin(it.time);
-        let statusClass = 'upcoming', statusLabel = '예정', rowClass = '';
-        if (isToday && tMin >= 0) {
-            if (tMin <= nowMin && nowMin < tMin + 25) {
-                statusClass = 'now'; statusLabel = '진행중'; rowClass = 'is-now';
-            } else if (tMin + 25 <= nowMin) {
-                statusClass = 'done'; statusLabel = '종료'; rowClass = 'is-done';
-            }
-        }
-        const secTag = it.section === 'field' ? '<span class="tt-section-tag field">필드</span>'
-                     : it.category === 'road' ? '<span class="tt-section-tag road">도로</span>'
-                     : '<span class="tt-section-tag track">트랙</span>';
-        const roundTxt = it.round ? `<span class="tt-event-meta">${_esc(it.round)}</span>` : '';
-        html += `<div class="tt-row ${rowClass}">
-            <div class="tt-time">${_esc(it.time||'—')}</div>
-            <div class="tt-event">${_esc(it.event_name)}${roundTxt}</div>
-            <div>${secTag}</div>
-            <div class="tt-status ${statusClass}">${statusLabel}</div>
-        </div>`;
-    });
-    bodyEl.innerHTML = html;
-}
-
-function switchTtDay(d) {
-    _ttModalDay = d;
-    renderTimetableModal();
-}
+// 시간표 모달 진입은 common.js의 openTimetable()을 그대로 사용 (기존 시간표 기능 보존)
 
 // Render competition-level video button next to comp-info-bar
 function renderCompVideoButton() {
