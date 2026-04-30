@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<!-- Google Analytics 4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-3PRW9G7KVQ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-3PRW9G7KVQ');
+</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+    <meta name="theme-color" content="#b79f58">
+    <title>PACE RISE : Node - 소집 모니터</title>
+    <link rel="stylesheet" href="styles.css?v=65">
+    <style>
+        /* ── Monitor-specific styles ── */
+        .monitor-body { background: #F8F9FA; min-height: 100vh; }
+
+        /* Competition tabs */
+        .mon-comp-bar {
+            display: flex; gap: 8px; padding: 10px 16px;
+            background: #fff; border-bottom: 1px solid #E5E7EB;
+            overflow-x: auto; -webkit-overflow-scrolling: touch;
+        }
+        .mon-comp-bar button {
+            flex: 0 0 auto; min-width: 120px; padding: 10px 18px; border-radius: 10px;
+            border: 2px solid #E5E7EB; background: #fff;
+            font-size: 13px; font-weight: 600; cursor: pointer; color: #6B7280;
+            transition: all .2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .mon-comp-bar button:active { transform: scale(0.97); }
+        .mon-comp-bar button.active {
+            background: linear-gradient(135deg, #b79f58, #8a7640); color: #fff;
+            border-color: #b79f58; font-weight: 700;
+            box-shadow: 0 3px 12px rgba(183,159,88,0.3);
+        }
+        .mon-comp-bar .comp-dot {
+            display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+            margin-right: 6px; vertical-align: middle;
+        }
+        .mon-comp-bar .comp-dot.s-active { background: #b79f58; }
+        .mon-comp-bar button.active .comp-dot.s-active { background: #fff; }
+        .mon-comp-bar .comp-dot.s-upcoming { background: #FB8C00; }
+        .mon-comp-bar button.active .comp-dot.s-upcoming { background: #fff; }
+        .mon-comp-bar .comp-dot.s-completed { background: #9ca3af; }
+        .mon-comp-bar button.active .comp-dot.s-completed { background: #fff; }
+
+        /* Gender tabs */
+        .mon-gender-tabs {
+            display: flex; gap: 0; background: #fff; border-bottom: 1px solid #E5E7EB;
+            position: sticky; top: 80px; z-index: 50;
+        }
+        .mon-gender-tabs button {
+            flex: 1; padding: 11px; border: none; background: none; font-size: 13px;
+            font-weight: 600; cursor: pointer; color: #9CA3AF;
+            border-bottom: 3px solid transparent; transition: all .15s;
+        }
+        .mon-gender-tabs button.active { color: #b79f58; border-bottom-color: #b79f58; }
+
+        /* Filter tabs */
+        .mon-filter-tabs {
+            display: flex; gap: 6px; padding: 10px 16px; overflow-x: auto;
+            background: #fff; border-bottom: 1px solid #E5E7EB;
+            position: sticky; top: 124px; z-index: 49;
+        }
+        .mon-filter-tabs button {
+            white-space: nowrap; padding: 6px 14px; border-radius: 20px;
+            border: 1px solid #E5E7EB; background: #fff;
+            font-size: 12px; cursor: pointer; color: #1F2937; font-weight: 500;
+        }
+        .mon-filter-tabs button.active { background: #b79f58; color: #fff; border-color: #b79f58; }
+
+        /* Summary bar */
+        .mon-summary-bar {
+            display: flex; gap: 0; background: #fff; border-bottom: 1px solid #E5E7EB;
+            padding: 8px 16px; font-size: 12px;
+        }
+        .mon-summary-item { flex: 1; text-align: center; }
+        .mon-summary-item .num { font-size: 18px; font-weight: 700; display: block; }
+        .mon-summary-item .lbl { color: #9CA3AF; font-size: 10px; }
+
+        /* Refresh bar */
+        .mon-refresh-bar {
+            text-align: center; font-size: 10px; color: #9CA3AF;
+            padding: 4px; background: #fff; border-bottom: 1px solid #E5E7EB;
+        }
+
+        /* Section header */
+        .mon-section-header {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px 6px; font-size: 12px; font-weight: 700;
+            color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .mon-section-header .sec-icon { font-size: 14px; }
+        .mon-section-header .sec-count { font-weight: 400; font-size: 11px; color: #9CA3AF; }
+        .mon-section-header .sec-line { flex: 1; height: 1px; background: #E5E7EB; }
+
+        /* Event list */
+        .mon-events { padding: 8px; }
+        .mon-event-card {
+            background: #fff; border-radius: 10px; margin-bottom: 8px;
+            border: 1px solid #E5E7EB; overflow: hidden; transition: opacity .3s;
+        }
+        .mon-event-card.st-callroom-done { border-left: 3px solid #b79f58; }
+        .mon-event-card.st-progress { border-left: 3px solid #6b6b6b; }
+        .mon-event-card.st-waiting { border-left: 3px solid #E5E7EB; opacity: 0.7; }
+        .mon-event-card.st-race-done { border-left: 3px solid #6B7280; opacity: 0.5; }
+
+        .mon-event-header {
+            padding: 12px 14px; display: flex; align-items: center; justify-content: space-between;
+            cursor: pointer; -webkit-user-select: none; user-select: none;
+        }
+        .mon-event-header:active { background: #f0f0f0; }
+        .mon-event-name { font-weight: 700; font-size: 14px; }
+        .mon-event-round { font-size: 11px; color: #9CA3AF; margin-left: 6px; }
+        .mon-event-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .mon-event-count { font-size: 13px; font-weight: 700; }
+        .mon-event-count .done { color: #b79f58; }
+        .mon-event-count .sep { color: #9CA3AF; font-weight: 400; }
+        .mon-event-count .total { color: #9CA3AF; }
+
+        /* Status badge */
+        .mon-badge {
+            font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+            white-space: nowrap;
+        }
+        .mon-badge-callroom-done { background: #f5f0e0; color: #9a8548; }
+        .mon-badge-progress { background: #e8e8e8; color: #555555; }
+        .mon-badge-waiting { background: #f3f4f6; color: #6b7280; }
+        .mon-badge-race-done { background: #e5e7eb; color: #4b5563; }
+
+        /* Progress bar */
+        .mon-progress { height: 4px; background: #E5E7EB; border-radius: 2px; margin: 0 14px 8px; }
+        .mon-progress-fill { height: 100%; border-radius: 2px; transition: width .3s; }
+        .mon-progress-fill.pg-green { background: #b79f58; }
+        .mon-progress-fill.pg-blue { background: #6b6b6b; }
+        .mon-progress-fill.pg-gray { background: #6B7280; }
+
+        /* Detail (expandable) */
+        .mon-event-detail { display: none; border-top: 1px solid #E5E7EB; }
+        .mon-event-detail.open { display: block; }
+        .mon-heat-section { padding: 10px 14px; }
+        .mon-heat-title { font-size: 12px; font-weight: 700; color: #6b6b6b; margin-bottom: 6px; }
+        .mon-athlete-row {
+            display: flex; align-items: center; padding: 6px 0;
+            border-bottom: 1px solid #E5E7EB; font-size: 13px;
+        }
+        .mon-athlete-row:last-child { border-bottom: none; }
+        .mon-athlete-bib { width: 40px; font-weight: 700; text-align: center; }
+        .mon-athlete-name { flex: 1; }
+        .mon-athlete-team { color: #9CA3AF; font-size: 11px; margin-left: 6px; }
+        .mon-athlete-status { width: 24px; text-align: center; font-size: 16px; }
+
+        /* Empty state */
+        .mon-empty { text-align: center; padding: 40px 20px; color: #9CA3AF; }
+        .mon-empty-icon { font-size: 40px; margin-bottom: 8px; }
+
+        @media (min-width: 768px) {
+            .mon-events { max-width: 700px; margin: 0 auto; }
+        }
+    </style>
+</head>
+<body class="monitor-body">
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">Node</span></h1>
+            <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
+        </div>
+        <nav class="page-nav" id="page-nav"></nav>
+    </header>
+
+    <!-- Competition selector tabs -->
+    <div class="mon-comp-bar" id="comp-bar" style="display:none;"></div>
+
+    <!-- Gender tabs -->
+    <div class="mon-gender-tabs" id="gender-tabs">
+        <button class="active" data-g="ALL" onclick="setGender('ALL',this)">전체</button>
+        <button data-g="M" onclick="setGender('M',this)">남자</button>
+        <button data-g="F" onclick="setGender('F',this)">여자</button>
+        <button data-g="X" onclick="setGender('X',this)">혼성</button>
+    </div>
+
+    <!-- Filter tabs -->
+    <div class="mon-filter-tabs" id="filter-tabs">
+        <button class="active" data-f="all" onclick="setFilter('all',this)">전체</button>
+        <button data-f="callroom_done" onclick="setFilter('callroom_done',this)">소집 완료</button>
+        <button data-f="progress" onclick="setFilter('progress',this)">소집 진행</button>
+        <button data-f="waiting" onclick="setFilter('waiting',this)">대기</button>
+        <button data-f="race_done" onclick="setFilter('race_done',this)">경기 완료</button>
+    </div>
+
+    <!-- Summary + refresh + event list -->
+    <div class="mon-summary-bar" id="summary-bar"></div>
+    <div class="mon-refresh-bar" id="refresh-bar">로딩 중...</div>
+    <div class="mon-events" id="event-list"></div>
+
+    <script src="common.js?v=62"></script>
+    <script>
+    // ============================================================
+    // Initialization
+    // ============================================================
+    renderPageNav('monitor');
+    let compId = getCompetitionId() || '1';
+    let allData = [];
+    let allCompetitions = [];
+    let currentGender = 'ALL';
+    let currentFilter = 'all';
+
+    // ============================================================
+    // Competition tabs: load active/upcoming competitions
+    // ============================================================
+    async function loadCompetitions() {
+        try {
+            const res = await fetch('/api/competitions');
+            const all = await res.json();
+            const today = new Date(); today.setHours(0,0,0,0);
+            const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() + 14);
+            // Show all competitions: active, upcoming (14 days), completed (last 30 days)
+            const past = new Date(today); past.setDate(past.getDate() - 30);
+            allCompetitions = all.filter(c => {
+                if (String(c.id) === compId) return true;
+                if (c.status === 'active') return true;
+                if (c.status === 'upcoming' && c.start_date) {
+                    const start = new Date(c.start_date + 'T00:00:00');
+                    return start <= cutoff;
+                }
+                if (c.status === 'completed' && c.end_date) {
+                    const end = new Date(c.end_date + 'T00:00:00');
+                    return end >= past;
+                }
+                return false;
+            });
+            renderCompTabs();
+        } catch(e) { console.error('Failed to load competitions'); }
+    }
+
+    function renderCompTabs() {
+        const bar = document.getElementById('comp-bar');
+        if (allCompetitions.length === 0) {
+            bar.style.display = 'none';
+            return;
+        }
+        // Always show comp bar (even with 1 competition)
+        bar.style.display = 'flex';
+        if (allCompetitions.length === 1 && !compId) {
+            compId = String(allCompetitions[0].id);
+            setCompetitionId(compId);
+        }
+        if (!allCompetitions.find(c => String(c.id) === compId)) {
+            compId = String(allCompetitions[0].id);
+        }
+        bar.innerHTML = allCompetitions.map(c => {
+            const isActive = String(c.id) === compId;
+            const statusDot = c.status === 'active' ? 's-active' : c.status === 'completed' ? 's-completed' : 's-upcoming';
+            return `<button class="${isActive ? 'active' : ''}" onclick="switchComp(${c.id}, this)">` +
+                `<span class="comp-dot ${statusDot}"></span>${c.name}</button>`;
+        }).join('');
+    }
+
+    function switchComp(id, btn) {
+        compId = String(id);
+        setCompetitionId(compId);
+        document.querySelectorAll('.mon-comp-bar button').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        loadData();
+    }
+
+    // ============================================================
+    // Gender / Filter
+    // ============================================================
+    function setGender(g, btn) {
+        currentGender = g;
+        document.querySelectorAll('.mon-gender-tabs button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+    }
+    function setFilter(f, btn) {
+        currentFilter = f;
+        document.querySelectorAll('.mon-filter-tabs button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+    }
+
+    // ============================================================
+    // Status classification
+    // ============================================================
+    function getEventStatus(evt) {
+        if (evt.round_status === 'completed') return 'race_done';
+        if (evt.total === 0) return 'waiting';
+        if (evt.checked_in === evt.total) return 'callroom_done';
+        if (evt.checked_in > 0 || evt.no_show > 0) return 'progress';
+        return 'waiting';
+    }
+    const STATUS_ORDER = { callroom_done:1, progress:2, waiting:3, race_done:4 };
+    const STATUS_LABEL = {
+        callroom_done: '소집 완료', progress: '소집 진행',
+        waiting: '대기', race_done: '경기 완료'
+    };
+    const STATUS_ICON = {
+        callroom_done: '&#10003;', progress: '&#9679;',
+        waiting: '&#9711;', race_done: '&#127937;'
+    };
+    const STATUS_BADGE_CLASS = {
+        callroom_done: 'mon-badge-callroom-done', progress: 'mon-badge-progress',
+        waiting: 'mon-badge-waiting', race_done: 'mon-badge-race-done'
+    };
+    const STATUS_CARD_CLASS = {
+        callroom_done: 'st-callroom-done', progress: 'st-progress',
+        waiting: 'st-waiting', race_done: 'st-race-done'
+    };
+    const STATUS_PROGRESS_CLASS = {
+        callroom_done: 'pg-green', progress: 'pg-blue',
+        waiting: 'pg-gray', race_done: 'pg-gray'
+    };
+
+    // ============================================================
+    // Event sort order
+    // ============================================================
+    const CATEGORY_ORDER = { track:0, field_distance:1, field_height:2, combined:3, relay:4, road:5 };
+    function extractDistance(name) {
+        const m = name.match(/(\d+[\.,]?\d*)\s*(m|km|K)/i);
+        if (!m) return 99999;
+        let d = parseFloat(m[1].replace(',', ''));
+        if (/km|K/i.test(m[2])) d *= 1000;
+        return d;
+    }
+    function eventSortKey(evt) {
+        return (CATEGORY_ORDER[evt.category] || 9) * 1000000 + extractDistance(evt.name);
+    }
+    function monFmtRound(r) {
+        return { preliminary:'예선', semifinal:'준결승', final:'결승' }[r] || r;
+    }
+
+    // ============================================================
+    // Render
+    // ============================================================
+    function render() {
+        let filtered = allData;
+        if (currentGender !== 'ALL') {
+            filtered = filtered.filter(e => e.gender === currentGender);
+        }
+        if (currentFilter !== 'all') {
+            filtered = filtered.filter(e => getEventStatus(e) === currentFilter);
+        }
+
+        // Summary
+        const totalEvents = filtered.length;
+        const totalAthletes = filtered.reduce((s, e) => s + e.total, 0);
+        const totalCIn = filtered.reduce((s, e) => s + e.checked_in, 0);
+        const totalNS = filtered.reduce((s, e) => s + e.no_show, 0);
+        document.getElementById('summary-bar').innerHTML = `
+            <div class="mon-summary-item"><span class="num">${totalEvents}</span><span class="lbl">종목</span></div>
+            <div class="mon-summary-item"><span class="num">${totalAthletes}</span><span class="lbl">선수</span></div>
+            <div class="mon-summary-item"><span class="num" style="color:#b79f58">${totalCIn}</span><span class="lbl">출석</span></div>
+            <div class="mon-summary-item"><span class="num" style="color:#E53935">${totalNS}</span><span class="lbl">결석</span></div>
+        `;
+
+        if (filtered.length === 0) {
+            document.getElementById('event-list').innerHTML = `
+                <div class="mon-empty"><div class="mon-empty-icon">&#128203;</div><p>해당 조건의 종목이 없습니다</p></div>`;
+            return;
+        }
+
+        // Sort: status order, then category+distance
+        filtered.sort((a, b) => {
+            const sa = STATUS_ORDER[getEventStatus(a)] || 9;
+            const sb = STATUS_ORDER[getEventStatus(b)] || 9;
+            if (sa !== sb) return sa - sb;
+            return eventSortKey(a) - eventSortKey(b);
+        });
+
+        let html = '';
+        let lastStatus = '';
+        let globalIdx = 0;
+
+        filtered.forEach((evt) => {
+            const st = getEventStatus(evt);
+            const idx = globalIdx++;
+
+            if (st !== lastStatus) {
+                const countInGroup = filtered.filter(e => getEventStatus(e) === st).length;
+                html += `
+                <div class="mon-section-header">
+                    <span class="sec-icon">${STATUS_ICON[st]}</span>
+                    <span>${STATUS_LABEL[st]}</span>
+                    <span class="sec-count">${countInGroup}개</span>
+                    <span class="sec-line"></span>
+                </div>`;
+                lastStatus = st;
+            }
+
+            const pct = evt.total > 0 ? Math.round((evt.checked_in / evt.total) * 100) : 0;
+            const gL = { M:'남', F:'여', X:'혼' }[evt.gender] || '';
+
+            let detailHtml = '';
+            evt.heats.forEach(h => {
+                detailHtml += `<div class="mon-heat-section">
+                    <div class="mon-heat-title">${h.heat_number}조 (${h.checked_in}/${h.total})</div>
+                    ${h.entries.map(e => `
+                        <div class="mon-athlete-row">
+                            <div class="mon-athlete-bib">${e.bib || '—'}</div>
+                            <div class="mon-athlete-name">${e.name}<span class="mon-athlete-team">${e.team || ''}</span></div>
+                            <div class="mon-athlete-status">${e.status === 'checked_in' ? '&#10004;' : e.status === 'no_show' ? '&#10008;' : '&#11036;'}</div>
+                        </div>
+                    `).join('')}
+                </div>`;
+            });
+
+            html += `
+            <div class="mon-event-card ${STATUS_CARD_CLASS[st]}" data-idx="${idx}">
+                <div class="mon-event-header" onclick="toggleDetail(${idx})">
+                    <div>
+                        <span class="mon-event-name">${gL} ${evt.name}</span>
+                        <span class="mon-event-round">${monFmtRound(evt.round_type)}</span>
+                    </div>
+                    <div class="mon-event-right">
+                        <span class="mon-event-count"><span class="done">${evt.checked_in}</span><span class="sep"> / </span><span class="total">${evt.total}</span></span>
+                        <span class="mon-badge ${STATUS_BADGE_CLASS[st]}">${STATUS_LABEL[st]}</span>
+                    </div>
+                </div>
+                <div class="mon-progress"><div class="mon-progress-fill ${STATUS_PROGRESS_CLASS[st]}" style="width:${pct}%"></div></div>
+                <div class="mon-event-detail" id="detail-${idx}">
+                    ${detailHtml}
+                </div>
+            </div>`;
+        });
+        document.getElementById('event-list').innerHTML = html;
+    }
+
+    function toggleDetail(idx) {
+        const el = document.getElementById('detail-' + idx);
+        if (el) el.classList.toggle('open');
+    }
+
+    // ============================================================
+    // Data loading
+    // ============================================================
+    async function loadData() {
+        document.getElementById('refresh-bar').textContent = '새로고침 중...';
+        try {
+            const res = await fetch(`/api/public/callroom-summary?competition_id=${compId}`);
+            allData = await res.json();
+            render();
+            const now = new Date();
+            document.getElementById('refresh-bar').textContent =
+                `마지막 업데이트: ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+        } catch(e) {
+            document.getElementById('refresh-bar').textContent = '데이터 로드 실패';
+        }
+    }
+
+    // ============================================================
+    // SSE for real-time updates
+    // ============================================================
+    // Use common.js SSE — listen for relevant events
+    onSSE('entry_status', () => loadData());
+    onSSE('callroom_complete', () => loadData());
+    onSSE('event_completed', () => loadData());
+    onSSE('event_reverted', () => loadData());
+    onSSE('event_status_changed', () => loadData());
+    // Refresh on SSE reconnect (stale data)
+    onSSEReconnect(() => loadData());
+
+    // ============================================================
+    // Init
+    // ============================================================
+    (async function init() {
+        await loadCompetitions();
+        await loadData();
+        setInterval(loadData, 30000);
+    })();
+    </script>
+</body>
+</html>

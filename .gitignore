@@ -1,0 +1,24 @@
+node_modules/
+.env
+db/competition.db
+db/competition.db-shm
+db/competition.db-wal
+uploads/
+*.xlsx
+!PACERISE_upload_template.xlsx
+!public/PACERISE_upload_template.xlsx
+!public/template_men.xlsx
+!public/template_women.xlsx
+ktfl_sample.pdf
+public/ktfl_p*.png
+.png test files
+*.png
+!public/icons/og-image.png
+db/pacerise.db
+db/*.db
+!db/init.js
+db_import/*.db
+gen_icons*.py
+backups/
+public/og-preview.html
+public/icons/preview/

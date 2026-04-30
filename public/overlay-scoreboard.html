@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<!-- Google Analytics 4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-3PRW9G7KVQ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-3PRW9G7KVQ');
+</script>
+    <meta charset="UTF-8">
+    <title>PACE RISE Scoreboard Overlay</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: transparent; font-family: 'Noto Sans KR', 'Segoe UI', sans-serif; overflow: hidden; }
+        @import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Noto+Sans+KR:wght@400;600;700;800;900&display=swap');
+
+        .scoreboard {
+            position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+            width: 960px; background: rgba(10,12,20,0.92); border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden;
+            animation: slideUp 0.5s ease-out;
+        }
+        @keyframes slideUp { from { transform: translateX(-50%) translateY(40px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+
+        .sb-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 20px; background: linear-gradient(135deg, #1a5d3a, #b79f58);
+        }
+        .sb-event-name { font-family: 'Audiowide', sans-serif; font-size: 16px; color: #fff; letter-spacing: 1px; }
+        .sb-heat-info { font-size: 12px; color: rgba(255,255,255,0.8); font-weight: 600; }
+        .sb-wind { font-size: 11px; color: #a5d6c1; font-weight: 500; }
+        .sb-joint-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-left: 8px; }
+
+        .sb-body { padding: 0; }
+        .sb-row {
+            display: grid; grid-template-columns: 50px 60px 1fr 120px 100px;
+            align-items: center; padding: 8px 20px; border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: background 0.3s;
+        }
+        .sb-row:last-child { border-bottom: none; }
+        .sb-row.highlight { background: rgba(183,159,88,0.15); }
+        .sb-row.dns { opacity: 0.4; }
+
+        .sb-lane { font-size: 14px; color: #6b7b8d; font-weight: 700; text-align: center; }
+        .sb-bib { font-size: 15px; color: #fff; font-weight: 800; text-align: center; }
+        .sb-name-team { padding-left: 12px; }
+        .sb-name { font-size: 15px; color: #fff; font-weight: 700; letter-spacing: 0.3px; }
+        .sb-team { font-size: 10px; color: #8a9bae; font-weight: 500; margin-top: 1px; }
+        .sb-fed-badge {
+            display: inline-block; padding: 1px 5px; border-radius: 3px;
+            font-size: 8px; font-weight: 700; margin-left: 4px; vertical-align: middle;
+        }
+        .sb-fed-badge.KTFL { background: #6b6b6b; color: #fff; }
+        .sb-fed-badge.KUAF { background: #dc2626; color: #fff; }
+        .sb-fed-badge.default { background: #6b7280; color: #fff; }
+        .sb-record { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 18px; color: #4ade80; font-weight: 700; text-align: right; }
+        .sb-record.dns-mark { color: #ef4444; font-size: 14px; }
+        .sb-rank { font-family: 'Audiowide', sans-serif; font-size: 18px; font-weight: 900; text-align: center; }
+        .sb-rank.gold { color: #fbbf24; }
+        .sb-rank.silver { color: #cbd5e1; }
+        .sb-rank.bronze { color: #d97706; }
+
+        .sb-footer {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 6px 20px; background: rgba(0,0,0,0.3); font-size: 9px; color: #556; letter-spacing: 0.5px;
+        }
+        .sb-brand { font-family: 'Audiowide', sans-serif; color: #4a5; }
+
+        .sb-empty { padding: 40px; text-align: center; color: #556; font-size: 14px; }
+
+        /* Status indicator */
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .status-dot.live { background: #22c55e; animation: pulse 1.5s infinite; }
+        .status-dot.offline { background: #ef4444; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    </style>
+</head>
+<body>
+<div class="scoreboard" id="scoreboard">
+    <div class="sb-header">
+        <div>
+            <div class="sb-event-name" id="event-name">Connecting...</div>
+            <div class="sb-heat-info" id="heat-info"></div>
+        </div>
+        <div class="sb-wind" id="wind-info"></div>
+    </div>
+    <div class="sb-body" id="sb-body">
+        <div class="sb-empty">Waiting for event data...</div>
+    </div>
+    <div class="sb-footer">
+        <span><span class="status-dot" id="status-dot"></span><span id="status-text">Connecting</span></span>
+        <span class="sb-brand">PACE RISE</span>
+    </div>
+</div>
+
+<script>
+const FED_LABELS = { 'KTFL': '실업', 'KUAF': '대학' };
+
+const params = new URLSearchParams(window.location.search);
+const compId = params.get('comp');
+let ws = null;
+let reconnectTimer = null;
+
+function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws/scoreboard`);
+
+    ws.onopen = () => {
+        document.getElementById('status-dot').className = 'status-dot live';
+        document.getElementById('status-text').textContent = 'LIVE';
+        if (compId) {
+            ws.send(JSON.stringify({ type: 'subscribe', competition_id: compId }));
+            ws.send(JSON.stringify({ type: 'request_current', competition_id: compId }));
+        }
+    };
+
+    ws.onmessage = (e) => {
+        try {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'scoreboard_state') renderScoreboard(msg.data);
+            if (msg.type === 'scoreboard_result_update' || msg.type === 'scoreboard_wind_update' || msg.type === 'scoreboard_event_status_changed') {
+                if (compId) ws.send(JSON.stringify({ type: 'request_current', competition_id: compId }));
+            }
+        } catch(e) {}
+    };
+
+    ws.onclose = () => {
+        document.getElementById('status-dot').className = 'status-dot offline';
+        document.getElementById('status-text').textContent = 'Reconnecting...';
+        reconnectTimer = setTimeout(connect, 3000);
+    };
+
+    ws.onerror = () => { ws.close(); };
+}
+
+function renderScoreboard(data) {
+    if (!data || !data.event) {
+        document.getElementById('event-name').textContent = 'No active event';
+        document.getElementById('heat-info').textContent = '';
+        document.getElementById('wind-info').textContent = '';
+        document.getElementById('sb-body').innerHTML = '<div class="sb-empty">Waiting for event...</div>';
+        return;
+    }
+
+    const evt = data.event;
+    const gL = evt.gender === 'M' ? 'Men' : evt.gender === 'F' ? 'Women' : 'Mixed';
+    const roundL = { preliminary: 'Prelim', semifinal: 'Semi', final: 'Final' }[evt.round_type] || '';
+    
+    let titleHtml = `${gL} ${evt.name}`;
+    if (data.is_joint) {
+        titleHtml += ' <span class="sb-joint-badge" style="background:#f59e0b;color:#000;">JOINT</span>';
+    }
+    document.getElementById('event-name').innerHTML = titleHtml;
+    document.getElementById('heat-info').textContent = data.heat 
+        ? ((evt.round_type === 'final' && data.total_heats === 1) 
+            ? roundL 
+            : (data.heat.heat_name || `Heat ${data.heat.heat_number}`) + ` ${roundL}`)
+        : roundL;
+    document.getElementById('wind-info').textContent = data.heat?.wind ? `Wind: ${data.heat.wind}` : '';
+
+    if (!data.entries || data.entries.length === 0) {
+        document.getElementById('sb-body').innerHTML = '<div class="sb-empty">No entries</div>';
+        return;
+    }
+
+    const isTrack = evt.category === 'track' || evt.category === 'relay' || evt.category === 'road';
+    const isJoint = data.is_joint;
+    const sorted = [...data.entries].sort((a, b) => {
+        const aS = a.status_code === 'DNS' || a.status_code === 'DNF';
+        const bS = b.status_code === 'DNS' || b.status_code === 'DNF';
+        if (aS && !bS) return 1;
+        if (!aS && bS) return -1;
+        if (a.record == null && b.record == null) return (a.lane_number || 0) - (b.lane_number || 0);
+        if (a.record == null) return 1;
+        if (b.record == null) return -1;
+        return isTrack ? a.record - b.record : b.record - a.record;
+    });
+
+    let rank = 0;
+    const html = sorted.map((e, i) => {
+        const special = e.status_code === 'DNS' || e.status_code === 'DNF' || e.status_code === 'DQ';
+        if (!special && e.record != null) rank++;
+        const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+        const recStr = special ? e.status_code : (e.record != null ? formatTime(e.record, isTrack) : '');
+        
+        // Federation badge for joint events
+        let fedBadge = '';
+        if (isJoint && e.federation) {
+            const fedCode = e.federation;
+            const fedClass = FED_LABELS[fedCode] ? fedCode : 'default';
+            const fedText = FED_LABELS[fedCode] || fedCode;
+            fedBadge = `<span class="sb-fed-badge ${fedClass}">${fedText}</span>`;
+        }
+        
+        return `<div class="sb-row ${special ? 'dns' : ''} ${rank <= 3 && !special ? 'highlight' : ''}">
+            <div class="sb-rank ${rankClass}">${special ? '' : (e.record != null ? rank : '')}</div>
+            <div class="sb-bib">${e.bib_number || ''}</div>
+            <div class="sb-name-team">
+                <div class="sb-name">${e.name || ''}${fedBadge}</div>
+                <div class="sb-team">${e.team || ''}</div>
+            </div>
+            <div class="sb-record ${special ? 'dns-mark' : ''}">${recStr}</div>
+            <div class="sb-lane">Lane ${e.lane_number || '-'}</div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('sb-body').innerHTML = html;
+}
+
+function formatTime(s, isTrack) {
+    if (s == null) return '';
+    if (!isTrack) return s.toFixed(2) + 'm';
+    if (s >= 3600) {
+        const h = Math.floor(s / 3600), m = Math.floor((s - h * 3600) / 60), r = s - h * 3600 - m * 60;
+        return `${h}:${String(m).padStart(2,'0')}:${r < 10 ? '0' : ''}${r.toFixed(2)}`;
+    }
+    if (s >= 60) {
+        const m = Math.floor(s / 60), r = s - m * 60;
+        return `${m}:${r < 10 ? '0' : ''}${r.toFixed(2)}`;
+    }
+    return s.toFixed(2);
+}
+
+connect();
+</script>
+</body>
+</html>
