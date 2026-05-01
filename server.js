@@ -6958,6 +6958,51 @@ try { db.exec('ALTER TABLE timetable ADD COLUMN callroom_time TEXT DEFAULT NULL'
 try { db.exec('ALTER TABLE timetable ADD COLUMN scheduled_date TEXT DEFAULT NULL'); } catch(e) {}
 try { db.exec('ALTER TABLE timetable ADD COLUMN event_ids TEXT DEFAULT NULL'); } catch(e) {}
 
+// Migration: UNIQUE 제약에 round 포함 (혼성/10종/5종 등 같은 시간·종목·부별이라도 round가 다르면 별개 행)
+// 기존 UNIQUE(competition_id, day, section, time, event_name, category) → UNIQUE(... , round) 로 확장
+try {
+    const idxRows = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='timetable' AND name='ux_timetable_full'").all();
+    if (idxRows.length === 0) {
+        // 자동 인덱스(sqlite_autoindex_timetable_1)는 그대로 두면 round 미포함 충돌이 발생하므로 테이블 재구성
+        const hasOldAutoIdx = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='sqlite_autoindex_timetable_1'").get();
+        if (hasOldAutoIdx) {
+            console.log('[migration] timetable UNIQUE 재구성: round 컬럼 포함');
+            db.exec('BEGIN');
+            try {
+                db.exec(`CREATE TABLE timetable_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    competition_id INTEGER NOT NULL,
+                    day INTEGER NOT NULL DEFAULT 1,
+                    section TEXT NOT NULL DEFAULT 'track',
+                    time TEXT NOT NULL,
+                    event_name TEXT NOT NULL,
+                    category TEXT NOT NULL DEFAULT '',
+                    round TEXT NOT NULL DEFAULT '',
+                    note TEXT DEFAULT '',
+                    sort_order INTEGER DEFAULT 0,
+                    event_id INTEGER DEFAULT NULL,
+                    callroom_time TEXT DEFAULT NULL,
+                    scheduled_date TEXT DEFAULT NULL,
+                    event_ids TEXT DEFAULT NULL,
+                    UNIQUE(competition_id, day, section, time, event_name, category, round)
+                )`);
+                db.exec(`INSERT INTO timetable_new (id, competition_id, day, section, time, event_name, category, round, note, sort_order, event_id, callroom_time, scheduled_date, event_ids)
+                         SELECT id, competition_id, day, section, time, event_name, category, round, note, sort_order, event_id, callroom_time, scheduled_date, event_ids FROM timetable`);
+                db.exec('DROP TABLE timetable');
+                db.exec('ALTER TABLE timetable_new RENAME TO timetable');
+                db.exec('CREATE INDEX IF NOT EXISTS ux_timetable_full ON timetable(competition_id, day, section, time, event_name, category, round)');
+                db.exec('COMMIT');
+                console.log('[migration] timetable UNIQUE 재구성 완료');
+            } catch (mErr) {
+                db.exec('ROLLBACK');
+                console.warn('[migration] timetable UNIQUE 재구성 실패(무시):', mErr.message);
+            }
+        } else {
+            try { db.exec('CREATE INDEX IF NOT EXISTS ux_timetable_full ON timetable(competition_id, day, section, time, event_name, category, round)'); } catch(e) {}
+        }
+    }
+} catch(e) { console.warn('[migration] timetable UNIQUE 점검 실패:', e.message); }
+
 // GET timetable for a competition
 app.get('/api/timetable/:compId', (req, res) => {
     // FIX: time 우선 정렬 (HH:MM 문자열 정렬은 24시간 형식에서 안전), 같은 시간이면 sort_order
@@ -6991,25 +7036,71 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
         const wb = XLSX.readFile(req.file.path);
         const allEntries = [];
 
+        // 대회 시작일을 미리 조회 (날짜 컬럼이 있을 때 day 계산용)
+        const _compStartRow = db.prepare('SELECT start_date FROM competition WHERE id=?').get(parseInt(competition_id));
+        const _startDateMs = (_compStartRow && _compStartRow.start_date)
+            ? new Date(_compStartRow.start_date + 'T00:00:00').getTime() : null;
+
+        // 한국어 날짜 문자열 → YYYY-MM-DD 파싱 (예: "2026. 4. 30(목)" → "2026-04-30")
+        function parseKoreanDate(s) {
+            if (!s) return null;
+            if (s instanceof Date) {
+                const y = s.getFullYear(), mo = s.getMonth()+1, dd = s.getDate();
+                return `${y}-${String(mo).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+            }
+            const str = s.toString().trim();
+            // 숫자(엑셀 시리얼) 처리
+            if (/^\d+(\.\d+)?$/.test(str)) {
+                const n = parseFloat(str);
+                if (n > 25000 && n < 80000) {
+                    const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+                    const y = d.getUTCFullYear(), mo = d.getUTCMonth()+1, dd = d.getUTCDate();
+                    return `${y}-${String(mo).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+                }
+            }
+            // "2026. 4. 30(목)" / "2026-04-30" / "2026/4/30" 모두 매칭
+            const m = str.match(/(\d{4})[.\-\/]\s*(\d{1,2})[.\-\/]\s*(\d{1,2})/);
+            if (m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+            return null;
+        }
+
         // Process each sheet as a day
         wb.SheetNames.forEach((sheetName, idx) => {
             const ws = wb.Sheets[sheetName];
             const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
-            // Determine day number from sheet name or index
-            let dayNum = idx + 1;
+            // Determine day number from sheet name or index (fallback)
+            let sheetDayNum = idx + 1;
             const dayMatch = sheetName.match(/(\d+)/);
-            if (dayMatch) dayNum = parseInt(dayMatch[1]);
+            if (dayMatch) sheetDayNum = parseInt(dayMatch[1]);
 
             data.forEach((row, rowIdx) => {
-                // Expected columns: 구분(section), 시간(time), 종목(event), 부별(category), 라운드(round), 비고(note)
+                // Expected columns: 날짜(date), 구분(section), 시간(time), 종목(event), 부별/종별(category), 라운드(round), 비고(note)
                 const section = (row['구분'] || row['section'] || row['Section'] || '').toString().trim().toLowerCase();
-                const time = (row['시간'] || row['time'] || row['Time'] || '').toString().trim();
+                const rawTime = row['시간'] !== undefined ? row['시간'] : (row['time'] !== undefined ? row['time'] : row['Time']);
+                // FIX: Excel 시간 셀이 분수(0.4166…)로 들어오는 경우 HH:MM 으로 변환
+                const time = excelTimeToHHMM(rawTime);
                 const eventName = (row['종목'] || row['event'] || row['Event'] || row['event_name'] || '').toString().trim();
-                const category = (row['부별'] || row['category'] || row['Category'] || '').toString().trim();
+                const category = (row['부별'] || row['종별'] || row['category'] || row['Category'] || '').toString().trim();
                 const round = (row['라운드'] || row['round'] || row['Round'] || '').toString().trim();
                 const note = (row['비고'] || row['note'] || row['Note'] || '').toString().trim();
 
                 if (!time || !eventName) return; // skip empty rows
+
+                // FIX: 날짜 컬럼이 있으면 day 번호를 행별로 산출 (한 시트에 여러 날짜가 섞인 케이스 지원)
+                let dayNum = sheetDayNum;
+                let scheduledDate = null;
+                const rawDate = row['날짜'] || row['date'] || row['Date'] || row['일자'];
+                if (rawDate !== undefined && rawDate !== '') {
+                    const ymd = parseKoreanDate(rawDate);
+                    if (ymd) {
+                        scheduledDate = ymd;
+                        if (_startDateMs !== null) {
+                            const rowMs = new Date(ymd + 'T00:00:00').getTime();
+                            const diff = Math.round((rowMs - _startDateMs) / 86400000) + 1;
+                            if (diff >= 1 && diff <= 30) dayNum = diff;
+                        }
+                    }
+                }
 
                 const sec = (section.includes('필드') || section.includes('field')) ? 'field' : 'track';
                 allEntries.push({
@@ -7021,7 +7112,8 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
                     category: category,
                     round: round,
                     note: note,
-                    sort_order: rowIdx
+                    sort_order: rowIdx,
+                    scheduled_date: scheduledDate || undefined
                 });
             });
         });
