@@ -205,6 +205,7 @@
                 <button class="admin-tab" data-tab="scoreboard" onclick="switchTab('scoreboard',this)">스코어보드</button>
                 <button class="admin-tab" data-tab="pacing" onclick="switchTab('pacing',this)">페이싱</button>
                 <button class="admin-tab" data-tab="settings" onclick="switchTab('settings',this)">시스템</button>
+                <button class="admin-tab" data-tab="extapi" onclick="switchTab('extapi',this)">외부 API</button>
             </div>
 
             <!-- TAB: Overview -->
@@ -766,6 +767,124 @@
                             <button class="btn btn-primary" onclick="savePopup()">저장</button>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- TAB: External API (외부 API 키 관리) -->
+            <div id="tab-extapi" class="admin-tab-panel">
+                <div class="admin-card" style="border-left:4px solid #6366f1;">
+                    <h4 style="display:flex;align-items:center;gap:8px;margin:0;">외부 API 키 관리 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">External Result-Link API</span></h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;line-height:1.5;">
+                        외부 시스템(예: OpenClaw on Mac mini)이 노출용(display) 대회 종목에 결과/영상 링크를 자동 등록할 때 사용하는 API 키를 발급/회수합니다.<br>
+                        키는 <b>발급 시 1회만 표시</b>되며, 이후에는 prefix만 확인 가능합니다. 안전한 곳에 보관하세요.
+                    </p>
+                </div>
+
+                <!-- Issue New Key -->
+                <div class="admin-card">
+                    <h4>새 키 발급</h4>
+                    <div class="admin-form-row" style="margin-bottom:8px;">
+                        <div class="admin-form-group" style="flex:2;">
+                            <label>라벨 *</label>
+                            <input id="ext-new-label" placeholder="예: OpenClaw - 정선 5/15">
+                        </div>
+                        <div class="admin-form-group" style="flex:2;">
+                            <label>전용 대회 (선택, 비우면 모든 노출용 대회 허용)</label>
+                            <select id="ext-new-comp"><option value="">— 모든 노출용 대회 —</option></select>
+                        </div>
+                    </div>
+                    <div class="admin-form-row" style="margin-bottom:8px;">
+                        <div class="admin-form-group">
+                            <label>분당 호출 한도</label>
+                            <input id="ext-new-rate" type="number" value="60" min="1" max="600" style="width:120px;">
+                        </div>
+                        <div class="admin-form-group">
+                            <label>만료일 (선택, YYYY-MM-DD)</label>
+                            <input id="ext-new-exp" placeholder="예: 2026-12-31" style="width:160px;">
+                        </div>
+                        <div class="admin-form-group" style="align-self:flex-end;">
+                            <button class="btn btn-primary" onclick="extIssueKey()">키 발급</button>
+                        </div>
+                    </div>
+                    <div id="ext-issued-result" style="display:none;margin-top:10px;"></div>
+                </div>
+
+                <!-- Existing Keys -->
+                <div class="admin-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h4 style="margin:0;">발급된 키</h4>
+                        <button class="btn btn-sm btn-ghost" onclick="extLoadKeys()">새로고침</button>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table id="ext-keys-table" style="width:100%;font-size:12px;border-collapse:collapse;">
+                            <thead>
+                                <tr style="background:#f8f6f0;text-align:left;">
+                                    <th style="padding:8px;border-bottom:1px solid var(--gray);">ID</th>
+                                    <th style="padding:8px;border-bottom:1px solid var(--gray);">Prefix</th>
+                                    <th style="padding:8px;border-bottom:1px solid var(--gray);">라벨</th>
+                                    <th style="padding:8px;border-bottom:1px solid var(--gray);">전용 대회</th>
+                                    <th style="padding:8px;border-bottom:1px solid var(--gray);">분당 한도</th>
+                                    <th style="padding:8px;border-bottom:1px solid var(--gray);">총 호출</th>
+                                    <th style="padding:8px;border-bottom:1px solid var(--gray);">최근 사용</th>
+                                    <th style="padding:8px;border-bottom:1px solid var(--gray);">만료</th>
+                                    <th style="padding:8px;border-bottom:1px solid var(--gray);">상태</th>
+                                    <th style="padding:8px;border-bottom:1px solid var(--gray);">동작</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ext-keys-tbody"><tr><td colspan="10" style="padding:14px;text-align:center;color:var(--text-muted);">불러오는 중...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Logs -->
+                <div class="admin-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h4 style="margin:0;">최근 호출 로그 (최대 100건)</h4>
+                        <div style="display:flex;gap:6px;">
+                            <select id="ext-log-filter" style="font-size:12px;padding:4px 8px;">
+                                <option value="">전체 키</option>
+                            </select>
+                            <button class="btn btn-sm btn-ghost" onclick="extLoadLogs()">새로고침</button>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%;font-size:11px;border-collapse:collapse;">
+                            <thead>
+                                <tr style="background:#f8f6f0;text-align:left;">
+                                    <th style="padding:6px;border-bottom:1px solid var(--gray);">시각</th>
+                                    <th style="padding:6px;border-bottom:1px solid var(--gray);">키</th>
+                                    <th style="padding:6px;border-bottom:1px solid var(--gray);">엔드포인트</th>
+                                    <th style="padding:6px;border-bottom:1px solid var(--gray);">메서드</th>
+                                    <th style="padding:6px;border-bottom:1px solid var(--gray);">대회</th>
+                                    <th style="padding:6px;border-bottom:1px solid var(--gray);">종목</th>
+                                    <th style="padding:6px;border-bottom:1px solid var(--gray);">상태</th>
+                                    <th style="padding:6px;border-bottom:1px solid var(--gray);">코드</th>
+                                    <th style="padding:6px;border-bottom:1px solid var(--gray);">소요(ms)</th>
+                                    <th style="padding:6px;border-bottom:1px solid var(--gray);">IP</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ext-logs-tbody"><tr><td colspan="10" style="padding:14px;text-align:center;color:var(--text-muted);">불러오는 중...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Quick Reference -->
+                <div class="admin-card" style="background:#fafafe;">
+                    <h4>빠른 참조 - API 사용법</h4>
+                    <div style="font-family:monospace;font-size:11px;background:#fff;border:1px solid var(--gray);border-radius:6px;padding:10px;line-height:1.6;overflow-x:auto;">
+<b>인증:</b> 헤더 <code>X-API-Key: pkr_...</code> (또는 <code>Authorization: Bearer pkr_...</code>)<br><br>
+<b># 1) 종목 검색</b><br>
+GET /api/external/events/search?competition_id=31&amp;name=100m&amp;division=선수권<br><br>
+<b># 2) 종목 상세</b><br>
+GET /api/external/event/12345<br><br>
+<b># 3) 결과 링크 저장 (단건)</b><br>
+POST /api/external/event-result-link<br>
+&nbsp;&nbsp;{"event_id":12345, "url":"https://...", "field":"result_url", "force":false, "dry_run":false}<br><br>
+<b># 4) 결과 링크 저장 (배치, 최대 100건)</b><br>
+POST /api/external/event-result-link/batch<br>
+&nbsp;&nbsp;{"items":[{"event_id":1,"url":"https://..."}, ...], "dry_run":false, "stop_on_error":false}<br>
+                    </div>
+                    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">자세한 내용: <code>docs/EXTERNAL_API.md</code></p>
                 </div>
             </div>
 
@@ -1495,6 +1614,7 @@
             if (name === 'relay') loadRelayTab();
             if (name === 'documents') loadDocTemplates();
             if (name === 'records') loadRecordsTab();
+            if (name === 'extapi') { extLoadCompetitions(); extLoadKeys(); extLoadLogs(); }
         }
 
         function toast(msg, type = 'success') {
@@ -5674,6 +5794,211 @@
                 toast('저장 오류: ' + err.message, 'error');
             }
         }
+
+        // ====================================================================
+        // EXTERNAL API KEY MANAGEMENT (외부 API)
+        // ====================================================================
+        let _extKeys = [];
+        function _esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+        function _fmtDate(s) {
+            if (!s) return '-';
+            return String(s).replace('T', ' ').slice(0, 19);
+        }
+
+        async function extLoadCompetitions() {
+            try {
+                const res = await fetch('/api/competitions');
+                const list = await res.json();
+                const sel = document.getElementById('ext-new-comp');
+                const cur = sel.value;
+                sel.innerHTML = '<option value="">— 모든 노출용 대회 —</option>';
+                (list || []).filter(c => c.mode === 'display').forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = `[${c.id}] ${c.name} (${c.start_date} ~ ${c.end_date})`;
+                    sel.appendChild(opt);
+                });
+                sel.value = cur;
+            } catch (e) {
+                console.warn('extLoadCompetitions failed', e);
+            }
+        }
+
+        async function extIssueKey() {
+            const label = document.getElementById('ext-new-label').value.trim();
+            const compId = document.getElementById('ext-new-comp').value;
+            const rate = parseInt(document.getElementById('ext-new-rate').value) || 60;
+            const exp = document.getElementById('ext-new-exp').value.trim();
+            if (!label) { toast('라벨을 입력하세요', 'error'); return; }
+            const body = {
+                admin_key: AK(),
+                label,
+                rate_limit_per_min: rate
+            };
+            if (compId) body.allowed_competition_id = parseInt(compId);
+            if (exp) body.expires_at = exp;
+            try {
+                const res = await fetch('/api/admin/external-keys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!data.ok) {
+                    toast(data.error || '발급 실패', 'error');
+                    return;
+                }
+                const box = document.getElementById('ext-issued-result');
+                box.style.display = 'block';
+                box.innerHTML = `
+                    <div style="border:2px solid #10b981;border-radius:8px;padding:14px;background:#ecfdf5;">
+                        <div style="font-weight:700;color:#047857;margin-bottom:8px;">✅ 키가 발급되었습니다 (이 값은 다시 표시되지 않습니다)</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">라벨: ${_esc(data.label)} · ID #${data.id} · 분당 ${data.rate_limit_per_min}회${data.allowed_competition_id ? ' · 대회 #'+data.allowed_competition_id+' 전용' : ' · 모든 노출용 대회'}${data.expires_at ? ' · 만료 '+_esc(data.expires_at) : ''}</div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input id="ext-issued-key-text" readonly value="${_esc(data.api_key)}" style="flex:1;font-family:monospace;font-size:13px;font-weight:700;padding:10px;border:1.5px solid #10b981;border-radius:6px;background:#fff;">
+                            <button class="btn btn-sm btn-primary" onclick="extCopyIssuedKey()">📋 복사</button>
+                            <button class="btn btn-sm btn-ghost" onclick="document.getElementById('ext-issued-result').style.display='none'">닫기</button>
+                        </div>
+                        <div style="font-size:11px;color:#b45309;margin-top:8px;">⚠️ 이 페이지를 닫거나 새로고침하면 더 이상 표시되지 않습니다. 즉시 안전한 곳에 보관하세요.</div>
+                    </div>`;
+                document.getElementById('ext-new-label').value = '';
+                document.getElementById('ext-new-exp').value = '';
+                toast('키 발급 완료');
+                await extLoadKeys();
+            } catch (e) {
+                toast('발급 실패: ' + e.message, 'error');
+            }
+        }
+
+        function extCopyIssuedKey() {
+            const inp = document.getElementById('ext-issued-key-text');
+            if (!inp) return;
+            inp.select();
+            try {
+                document.execCommand('copy');
+                toast('클립보드에 복사됨');
+            } catch (_) {
+                navigator.clipboard.writeText(inp.value).then(() => toast('클립보드에 복사됨'));
+            }
+        }
+
+        async function extLoadKeys() {
+            const tbody = document.getElementById('ext-keys-tbody');
+            try {
+                const res = await fetch('/api/admin/external-keys?admin_key=' + encodeURIComponent(AK()));
+                const data = await res.json();
+                if (!data.ok) {
+                    tbody.innerHTML = `<tr><td colspan="10" style="padding:14px;text-align:center;color:#b91c1c;">${_esc(data.error || '불러오기 실패')}</td></tr>`;
+                    return;
+                }
+                _extKeys = data.items || [];
+                if (_extKeys.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="10" style="padding:14px;text-align:center;color:var(--text-muted);">발급된 키가 없습니다.</td></tr>';
+                } else {
+                    tbody.innerHTML = _extKeys.map(k => {
+                        const isRevoked = !!k.revoked_at;
+                        const isExpired = k.expires_at && k.expires_at < new Date().toISOString().replace('T', ' ').slice(0, 19);
+                        const status = isRevoked ? '<span style="color:#b91c1c;font-weight:700;">회수됨</span>'
+                                     : isExpired ? '<span style="color:#b45309;font-weight:700;">만료됨</span>'
+                                     : '<span style="color:#047857;font-weight:700;">활성</span>';
+                        const compLabel = k.allowed_competition_id
+                            ? `[#${k.allowed_competition_id}] ${_esc(k.competition_name || '')}`
+                            : '<span style="color:var(--text-muted);">모든 노출용</span>';
+                        const action = isRevoked
+                            ? '<span style="color:var(--text-muted);">-</span>'
+                            : `<button class="btn btn-xs btn-danger" onclick="extRevoke(${k.id})">회수</button>`;
+                        return `<tr>
+                            <td style="padding:8px;border-bottom:1px solid #eee;">${k.id}</td>
+                            <td style="padding:8px;border-bottom:1px solid #eee;font-family:monospace;">${_esc(k.key_prefix)}…</td>
+                            <td style="padding:8px;border-bottom:1px solid #eee;">${_esc(k.label)}</td>
+                            <td style="padding:8px;border-bottom:1px solid #eee;">${compLabel}</td>
+                            <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;">${k.rate_limit_per_min}/min</td>
+                            <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;">${k.total_calls}</td>
+                            <td style="padding:8px;border-bottom:1px solid #eee;font-size:11px;">${_fmtDate(k.last_used_at)}</td>
+                            <td style="padding:8px;border-bottom:1px solid #eee;font-size:11px;">${_fmtDate(k.expires_at)}</td>
+                            <td style="padding:8px;border-bottom:1px solid #eee;">${status}</td>
+                            <td style="padding:8px;border-bottom:1px solid #eee;">${action}</td>
+                        </tr>`;
+                    }).join('');
+                }
+                // populate log filter dropdown
+                const filt = document.getElementById('ext-log-filter');
+                if (filt) {
+                    const cur = filt.value;
+                    filt.innerHTML = '<option value="">전체 키</option>' +
+                        _extKeys.map(k => `<option value="${k.id}">[${k.id}] ${_esc(k.label)} (${_esc(k.key_prefix)}…)</option>`).join('');
+                    filt.value = cur;
+                }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="10" style="padding:14px;text-align:center;color:#b91c1c;">불러오기 실패: ${_esc(e.message)}</td></tr>`;
+            }
+        }
+
+        async function extRevoke(id) {
+            if (!confirm(`키 #${id} 를 회수하시겠습니까? 회수 후에는 사용할 수 없으며 되돌릴 수 없습니다.`)) return;
+            try {
+                const res = await fetch(`/api/admin/external-keys/${id}/revoke`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK() })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    toast('회수 완료');
+                    await extLoadKeys();
+                } else {
+                    toast(data.error || '회수 실패', 'error');
+                }
+            } catch (e) {
+                toast('회수 실패: ' + e.message, 'error');
+            }
+        }
+
+        async function extLoadLogs() {
+            const tbody = document.getElementById('ext-logs-tbody');
+            const filt = document.getElementById('ext-log-filter');
+            const apiKeyId = filt ? filt.value : '';
+            try {
+                let url = '/api/admin/external-keys/logs?admin_key=' + encodeURIComponent(AK()) + '&limit=100';
+                if (apiKeyId) url += '&api_key_id=' + apiKeyId;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!data.ok) {
+                    tbody.innerHTML = `<tr><td colspan="10" style="padding:14px;text-align:center;color:#b91c1c;">${_esc(data.error || '불러오기 실패')}</td></tr>`;
+                    return;
+                }
+                if ((data.items || []).length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="10" style="padding:14px;text-align:center;color:var(--text-muted);">로그가 없습니다.</td></tr>';
+                } else {
+                    tbody.innerHTML = data.items.map(l => {
+                        const statusColor = l.response_status >= 200 && l.response_status < 300 ? '#047857'
+                                          : l.response_status >= 400 ? '#b91c1c' : '#6b7280';
+                        return `<tr>
+                            <td style="padding:6px;border-bottom:1px solid #eee;font-size:10px;font-family:monospace;">${_fmtDate(l.created_at)}</td>
+                            <td style="padding:6px;border-bottom:1px solid #eee;font-size:10px;">${_esc(l.key_label || '')} <span style="color:var(--text-muted);">${_esc(l.key_prefix || '')}</span></td>
+                            <td style="padding:6px;border-bottom:1px solid #eee;font-family:monospace;">${_esc(l.endpoint)}</td>
+                            <td style="padding:6px;border-bottom:1px solid #eee;">${_esc(l.method)}</td>
+                            <td style="padding:6px;border-bottom:1px solid #eee;text-align:center;">${l.competition_id || '-'}</td>
+                            <td style="padding:6px;border-bottom:1px solid #eee;text-align:center;">${l.event_id || '-'}</td>
+                            <td style="padding:6px;border-bottom:1px solid #eee;text-align:center;color:${statusColor};font-weight:700;">${l.response_status}</td>
+                            <td style="padding:6px;border-bottom:1px solid #eee;">${_esc(l.response_code || '')}</td>
+                            <td style="padding:6px;border-bottom:1px solid #eee;text-align:right;">${l.duration_ms}</td>
+                            <td style="padding:6px;border-bottom:1px solid #eee;font-size:10px;">${_esc(l.request_ip || '')}</td>
+                        </tr>`;
+                    }).join('');
+                }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="10" style="padding:14px;text-align:center;color:#b91c1c;">불러오기 실패: ${_esc(e.message)}</td></tr>`;
+            }
+        }
+
+        // Wire up the log filter dropdown
+        document.addEventListener('DOMContentLoaded', () => {
+            const filt = document.getElementById('ext-log-filter');
+            if (filt) filt.addEventListener('change', extLoadLogs);
+        });
 
     </script>
 </body>

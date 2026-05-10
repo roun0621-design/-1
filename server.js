@@ -457,6 +457,56 @@ try { db.exec(`ALTER TABLE display_roster ADD COLUMN lane INTEGER DEFAULT NULL`)
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_display_roster_comp ON display_roster(competition_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_display_roster_event ON display_roster(competition_id, event_id)`); } catch(e) {}
 
+// ─────────────────────────────────────────────────────────────────
+// EXTERNAL API KEY 시스템 (대한육상연맹 결과 URL 자동 수집용)
+// ─────────────────────────────────────────────────────────────────
+// external_api_key: 외부 시스템(OpenClaw 등)에서 PACE RISE에 결과 URL 등을
+//   안전하게 등록하기 위한 API 키 저장 테이블
+//
+//   - key_hash: bcrypt 해시된 키 (평문은 발급 시점에만 보여줌, DB에 저장 X)
+//   - key_prefix: 사용자가 키 식별 가능하도록 앞 8자리만 평문 저장 (예: "pkr_a1b2c3d4...")
+//   - label: 키 용도 라벨 (예: "OpenClaw - 정선 2026")
+//   - allowed_competition_id: NULL이면 모든 노출용 대회 허용, 값이 있으면 해당 대회만
+//   - rate_limit_per_min: 분당 호출 제한
+//   - expires_at: 만료 일시 (NULL이면 무기한)
+//   - revoked_at: 회수 일시 (NULL이면 활성)
+//   - last_used_at, total_calls: 사용 통계
+try { db.exec(`CREATE TABLE IF NOT EXISTS external_api_key (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key_hash TEXT NOT NULL,
+    key_prefix TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    allowed_competition_id INTEGER DEFAULT NULL REFERENCES competition(id) ON DELETE SET NULL,
+    rate_limit_per_min INTEGER NOT NULL DEFAULT 60,
+    expires_at TEXT DEFAULT NULL,
+    revoked_at TEXT DEFAULT NULL,
+    last_used_at TEXT DEFAULT NULL,
+    total_calls INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_by TEXT NOT NULL DEFAULT 'admin'
+)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_extkey_prefix ON external_api_key(key_prefix)`); } catch(e) {}
+
+// external_api_log: 모든 외부 API 호출 기록 (성공/실패 모두)
+try { db.exec(`CREATE TABLE IF NOT EXISTS external_api_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    api_key_id INTEGER DEFAULT NULL REFERENCES external_api_key(id) ON DELETE SET NULL,
+    key_prefix TEXT DEFAULT '',
+    endpoint TEXT NOT NULL DEFAULT '',
+    method TEXT NOT NULL DEFAULT 'POST',
+    request_ip TEXT DEFAULT '',
+    user_agent TEXT DEFAULT '',
+    competition_id INTEGER DEFAULT NULL,
+    event_id INTEGER DEFAULT NULL,
+    request_body TEXT DEFAULT '',
+    response_status INTEGER NOT NULL DEFAULT 0,
+    response_code TEXT DEFAULT '',
+    duration_ms INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_extlog_keyid ON external_api_log(api_key_id, created_at)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_extlog_created ON external_api_log(created_at)`); } catch(e) {}
+
 // Persist default admin in DB if not exists
 function getConfigKey(k, def) {
     const row = db.prepare('SELECT value FROM system_config WHERE key=?').get(k);
@@ -9633,6 +9683,667 @@ app.get('/api/documents/:compId', (req, res) => {
     }
     res.json(docs);
 });
+
+// ============================================================
+// EXTERNAL API (외부 시스템 연동 — 결과 URL 자동 등록 등)
+// ============================================================
+//
+// 보안 정책:
+//   1) 모든 호출은 X-API-Key 헤더 필수 (또는 Authorization: Bearer <key>)
+//   2) 키는 발급 시점에만 평문 노출, DB에는 bcrypt 해시만 저장
+//   3) 키마다 적용 대회 제한 가능 (allowed_competition_id)
+//   4) 분당 호출 제한 (기본 60회)
+//   5) 노출용 대회(comp.mode='display')의 종목만 수정 가능
+//   6) 모든 호출은 external_api_log에 자동 기록
+//   7) 기존 result_url이 있으면 force=true 없이는 덮어쓰기 거부
+//   8) dry_run=true: 검증만 하고 저장 안 함
+
+// 평문 키 생성: 32바이트 랜덤 → "pkr_" prefix + base62 인코딩
+function _generateApiKey() {
+    const buf = crypto.randomBytes(24);
+    const b64 = buf.toString('base64').replace(/[+/=]/g, '').slice(0, 32);
+    return 'pkr_' + b64;
+}
+function _hashApiKey(plain) {
+    return bcrypt.hashSync(plain, 10);
+}
+function _keyPrefix(plain) {
+    // "pkr_a1b2c3d4..." → 앞 12자만 노출 식별용
+    return (plain || '').slice(0, 12);
+}
+
+// 외부 API 호출 로그 기록
+function _logExternalCall(opts) {
+    try {
+        db.prepare(`INSERT INTO external_api_log
+            (api_key_id, key_prefix, endpoint, method, request_ip, user_agent,
+             competition_id, event_id, request_body, response_status, response_code, duration_ms)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+            opts.api_key_id || null,
+            opts.key_prefix || '',
+            opts.endpoint || '',
+            opts.method || 'POST',
+            opts.request_ip || '',
+            (opts.user_agent || '').slice(0, 500),
+            opts.competition_id || null,
+            opts.event_id || null,
+            (opts.request_body || '').slice(0, 4000),
+            opts.response_status || 0,
+            opts.response_code || '',
+            opts.duration_ms || 0
+        );
+    } catch(e) {
+        console.warn('external_api_log insert failed:', e.message);
+    }
+}
+
+// 메모리 기반 레이트 리미터 (분 단위 슬라이딩 윈도우, 키 ID 기준)
+const _extRateMap = new Map(); // key: api_key_id, value: { windowStart: ms, count: n }
+function _checkRateLimit(apiKeyId, limitPerMin) {
+    const now = Date.now();
+    const winSize = 60 * 1000;
+    const entry = _extRateMap.get(apiKeyId);
+    if (!entry || (now - entry.windowStart) >= winSize) {
+        _extRateMap.set(apiKeyId, { windowStart: now, count: 1 });
+        return { allowed: true, remaining: limitPerMin - 1, resetIn: winSize };
+    }
+    if (entry.count >= limitPerMin) {
+        return { allowed: false, remaining: 0, resetIn: winSize - (now - entry.windowStart) };
+    }
+    entry.count++;
+    return { allowed: true, remaining: limitPerMin - entry.count, resetIn: winSize - (now - entry.windowStart) };
+}
+
+// API 키 검증 미들웨어
+//   - 헤더 X-API-Key 또는 Authorization: Bearer <key>
+//   - 키 검증 후 req.extApiKey에 키 레코드 부착
+//   - 레이트 리밋 통과 못하면 429
+//   - 응답 후 자동으로 external_api_log 기록
+function externalApiAuth(req, res, next) {
+    const startedAt = Date.now();
+    const reqId = crypto.randomBytes(6).toString('hex');
+    req._extReqId = reqId;
+    req._extStartedAt = startedAt;
+
+    // 응답 가로채기 (자동 로깅)
+    const _origJson = res.json.bind(res);
+    res.json = function(body) {
+        const dur = Date.now() - startedAt;
+        const code = (body && body.error_code) || (body && body.success ? 'OK' : '');
+        try {
+            _logExternalCall({
+                api_key_id: req.extApiKey ? req.extApiKey.id : null,
+                key_prefix: req.extApiKey ? req.extApiKey.key_prefix : (req._extKeyPrefix || ''),
+                endpoint: req.originalUrl.split('?')[0],
+                method: req.method,
+                request_ip: (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim(),
+                user_agent: req.headers['user-agent'] || '',
+                competition_id: (req.body && req.body.competition_id) || (req.query && req.query.competition_id) || null,
+                event_id: (req.body && req.body.event_id) || (req.params && req.params.id) || null,
+                request_body: req.method === 'GET' ? JSON.stringify(req.query || {}) : JSON.stringify(req.body || {}),
+                response_status: res.statusCode,
+                response_code: code,
+                duration_ms: dur,
+            });
+        } catch(_){}
+        return _origJson(body);
+    };
+
+    // 키 추출
+    const headerKey = req.headers['x-api-key'] || '';
+    const authHeader = req.headers['authorization'] || '';
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const plainKey = (headerKey || (bearerMatch ? bearerMatch[1] : '') || '').trim();
+    if (!plainKey) {
+        return res.status(401).json({ success: false, error_code: 'MISSING_API_KEY', message: 'X-API-Key 헤더가 필요합니다.' });
+    }
+    req._extKeyPrefix = _keyPrefix(plainKey);
+
+    // prefix로 후보 조회 (보통 1개) → bcrypt 비교
+    const prefix = _keyPrefix(plainKey);
+    const candidates = db.prepare('SELECT * FROM external_api_key WHERE key_prefix=?').all(prefix);
+    let matched = null;
+    for (const c of candidates) {
+        if (bcrypt.compareSync(plainKey, c.key_hash)) { matched = c; break; }
+    }
+    if (!matched) {
+        return res.status(403).json({ success: false, error_code: 'INVALID_API_KEY', message: '유효하지 않은 API 키입니다.' });
+    }
+    if (matched.revoked_at) {
+        return res.status(403).json({ success: false, error_code: 'KEY_REVOKED', message: '회수된 API 키입니다.' });
+    }
+    if (matched.expires_at && matched.expires_at < new Date().toISOString()) {
+        return res.status(403).json({ success: false, error_code: 'KEY_EXPIRED', message: '만료된 API 키입니다.' });
+    }
+
+    // 레이트 리밋
+    const rl = _checkRateLimit(matched.id, matched.rate_limit_per_min || 60);
+    res.setHeader('X-RateLimit-Limit', String(matched.rate_limit_per_min || 60));
+    res.setHeader('X-RateLimit-Remaining', String(rl.remaining));
+    if (!rl.allowed) {
+        return res.status(429).json({
+            success: false, error_code: 'RATE_LIMITED',
+            message: `분당 ${matched.rate_limit_per_min || 60}회 호출 한도를 초과했습니다.`,
+            reset_in_ms: rl.resetIn,
+        });
+    }
+
+    // 통계 업데이트 (비차단)
+    try {
+        db.prepare('UPDATE external_api_key SET last_used_at=datetime(\'now\'), total_calls=total_calls+1 WHERE id=?').run(matched.id);
+    } catch(_){}
+
+    req.extApiKey = matched;
+    next();
+}
+
+// 헬퍼: 키의 적용 대회 제한 검증
+//   - allowed_competition_id가 NULL이면 모든 노출용 대회 허용
+//   - 값이 있으면 요청의 competition_id와 일치해야 함
+function _checkCompetitionScope(extApiKey, requestedCompId) {
+    if (!extApiKey.allowed_competition_id) return { ok: true };
+    if (!requestedCompId) return { ok: false, code: 'COMPETITION_REQUIRED', message: '이 키는 특정 대회 전용입니다. competition_id를 명시해주세요.' };
+    if (parseInt(requestedCompId) !== extApiKey.allowed_competition_id) {
+        return { ok: false, code: 'COMPETITION_FORBIDDEN', message: `이 키는 competition_id=${extApiKey.allowed_competition_id}에만 사용 가능합니다.` };
+    }
+    return { ok: true };
+}
+
+// 헬퍼: 노출용 대회인지 확인
+function _ensureDisplayCompetition(compId) {
+    const comp = db.prepare('SELECT id, name, mode, start_date, end_date FROM competition WHERE id=?').get(parseInt(compId));
+    if (!comp) return { ok: false, code: 'COMPETITION_NOT_FOUND', message: '대회를 찾을 수 없습니다.' };
+    if (comp.mode !== 'display') return { ok: false, code: 'NOT_DISPLAY_MODE', message: '이 API는 노출용(display) 대회에만 사용 가능합니다.' };
+    return { ok: true, comp };
+}
+
+// 헬퍼: URL 형식 검증
+function _isValidUrl(url) {
+    if (typeof url !== 'string') return false;
+    if (url.length < 10 || url.length > 2000) return false;
+    if (!/^https?:\/\/[^\s]+$/i.test(url)) return false;
+    return true;
+}
+
+// ─── 외부 API 라우트들 ───────────────────────────────────────
+
+// ── Phase 3: 종목 검색 ──
+// GET /api/external/events/search
+//   query params:
+//     competition_id (optional if key has allowed_competition_id)
+//     name           (partial match)
+//     division       (partial match - "선수권" matches "선수권(남)" 등)
+//     gender         (M | F | X)
+//     round_type     (preliminary | semifinal | final)
+//     limit          (default 50, max 200)
+app.get('/api/external/events/search', externalApiAuth, (req, res) => {
+    const extKey = req.extApiKey;
+    let compId = req.query.competition_id ? parseInt(req.query.competition_id) : null;
+
+    // 키에 대회 제한이 걸려 있으면 그 대회로 강제
+    if (extKey.allowed_competition_id) {
+        if (compId && compId !== extKey.allowed_competition_id) {
+            return res.status(403).json({ ok: false, code: 'COMPETITION_FORBIDDEN', message: '이 API 키는 다른 대회를 조회할 수 없습니다.' });
+        }
+        compId = extKey.allowed_competition_id;
+    }
+    if (!compId) {
+        return res.status(400).json({ ok: false, code: 'MISSING_COMPETITION_ID', message: 'competition_id 파라미터가 필요합니다.' });
+    }
+
+    // 노출용 대회 강제
+    const compCheck = _ensureDisplayCompetition(compId);
+    if (!compCheck.ok) return res.status(404).json({ ok: false, code: compCheck.code, message: compCheck.message });
+
+    const name = (req.query.name || '').trim();
+    const division = (req.query.division || '').trim();
+    const gender = (req.query.gender || '').trim().toUpperCase();
+    const roundType = (req.query.round_type || '').trim().toLowerCase();
+    let limit = parseInt(req.query.limit || '50', 10);
+    if (!Number.isFinite(limit) || limit <= 0) limit = 50;
+    if (limit > 200) limit = 200;
+
+    const where = ['e.competition_id = ?', '(e.parent_event_id IS NULL)'];
+    const params = [compId];
+
+    if (name) {
+        where.push('e.name LIKE ?');
+        params.push('%' + name + '%');
+    }
+    if (division) {
+        where.push('e.division LIKE ?');
+        params.push('%' + division + '%');
+    }
+    if (gender && ['M', 'F', 'X'].includes(gender)) {
+        where.push('e.gender = ?');
+        params.push(gender);
+    }
+    if (roundType && ['preliminary', 'semifinal', 'final'].includes(roundType)) {
+        where.push('e.round_type = ?');
+        params.push(roundType);
+    }
+
+    const sql = `
+        SELECT e.id, e.competition_id, e.name, e.category, e.gender, e.division,
+               e.round_type, e.round_status, e.sort_order,
+               COALESCE(e.result_url, '') AS result_url,
+               COALESCE(e.video_url, '')  AS video_url
+        FROM event e
+        WHERE ${where.join(' AND ')}
+        ORDER BY e.division, e.sort_order, e.name, e.round_type
+        LIMIT ?
+    `;
+    params.push(limit);
+
+    try {
+        const rows = db.prepare(sql).all(...params);
+        return res.json({
+            ok: true,
+            competition: { id: compCheck.comp.id, name: compCheck.comp.name, mode: compCheck.comp.mode, start_date: compCheck.comp.start_date, end_date: compCheck.comp.end_date },
+            count: rows.length,
+            limit,
+            items: rows
+        });
+    } catch (e) {
+        console.error('[external/events/search]', e);
+        return res.status(500).json({ ok: false, code: 'INTERNAL_ERROR', message: e.message || 'internal error' });
+    }
+});
+
+// ── Phase 4: 종목 단건 조회 ──
+// GET /api/external/event/:id
+app.get('/api/external/event/:id', externalApiAuth, (req, res) => {
+    const eventId = parseInt(req.params.id);
+    if (!Number.isFinite(eventId) || eventId <= 0) {
+        return res.status(400).json({ ok: false, code: 'INVALID_EVENT_ID', message: 'event id가 올바르지 않습니다.' });
+    }
+
+    const evt = db.prepare(`
+        SELECT e.id, e.competition_id, e.name, e.category, e.gender, e.division,
+               e.round_type, e.round_status, e.sort_order,
+               COALESCE(e.result_url, '') AS result_url,
+               COALESCE(e.video_url, '')  AS video_url
+        FROM event e
+        WHERE e.id = ?
+    `).get(eventId);
+
+    if (!evt) {
+        return res.status(404).json({ ok: false, code: 'EVENT_NOT_FOUND', message: '종목을 찾을 수 없습니다.' });
+    }
+
+    // 키 범위 검증
+    const scope = _checkCompetitionScope(req.extApiKey, evt.competition_id);
+    if (!scope.ok) return res.status(403).json({ ok: false, code: scope.code, message: scope.message });
+
+    const compCheck = _ensureDisplayCompetition(evt.competition_id);
+    if (!compCheck.ok) return res.status(404).json({ ok: false, code: compCheck.code, message: compCheck.message });
+
+    return res.json({
+        ok: true,
+        competition: { id: compCheck.comp.id, name: compCheck.comp.name, mode: compCheck.comp.mode, start_date: compCheck.comp.start_date, end_date: compCheck.comp.end_date },
+        event: evt
+    });
+});
+
+// ── Phase 5: 단건 결과 링크 저장 ──
+// POST /api/external/event-result-link
+//   body:
+//     event_id (required)
+//     url      (required, https?:// 형식)
+//     field    (optional, default 'result_url' / 또는 'video_url')
+//     dry_run  (optional bool)  — 검증만, 저장 X
+//     force    (optional bool)  — 기존 값 덮어쓰기 허용
+app.post('/api/external/event-result-link', externalApiAuth, (req, res) => {
+    const body = req.body || {};
+    const eventId = parseInt(body.event_id);
+    const url = (body.url || '').trim();
+    const field = (body.field || 'result_url').trim();
+    const dryRun = !!body.dry_run;
+    const force = !!body.force;
+
+    if (!Number.isFinite(eventId) || eventId <= 0) {
+        return res.status(400).json({ ok: false, code: 'INVALID_EVENT_ID', message: 'event_id가 올바르지 않습니다.' });
+    }
+    if (!_isValidUrl(url)) {
+        return res.status(400).json({ ok: false, code: 'INVALID_URL', message: 'url은 https?:// 형식이어야 합니다 (10~2000자).' });
+    }
+    if (!['result_url', 'video_url'].includes(field)) {
+        return res.status(400).json({ ok: false, code: 'INVALID_FIELD', message: "field는 'result_url' 또는 'video_url'이어야 합니다." });
+    }
+
+    const evt = db.prepare(`SELECT id, competition_id, name, division, gender, round_type,
+                                   COALESCE(result_url,'') AS result_url,
+                                   COALESCE(video_url,'')  AS video_url
+                            FROM event WHERE id = ?`).get(eventId);
+    if (!evt) {
+        return res.status(404).json({ ok: false, code: 'EVENT_NOT_FOUND', message: '종목을 찾을 수 없습니다.' });
+    }
+
+    const scope = _checkCompetitionScope(req.extApiKey, evt.competition_id);
+    if (!scope.ok) return res.status(403).json({ ok: false, code: scope.code, message: scope.message });
+
+    const compCheck = _ensureDisplayCompetition(evt.competition_id);
+    if (!compCheck.ok) return res.status(404).json({ ok: false, code: compCheck.code, message: compCheck.message });
+
+    const oldValue = evt[field] || '';
+    const willOverwrite = oldValue && oldValue !== url;
+    if (willOverwrite && !force) {
+        return res.status(409).json({
+            ok: false,
+            code: 'ALREADY_HAS_VALUE',
+            message: `이 종목에는 이미 ${field}이(가) 저장되어 있습니다. 덮어쓰려면 force=true 를 보내세요.`,
+            event_id: eventId,
+            field,
+            current_value: oldValue,
+            requested_value: url
+        });
+    }
+
+    if (dryRun) {
+        return res.json({
+            ok: true,
+            dry_run: true,
+            event_id: eventId,
+            field,
+            current_value: oldValue,
+            requested_value: url,
+            will_overwrite: willOverwrite,
+            event: { id: evt.id, name: evt.name, division: evt.division, gender: evt.gender, round_type: evt.round_type }
+        });
+    }
+
+    // 실제 저장
+    try {
+        if (field === 'result_url') {
+            db.prepare('UPDATE event SET result_url = ? WHERE id = ?').run(url, eventId);
+        } else {
+            db.prepare('UPDATE event SET video_url = ? WHERE id = ?').run(url, eventId);
+        }
+        // 응답에 사용할 메타
+        req._extLogMeta = { competition_id: evt.competition_id, event_id: eventId };
+        return res.json({
+            ok: true,
+            saved: true,
+            event_id: eventId,
+            field,
+            previous_value: oldValue,
+            new_value: url,
+            overwritten: willOverwrite,
+            event: { id: evt.id, name: evt.name, division: evt.division, gender: evt.gender, round_type: evt.round_type }
+        });
+    } catch (e) {
+        console.error('[external/event-result-link]', e);
+        return res.status(500).json({ ok: false, code: 'INTERNAL_ERROR', message: e.message || 'internal error' });
+    }
+});
+
+// ── Phase 6: 배치 결과 링크 저장 ──
+// POST /api/external/event-result-link/batch
+//   body:
+//     items:   [{ event_id, url, field?, force? }, ...]   (1~100개)
+//     dry_run: bool (전체 dry-run)
+//     stop_on_error: bool (default false)
+app.post('/api/external/event-result-link/batch', externalApiAuth, (req, res) => {
+    const body = req.body || {};
+    const items = Array.isArray(body.items) ? body.items : null;
+    const dryRun = !!body.dry_run;
+    const stopOnError = !!body.stop_on_error;
+
+    if (!items || items.length === 0) {
+        return res.status(400).json({ ok: false, code: 'EMPTY_ITEMS', message: 'items 배열이 비어 있습니다.' });
+    }
+    if (items.length > 100) {
+        return res.status(400).json({ ok: false, code: 'TOO_MANY_ITEMS', message: 'items는 한번에 최대 100개까지만 처리됩니다.' });
+    }
+
+    // 1) 사전 검증 + 정규화
+    const prepared = [];
+    for (let i = 0; i < items.length; i++) {
+        const it = items[i] || {};
+        const eventId = parseInt(it.event_id);
+        const url = (it.url || '').trim();
+        const field = (it.field || 'result_url').trim();
+        const force = !!it.force;
+
+        if (!Number.isFinite(eventId) || eventId <= 0) {
+            prepared.push({ index: i, ok: false, code: 'INVALID_EVENT_ID', message: 'event_id가 올바르지 않습니다.', input: it });
+            continue;
+        }
+        if (!_isValidUrl(url)) {
+            prepared.push({ index: i, ok: false, code: 'INVALID_URL', message: 'url 형식 오류.', event_id: eventId, input: it });
+            continue;
+        }
+        if (!['result_url', 'video_url'].includes(field)) {
+            prepared.push({ index: i, ok: false, code: 'INVALID_FIELD', message: "field는 'result_url' 또는 'video_url'.", event_id: eventId, input: it });
+            continue;
+        }
+
+        const evt = db.prepare(`SELECT id, competition_id, name, division, gender, round_type,
+                                       COALESCE(result_url,'') AS result_url,
+                                       COALESCE(video_url,'')  AS video_url
+                                FROM event WHERE id = ?`).get(eventId);
+        if (!evt) {
+            prepared.push({ index: i, ok: false, code: 'EVENT_NOT_FOUND', message: '종목 없음.', event_id: eventId });
+            continue;
+        }
+        const scope = _checkCompetitionScope(req.extApiKey, evt.competition_id);
+        if (!scope.ok) {
+            prepared.push({ index: i, ok: false, code: scope.code, message: scope.message, event_id: eventId });
+            continue;
+        }
+        const compCheck = _ensureDisplayCompetition(evt.competition_id);
+        if (!compCheck.ok) {
+            prepared.push({ index: i, ok: false, code: compCheck.code, message: compCheck.message, event_id: eventId });
+            continue;
+        }
+
+        const oldValue = evt[field] || '';
+        const willOverwrite = !!oldValue && oldValue !== url;
+        if (willOverwrite && !force) {
+            prepared.push({
+                index: i, ok: false, code: 'ALREADY_HAS_VALUE',
+                message: '기존 값이 존재. force=true 필요.',
+                event_id: eventId, field, current_value: oldValue, requested_value: url
+            });
+            continue;
+        }
+
+        prepared.push({
+            index: i, ok: true, willApply: true,
+            event_id: eventId, field, url, force, willOverwrite, oldValue,
+            event: { id: evt.id, name: evt.name, division: evt.division, gender: evt.gender, round_type: evt.round_type, competition_id: evt.competition_id }
+        });
+    }
+
+    // stop_on_error 시 첫 실패에서 끊기
+    if (stopOnError) {
+        const firstErr = prepared.find(p => !p.ok);
+        if (firstErr) {
+            return res.status(400).json({
+                ok: false,
+                code: 'BATCH_VALIDATION_FAILED',
+                message: '검증 단계에서 실패가 발생했고 stop_on_error=true 입니다.',
+                results: prepared
+            });
+        }
+    }
+
+    if (dryRun) {
+        const okCnt = prepared.filter(p => p.ok).length;
+        return res.json({
+            ok: true,
+            dry_run: true,
+            total: prepared.length,
+            valid: okCnt,
+            invalid: prepared.length - okCnt,
+            results: prepared
+        });
+    }
+
+    // 2) 트랜잭션 적용
+    const stmtResult = db.prepare('UPDATE event SET result_url = ? WHERE id = ?');
+    const stmtVideo  = db.prepare('UPDATE event SET video_url = ? WHERE id = ?');
+    const apply = db.transaction((rows) => {
+        for (const r of rows) {
+            if (!r.ok || !r.willApply) continue;
+            if (r.field === 'result_url') stmtResult.run(r.url, r.event_id);
+            else stmtVideo.run(r.url, r.event_id);
+            r.applied = true;
+            r.previous_value = r.oldValue;
+            r.new_value = r.url;
+        }
+    });
+
+    try {
+        apply(prepared);
+    } catch (e) {
+        console.error('[external/event-result-link/batch]', e);
+        return res.status(500).json({ ok: false, code: 'INTERNAL_ERROR', message: e.message || 'internal error' });
+    }
+
+    const appliedCnt = prepared.filter(p => p.ok && p.applied).length;
+    const failedCnt = prepared.filter(p => !p.ok).length;
+
+    // 응답 정리(노출 필드 정돈)
+    const cleanResults = prepared.map(p => {
+        if (p.ok) {
+            return {
+                index: p.index, ok: true, applied: !!p.applied,
+                event_id: p.event_id, field: p.field,
+                previous_value: p.previous_value ?? p.oldValue,
+                new_value: p.new_value ?? p.url,
+                overwritten: !!p.willOverwrite,
+                event: p.event
+            };
+        }
+        return {
+            index: p.index, ok: false, code: p.code, message: p.message,
+            event_id: p.event_id, field: p.field || null,
+            current_value: p.current_value, requested_value: p.requested_value
+        };
+    });
+
+    return res.json({
+        ok: true,
+        total: prepared.length,
+        applied: appliedCnt,
+        failed: failedCnt,
+        results: cleanResults
+    });
+});
+
+// ── 외부 API 키 관리(관리자 전용) ──
+//   POST   /api/admin/external-keys           발급
+//   GET    /api/admin/external-keys           목록
+//   POST   /api/admin/external-keys/:id/revoke 회수
+//   GET    /api/admin/external-keys/logs      로그 조회
+app.post('/api/admin/external-keys', (req, res) => {
+    const { admin_key, label, allowed_competition_id, rate_limit_per_min, expires_at } = req.body || {};
+    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한 필요' });
+
+    const lbl = (label || '').toString().trim().slice(0, 200);
+    if (!lbl) return res.status(400).json({ error: 'label은 필수입니다.' });
+
+    let allowedComp = null;
+    if (allowed_competition_id) {
+        const cid = parseInt(allowed_competition_id);
+        if (!Number.isFinite(cid) || cid <= 0) return res.status(400).json({ error: 'allowed_competition_id가 올바르지 않습니다.' });
+        const c = db.prepare('SELECT id, mode FROM competition WHERE id=?').get(cid);
+        if (!c) return res.status(400).json({ error: '해당 대회가 존재하지 않습니다.' });
+        allowedComp = cid;
+    }
+
+    let rate = parseInt(rate_limit_per_min);
+    if (!Number.isFinite(rate) || rate <= 0) rate = 60;
+    if (rate > 600) rate = 600;
+
+    let expiresAt = null;
+    if (expires_at) {
+        const s = String(expires_at).trim();
+        if (s) {
+            // 간단 검증(YYYY-MM-DD 또는 YYYY-MM-DD HH:MM:SS)
+            if (!/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$/.test(s)) {
+                return res.status(400).json({ error: 'expires_at 형식 오류 (YYYY-MM-DD 또는 YYYY-MM-DD HH:MM:SS).' });
+            }
+            expiresAt = s.length === 10 ? (s + ' 23:59:59') : s;
+        }
+    }
+
+    const plain = _generateApiKey();
+    const hash = _hashApiKey(plain);
+    const prefix = _keyPrefix(plain);
+
+    const info = db.prepare(`
+        INSERT INTO external_api_key (key_hash, key_prefix, label, allowed_competition_id, rate_limit_per_min, expires_at, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(hash, prefix, lbl, allowedComp, rate, expiresAt, 'admin');
+
+    return res.json({
+        ok: true,
+        message: 'API 키가 발급되었습니다. 이 키는 다시 표시되지 않으니 안전한 곳에 보관하세요.',
+        id: info.lastInsertRowid,
+        api_key: plain,             // ← 발급 시 1회만 반환
+        key_prefix: prefix,
+        label: lbl,
+        allowed_competition_id: allowedComp,
+        rate_limit_per_min: rate,
+        expires_at: expiresAt
+    });
+});
+
+app.get('/api/admin/external-keys', (req, res) => {
+    const adminKey = req.query.admin_key || req.headers['x-admin-key'];
+    if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한 필요' });
+
+    const rows = db.prepare(`
+        SELECT k.id, k.key_prefix, k.label, k.allowed_competition_id, k.rate_limit_per_min,
+               k.expires_at, k.revoked_at, k.last_used_at, k.total_calls, k.created_at,
+               c.name AS competition_name
+        FROM external_api_key k
+        LEFT JOIN competition c ON c.id = k.allowed_competition_id
+        ORDER BY k.id DESC
+    `).all();
+
+    return res.json({ ok: true, items: rows });
+});
+
+app.post('/api/admin/external-keys/:id/revoke', (req, res) => {
+    const { admin_key } = req.body || {};
+    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한 필요' });
+    const id = parseInt(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'id 오류' });
+
+    const r = db.prepare(`UPDATE external_api_key SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`).run(id);
+    if (r.changes === 0) return res.status(404).json({ error: '해당 키 없음 또는 이미 회수됨' });
+    return res.json({ ok: true, id, revoked_at: new Date().toISOString() });
+});
+
+app.get('/api/admin/external-keys/logs', (req, res) => {
+    const adminKey = req.query.admin_key || req.headers['x-admin-key'];
+    if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한 필요' });
+
+    let limit = parseInt(req.query.limit || '100', 10);
+    if (!Number.isFinite(limit) || limit <= 0) limit = 100;
+    if (limit > 500) limit = 500;
+    const apiKeyId = req.query.api_key_id ? parseInt(req.query.api_key_id) : null;
+
+    let sql = `
+        SELECT l.id, l.api_key_id, l.key_prefix, l.endpoint, l.method,
+               l.request_ip, l.user_agent, l.competition_id, l.event_id,
+               l.response_status, l.response_code, l.duration_ms, l.created_at,
+               k.label AS key_label
+        FROM external_api_log l
+        LEFT JOIN external_api_key k ON k.id = l.api_key_id
+    `;
+    const params = [];
+    if (apiKeyId) { sql += ' WHERE l.api_key_id = ?'; params.push(apiKeyId); }
+    sql += ' ORDER BY l.id DESC LIMIT ?';
+    params.push(limit);
+
+    const rows = db.prepare(sql).all(...params);
+    return res.json({ ok: true, count: rows.length, items: rows });
+});
+
 
 // ============================================================
 // DISPLAY-MODE (노출용 대회) APIs

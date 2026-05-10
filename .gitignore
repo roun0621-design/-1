@@ -28,3 +28,4 @@ gen_icons*.py
 backups/
 public/og-preview.html
 public/icons/preview/
+tmp/
