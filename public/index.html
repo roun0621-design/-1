@@ -696,14 +696,12 @@
                 area.style.display = 'block';
 
                 // 헤더(라벨 + 펼침 토글)
-                const winLabel = win ? `${win.start} ~ ${win.end}` : '진행중 대회 ±3일';
                 const toggleLabel = _recentExpanded ? '접기 ▲' : '전체 대회 펼치기 ▼';
 
                 let html = `<div style="padding:16px;background:linear-gradient(135deg,#f8f4ea,#f0f0f0);border:1.5px solid #b79f58;border-radius:var(--radius);">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
                         <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#065f46;letter-spacing:1px;">
                             RECENT • 진행중 대회 ±3일
-                            <span style="font-family:var(--font-base,inherit);color:#666;font-size:11px;letter-spacing:0;margin-left:8px;">(${winLabel})</span>
                         </div>
                         <button type="button" onclick="toggleRecentExpanded()" class="btn btn-sm btn-ghost"
                             style="font-size:12px;padding:4px 10px;border:1px solid #b79f58;background:#fff;color:#065f46;border-radius:6px;cursor:pointer;">
