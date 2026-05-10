@@ -10879,6 +10879,123 @@ app.post('/api/display/timetable/relink/:compId', (req, res) => {
     }
 });
 
+// ─────────────────────────────────────────────────────────────────────
+// 고아 event 정리 API (노출용 대회 한정)
+//   사용 케이스: 옛날 코드(라벨 자유화 이전)로 시간표를 올렸을 때 잘못된
+//                division/gender 로 만들어진 event 들이 DB에 남아있음.
+//                재배포·재업로드 후, 시간표에 한 번도 링크되지 않고
+//                선수 엔트리/조/결과 링크도 없는 "고아 event" 만 안전 삭제.
+//
+//   안전 정책 (다음 조건 모두 만족해야 삭제 후보):
+//     - competition_id 일치
+//     - timetable.event_id 참조 0건 (재링크 후 미사용)
+//     - event_entry 0건 (선수 엔트리 없음)
+//     - heat 0건 (조 편성 없음)
+//     - result_url, video_url 모두 비어있음 (수동 입력 보호)
+//     - 다른 event 의 parent_event_id 로 참조되지 않음 (10종/7종 보호)
+//
+//   2단계 분리:
+//     GET  /api/display/cleanup-orphan-events/:compId  → 미리보기(삭제 안 함)
+//     POST /api/display/cleanup-orphan-events/:compId  → 실제 삭제
+// ─────────────────────────────────────────────────────────────────────
+function _findOrphanEvents(compId) {
+    return db.prepare(`
+        SELECT e.id, e.name, e.gender, e.division, e.round_type, e.category,
+               COALESCE(e.result_url,'') AS result_url,
+               COALESCE(e.video_url,'')  AS video_url
+        FROM event e
+        WHERE e.competition_id = ?
+          AND COALESCE(e.result_url,'') = ''
+          AND COALESCE(e.video_url,'')  = ''
+          AND e.parent_event_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM timetable    t  WHERE t.event_id        = e.id)
+          AND NOT EXISTS (SELECT 1 FROM event_entry  ee WHERE ee.event_id       = e.id)
+          AND NOT EXISTS (SELECT 1 FROM heat         h  WHERE h.event_id        = e.id)
+          AND NOT EXISTS (SELECT 1 FROM event        e2 WHERE e2.parent_event_id = e.id)
+        ORDER BY e.id
+    `).all(compId);
+}
+
+// 미리보기
+app.get('/api/display/cleanup-orphan-events/:compId', (req, res) => {
+    try {
+        const admin_key = req.query.admin_key || req.headers['x-admin-key'] || '';
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        const compId = parseInt(req.params.compId);
+        if (!compId) return res.status(400).json({ error: 'competition_id required' });
+
+        const comp = db.prepare('SELECT id, name, mode FROM competition WHERE id=?').get(compId);
+        if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
+        if (comp.mode !== 'display') return res.status(400).json({ error: '노출용(display) 대회에서만 사용 가능합니다.' });
+
+        const orphans = _findOrphanEvents(compId);
+        const totalEvents = db.prepare('SELECT COUNT(*) AS c FROM event WHERE competition_id=?').get(compId).c;
+
+        // 그룹 요약
+        const byBucket = {};
+        orphans.forEach(o => {
+            const k = `${o.division || '(EMPTY)'} | ${o.gender}`;
+            byBucket[k] = (byBucket[k] || 0) + 1;
+        });
+
+        res.json({
+            success: true,
+            competition: { id: comp.id, name: comp.name },
+            total_events: totalEvents,
+            orphan_count: orphans.length,
+            by_bucket: byBucket,
+            orphans: orphans.map(o => ({
+                id: o.id, name: o.name, gender: o.gender,
+                division: o.division, round_type: o.round_type, category: o.category
+            }))
+        });
+    } catch (e) {
+        console.error('cleanup preview error:', e);
+        res.status(500).json({ error: '미리보기 실패: ' + e.message });
+    }
+});
+
+// 실제 삭제
+app.post('/api/display/cleanup-orphan-events/:compId', (req, res) => {
+    try {
+        const { admin_key, dry_run } = req.body || {};
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        const compId = parseInt(req.params.compId);
+        if (!compId) return res.status(400).json({ error: 'competition_id required' });
+
+        const comp = db.prepare('SELECT id, name, mode FROM competition WHERE id=?').get(compId);
+        if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
+        if (comp.mode !== 'display') return res.status(400).json({ error: '노출용(display) 대회에서만 사용 가능합니다.' });
+
+        const orphans = _findOrphanEvents(compId);
+        if (dry_run) {
+            return res.json({
+                success: true, dry_run: true,
+                would_delete: orphans.length,
+                orphans: orphans.map(o => ({ id: o.id, name: o.name, gender: o.gender, division: o.division, round_type: o.round_type }))
+            });
+        }
+
+        const tx = db.transaction(() => {
+            const del = db.prepare('DELETE FROM event WHERE id=?');
+            let deleted = 0;
+            orphans.forEach(o => { del.run(o.id); deleted++; });
+            return deleted;
+        });
+        const deleted = tx();
+
+        opLog(`고아 event 정리 (${deleted}개 삭제)`, 'admin', 'admin', compId);
+        res.json({
+            success: true,
+            deleted,
+            sample: orphans.slice(0, 20).map(o => ({ id: o.id, name: o.name, gender: o.gender, division: o.division, round_type: o.round_type }))
+        });
+    } catch (e) {
+        console.error('cleanup orphan error:', e);
+        res.status(500).json({ error: '정리 실패: ' + e.message });
+    }
+});
+
 // Auto-link timetable to display-mode events
 function autoLinkDisplayTimetable(compId) {
     let events = db.prepare('SELECT id, name, gender, division, round_type, category FROM event WHERE competition_id=?').all(compId);

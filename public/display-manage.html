@@ -363,6 +363,19 @@ function renderTimetable(el){
                 <span><b>강제 덮어쓰기</b> — 체크 시 과거 일차도 모두 새로 등록 (기본: 스마트 머지 — 과거 보존, 변경분만 반영)</span>
             </label>
         </div>
+        <div style="margin-top:10px;padding:10px 12px;background:#fff5f0;border:1px solid #fed7aa;border-radius:8px;font-size:12px;">
+            <div style="font-weight:600;margin-bottom:6px;color:#9a3412;">🧹 종목 정리 도구</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">
+                옛날 코드로 시간표를 올렸을 때 잘못된 division/gender로 만들어진 <b>고아 종목</b>(시간표·엔트리·조·결과 모두 없음)을 안전하게 삭제합니다.<br>
+                미리보기로 대상 확인 후 삭제하세요. 결과/영상 링크가 있는 종목은 절대 삭제되지 않습니다.
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-sm btn-ghost" onclick="previewOrphanEvents()">고아 종목 미리보기</button>
+                <button class="btn btn-sm btn-ghost" onclick="relinkTimetable()">시간표 재링크</button>
+                <button class="btn btn-sm" style="background:#dc2626;color:#fff;" onclick="cleanupOrphanEvents()">고아 종목 삭제 실행</button>
+            </div>
+            <div id="orphan-result" style="margin-top:10px;font-size:12px;"></div>
+        </div>
         <div id="upload-day-select" style="margin-top:12px;display:none;">
             <label style="font-size:12px;font-weight:600;">업로드 일차: </label>
             <select id="upload-day" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
@@ -1131,6 +1144,91 @@ async function uploadTT(inp){
         await loadAll();
     } else {
         document.getElementById('upload-msg').innerHTML=`<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+    }
+}
+
+// ─── 고아 종목 정리 도구 ──────────────────────────────────────────
+// 미리보기 (삭제하지 않고 대상만 조회)
+async function previewOrphanEvents(){
+    const box = document.getElementById('orphan-result');
+    box.innerHTML = '<span style="color:var(--gold);">⏳ 조회 중...</span>';
+    try {
+        const url = `/api/display/cleanup-orphan-events/${compId}?admin_key=${encodeURIComponent(getKey())}`;
+        const r = await fetch(url).then(r=>r.json());
+        if(!r.success){
+            box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+            return;
+        }
+        const buckets = r.by_bucket || {};
+        const bucketHtml = Object.entries(buckets).sort()
+            .map(([k,v]) => `<li><b>${esc(k)}</b>: ${v}개</li>`).join('') || '<li>없음</li>';
+        const sampleHtml = (r.orphans||[]).slice(0,30)
+            .map(o => `<li>#${o.id} ${esc(o.name)} | ${esc(o.gender)} | ${esc(o.division||'(빈값)')} | ${esc(o.round_type)}</li>`)
+            .join('');
+        box.innerHTML = `
+            <div style="background:#fff;border:1px solid var(--gray);border-radius:6px;padding:10px;">
+                <div style="font-weight:600;margin-bottom:6px;">📋 고아 종목 미리보기</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">
+                    전체 종목 ${r.total_events}개 중 <b style="color:#dc2626;">${r.orphan_count}개 삭제 후보</b>
+                </div>
+                <div style="font-size:11px;margin-bottom:8px;">
+                    <b>그룹별:</b><ul style="margin:4px 0 0 16px;padding:0;">${bucketHtml}</ul>
+                </div>
+                ${sampleHtml ? `<details style="font-size:11px;"><summary style="cursor:pointer;">상세 목록 (최대 30건 표시)</summary><ul style="margin:4px 0 0 16px;padding:0;max-height:200px;overflow:auto;">${sampleHtml}</ul></details>` : ''}
+            </div>`;
+    } catch(e){
+        box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(e.message)}</span>`;
+    }
+}
+
+// 시간표 재링크 — 모든 timetable.event_id 를 NULL 로 리셋 후 autoLink 재실행
+async function relinkTimetable(){
+    if(!confirm('시간표의 모든 행을 다시 링크합니다.\n\n잘못된 라벨로 매칭되었던 행이 올바른 종목으로 재매핑되며, 누락된 종목은 자동 생성됩니다.\n\n진행하시겠습니까?')) return;
+    const box = document.getElementById('orphan-result');
+    box.innerHTML = '<span style="color:var(--gold);">⏳ 재링크 중...</span>';
+    try {
+        const r = await fetch(`/api/display/timetable/relink/${compId}`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ admin_key: getKey() })
+        }).then(r=>r.json());
+        if(!r.success){
+            box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+            return;
+        }
+        box.innerHTML = `<span style="color:var(--success,#2e7d32);">✅ 재링크 완료 — 전체 ${r.total}건 / 링크됨 ${r.linked}건 / 미매칭 ${r.unlinked}건 (이전 ${r.before}건)</span>`;
+        toast('시간표 재링크 완료');
+    } catch(e){
+        box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(e.message)}</span>`;
+    }
+}
+
+// 실제 삭제 — 미리보기 후 진행 권장
+async function cleanupOrphanEvents(){
+    if(!confirm('⚠️ 고아 종목을 삭제합니다.\n\n시간표·엔트리·조·결과(result_url/video_url)가 모두 없는 종목만 삭제됩니다.\n부모 종목으로 참조되는 10종/7종 sub-event 도 보호됩니다.\n\n계속하시겠습니까?')) return;
+    if(!confirm('한번 더 확인합니다. 정말 삭제하시겠습니까?')) return;
+    const box = document.getElementById('orphan-result');
+    box.innerHTML = '<span style="color:var(--gold);">⏳ 삭제 중...</span>';
+    try {
+        const r = await fetch(`/api/display/cleanup-orphan-events/${compId}`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ admin_key: getKey() })
+        }).then(r=>r.json());
+        if(!r.success){
+            box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+            return;
+        }
+        const sampleHtml = (r.sample||[]).map(o => `<li>#${o.id} ${esc(o.name)} | ${esc(o.gender)} | ${esc(o.division||'(빈값)')} | ${esc(o.round_type)}</li>`).join('');
+        box.innerHTML = `
+            <div style="background:#fff;border:1px solid var(--gray);border-radius:6px;padding:10px;">
+                <div style="color:var(--success,#2e7d32);font-weight:600;">✅ ${r.deleted}개 종목 삭제 완료</div>
+                ${sampleHtml ? `<details style="font-size:11px;margin-top:6px;"><summary style="cursor:pointer;">삭제된 종목 샘플 (최대 20건)</summary><ul style="margin:4px 0 0 16px;padding:0;">${sampleHtml}</ul></details>` : ''}
+            </div>`;
+        toast(`고아 종목 ${r.deleted}개 삭제됨`);
+        await loadAll();
+    } catch(e){
+        box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(e.message)}</span>`;
     }
 }
 
