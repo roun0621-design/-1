@@ -270,8 +270,48 @@ function switchGender(g, btn) {
     renderMatrix();
 }
 
-// Division filter tabs for display mode (fixed order: 중등부→고등부→대학부→일반부→U20→국제)
-const DIVISION_ORDER = ['중등부','고등부','대학부','일반부','U20','국제'];
+// Division filter tabs for display mode
+// 연령군 우선 → 성별 보조 (초·중·고·대·일반·U18·U20·선수권·국제). 신규 라벨은 자동으로 마지막에 붙음.
+const DIVISION_ORDER = [
+    '초등부','남초','여초',
+    '중등부','남중','여중',
+    '고등부','남고','여고',
+    'U18','U18(남)','U18(여)','U18(혼)',
+    'U20','U20(남)','U20(여)','U20(혼)',
+    '대학부','대학(남)','대학(여)',
+    '일반부','일반(남)','일반(여)',
+    '선수권','선수권(남)','선수권(여)','선수권(혼)',
+    '국제'
+];
+
+// 동적 라벨도 합리적 위치에 정렬되도록 연령군 점수를 부여
+function _ageGroupScore(d) {
+    const s = (d || '').replace(/\s/g, '');
+    if (!s) return 900;
+    if (/초/.test(s)) return 100;
+    if (/중/.test(s)) return 200;
+    if (/고/.test(s)) return 300;
+    if (/U18/i.test(s)) return 350;
+    if (/U20/i.test(s)) return 400;
+    if (/대학|대$/.test(s)) return 500;
+    if (/일반|실업/.test(s)) return 600;
+    if (/선수권/.test(s)) return 700;
+    if (/마스터즈|master/i.test(s)) return 800;
+    if (/국제|inter/i.test(s)) return 850;
+    return 900;
+}
+function _genderScore(d) {
+    const s = (d || '').replace(/\s/g, '');
+    if (/혼/.test(s)) return 3;
+    if (/여/.test(s)) return 2;
+    if (/남/.test(s)) return 1;
+    return 0;
+}
+function _divCompareKey(d) {
+    const idx = DIVISION_ORDER.indexOf(d);
+    if (idx >= 0) return idx;
+    return 1000 + _ageGroupScore(d) + _genderScore(d);
+}
 
 function renderDivisionTabs() {
     let divBar = document.getElementById('division-tabs');
@@ -282,15 +322,13 @@ function renderDivisionTabs() {
         const genderTabs = document.getElementById('gender-tabs');
         if (genderTabs) genderTabs.after(divBar);
     }
-    const existingDivs = new Set(allEvents.filter(e => !e.parent_event_id).map(e => e.division).filter(Boolean));
-    if (existingDivs.size === 0) { divBar.style.display = 'none'; return; }
+    const existingDivs = [...new Set(allEvents.filter(e => !e.parent_event_id).map(e => e.division).filter(Boolean))];
+    if (existingDivs.length === 0) { divBar.style.display = 'none'; return; }
     divBar.style.display = 'flex';
-    // Use fixed order, only show divisions that have events
-    const orderedDivs = DIVISION_ORDER.filter(d => existingDivs.has(d));
-    // Add any extra divisions not in the fixed order
-    existingDivs.forEach(d => { if (!orderedDivs.includes(d)) orderedDivs.push(d); });
+    // 일반화된 정렬: 사전 정의 순서 → 연령군 점수 → 성별 점수
+    const orderedDivs = existingDivs.slice().sort((a, b) => _divCompareKey(a) - _divCompareKey(b) || a.localeCompare(b));
     const all = ['전체', ...orderedDivs];
-    divBar.innerHTML = all.map(d => `<button class="gender-tab-btn${d===_currentDivision?' active':''}" style="flex:none;padding:6px 14px;font-size:12px;font-weight:700;color:#555;border-bottom:2px solid transparent;${d===_currentDivision?'color:#b79f58;border-bottom-color:#b79f58;background:#f8f4ea;':''}" onclick="switchDivision('${d}',this)">${d}</button>`).join('');
+    divBar.innerHTML = all.map(d => `<button class="gender-tab-btn${d===_currentDivision?' active':''}" style="flex:none;padding:6px 14px;font-size:12px;font-weight:700;color:#555;border-bottom:2px solid transparent;${d===_currentDivision?'color:#b79f58;border-bottom-color:#b79f58;background:#f8f4ea;':''}" onclick="switchDivision('${d.replace(/'/g,"\\'")}',this)">${d}</button>`).join('');
 }
 
 function switchDivision(div, btn) {
@@ -387,7 +425,7 @@ function renderMatrix() {
         }
         return 999;
     }
-    function _divSortIdx(div) { const idx=DIVISION_ORDER.indexOf(div); return idx>=0?idx:999; }
+    function _divSortIdx(div) { return _divCompareKey(div); }
     categories.forEach(cat => {
         const groups = Object.values(eventGroups).filter(g => cat.match(g.category));
         // Sort groups by event standard order, then division
@@ -468,16 +506,31 @@ function renderCategoryTable(groups, label, isLive) {
             timeBadge = `${dayLabel}<span style="font-size:9px;color:${tColor};background:${tBg};padding:1px 5px;border-radius:6px;margin-left:2px;font-weight:600;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
         }
 
-        // Division badge for display mode (color-coded by division)
-        const _divColors = {
-            '중등부': { color: '#1565c0', bg: '#e3f2fd' },
-            '고등부': { color: '#e65100', bg: '#fff3e0' },
-            '대학부': { color: '#4a148c', bg: '#f3e5f5' },
-            '일반부': { color: '#1b5e20', bg: '#e8f5e9' },
-            'U20': { color: '#b71c1c', bg: '#ffebee' },
-            '국제': { color: '#006064', bg: '#e0f7fa' }
-        };
-        const _dc = _divColors[g.division] || { color: '#6a1b9a', bg: '#f3e5f5' };
+        // Division badge for display mode (color-coded by age group)
+        // 연령군별 베이스 색상 → 정확 라벨이 없어도 자동 매칭
+        function _divColorOf(div) {
+            const exact = {
+                '중등부': { color: '#1565c0', bg: '#e3f2fd' },
+                '고등부': { color: '#e65100', bg: '#fff3e0' },
+                '대학부': { color: '#4a148c', bg: '#f3e5f5' },
+                '일반부': { color: '#1b5e20', bg: '#e8f5e9' },
+                '국제':   { color: '#006064', bg: '#e0f7fa' }
+            };
+            if (exact[div]) return exact[div];
+            const s = (div || '').replace(/\s/g, '');
+            if (/초/.test(s))           return { color: '#00695c', bg: '#e0f2f1' }; // 초등 - 청록
+            if (/중/.test(s))           return { color: '#1565c0', bg: '#e3f2fd' }; // 중등 - 파랑
+            if (/고/.test(s))           return { color: '#e65100', bg: '#fff3e0' }; // 고등 - 주황
+            if (/U18/i.test(s))         return { color: '#c62828', bg: '#ffebee' }; // U18 - 빨강
+            if (/U20/i.test(s))         return { color: '#b71c1c', bg: '#ffcdd2' }; // U20 - 진빨강
+            if (/대학|대$/.test(s))     return { color: '#4a148c', bg: '#f3e5f5' }; // 대학 - 보라
+            if (/일반|실업/.test(s))    return { color: '#1b5e20', bg: '#e8f5e9' }; // 일반 - 녹색
+            if (/선수권/.test(s))       return { color: '#5d4037', bg: '#efebe9' }; // 선수권 - 갈색
+            if (/마스터즈|master/i.test(s)) return { color: '#37474f', bg: '#eceff1' };
+            if (/국제|inter/i.test(s))  return { color: '#006064', bg: '#e0f7fa' };
+            return { color: '#6a1b9a', bg: '#f3e5f5' };
+        }
+        const _dc = _divColorOf(g.division);
         const divBadge = (_isDisplayMode && g.division && _currentDivision === '전체') ? `<span style="font-size:9px;color:${_dc.color};background:${_dc.bg};padding:1px 5px;border-radius:6px;margin-left:4px;font-weight:600;">${g.division}</span>` : '';
 
         html += `<tr>

@@ -217,12 +217,56 @@ let _dayFilter = 0; // 0 = all
 // Constants
 // WA 표준 순서 (서버 STANDARD_EVENT_ORDER와 동기화)
 const EVENT_ORDER = ['100m','200m','400m','800m','1500m','3000m','5000m','5000mW','10000m','10000mW','100mH','110mH','400mH','3000mSC','3000m장애물','멀리뛰기','세단뛰기','높이뛰기','장대높이뛰기','포환던지기','원반던지기','해머던지기','창던지기','10종경기','7종경기','5종경기','4x100mR','4X100mR','4x400mR','4X400mR','4x800mR','4X800mR','4x1500mR','4X1500mR','4x400mR(믹스)','4X400mR(Mixed)','혼성4x400mR','혼성 4x400m 릴레이','하프마라톤','마라톤','10kmW','20kmW','20KmW','35kmW','50kmW'];
-const DIV_ORDER = ['중등부','고등부','대학부','일반부','U20','국제'];
-const DIV_SHORT = {'중등부':'중','고등부':'고','대학부':'대','일반부':'일','U20':'U20','국제':'국제'};
+// 연령군 우선 → 성별 보조. 사전 정의 외 라벨도 자동으로 합리적 위치로 정렬.
+const DIV_ORDER = [
+    '초등부','남초','여초',
+    '중등부','남중','여중',
+    '고등부','남고','여고',
+    'U18','U18(남)','U18(여)','U18(혼)',
+    'U20','U20(남)','U20(여)','U20(혼)',
+    '대학부','대학(남)','대학(여)',
+    '일반부','일반(남)','일반(여)',
+    '선수권','선수권(남)','선수권(여)','선수권(혼)',
+    '국제'
+];
+const DIV_SHORT = {
+    '초등부':'초','남초':'남초','여초':'여초',
+    '중등부':'중','남중':'남중','여중':'여중',
+    '고등부':'고','남고':'남고','여고':'여고',
+    'U18':'U18','U18(남)':'U18남','U18(여)':'U18여','U18(혼)':'U18혼',
+    'U20':'U20','U20(남)':'U20남','U20(여)':'U20여','U20(혼)':'U20혼',
+    '대학부':'대','대학(남)':'대남','대학(여)':'대여',
+    '일반부':'일','일반(남)':'일남','일반(여)':'일여',
+    '선수권':'선수권','선수권(남)':'선수권남','선수권(여)':'선수권여','선수권(혼)':'선수권혼',
+    '국제':'국제'
+};
 const GENDER_SHORT = {M:'남',F:'여',X:''};
 
+function _ageGroupScore(d){
+    const s=(d||'').replace(/\s/g,'');
+    if(!s) return 900;
+    if(/초/.test(s)) return 100;
+    if(/중/.test(s)) return 200;
+    if(/고/.test(s)) return 300;
+    if(/U18/i.test(s)) return 350;
+    if(/U20/i.test(s)) return 400;
+    if(/대학|대$/.test(s)) return 500;
+    if(/일반|실업/.test(s)) return 600;
+    if(/선수권/.test(s)) return 700;
+    if(/마스터즈|master/i.test(s)) return 800;
+    if(/국제|inter/i.test(s)) return 850;
+    return 900;
+}
+function _genderScore(d){
+    const s=(d||'').replace(/\s/g,'');
+    if(/혼/.test(s)) return 3;
+    if(/여/.test(s)) return 2;
+    if(/남/.test(s)) return 1;
+    return 0;
+}
+
 function evIdx(n){ const s=(n||'').replace(/\s/g,''); for(let i=0;i<EVENT_ORDER.length;i++) if(s===EVENT_ORDER[i]||s.startsWith(EVENT_ORDER[i])) return i; return 999; }
-function divIdx(d){ const i=DIV_ORDER.indexOf(d); return i>=0?i:999; }
+function divIdx(d){ const i=DIV_ORDER.indexOf(d); if(i>=0) return i; return 1000+_ageGroupScore(d)+_genderScore(d); }
 function fmtEvent(ev){ return `${GENDER_SHORT[ev.gender]||''}${DIV_SHORT[ev.division]||ev.division||''} ${ev.name} ${ev.round_type==='preliminary'?'예선':ev.round_type==='semifinal'?'준결승':ev.round_type==='final'?'결승':ev.round_type||''}`.trim(); }
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function getKey(){ return localStorage.getItem('pace_admin_key')||localStorage.getItem('pace_op_key')||''; }
@@ -386,14 +430,9 @@ function renderTimetable(el){
             const roundBase = roundFull.replace(/\([^)]*\)/g,'').trim();
             // 종목명에 라운드 포함: "남고 100m 예선"
             const eventLabel = `${cats} ${g.event_name}${roundBase?' '+roundBase:''}`;
-            // 부별 표시 (종별에서 추출 - 고/대/일/중 등)
-            const divTags = g.categories.map(c=>{
-                if(c.includes('고')) return '고등부';
-                if(c.includes('대')) return '대학부';
-                if(c.includes('일')) return '일반부';
-                if(c.includes('중')) return '중등부';
-                return '';
-            }).filter(Boolean);
+            // 부별 표시 (종별 라벨을 그대로 사용; 정선 대회처럼 U18/U20/선수권/남초 등 다양)
+            // 다중 라벨이면 그대로 슬래시로 묶음
+            const divTags = g.categories.map(c=>(c||'').trim()).filter(Boolean);
             const divLabel = [...new Set(divTags)].join('/');
             // 라운드 태그 + 부별 배지 (우측 정렬)
             let rightTags = '';

@@ -1738,8 +1738,46 @@
 
         // ---- EVENTS (Callroom/Record-style Matrix) ----
         let _evtGender = 'M';
-        let _evtDivision = 'all'; // 'all' | '중등부' | '고등부' | '대학부' | '일반부' | 'U20' | '국제' | '' (미지정)
-        const DIV_ORDER_ADM = ['중등부','고등부','대학부','일반부','U20','국제'];
+        let _evtDivision = 'all'; // 'all' | 정의된 라벨 | 동적 라벨 | '' (미지정)
+        // 연령군 우선 + 성별 보조. 신규 라벨도 자동으로 합리적 위치로 정렬됨.
+        const DIV_ORDER_ADM = [
+            '초등부','남초','여초',
+            '중등부','남중','여중',
+            '고등부','남고','여고',
+            'U18','U18(남)','U18(여)','U18(혼)',
+            'U20','U20(남)','U20(여)','U20(혼)',
+            '대학부','대학(남)','대학(여)',
+            '일반부','일반(남)','일반(여)',
+            '선수권','선수권(남)','선수권(여)','선수권(혼)',
+            '국제'
+        ];
+        function _admAgeScore(d){
+            const s=(d||'').replace(/\s/g,'');
+            if(!s) return 900;
+            if(/초/.test(s)) return 100;
+            if(/중/.test(s)) return 200;
+            if(/고/.test(s)) return 300;
+            if(/U18/i.test(s)) return 350;
+            if(/U20/i.test(s)) return 400;
+            if(/대학|대$/.test(s)) return 500;
+            if(/일반|실업/.test(s)) return 600;
+            if(/선수권/.test(s)) return 700;
+            if(/마스터즈|master/i.test(s)) return 800;
+            if(/국제|inter/i.test(s)) return 850;
+            return 900;
+        }
+        function _admGenderScore(d){
+            const s=(d||'').replace(/\s/g,'');
+            if(/혼/.test(s)) return 3;
+            if(/여/.test(s)) return 2;
+            if(/남/.test(s)) return 1;
+            return 0;
+        }
+        function _admDivKey(d){
+            const i=DIV_ORDER_ADM.indexOf(d);
+            if(i>=0) return i;
+            return 1000+_admAgeScore(d)+_admGenderScore(d);
+        }
         async function loadEvents() {
             if (!_selectedCompId) return;
             try { _allAdminEvents = await API.adminGetEvents(AK(), _selectedCompId); renderEvtDivisionTabs(); renderEvtMatrix(); } catch (e) { toast('종목 로드 실패', 'error'); }
@@ -1772,19 +1810,14 @@
                 const d = e.division || '';
                 divCounts[d] = (divCounts[d] || 0) + 1;
             });
-            // Build tabs: 전체 + 표준 부 순서 + 미지정(if any)
+            // Build tabs: 전체 + 일반화된 정렬(연령군→성별) + 미지정(끝)
             const totalCount = genderEvents.length;
             let html = `<button class="evt-div-tab ${_evtDivision==='all'?'active':''}" onclick="switchEvtDivision('all',this)">전체<span class="div-count">${totalCount}</span></button>`;
-            DIV_ORDER_ADM.forEach(d => {
-                if (divCounts[d]) {
-                    html += `<button class="evt-div-tab ${_evtDivision===d?'active':''}" onclick="switchEvtDivision('${d}',this)">${d}<span class="div-count">${divCounts[d]}</span></button>`;
-                }
-            });
-            // Other divisions not in standard order
-            Object.keys(divCounts).forEach(d => {
-                if (d && !DIV_ORDER_ADM.includes(d)) {
-                    html += `<button class="evt-div-tab ${_evtDivision===d?'active':''}" onclick="switchEvtDivision('${d}',this)">${d}<span class="div-count">${divCounts[d]}</span></button>`;
-                }
+            const nonEmptyDivs = Object.keys(divCounts).filter(d => d !== '');
+            nonEmptyDivs.sort((a,b) => _admDivKey(a) - _admDivKey(b) || a.localeCompare(b));
+            nonEmptyDivs.forEach(d => {
+                const dEsc = d.replace(/'/g, "\\'");
+                html += `<button class="evt-div-tab ${_evtDivision===d?'active':''}" onclick="switchEvtDivision('${dEsc}',this)">${d}<span class="div-count">${divCounts[d]}</span></button>`;
             });
             // 미지정 (division empty)
             if (divCounts['']) {
@@ -1844,21 +1877,34 @@
                 }
                 eventGroups[gKey].rounds.push(e);
             });
-            // Division badge color
-            const DIV_BADGE_COLOR = {
+            // Division badge color (연령군 베이스 + 정확 라벨 우선)
+            const DIV_BADGE_EXACT = {
                 '중등부': { bg:'#e3f2fd', fg:'#1565c0' },
                 '고등부': { bg:'#fff3e0', fg:'#e65100' },
                 '대학부': { bg:'#f3e5f5', fg:'#6a1b9a' },
                 '일반부': { bg:'#e8f5e9', fg:'#2e7d32' },
-                'U20':    { bg:'#ffebee', fg:'#c62828' },
                 '국제':   { bg:'#e0f7fa', fg:'#00695c' },
             };
-            // When showing 'all', sort groups by division within each category
+            function divBadgeColor(d){
+                if (DIV_BADGE_EXACT[d]) return DIV_BADGE_EXACT[d];
+                const s = (d||'').replace(/\s/g,'');
+                if (/초/.test(s))           return { bg:'#e0f2f1', fg:'#00695c' };
+                if (/중/.test(s))           return { bg:'#e3f2fd', fg:'#1565c0' };
+                if (/고/.test(s))           return { bg:'#fff3e0', fg:'#e65100' };
+                if (/U18/i.test(s))         return { bg:'#ffebee', fg:'#c62828' };
+                if (/U20/i.test(s))         return { bg:'#ffcdd2', fg:'#b71c1c' };
+                if (/대학|대$/.test(s))     return { bg:'#f3e5f5', fg:'#4a148c' };
+                if (/일반|실업/.test(s))    return { bg:'#e8f5e9', fg:'#1b5e20' };
+                if (/선수권/.test(s))       return { bg:'#efebe9', fg:'#5d4037' };
+                if (/마스터즈|master/i.test(s)) return { bg:'#eceff1', fg:'#37474f' };
+                if (/국제|inter/i.test(s))  return { bg:'#e0f7fa', fg:'#006064' };
+                return { bg:'#f3e5f5', fg:'#6a1b9a' };
+            }
+            const DIV_BADGE_COLOR = new Proxy({}, { get: (_, d) => divBadgeColor(d) });
+            // When showing 'all', sort groups by division within each category (일반화된 키 사용)
             const sortGroupsByDiv = (a, b) => {
-                const ai = DIV_ORDER_ADM.indexOf(a.division);
-                const bi = DIV_ORDER_ADM.indexOf(b.division);
-                const aRank = ai >= 0 ? ai : 99;
-                const bRank = bi >= 0 ? bi : 99;
+                const aRank = _admDivKey(a.division);
+                const bRank = _admDivKey(b.division);
                 if (aRank !== bRank) return aRank - bRank;
                 return (a.name || '').localeCompare(b.name || '');
             };
