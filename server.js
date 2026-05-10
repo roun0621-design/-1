@@ -10953,12 +10953,15 @@ function autoLinkDisplayTimetable(compId) {
 // Upload roster PDF for display-mode competition
 app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
     try {
-        const { competition_id, admin_key, day } = req.body;
+        const { competition_id, admin_key, day, division_hint } = req.body;
         if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
         if (!req.file) return res.status(400).json({ error: '파일이 없습니다.' });
 
         const dayNum = parseInt(day) || 1;
+        // 파일명/사용자 입력에서 추출한 division_hint (PDF 파싱이 부 라벨을 못 찾을 때 fallback)
+        // 예: "꿈나무" / "선수권" / "U18" / "U20"  (성별 정보가 같이 들어오면 "선수권 남자" 처럼)
+        const divisionHint = (division_hint || '').toString().trim();
         const pdfParse = require('pdf-parse');
         const pdfBuffer = fs.readFileSync(req.file.path);
 
@@ -11090,6 +11093,35 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
             // --- Division/Gender mapping ---
             function parseDivisionMarker(line) {
                 let gender = '', division = '';
+                const orig = line;
+
+                // ── 신형 라벨 우선 처리 ─────────────────────────────────────
+                // 1) "남초 4학년부", "여초 5학년부" 등 → 초등부
+                let m = orig.match(/^(남|여)초\s*(\d+학년부)?$/);
+                if (m) {
+                    return { gender: m[1] === '남' ? 'M' : 'F', division: '초등부' };
+                }
+                // 2) "선수권 남자부" / "선수권 여자부" / "선수권 혼성부"
+                m = orig.match(/^선수권\s*(남자|여자|혼성)부?$/);
+                if (m) {
+                    const g = m[1] === '남자' ? 'M' : (m[1] === '여자' ? 'F' : 'X');
+                    const dv = m[1] === '남자' ? '선수권(남)' : (m[1] === '여자' ? '선수권(여)' : '선수권(혼)');
+                    return { gender: g, division: dv };
+                }
+                // 3) "U18 남자부" / "U20 여자부" / "U18 혼성부"
+                m = orig.match(/^U(18|20)\s*(남자|여자|혼성)부?$/i);
+                if (m) {
+                    const g = m[2] === '남자' ? 'M' : (m[2] === '여자' ? 'F' : 'X');
+                    const dv = `U${m[1]}(${m[2] === '남자' ? '남' : (m[2] === '여자' ? '여' : '혼')})`;
+                    return { gender: g, division: dv };
+                }
+                // 4) "꿈나무 남자부" / "꿈나무 여자부" (혹시 등장 시)
+                m = orig.match(/^꿈나무\s*(남자|여자)부?$/);
+                if (m) {
+                    return { gender: m[1] === '남자' ? 'M' : 'F', division: '초등부' };
+                }
+
+                // ── 구형 라벨: "남자/여자" + 중학교부/고등학교부/... ──
                 if (line.startsWith('남자')) { gender = 'M'; line = line.substring(2); }
                 else if (line.startsWith('여자')) { gender = 'F'; line = line.substring(2); }
                 const divMap = {
@@ -11097,6 +11129,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                     '대학부': '대학부', '대학교부': '대학부',
                     '고등부': '고등부', '고등학교부': '고등부',
                     '중등부': '중등부', '중학교부': '중등부',
+                    '초등부': '초등부', '초등학교부': '초등부',
                 };
                 for (const [key, val] of Object.entries(divMap)) {
                     if (line.startsWith(key)) { division = val; break; }
@@ -11112,7 +11145,24 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
             // ============================================================
 
             // Pass 1: Identify section boundaries
-            const divMarkerRegex = /^(남자|여자)?(중학교부|고등학교부|대학교부|일반부|중등부|고등부|대학부|실업부)$/;
+            //   - 구형: "남자중학교부" / "여자고등학교부" / "일반부" 등
+            //   - 신형: "남초 4학년부" / "여초 5학년부" / "선수권 남자부" / "U18 남자부" / "U20 여자부" / "꿈나무 남자부"
+            const divMarkerRegex = new RegExp(
+                '^(?:' +
+                    // 구형
+                    '(?:남자|여자)?(?:초등학교부|중학교부|고등학교부|대학교부|일반부|초등부|중등부|고등부|대학부|실업부)' +
+                    '|' +
+                    // 신형
+                    '(?:남|여)초(?:\\s*\\d+학년부)?' +
+                    '|' +
+                    '선수권\\s*(?:남자|여자|혼성)부?' +
+                    '|' +
+                    'U(?:18|20)\\s*(?:남자|여자|혼성)부?' +
+                    '|' +
+                    '꿈나무\\s*(?:남자|여자)부?' +
+                ')$',
+                'i'
+            );
             const sectionBoundaries = []; // {lineIdx, gender, division}
             lines.forEach((l, i) => {
                 if (divMarkerRegex.test(l)) {
@@ -11120,6 +11170,18 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                     sectionBoundaries.push({ lineIdx: i, ...parsed });
                 }
             });
+
+            // ── Fallback: PDF 안에 부 라벨 마커가 하나도 없으면 division_hint 사용 ──
+            // 파일명에서 추출한 힌트(예: "꿈나무", "선수권", "U18", "U20")를
+            // parseDivisionMarker로 한 번 더 정규화해 전체 파일에 적용한다.
+            let hintFallback = null;
+            if (sectionBoundaries.length === 0 && divisionHint) {
+                const parsedHint = parseDivisionMarker(divisionHint);
+                if (parsedHint.division) {
+                    hintFallback = parsedHint;
+                    console.log(`[roster/upload] division markers not found in PDF — using filename hint: "${divisionHint}" → ${JSON.stringify(parsedHint)}`);
+                }
+            }
 
             // Build a mapping: for each line, determine which division it belongs to
             // Division marker at line X labels everything from the previous marker+1 to X-1
@@ -11134,6 +11196,10 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                 if (sectionBoundaries.length > 0) {
                     const last = sectionBoundaries[sectionBoundaries.length - 1];
                     return { gender: last.gender, division: last.division };
+                }
+                // PDF 내 마커가 전혀 없을 때만 파일명 힌트 fallback 사용
+                if (hintFallback) {
+                    return { gender: hintFallback.gender, division: hintFallback.division };
                 }
                 return { gender: '', division: '' };
             }
