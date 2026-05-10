@@ -11473,355 +11473,239 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
             }
 
             // ============================================================
-            // 2-PASS PARSING: Division markers come AFTER athlete data
-            // Pass 1: Find division boundaries (markers label everything above them)
-            // Pass 2: Parse athletes with correct division assignment
+            // v3 PARSING: 페이지 단위 부 라벨 + lastSeq 추적 + 두자리 순(10~99) 정확 추출
+            //   - tmp/pdf_to_excel.js 의 v3 로직과 동일한 알고리즘
+            //   - PDF 마다 페이지 마커(-NN-) 단위로 분할하고, 각 페이지의 부 라벨을
+            //     그 페이지 내부에만 적용해 다음 페이지로 흘러넘치지 않도록 함
+            //   - 같은 종목/조 내에서 순(順)/레인은 1부터 N까지 단조증가한다는 사실을 활용해
+            //     붙어있는 숫자 덩어리에서 두자리 순도 정확히 분리
             // ============================================================
-
-            // Pass 1: Identify section boundaries
-            //   - 구형: "남자중학교부" / "여자고등학교부" / "일반부" 등
-            //   - 신형: "남초 4학년부" / "여초 5학년부" / "선수권 남자부" / "U18 남자부" / "U20 여자부" / "꿈나무 남자부"
             const divMarkerRegex = new RegExp(
                 '^(?:' +
-                    // 구형
                     '(?:남자|여자)?(?:초등학교부|중학교부|고등학교부|대학교부|일반부|초등부|중등부|고등부|대학부|실업부)' +
-                    '|' +
-                    // 신형 — 짧은 코드 라벨
-                    '(?:남|여)초(?:\\s*\\d+학년부)?' +
-                    '|' +
-                    // ★ 추가: "남중 1/2학년부", "여중", "남고", "여고", "남대", "여대"
-                    //    (꿈나무 PDF의 페이지 끝 라벨 형식 — 기존엔 인식 못해 잘못된 division 으로 매칭됨)
-                    '(?:남|여)중(?:\\s*[\\d/]+학년부)?' +
-                    '|' +
-                    '(?:남|여)고(?:\\s*\\d+학년부)?' +
-                    '|' +
-                    '(?:남|여)대(?:\\s*\\d+학년부)?' +
-                    '|' +
-                    '선수권\\s*(?:남자|여자|혼성)부?' +
-                    '|' +
-                    'U(?:18|20)\\s*(?:남자|여자|혼성)부?' +
-                    '|' +
-                    '꿈나무\\s*(?:남자|여자)부?' +
+                    '|(?:남|여)초(?:\\s*[\\d/]+학년부)?' +
+                    '|(?:남|여)중(?:\\s*[\\d/]+학년부)?' +
+                    '|(?:남|여)고(?:\\s*[\\d/]+학년부)?' +
+                    '|(?:남|여)대(?:\\s*[\\d/]+학년부)?' +
+                    '|선수권\\s*(?:남자|여자|혼성)부?' +
+                    '|U(?:18|20)\\s*(?:남자|여자|혼성)부?' +
+                    '|꿈나무\\s*(?:남자|여자)부?' +
                 ')$',
                 'i'
             );
-            const sectionBoundaries = []; // {lineIdx, gender, division}
-            lines.forEach((l, i) => {
-                if (divMarkerRegex.test(l)) {
-                    const parsed = parseDivisionMarker(l);
-                    sectionBoundaries.push({ lineIdx: i, ...parsed });
-                }
-            });
 
-            // ── Fallback: PDF 안에 부 라벨 마커가 하나도 없으면 division_hint 사용 ──
-            // 파일명에서 추출한 힌트(예: "꿈나무", "선수권", "U18", "U20")를
-            // parseDivisionMarker로 한 번 더 정규화해 전체 파일에 적용한다.
-            let hintFallback = null;
-            if (sectionBoundaries.length === 0 && divisionHint) {
-                const parsedHint = parseDivisionMarker(divisionHint);
-                if (parsedHint.division) {
-                    hintFallback = parsedHint;
-                    console.log(`[roster/upload] division markers not found in PDF — using filename hint: "${divisionHint}" → ${JSON.stringify(parsedHint)}`);
+            // ── 페이지 단위 분할 ──
+            const pages = [];
+            let curPage = [];
+            for (const l of lines) {
+                if (/^-\d+-$/.test(l)) {
+                    if (curPage.length) pages.push(curPage);
+                    curPage = [];
+                } else {
+                    curPage.push(l);
                 }
             }
+            if (curPage.length) pages.push(curPage);
 
-            // Build a mapping: for each line, determine which division it belongs to
-            // Division marker at line X labels everything from the previous marker+1 to X-1
-            function getDivisionForLine(lineIdx) {
-                // Find the NEXT division marker after this line
-                for (const sec of sectionBoundaries) {
-                    if (sec.lineIdx > lineIdx) {
-                        return { gender: sec.gender, division: sec.division };
+            // ── 파일명 힌트 fallback ──
+            const hintParsed = divisionHint ? parseDivisionMarker(divisionHint) : null;
+            const hintFallback = (hintParsed && hintParsed.division) ? hintParsed : null;
+            if (hintFallback) {
+                console.log(`[roster/upload v3] divisionHint="${divisionHint}" → ${JSON.stringify(hintFallback)}`);
+            }
+
+            // ── splitSeqAndBib: 붙어있는 숫자열에서 (순/레인, 배번) 분리 ──
+            //   expectedSeq = lastSeq + 1 (다음에 와야 할 순/레인)
+            function splitSeqAndBib(digits, expectedSeq) {
+                if (!digits) return { seq: null, bib: '' };
+                // 두자리 순 매칭 (expectedSeq ≥ 10)
+                if (digits.length >= 3 && expectedSeq >= 10) {
+                    const twoDigit = parseInt(digits.substring(0, 2));
+                    if (twoDigit === expectedSeq) return { seq: twoDigit, bib: digits.substring(2) };
+                }
+                // 한자리 순 매칭
+                if (digits.length >= 2) {
+                    const oneDigit = parseInt(digits[0]);
+                    if (oneDigit === expectedSeq && expectedSeq >= 1 && expectedSeq <= 9) {
+                        return { seq: oneDigit, bib: digits.substring(1) };
                     }
                 }
-                // If no marker found after, use the last one
-                if (sectionBoundaries.length > 0) {
-                    const last = sectionBoundaries[sectionBoundaries.length - 1];
-                    return { gender: last.gender, division: last.division };
+                // 폴백: digits 두자리(10~99) 우선
+                if (digits.length >= 3) {
+                    const twoDigit = parseInt(digits.substring(0, 2));
+                    if (twoDigit >= 10 && twoDigit <= 99) {
+                        return { seq: twoDigit, bib: digits.substring(2) };
+                    }
                 }
-                // PDF 내 마커가 전혀 없을 때만 파일명 힌트 fallback 사용
-                if (hintFallback) {
-                    return { gender: hintFallback.gender, division: hintFallback.division };
-                }
-                return { gender: '', division: '' };
+                // 최종 폴백: 한자리
+                if (digits.length >= 2) return { seq: parseInt(digits[0]), bib: digits.substring(1) };
+                return { seq: null, bib: digits };
             }
 
-            // Pass 2: Parse athletes
+            // ── 한 페이지 파싱 ──
+            // pageDiv: { gender, division } — 이 페이지에 적용할 부
             const rosterEntries = [];
-            let currentEvent = '', currentRound = '';
-            let currentHeat = null;
-            // ★ Bug B 수정: 필드/혼성/단조 트랙 종목은 "1조" 헤더 없이 곧장 "순번호성명소속" 또는
-            //   "레인번호성명소속" 컬럼 헤더만 등장한다. 이 경우에도 첫 자리(들)을 lane(또는 순서/스몰넘버)로
-            //   인식해 display_roster.lane 에 저장해야 스코어보드의 '레인'에 매칭된다.
-            //   currentHeat 가 null 이어도 lane 저장이 가능하도록 보조 플래그를 둔다.
-            let laneHeaderSeen = false;
             let sortOrder = 0;
-            let lastEntryIdx = -1; // Track last entry for multi-line team names
 
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
+            function parsePage(pageLines, pageDiv) {
+                let currentEvent = '', currentRound = '';
+                let currentHeat = null;
+                let laneHeaderSeen = false;
+                let lastEntryIdx = -1;
+                let lastSeq = 0; // 같은 종목/조 내 순/레인 누적
 
-                // Skip page numbers: "-23-", "-24-", etc.
-                if (/^-\d+-$/.test(line)) continue;
+                for (let i = 0; i < pageLines.length; i++) {
+                    const line = pageLines[i];
+                    if (!line) continue;
+                    if (divMarkerRegex.test(line)) continue;
+                    if (/^(KTFL|KOREA|TRACK|FIELD|LEAGUE|&|한국실업육상연맹|한국중고육상연맹|한국대학육상연맹|한국육상연맹|대한육상연맹)$/.test(line)) continue;
 
-                // Skip header lines
-                if (/^(KTFL|KOREA|TRACK|FIELD|LEAGUE|&|한국실업육상연맹|한국중고육상연맹|한국대학육상연맹|한국육상연맹|대한육상연맹)$/.test(line)) continue;
+                    // 종목 헤더: ▣ 100m (5-2+6)
+                    const evMatch = line.match(/^[▣■□●○]\s*(.+?)\s*[\(（](.+?)[\)）]\s*$/);
+                    if (evMatch) {
+                        currentEvent = evMatch[1].trim();
+                        currentRound = evMatch[2].trim();
+                        currentHeat = null;
+                        laneHeaderSeen = false;
+                        lastEntryIdx = -1;
+                        lastSeq = 0;
+                        continue;
+                    }
+                    // 종목 헤더(공백 없음): ▣ 100m(10종)
+                    const evMatch2 = line.match(/^[▣■□●○]\s*(.+?)[\(（](.+?)[\)）]\s*$/);
+                    if (evMatch2 && !evMatch) {
+                        currentEvent = evMatch2[1].trim();
+                        currentRound = evMatch2[2].trim();
+                        currentHeat = null;
+                        laneHeaderSeen = false;
+                        lastEntryIdx = -1;
+                        lastSeq = 0;
+                        continue;
+                    }
 
-                // Skip division markers (already processed in pass 1)
-                if (divMarkerRegex.test(line)) continue;
+                    // 조 헤더: "1조레인번호성명소속" / "1조   레인  번호성명소속"
+                    const heatMatch = line.match(/^(\d+)조\s*(?:레인|순)?\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?\s*$/);
+                    if (heatMatch) {
+                        currentHeat = parseInt(heatMatch[1]);
+                        laneHeaderSeen = true;
+                        lastEntryIdx = -1;
+                        lastSeq = 0; // 새 조 → 레인 카운터 리셋
+                        continue;
+                    }
+                    // 컬럼 헤더(필드 종목): "순번호성명소속" / "레인번호성명소속"
+                    if (/^(순|레인|번호)\s*(번호|성명|소속)?/.test(line) && !/\d{2,}/.test(line)) {
+                        laneHeaderSeen = true;
+                        lastSeq = 0;
+                        continue;
+                    }
+                    if (/^번호\s*성명/.test(line)) continue;
 
-                // Match event header: ▣ 100m (5-2+6) or ▣ 멀리뛰기(10종) or ▣ 100m (준 4-2)
-                const evMatch = line.match(/^[▣■□●○]\s*(.+?)\s*[\(（](.+?)[\)）]\s*$/);
-                if (evMatch) {
-                    currentEvent = evMatch[1].trim();
-                    currentRound = evMatch[2].trim();
-                    currentHeat = null;
-                    laneHeaderSeen = false;
-                    lastEntryIdx = -1;
-                    continue;
-                }
-                // Event header without round: ▣ 100m(10종)
-                const evMatch2 = line.match(/^[▣■□●○]\s*(.+?)[\(（](.+?)[\)）]\s*$/);
-                if (evMatch2 && !evMatch) {
-                    currentEvent = evMatch2[1].trim();
-                    currentRound = evMatch2[2].trim();
-                    currentHeat = null;
-                    laneHeaderSeen = false;
-                    lastEntryIdx = -1;
-                    continue;
-                }
+                    if (!currentEvent) continue;
 
-                // Match heat header: "1조레인번호성명소속" or "1조   레인  번호성명소속"
-                const heatMatch = line.match(/^(\d+)조\s*(레인|번호|순)/);
-                if (heatMatch) {
-                    currentHeat = parseInt(heatMatch[1]);
-                    laneHeaderSeen = true;
-                    continue;
-                }
-                // Skip column headers: "순번호성명소속", "레인번호성명소속", "순  번호성명소속"
-                //   ★ Bug B 수정: 이 헤더 자체가 "이후 라인의 첫 숫자가 순/레인이다"는 신호.
-                //   currentHeat 미설정이라도 lane 파싱이 가능하도록 laneHeaderSeen 플래그를 켠다.
-                if (/^(순|레인)\s*(번호|레인)/.test(line)) { laneHeaderSeen = true; continue; }
-                if (/^순\s+번호/.test(line)) { laneHeaderSeen = true; continue; }
-                if (/^번호\s*성명/.test(line)) continue;
+                    // 데이터 행 파싱
+                    let lane = null, bib = '', namePart = '', teamPart = '';
 
-                // Skip if no current event
-                if (!currentEvent) continue;
+                    // 패턴 A: "5   31양지은    학교" (공백 구분, 한자리 순)
+                    const aMatch = line.match(/^([1-9])\s+(\d{1,3})\s*([가-힣]{2,4})(?:\s{2,}(.+))?\s*$/);
+                    if (aMatch) {
+                        lane = parseInt(aMatch[1]);
+                        bib = aMatch[2];
+                        namePart = aMatch[3];
+                        teamPart = (aMatch[4] || '').trim();
+                    } else {
+                        // 패턴 A2: "10  149김인혜    학교" (공백 구분, 두자리 순)
+                        const aMatch2 = line.match(/^(\d{1,2})\s{2,}(\d{1,3})\s*([가-힣]{2,4})(?:\s{2,}(.+))?\s*$/);
+                        if (aMatch2) {
+                            lane = parseInt(aMatch2[1]);
+                            bib = aMatch2[2];
+                            namePart = aMatch2[3];
+                            teamPart = (aMatch2[4] || '').trim();
+                        } else {
+                            // 패턴 C/D: "2245명민준마산구암고등학교" / "10657우상혁용인시청" (모두 붙어있음)
+                            const m = line.match(/^(\d+)([가-힣].+)$/);
+                            if (m) {
+                                const digits = m[1];
+                                const rest = m[2];
 
-                // Get division for this line from 2-pass mapping
-                const divInfo = getDivisionForLine(i);
+                                // 릴레이 연속 행: digits 전체 = 배번, koreanPart = 이름만
+                                const isRelayContinuation = currentEvent && currentEvent.includes('R') &&
+                                    rest.length >= 2 && rest.length <= 4 && !/[가-힣]{5,}/.test(rest);
+                                if (isRelayContinuation) {
+                                    const bibNum = parseInt(digits);
+                                    if (bibNum > 0 && bibNum < 10000) {
+                                        const inheritTeam = (lastEntryIdx >= 0) ? rosterEntries[lastEntryIdx].team : '';
+                                        rosterEntries.push({
+                                            competition_id: parseInt(competition_id), day: dayNum,
+                                            event_name: currentEvent, round: currentRound,
+                                            division: pageDiv.division, gender: pageDiv.gender,
+                                            bib_number: digits, athlete_name: rest, team: inheritTeam,
+                                            sort_order: sortOrder++, heat: currentHeat, lane: null,
+                                        });
+                                        lastEntryIdx = rosterEntries.length - 1;
+                                        continue;
+                                    }
+                                }
 
-                // Pattern 1: Space-separated with 4 fields: "1   70채수현    광주체육중학교"
-                // or "1   70 채수현 광주체육중학교"
-                const spaceMatch = line.match(/^(\d+)\s{2,}(\d+)\s*(\S+)\s{2,}(.+)$/);
-                if (spaceMatch) {
+                                const expectedSeq = lastSeq + 1;
+                                const split = splitSeqAndBib(digits, expectedSeq);
+                                lane = split.seq;
+                                bib = split.bib;
+                                const nt = parseNameTeam(rest);
+                                namePart = nt.name;
+                                teamPart = nt.team;
+                            }
+                        }
+                    }
+
+                    // 유효성 검증
+                    const bibNum = parseInt(bib);
+                    if (!namePart || namePart.length < 2 || !bibNum || bibNum <= 0 || bibNum >= 10000) {
+                        // 데이터 행 아님 → 직전 entry 의 소속 보강 시도
+                        if (/^[가-힣A-Za-z_()（）]/.test(line) && lastEntryIdx >= 0
+                            && rosterEntries[lastEntryIdx] && !rosterEntries[lastEntryIdx].team
+                            && !line.startsWith('▣')
+                            && !/^(순|레인|번호|성명|소속)/.test(line)) {
+                            rosterEntries[lastEntryIdx].team = line;
+                        }
+                        continue;
+                    }
+
+                    // 레인 저장 조건: heat 또는 laneHeader 가 보였을 때만
+                    const laneToStore = (currentHeat || laneHeaderSeen) ? lane : null;
+
                     rosterEntries.push({
-                        competition_id: parseInt(competition_id),
-                        day: dayNum,
-                        event_name: currentEvent,
-                        round: currentRound,
-                        division: divInfo.division,
-                        gender: divInfo.gender,
-                        bib_number: spaceMatch[2],
-                        athlete_name: spaceMatch[3],
-                        team: spaceMatch[4].trim(),
-                        sort_order: sortOrder++,
-                        heat: currentHeat,
-                        lane: parseInt(spaceMatch[1]) || null,
+                        competition_id: parseInt(competition_id), day: dayNum,
+                        event_name: currentEvent, round: currentRound,
+                        division: pageDiv.division, gender: pageDiv.gender,
+                        bib_number: bib, athlete_name: namePart, team: teamPart,
+                        sort_order: sortOrder++, heat: currentHeat, lane: laneToStore,
                     });
                     lastEntryIdx = rosterEntries.length - 1;
-                    continue;
-                }
 
-                // Pattern 2: Space-separated with bib + name + team: "70 채수현 광주체육중학교"
-                const altMatch = line.match(/^(\d+)\s+(\S+)\s+(.+)$/);
-                if (altMatch && !/^(순|번호|성명|소속|NO|레인)/.test(line)) {
-                    const num = parseInt(altMatch[1]);
-                    if (num > 0 && num < 10000) {
-                        rosterEntries.push({
-                            competition_id: parseInt(competition_id),
-                            day: dayNum,
-                            event_name: currentEvent,
-                            round: currentRound,
-                            division: divInfo.division,
-                            gender: divInfo.gender,
-                            bib_number: String(num),
-                            athlete_name: altMatch[2],
-                            team: altMatch[3].trim(),
-                            sort_order: sortOrder++,
-                            heat: currentHeat,
-                            lane: null,
-                        });
-                        lastEntryIdx = rosterEntries.length - 1;
-                        continue;
+                    // 단조증가 lastSeq 갱신
+                    if (typeof lane === 'number' && lane > 0 && lane === lastSeq + 1) {
+                        lastSeq = lane;
+                    } else if (typeof lane === 'number' && lane > lastSeq) {
+                        lastSeq = lane;
                     }
                 }
+            }
 
-                // Pattern 3: Fully concatenated format
-                // For field events (순): "167손예원광주체육중학교" = seq(1) + bib(67) + name + team
-                // For track events (레인): "2413고현준은행고등학교" = lane(2) + bib(413) + name + team
-                // Key: first digit(s) are seq/lane number, remaining digits are bib
-                const digitBoundary = line.search(/[가-힣(A-Z]/);
-                if (digitBoundary > 1) {
-                    const digits = line.substring(0, digitBoundary);
-                    const koreanPart = line.substring(digitBoundary);
-                    
-                    // Detect relay continuation lines: just bib + name (2-4 Korean chars), no team
-                    // Examples: "124김재효", "19이창규", "232안대성"
-                    // These have NO lane prefix - the entire digit portion is the bib number
-                    const isRelayContinuation = currentEvent && currentEvent.includes('R') && 
-                        koreanPart.length >= 2 && koreanPart.length <= 4 && 
-                        !/[가-힣]{5,}/.test(koreanPart); // short Korean = name only, no team
-                    
-                    if (isRelayContinuation) {
-                        // Entire digits = bib, koreanPart = name only
-                        const bibNum = parseInt(digits);
-                        if (bibNum > 0 && bibNum < 10000) {
-                            const inheritTeam = (lastEntryIdx >= 0) ? rosterEntries[lastEntryIdx].team : '';
-                            rosterEntries.push({
-                                competition_id: parseInt(competition_id),
-                                day: dayNum,
-                                event_name: currentEvent,
-                                round: currentRound,
-                                division: divInfo.division,
-                                gender: divInfo.gender,
-                                bib_number: digits,
-                                athlete_name: koreanPart,
-                                team: inheritTeam,
-                                sort_order: sortOrder++,
-                                heat: currentHeat,
-                                lane: null,
-                            });
-                            lastEntryIdx = rosterEntries.length - 1;
-                            continue;
-                        }
-                    }
-                    
-                    // Split digits into seq/lane + bib
-                    // Heuristic: if heat exists, first 1 digit = lane; otherwise first 1-2 digits = seq
-                    // Bib numbers in this competition: 2-4 digits (8, 13, 48, 70, 174, 223, 956)
-                    let laneOrSeq = null;
-                    let bib = '';
-                    
-                    if (digits.length >= 2) {
-                        const firstOne = parseInt(digits[0]);
-                        const restOne = digits.substring(1);
-                        const firstTwo = parseInt(digits.substring(0, 2));
-                        const restTwo = digits.substring(2);
-                        
-                        // If there's a heat context, first digit is lane (1-8)
-                        if (currentHeat && firstOne >= 1 && firstOne <= 8 && restOne.length >= 1) {
-                            laneOrSeq = firstOne;
-                            bib = restOne;
-                        }
-                        // For seq numbers > 9 (10, 11, 12...) take 2 digits
-                        else if (firstTwo >= 10 && restTwo.length >= 1 && parseInt(restTwo) > 0) {
-                            laneOrSeq = firstTwo;
-                            bib = restTwo;
-                        }
-                        // Default: first digit is seq/lane
-                        else if (firstOne >= 1 && restOne.length >= 1 && parseInt(restOne) > 0) {
-                            laneOrSeq = firstOne;
-                            bib = restOne;
-                        }
-                        else {
-                            // Might be just a bib number (relay member continuation)
-                            bib = digits;
-                            laneOrSeq = null;
-                        }
-                    } else {
-                        continue; // single digit + korean - probably not an athlete
-                    }
-
-                    const bibNum = parseInt(bib);
-                    // ★ Bug B 수정: lane 저장 조건을 currentHeat 뿐 아니라 laneHeaderSeen 도 포함.
-                    //   필드/혼성 트랙 종목은 "1조" 헤더 없이 "순번호성명소속" 만 등장하지만
-                    //   첫 자리(들)이 PDF의 "순"이고 우리 시스템의 "레인"에 해당함.
-                    const laneToStore = (currentHeat || laneHeaderSeen) ? laneOrSeq : null;
-                    if (bibNum > 0 && bibNum < 10000 && koreanPart.length >= 2) {
-                        const parsed = parseNameTeam(koreanPart);
-                        if (parsed.name.length >= 2 && parsed.team.length >= 1) {
-                            rosterEntries.push({
-                                competition_id: parseInt(competition_id),
-                                day: dayNum,
-                                event_name: currentEvent,
-                                round: currentRound,
-                                division: divInfo.division,
-                                gender: divInfo.gender,
-                                bib_number: bib,
-                                athlete_name: parsed.name,
-                                team: parsed.team,
-                                sort_order: sortOrder++,
-                                heat: currentHeat,
-                                lane: laneToStore,
-                            });
-                            lastEntryIdx = rosterEntries.length - 1;
-                            continue;
-                        } else if (parsed.name.length >= 2 && parsed.team === '') {
-                            // Name found but no team - team might be on next line
-                            rosterEntries.push({
-                                competition_id: parseInt(competition_id),
-                                day: dayNum,
-                                event_name: currentEvent,
-                                round: currentRound,
-                                division: divInfo.division,
-                                gender: divInfo.gender,
-                                bib_number: bib,
-                                athlete_name: parsed.name,
-                                team: '',
-                                sort_order: sortOrder++,
-                                heat: currentHeat,
-                                lane: laneToStore,
-                            });
-                            lastEntryIdx = rosterEntries.length - 1;
-                            continue;
-                        }
-                    }
-                    
-                    // Might be relay member (just bib + name, no team)
-                    if (bibNum > 0 && bibNum < 10000 && koreanPart.length >= 2 && koreanPart.length <= 4) {
-                        // This is likely a relay additional member: "124김재효" = bib 124, name 김재효
-                        // They inherit team from the first member of their relay team
-                        const inheritTeam = (lastEntryIdx >= 0) ? rosterEntries[lastEntryIdx].team : '';
-                        rosterEntries.push({
-                            competition_id: parseInt(competition_id),
-                            day: dayNum,
-                            event_name: currentEvent,
-                            round: currentRound,
-                            division: divInfo.division,
-                            gender: divInfo.gender,
-                            bib_number: bib,
-                            athlete_name: koreanPart,
-                            team: inheritTeam,
-                            sort_order: sortOrder++,
-                            heat: currentHeat,
-                            lane: currentHeat ? laneOrSeq : null,
-                        });
-                        lastEntryIdx = rosterEntries.length - 1;
-                        continue;
+            // ── 페이지별 부 라벨 결정 후 파싱 실행 ──
+            //   각 페이지의 부 = 페이지 내 첫 divMarkerRegex 매칭 라인
+            //   (페이지에 라벨이 없으면 직전 페이지 부 상속, 모두 없으면 hintFallback)
+            let lastDiv = hintFallback ? { gender: hintFallback.gender, division: hintFallback.division } : { gender: '', division: '' };
+            for (const page of pages) {
+                let pageDiv = null;
+                for (const l of page) {
+                    if (divMarkerRegex.test(l)) {
+                        const parsed = parseDivisionMarker(l);
+                        if (parsed && parsed.division) { pageDiv = parsed; break; }
                     }
                 }
-
-                // Pattern 4: Only Korean text (team name continuation from previous line)
-                // e.g., "화성G스포츠클럽_중", "경기모바일과학고등학교"
-                if (/^[가-힣A-Za-z_()（）]/.test(line) && lastEntryIdx >= 0 && !divMarkerRegex.test(line)) {
-                    // Check it's not a header/marker
-                    if (!/^(순|레인|번호|성명|소속)/.test(line) && !line.startsWith('▣')) {
-                        // Assign as team to last entry that has no team
-                        if (rosterEntries[lastEntryIdx] && !rosterEntries[lastEntryIdx].team) {
-                            rosterEntries[lastEntryIdx].team = line;
-                        } else if (rosterEntries[lastEntryIdx] && rosterEntries[lastEntryIdx].team === '') {
-                            rosterEntries[lastEntryIdx].team = line;
-                        }
-                        continue;
-                    }
-                }
-
-                // Pattern 5: Just a bib number (relay member without name yet — rare)
-                if (/^\d+$/.test(line) && currentEvent && parseInt(line) > 0 && parseInt(line) < 10000) {
-                    // Could be relay member bib-only line, skip for now
-                    continue;
-                }
+                const effDiv = (pageDiv && pageDiv.division) ? pageDiv : lastDiv;
+                if (effDiv.division) lastDiv = effDiv;
+                parsePage(page, effDiv);
             }
 
             // Delete existing roster for this day
