@@ -1352,38 +1352,93 @@ app.delete('/api/competitions/:id', (req, res) => {
     if (!isAdminOrManager(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(req.params.id);
     if (!comp) return res.status(404).json({ error: 'Not found' });
-    db.transaction(() => {
-        const events = db.prepare('SELECT id FROM event WHERE competition_id=?').all(comp.id);
-        for (const evt of events) {
-            const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(evt.id);
-            for (const h of heats) {
-                db.prepare('DELETE FROM result WHERE heat_id=?').run(h.id);
-                db.prepare('DELETE FROM height_attempt WHERE heat_id=?').run(h.id);
-                db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(h.id);
-            }
-            db.prepare('DELETE FROM heat WHERE event_id=?').run(evt.id);
-            db.prepare('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(evt.id);
-            db.prepare('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(evt.id);
-            db.prepare('DELETE FROM qualification_selection WHERE event_id=?').run(evt.id);
-            db.prepare('DELETE FROM event_entry WHERE event_id=?').run(evt.id);
-        }
-        db.prepare('DELETE FROM event WHERE competition_id=?').run(comp.id);
-        db.prepare('DELETE FROM athlete WHERE competition_id=?').run(comp.id);
-        db.prepare('DELETE FROM audit_log WHERE competition_id=?').run(comp.id);
-        db.prepare('DELETE FROM operation_log WHERE competition_id=?').run(comp.id);
-        db.prepare('DELETE FROM competition WHERE id=?').run(comp.id);
-    })();
 
-    // 삭제 전 자동 백업 (서버 로컬)
+    // 삭제 전 자동 백업 (트랜잭션 시작 전 — 실제 백업은 삭제 직전 DB를 복사해야 의미가 있음)
     try {
         const backupDir = require('path').join(__dirname, 'backups');
         if (!require('fs').existsSync(backupDir)) require('fs').mkdirSync(backupDir);
-        const backupName = `deleted_${comp.name}_${new Date().toISOString().replace(/[:.]/g,'-')}.db`;
+        const safeName = (comp.name || 'comp').replace(/[\/\\:*?"<>|]/g, '_');
+        const backupName = `deleted_${safeName}_${new Date().toISOString().replace(/[:.]/g,'-')}.db`;
         require('fs').copyFileSync(require('path').join(__dirname, 'db/competition.db'), require('path').join(backupDir, backupName));
         console.log(`[Backup] 삭제 전 백업 완료: ${backupName}`);
     } catch(e) { console.error('[Backup] 삭제 전 백업 실패:', e.message); }
 
-    res.json({ success: true });
+    // 안전 헬퍼: 테이블/컬럼이 존재할 때만 DELETE 실행 (스키마 다변화 대비)
+    const tableExists = (name) => {
+        try { return !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name); }
+        catch(_){ return false; }
+    };
+    const hasColumn = (table, col) => {
+        try {
+            const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+            return cols.some(c => c.name === col);
+        } catch(_){ return false; }
+    };
+    const safeRun = (sql, ...args) => {
+        try { return db.prepare(sql).run(...args); }
+        catch(e){ console.warn('[delete-comp] skip:', sql.split('\n')[0].trim(), '|', e.message); return null; }
+    };
+
+    try {
+        db.transaction(() => {
+            const events = db.prepare('SELECT id FROM event WHERE competition_id=?').all(comp.id);
+            const eventIds = events.map(e => e.id);
+
+            for (const evt of events) {
+                const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(evt.id);
+                for (const h of heats) {
+                    safeRun('DELETE FROM result WHERE heat_id=?', h.id);
+                    safeRun('DELETE FROM height_attempt WHERE heat_id=?', h.id);
+                    safeRun('DELETE FROM heat_entry WHERE heat_id=?', h.id);
+                }
+                safeRun('DELETE FROM heat WHERE event_id=?', evt.id);
+                safeRun('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', evt.id);
+                safeRun('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', evt.id);
+                safeRun('DELETE FROM qualification_selection WHERE event_id=?', evt.id);
+                safeRun('DELETE FROM event_entry WHERE event_id=?', evt.id);
+                // event_id 직접 참조 테이블들 (신규 추가 포함)
+                if (tableExists('event_records')) safeRun('DELETE FROM event_records WHERE event_id=?', evt.id);
+                if (tableExists('event_link'))    safeRun('DELETE FROM event_link WHERE event_id_a=? OR event_id_b=?', evt.id, evt.id);
+                if (tableExists('joint_group_member') && hasColumn('joint_group_member','event_id'))
+                    safeRun('DELETE FROM joint_group_member WHERE event_id=?', evt.id);
+            }
+
+            // pacing 트리: pacing_config(competition_id) → pacing_color(pacing_config_id) → pacing_segment(pacing_color_id)
+            if (tableExists('pacing_config')) {
+                const cfgs = db.prepare('SELECT id FROM pacing_config WHERE competition_id=?').all(comp.id);
+                for (const cfg of cfgs) {
+                    if (tableExists('pacing_color')) {
+                        const colors = db.prepare('SELECT id FROM pacing_color WHERE pacing_config_id=?').all(cfg.id);
+                        for (const c of colors) {
+                            if (tableExists('pacing_segment')) safeRun('DELETE FROM pacing_segment WHERE pacing_color_id=?', c.id);
+                        }
+                        safeRun('DELETE FROM pacing_color WHERE pacing_config_id=?', cfg.id);
+                    }
+                }
+                safeRun('DELETE FROM pacing_config WHERE competition_id=?', comp.id);
+            }
+
+            // competition_id 직접 참조 테이블 일괄 정리
+            const compIdTables = [
+                'event', 'athlete', 'audit_log', 'operation_log',
+                'display_roster', 'timetable', 'doc_template',
+                'external_api_log', 'joint_group_member'
+            ];
+            for (const t of compIdTables) {
+                if (tableExists(t) && hasColumn(t, 'competition_id')) {
+                    safeRun(`DELETE FROM ${t} WHERE competition_id=?`, comp.id);
+                }
+            }
+
+            // 마지막에 대회 본체 삭제
+            safeRun('DELETE FROM competition WHERE id=?', comp.id);
+        })();
+
+        return res.json({ success: true });
+    } catch(e) {
+        console.error('[delete-comp] 트랜잭션 실패:', e.message, e.stack);
+        return res.status(500).json({ error: '대회 삭제 중 오류: ' + e.message });
+    }
 });
 
 // Competition info (public — for viewer)
