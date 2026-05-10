@@ -11473,12 +11473,12 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
             }
 
             // ============================================================
-            // v3 PARSING: 페이지 단위 부 라벨 + lastSeq 추적 + 두자리 순(10~99) 정확 추출
-            //   - tmp/pdf_to_excel.js 의 v3 로직과 동일한 알고리즘
-            //   - PDF 마다 페이지 마커(-NN-) 단위로 분할하고, 각 페이지의 부 라벨을
-            //     그 페이지 내부에만 적용해 다음 페이지로 흘러넘치지 않도록 함
-            //   - 같은 종목/조 내에서 순(順)/레인은 1부터 N까지 단조증가한다는 사실을 활용해
-            //     붙어있는 숫자 덩어리에서 두자리 순도 정확히 분리
+            // v4 PARSING: 라벨 기반 섹션 분할 + 릴레이 팀단위 + 혼성경기 통합 + noSeq 헤더
+            //   - tmp/pdf_to_excel.js 의 v4 로직과 동일한 알고리즘
+            //   - 부 라벨은 "라벨 등장 라인까지의 모든 라인 = 그 라벨" 로 묶음 (페이지 경계 무시)
+            //   - 릴레이(4xNNNm[R] / 릴레이)는 첫 행만 = 레인+팀 한 행 (성명/배번 비움)
+            //   - 혼성경기(round나 event_name에 (N종))는 dedup 통합해 "N종경기" 1행 per 선수
+            //   - noSeqMode: 조헤더가 "N조레인번호성명소속"(공백 없음)이면 첫자리=레인, 나머지=배번
             // ============================================================
             const divMarkerRegex = new RegExp(
                 '^(?:' +
@@ -11494,73 +11494,111 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                 'i'
             );
 
-            // ── 페이지 단위 분할 ──
-            const pages = [];
-            let curPage = [];
-            for (const l of lines) {
-                if (/^-\d+-$/.test(l)) {
-                    if (curPage.length) pages.push(curPage);
-                    curPage = [];
-                } else {
-                    curPage.push(l);
-                }
-            }
-            if (curPage.length) pages.push(curPage);
-
             // ── 파일명 힌트 fallback ──
             const hintParsed = divisionHint ? parseDivisionMarker(divisionHint) : null;
             const hintFallback = (hintParsed && hintParsed.division) ? hintParsed : null;
             if (hintFallback) {
-                console.log(`[roster/upload v3] divisionHint="${divisionHint}" → ${JSON.stringify(hintFallback)}`);
+                console.log(`[roster/upload v4] divisionHint="${divisionHint}" → ${JSON.stringify(hintFallback)}`);
             }
 
-            // ── splitSeqAndBib: 붙어있는 숫자열에서 (순/레인, 배번) 분리 ──
-            //   expectedSeq = lastSeq + 1 (다음에 와야 할 순/레인)
+            // ── 라벨 기반 섹션 분할 ──
+            //   페이지 마커(-NN-)는 제거. 부 라벨 라인 만나면 그 라벨까지의 모든 라인을 섹션으로 묶음.
+            //   라벨 없이 끝난 마지막 섹션은 직전 라벨 또는 hintFallback 상속.
+            const flatLines = lines.filter(l => !/^-\d+-$/.test(l));
+            const sections = [];
+            let curSec = [];
+            let lastDivSeen = hintFallback
+                ? { gender: hintFallback.gender, division: hintFallback.division }
+                : { gender: '', division: '' };
+            for (const l of flatLines) {
+                if (divMarkerRegex.test(l)) {
+                    const parsed = parseDivisionMarker(l);
+                    if (parsed && parsed.division) {
+                        sections.push({ lines: curSec, div: parsed });
+                        lastDivSeen = parsed;
+                        curSec = [];
+                        continue;
+                    }
+                }
+                curSec.push(l);
+            }
+            if (curSec.length) sections.push({ lines: curSec, div: lastDivSeen });
+
+            // ── splitSeqAndBib (lastSeq 추적용) ──
             function splitSeqAndBib(digits, expectedSeq) {
                 if (!digits) return { seq: null, bib: '' };
-                // 두자리 순 매칭 (expectedSeq ≥ 10)
                 if (digits.length >= 3 && expectedSeq >= 10) {
                     const twoDigit = parseInt(digits.substring(0, 2));
                     if (twoDigit === expectedSeq) return { seq: twoDigit, bib: digits.substring(2) };
                 }
-                // 한자리 순 매칭
                 if (digits.length >= 2) {
                     const oneDigit = parseInt(digits[0]);
                     if (oneDigit === expectedSeq && expectedSeq >= 1 && expectedSeq <= 9) {
                         return { seq: oneDigit, bib: digits.substring(1) };
                     }
                 }
-                // 폴백: digits 두자리(10~99) 우선
                 if (digits.length >= 3) {
                     const twoDigit = parseInt(digits.substring(0, 2));
-                    if (twoDigit >= 10 && twoDigit <= 99) {
-                        return { seq: twoDigit, bib: digits.substring(2) };
-                    }
+                    if (twoDigit >= 10 && twoDigit <= 99) return { seq: twoDigit, bib: digits.substring(2) };
                 }
-                // 최종 폴백: 한자리
                 if (digits.length >= 2) return { seq: parseInt(digits[0]), bib: digits.substring(1) };
                 return { seq: null, bib: digits };
             }
 
-            // ── 한 페이지 파싱 ──
-            // pageDiv: { gender, division } — 이 페이지에 적용할 부
+            // ── 릴레이 종목 판별 ──
+            function isRelayEvent(eventName) {
+                if (!eventName) return false;
+                return /\d\s*[x×Xx]\s*\d{2,4}\s*m?\s*R?/i.test(eventName)
+                    || /릴레이/.test(eventName)
+                    || /relay/i.test(eventName);
+            }
+
+            // ── 팀명(학교/시청/구청 등) 키워드 포함 여부 ──
+            const TEAM_KEYWORDS = [
+                '초등학교','중학교','고등학교','대학교','대학','시청','군청','도청','체육회',
+                '도시개발공사','개발공사','국군체육부대','구청','스포츠클럽','공사',
+                '클럽_중','클럽_고','클럽_초','체육부대',
+            ];
+            function hasTeamKeyword(s) {
+                if (!s) return false;
+                return TEAM_KEYWORDS.some(k => s.includes(k));
+            }
+
+            // ── 한 섹션 파싱 ──
             const rosterEntries = [];
             let sortOrder = 0;
 
-            function parsePage(pageLines, pageDiv) {
+            function parseSection(secLines, pageDiv) {
                 let currentEvent = '', currentRound = '';
                 let currentHeat = null;
                 let laneHeaderSeen = false;
                 let lastEntryIdx = -1;
-                let lastSeq = 0; // 같은 종목/조 내 순/레인 누적
+                let lastSeq = 0;
+                let noSeqMode = false;
+                let relayMode = false;
+                let relayCurrentLane = null;
 
-                for (let i = 0; i < pageLines.length; i++) {
-                    const line = pageLines[i];
+                for (let i = 0; i < secLines.length; i++) {
+                    const line = secLines[i];
                     if (!line) continue;
                     if (divMarkerRegex.test(line)) continue;
                     if (/^(KTFL|KOREA|TRACK|FIELD|LEAGUE|&|한국실업육상연맹|한국중고육상연맹|한국대학육상연맹|한국육상연맹|대한육상연맹)$/.test(line)) continue;
 
-                    // 종목 헤더: ▣ 100m (5-2+6)
+                    // 종목 헤더 (이중괄호 케이스 우선): ▣ 4x400mR(Mixed) (결승)
+                    const evMatchDouble = line.match(/^[▣■□●○]\s*(.+?)\s*[\(（](.+?)[\)）]\s*[\(（](.+?)[\)）]\s*$/);
+                    if (evMatchDouble) {
+                        currentEvent = (evMatchDouble[1] + '(' + evMatchDouble[2] + ')').trim();
+                        currentRound = evMatchDouble[3].trim();
+                        currentHeat = null;
+                        laneHeaderSeen = false;
+                        lastEntryIdx = -1;
+                        lastSeq = 0;
+                        noSeqMode = false;
+                        relayMode = isRelayEvent(currentEvent);
+                        relayCurrentLane = null;
+                        continue;
+                    }
+                    // 종목 헤더 (단일 괄호): ▣ 100m (5-2+6) | ▣ 100m(10종)
                     const evMatch = line.match(/^[▣■□●○]\s*(.+?)\s*[\(（](.+?)[\)）]\s*$/);
                     if (evMatch) {
                         currentEvent = evMatch[1].trim();
@@ -11569,43 +11607,95 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                         laneHeaderSeen = false;
                         lastEntryIdx = -1;
                         lastSeq = 0;
-                        continue;
-                    }
-                    // 종목 헤더(공백 없음): ▣ 100m(10종)
-                    const evMatch2 = line.match(/^[▣■□●○]\s*(.+?)[\(（](.+?)[\)）]\s*$/);
-                    if (evMatch2 && !evMatch) {
-                        currentEvent = evMatch2[1].trim();
-                        currentRound = evMatch2[2].trim();
-                        currentHeat = null;
-                        laneHeaderSeen = false;
-                        lastEntryIdx = -1;
-                        lastSeq = 0;
+                        noSeqMode = false;
+                        relayMode = isRelayEvent(currentEvent);
+                        relayCurrentLane = null;
                         continue;
                     }
 
-                    // 조 헤더: "1조레인번호성명소속" / "1조   레인  번호성명소속"
-                    const heatMatch = line.match(/^(\d+)조\s*(?:레인|순)?\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?\s*$/);
+                    // 조 헤더: "1조레인번호성명소속" (붙음→noSeq) | "1조   레인  번호성명소속" (공백→일반)
+                    const heatMatch = line.match(/^(\d+)조\s*((?:레인|순)?\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?)?\s*$/);
                     if (heatMatch) {
                         currentHeat = parseInt(heatMatch[1]);
                         laneHeaderSeen = true;
                         lastEntryIdx = -1;
-                        lastSeq = 0; // 새 조 → 레인 카운터 리셋
+                        lastSeq = 0;
+                        const afterHeat = line.replace(/^\d+조/, '');
+                        noSeqMode = (afterHeat && /\S/.test(afterHeat) && !/\s/.test(afterHeat));
+                        relayCurrentLane = null;
                         continue;
                     }
-                    // 컬럼 헤더(필드 종목): "순번호성명소속" / "레인번호성명소속"
-                    if (/^(순|레인|번호)\s*(번호|성명|소속)?/.test(line) && !/\d{2,}/.test(line)) {
+                    // 비-조 헤더 "레인번호성명소속" / "레인  번호성명소속" (릴레이/필드)
+                    if (/^(?:레인|순)\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?$/.test(line)) {
                         laneHeaderSeen = true;
                         lastSeq = 0;
+                        noSeqMode = true; // 레인 사용 (순 아님)
+                        relayCurrentLane = null;
+                        continue;
+                    }
+                    // 필드 종목 "순번호성명소속" — 순 사용
+                    if (/^순\s*번호\s*성명\s*소속$/.test(line) || /^순번호성명소속$/.test(line)) {
+                        laneHeaderSeen = true;
+                        lastSeq = 0;
+                        noSeqMode = false;
                         continue;
                     }
                     if (/^번호\s*성명/.test(line)) continue;
 
                     if (!currentEvent) continue;
 
-                    // 데이터 행 파싱
+                    // ──────── 릴레이 모드 ────────
+                    if (relayMode) {
+                        // R-A: "4   129김이겸    전곡고등학교" (공백 분리)
+                        const rA = line.match(/^([1-9])\s+\d{1,3}\s*[가-힣]{2,4}\s+(.+)$/);
+                        if (rA) {
+                            relayCurrentLane = parseInt(rA[1]);
+                            const team = rA[2].trim();
+                            rosterEntries.push({
+                                competition_id: parseInt(competition_id), day: dayNum,
+                                event_name: currentEvent, round: currentRound,
+                                division: pageDiv.division, gender: pageDiv.gender,
+                                bib_number: '', athlete_name: '', team,
+                                sort_order: sortOrder++, heat: null, lane: relayCurrentLane,
+                            });
+                            lastEntryIdx = rosterEntries.length - 1;
+                            continue;
+                        }
+                        // R-B: "4614민지현화성시청" (붙음, 첫 행)
+                        const rB = line.match(/^(\d+)([가-힣].+)$/);
+                        if (rB) {
+                            const digits = rB[1];
+                            const rest = rB[2];
+                            const nt = parseNameTeam(rest);
+                            if (nt.team && hasTeamKeyword(nt.team)) {
+                                relayCurrentLane = parseInt(digits[0]);
+                                rosterEntries.push({
+                                    competition_id: parseInt(competition_id), day: dayNum,
+                                    event_name: currentEvent, round: currentRound,
+                                    division: pageDiv.division, gender: pageDiv.gender,
+                                    bib_number: '', athlete_name: '', team: nt.team,
+                                    sort_order: sortOrder++, heat: null, lane: relayCurrentLane,
+                                });
+                                lastEntryIdx = rosterEntries.length - 1;
+                                continue;
+                            }
+                            // 후속 멤버 행 (이름만, 팀 키워드 없음) → 스킵
+                            continue;
+                        }
+                        // 한글만 있는 라인 — 직전 entry 의 team 보강
+                        if (/^[가-힣A-Za-z_()（）\s]+$/.test(line) && lastEntryIdx >= 0
+                            && rosterEntries[lastEntryIdx] && !rosterEntries[lastEntryIdx].team
+                            && hasTeamKeyword(line)) {
+                            rosterEntries[lastEntryIdx].team = line.trim();
+                            continue;
+                        }
+                        continue;
+                    }
+                    // ──────── 일반 모드 ────────
+
                     let lane = null, bib = '', namePart = '', teamPart = '';
 
-                    // 패턴 A: "5   31양지은    학교" (공백 구분, 한자리 순)
+                    // 패턴 A: "5   31양지은    학교" (공백 분리, 한자리 순)
                     const aMatch = line.match(/^([1-9])\s+(\d{1,3})\s*([가-힣]{2,4})(?:\s{2,}(.+))?\s*$/);
                     if (aMatch) {
                         lane = parseInt(aMatch[1]);
@@ -11613,7 +11703,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                         namePart = aMatch[3];
                         teamPart = (aMatch[4] || '').trim();
                     } else {
-                        // 패턴 A2: "10  149김인혜    학교" (공백 구분, 두자리 순)
+                        // 패턴 A2: "10  149김인혜    학교" (공백 분리, 두자리 순)
                         const aMatch2 = line.match(/^(\d{1,2})\s{2,}(\d{1,3})\s*([가-힣]{2,4})(?:\s{2,}(.+))?\s*$/);
                         if (aMatch2) {
                             lane = parseInt(aMatch2[1]);
@@ -11621,35 +11711,21 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                             namePart = aMatch2[3];
                             teamPart = (aMatch2[4] || '').trim();
                         } else {
-                            // 패턴 C/D: "2245명민준마산구암고등학교" / "10657우상혁용인시청" (모두 붙어있음)
+                            // 패턴 C/D (붙음)
                             const m = line.match(/^(\d+)([가-힣].+)$/);
                             if (m) {
                                 const digits = m[1];
                                 const rest = m[2];
-
-                                // 릴레이 연속 행: digits 전체 = 배번, koreanPart = 이름만
-                                const isRelayContinuation = currentEvent && currentEvent.includes('R') &&
-                                    rest.length >= 2 && rest.length <= 4 && !/[가-힣]{5,}/.test(rest);
-                                if (isRelayContinuation) {
-                                    const bibNum = parseInt(digits);
-                                    if (bibNum > 0 && bibNum < 10000) {
-                                        const inheritTeam = (lastEntryIdx >= 0) ? rosterEntries[lastEntryIdx].team : '';
-                                        rosterEntries.push({
-                                            competition_id: parseInt(competition_id), day: dayNum,
-                                            event_name: currentEvent, round: currentRound,
-                                            division: pageDiv.division, gender: pageDiv.gender,
-                                            bib_number: digits, athlete_name: rest, team: inheritTeam,
-                                            sort_order: sortOrder++, heat: currentHeat, lane: null,
-                                        });
-                                        lastEntryIdx = rosterEntries.length - 1;
-                                        continue;
-                                    }
+                                if (noSeqMode) {
+                                    // 순 없는 페이지: 첫 한자리=레인, 나머지=배번
+                                    lane = parseInt(digits[0]);
+                                    bib = digits.substring(1);
+                                } else {
+                                    const expectedSeq = lastSeq + 1;
+                                    const split = splitSeqAndBib(digits, expectedSeq);
+                                    lane = split.seq;
+                                    bib = split.bib;
                                 }
-
-                                const expectedSeq = lastSeq + 1;
-                                const split = splitSeqAndBib(digits, expectedSeq);
-                                lane = split.seq;
-                                bib = split.bib;
                                 const nt = parseNameTeam(rest);
                                 namePart = nt.name;
                                 teamPart = nt.team;
@@ -11660,7 +11736,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                     // 유효성 검증
                     const bibNum = parseInt(bib);
                     if (!namePart || namePart.length < 2 || !bibNum || bibNum <= 0 || bibNum >= 10000) {
-                        // 데이터 행 아님 → 직전 entry 의 소속 보강 시도
+                        // 직전 entry 의 소속 보강
                         if (/^[가-힣A-Za-z_()（）]/.test(line) && lastEntryIdx >= 0
                             && rosterEntries[lastEntryIdx] && !rosterEntries[lastEntryIdx].team
                             && !line.startsWith('▣')
@@ -11682,31 +11758,52 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                     });
                     lastEntryIdx = rosterEntries.length - 1;
 
-                    // 단조증가 lastSeq 갱신
                     if (typeof lane === 'number' && lane > 0 && lane === lastSeq + 1) {
                         lastSeq = lane;
-                    } else if (typeof lane === 'number' && lane > lastSeq) {
+                    } else if (typeof lane === 'number' && lane > lastSeq && !noSeqMode) {
                         lastSeq = lane;
                     }
                 }
             }
 
-            // ── 페이지별 부 라벨 결정 후 파싱 실행 ──
-            //   각 페이지의 부 = 페이지 내 첫 divMarkerRegex 매칭 라인
-            //   (페이지에 라벨이 없으면 직전 페이지 부 상속, 모두 없으면 hintFallback)
-            let lastDiv = hintFallback ? { gender: hintFallback.gender, division: hintFallback.division } : { gender: '', division: '' };
-            for (const page of pages) {
-                let pageDiv = null;
-                for (const l of page) {
-                    if (divMarkerRegex.test(l)) {
-                        const parsed = parseDivisionMarker(l);
-                        if (parsed && parsed.division) { pageDiv = parsed; break; }
-                    }
-                }
-                const effDiv = (pageDiv && pageDiv.division) ? pageDiv : lastDiv;
-                if (effDiv.division) lastDiv = effDiv;
-                parsePage(page, effDiv);
+            // ── 모든 섹션 파싱 ──
+            for (const sec of sections) {
+                const effDiv = (sec.div && sec.div.division)
+                    ? sec.div
+                    : (hintFallback || { gender: '', division: '' });
+                parseSection(sec.lines, effDiv);
             }
+
+            // ── 혼성경기(10종/7종) 통합 dedup ──
+            //   event_name 또는 round 에 "(N종)"이 들어가면 → "N종경기" 단일 종목으로 통합
+            //   같은 (division, gender, athlete_name, team, N) 키로 첫 등장만 유지
+            function combinedEventName(eventName, round) {
+                const text = `${eventName || ''} ${round || ''}`;
+                const m = text.match(/(\d+)\s*종/);
+                if (m) return `${m[1]}종경기`;
+                return null;
+            }
+            const dedupedEntries = [];
+            const combinedSeen = new Set();
+            for (const e of rosterEntries) {
+                const cn = combinedEventName(e.event_name, e.round);
+                if (cn) {
+                    const key = `${e.division}|${e.gender}|${e.athlete_name}|${e.team}|${cn}`;
+                    if (combinedSeen.has(key)) continue;
+                    combinedSeen.add(key);
+                    dedupedEntries.push({
+                        ...e,
+                        event_name: cn,
+                        round: '결승',
+                        heat: null,
+                        lane: null,
+                    });
+                } else {
+                    dedupedEntries.push(e);
+                }
+            }
+            rosterEntries.length = 0;
+            for (const e of dedupedEntries) rosterEntries.push(e);
 
             // Delete existing roster for this day
             db.prepare('DELETE FROM display_roster WHERE competition_id=? AND day=?').run(parseInt(competition_id), dayNum);
