@@ -9997,8 +9997,10 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
                 const insTT = db.prepare(`INSERT INTO timetable
                     (competition_id, day, section, time, event_name, category, round, note, sort_order, scheduled_date)
                     VALUES (?,?,?,?,?,?,?,?,?,?)`);
+                // FIX: event_id를 NULL로 리셋해서 autoLinkDisplayTimetable이 새 division/gender로 재링크하도록 함
+                //       (예전 잘못된 라벨로 만들어진 event에 링크된 채 남아있는 문제 방지)
                 const updTT = db.prepare(`UPDATE timetable SET
-                    section=?, note=?, sort_order=?, scheduled_date=?
+                    section=?, note=?, sort_order=?, scheduled_date=?, event_id=NULL
                     WHERE id=?`);
                 const delOne = db.prepare('DELETE FROM timetable WHERE id=?');
 
@@ -10144,15 +10146,48 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
     }
 });
 
+// 수동 재링크 API: 시간표의 모든 event_id를 NULL로 리셋한 뒤 autoLink 재실행
+//   사용 케이스: 잘못된 라벨로 매칭됐던 행을 일괄 재매칭 (필요 시 누락된 event 자동 생성)
+app.post('/api/display/timetable/relink/:compId', (req, res) => {
+    try {
+        const { admin_key } = req.body;
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        const compId = parseInt(req.params.compId);
+        if (!compId) return res.status(400).json({ error: 'competition_id required' });
+
+        const before = db.prepare('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND event_id IS NOT NULL').get(compId).c;
+        db.prepare('UPDATE timetable SET event_id=NULL WHERE competition_id=?').run(compId);
+        const linked = autoLinkDisplayTimetable(compId);
+        const total = db.prepare('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=?').get(compId).c;
+        const stillUnlinked = total - linked;
+        opLog(`시간표 재링크 (이전 ${before} → 현재 ${linked}, 미매칭 ${stillUnlinked})`, 'admin', 'admin', compId);
+        res.json({ success: true, total, linked, unlinked: stillUnlinked, before });
+    } catch (e) {
+        console.error('relink error:', e);
+        res.status(500).json({ error: '재링크 실패: ' + e.message });
+    }
+});
+
 // Auto-link timetable to display-mode events
 function autoLinkDisplayTimetable(compId) {
-    const events = db.prepare('SELECT id, name, gender, division, round_type, category FROM event WHERE competition_id=?').all(compId);
+    let events = db.prepare('SELECT id, name, gender, division, round_type, category FROM event WHERE competition_id=?').all(compId);
     const ttRows = db.prepare('SELECT id, event_name, category AS jongbyul, round, event_id FROM timetable WHERE competition_id=?').all(compId);
     const linkStmt = db.prepare('UPDATE timetable SET event_id=? WHERE id=?');
+    const insEvent = db.prepare('INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)');
 
     function norm(s) { return (s || '').replace(/\s+/g, '').toLowerCase().replace(/[×xX]/g, 'x'); }
 
+    // Best-effort 카테고리 추정 (기존 동일 종목명에서 가져오거나 guessEventCategory)
+    function guessCat(name) {
+        const sameName = events.find(e => norm(e.name) === norm(name) && e.category);
+        if (sameName) return sameName.category;
+        return guessEventCategory(name);
+    }
+
     let linked = 0;
+    let createdEvents = 0;
+    let nextSort = events.length;
+
     ttRows.forEach(tt => {
         if (tt.event_id) return; // already linked
         const parsed = parseDisplayRound(tt.round);
@@ -10160,26 +10195,47 @@ function autoLinkDisplayTimetable(compId) {
 
         // For combined sub-events, match to parent combined event
         let targetName = tt.event_name;
-        if (/^\d+종\(\d+\)/.test(tt.round)) {
+        const isCombinedSub = /^\d+종\(\d+\)/.test(tt.round);
+        if (isCombinedSub) {
             const m = tt.round.match(/^(\d+)종/);
             if (m) targetName = m[1] + '종경기';
         }
+        const targetRound = isCombinedSub ? 'final' : parsed.round_type;
 
-        const match = events.find(ev => {
+        // 1) Strict match: name + gender + division + round_type 모두 일치
+        let match = events.find(ev => {
             if (norm(ev.name) !== norm(targetName)) return false;
             if (jbParsed.gender && ev.gender !== jbParsed.gender) return false;
             if (jbParsed.division && ev.division !== jbParsed.division) return false;
-            // For combined sub-events, match to final
-            if (/^\d+종\(\d+\)/.test(tt.round)) return ev.round_type === 'final';
-            if (ev.round_type !== parsed.round_type) return false;
-            return true;
+            return ev.round_type === targetRound;
         });
+
+        // 2) Auto-create: 매칭 실패 시, parseJongbyul이 division을 추출했다면 누락된 event를 자동 생성
+        //    (기존 잘못된 division의 event는 그대로 두되, 정확한 라벨의 event를 새로 생성)
+        if (!match && jbParsed.division) {
+            const cat = guessCat(targetName);
+            const info = insEvent.run(compId, targetName, cat, jbParsed.gender || 'X', targetRound, jbParsed.division, nextSort++);
+            match = {
+                id: info.lastInsertRowid,
+                name: targetName,
+                gender: jbParsed.gender || 'X',
+                division: jbParsed.division,
+                round_type: targetRound,
+                category: cat,
+            };
+            events.push(match);
+            createdEvents++;
+        }
 
         if (match) {
             linkStmt.run(match.id, tt.id);
             linked++;
         }
     });
+
+    if (createdEvents > 0) {
+        console.log(`[autoLink] competition_id=${compId}: ${linked} linked, ${createdEvents} events auto-created from timetable`);
+    }
     return linked;
 }
 
@@ -10862,8 +10918,8 @@ function _planCleanupUndefined(compId) {
             e.round_type === u.round_type &&
             e.division && e.division.trim()
         );
-        // 가장 우선순위 높은 후보(중등→고등→대학→일반→U20→국제 순) 선택
-        const order = ['중등부','고등부','대학부','일반부','U20','국제'];
+        // 가장 우선순위 높은 후보(초등→중등→고등→U18→U20→대학→일반→선수권→국제 순) 선택
+        const order = ['초등부','중등부','고등부','U18','U20','대학부','일반부','선수권','국제'];
         candidates.sort((a, b) => {
             const ai = order.indexOf(a.division);
             const bi = order.indexOf(b.division);
