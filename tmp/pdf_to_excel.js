@@ -134,11 +134,16 @@ function splitNameTeam(koreanPart) {
 // ── 한 페이지 내 행 파싱 ──
 // pageLines: 페이지 안의 라인 배열 (페이지 마커 제외)
 // pageDiv: { gender, division, sublabel } — 이 페이지에 적용할 부
+//
+// 핵심 아이디어: 순(順) / 레인(lane) 은 같은 종목 / 같은 조 안에서 1부터 N 까지 연속 증가한다.
+//   → 직전 행의 순/레인을 추적해서 "다음 행은 prevSeq+1 로 시작" 한다는 제약으로
+//     붙어있는 숫자 덩어리에서 순(1~99)과 배번(1~9999)을 정확히 분리한다.
 function parsePageLines(pageLines, pageDiv) {
     const entries = [];
     let currentEvent = '', currentRound = '';
     let currentHeat = null;
     let lastEntryIdx = -1;
+    let lastSeq = 0; // 직전 행의 순 또는 레인 (현 종목/조 안에서 누적)
 
     for (let i = 0; i < pageLines.length; i++) {
         const line = pageLines[i];
@@ -153,6 +158,7 @@ function parsePageLines(pageLines, pageDiv) {
             currentRound = evMatch[2].trim();
             currentHeat = null;
             lastEntryIdx = -1;
+            lastSeq = 0;
             continue;
         }
 
@@ -161,12 +167,14 @@ function parsePageLines(pageLines, pageDiv) {
         if (heatMatch) {
             currentHeat = parseInt(heatMatch[1]);
             lastEntryIdx = -1;
+            lastSeq = 0; // 새 조 시작 → 레인 카운터 리셋
             continue;
         }
         // "순번호성명소속" — 트랙은 아니지만 필드 종목의 통합 헤더
         if (/^(순|레인|번호)\s*(번호|성명|소속)?/.test(line) && !/\d{2,}/.test(line)) {
             // heat 없는 종목 (필드)
             currentHeat = currentHeat || null;
+            lastSeq = 0; // 헤더 등장 → 카운터 리셋
             continue;
         }
 
@@ -175,12 +183,49 @@ function parsePageLines(pageLines, pageDiv) {
         // 데이터 행 패턴 분리
         let lane = null, bib = '', namePart = '', teamPart = '';
 
-        // 패턴 A: "5   31양지은" (공백구분 lane → bib+name 붙음, 소속은 다음 줄)
-        // 패턴 B: "3   22배윤우    대전관평초등학교" (공백구분 lane / bib+name / 소속)
-        // 패턴 C: "2245명민준마산구암고등학교" (모두 붙어있음 — u18/u20)
-        // 패턴 D: "11김도혁개봉초등학교" (필드 종목, 순번호+이름+소속 붙음)
+        // ── 헬퍼: 붙어있는 숫자열 digits 에서 (순/레인, 배번) 분리 ──
+        // expectedSeq = lastSeq + 1 (다음에 와야 할 순)
+        // 우선순위:
+        //   1) digits 가 expectedSeq 두자리(예: "10", "11")로 시작 + 나머지 길이 ≥ 1 → 순=두자리
+        //   2) digits 첫 한자리가 expectedSeq 와 일치 + 나머지 길이 ≥ 1 → 순=한자리
+        //   3) 폴백: 첫 한자리(1~9)를 순, 나머지를 배번 (단 expectedSeq 가 10 이상이고
+        //      digits 두자리가 expectedSeq 면 무조건 두자리 우선)
+        function splitSeqAndBib(digits, expectedSeq) {
+            if (!digits) return { seq: null, bib: '' };
+            // 두자리 순 매칭 시도 (expectedSeq ≥ 10 이거나, 다음에 와야 할 순이 두자리인 경우)
+            if (digits.length >= 3 && expectedSeq >= 10) {
+                const twoDigit = parseInt(digits.substring(0, 2));
+                if (twoDigit === expectedSeq) {
+                    return { seq: twoDigit, bib: digits.substring(2) };
+                }
+            }
+            // 한자리 순 매칭
+            if (digits.length >= 2) {
+                const oneDigit = parseInt(digits[0]);
+                if (oneDigit === expectedSeq && expectedSeq >= 1 && expectedSeq <= 9) {
+                    return { seq: oneDigit, bib: digits.substring(1) };
+                }
+            }
+            // expectedSeq 가 모르거나 어긋나는 경우(첫 행/PDF 결손/리셋)
+            // → 휴리스틱: digits 두자리(10~99)로 시작 + 나머지 ≥ 1 면 두자리 순으로 가정
+            if (digits.length >= 3) {
+                const twoDigit = parseInt(digits.substring(0, 2));
+                // 두자리가 10~99 범위 + (expectedSeq 가 0이거나 두자리와 일치/근접)
+                if (twoDigit >= 10 && twoDigit <= 99) {
+                    // 이전 순 추적이 끊긴 케이스에서도 두자리 우선 시도
+                    // 단, 두자리 순 다음 자리들이 모두 숫자 + 길이 ≥ 1 조건 만족 시
+                    return { seq: twoDigit, bib: digits.substring(2) };
+                }
+            }
+            // 최종 폴백: 한자리 순
+            if (digits.length >= 2) {
+                return { seq: parseInt(digits[0]), bib: digits.substring(1) };
+            }
+            return { seq: null, bib: digits };
+        }
 
-        // A/B 시도: 첫 토큰이 1~9의 한자리 lane
+        // 패턴 A/B: "5   31양지은    학교" (공백 구분 — 꿈나무 형식)
+        //   순/레인이 한자리만 노출되는 케이스 (PDF 자체가 1~9만 사용)
         const aMatch = line.match(/^([1-9])\s+(\d{1,3})\s*([가-힣]{2,4})(?:\s{2,}(.+))?\s*$/);
         if (aMatch) {
             lane = parseInt(aMatch[1]);
@@ -188,39 +233,27 @@ function parsePageLines(pageLines, pageDiv) {
             namePart = aMatch[3];
             teamPart = (aMatch[4] || '').trim();
         } else {
-            // C/D: 모두 붙어있음
-            const m = line.match(/^(\d+)([가-힣].+)$/);
-            if (m) {
-                const digits = m[1];
-                const rest = m[2];
-                // 한글 부분에서 이름과 소속 분리
-                if (currentHeat) {
-                    // 트랙: digits 첫자리 = lane(1~9), 나머지 = bib(1~3자리)
-                    const firstDigit = parseInt(digits[0]);
-                    if (firstDigit >= 1 && firstDigit <= 9 && digits.length >= 2) {
-                        lane = firstDigit;
-                        bib = digits.substring(1);
-                    } else if (digits.length >= 1) {
-                        // lane 누락 케이스 (가끔 발생)
-                        bib = digits;
-                    }
-                } else {
-                    // 필드: digits 앞부분이 순(1~99), 나머지가 bib
-                    // 일반적으로 첫 1~2자리가 순, 나머지가 배번
-                    if (digits.length >= 2) {
-                        // 순이 한자리(1~9)인지 두자리(10~99)인지 휴리스틱
-                        // 보통 '11김도혁' 의 경우 lane=1, bib=1 보다는 순=1, bib=1 이 맞음
-                        // 다만 두 자리 순(11~99)도 가능 — 보수적으로 첫자리만 순, 나머지 bib
-                        const firstDigit = parseInt(digits[0]);
-                        lane = firstDigit;
-                        bib = digits.substring(1);
-                    } else {
-                        bib = digits;
-                    }
+            // 패턴 A2: "10  149김인혜    학교" (공백 구분, 두자리 순)
+            const aMatch2 = line.match(/^(\d{1,2})\s{2,}(\d{1,3})\s*([가-힣]{2,4})(?:\s{2,}(.+))?\s*$/);
+            if (aMatch2) {
+                lane = parseInt(aMatch2[1]);
+                bib = aMatch2[2];
+                namePart = aMatch2[3];
+                teamPart = (aMatch2[4] || '').trim();
+            } else {
+                // 패턴 C/D: "2245명민준마산구암고등학교" 또는 "10657우상혁용인시청" (모두 붙어있음)
+                const m = line.match(/^(\d+)([가-힣].+)$/);
+                if (m) {
+                    const digits = m[1];
+                    const rest = m[2];
+                    const expectedSeq = lastSeq + 1;
+                    const split = splitSeqAndBib(digits, expectedSeq);
+                    lane = split.seq;
+                    bib = split.bib;
+                    const nt = splitNameTeam(rest);
+                    namePart = nt.name;
+                    teamPart = nt.team;
                 }
-                const split = splitNameTeam(rest);
-                namePart = split.name;
-                teamPart = split.team;
             }
         }
 
@@ -249,6 +282,13 @@ function parsePageLines(pageLines, pageDiv) {
             sublabel: pageDiv.sublabel || '',
         });
         lastEntryIdx = entries.length - 1;
+        // 다음 행의 expectedSeq 추적 — 정상 push 됐고 lane(=순/레인)이 lastSeq+1 인 경우만 갱신
+        if (typeof lane === 'number' && lane > 0 && lane === lastSeq + 1) {
+            lastSeq = lane;
+        } else if (typeof lane === 'number' && lane > lastSeq) {
+            // 페이지 결손 등으로 점프했더라도 레인 자체가 단조증가면 따라간다
+            lastSeq = lane;
+        }
     }
 
     return entries;
