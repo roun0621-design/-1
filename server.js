@@ -10364,29 +10364,47 @@ function parseJongbyul(jb) {
     if (/여고\(U20/i.test(s) || /여자고등.*U20/i.test(s)) return { gender: 'F', division: 'U20' };
 
     // ── 2) 괄호 표기: "U18(남)", "U20(여)", "선수권(혼)", "일반(남)", "남자(아시아)" 등 ──
-    //    base 부분은 그대로 division 으로 보존, 괄호 안은 성별/국제로 매핑.
+    //    ★ 핵심 정책: 괄호 안이 성별 토큰(남/여/혼)이면 division은 base+괄호 통째로 보존(예: "선수권(남)", "U18(여)").
+    //    그래야 명단 PDF의 부 라벨("선수권 남자부" → "선수권(남)")과 결정적으로 일치한다.
+    //    이전 버그: base만 division으로 잘라 "선수권"으로 저장 → 명단 "선수권(남)"과 매칭 실패.
     const parenMatch = s.match(/^([^(]+)\(([^)]+)\)$/);
     if (parenMatch) {
         const base = parenMatch[1];
         const inside = parenMatch[2];
         // 성별 추정 — 괄호 안 우선, 없으면 base prefix(남자/여자) 에서 추출
         let gender = 'X';
+        const isGenderToken = /^(남|남자|여|여자|혼|혼성|M|F|X|믹스|mix)/i.test(inside);
         if (/^남$|^남자$|^M$/i.test(inside)) gender = 'M';
         else if (/^여$|^여자$|^F$/i.test(inside)) gender = 'F';
         else if (/^혼$|^혼성$|^X$|^믹스/i.test(inside)) gender = 'X';
         else if (/^남/.test(base)) gender = 'M';
         else if (/^여/.test(base)) gender = 'F';
-        // 베이스 라벨 정규화
-        // 중학교부/고등학교부/대학교부 → 중등부/고등부/대학부 정규화
-        let division = base;
-        if (/^중학(교)?부?$|^중등부?$/.test(base)) division = '중등부';
-        else if (/^고등(학교)?부?$/.test(base)) division = '고등부';
-        else if (/^대학(교)?부?$/.test(base)) division = '대학부';
-        else if (/^일반부?$/.test(base)) division = '일반부';
-        else if (/^초등(학교)?부?$/.test(base)) division = '초등부';
-        // (아시아) 국제
-        if (/아시아/.test(inside)) division = '국제';
-        return { gender, division };
+
+        // base 정규화
+        let baseNorm = base;
+        if (/^중학(교)?부?$|^중등부?$/.test(base)) baseNorm = '중등부';
+        else if (/^고등(학교)?부?$/.test(base)) baseNorm = '고등부';
+        else if (/^대학(교)?부?$/.test(base)) baseNorm = '대학부';
+        else if (/^일반부?$/.test(base)) baseNorm = '일반부';
+        else if (/^초등(학교)?부?$/.test(base)) baseNorm = '초등부';
+
+        // (아시아) 국제 — 특수 케이스
+        if (/아시아/.test(inside)) return { gender, division: '국제' };
+
+        // 괄호 안이 성별 토큰이면 division은 "base(성별약자)" 형태로 보존
+        // 예: "선수권(남)" → division="선수권(남)", "U18(여)" → division="U18(여)", "U20(혼)" → "U20(혼)"
+        // 단, base가 학교부 계열이면 base만 사용 (예: "중등부(남)"은 어색 → "중등부" + gender=M 으로 분리)
+        if (isGenderToken) {
+            if (['중등부', '고등부', '대학부', '일반부', '초등부'].includes(baseNorm)) {
+                return { gender, division: baseNorm };
+            }
+            // 선수권/U18/U20 등은 base+성별괄호 형태 보존
+            const genderShort = (gender === 'M') ? '남' : (gender === 'F' ? '여' : '혼');
+            return { gender, division: `${baseNorm}(${genderShort})` };
+        }
+
+        // 괄호 안이 성별 토큰이 아닌 경우(예: "남자(아시아)"는 위에서 이미 국제로 처리됨)
+        return { gender, division: baseNorm };
     }
 
     // ── 3) 단독 부 라벨 (성별 표기 없음) ──
@@ -11348,6 +11366,20 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                 if (m) {
                     return { gender: m[1] === '남' ? 'M' : 'F', division: normalizeDivisionLabel('초등부') };
                 }
+                // 1.5) ★ 추가: "남중 1/2학년부", "여중 3학년부", "남고", "여고", "남대", "여대"
+                //      꿈나무 PDF에 "남중 1/2학년부" 같은 라벨이 등장 — 기존엔 인식 못해 초등부 hint로 잘못 흘러감(Bug C 잔여).
+                m = orig.match(/^(남|여)중(\s*[\d/]+학년부)?$/);
+                if (m) {
+                    return { gender: m[1] === '남' ? 'M' : 'F', division: normalizeDivisionLabel('중등부') };
+                }
+                m = orig.match(/^(남|여)고(\s*\d+학년부)?$/);
+                if (m) {
+                    return { gender: m[1] === '남' ? 'M' : 'F', division: normalizeDivisionLabel('고등부') };
+                }
+                m = orig.match(/^(남|여)대(\s*\d+학년부)?$/);
+                if (m) {
+                    return { gender: m[1] === '남' ? 'M' : 'F', division: normalizeDivisionLabel('대학부') };
+                }
                 // 2) "선수권 남자부" / "선수권 여자부" / "선수권 혼성부"
                 m = orig.match(/^선수권\s*(남자|여자|혼성)부?$/);
                 if (m) {
@@ -11399,8 +11431,16 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                     // 구형
                     '(?:남자|여자)?(?:초등학교부|중학교부|고등학교부|대학교부|일반부|초등부|중등부|고등부|대학부|실업부)' +
                     '|' +
-                    // 신형
+                    // 신형 — 짧은 코드 라벨
                     '(?:남|여)초(?:\\s*\\d+학년부)?' +
+                    '|' +
+                    // ★ 추가: "남중 1/2학년부", "여중", "남고", "여고", "남대", "여대"
+                    //    (꿈나무 PDF의 페이지 끝 라벨 형식 — 기존엔 인식 못해 잘못된 division 으로 매칭됨)
+                    '(?:남|여)중(?:\\s*[\\d/]+학년부)?' +
+                    '|' +
+                    '(?:남|여)고(?:\\s*\\d+학년부)?' +
+                    '|' +
+                    '(?:남|여)대(?:\\s*\\d+학년부)?' +
                     '|' +
                     '선수권\\s*(?:남자|여자|혼성)부?' +
                     '|' +
@@ -11455,6 +11495,11 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
             const rosterEntries = [];
             let currentEvent = '', currentRound = '';
             let currentHeat = null;
+            // ★ Bug B 수정: 필드/혼성/단조 트랙 종목은 "1조" 헤더 없이 곧장 "순번호성명소속" 또는
+            //   "레인번호성명소속" 컬럼 헤더만 등장한다. 이 경우에도 첫 자리(들)을 lane(또는 순서/스몰넘버)로
+            //   인식해 display_roster.lane 에 저장해야 스코어보드의 '레인'에 매칭된다.
+            //   currentHeat 가 null 이어도 lane 저장이 가능하도록 보조 플래그를 둔다.
+            let laneHeaderSeen = false;
             let sortOrder = 0;
             let lastEntryIdx = -1; // Track last entry for multi-line team names
 
@@ -11476,6 +11521,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                     currentEvent = evMatch[1].trim();
                     currentRound = evMatch[2].trim();
                     currentHeat = null;
+                    laneHeaderSeen = false;
                     lastEntryIdx = -1;
                     continue;
                 }
@@ -11485,6 +11531,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                     currentEvent = evMatch2[1].trim();
                     currentRound = evMatch2[2].trim();
                     currentHeat = null;
+                    laneHeaderSeen = false;
                     lastEntryIdx = -1;
                     continue;
                 }
@@ -11493,10 +11540,14 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                 const heatMatch = line.match(/^(\d+)조\s*(레인|번호|순)/);
                 if (heatMatch) {
                     currentHeat = parseInt(heatMatch[1]);
+                    laneHeaderSeen = true;
                     continue;
                 }
                 // Skip column headers: "순번호성명소속", "레인번호성명소속", "순  번호성명소속"
-                if (/^(순|레인)\s*(번호|레인)/.test(line)) continue;
+                //   ★ Bug B 수정: 이 헤더 자체가 "이후 라인의 첫 숫자가 순/레인이다"는 신호.
+                //   currentHeat 미설정이라도 lane 파싱이 가능하도록 laneHeaderSeen 플래그를 켠다.
+                if (/^(순|레인)\s*(번호|레인)/.test(line)) { laneHeaderSeen = true; continue; }
+                if (/^순\s+번호/.test(line)) { laneHeaderSeen = true; continue; }
                 if (/^번호\s*성명/.test(line)) continue;
 
                 // Skip if no current event
@@ -11628,6 +11679,10 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                     }
 
                     const bibNum = parseInt(bib);
+                    // ★ Bug B 수정: lane 저장 조건을 currentHeat 뿐 아니라 laneHeaderSeen 도 포함.
+                    //   필드/혼성 트랙 종목은 "1조" 헤더 없이 "순번호성명소속" 만 등장하지만
+                    //   첫 자리(들)이 PDF의 "순"이고 우리 시스템의 "레인"에 해당함.
+                    const laneToStore = (currentHeat || laneHeaderSeen) ? laneOrSeq : null;
                     if (bibNum > 0 && bibNum < 10000 && koreanPart.length >= 2) {
                         const parsed = parseNameTeam(koreanPart);
                         if (parsed.name.length >= 2 && parsed.team.length >= 1) {
@@ -11643,7 +11698,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                                 team: parsed.team,
                                 sort_order: sortOrder++,
                                 heat: currentHeat,
-                                lane: currentHeat ? laneOrSeq : null,
+                                lane: laneToStore,
                             });
                             lastEntryIdx = rosterEntries.length - 1;
                             continue;
@@ -11661,7 +11716,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                                 team: '',
                                 sort_order: sortOrder++,
                                 heat: currentHeat,
-                                lane: currentHeat ? laneOrSeq : null,
+                                lane: laneToStore,
                             });
                             lastEntryIdx = rosterEntries.length - 1;
                             continue;
