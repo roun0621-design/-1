@@ -11796,6 +11796,244 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
     }
 });
 
+// ============================================================
+// Excel 명단 업로드 (결정적 컬럼 매핑 — PDF 추측 매칭 대안)
+// ============================================================
+// PDF 추측 파싱이 엣지 케이스에서 계속 실패하므로, 사용자가 PDF→Excel 변환본을
+// 직접 검수/수정한 후 업로드하는 워크플로를 지원한다.
+//
+// 기대 컬럼(헤더 한글 또는 영문 모두 허용):
+//   일차/day, 종목/event_name, 라운드/round, 라운드타입/round_type,
+//   조/heat, 레인/lane, 배번/bib_number, 성명/athlete_name,
+//   소속/team, 부/division, 성별/gender
+//
+// 동작:
+//   ① day 별로 기존 display_roster를 삭제 후 새로 INSERT
+//   ② 업로드 직후 autoMatchDisplayRoster 호출 (시간표 events와 매칭)
+//   ③ 매칭이 안 된 행은 관리 페이지에서 "수동 매칭"으로 직접 지정 가능
+app.post('/api/display/roster/upload-excel', upload.single('file'), (req, res) => {
+    try {
+        const { competition_id, admin_key } = req.body;
+        if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        if (!req.file) return res.status(400).json({ error: '파일이 없습니다.' });
+
+        const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(parseInt(competition_id));
+        if (!comp) { try { fs.unlinkSync(req.file.path); } catch(e) {} return res.status(404).json({ error: '대회를 찾을 수 없습니다.' }); }
+
+        const wb = XLSX.readFile(req.file.path);
+        // 우선순위: '명단' 시트 > 첫번째 시트
+        const sheetName = wb.SheetNames.find(s => s === '명단' || s === 'roster') || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        if (!ws) { try { fs.unlinkSync(req.file.path); } catch(e) {} return res.status(400).json({ error: '시트가 비어있습니다.' }); }
+
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        if (data.length < 2) { try { fs.unlinkSync(req.file.path); } catch(e) {} return res.status(400).json({ error: '데이터 행이 없습니다.' }); }
+
+        // 헤더 매핑 (한/영 모두 지원)
+        const headerRow = data[0].map(c => String(c || '').trim());
+        function findCol(...names) {
+            for (const n of names) {
+                const idx = headerRow.findIndex(h => h === n);
+                if (idx >= 0) return idx;
+            }
+            return -1;
+        }
+        const colIdx = {
+            day: findCol('일차', 'day'),
+            event_name: findCol('종목', 'event_name', 'event'),
+            round: findCol('라운드', 'round'),
+            round_type: findCol('라운드타입', 'round_type'),
+            heat: findCol('조', 'heat'),
+            lane: findCol('레인', 'lane'),
+            bib_number: findCol('배번', 'bib_number', 'bib'),
+            athlete_name: findCol('성명', 'athlete_name', 'name'),
+            team: findCol('소속', 'team'),
+            division: findCol('부', 'division'),
+            gender: findCol('성별', 'gender'),
+        };
+
+        if (colIdx.event_name < 0 || colIdx.athlete_name < 0) {
+            try { fs.unlinkSync(req.file.path); } catch(e) {}
+            return res.status(400).json({ error: '필수 컬럼(종목/성명)이 없습니다. README 시트의 양식을 참고하세요.' });
+        }
+
+        // 행 파싱 (정규화는 normalizeDivisionLabel 한 번만 거침)
+        function gNorm(g) {
+            const s = String(g || '').trim().toUpperCase();
+            if (s === 'M' || s === '남' || s === '남자') return 'M';
+            if (s === 'F' || s === '여' || s === '여자') return 'F';
+            if (s === 'X' || s === '혼' || s === '혼성' || s === 'MIX') return 'X';
+            return '';
+        }
+
+        const entries = [];
+        const daysSeen = new Set();
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i] || [];
+            const evName = String(row[colIdx.event_name] || '').trim();
+            const athName = String(row[colIdx.athlete_name] || '').trim();
+            if (!evName || !athName) continue; // skip empty rows
+
+            const dayRaw = colIdx.day >= 0 ? row[colIdx.day] : 1;
+            const dayNum = parseInt(dayRaw) || 1;
+            daysSeen.add(dayNum);
+
+            const round = colIdx.round >= 0 ? String(row[colIdx.round] || '').trim() : '';
+            const heatRaw = colIdx.heat >= 0 ? row[colIdx.heat] : '';
+            const laneRaw = colIdx.lane >= 0 ? row[colIdx.lane] : '';
+            const bib = colIdx.bib_number >= 0 ? String(row[colIdx.bib_number] || '').trim() : '';
+            const team = colIdx.team >= 0 ? String(row[colIdx.team] || '').trim() : '';
+            const divRaw = colIdx.division >= 0 ? String(row[colIdx.division] || '').trim() : '';
+            const genderRaw = colIdx.gender >= 0 ? row[colIdx.gender] : '';
+
+            entries.push({
+                competition_id: parseInt(competition_id),
+                day: dayNum,
+                event_name: evName,
+                round: round,
+                division: normalizeDivisionLabel(divRaw),
+                gender: gNorm(genderRaw),
+                bib_number: bib,
+                athlete_name: athName,
+                team: team,
+                sort_order: entries.length,
+                heat: heatRaw === '' || heatRaw === null ? null : (parseInt(heatRaw) || null),
+                lane: laneRaw === '' || laneRaw === null ? null : (parseInt(laneRaw) || null),
+            });
+        }
+
+        if (entries.length === 0) {
+            try { fs.unlinkSync(req.file.path); } catch(e) {}
+            return res.status(400).json({ error: '유효한 명단 행이 없습니다.' });
+        }
+
+        // 트랜잭션: day별 삭제 후 INSERT
+        const insStmt = db.prepare('INSERT INTO display_roster (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, heat, lane) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+        const delStmt = db.prepare('DELETE FROM display_roster WHERE competition_id=? AND day=?');
+        const tx = db.transaction(() => {
+            [...daysSeen].forEach(d => delStmt.run(parseInt(competition_id), d));
+            entries.forEach(e => insStmt.run(e.competition_id, e.day, e.event_name, e.round, e.division, e.gender, e.bib_number, e.athlete_name, e.team, e.sort_order, e.heat, e.lane));
+        });
+        tx();
+
+        // Auto-match
+        try { autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) { console.warn('Roster auto-match warning:', e.message); }
+
+        try { fs.unlinkSync(req.file.path); } catch(e) {}
+        opLog(`노출용 명단 Excel 업로드 (일차 ${[...daysSeen].sort().join(',')}, ${entries.length}명)`, 'admin', 'admin', parseInt(competition_id));
+        res.json({ success: true, count: entries.length, days: [...daysSeen].sort(), message: `Excel 명단 ${entries.length}명 등록됨` });
+    } catch(e) {
+        console.error('Roster Excel upload error:', e);
+        try { if (req.file) fs.unlinkSync(req.file.path); } catch(ex) {}
+        res.status(500).json({ error: 'Excel 명단 업로드 실패: ' + e.message });
+    }
+});
+
+// ============================================================
+// 명단 매칭 수동 수정 API
+// ============================================================
+//   ① GET  /api/display/roster/list/:compId          — 명단 행 목록 (필터 가능)
+//   ② GET  /api/display/roster/events/:compId        — 매칭 후보 event 목록
+//   ③ POST /api/display/roster/assign                — 단건 event_id 변경
+//   ④ POST /api/display/roster/assign-bulk           — 다건 동시 변경 (그룹 단위)
+//   ⑤ POST /api/display/roster/clear-event/:rosterId — event_id를 NULL로 (미매칭으로 되돌림)
+app.get('/api/display/roster/list/:compId', (req, res) => {
+    try {
+        const compId = parseInt(req.params.compId);
+        const { day, only_unmatched, event_id } = req.query;
+        let sql = `SELECT r.id, r.day, r.event_name, r.round, r.division, r.gender, r.bib_number,
+                          r.athlete_name, r.team, r.heat, r.lane, r.event_id,
+                          e.name AS matched_event_name, e.gender AS matched_event_gender,
+                          e.division AS matched_event_division, e.round_type AS matched_event_round
+                   FROM display_roster r
+                   LEFT JOIN event e ON e.id = r.event_id
+                   WHERE r.competition_id=?`;
+        const args = [compId];
+        if (day) { sql += ' AND r.day=?'; args.push(parseInt(day)); }
+        if (only_unmatched === '1' || only_unmatched === 'true') sql += ' AND r.event_id IS NULL';
+        if (event_id) { sql += ' AND r.event_id=?'; args.push(parseInt(event_id)); }
+        sql += ' ORDER BY r.day, r.event_name, r.round, r.heat, r.lane, r.sort_order';
+        const rows = db.prepare(sql).all(...args);
+        res.json({ success: true, rows, total: rows.length });
+    } catch(e) {
+        console.error('roster/list error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/display/roster/events/:compId', (req, res) => {
+    try {
+        const compId = parseInt(req.params.compId);
+        const events = db.prepare(
+            `SELECT id, name, gender, division, round_type, category
+             FROM event WHERE competition_id=?
+             ORDER BY name, division, gender, round_type`
+        ).all(compId);
+        res.json({ success: true, events });
+    } catch(e) {
+        console.error('roster/events error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/display/roster/assign', (req, res) => {
+    try {
+        const { admin_key, roster_id, event_id } = req.body;
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        if (!roster_id) return res.status(400).json({ error: 'roster_id required' });
+        const evId = event_id ? parseInt(event_id) : null;
+        if (evId) {
+            const ev = db.prepare('SELECT id FROM event WHERE id=?').get(evId);
+            if (!ev) return res.status(404).json({ error: '해당 종목이 존재하지 않습니다.' });
+        }
+        db.prepare('UPDATE display_roster SET event_id=? WHERE id=?').run(evId, parseInt(roster_id));
+        res.json({ success: true });
+    } catch(e) {
+        console.error('roster/assign error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/display/roster/assign-bulk', (req, res) => {
+    try {
+        const { admin_key, competition_id, filter, event_id } = req.body;
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
+        const evId = event_id ? parseInt(event_id) : null;
+        if (evId) {
+            const ev = db.prepare('SELECT id FROM event WHERE id=?').get(evId);
+            if (!ev) return res.status(404).json({ error: '해당 종목이 존재하지 않습니다.' });
+        }
+        // filter: { event_name, division, gender, round, day }
+        const f = filter || {};
+        let sql = 'UPDATE display_roster SET event_id=? WHERE competition_id=?';
+        const args = [evId, parseInt(competition_id)];
+        if (f.event_name) { sql += ' AND event_name=?'; args.push(f.event_name); }
+        if (f.division !== undefined) { sql += ' AND division=?'; args.push(f.division || ''); }
+        if (f.gender !== undefined) { sql += ' AND gender=?'; args.push(f.gender || ''); }
+        if (f.round !== undefined) { sql += ' AND round=?'; args.push(f.round || ''); }
+        if (f.day) { sql += ' AND day=?'; args.push(parseInt(f.day)); }
+        const info = db.prepare(sql).run(...args);
+        res.json({ success: true, updated: info.changes });
+    } catch(e) {
+        console.error('roster/assign-bulk error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/display/roster/clear-event/:rosterId', (req, res) => {
+    try {
+        const { admin_key } = req.body;
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        db.prepare('UPDATE display_roster SET event_id=NULL WHERE id=?').run(parseInt(req.params.rosterId));
+        res.json({ success: true });
+    } catch(e) {
+        console.error('roster/clear-event error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Auto-match roster entries to events
 //
 // 매칭 정책 (2026-05 재작성):

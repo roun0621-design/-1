@@ -265,8 +265,13 @@ function renderCompVideoButton() {
 
 function switchGender(g, btn) {
     currentGender = g;
-    document.querySelectorAll('.gender-tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    // 성별 탭 active 표시는 #gender-tabs 안의 버튼에만 적용 (division-tabs 가 .gender-tab-btn 클래스를
+    // 재사용하므로 전역 querySelectorAll 로 잡으면 division 탭의 active 도 같이 풀려버림)
+    document.querySelectorAll('#gender-tabs .gender-tab-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    // ★ FIX: 성별 변경 시 division 탭 목록도 새 성별에 맞게 다시 렌더링
+    //    (남자 탭에서 여자/혼성 division 이 보이던 버그 수정)
+    if (typeof renderDivisionTabs === 'function') renderDivisionTabs();
     renderMatrix();
 }
 
@@ -322,12 +327,24 @@ function renderDivisionTabs() {
         const genderTabs = document.getElementById('gender-tabs');
         if (genderTabs) genderTabs.after(divBar);
     }
-    const existingDivs = [...new Set(allEvents.filter(e => !e.parent_event_id).map(e => e.division).filter(Boolean))];
+    // ★ FIX: 현재 성별 탭(M/F/X)에 해당하는 events 만 division 목록 추출
+    //    이전엔 모든 events 의 division 합집합을 보여줘서 "남자" 탭에서도 "선수권(여)" 등이 표시됨.
+    const existingDivs = [...new Set(
+        allEvents
+            .filter(e => !e.parent_event_id)
+            .filter(e => e.gender === currentGender)
+            .map(e => e.division)
+            .filter(Boolean)
+    )];
     if (existingDivs.length === 0) { divBar.style.display = 'none'; return; }
     divBar.style.display = 'flex';
     // 일반화된 정렬: 사전 정의 순서 → 연령군 점수 → 성별 점수
     const orderedDivs = existingDivs.slice().sort((a, b) => _divCompareKey(a) - _divCompareKey(b) || a.localeCompare(b));
     const all = ['전체', ...orderedDivs];
+    // 현재 활성 division 이 새 성별 탭의 목록에 없으면 '전체'로 폴백
+    if (_currentDivision !== '전체' && !orderedDivs.includes(_currentDivision)) {
+        _currentDivision = '전체';
+    }
     divBar.innerHTML = all.map(d => `<button class="gender-tab-btn${d===_currentDivision?' active':''}" style="flex:none;padding:6px 14px;font-size:12px;font-weight:700;color:#555;border-bottom:2px solid transparent;${d===_currentDivision?'color:#b79f58;border-bottom-color:#b79f58;background:#f8f4ea;':''}" onclick="switchDivision('${d.replace(/'/g,"\\'")}',this)">${d}</button>`).join('');
 }
 
