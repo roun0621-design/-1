@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PACE RISE : Node — 노출용 대회 관리</title>
+<link rel="stylesheet" href="styles.css?v=71">
+<style>
+:root { --gold:#b79f58; --gold-bg:#f8f4ea; --gold-dark:#8a7640; --danger:#c62828; --success:#2e7d32; --border:#e5e7eb; --bg:#f9fafb; --text:#1a1f2b; --muted:#888; --blue:#1565c0; --radius:8px; }
+* { box-sizing:border-box; margin:0; padding:0; }
+
+/* ═══════ FULL-PAGE TOP TAB BAR ═══════ */
+.top-tabs { display:flex; background:#fff; border-bottom:2px solid var(--border); padding:0 20px; gap:0; position:sticky; top:56px; z-index:90; }
+.top-tab { padding:14px 24px; font-size:14px; font-weight:700; border:none; background:none; cursor:pointer; color:var(--muted); border-bottom:3px solid transparent; margin-bottom:-2px; transition:all .15s; white-space:nowrap; }
+.top-tab:hover { color:var(--text); background:#fafafa; }
+.top-tab.active { color:var(--gold-dark); border-bottom-color:var(--gold); }
+.top-tab .tab-count { display:inline-block; background:#eee; color:#666; font-size:10px; font-weight:800; padding:1px 6px; border-radius:8px; margin-left:5px; }
+.top-tab.active .tab-count { background:var(--gold-bg); color:var(--gold-dark); }
+
+/* ═══════ PAGE BODY ═══════ */
+.page-body { max-width:1400px; margin:0 auto; padding:20px; }
+
+/* ═══════ STATS ROW ═══════ */
+.stats-row { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+.stat-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px 20px; text-align:center; min-width:110px; flex:1; }
+.stat-card .num { font-size:28px; font-weight:800; color:var(--gold); }
+.stat-card .lbl { font-size:11px; color:var(--muted); margin-top:2px; font-weight:600; }
+
+/* ═══════ TOOLBAR ═══════ */
+.toolbar { display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; background:#fff; padding:12px 16px; border-radius:10px; border:1px solid var(--border); }
+.toolbar .search-input { flex:1; min-width:200px; padding:9px 14px; border:1.5px solid #ddd; border-radius:8px; font-size:13px; }
+.toolbar .search-input:focus { border-color:var(--gold); outline:none; box-shadow:0 0 0 3px rgba(183,159,88,.12); }
+.pill-group { display:flex; gap:4px; }
+.pill { padding:6px 14px; border:1.5px solid #ddd; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; background:#fff; transition:all .12s; user-select:none; }
+.pill.on { background:var(--gold); color:#fff; border-color:var(--gold); }
+.pill:hover:not(.on) { border-color:var(--gold); color:var(--gold-dark); }
+
+/* ═══════ UPLOAD AREA ═══════ */
+.upload-area { background:#fff; border:1px solid var(--border); border-radius:10px; padding:24px; margin-bottom:20px; }
+.upload-area h3 { font-size:16px; font-weight:800; margin-bottom:12px; }
+.upload-row { display:flex; gap:16px; flex-wrap:wrap; }
+.upload-card { flex:1; min-width:260px; border:2px dashed #ccc; border-radius:12px; padding:30px 20px; text-align:center; cursor:pointer; transition:all .2s; }
+.upload-card:hover { border-color:var(--gold); background:var(--gold-bg); }
+.upload-card input[type=file] { display:none; }
+.upload-card .upload-icon { font-size:32px; margin-bottom:8px; opacity:.5; }
+.upload-card .upload-title { font-size:14px; font-weight:700; color:var(--text); }
+.upload-card .upload-sub { font-size:11px; color:var(--muted); margin-top:4px; }
+
+/* ═══════ DAY TABS ═══════ */
+.day-tabs { display:flex; gap:6px; margin-bottom:16px; }
+.day-tab { padding:8px 18px; border:1.5px solid #ddd; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; background:#fff; transition:all .12s; }
+.day-tab.active { background:var(--gold); color:#fff; border-color:var(--gold); }
+.day-tab:hover:not(.active) { border-color:var(--gold); }
+
+/* ═══════ TIMETABLE TABLE ═══════ */
+.tt-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; border-radius:10px; overflow:hidden; border:1px solid var(--border); }
+.tt-table th { padding:10px 12px; text-align:left; font-size:11px; font-weight:700; color:var(--muted); background:#fafafa; border-bottom:2px solid var(--border); white-space:nowrap; }
+.tt-table td { padding:9px 12px; border-bottom:1px solid #f3f3f3; }
+.tt-table tr:hover td { background:var(--gold-bg); }
+.tt-table .time-cell { font-family:'SF Mono',monospace; font-weight:700; font-size:13px; color:var(--gold-dark); white-space:nowrap; }
+.tt-table .event-cell { font-weight:600; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.tt-table .category-cell { font-size:12px; color:#555; }
+.tt-table .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; }
+.tt-table .badge-linked { background:#e8f5e9; color:#2e7d32; }
+.tt-table .badge-unlinked { background:#fce4ec; color:#c62828; }
+
+/* ═══════ ROSTER TABLE ═══════ */
+.roster-group { background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:16px; overflow:hidden; }
+.roster-group-head { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:#fafafa; border-bottom:1px solid var(--border); cursor:pointer; }
+.roster-group-head:hover { background:var(--gold-bg); }
+.roster-group-head .rg-title { font-size:14px; font-weight:700; }
+.roster-group-head .rg-meta { font-size:11px; color:var(--muted); display:flex; gap:10px; align-items:center; }
+.heat-section { margin:0; border-bottom:1px solid #f0f0f0; }
+.heat-section:last-child { border-bottom:none; }
+.heat-header { padding:8px 16px; background:#f8f8f8; font-size:12px; font-weight:700; color:var(--gold-dark); display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; }
+.roster-table { width:100%; border-collapse:collapse; font-size:12px; }
+.roster-table th { padding:7px 12px; text-align:left; font-size:10px; font-weight:700; color:var(--muted); background:#fafafa; border-bottom:1px solid #eee; }
+.roster-table td { padding:6px 12px; border-bottom:1px solid #f8f8f8; }
+.roster-table tr:hover td { background:#fafbfc; }
+.roster-table .lane-cell { text-align:center; font-weight:700; color:var(--gold-dark); min-width:40px; }
+.roster-table .bib-cell { text-align:center; font-weight:800; font-size:13px; }
+.roster-table .name-cell { font-weight:600; }
+.roster-table .team-cell { color:#555; }
+
+/* ═══════ RELAY (팀 단위 표시) ═══════ */
+.relay-team-card { border:1px solid #e5e7eb; border-radius:8px; margin:8px 12px; overflow:hidden; background:#fff; }
+.relay-team-card:hover { border-color: var(--gold); box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+.relay-team-head { display:flex; justify-content:space-between; align-items:center; padding:9px 14px; background:linear-gradient(90deg,#fefcf3 0%,#fff 100%); border-bottom:1px solid #f0f0f0; cursor:pointer; gap:10px; }
+.relay-team-head .rt-left { display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
+.relay-team-head .rt-lane { display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:28px; padding:0 9px; background:var(--gold); color:#fff; border-radius:6px; font-weight:800; font-size:13px; }
+.relay-team-head .rt-lane.no-lane { background:#e5e7eb; color:#999; }
+.relay-team-head .rt-team { font-weight:700; font-size:14px; color:#222; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.relay-team-head .rt-meta { font-size:11px; color:var(--muted); display:flex; gap:8px; align-items:center; flex-shrink:0; }
+.relay-team-head .rt-edit-btn { background:#fff; border:1px solid #d1d5db; border-radius:5px; padding:3px 8px; font-size:11px; cursor:pointer; color:#555; }
+.relay-team-head .rt-edit-btn:hover { background:var(--gold-bg); border-color:var(--gold); color:var(--gold-dark); }
+.relay-members { padding:6px 14px 10px 50px; display:flex; flex-direction:column; gap:4px; background:#fafbfc; }
+.relay-member-row { display:flex; align-items:center; gap:10px; padding:5px 8px; background:#fff; border-radius:5px; border:1px solid #f0f0f0; font-size:12px; }
+.relay-member-row .rm-leg { display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:22px; background:#f3f4f6; color:#555; border-radius:4px; font-weight:700; font-size:10px; }
+.relay-member-row .rm-leg.leg-1 { background:#fef3c7; color:#92400e; }
+.relay-member-row .rm-leg.leg-2 { background:#dbeafe; color:#1e40af; }
+.relay-member-row .rm-leg.leg-3 { background:#dcfce7; color:#166534; }
+.relay-member-row .rm-leg.leg-4 { background:#fce7f3; color:#9f1239; }
+.relay-member-row .rm-bib { min-width:50px; text-align:center; font-weight:800; font-size:12px; color:#333; }
+.relay-member-row .rm-name { font-weight:600; flex:1; color:#222; }
+.relay-member-row.no-team { background:#fef2f2; border-color:#fecaca; }
+.relay-team-empty { padding:8px 14px 10px 50px; font-size:11px; color:#999; font-style:italic; background:#fafbfc; }
+
+/* ═══════ EVENTS / RESULTS GRID ═══════ */
+.events-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px; }
+.event-card { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px 14px; cursor:pointer; transition:all .12s; display:flex; justify-content:space-between; align-items:center; }
+.event-card:hover { border-color:var(--gold); box-shadow:0 2px 8px rgba(183,159,88,.1); }
+.event-card.has-link { border-left:3px solid var(--blue); }
+.event-card.has-roster { border-left:3px solid var(--success); }
+.event-card .ec-title { font-size:13px; font-weight:700; }
+.event-card .ec-sub { font-size:10px; color:var(--muted); margin-top:2px; }
+.event-card .ec-badges { display:flex; gap:4px; }
+.badge-sm { display:inline-block; padding:2px 7px; border-radius:8px; font-size:9px; font-weight:700; }
+.badge-green { background:#e8f5e9; color:#2e7d32; }
+.badge-red { background:#fce4ec; color:#c62828; }
+.badge-blue { background:#e3f2fd; color:#1565c0; }
+.badge-orange { background:#fff3e0; color:#e65100; }
+.badge-gray { background:#f5f5f5; color:#999; }
+
+/* ═══════ MATCH TAB ═══════ */
+.match-summary { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+.match-stat { background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px 18px; text-align:center; min-width:120px; }
+.match-stat .ms-num { font-size:22px; font-weight:800; }
+.match-stat .ms-lbl { font-size:10px; color:var(--muted); margin-top:2px; }
+.unmatched-list { background:#fff; border:1px solid #fce4ec; border-radius:10px; overflow:hidden; }
+.unmatched-item { padding:10px 16px; border-bottom:1px solid #fce4ec; display:flex; justify-content:space-between; align-items:center; cursor:pointer; transition:background .1s; }
+.unmatched-item:hover { background:#fff8f8; }
+.unmatched-item:last-child { border-bottom:none; }
+
+/* ═══════ RESULT LINK EDIT ═══════ */
+.link-edit-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.4); z-index:999; display:flex; align-items:center; justify-content:center; }
+.link-edit-modal { background:#fff; border-radius:12px; padding:24px; width:90%; max-width:500px; box-shadow:0 20px 60px rgba(0,0,0,.2); }
+.link-edit-modal h3 { font-size:16px; font-weight:800; margin-bottom:16px; }
+.link-input { width:100%; padding:10px 14px; border:1.5px solid #ddd; border-radius:8px; font-size:13px; margin-bottom:12px; box-sizing:border-box; }
+.link-input:focus { border-color:var(--gold); outline:none; box-shadow:0 0 0 3px rgba(183,159,88,.12); }
+.tt-edit-label { font-size:11px; font-weight:700; color:var(--muted); display:block; margin-bottom:4px; }
+.section-title { display:flex; align-items:center; }
+
+/* ═══════ BUTTONS ═══════ */
+.btn-gold { background:var(--gold); color:#fff; border:none; padding:9px 18px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; transition:all .12s; }
+.btn-gold:hover { background:#a08a48; }
+.btn-outline { background:none; border:1.5px solid #ddd; padding:7px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; color:var(--text); transition:all .12s; }
+.btn-outline:hover { border-color:var(--gold); color:var(--gold-dark); }
+.btn-danger { background:#c62828; color:#fff; border:none; padding:9px 18px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; }
+.btn-danger:hover { background:#a01a1a; }
+
+/* ═══════ RESPONSIVE ═══════ */
+@media(max-width:768px) {
+    .top-tabs { padding:0 10px; overflow-x:auto; }
+    .top-tab { padding:12px 16px; font-size:13px; }
+    .page-body { padding:12px; }
+    .events-grid { grid-template-columns:1fr; }
+    .upload-row { flex-direction:column; }
+}
+
+/* ═══════ EMPTY STATE ═══════ */
+.empty-state { text-align:center; padding:40px 20px; color:var(--muted); }
+.empty-state .empty-icon { font-size:36px; opacity:.3; margin-bottom:8px; }
+.empty-state .empty-text { font-size:14px; font-weight:600; }
+
+/* ═══════ SECTION TITLE ═══════ */
+.section-title { font-size:16px; font-weight:800; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.section-title .st-count { font-size:12px; color:var(--muted); font-weight:600; }
+
+/* ═══════ Toast ═══════ */
+.toast { position:fixed; bottom:20px; right:20px; padding:12px 24px; border-radius:10px; color:#fff; font-size:13px; font-weight:700; z-index:9999; animation:fadeUp .3s; }
+.toast-success { background:var(--success); }
+.toast-error { background:var(--danger); }
+@keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body>
+<header class="header">
+    <div class="header-inner">
+        <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">Node</span></h1>
+        <p class="header-subtitle">노출용 대회 관리</p>
+    </div>
+    <nav class="page-nav" id="page-nav"></nav>
+</header>
+
+<!-- TOP TAB BAR -->
+<div class="top-tabs" id="top-tabs">
+    <button class="top-tab active" onclick="switchTab('timetable',this)">시간표 <span class="tab-count" id="tc-tt">0</span></button>
+    <button class="top-tab" onclick="switchTab('roster',this)">참가명단 <span class="tab-count" id="tc-roster">0</span></button>
+    <button class="top-tab" onclick="switchTab('events',this)">종목·결과 <span class="tab-count" id="tc-events">0</span></button>
+    <button class="top-tab" onclick="switchTab('match',this)">매칭 <span class="tab-count" id="tc-match">0</span></button>
+</div>
+
+<!-- PAGE BODY -->
+<div class="page-body">
+    <!-- STATS -->
+    <div class="stats-row" id="stats-row"></div>
+    <!-- CONTENT -->
+    <div id="tab-content"></div>
+</div>
+
+<!-- Link Edit Modal (hidden) -->
+<div id="link-modal" style="display:none;"></div>
+
+<script src="common.js?v=71"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+const compId = getCompetitionId();
+let _tab = 'timetable';
+let _events = [], _roster = [], _timetable = {};
+let _sortMode = 'event'; // event | division
+let _filterDiv = '전체';
+let _searchQ = '';
+let _dayFilter = 0; // 0 = all
+
+// Constants
+// WA 표준 순서 (서버 STANDARD_EVENT_ORDER와 동기화)
+const EVENT_ORDER = ['100m','200m','400m','800m','1500m','3000m','5000m','5000mW','10000m','10000mW','100mH','110mH','400mH','3000mSC','3000m장애물','멀리뛰기','세단뛰기','높이뛰기','장대높이뛰기','포환던지기','원반던지기','해머던지기','창던지기','10종경기','7종경기','5종경기','4x100mR','4X100mR','4x400mR','4X400mR','4x800mR','4X800mR','4x1500mR','4X1500mR','4x400mR(믹스)','4X400mR(Mixed)','혼성4x400mR','혼성 4x400m 릴레이','하프마라톤','마라톤','10kmW','20kmW','20KmW','35kmW','50kmW'];
+// 연령군 우선 → 성별 보조. 사전 정의 외 라벨도 자동으로 합리적 위치로 정렬.
+const DIV_ORDER = [
+    '초등부','남초','여초',
+    '중등부','남중','여중',
+    '고등부','남고','여고',
+    'U18','U18(남)','U18(여)','U18(혼)',
+    'U20','U20(남)','U20(여)','U20(혼)',
+    '대학부','대학(남)','대학(여)',
+    '일반부','일반(남)','일반(여)',
+    '선수권','선수권(남)','선수권(여)','선수권(혼)',
+    '국제'
+];
+const DIV_SHORT = {
+    '초등부':'초','남초':'남초','여초':'여초',
+    '중등부':'중','남중':'남중','여중':'여중',
+    '고등부':'고','남고':'남고','여고':'여고',
+    'U18':'U18','U18(남)':'U18남','U18(여)':'U18여','U18(혼)':'U18혼',
+    'U20':'U20','U20(남)':'U20남','U20(여)':'U20여','U20(혼)':'U20혼',
+    '대학부':'대','대학(남)':'대남','대학(여)':'대여',
+    '일반부':'일','일반(남)':'일남','일반(여)':'일여',
+    '선수권':'선수권','선수권(남)':'선수권남','선수권(여)':'선수권여','선수권(혼)':'선수권혼',
+    '국제':'국제'
+};
+const GENDER_SHORT = {M:'남',F:'여',X:''};
+
+function _ageGroupScore(d){
+    const s=(d||'').replace(/\s/g,'');
+    if(!s) return 900;
+    if(/초/.test(s)) return 100;
+    if(/중/.test(s)) return 200;
+    if(/고/.test(s)) return 300;
+    if(/U18/i.test(s)) return 350;
+    if(/U20/i.test(s)) return 400;
+    if(/대학|대$/.test(s)) return 500;
+    if(/일반|실업/.test(s)) return 600;
+    if(/선수권/.test(s)) return 700;
+    if(/마스터즈|master/i.test(s)) return 800;
+    if(/국제|inter/i.test(s)) return 850;
+    return 900;
+}
+function _genderScore(d){
+    const s=(d||'').replace(/\s/g,'');
+    if(/혼/.test(s)) return 3;
+    if(/여/.test(s)) return 2;
+    if(/남/.test(s)) return 1;
+    return 0;
+}
+
+function evIdx(n){ const s=(n||'').replace(/\s/g,''); for(let i=0;i<EVENT_ORDER.length;i++) if(s===EVENT_ORDER[i]||s.startsWith(EVENT_ORDER[i])) return i; return 999; }
+function divIdx(d){ const i=DIV_ORDER.indexOf(d); if(i>=0) return i; return 1000+_ageGroupScore(d)+_genderScore(d); }
+function fmtEvent(ev){ return `${GENDER_SHORT[ev.gender]||''}${DIV_SHORT[ev.division]||ev.division||''} ${ev.name} ${ev.round_type==='preliminary'?'예선':ev.round_type==='semifinal'?'준결승':ev.round_type==='final'?'결승':ev.round_type||''}`.trim(); }
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function getKey(){ return localStorage.getItem('pace_admin_key')||localStorage.getItem('pace_op_key')||''; }
+function toast(msg,type='success'){ const t=document.createElement('div');t.className='toast toast-'+type;t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3000); }
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async()=>{
+    if(!compId){alert('대회를 선택해주세요.');location.href='/';return;}
+    renderPageNav('display-manage');
+    await loadAll();
+});
+
+async function loadAll(){
+    try{ const c=await fetch('/api/competitions/'+compId).then(r=>r.json()); document.title='노출 관리 — '+(c.name||''); }catch(e){}
+    await Promise.all([
+        fetch('/api/display/match-status/'+compId).then(r=>r.json()).then(d=>{_events=d;}).catch(()=>{_events=[];}),
+        fetch('/api/timetable/'+compId).then(r=>r.json()).then(d=>{_timetable=d;}).catch(()=>{_timetable={};}),
+        fetch('/api/display/roster/'+compId).then(r=>r.json()).then(d=>{_roster=d;}).catch(()=>{_roster=[];})
+    ]);
+    renderStats();
+    renderTabCounts();
+    renderTab();
+}
+
+function renderStats(){
+    const ttCount = Object.values(_timetable.days||{}).reduce((s,d)=>[...(d.track||[]),...(d.field||[])].length+s, 0);
+    const linked = _events.filter(e=>e.result_url).length;
+    const rostered = _events.filter(e=>e.roster_count>0).length;
+    const unmatched = _roster.filter(r=>!r.event_id).length;
+    document.getElementById('stats-row').innerHTML = `
+        <div class="stat-card"><div class="num">${_events.length}</div><div class="lbl">전체 종목</div></div>
+        <div class="stat-card"><div class="num">${ttCount}</div><div class="lbl">시간표 항목</div></div>
+        <div class="stat-card"><div class="num">${_roster.length}</div><div class="lbl">참가선수</div></div>
+        <div class="stat-card"><div class="num">${rostered}</div><div class="lbl">명단 연결</div></div>
+        <div class="stat-card"><div class="num">${linked}</div><div class="lbl">결과 링크</div></div>
+        <div class="stat-card" style="border-color:${unmatched>0?'#fce4ec':'var(--border)'}"><div class="num" style="color:${unmatched>0?'#c62828':'var(--gold)'}">${unmatched}</div><div class="lbl">미매칭</div></div>`;
+}
+
+function renderTabCounts(){
+    const ttCount = Object.values(_timetable.days||{}).reduce((s,d)=>[...(d.track||[]),...(d.field||[])].length+s, 0);
+    document.getElementById('tc-tt').textContent = ttCount;
+    document.getElementById('tc-roster').textContent = _roster.length;
+    document.getElementById('tc-events').textContent = _events.length;
+    const unmatched = _roster.filter(r=>!r.event_id).length;
+    document.getElementById('tc-match').textContent = unmatched>0?unmatched+'!':_events.filter(e=>e.roster_count>0).length;
+}
+
+// ═══════════════════════════════════════════════════════════
+// TAB SWITCH
+// ═══════════════════════════════════════════════════════════
+function switchTab(tab, btn){
+    _tab = tab;
+    document.querySelectorAll('.top-tab').forEach(t=>t.classList.remove('active'));
+    if(btn) btn.classList.add('active');
+    renderTab();
+}
+
+function renderTab(){
+    const el = document.getElementById('tab-content');
+    if(_tab==='timetable') renderTimetable(el);
+    else if(_tab==='roster') renderRoster(el);
+    else if(_tab==='events') renderEvents(el);
+    else if(_tab==='match') renderMatch(el);
+}
+
+// ═══════════════════════════════════════════════════════════
+// TAB: TIMETABLE
+// ═══════════════════════════════════════════════════════════
+function renderTimetable(el){
+    const days = _timetable.days || {};
+    const dayNums = Object.keys(days).sort((a,b)=>a-b);
+    
+    let h = `<div class="upload-area">
+        <h3>시간표 업로드</h3>
+        <div class="upload-row">
+            <div class="upload-card" onclick="this.querySelector('input').click()">
+                <input type="file" accept=".xlsx,.xls" onchange="uploadTT(this)">
+                <div class="upload-icon">📅</div>
+                <div class="upload-title">시간표 엑셀 업로드</div>
+                <div class="upload-sub">.xlsx / .xls — 업로드 시 종목 자동 생성</div>
+            </div>
+            <div class="upload-card" onclick="this.querySelector('input').click()">
+                <input type="file" accept=".pdf" multiple onchange="uploadRoster(this)">
+                <div class="upload-icon">📋</div>
+                <div class="upload-title">참가명단 PDF 업로드 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(여러 개 동시 선택 가능)</span></div>
+                <div class="upload-sub">.pdf — 자동 파싱 + 종목 매칭 · 파일명에 부 라벨(꿈나무/선수권/U18/U20) 자동 인식</div>
+            </div>
+        </div>
+        <div style="margin-top:12px;padding:10px 12px;background:#f8f4ea;border-radius:8px;font-size:12px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="upload-force" style="margin:0;">
+                <span><b>강제 덮어쓰기</b> — 체크 시 과거 일차도 모두 새로 등록 (기본: 스마트 머지 — 과거 보존, 변경분만 반영)</span>
+            </label>
+        </div>
+        <div id="upload-day-select" style="margin-top:12px;display:none;">
+            <label style="font-size:12px;font-weight:600;">업로드 일차: </label>
+            <select id="upload-day" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
+                <option value="1">1일차</option><option value="2">2일차</option><option value="3">3일차</option><option value="4">4일차</option><option value="5">5일차</option>
+            </select>
+        </div>
+        <div id="upload-msg" style="margin-top:10px;font-size:13px;"></div>
+    </div>`;
+
+    if(dayNums.length===0){
+        h += '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">시간표가 없습니다. 엑셀을 업로드하세요.</div></div>';
+        el.innerHTML=h; return;
+    }
+
+    // Day tabs
+    h += '<div class="day-tabs">';
+    h += `<button class="day-tab ${_dayFilter===0?'active':''}" onclick="setDayFilter(0)">전체</button>`;
+    dayNums.forEach(d=>{ h += `<button class="day-tab ${_dayFilter==d?'active':''}" onclick="setDayFilter(${d})">${d}일차</button>`; });
+    h += '</div>';
+
+    // FIX: 일자 필터를 정확히 매칭 (number/string 혼용 방지)
+    const filteredDays = _dayFilter===0 ? dayNums : dayNums.filter(d => String(d) === String(_dayFilter));
+    filteredDays.forEach(d=>{
+        if(!days[d]) return;
+        // FIX: 시간을 분 단위로 파싱해서 정렬 (문자열 정렬은 "9:00" vs "10:00" 같은 케이스에서 깨짐)
+        const toMin = (t) => {
+            if(!t) return 99999;
+            const m = String(t).trim().match(/^(\d{1,2})\s*[:.]?\s*(\d{2})?/);
+            if(!m) return 99999;
+            return parseInt(m[1])*60 + parseInt(m[2]||'0');
+        };
+        let items = [...(days[d]?.track||[]),...(days[d]?.field||[])].sort((a,b)=>{
+            const dt = toMin(a.time) - toMin(b.time);
+            if(dt !== 0) return dt;
+            return evIdx(a.event_name) - evIdx(b.event_name);
+        });
+
+        // Group same time+event+round → combine categories with / (시간 정규화로 미세 차이 방지)
+        const grouped = [];
+        const seen = {};
+        items.forEach(item=>{
+            const timeKey = (item.time||'').trim();
+            const k = timeKey+'|'+(item.event_name||'').trim()+'|'+(item.round||'').trim();
+            if(!seen[k]){
+                seen[k] = {...item, categories:[item.category], ids:[item.id], event_ids:[item.event_id]};
+                grouped.push(seen[k]);
+            } else {
+                seen[k].categories.push(item.category);
+                seen[k].ids.push(item.id);
+                seen[k].event_ids.push(item.event_id);
+            }
+        });
+
+        h += `<div class="section-title" style="margin-top:${d===filteredDays[0]?'0':'20'}px;">
+            ${d}일차 <span class="st-count">${grouped.length}개 종목</span>
+            <button class="btn-outline" style="margin-left:auto;font-size:11px;padding:4px 10px;" onclick="openTTAdd(${d})">＋ 행 추가</button>
+        </div>`;
+        h += `<table class="tt-table"><thead><tr><th style="width:60px;">시간</th><th>종목</th><th style="width:80px;">연결/결과</th><th style="width:60px;">수정</th></tr></thead><tbody>`;
+        
+        grouped.forEach(g=>{
+            const cats = g.categories.join('/');
+            // 라운드 파싱: "예선(5-2+6)" → roundBase="예선", bracket="(5-2+6)"
+            const roundFull = (g.round||'').trim();
+            const bracketMatch = roundFull.match(/\(([^)]+)\)/);
+            const roundBase = roundFull.replace(/\([^)]*\)/g,'').trim();
+            // 종목명에 라운드 포함: "남고 100m 예선"
+            const eventLabel = `${cats} ${g.event_name}${roundBase?' '+roundBase:''}`;
+            // 부별 표시 (종별 라벨을 그대로 사용; 정선 대회처럼 U18/U20/선수권/남초 등 다양)
+            // 다중 라벨이면 그대로 슬래시로 묶음
+            const divTags = g.categories.map(c=>(c||'').trim()).filter(Boolean);
+            const divLabel = [...new Set(divTags)].join('/');
+            // 라운드 태그 + 부별 배지 (우측 정렬)
+            let rightTags = '';
+            if(divLabel) rightTags += `<span class="badge" style="background:#f3e5f5;color:#6a1b9a;margin-right:4px;">${divLabel}</span>`;
+            if(roundBase) rightTags += `<span class="badge" style="background:#e3f2fd;color:#1565c0;margin-right:4px;">${roundBase}</span>`;
+            if(bracketMatch) rightTags += `<span class="badge" style="background:#f8f4ea;color:#8a7640;">(${bracketMatch[1]})</span>`;
+            const linked = g.event_ids.filter(Boolean).length;
+            const total = g.ids.length;
+            const linkBadge = linked===total ? '<span class="badge badge-linked">●</span>' : linked>0 ? '<span class="badge" style="background:#fff3e0;color:#e65100;">△</span>' : '<span class="badge badge-unlinked">○</span>';
+            // result_url 확인 - 별도 버튼으로 외부 링크 열기
+            const eventId = g.event_ids.find(Boolean);
+            const ev = eventId ? _events.find(e=>e.id===eventId) : null;
+            const resultUrl = ev && ev.result_url ? ev.result_url : '';
+            const resultBtn = resultUrl
+                ? `<a href="${esc(resultUrl)}" target="_blank" onclick="event.stopPropagation()" class="badge" style="background:#e8f5e9;color:#2e7d32;text-decoration:none;margin-left:4px;">결과↗</a>`
+                : '';
+            // 행 클릭 → 수정 모달
+            const idsJson = JSON.stringify(g.ids).replace(/"/g,'&quot;');
+            h += `<tr onclick="openTTEdit(${idsJson})" style="cursor:pointer;">
+                <td class="time-cell">${g.time||'—'}</td>
+                <td class="event-cell"><span>${esc(eventLabel)}</span><span style="display:flex;gap:2px;flex-shrink:0;">${rightTags}</span></td>
+                <td style="text-align:center;white-space:nowrap;">${linkBadge}${resultBtn}</td>
+                <td style="text-align:center;"><span style="color:var(--gold);font-size:14px;">✏️</span></td>
+            </tr>`;
+        });
+        h += '</tbody></table>';
+    });
+    el.innerHTML = h;
+}
+
+// ═══════════════════════════════════════════════════════════
+// TIMETABLE INLINE EDIT
+// ═══════════════════════════════════════════════════════════
+// 시간표 행 수정 모달 — 그룹화된 행은 첫 번째 ID만 수정 (또는 전체 일괄)
+function openTTEdit(ids){
+    if(!Array.isArray(ids)||ids.length===0)return;
+    // Find the timetable entries by ID
+    const allTT = [];
+    Object.values(_timetable.days||{}).forEach(d=>{
+        ['track','field','road'].forEach(s=>{ (d[s]||[]).forEach(it=>allTT.push(it)); });
+    });
+    const entries = ids.map(id=>allTT.find(t=>t.id===id)).filter(Boolean);
+    if(entries.length===0){ toast('항목을 찾을 수 없습니다','error'); return; }
+
+    const first = entries[0];
+    const isMulti = entries.length>1;
+    const sectionOpts = [{v:'track',l:'트랙'},{v:'field',l:'필드'},{v:'road',l:'도로'}];
+    const roundFull = (first.round||'').trim();
+    const bracketMatch = roundFull.match(/\(([^)]+)\)/);
+    const roundBase = roundFull.replace(/\([^)]*\)/g,'').trim();
+
+    // Find linked event for result_url editing
+    const linkedEvId = first.event_id;
+    const linkedEv = linkedEvId ? _events.find(e=>e.id===linkedEvId) : null;
+    const resultUrl = linkedEv && linkedEv.result_url ? linkedEv.result_url : '';
+
+    // Multi-row: show all categories
+    const allCats = entries.map(e=>e.category||'').filter(Boolean);
+
+    document.getElementById('link-modal').innerHTML = `
+        <div class="link-edit-overlay" onclick="if(event.target===this)closeLinkEdit()">
+            <div class="link-edit-modal" style="max-width:680px;max-height:90vh;overflow-y:auto;">
+                <h3 style="margin-bottom:8px;">시간표 항목 수정 ${isMulti?`<span style="font-size:11px;color:var(--muted);">(${entries.length}건 일괄)</span>`:''}</h3>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${first.scheduled_date||''} · ${first.day}일차</div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label class="tt-edit-label">일차</label>
+                        <input id="tt-edit-day" class="link-input" type="number" min="1" max="10" value="${first.day||1}" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">시간 (HH:MM)</label>
+                        <input id="tt-edit-time" class="link-input" value="${esc(first.time||'')}" placeholder="14:30" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">콜룸 시간</label>
+                        <input id="tt-edit-callroom" class="link-input" value="${esc(first.callroom_time||'')}" placeholder="자동 계산" style="margin-bottom:0;">
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label class="tt-edit-label">종목명 ${isMulti?'<span style="color:var(--danger);">(전체 적용)</span>':''}</label>
+                        <input id="tt-edit-name" class="link-input" value="${esc(first.event_name||'')}" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">구분</label>
+                        <select id="tt-edit-section" class="link-input" style="margin-bottom:0;">
+                            ${sectionOpts.map(s=>`<option value="${s.v}" ${first.section===s.v?'selected':''}>${s.l}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+
+                ${isMulti ? `
+                <div style="background:#fff8e1;border:1px solid #ffd54f;border-radius:6px;padding:10px;margin-bottom:12px;">
+                    <div style="font-size:11px;font-weight:700;color:#bf8f00;margin-bottom:6px;">⚠️ 부(종별) 일괄 수정 — 같은 시간/종목/라운드 묶음 ${entries.length}건</div>
+                    <div style="display:grid;grid-template-columns:repeat(${Math.min(entries.length,3)},1fr);gap:8px;">
+                        ${entries.map((e,i)=>`
+                            <div>
+                                <label class="tt-edit-label">행 ${i+1} 부(종별)</label>
+                                <input class="link-input tt-edit-cat-multi" data-id="${e.id}" value="${esc(e.category||'')}" placeholder="예: 남고/여중" style="margin-bottom:0;font-size:12px;">
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>` : `
+                <div style="margin-bottom:12px;">
+                    <label class="tt-edit-label">부(종별) <span style="color:var(--muted);font-weight:400;">예: 남고, 여중, 대학(남), 대학/실업(여)</span></label>
+                    <input id="tt-edit-category" class="link-input" value="${esc(first.category||'')}" style="margin-bottom:0;">
+                </div>`}
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label class="tt-edit-label">라운드 (전체) <span style="color:var(--muted);font-weight:400;">예: 결승, 예선(5-2+6)</span></label>
+                        <input id="tt-edit-round" class="link-input" value="${esc(first.round||'')}" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">비고</label>
+                        <input id="tt-edit-note" class="link-input" value="${esc(first.note||'')}" style="margin-bottom:0;">
+                    </div>
+                </div>
+
+                ${linkedEv ? `
+                <div style="background:#f5f5f5;border-radius:6px;padding:10px;margin-bottom:12px;">
+                    <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">연결된 종목: <b>${esc(fmtEvent(linkedEv))}</b></div>
+                    <label class="tt-edit-label">결과 링크 (URL)</label>
+                    <input id="tt-edit-result-url" class="link-input" value="${esc(resultUrl)}" placeholder="https://..." style="margin-bottom:0;">
+                    <div style="font-size:10px;color:var(--muted);margin-top:4px;">※ 종목 단위로 저장됩니다 (이 종목이 시간표 다른 행에도 노출되면 함께 적용)</div>
+                </div>` : ''}
+
+                <div style="display:flex;justify-content:space-between;gap:8px;border-top:1px solid #eee;padding-top:12px;">
+                    <button class="btn-outline" style="color:var(--danger);border-color:var(--danger);" onclick="deleteTTEntries(${JSON.stringify(ids).replace(/"/g,'&quot;')})">🗑 ${isMulti?'전체':'행'} 삭제</button>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn-outline" onclick="closeLinkEdit()">취소</button>
+                        <button class="btn-gold" onclick="saveTTEdit(${JSON.stringify(ids).replace(/"/g,'&quot;')}, ${linkedEvId||'null'})">저장</button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('link-modal').style.display='block';
+}
+
+async function saveTTEdit(ids, linkedEvId){
+    const day = parseInt(document.getElementById('tt-edit-day').value)||1;
+    const time = document.getElementById('tt-edit-time').value.trim();
+    const callroom_time = document.getElementById('tt-edit-callroom').value.trim();
+    const event_name = document.getElementById('tt-edit-name').value.trim();
+    const section = document.getElementById('tt-edit-section').value;
+    const round = document.getElementById('tt-edit-round').value.trim();
+    const note = document.getElementById('tt-edit-note').value.trim();
+    const isMulti = ids.length>1;
+
+    if(!time||!event_name){ toast('시간과 종목명은 필수입니다','error'); return; }
+
+    // Per-row category for multi mode
+    const catMap = {};
+    if(isMulti){
+        document.querySelectorAll('.tt-edit-cat-multi').forEach(inp=>{
+            catMap[inp.dataset.id] = inp.value.trim();
+        });
+    } else {
+        catMap[ids[0]] = document.getElementById('tt-edit-category').value.trim();
+    }
+
+    const adminKey = getKey();
+    let okCount = 0, failCount = 0;
+    for(const id of ids){
+        const body = { admin_key: adminKey, day, time, event_name, section, round, note, category: catMap[id]||'' };
+        if(callroom_time) body.callroom_time = callroom_time;
+        const r = await fetch('/api/timetable/entry/'+id, {
+            method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+        }).then(r=>r.json()).catch(e=>({error:e.message}));
+        if(r.success) okCount++; else failCount++;
+    }
+
+    // Save result_url to linked event
+    const resultUrlInp = document.getElementById('tt-edit-result-url');
+    if(linkedEvId && resultUrlInp){
+        const newUrl = resultUrlInp.value.trim();
+        const ev = _events.find(e=>e.id===linkedEvId);
+        if(ev && newUrl !== (ev.result_url||'')){
+            await fetch('/api/admin/events/'+linkedEvId, {
+                method:'PUT', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ admin_key: adminKey, name: ev.name, category: ev.category, gender: ev.gender, round_type: ev.round_type, result_url: newUrl })
+            }).catch(()=>{});
+        }
+    }
+
+    if(failCount===0){
+        toast(`${okCount}건 저장 완료`);
+        closeLinkEdit();
+        await loadAll();
+    } else {
+        toast(`${okCount}건 성공 / ${failCount}건 실패`,'error');
+    }
+}
+
+async function deleteTTEntries(ids){
+    if(!confirm(`${ids.length}건의 시간표 행을 삭제하시겠습니까?\n(연결된 종목/명단은 유지됩니다)`)) return;
+    const adminKey = getKey();
+    let okCount = 0, failMsgs = [];
+    for(const id of ids){
+        const r = await fetch('/api/timetable/entry/'+id, {
+            method:'DELETE', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ admin_key: adminKey })
+        }).then(r=>r.json()).catch(e=>({error:e.message}));
+        if(r.success) okCount++;
+        else failMsgs.push(r.error||'알 수 없는 오류');
+    }
+    if(okCount === ids.length){
+        toast(`${okCount}건 삭제됨`);
+    } else {
+        toast(`${okCount}/${ids.length}건 삭제. 실패: ${failMsgs[0]||''}`,'error');
+    }
+    // FIX: 캐시 강제 무효화 후 재로딩 (간헐적으로 이전 데이터가 남아있는 문제 방지)
+    _timetable = {};
+    closeLinkEdit();
+    await loadAll();
+}
+
+// 새 시간표 행 추가
+function openTTAdd(day){
+    const sectionOpts = [{v:'track',l:'트랙'},{v:'field',l:'필드'},{v:'road',l:'도로'}];
+    document.getElementById('link-modal').innerHTML = `
+        <div class="link-edit-overlay" onclick="if(event.target===this)closeLinkEdit()">
+            <div class="link-edit-modal" style="max-width:560px;">
+                <h3 style="margin-bottom:14px;">${day}일차 — 시간표 행 추가</h3>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label class="tt-edit-label">일차</label>
+                        <input id="tt-add-day" class="link-input" type="number" min="1" max="10" value="${day}" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">시간</label>
+                        <input id="tt-add-time" class="link-input" placeholder="14:30" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">구분</label>
+                        <select id="tt-add-section" class="link-input" style="margin-bottom:0;">
+                            ${sectionOpts.map(s=>`<option value="${s.v}">${s.l}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <label class="tt-edit-label">종목명</label>
+                    <input id="tt-add-name" class="link-input" placeholder="예: 100m, 멀리뛰기" style="margin-bottom:0;">
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label class="tt-edit-label">부(종별)</label>
+                        <input id="tt-add-category" class="link-input" placeholder="예: 남고, 여중" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label class="tt-edit-label">라운드</label>
+                        <input id="tt-add-round" class="link-input" placeholder="예: 결승, 예선" style="margin-bottom:0;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom:14px;">
+                    <label class="tt-edit-label">비고</label>
+                    <input id="tt-add-note" class="link-input" placeholder="(선택)" style="margin-bottom:0;">
+                </div>
+
+                <div style="display:flex;gap:8px;justify-content:flex-end;border-top:1px solid #eee;padding-top:12px;">
+                    <button class="btn-outline" onclick="closeLinkEdit()">취소</button>
+                    <button class="btn-gold" onclick="saveTTAdd()">추가</button>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('link-modal').style.display='block';
+}
+
+async function saveTTAdd(){
+    const day = parseInt(document.getElementById('tt-add-day').value)||1;
+    const time = document.getElementById('tt-add-time').value.trim();
+    const section = document.getElementById('tt-add-section').value;
+    const event_name = document.getElementById('tt-add-name').value.trim();
+    const category = document.getElementById('tt-add-category').value.trim();
+    const round = document.getElementById('tt-add-round').value.trim();
+    const note = document.getElementById('tt-add-note').value.trim();
+
+    if(!time||!event_name){ toast('시간과 종목명은 필수입니다','error'); return; }
+
+    const r = await fetch('/api/timetable/entry', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ admin_key: getKey(), competition_id: compId, day, section, time, event_name, category, round, note })
+    }).then(r=>r.json()).catch(e=>({error:e.message}));
+
+    if(r.success){
+        toast('행 추가 완료');
+        closeLinkEdit();
+        await loadAll();
+    } else {
+        toast('추가 실패: '+(r.error||''),'error');
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// TAB: ROSTER (with HEAT grouping)
+// ═══════════════════════════════════════════════════════════
+function renderRoster(el){
+    const days = _timetable.days || {};
+    const dayNums = Object.keys(days).sort((a,b)=>a-b);
+    const rDays = [...new Set(_roster.map(r=>r.day))].sort((a,b)=>a-b);
+
+    if(_roster.length===0){
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">참가명단이 없습니다. PDF를 업로드하세요.</div></div>';
+        return;
+    }
+
+    // Day filter
+    let h = '<div class="day-tabs">';
+    h += `<button class="day-tab ${_dayFilter===0?'active':''}" onclick="setDayFilter(0)">전체</button>`;
+    rDays.forEach(d=>{ h += `<button class="day-tab ${_dayFilter==d?'active':''}" onclick="setDayFilter(${d})">${d}일차</button>`; });
+    h += '</div>';
+
+    const filteredDays = _dayFilter===0 ? rDays : [_dayFilter];
+    
+    filteredDays.forEach(day=>{
+        const dayR = _roster.filter(r=>r.day===day);
+        // Group by event+round+gender+division
+        const groups = {};
+        dayR.forEach(r=>{
+            const k = `${r.event_name}|${r.round}|${r.gender}|${r.division}`;
+            if(!groups[k]) groups[k] = {event:r.event_name, round:r.round, gender:r.gender, division:r.division, athletes:[], hasHeat:false, heats:new Set(), matched:false, day};
+            groups[k].athletes.push(r);
+            if(r.heat){ groups[k].hasHeat=true; groups[k].heats.add(r.heat); }
+            if(r.event_id) groups[k].matched=true;
+        });
+        
+        const gList = Object.values(groups).sort((a,b)=>evIdx(a.event)-evIdx(b.event));
+        
+        h += `<div class="section-title" style="margin-top:16px;">${day}일차 <span class="st-count">${dayR.length}명 · ${gList.length}개 종목</span></div>`;
+        
+        gList.forEach(g=>{
+            const prefix = (GENDER_SHORT[g.gender]||'')+(DIV_SHORT[g.division]||g.division||'');
+            const heatCount = g.heats.size;
+            const matchBadge = g.matched ? '<span class="badge-sm badge-green">매칭</span>' : '<span class="badge-sm badge-red">미매칭</span>';
+            // event_id로 매칭된 행이 있으면 해당 id를, 없으면 종목명만으로 판정
+            const matchedEventId = (g.athletes.find(a=>a.event_id)||{}).event_id;
+            const isRelay = isRelayEvent(g.event, matchedEventId);
+
+            // 릴레이는 "팀 수" 표시 (멤버 수가 아니라)
+            let countLabel;
+            if(isRelay){
+                const teamCount = countRelayTeams(g.athletes);
+                countLabel = `<span title="릴레이 팀 수">${teamCount}팀</span> <span style="color:#aaa;">(${g.athletes.length}명)</span>`;
+            } else {
+                countLabel = `<span>${g.athletes.length}명</span>`;
+            }
+
+            h += `<div class="roster-group${isRelay?' is-relay':''}">
+                <div class="roster-group-head" onclick="toggleRosterGroup(this)">
+                    <div class="rg-title">${isRelay?'<span class="badge-sm" style="background:#dbeafe;color:#1e40af;margin-right:6px;">릴레이</span>':''}${prefix} ${esc(g.event)} ${esc(g.round)}</div>
+                    <div class="rg-meta">
+                        ${countLabel}
+                        ${heatCount>0?`<span style="color:var(--gold-dark);">${heatCount}조</span>`:''}
+                        ${matchBadge}
+                    </div>
+                </div>
+                <div class="roster-group-body" style="display:none;">`;
+
+            // Group athletes by heat
+            const heats = {};
+            g.athletes.forEach(r=>{ const hk=r.heat||0; if(!heats[hk])heats[hk]=[]; heats[hk].push(r); });
+            const heatKeys = Object.keys(heats).sort((a,b)=>a-b);
+
+            heatKeys.forEach(hk=>{
+                const hItems = heats[hk];
+
+                if(isRelay){
+                    // 릴레이: 팀(학교) 단위로 묶어서 표시
+                    const teams = groupRelayTeams(hItems);
+                    if(heatKeys.length>1 || hk!=0){
+                        h += `<div class="heat-section"><div class="heat-header"><span>${hk==0?'조 미지정':hk+'조'}</span><span>${teams.length}팀 / ${hItems.length}명</span></div>`;
+                    } else {
+                        h += '<div class="heat-section">';
+                    }
+                    teams.forEach(team=>{
+                        const laneStr = team.lane ? team.lane : '';
+                        const teamName = team.team || '<span style="color:#c62828;">소속 미상</span>';
+                        const memberIds = team.members.map(m=>m.id);
+                        const isRoster = team.isRoster; // 5명 이상 = 후보 풀
+                        h += `<div class="relay-team-card${isRoster?' is-roster':''}">
+                            <div class="relay-team-head" onclick="openRelayTeamEdit(${JSON.stringify(memberIds).replace(/"/g,'&quot;')})">
+                                <div class="rt-left">
+                                    <span class="rt-lane ${laneStr?'':'no-lane'}">${laneStr?laneStr+'레인':'레인—'}</span>
+                                    <span class="rt-team">${esc(team.team)||'<span style=\"color:#c62828;\">소속 미상</span>'}</span>
+                                    ${isRoster?'<span class="badge-sm" style="background:#fef3c7;color:#92400e;margin-left:6px;font-size:10px;">후보</span>':''}
+                                </div>
+                                <div class="rt-meta">
+                                    <span>${team.members.length}명</span>
+                                    <button class="rt-edit-btn" onclick="event.stopPropagation();openRelayTeamEdit(${JSON.stringify(memberIds).replace(/"/g,'&quot;')})">수정</button>
+                                </div>
+                            </div>`;
+                        if(team.members.length===0){
+                            h += '<div class="relay-team-empty">멤버가 없습니다.</div>';
+                        } else {
+                            h += '<div class="relay-members">';
+                            team.members.forEach((m,idx)=>{
+                                const legNum = idx+1;
+                                const noTeam = !m.team ? ' no-team' : '';
+                                // 후보 풀 모드면 走 번호 대신 빈 자리 또는 일련번호
+                                const legBadge = isRoster
+                                    ? `<span class="rm-leg" style="background:#f3f4f6;color:#888;">${idx+1}</span>`
+                                    : `<span class="rm-leg leg-${legNum<=4?legNum:''}">${legNum}走</span>`;
+                                h += `<div class="relay-member-row${noTeam}">
+                                    ${legBadge}
+                                    <span class="rm-bib">${m.bib_number||'—'}</span>
+                                    <span class="rm-name">${esc(m.athlete_name)}</span>
+                                </div>`;
+                            });
+                            h += '</div>';
+                        }
+                        h += '</div>';
+                    });
+                    h += '</div>';
+                } else {
+                    // 일반 종목: 기존 표 형식 유지
+                    const sortedItems = hItems.sort((a,b)=>(a.lane||99)-(b.lane||99));
+                    if(heatKeys.length>1 || hk!=0){
+                        h += `<div class="heat-section"><div class="heat-header"><span>${hk==0?'조 미지정':hk+'조'}</span><span>${sortedItems.length}명</span></div>`;
+                    } else {
+                        h += '<div class="heat-section">';
+                    }
+                    h += `<table class="roster-table"><thead><tr><th style="width:50px;">레인</th><th style="width:55px;">배번</th><th>성명</th><th>소속</th></tr></thead><tbody>`;
+                    sortedItems.forEach(a=>{
+                        h += `<tr><td class="lane-cell">${a.lane||'—'}</td><td class="bib-cell">${a.bib_number}</td><td class="name-cell">${esc(a.athlete_name)}</td><td class="team-cell">${esc(a.team)}</td></tr>`;
+                    });
+                    h += '</tbody></table></div>';
+                }
+            });
+
+            h += '</div></div>';
+        });
+    });
+    el.innerHTML = h;
+}
+
+// 릴레이 종목 판별
+// 종목명 + DB의 event.category='relay' 둘 다 활용
+function isRelayEvent(eventName, eventId){
+    const n = (eventName||'').replace(/[\s\u3000]/g,''); // 공백/전각공백 제거
+    if(/릴레이|계주|relay/i.test(n)) return true;
+    if(/^4[x×X]\d+m?[Rr]?(\(.*\))?$/.test(n)) return true;
+    if(/[Rr]$/.test(n) && /^\d+[xX×]/.test(n)) return true;
+    if(/^\d+\s*[x×X]\s*\d+m?[Rr]/.test(n)) return true;
+    // DB 매칭된 event의 category 확인
+    if(eventId){
+        const ev = (_events||[]).find(e=>e.id===eventId);
+        if(ev && ev.category==='relay') return true;
+    }
+    return false;
+}
+
+// 릴레이 멤버 행들을 팀 단위로 묶음
+// 모드 자동 판단:
+//  - 모든 멤버에 lane이 부여되어 있고 학교별 인원이 정확히 4명씩이면 → 팀 카드 모드
+//  - 그렇지 않으면(엔트리 후보 풀) → 학교별 그룹 모드 (走 번호 표시 안 함)
+function groupRelayTeams(rows){
+    // 1) 학교(team)별로 그룹화
+    const byTeam = new Map();
+    rows.forEach(r=>{
+        const k = (r.team||'').trim() || '__no_team__';
+        if(!byTeam.has(k)) byTeam.set(k, []);
+        byTeam.get(k).push(r);
+    });
+    // 2) 각 학교 안에서 sort_order/lane 기준 정렬
+    const teams = [];
+    for(const [teamKey, members] of byTeam){
+        members.sort((a,b)=>{
+            const al = a.lane||999, bl = b.lane||999;
+            if(al !== bl) return al - bl;
+            return (a.sort_order||0) - (b.sort_order||0);
+        });
+        const teamName = teamKey === '__no_team__' ? '' : teamKey;
+        // 학교당 인원이 5명 이상이면 후보 풀(roster) 모드, 4명 이하이면 팀 모드
+        const isRoster = members.length > 4;
+        if(isRoster){
+            // 후보 풀: 한 그룹으로 합쳐서 走 번호 없이 표시
+            teams.push({
+                team: teamName,
+                lane: members[0].lane || null,
+                heat: members[0].heat || null,
+                members: members,
+                isRoster: true
+            });
+        } else {
+            teams.push({
+                team: teamName,
+                lane: members[0].lane || null,
+                heat: members[0].heat || null,
+                members: members,
+                isRoster: false
+            });
+        }
+    }
+    // 3) lane 우선 정렬, 없으면 학교명 순
+    teams.sort((a,b)=>{
+        const al = a.lane||999, bl = b.lane||999;
+        if(al !== bl) return al - bl;
+        return (a.team||'').localeCompare(b.team||'');
+    });
+    return teams;
+}
+
+// 릴레이 팀 수 카운트 (학교 수)
+function countRelayTeams(rows){
+    return groupRelayTeams(rows).length;
+}
+
+function toggleRosterGroup(head){
+    const body = head.nextElementSibling;
+    body.style.display = body.style.display==='none' ? 'block' : 'none';
+}
+
+// ═══════════════════════════════════════════════════════════
+// TAB: EVENTS + RESULTS (categorized sections with gender filter)
+// ═══════════════════════════════════════════════════════════
+let _filterGender = '전체';
+let _filterCat = '전체';
+
+function guessCat(name){
+    const n=(name||'').trim();
+    if(/릴레이|[Rr]$|4[x×]/.test(n)) return 'relay';
+    if(/높이뛰기|장대높이/.test(n)) return 'field_height';
+    if(/멀리뛰기|세단뛰기|포환|원반|창던지기|해머/.test(n)) return 'field_distance';
+    if(/종경기$/.test(n)) return 'combined';
+    if(/[Ww]$|경보|마라톤|하프마라톤/.test(n)) return 'road';
+    return 'track';
+}
+const CAT_LABELS = {track:'트랙',field_height:'필드(높이)',field_distance:'필드(투척/도약)',combined:'혼성경기',relay:'릴레이',road:'도로'};
+const CAT_ORDER = ['track','field_height','field_distance','combined','relay','road'];
+const CAT_COLORS = {track:{bg:'#f0f0f0',color:'#333'},field_height:{bg:'#e8f5e9',color:'#2e7d32'},field_distance:{bg:'#fff3e0',color:'#e65100'},combined:{bg:'#f3e5f5',color:'#6a1b9a'},relay:{bg:'#e3f2fd',color:'#1565c0'},road:{bg:'#fce4ec',color:'#c62828'}};
+
+function renderEvents(el){
+    const divs = [...new Set(_events.map(e=>e.division).filter(Boolean))].sort((a,b)=>divIdx(a)-divIdx(b));
+    
+    let h = `<div class="toolbar">
+        <input class="search-input" type="text" placeholder="종목명 검색..." value="${esc(_searchQ)}" oninput="_searchQ=this.value;renderTab();">
+        <div class="pill-group">
+            <span class="pill ${_filterGender==='전체'?'on':''}" onclick="setGender('전체')">전체</span>
+            <span class="pill ${_filterGender==='M'?'on':''}" onclick="setGender('M')">남자</span>
+            <span class="pill ${_filterGender==='F'?'on':''}" onclick="setGender('F')">여자</span>
+        </div>
+        <div class="pill-group">
+            <span class="pill ${_filterDiv==='전체'?'on':''}" onclick="setDiv('전체')">전체</span>`;
+    divs.forEach(d=>{ h += `<span class="pill ${_filterDiv===d?'on':''}" onclick="setDiv('${d}')">${DIV_SHORT[d]||d}</span>`; });
+    h += `</div>
+        <div class="pill-group" style="margin-left:8px;">
+            <span class="pill ${_filterCat==='전체'?'on':''}" onclick="setCat('전체')">전체</span>
+            <span class="pill ${_filterCat==='track'?'on':''}" onclick="setCat('track')">트랙</span>
+            <span class="pill ${_filterCat==='field'?'on':''}" onclick="setCat('field')">필드</span>
+            <span class="pill ${_filterCat==='relay'?'on':''}" onclick="setCat('relay')">릴레이</span>
+            <span class="pill ${_filterCat==='road'?'on':''}" onclick="setCat('road')">도로</span>
+        </div>
+    </div>`;
+
+    let list = [..._events];
+    // Assign category from name if not present
+    list.forEach(ev=>{ if(!ev._cat) ev._cat = ev.category || guessCat(ev.name); });
+    
+    if(_filterDiv!=='전체') list = list.filter(e=>e.division===_filterDiv);
+    if(_filterGender!=='전체') list = list.filter(e=>e.gender===_filterGender);
+    if(_filterCat!=='전체'){
+        if(_filterCat==='field') list = list.filter(e=>e._cat==='field_height'||e._cat==='field_distance');
+        else list = list.filter(e=>e._cat===_filterCat);
+    }
+    if(_searchQ) { const q=_searchQ.toLowerCase(); list = list.filter(e=>(e.name||'').toLowerCase().includes(q)||(e.division||'').includes(q)); }
+    list.sort((a,b)=>evIdx(a.name)-evIdx(b.name)||divIdx(a.division)-divIdx(b.division));
+
+    h += `<div class="section-title">전체 종목 <span class="st-count">${list.length}개 (결과링크: ${list.filter(e=>e.result_url).length})</span></div>`;
+
+    // Group by category
+    const catGroups = {};
+    list.forEach(ev=>{
+        const c = ev._cat || 'track';
+        if(!catGroups[c]) catGroups[c] = [];
+        catGroups[c].push(ev);
+    });
+
+    CAT_ORDER.forEach(cat=>{
+        const items = catGroups[cat];
+        if(!items || items.length===0) return;
+        const cc = CAT_COLORS[cat] || {bg:'#f5f5f5',color:'#333'};
+        h += `<div style="margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid ${cc.bg};">
+                <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;background:${cc.bg};color:${cc.color};">${CAT_LABELS[cat]||cat}</span>
+                <span style="font-size:12px;color:var(--muted);">${items.length}개</span>
+            </div>
+            <div class="events-grid">`;
+        items.forEach(ev=>{
+            const label = fmtEvent(ev);
+            const hasLink = ev.result_url;
+            const hasRoster = ev.roster_count>0;
+            let cardClass = 'event-card';
+            if(hasLink) cardClass += ' has-link';
+            else if(hasRoster) cardClass += ' has-roster';
+            
+            let badges = '';
+            if(hasLink) badges += '<span class="badge-sm badge-blue">링크</span>';
+            if(hasRoster) badges += `<span class="badge-sm badge-green">${ev.roster_count}명</span>`;
+            if(!hasLink && !hasRoster) badges = '<span class="badge-sm badge-gray">—</span>';
+            
+            h += `<div class="${cardClass}" onclick="openLinkEdit(${ev.id})">
+                <div><div class="ec-title">${esc(label)}</div><div class="ec-sub">${ev.division||'—'} · ${ev.gender==='M'?'남':ev.gender==='F'?'여':'혼'} · ${ev.roster_count}명</div></div>
+                <div class="ec-badges">${badges}</div>
+            </div>`;
+        });
+        h += '</div></div>';
+    });
+    
+    if(list.length===0) h += '<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-text">조건에 맞는 종목이 없습니다.</div></div>';
+    el.innerHTML = h;
+}
+
+// ═══════════════════════════════════════════════════════════
+// TAB: MATCH
+// ═══════════════════════════════════════════════════════════
+function renderMatch(el){
+    const unmatchedR = _roster.filter(r=>!r.event_id);
+    const matchedEvts = _events.filter(e=>e.roster_count>0);
+    const totalR = _roster.length;
+    const matchedR = _roster.filter(r=>r.event_id).length;
+    const pct = totalR>0 ? Math.round(matchedR/totalR*100) : 0;
+
+    let h = `<div class="match-summary">
+        <div class="match-stat"><div class="ms-num" style="color:var(--success);">${matchedR}</div><div class="ms-lbl">매칭 완료</div></div>
+        <div class="match-stat"><div class="ms-num" style="color:${unmatchedR.length>0?'#c62828':'var(--success)'};">${unmatchedR.length}</div><div class="ms-lbl">미매칭</div></div>
+        <div class="match-stat"><div class="ms-num">${pct}%</div><div class="ms-lbl">매칭률</div></div>
+        <div class="match-stat"><div class="ms-num">${matchedEvts.length}</div><div class="ms-lbl">종목 연결</div></div>
+    </div>
+    <div style="margin-bottom:16px;">
+        <button class="btn-gold" onclick="doRematch()">자동 매칭 실행</button>
+    </div>`;
+
+    if(unmatchedR.length>0){
+        // Group unmatched by event
+        const groups = {};
+        unmatchedR.forEach(r=>{
+            const k=`${r.event_name}|${r.round}|${r.gender}|${r.division}`;
+            if(!groups[k]) groups[k]={event:r.event_name,round:r.round,gender:r.gender,division:r.division,count:0,day:r.day,ids:[]};
+            groups[k].count++; groups[k].ids.push(r.id);
+        });
+        
+        h += `<div class="section-title" style="color:#c62828;">미매칭 명단 <span class="st-count">${unmatchedR.length}명 · ${Object.keys(groups).length}개 종목</span></div>`;
+        h += '<div class="unmatched-list">';
+        Object.values(groups).sort((a,b)=>evIdx(a.event)-evIdx(b.event)).forEach(g=>{
+            const prefix = (GENDER_SHORT[g.gender]||'')+(DIV_SHORT[g.division]||'');
+            h += `<div class="unmatched-item" onclick="openManualMatch(${JSON.stringify(g.ids).replace(/"/g,'&quot;')},'${esc(g.event)}','${esc(g.round)}','${g.gender}','${esc(g.division)}',${g.day})">
+                <div><strong>${prefix} ${esc(g.event)} ${esc(g.round)}</strong><div style="font-size:11px;color:var(--muted);">${g.count}명 · ${g.day}일차</div></div>
+                <span class="badge-sm badge-red">미매칭</span>
+            </div>`;
+        });
+        h += '</div>';
+    } else {
+        h += '<div class="empty-state" style="padding:30px;"><div class="empty-icon">✅</div><div class="empty-text">모든 선수가 매칭되었습니다!</div></div>';
+    }
+    el.innerHTML = h;
+}
+
+// ═══════════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════════
+function setDayFilter(d){ _dayFilter=d; renderTab(); }
+function setDiv(d){ _filterDiv=d; renderTab(); }
+function setSort(s){ _sortMode=s; renderTab(); }
+function setGender(g){ _filterGender=g; renderTab(); }
+function setCat(c){ _filterCat=c; renderTab(); }
+
+// Upload handlers
+async function uploadTT(inp){
+    const file=inp.files[0]; if(!file)return;
+    const forceMode = document.getElementById('upload-force')?.checked;
+    if(forceMode){
+        if(!confirm('⚠️ 강제 덮어쓰기 모드입니다.\n\n과거 일차의 시간표도 모두 삭제 후 새로 등록되며, 결과 링크나 수동 수정 사항이 사라질 수 있습니다.\n\n계속하시겠습니까?')){
+            inp.value=''; return;
+        }
+    }
+    const fd=new FormData();
+    fd.append('file',file); fd.append('competition_id',compId); fd.append('admin_key',getKey());
+    fd.append('overwrite_mode', forceMode ? 'force' : 'smart');
+    document.getElementById('upload-msg').innerHTML='<span style="color:var(--gold);">⏳ 업로드 중...</span>';
+    const r=await fetch('/api/display/timetable/upload',{method:'POST',body:fd}).then(r=>r.json()).catch(e=>({error:e.message}));
+    if(r.success){
+        // Detailed result message
+        let detail = r.message || '완료';
+        if(r.skippedPastDays && r.skippedPastDays.length>0){
+            detail += ` (과거 ${r.skippedPastDays.map(d=>d+'일차').join('·')} 보존됨)`;
+        }
+        document.getElementById('upload-msg').innerHTML=`<span style="color:var(--success,#2e7d32);">✅ ${esc(detail)}</span>`;
+        toast('시간표 업로드 완료');
+        inp.value='';
+        await loadAll();
+    } else {
+        document.getElementById('upload-msg').innerHTML=`<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+    }
+}
+
+// 파일명에서 부 라벨 힌트 추출 (PDF 안에 부 마커가 없을 때 fallback으로 서버에 전달)
+//   예: "1일 꿈나무 명단.pdf" → "꿈나무"
+//       "1일 선수권 명단.pdf" → "선수권"
+//       "1일 u18 명단.pdf"   → "U18"
+//       "1일 u20 명단.pdf"   → "U20"
+//       "1일 남고 명단.pdf"   → "남자고등부"
+//       "여자 일반부.pdf"     → "여자일반부"
+function _extractDivisionHintFromName(fileName){
+    if(!fileName) return '';
+    const base = fileName.replace(/\.pdf$/i,'').replace(/_/g,' ').toLowerCase();
+    // 명시적 부 키워드 우선
+    if(/꿈나무/.test(base)) return '꿈나무';
+    if(/선수권/.test(base)) return '선수권';
+    if(/u\s*18/.test(base)) return 'U18';
+    if(/u\s*20/.test(base)) return 'U20';
+    // 학교급 + 성별
+    const genderM = /남자|남[고중초대]|남\b/.test(base);
+    const genderF = /여자|여[고중초대]|여\b/.test(base);
+    const g = genderM ? '남자' : (genderF ? '여자' : '');
+    if(/초등|남초|여초|꿈나무/.test(base)) return g + '초등부';
+    if(/중등|남중|여중|중학교/.test(base)) return g + '중등부';
+    if(/고등|남고|여고|고등학교/.test(base)) return g + '고등부';
+    if(/대학|남대|여대/.test(base)) return g + '대학부';
+    if(/일반|실업/.test(base)) return g + '일반부';
+    return '';
+}
+
+async function _uploadOneRoster(file, day){
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('competition_id', compId);
+    fd.append('admin_key', getKey());
+    fd.append('day', day);
+    const hint = _extractDivisionHintFromName(file.name);
+    if(hint) fd.append('division_hint', hint);
+    try{
+        const r = await fetch('/api/display/roster/upload',{ method:'POST', body: fd }).then(r=>r.json());
+        return { ok: !!r.success, file: file.name, hint, message: r.message || r.error || '' };
+    }catch(e){
+        return { ok: false, file: file.name, hint, message: e.message };
+    }
+}
+
+async function uploadRoster(inp){
+    const files = Array.from(inp.files || []);
+    if(!files.length) return;
+
+    // Show day selector
+    document.getElementById('upload-day-select').style.display='block';
+
+    // Single prompt for day (적용 모든 파일에 동일)
+    const dayLabel = files.length === 1
+        ? '몇 일차 명단입니까? (1~5)'
+        : `몇 일차 명단입니까? (1~5)\n— 선택된 ${files.length}개 파일 모두 같은 일차로 업로드됩니다.`;
+    const day = prompt(dayLabel, '1');
+    if(!day) { inp.value=''; return; }
+
+    const msgEl = document.getElementById('upload-msg');
+    const results = [];
+
+    // 파일명 힌트 미리보기로 사용자 안심 효과
+    const previews = files.map(f => {
+        const hint = _extractDivisionHintFromName(f.name);
+        return `<div style="font-size:12px;margin:2px 0;">📄 ${esc(f.name)} ${hint ? `<span style="color:var(--gold);">→ 부 힌트: ${esc(hint)}</span>` : '<span style="color:var(--text-muted);">(파일명 힌트 없음, PDF 안의 부 마커 사용)</span>'}</div>`;
+    }).join('');
+
+    msgEl.innerHTML = `
+        <div style="border:1px solid var(--gold);border-radius:8px;padding:10px;background:#fffbf0;">
+            <div style="font-weight:700;margin-bottom:6px;">⏳ ${files.length}개 파일 순차 업로드 중...</div>
+            ${previews}
+            <div id="roster-progress" style="margin-top:8px;font-size:12px;font-weight:700;color:var(--gold);">진행률: 0 / ${files.length}</div>
+        </div>`;
+
+    // 직렬 처리 (SQLite UNIQUE 충돌/경합 회피)
+    for(let i=0; i<files.length; i++){
+        const f = files[i];
+        const prog = document.getElementById('roster-progress');
+        if(prog) prog.textContent = `진행률: ${i} / ${files.length} — 처리 중: ${f.name}`;
+        const res = await _uploadOneRoster(f, day);
+        results.push(res);
+        if(prog) prog.textContent = `진행률: ${i+1} / ${files.length}`;
+    }
+
+    // 결과 요약
+    const okCnt = results.filter(r => r.ok).length;
+    const failCnt = results.length - okCnt;
+    const summaryColor = failCnt === 0 ? 'var(--green)' : (okCnt === 0 ? 'var(--danger)' : 'var(--gold)');
+    const summaryIcon = failCnt === 0 ? '✅' : (okCnt === 0 ? '❌' : '⚠️');
+    const items = results.map(r => {
+        const icon = r.ok ? '✅' : '❌';
+        const color = r.ok ? 'var(--green)' : 'var(--danger)';
+        return `<div style="font-size:12px;margin:3px 0;color:${color};">${icon} ${esc(r.file)}${r.hint ? ` <span style="color:var(--text-muted);">(힌트: ${esc(r.hint)})</span>` : ''} — ${esc(r.message || '')}</div>`;
+    }).join('');
+
+    msgEl.innerHTML = `
+        <div style="border:1.5px solid ${summaryColor};border-radius:8px;padding:10px;background:#fafafa;">
+            <div style="font-weight:700;margin-bottom:6px;color:${summaryColor};">${summaryIcon} ${results.length}개 중 ${okCnt}개 성공${failCnt > 0 ? ` / ${failCnt}개 실패` : ''}</div>
+            ${items}
+        </div>`;
+
+    inp.value = '';
+    if(okCnt > 0){
+        toast(`명단 업로드 완료: ${okCnt}/${results.length}`);
+        await loadAll();
+    }
+}
+
+// Event edit modal (full edit: name, category, gender, round, result_url)
+function openLinkEdit(evId){
+    const ev = _events.find(e=>e.id===evId);
+    if(!ev) return;
+    const label = fmtEvent(ev);
+    const catOptions = ['track','field_distance','field_height','combined','relay','road'];
+    const catLabels = {track:'트랙',field_distance:'필드(투척/도약)',field_height:'필드(높이)',combined:'혼성경기',relay:'릴레이',road:'도로'};
+    const genderOptions = [{v:'M',l:'남자'},{v:'F',l:'여자'},{v:'X',l:'혼성'}];
+    const roundOptions = [{v:'preliminary',l:'예선'},{v:'semifinal',l:'준결승'},{v:'final',l:'결승'}];
+    
+    document.getElementById('link-modal').innerHTML = `
+        <div class="link-edit-overlay" onclick="if(event.target===this)closeLinkEdit()">
+            <div class="link-edit-modal" style="max-width:560px;">
+                <h3 style="margin-bottom:16px;">${esc(label)}</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                    <div>
+                        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">종목명</label>
+                        <input class="link-input" id="edit-name" value="${esc(ev.name||'')}" style="margin-bottom:0;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">카테고리</label>
+                        <select id="edit-category" class="link-input" style="margin-bottom:0;">
+                            ${catOptions.map(c=>`<option value="${c}" ${ev.category===c?'selected':''}>${catLabels[c]||c}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">성별</label>
+                        <select id="edit-gender" class="link-input" style="margin-bottom:0;">
+                            ${genderOptions.map(g=>`<option value="${g.v}" ${ev.gender===g.v?'selected':''}>${g.l}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">라운드</label>
+                        <select id="edit-round" class="link-input" style="margin-bottom:0;">
+                            ${roundOptions.map(r=>`<option value="${r.v}" ${ev.round_type===r.v?'selected':''}>${r.l}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">결과 링크 (URL)</label>
+                    <input class="link-input" id="link-inp" value="${esc(ev.result_url||'')}" placeholder="https://..." style="margin-bottom:0;">
+                    ${ev.result_url?`<a href="${ev.result_url}" target="_blank" style="font-size:10px;color:var(--blue);margin-top:4px;display:inline-block;">↗ 링크 열기</a>`:''}
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button class="btn-outline" onclick="closeLinkEdit()">취소</button>
+                    <button class="btn-gold" onclick="saveEventEdit(${ev.id})">저장</button>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('link-modal').style.display='block';
+}
+
+function closeLinkEdit(){ document.getElementById('link-modal').style.display='none'; }
+
+// ═══════ 릴레이 팀 편집 모달 ═══════
+function openRelayTeamEdit(memberIds){
+    if(!Array.isArray(memberIds)) memberIds = [memberIds];
+    const members = memberIds.map(id => _roster.find(r=>r.id===id)).filter(Boolean);
+    if(members.length===0){ toast('멤버를 찾을 수 없습니다','error'); return; }
+    // 첫 멤버를 팀 리더로 가정 (lane / heat / team 정보)
+    const leader = members[0];
+    const teamName = leader.team || '';
+    const lane = leader.lane || '';
+    const heat = leader.heat || '';
+    const day = leader.day;
+    const eventName = leader.event_name;
+    const round = leader.round;
+    const gender = leader.gender;
+    const division = leader.division;
+
+    // sort_order 순 정렬
+    const sortedMembers = [...members].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+
+    let memberRows = sortedMembers.map((m,idx)=>{
+        const legNum = idx+1;
+        return `<div class="rt-member-edit-row" data-id="${m.id}" data-leg="${legNum}" style="display:flex;gap:8px;align-items:center;padding:6px;border:1px solid #eee;border-radius:5px;margin-bottom:4px;background:#fff;">
+            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:24px;background:${legNum===1?'#fef3c7':legNum===2?'#dbeafe':legNum===3?'#dcfce7':legNum===4?'#fce7f3':'#f3f4f6'};color:${legNum===1?'#92400e':legNum===2?'#1e40af':legNum===3?'#166534':legNum===4?'#9f1239':'#555'};border-radius:4px;font-weight:700;font-size:11px;">${legNum}走</span>
+            <input type="text" class="rt-bib" placeholder="배번" value="${(m.bib_number||'').replace(/"/g,'&quot;')}" style="width:80px;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+            <input type="text" class="rt-name" placeholder="선수명" value="${(m.athlete_name||'').replace(/"/g,'&quot;')}" style="flex:1;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+            <button onclick="this.closest('.rt-member-edit-row').remove();updateLegNumbers()" title="이 주자 삭제" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:4px;padding:4px 8px;font-size:11px;cursor:pointer;">삭제</button>
+        </div>`;
+    }).join('');
+
+    document.getElementById('link-modal').innerHTML = `
+        <div class="link-edit-overlay" onclick="if(event.target===this)closeLinkEdit()">
+            <div class="link-edit-modal" style="max-width:680px;">
+                <h3 style="margin-bottom:6px;">릴레이 팀 수정 — ${esc(eventName)} ${esc(round||'')}</h3>
+                <div style="font-size:11px;color:#777;margin-bottom:14px;">${day}일차 · ${esc(division||'')} · ${gender==='M'?'남':gender==='F'?'여':'혼성'}</div>
+
+                <div style="display:flex;gap:8px;margin-bottom:12px;">
+                    <div style="flex:2;">
+                        <label style="font-size:11px;color:#555;">팀명 (소속) *</label>
+                        <input id="rt-team-name" value="${teamName.replace(/"/g,'&quot;')}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:5px;font-weight:700;">
+                    </div>
+                    <div style="width:80px;">
+                        <label style="font-size:11px;color:#555;">레인</label>
+                        <input id="rt-lane" type="number" min="1" max="9" value="${lane}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:5px;text-align:center;">
+                    </div>
+                    <div style="width:80px;">
+                        <label style="font-size:11px;color:#555;">조</label>
+                        <input id="rt-heat" type="number" min="1" value="${heat}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:5px;text-align:center;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+                    <strong style="font-size:13px;">주자 (1走 → 4走 순서)</strong>
+                    <button onclick="addRelayMemberRow()" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;">+ 주자 추가</button>
+                </div>
+                <div id="rt-members-list" style="margin-bottom:14px;max-height:280px;overflow-y:auto;background:#fafafa;padding:8px;border-radius:6px;border:1px solid #eee;">
+                    ${memberRows || '<div style="color:#999;font-size:12px;padding:10px;text-align:center;">주자가 없습니다. + 주자 추가 버튼으로 추가하세요.</div>'}
+                </div>
+
+                <div style="display:flex;gap:6px;justify-content:flex-end;border-top:1px solid #eee;padding-top:10px;">
+                    <button onclick="deleteRelayTeam(${JSON.stringify(memberIds).replace(/"/g,'&quot;')})" style="background:#fff;color:#991b1b;border:1px solid #fecaca;border-radius:5px;padding:7px 14px;font-size:12px;cursor:pointer;margin-right:auto;">팀 전체 삭제</button>
+                    <button class="btn-outline" onclick="closeLinkEdit()">취소</button>
+                    <button class="btn-gold" onclick='saveRelayTeam(${JSON.stringify(memberIds).replace(/'/g,"\\'")}, ${JSON.stringify({day,event_name:eventName,round,gender,division}).replace(/'/g,"\\'")})'>저장</button>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('link-modal').style.display='block';
+}
+
+function addRelayMemberRow(){
+    const list = document.getElementById('rt-members-list');
+    // 빈 메시지 제거
+    if(list.children.length===1 && list.children[0].tagName==='DIV' && !list.children[0].classList.contains('rt-member-edit-row')){
+        list.innerHTML = '';
+    }
+    const legNum = list.querySelectorAll('.rt-member-edit-row').length + 1;
+    const colorMap = {1:['#fef3c7','#92400e'],2:['#dbeafe','#1e40af'],3:['#dcfce7','#166534'],4:['#fce7f3','#9f1239']};
+    const [bg,fg] = colorMap[legNum] || ['#f3f4f6','#555'];
+    const row = document.createElement('div');
+    row.className = 'rt-member-edit-row';
+    row.dataset.id = '';  // 새 멤버
+    row.dataset.leg = legNum;
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:6px;border:1px solid #eee;border-radius:5px;margin-bottom:4px;background:#fff;';
+    row.innerHTML = `
+        <span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:24px;background:${bg};color:${fg};border-radius:4px;font-weight:700;font-size:11px;">${legNum}走</span>
+        <input type="text" class="rt-bib" placeholder="배번" style="width:80px;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+        <input type="text" class="rt-name" placeholder="선수명" style="flex:1;padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+        <button onclick="this.closest('.rt-member-edit-row').remove();updateLegNumbers()" title="이 주자 삭제" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:4px;padding:4px 8px;font-size:11px;cursor:pointer;">삭제</button>`;
+    list.appendChild(row);
+}
+
+function updateLegNumbers(){
+    const rows = document.querySelectorAll('#rt-members-list .rt-member-edit-row');
+    const colorMap = {1:['#fef3c7','#92400e'],2:['#dbeafe','#1e40af'],3:['#dcfce7','#166534'],4:['#fce7f3','#9f1239']};
+    rows.forEach((row,idx)=>{
+        const legNum = idx+1;
+        row.dataset.leg = legNum;
+        const [bg,fg] = colorMap[legNum] || ['#f3f4f6','#555'];
+        const span = row.querySelector('span');
+        if(span){
+            span.style.background = bg;
+            span.style.color = fg;
+            span.textContent = legNum + '走';
+        }
+    });
+    if(rows.length===0){
+        document.getElementById('rt-members-list').innerHTML = '<div style="color:#999;font-size:12px;padding:10px;text-align:center;">주자가 없습니다. + 주자 추가 버튼으로 추가하세요.</div>';
+    }
+}
+
+async function saveRelayTeam(originalIds, ctx){
+    const teamName = document.getElementById('rt-team-name').value.trim();
+    const lane = parseInt(document.getElementById('rt-lane').value)||null;
+    const heat = parseInt(document.getElementById('rt-heat').value)||null;
+    if(!teamName){ toast('팀명(소속)은 필수입니다','error'); return; }
+    const rows = [...document.querySelectorAll('#rt-members-list .rt-member-edit-row')];
+    if(rows.length===0){ toast('주자를 1명 이상 추가하세요','error'); return; }
+
+    const adminKey = getKey();
+    const compId = getCompId();
+    let okCount=0, failCount=0;
+
+    // 1) 기존 멤버 업데이트 또는 신규 추가
+    const keptIds = [];
+    for(let i=0;i<rows.length;i++){
+        const row = rows[i];
+        const id = row.dataset.id ? parseInt(row.dataset.id) : null;
+        const bib = row.querySelector('.rt-bib').value.trim();
+        const name = row.querySelector('.rt-name').value.trim();
+        if(!name){ failCount++; continue; }
+        const sortOrder = (ctx.sort_base||0) + i;
+        const memberLane = (i===0) ? lane : null;  // 첫 주자에만 레인 부여
+        const body = {
+            admin_key: adminKey,
+            competition_id: compId,
+            day: ctx.day,
+            event_name: ctx.event_name,
+            round: ctx.round || '',
+            division: ctx.division || '',
+            gender: ctx.gender || '',
+            bib_number: bib,
+            athlete_name: name,
+            team: teamName,
+            heat: heat,
+            lane: memberLane,
+            sort_order: sortOrder
+        };
+        try {
+            if(id){
+                const r = await fetch('/api/display/roster/entry/'+id, {
+                    method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+                }).then(r=>r.json());
+                if(r.success){ okCount++; keptIds.push(id); } else failCount++;
+            } else {
+                const r = await fetch('/api/display/roster/entry', {
+                    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+                }).then(r=>r.json());
+                if(r.success || r.id){ okCount++; if(r.id) keptIds.push(r.id); } else failCount++;
+            }
+        } catch(e){ failCount++; }
+    }
+
+    // 2) 삭제된 멤버 처리 (originalIds 중 keptIds에 없는 것)
+    const toDelete = originalIds.filter(id=>!keptIds.includes(id));
+    for(const id of toDelete){
+        try {
+            await fetch('/api/display/roster/entry/'+id, {
+                method:'DELETE', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ admin_key: adminKey })
+            });
+        } catch(e){}
+    }
+
+    if(failCount===0){
+        toast(`${okCount}명 저장 완료`);
+        closeLinkEdit();
+        await loadAll();
+    } else {
+        toast(`${okCount}명 성공 / ${failCount}명 실패`,'error');
+        await loadAll();
+    }
+}
+
+async function deleteRelayTeam(memberIds){
+    if(!confirm(`이 릴레이 팀(${memberIds.length}명)을 모두 삭제하시겠습니까?`)) return;
+    const adminKey = getKey();
+    let okCount=0;
+    for(const id of memberIds){
+        try {
+            const r = await fetch('/api/display/roster/entry/'+id, {
+                method:'DELETE', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ admin_key: adminKey })
+            }).then(r=>r.json());
+            if(r.success) okCount++;
+        } catch(e){}
+    }
+    toast(`${okCount}명 삭제됨`);
+    closeLinkEdit();
+    await loadAll();
+}
+
+// 대회 ID 헬퍼 (안전 장치 — 모듈 최상단의 compId를 우선 사용)
+function getCompId(){
+    return (typeof compId !== 'undefined' && compId) ? compId : (getCompetitionId() || 0);
+}
+
+async function saveEventEdit(evId){
+    const name = document.getElementById('edit-name').value.trim();
+    const category = document.getElementById('edit-category').value;
+    const gender = document.getElementById('edit-gender').value;
+    const round_type = document.getElementById('edit-round').value;
+    const result_url = document.getElementById('link-inp').value.trim();
+    
+    // Save event details
+    const r1 = await fetch('/api/admin/events/'+evId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:getKey(),name,category,gender,round_type})}).then(r=>r.json()).catch(e=>({error:e.message}));
+    // Save result URL separately
+    const r2 = await fetch('/api/display/events/'+evId+'/result-url',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:getKey(),result_url})}).then(r=>r.json()).catch(e=>({error:e.message}));
+    
+    if(r1.error){ toast('종목 수정 오류: '+r1.error,'error'); return; }
+    toast('종목 저장됨'); closeLinkEdit(); await loadAll();
+}
+
+// Manual match modal
+function openManualMatch(ids, eventName, round, gender, division, day){
+    // Find candidate events
+    const candidates = _events.filter(ev=>{
+        const n1=ev.name.replace(/\s/g,''), n2=eventName.replace(/\s/g,'');
+        return n1.includes(n2)||n2.includes(n1);
+    }).sort((a,b)=>evIdx(a.name)-evIdx(b.name));
+    
+    const prefix = (GENDER_SHORT[gender]||'')+(DIV_SHORT[division]||division||'');
+    document.getElementById('link-modal').innerHTML = `
+        <div class="link-edit-overlay" onclick="if(event.target===this)closeLinkEdit()">
+            <div class="link-edit-modal">
+                <h3>수동 매칭: ${prefix} ${esc(eventName)} (${esc(round)})</h3>
+                <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">${day}일차 · ${ids.length}명</p>
+                <select id="match-select" style="width:100%;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;margin-bottom:12px;">
+                    <option value="">— 매칭할 종목 선택 —</option>
+                    ${candidates.map(c=>`<option value="${c.id}">${esc(fmtEvent(c))} (ID:${c.id})</option>`).join('')}
+                </select>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button class="btn-outline" onclick="closeLinkEdit()">취소</button>
+                    <button class="btn-gold" onclick="doManualMatch([${ids.join(',')}])">매칭 실행</button>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('link-modal').style.display='block';
+}
+
+async function doManualMatch(rosterIds){
+    const evId = document.getElementById('match-select')?.value;
+    if(!evId){ toast('종목을 선택하세요.','error'); return; }
+    const r = await fetch('/api/display/roster/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:getKey(),roster_ids:rosterIds,event_id:parseInt(evId)})}).then(r=>r.json()).catch(e=>({error:e.message}));
+    if(r.success){ toast(`${r.updated}건 매칭 완료`); closeLinkEdit(); await loadAll(); }
+    else toast('오류: '+(r.error||'매칭 실패'),'error');
+}
+
+async function doRematch(){
+    if(!confirm('자동 매칭을 다시 실행합니까?\n기존 매칭은 유지되며, 미매칭 항목만 처리됩니다.')) return;
+    const r = await fetch('/api/display/roster/'+compId+'/rematch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:getKey()})}).then(r=>r.json()).catch(e=>({error:e.message}));
+    if(r.success){ toast(`자동 매칭 완료: ${r.matched}건`); await loadAll(); }
+    else toast('오류: '+(r.error||'매칭 실패'),'error');
+}
+</script>
+</body>
+</html>

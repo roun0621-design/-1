@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<!-- Google Analytics 4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-3PRW9G7KVQ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-3PRW9G7KVQ');
+</script>
+    <meta charset="UTF-8">
+    <title>PACE RISE Lower Third Overlay</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: transparent; font-family: 'Noto Sans KR', 'Segoe UI', sans-serif; overflow: hidden; }
+        @import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Noto+Sans+KR:wght@400;600;700;800;900&display=swap');
+
+        .lower-third {
+            position: fixed; bottom: 60px; left: 60px;
+            min-width: 420px; max-width: 700px;
+            animation: slideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes slideIn { from { transform: translateX(-40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-40px); opacity: 0; } }
+        .lower-third.hiding { animation: slideOut 0.4s ease-in forwards; }
+
+        .lt-main {
+            background: rgba(10,12,20,0.92); border-radius: 10px; overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.06); backdrop-filter: blur(20px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        .lt-accent { height: 3px; background: linear-gradient(90deg, #b79f58, #6b6b6b); }
+
+        .lt-content { padding: 14px 24px; display: flex; align-items: center; gap: 18px; }
+
+        .lt-bib {
+            font-family: 'Audiowide', sans-serif; font-size: 28px; font-weight: 900;
+            color: #fff; background: rgba(183,159,88,0.2); border-radius: 8px;
+            width: 60px; height: 52px; display: flex; align-items: center; justify-content: center;
+            border: 1px solid rgba(183,159,88,0.3);
+        }
+
+        .lt-info { flex: 1; }
+        .lt-name { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: 0.5px; }
+        .lt-team { font-size: 12px; color: #8a9bae; font-weight: 500; margin-top: 2px; }
+
+        .lt-result { text-align: right; }
+        .lt-record { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 26px; font-weight: 800; color: #4ade80; }
+        .lt-rank { font-size: 11px; color: #fbbf24; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+
+        .lt-event-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 6px 24px; background: rgba(0,0,0,0.3);
+        }
+        .lt-event-name { font-size: 11px; color: #64748b; font-weight: 600; letter-spacing: 0.5px; }
+        .lt-brand { font-family: 'Audiowide', sans-serif; font-size: 9px; color: #4a5568; letter-spacing: 1px; }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+<div class="lower-third hidden" id="lower-third">
+    <div class="lt-main">
+        <div class="lt-accent"></div>
+        <div class="lt-content">
+            <div class="lt-bib" id="lt-bib">-</div>
+            <div class="lt-info">
+                <div class="lt-name" id="lt-name">-</div>
+                <div class="lt-team" id="lt-team">-</div>
+            </div>
+            <div class="lt-result">
+                <div class="lt-record" id="lt-record">-</div>
+                <div class="lt-rank" id="lt-rank">-</div>
+            </div>
+        </div>
+        <div class="lt-event-bar">
+            <span class="lt-event-name" id="lt-event">-</span>
+            <span class="lt-brand">PACE RISE</span>
+        </div>
+    </div>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const compId = params.get('comp');
+let ws = null;
+let currentData = null;
+let displayTimer = null;
+
+function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws/scoreboard`);
+
+    ws.onopen = () => {
+        if (compId) {
+            ws.send(JSON.stringify({ type: 'subscribe', competition_id: compId }));
+        }
+    };
+
+    ws.onmessage = (e) => {
+        try {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'scoreboard_result_update') {
+                // Show the latest result as a lower-third pop-up
+                if (compId) ws.send(JSON.stringify({ type: 'request_current', competition_id: compId }));
+            }
+            if (msg.type === 'scoreboard_state') {
+                showLatestResult(msg.data);
+            }
+        } catch(e) {}
+    };
+
+    ws.onclose = () => { setTimeout(connect, 3000); };
+    ws.onerror = () => { ws.close(); };
+}
+
+function showLatestResult(data) {
+    if (!data || !data.event || !data.entries) return;
+
+    const isTrack = data.event.category === 'track' || data.event.category === 'relay' || data.event.category === 'road';
+
+    // Find entries with records, sort by rank
+    const withRecords = data.entries.filter(e => e.record != null && e.status_code !== 'DNS' && e.status_code !== 'DNF');
+    if (withRecords.length === 0) return;
+
+    withRecords.sort((a, b) => isTrack ? a.record - b.record : b.record - a.record);
+
+    // Show the leader
+    const leader = withRecords[0];
+    const el = document.getElementById('lower-third');
+
+    document.getElementById('lt-bib').textContent = leader.bib_number || '-';
+    document.getElementById('lt-name').textContent = leader.name || '-';
+    document.getElementById('lt-team').textContent = leader.team || '';
+    document.getElementById('lt-record').textContent = formatTime(leader.record, isTrack);
+    document.getElementById('lt-rank').textContent = '1st PLACE';
+
+    const gL = data.event.gender === 'M' ? 'Men' : data.event.gender === 'F' ? 'Women' : 'Mixed';
+    const roundL = { preliminary: 'Prelim', semifinal: 'Semi', final: 'Final' }[data.event.round_type] || '';
+    document.getElementById('lt-event').textContent = `${gL} ${data.event.name} ${roundL}`;
+
+    // Show with auto-hide
+    el.classList.remove('hidden', 'hiding');
+    if (displayTimer) clearTimeout(displayTimer);
+    displayTimer = setTimeout(() => {
+        el.classList.add('hiding');
+        setTimeout(() => el.classList.add('hidden'), 500);
+    }, 8000);
+}
+
+function formatTime(s, isTrack) {
+    if (s == null) return '-';
+    if (!isTrack) return s.toFixed(2) + 'm';
+    if (s >= 3600) {
+        const h = Math.floor(s / 3600), m = Math.floor((s - h * 3600) / 60), r = s - h * 3600 - m * 60;
+        return `${h}:${String(m).padStart(2,'0')}:${r < 10 ? '0' : ''}${r.toFixed(2)}`;
+    }
+    if (s >= 60) {
+        const m = Math.floor(s / 60), r = s - m * 60;
+        return `${m}:${r < 10 ? '0' : ''}${r.toFixed(2)}`;
+    }
+    return s.toFixed(2);
+}
+
+connect();
+</script>
+</body>
+</html>
