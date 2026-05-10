@@ -150,7 +150,7 @@
             <span class="role-badge viewer" id="role-badge" style="display:none;">뷰어</span>
         </div>
 
-        <!-- Recent competitions (within 2 weeks) — auto shown -->
+        <!-- Recent competitions — 진행중 ±3일 윈도우, 펼침/접힘 탭 지원 -->
         <div id="recent-comps-area" style="display:none;margin-bottom:20px;"></div>
 
         <h3 class="comp-list-title">COMPETITION LIST</h3>
@@ -655,38 +655,98 @@
             window.location.href = `/dashboard.html?comp=${compId}`;
         }
 
-        // ---- Recent competitions (within 2 weeks) ----
+        // ---- Recent competitions (진행중 ±3일 윈도우 + 펼침 탭) ----
+        // 상태: localStorage('recent_comps_expanded') = '1' | '0'
+        let _recentExpanded = (localStorage.getItem('recent_comps_expanded') === '1');
+
+        function _renderCompCard(c) {
+            const isLive = c.status === 'active';
+            const fedBadge = c.federation ? getFedBadge(c.federation) : '';
+            const statusBadge = isLive
+                ? '<span class="comp-card-dday active">LIVE</span>'
+                : `<span class="comp-card-dday ${c.status}">${{upcoming:'예정',completed:'종료'}[c.status]||c.status}</span>`;
+            return `<div class="comp-card" onclick="selectCompetition(${c.id})" style="${isLive?'border-color:#b79f58;':''}">
+                <div class="comp-card-status ${c.status}"></div>
+                <div class="comp-card-info">
+                    <div class="comp-card-name">${c.name} ${fedBadge}</div>
+                    <div class="comp-card-meta">
+                        <span>${c.start_date} ~ ${c.end_date}</span>
+                        <span>${c.venue || ''}</span>
+                        ${statusBadge}
+                    </div>
+                </div>
+                <div class="comp-card-arrow">&rsaquo;</div>
+            </div>`;
+        }
+
         async function loadRecentCompetitions() {
+            const area = document.getElementById('recent-comps-area');
             try {
-                const recent = await API.getRecentCompetitions();
-                const area = document.getElementById('recent-comps-area');
-                if (!recent || !recent.length) { area.style.display = 'none'; return; }
+                // 1) 진행중 ±3일 윈도우 (기본 활성 카드 영역)
+                const activeResp = await API.getRecentCompetitions({ window: 'active' });
+                // server response: { window: {start,end,mode}, items: [...] }
+                const activeItems = Array.isArray(activeResp) ? activeResp : (activeResp.items || []);
+                const win = (activeResp && activeResp.window) || null;
+
+                // 진행중 ±3일에 해당하는 대회가 없고, 펼침 모드도 아니면 전체 영역 숨김
+                if ((!activeItems || !activeItems.length) && !_recentExpanded) {
+                    area.style.display = 'none';
+                    return;
+                }
                 area.style.display = 'block';
+
+                // 헤더(라벨 + 펼침 토글)
+                const winLabel = win ? `${win.start} ~ ${win.end}` : '진행중 대회 ±3일';
+                const toggleLabel = _recentExpanded ? '접기 ▲' : '전체 대회 펼치기 ▼';
+
                 let html = `<div style="padding:16px;background:linear-gradient(135deg,#f8f4ea,#f0f0f0);border:1.5px solid #b79f58;border-radius:var(--radius);">
-                    <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#065f46;letter-spacing:1px;margin-bottom:10px;">RECENT • 최근 2주 대회</div>
-                    <div style="display:flex;flex-direction:column;gap:8px;">`;
-                recent.forEach(c => {
-                    const isLive = c.status === 'active';
-                    const fedBadge = c.federation ? getFedBadge(c.federation) : '';
-                    const statusBadge = isLive
-                        ? '<span class="comp-card-dday active">LIVE</span>'
-                        : `<span class="comp-card-dday ${c.status}">${{upcoming:'예정',completed:'종료'}[c.status]||c.status}</span>`;
-                    html += `<div class="comp-card" onclick="selectCompetition(${c.id})" style="${isLive?'border-color:#b79f58;':''}">
-                        <div class="comp-card-status ${c.status}"></div>
-                        <div class="comp-card-info">
-                            <div class="comp-card-name">${c.name} ${fedBadge}</div>
-                            <div class="comp-card-meta">
-                                <span>${c.start_date} ~ ${c.end_date}</span>
-                                <span>${c.venue || ''}</span>
-                                ${statusBadge}
-                            </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
+                        <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#065f46;letter-spacing:1px;">
+                            RECENT • 진행중 대회 ±3일
+                            <span style="font-family:var(--font-base,inherit);color:#666;font-size:11px;letter-spacing:0;margin-left:8px;">(${winLabel})</span>
                         </div>
-                        <div class="comp-card-arrow">&rsaquo;</div>
+                        <button type="button" onclick="toggleRecentExpanded()" class="btn btn-sm btn-ghost"
+                            style="font-size:12px;padding:4px 10px;border:1px solid #b79f58;background:#fff;color:#065f46;border-radius:6px;cursor:pointer;">
+                            ${toggleLabel}
+                        </button>
                     </div>`;
-                });
-                html += `</div></div>`;
+
+                // 활성 윈도우 카드 (없으면 안내 문구)
+                if (activeItems && activeItems.length) {
+                    html += `<div style="display:flex;flex-direction:column;gap:8px;">`;
+                    activeItems.forEach(c => { html += _renderCompCard(c); });
+                    html += `</div>`;
+                } else {
+                    html += `<div style="padding:12px 4px;color:#666;font-size:13px;">현재 진행중인 대회가 없습니다.</div>`;
+                }
+
+                // 펼침 모드: 전체 대회 목록을 추가로 로드해 아래 표시
+                if (_recentExpanded) {
+                    const allResp = await API.getRecentCompetitions({ window: 'all' });
+                    const allItems = Array.isArray(allResp) ? allResp : (allResp.items || []);
+                    const activeIds = new Set(activeItems.map(c => c.id));
+                    const others = allItems.filter(c => !activeIds.has(c.id));
+                    html += `<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #b79f58;">
+                        <div style="font-size:12px;color:#065f46;letter-spacing:1px;margin-bottom:8px;font-weight:600;">전체 대회 (${others.length})</div>`;
+                    if (others.length) {
+                        html += `<div style="display:flex;flex-direction:column;gap:8px;">`;
+                        others.forEach(c => { html += _renderCompCard(c); });
+                        html += `</div>`;
+                    } else {
+                        html += `<div style="padding:8px 4px;color:#888;font-size:12px;">표시할 다른 대회가 없습니다.</div>`;
+                    }
+                    html += `</div>`;
+                }
+
+                html += `</div>`;
                 area.innerHTML = html;
             } catch(e) { console.error(e); }
+        }
+
+        function toggleRecentExpanded() {
+            _recentExpanded = !_recentExpanded;
+            localStorage.setItem('recent_comps_expanded', _recentExpanded ? '1' : '0');
+            loadRecentCompetitions();
         }
 
         // ---- Home Popup (auto-show on entry) ----

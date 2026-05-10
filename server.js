@@ -1216,17 +1216,53 @@ app.get('/api/competitions', (req, res) => {
     res.json(db.prepare('SELECT * FROM competition ORDER BY start_date ASC').all());
 });
 // Competitions within 2 weeks (for home top section) — MUST be before /:id
+// 노출 정책:
+//  - 기본(?window=active): "현재 진행중 대회 기준 ±3일" 윈도우
+//      · 진행중(active) 대회의 [start_date - 3일, end_date + 3일] 안에 걸치는 대회
+//      · 진행중 대회가 없으면 fallback으로 오늘 ±3일 윈도우 사용
+//  - ?window=all: 전체 대회 (펼침 모드)
 app.get('/api/competitions/recent', (req, res) => {
+    const window = (req.query.window || 'active').toLowerCase();
+
+    if (window === 'all') {
+        // 전체 대회 (펼침 탭에서 사용) — status 우선, 시작일 내림차순
+        const rows = db.prepare(`
+            SELECT * FROM competition
+            ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'upcoming' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
+                     start_date DESC
+        `).all();
+        return res.json(rows);
+    }
+
+    // active 윈도우: 진행중 대회 기준 ±3일
     const today = new Date().toISOString().slice(0, 10);
-    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const addDays = (dateStr, n) => {
+        const d = new Date(dateStr + 'T00:00:00');
+        d.setDate(d.getDate() + n);
+        return d.toISOString().slice(0, 10);
+    };
+
+    const activeComps = db.prepare(`SELECT start_date, end_date FROM competition WHERE status='active'`).all();
+
+    let winStart, winEnd;
+    if (activeComps.length > 0) {
+        const starts = activeComps.map(c => c.start_date).filter(Boolean).sort();
+        const ends = activeComps.map(c => c.end_date).filter(Boolean).sort();
+        winStart = addDays(starts[0], -3);
+        winEnd = addDays(ends[ends.length - 1], 3);
+    } else {
+        // fallback: 오늘 ±3일
+        winStart = addDays(today, -3);
+        winEnd = addDays(today, 3);
+    }
+
     const rows = db.prepare(`
         SELECT * FROM competition
         WHERE status = 'active'
            OR (end_date >= ? AND start_date <= ?)
         ORDER BY CASE WHEN status='active' THEN 0 ELSE 1 END, start_date DESC
-    `).all(twoWeeksAgo, twoWeeksLater);
-    res.json(rows);
+    `).all(winStart, winEnd);
+    res.json({ window: { start: winStart, end: winEnd, mode: 'active' }, items: rows });
 });
 // Competitions by federation — MUST be before /:id
 app.get('/api/competitions/by-federation/:code', (req, res) => {
@@ -9602,49 +9638,89 @@ app.get('/api/documents/:compId', (req, res) => {
 // DISPLAY-MODE (노출용 대회) APIs
 // ============================================================
 
-// --- Helper: parse 종별 (e.g. "남고", "여자(아시아)", "남고(U20포함)", "중학교부") ---
+// --- Helper: parse 종별 (e.g. "남고", "여자(아시아)", "남고(U20포함)", "중학교부", "U18(남)", "선수권(혼)", "남초") ---
+// 정책: "라벨 자유화" — 알 수 없는 라벨도 가능한 한 그대로 division 으로 보존하고,
+//       절대로 임의로 "중등부" 같은 기본값을 부여하지 않음.
 function parseJongbyul(jb) {
     const raw = (jb || '').trim();
     // FIX: 공백 제거한 형태로 매칭(엑셀에 "남자 대학부"처럼 공백이 들어간 라벨 처리)
     const s = raw.replace(/\s+/g, '');
-    // Mixed relay division labels
+    if (!s) return { gender: 'X', division: '' };
+
+    // ── 1) U20/U18 "포함" 변형 (괄호 안에 성별이 아닌 부가설명이 있는 경우) ──
+    //    "남고(U20포함)", "여고(U20포함)" 등 — 괄호 매칭보다 먼저 처리해야 함.
+    if (/남고\(U20/i.test(s) || /남자고등.*U20/i.test(s)) return { gender: 'M', division: 'U20' };
+    if (/여고\(U20/i.test(s) || /여자고등.*U20/i.test(s)) return { gender: 'F', division: 'U20' };
+
+    // ── 2) 괄호 표기: "U18(남)", "U20(여)", "선수권(혼)", "일반(남)", "남자(아시아)" 등 ──
+    //    base 부분은 그대로 division 으로 보존, 괄호 안은 성별/국제로 매핑.
+    const parenMatch = s.match(/^([^(]+)\(([^)]+)\)$/);
+    if (parenMatch) {
+        const base = parenMatch[1];
+        const inside = parenMatch[2];
+        // 성별 추정 — 괄호 안 우선, 없으면 base prefix(남자/여자) 에서 추출
+        let gender = 'X';
+        if (/^남$|^남자$|^M$/i.test(inside)) gender = 'M';
+        else if (/^여$|^여자$|^F$/i.test(inside)) gender = 'F';
+        else if (/^혼$|^혼성$|^X$|^믹스/i.test(inside)) gender = 'X';
+        else if (/^남/.test(base)) gender = 'M';
+        else if (/^여/.test(base)) gender = 'F';
+        // 베이스 라벨 정규화
+        // 중학교부/고등학교부/대학교부 → 중등부/고등부/대학부 정규화
+        let division = base;
+        if (/^중학(교)?부?$|^중등부?$/.test(base)) division = '중등부';
+        else if (/^고등(학교)?부?$/.test(base)) division = '고등부';
+        else if (/^대학(교)?부?$/.test(base)) division = '대학부';
+        else if (/^일반부?$/.test(base)) division = '일반부';
+        else if (/^초등(학교)?부?$/.test(base)) division = '초등부';
+        // (아시아) 국제
+        if (/아시아/.test(inside)) division = '국제';
+        return { gender, division };
+    }
+
+    // ── 3) 단독 부 라벨 (성별 표기 없음) ──
     if (/^중학교부$|^중학부$|^중등부$/.test(s)) return { gender: 'X', division: '중등부' };
     if (/^고등부$|^고등학교부$/.test(s)) return { gender: 'X', division: '고등부' };
     if (/^대학부$|^대학교부$/.test(s)) return { gender: 'X', division: '대학부' };
     if (/^일반부$/.test(s)) return { gender: 'X', division: '일반부' };
-    // U20
+    if (/^초등부$|^초등학교부$/.test(s)) return { gender: 'X', division: '초등부' };
+    if (/^U18$/i.test(s)) return { gender: 'X', division: 'U18' };
+    if (/^U20$/i.test(s)) return { gender: 'X', division: 'U20' };
+    if (/^선수권$/.test(s)) return { gender: 'X', division: '선수권' };
+
+    // ── 3) U20 변형(legacy 호환) ──
     if (/남고\(U20/i.test(s) || /남자고등.*U20/i.test(s)) return { gender: 'M', division: 'U20' };
     if (/여고\(U20/i.test(s) || /여자고등.*U20/i.test(s)) return { gender: 'F', division: 'U20' };
     if (/남.*\(U20/i.test(s)) return { gender: 'M', division: 'U20' };
     if (/여.*\(U20/i.test(s)) return { gender: 'F', division: 'U20' };
-    // International (아시아)
-    if (/남자?\(아시아\)/i.test(s) || /남자\(아시아/i.test(s)) return { gender: 'M', division: '국제' };
-    if (/여자?\(아시아\)/i.test(s) || /여자\(아시아/i.test(s)) return { gender: 'F', division: '국제' };
-    // Standard short codes
+
+    // ── 4) 짧은 코드: 남초/여초/남중/여중/남고/여고/남대/여대/남일/여일 ──
     const map = {
+        '남초': { gender: 'M', division: '초등부' }, '여초': { gender: 'F', division: '초등부' },
         '남중': { gender: 'M', division: '중등부' }, '여중': { gender: 'F', division: '중등부' },
         '남고': { gender: 'M', division: '고등부' }, '여고': { gender: 'F', division: '고등부' },
         '남대': { gender: 'M', division: '대학부' }, '여대': { gender: 'F', division: '대학부' },
         '남일': { gender: 'M', division: '일반부' }, '여일': { gender: 'F', division: '일반부' },
     };
     if (map[s]) return map[s];
-    // FIX: "남자중학부", "남자 중학부" (공백 제거 후 매칭) 처리 강화
-    // 중학(부|교) 패턴
+
+    // ── 5) "남자초등", "여자중학" 등 풀어쓴 라벨 ──
+    if (/남자초등/.test(s)) return { gender: 'M', division: '초등부' };
+    if (/여자초등/.test(s)) return { gender: 'F', division: '초등부' };
     if (/남자중학/.test(s)) return { gender: 'M', division: '중등부' };
     if (/여자중학/.test(s)) return { gender: 'F', division: '중등부' };
-    // 고등(부|학교부) 패턴
     if (/남자고등/.test(s)) return { gender: 'M', division: '고등부' };
     if (/여자고등/.test(s)) return { gender: 'F', division: '고등부' };
-    // 대학(부|교부) 패턴
     if (/남자대학/.test(s)) return { gender: 'M', division: '대학부' };
     if (/여자대학/.test(s)) return { gender: 'F', division: '대학부' };
-    // 일반부 패턴
     if (/남자일반/.test(s)) return { gender: 'M', division: '일반부' };
     if (/여자일반/.test(s)) return { gender: 'F', division: '일반부' };
-    // Fallback: try prefix
-    if (s.startsWith('남')) return { gender: 'M', division: '' };
-    if (s.startsWith('여')) return { gender: 'F', division: '' };
-    return { gender: 'X', division: '' };
+
+    // ── 6) 마지막 fallback: 절대 임의 division 부여 금지 ──
+    //    원본 라벨을 그대로 division 으로 보존하여 신규 라벨도 표시되도록 함.
+    if (s.startsWith('남')) return { gender: 'M', division: raw };
+    if (s.startsWith('여')) return { gender: 'F', division: raw };
+    return { gender: 'X', division: raw };
 }
 
 // --- Helper: parse 라운드 for display mode ---

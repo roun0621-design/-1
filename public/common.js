@@ -387,7 +387,7 @@ const API = {
     createCompetition: (data, adminKey) => api('POST', '/api/competitions', { ...data, admin_key: adminKey }),
     updateCompetition: (id, data, adminKey) => api('PUT', `/api/competitions/${id}`, { ...data, admin_key: adminKey }),
     deleteCompetition: (id, adminKey) => api('DELETE', `/api/competitions/${id}`, { admin_key: adminKey }),
-    getRecentCompetitions: () => api('GET', '/api/competitions/recent'),
+    getRecentCompetitions: (opts = {}) => api('GET', '/api/competitions/recent' + (opts.window ? `?window=${encodeURIComponent(opts.window)}` : '')),
     getCompetitionsByFederation: (code) => api('GET', `/api/competitions/by-federation/${encodeURIComponent(code)}`),
 
     // Federations (cached — called by renderCompInfoBar)
