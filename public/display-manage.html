@@ -372,6 +372,8 @@ function renderTimetable(el){
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button class="btn btn-sm btn-ghost" onclick="previewOrphanEvents()">고아 종목 미리보기</button>
                 <button class="btn btn-sm btn-ghost" onclick="relinkTimetable()">시간표 재링크</button>
+                <button class="btn btn-sm btn-ghost" onclick="relinkRoster()">명단 재매칭</button>
+                <button class="btn btn-sm btn-ghost" onclick="showUnmatchedRoster()">미매칭 명단 리포트</button>
                 <button class="btn btn-sm" style="background:#dc2626;color:#fff;" onclick="cleanupOrphanEvents()">고아 종목 삭제 실행</button>
             </div>
             <div id="orphan-result" style="margin-top:10px;font-size:12px;"></div>
@@ -1198,6 +1200,76 @@ async function relinkTimetable(){
         }
         box.innerHTML = `<span style="color:var(--success,#2e7d32);">✅ 재링크 완료 — 전체 ${r.total}건 / 링크됨 ${r.linked}건 / 미매칭 ${r.unlinked}건 (이전 ${r.before}건)</span>`;
         toast('시간표 재링크 완료');
+    } catch(e){
+        box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(e.message)}</span>`;
+    }
+}
+
+// 명단 재매칭 — PDF 재업로드 없이 매칭 로직만 다시 돌림
+async function relinkRoster(){
+    if(!confirm('명단 전체를 다시 매칭합니다.\n\n현재 명단 데이터는 그대로 두고, 시간표 종목과의 연결만 재계산합니다.\n매칭 로직 개선·시간표 변경 후 사용하세요.\n\n진행하시겠습니까?')) return;
+    const box = document.getElementById('orphan-result');
+    box.innerHTML = '<span style="color:var(--gold);">⏳ 명단 재매칭 중...</span>';
+    try {
+        const r = await fetch(`/api/display/roster/relink/${compId}`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ admin_key: getKey() })
+        }).then(r=>r.json());
+        if(!r.success){
+            box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+            return;
+        }
+        box.innerHTML = `<span style="color:var(--success,#2e7d32);">✅ 명단 재매칭 완료 — 전체 ${r.total}명 / 매칭 ${r.matched}명 / 미매칭 ${r.unmatched}명 (이전 ${r.before}명)</span>`;
+        toast(`명단 재매칭: ${r.matched}/${r.total}`);
+        if(typeof loadAll==='function') await loadAll();
+    } catch(e){
+        box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(e.message)}</span>`;
+    }
+}
+
+// 미매칭 명단 리포트 — 어떤 (종목,라운드,부,성별) 조합이 시간표에 없어서 매칭 실패했는지 표시
+async function showUnmatchedRoster(){
+    const box = document.getElementById('orphan-result');
+    box.innerHTML = '<span style="color:var(--gold);">⏳ 미매칭 리포트 조회 중...</span>';
+    try {
+        const r = await fetch(`/api/display/roster/unmatched/${compId}`).then(r=>r.json());
+        if(!r.success){
+            box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+            return;
+        }
+        if(r.total_unmatched===0){
+            box.innerHTML = `<span style="color:var(--success,#2e7d32);">✅ 미매칭 명단 없음 — 모든 명단이 시간표 종목에 연결되어 있습니다.</span>`;
+            return;
+        }
+        const rowsHtml = (r.groups||[]).map(g => `
+            <tr>
+                <td style="padding:4px 8px;border-bottom:1px solid #eee;">${esc(g.event_name||'')}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #eee;">${esc(g.round||'')}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #eee;">${esc(g.division||'(빈값)')}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #eee;">${esc(g.gender||'(빈값)')}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600;">${g.cnt}명</td>
+            </tr>
+        `).join('');
+        box.innerHTML = `
+            <div style="background:#fff;border:1px solid #fed7aa;border-radius:6px;padding:10px;">
+                <div style="color:#c62828;font-weight:600;margin-bottom:6px;">⚠️ 미매칭 명단: 총 ${r.total_unmatched}명 (${r.groups.length}개 그룹)</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">아래 (종목·라운드·부·성별) 조합이 시간표에 없거나 표기가 달라서 매칭에 실패했습니다. 시간표 엑셀의 종별/라운드 컬럼 값을 확인하세요.</div>
+                <div style="max-height:300px;overflow:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                        <thead>
+                            <tr style="background:#fff5f0;">
+                                <th style="padding:4px 8px;text-align:left;border-bottom:1px solid #fed7aa;">종목</th>
+                                <th style="padding:4px 8px;text-align:left;border-bottom:1px solid #fed7aa;">라운드</th>
+                                <th style="padding:4px 8px;text-align:left;border-bottom:1px solid #fed7aa;">부</th>
+                                <th style="padding:4px 8px;text-align:left;border-bottom:1px solid #fed7aa;">성별</th>
+                                <th style="padding:4px 8px;text-align:right;border-bottom:1px solid #fed7aa;">인원</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>
+            </div>`;
     } catch(e){
         box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(e.message)}</span>`;
     }

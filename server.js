@@ -10434,30 +10434,110 @@ function parseJongbyul(jb) {
     return { gender: 'X', division: raw };
 }
 
+// parseJongbyul wrapper: division을 normalizeDivisionLabel로 한 번 더 정규화
+// (시간표 import 시 division을 결정적 표기로 저장하기 위함 — 명단 측 표기와 일치)
+function parseJongbyulNormalized(jb) {
+    const r = parseJongbyul(jb);
+    return { gender: r.gender, division: normalizeDivisionLabel(r.division) };
+}
+
 // --- Helper: parse 라운드 for display mode ---
+// 통합 정규화: 시간표 엑셀(라운드 컬럼)과 명단 PDF(▣ 종목 (라운드)) 양쪽에서 동일하게 호출.
+// 시간표 엑셀 예: "예선", "준결승", "결승", "결승(A)", "10종(1)", "자격(A)"
+// 명단 PDF 예:   "5-2+6", "8-2", "준 4-2", "결승", "결승 2조", "7종", "10종", "Mixed", "10종) (기록경기"
+//   ※ 명단 패턴 중 "10종) (기록경기" 같이 PDF 정규식이 괄호 짝을 잘못 잡아 round 안에 ") ("이 들어오는
+//      경우도 안전하게 처리 (앞부분만 보고 종합경기로 인식).
+//   ※ 이 함수는 결정적이고 idempotent — 같은 입력은 항상 같은 round_type을 반환해야 함.
 function parseDisplayRound(roundStr) {
-    const r = (roundStr || '').trim();
-    if (!r) return { round_type: 'final', note: '' };
-    // Combined events: 10종(N), 7종(N), 5종(N)
-    if (/^\d+종\(\d+\)/.test(r)) return { round_type: 'final', note: r };
-    // 자격(A), 자격(B)
-    if (r.startsWith('자격')) return { round_type: 'preliminary', note: r };
-    // 예선
-    if (r.startsWith('예선')) {
-        const noteMatch = r.match(/\((.+)\)/);
-        return { round_type: 'preliminary', note: noteMatch ? noteMatch[1] : '' };
+    const orig = (roundStr || '').trim();
+    if (!orig) return { round_type: 'final', note: '', is_combined: false };
+
+    // 종합경기 sub-event: "10종(1)", "10종(2)", "7종" — 부모 매칭용 마커
+    //   · 시간표: "10종(1)" 형식 (괄호 안 숫자)
+    //   · 명단:    "7종" 단독, "10종" 단독, "10종) (기록경기" (괄호 손상)
+    if (/(\d+)종/.test(orig)) {
+        const m = orig.match(/(\d+)종/);
+        return {
+            round_type: 'final',
+            note: orig,
+            is_combined: true,
+            combined_n: m ? parseInt(m[1]) : null,
+        };
     }
-    // 준결, 준결승
-    if (r.startsWith('준결')) {
-        const noteMatch = r.match(/\((.+)\)/);
-        return { round_type: 'semifinal', note: noteMatch ? noteMatch[1] : '' };
+
+    // 자격(A), 자격(B) — 예선 라운드의 한 형태
+    if (orig.startsWith('자격')) {
+        return { round_type: 'preliminary', note: orig, is_combined: false };
     }
-    // 결승
-    if (r.startsWith('결승')) {
-        const noteMatch = r.match(/\((.+)\)/);
-        return { round_type: 'final', note: noteMatch ? noteMatch[1] : '' };
+
+    // 예선 (명시)
+    if (orig.includes('예선')) {
+        const noteMatch = orig.match(/\((.+)\)/);
+        return { round_type: 'preliminary', note: noteMatch ? noteMatch[1] : '', is_combined: false };
     }
-    return { round_type: 'final', note: r };
+
+    // 준결, 준결승 — "준 4-2", "준4-2" 처럼 PDF에서 "준" 접두어가 붙은 heat 패턴도 포함.
+    //   기존 버그: 명단 PDF의 "준 4-2"가 final로 잘못 분류되던 케이스 수정.
+    if (orig.startsWith('준결') || /^준\s*\d+-\d+/.test(orig)) {
+        const noteMatch = orig.match(/\((.+)\)/);
+        return { round_type: 'semifinal', note: noteMatch ? noteMatch[1] : orig, is_combined: false };
+    }
+
+    // 명단 PDF heat 패턴: "5-2+6", "8-2", "3-2+2", "2-3+2" → 예선
+    if (/^\d+-\d+/.test(orig)) {
+        return { round_type: 'preliminary', note: orig, is_combined: false };
+    }
+
+    // 결승 (명시) — "결승 2조", "결승(A)", "결승 A,B" 모두 final 로
+    if (orig.startsWith('결승')) {
+        const noteMatch = orig.match(/\((.+)\)/);
+        return { round_type: 'final', note: noteMatch ? noteMatch[1] : (orig.replace(/^결승\s*/, '') || ''), is_combined: false };
+    }
+
+    // 4x400mR Mixed 결승 — PDF에서 "Mixed) (결승" 식으로 깨질 수도 있음
+    if (/^mixed/i.test(orig)) {
+        return { round_type: 'final', note: orig, is_combined: false };
+    }
+
+    return { round_type: 'final', note: orig, is_combined: false };
+}
+
+// --- Helper: division 정규화 (시간표 + 명단 양쪽에서 호출하는 공통 헬퍼) ---
+// 입력: parseJongbyul 결과 또는 parseDivisionMarker 결과 또는 raw 문자열
+// 출력: 양쪽이 결정적으로 같은 division 문자열을 만들도록 정규화
+//   · "선수권 남자부" / "선수권(남)" → "선수권(남)"
+//   · "U18 여자부" / "U18(여)" → "U18(여)"
+//   · "중학교부" / "중등부" / "남자중학교부" → "중등부"
+//   · "" 빈 문자열은 그대로 유지 (시간표 종별이 비어있는 경우 대비)
+function normalizeDivisionLabel(div) {
+    if (!div) return '';
+    const s = div.toString().trim().replace(/\s+/g, '');
+    if (!s) return '';
+
+    // 선수권 변형 통합
+    if (/^선수권\(?남자?\)?부?$/.test(s) || s === '선수권남' || s === '남자선수권') return '선수권(남)';
+    if (/^선수권\(?여자?\)?부?$/.test(s) || s === '선수권여' || s === '여자선수권') return '선수권(여)';
+    if (/^선수권\(?혼성?\)?부?$/.test(s) || /^선수권\(?mix/i.test(s)) return '선수권(혼)';
+    if (s === '선수권') return '선수권';
+
+    // U18/U20 변형 통합
+    let m = s.match(/^U(18|20)\(?(남자?|여자?|혼성?)\)?부?$/i);
+    if (m) {
+        const g = /^남/.test(m[2]) ? '남' : (/^여/.test(m[2]) ? '여' : '혼');
+        return `U${m[1]}(${g})`;
+    }
+    if (/^U18$/i.test(s)) return 'U18';
+    if (/^U20$/i.test(s)) return 'U20';
+
+    // 학교부 변형 통합
+    if (/^(남자|여자)?(중학교부|중학부|중등부)$/.test(s)) return '중등부';
+    if (/^(남자|여자)?(고등학교부|고등부)$/.test(s)) return '고등부';
+    if (/^(남자|여자)?(대학교부|대학부)$/.test(s)) return '대학부';
+    if (/^(남자|여자)?(초등학교부|초등부)$/.test(s)) return '초등부';
+    if (/^(남자|여자)?(일반부|실업부)$/.test(s)) return '일반부';
+
+    // 기타 알 수 없는 라벨은 원본 보존
+    return div.toString().trim();
 }
 
 // --- Helper: Excel time fraction → HH:MM string ---
@@ -10593,7 +10673,7 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
             const parsedRound = parseDisplayRound(rawRound);
 
             for (const jbPart of jbParts) {
-                const parsed = parseJongbyul(jbPart);
+                const parsed = parseJongbyulNormalized(jbPart);
                 const gender = parsed.gender;
                 const division = parsed.division;
 
@@ -10880,6 +10960,53 @@ app.post('/api/display/timetable/relink/:compId', (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// 명단 재매칭 API: 노출용 대회의 모든 명단 row event_id를 NULL로 리셋한 뒤
+// autoMatchDisplayRoster 재실행. 명단 PDF 재업로드 없이 매칭 로직만 갱신할 때 사용.
+// ─────────────────────────────────────────────────────────────────────
+app.post('/api/display/roster/relink/:compId', (req, res) => {
+    try {
+        const { admin_key } = req.body;
+        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
+        const compId = parseInt(req.params.compId);
+        if (!compId) return res.status(400).json({ error: 'competition_id required' });
+
+        const before = db.prepare('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NOT NULL').get(compId).c;
+        db.prepare('UPDATE display_roster SET event_id=NULL WHERE competition_id=?').run(compId);
+        const matched = autoMatchDisplayRoster(compId);
+        const total = db.prepare('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=?').get(compId).c;
+        const stillUnmatched = total - matched;
+        opLog(`명단 재매칭 (이전 ${before} → 현재 ${matched}, 미매칭 ${stillUnmatched})`, 'admin', 'admin', compId);
+        res.json({ success: true, total, matched, unmatched: stillUnmatched, before });
+    } catch (e) {
+        console.error('roster relink error:', e);
+        res.status(500).json({ error: '명단 재매칭 실패: ' + e.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// 미매칭 리포트 API: event_id가 NULL인 명단 row를 (event_name, round, division, gender) 별로 그룹화해서 반환.
+// 어떤 종목이 시간표에 없거나 표기가 다른지 한눈에 확인 가능.
+// ─────────────────────────────────────────────────────────────────────
+app.get('/api/display/roster/unmatched/:compId', (req, res) => {
+    try {
+        const compId = parseInt(req.params.compId);
+        if (!compId) return res.status(400).json({ error: 'competition_id required' });
+        const rows = db.prepare(`
+            SELECT event_name, round, division, gender, COUNT(*) AS cnt
+            FROM display_roster
+            WHERE competition_id=? AND event_id IS NULL
+            GROUP BY event_name, round, division, gender
+            ORDER BY event_name, round, division, gender
+        `).all(compId);
+        const total = db.prepare('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NULL').get(compId).c;
+        res.json({ success: true, total_unmatched: total, groups: rows });
+    } catch (e) {
+        console.error('unmatched report error:', e);
+        res.status(500).json({ error: '미매칭 리포트 조회 실패: ' + e.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // 고아 event 정리 API (노출용 대회 한정)
 //   사용 케이스: 옛날 코드(라벨 자유화 이전)로 시간표를 올렸을 때 잘못된
 //                division/gender 로 만들어진 event 들이 DB에 남아있음.
@@ -11016,38 +11143,40 @@ function autoLinkDisplayTimetable(compId) {
     let createdEvents = 0;
     let nextSort = events.length;
 
+    // 시간표 측에서도 동일한 정규화 기준 사용 (매칭 표기 차이 제거)
+    function divNorm(d) { return normalizeDivisionLabel(d || ''); }
+
     ttRows.forEach(tt => {
         if (tt.event_id) return; // already linked
         const parsed = parseDisplayRound(tt.round);
-        const jbParsed = parseJongbyul(tt.jongbyul);
+        const jbParsed = parseJongbyulNormalized(tt.jongbyul);
 
-        // For combined sub-events, match to parent combined event
+        // 종합 sub-event는 부모 이벤트(N종경기)에 연결
         let targetName = tt.event_name;
-        const isCombinedSub = /^\d+종\(\d+\)/.test(tt.round);
+        const isCombinedSub = parsed.is_combined && parsed.combined_n;
         if (isCombinedSub) {
-            const m = tt.round.match(/^(\d+)종/);
-            if (m) targetName = m[1] + '종경기';
+            targetName = parsed.combined_n + '종경기';
         }
         const targetRound = isCombinedSub ? 'final' : parsed.round_type;
+        const targetDivNorm = divNorm(jbParsed.division);
 
         // 1) Strict match: name + gender + division + round_type 모두 일치
         let match = events.find(ev => {
             if (norm(ev.name) !== norm(targetName)) return false;
-            if (jbParsed.gender && ev.gender !== jbParsed.gender) return false;
-            if (jbParsed.division && ev.division !== jbParsed.division) return false;
+            if (jbParsed.gender && ev.gender && ev.gender !== jbParsed.gender) return false;
+            if (targetDivNorm && divNorm(ev.division) !== targetDivNorm) return false;
             return ev.round_type === targetRound;
         });
 
         // 2) Auto-create: 매칭 실패 시, parseJongbyul이 division을 추출했다면 누락된 event를 자동 생성
-        //    (기존 잘못된 division의 event는 그대로 두되, 정확한 라벨의 event를 새로 생성)
-        if (!match && jbParsed.division) {
+        if (!match && targetDivNorm) {
             const cat = guessCat(targetName);
-            const info = insEvent.run(compId, targetName, cat, jbParsed.gender || 'X', targetRound, jbParsed.division, nextSort++);
+            const info = insEvent.run(compId, targetName, cat, jbParsed.gender || 'X', targetRound, targetDivNorm, nextSort++);
             match = {
                 id: info.lastInsertRowid,
                 name: targetName,
                 gender: jbParsed.gender || 'X',
-                division: jbParsed.division,
+                division: targetDivNorm,
                 round_type: targetRound,
                 category: cat,
             };
@@ -11207,7 +11336,8 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                 return { name: koreanPart, team: '' };
             }
 
-            // --- Division/Gender mapping ---
+            // --- Division/Gender mapping (명단 PDF용) ---
+            // 출력 division은 항상 normalizeDivisionLabel을 통과시켜 시간표 측 표기와 결정적으로 일치하게 함.
             function parseDivisionMarker(line) {
                 let gender = '', division = '';
                 const orig = line;
@@ -11216,26 +11346,26 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                 // 1) "남초 4학년부", "여초 5학년부" 등 → 초등부
                 let m = orig.match(/^(남|여)초\s*(\d+학년부)?$/);
                 if (m) {
-                    return { gender: m[1] === '남' ? 'M' : 'F', division: '초등부' };
+                    return { gender: m[1] === '남' ? 'M' : 'F', division: normalizeDivisionLabel('초등부') };
                 }
                 // 2) "선수권 남자부" / "선수권 여자부" / "선수권 혼성부"
                 m = orig.match(/^선수권\s*(남자|여자|혼성)부?$/);
                 if (m) {
                     const g = m[1] === '남자' ? 'M' : (m[1] === '여자' ? 'F' : 'X');
                     const dv = m[1] === '남자' ? '선수권(남)' : (m[1] === '여자' ? '선수권(여)' : '선수권(혼)');
-                    return { gender: g, division: dv };
+                    return { gender: g, division: normalizeDivisionLabel(dv) };
                 }
                 // 3) "U18 남자부" / "U20 여자부" / "U18 혼성부"
                 m = orig.match(/^U(18|20)\s*(남자|여자|혼성)부?$/i);
                 if (m) {
                     const g = m[2] === '남자' ? 'M' : (m[2] === '여자' ? 'F' : 'X');
                     const dv = `U${m[1]}(${m[2] === '남자' ? '남' : (m[2] === '여자' ? '여' : '혼')})`;
-                    return { gender: g, division: dv };
+                    return { gender: g, division: normalizeDivisionLabel(dv) };
                 }
                 // 4) "꿈나무 남자부" / "꿈나무 여자부" (혹시 등장 시)
                 m = orig.match(/^꿈나무\s*(남자|여자)부?$/);
                 if (m) {
-                    return { gender: m[1] === '남자' ? 'M' : 'F', division: '초등부' };
+                    return { gender: m[1] === '남자' ? 'M' : 'F', division: normalizeDivisionLabel('초등부') };
                 }
 
                 // ── 구형 라벨: "남자/여자" + 중학교부/고등학교부/... ──
@@ -11252,7 +11382,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                     if (line.startsWith(key)) { division = val; break; }
                 }
                 if (!division && line) division = line;
-                return { gender, division };
+                return { gender, division: normalizeDivisionLabel(division) };
             }
 
             // ============================================================
@@ -11612,83 +11742,139 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
 });
 
 // Auto-match roster entries to events
+//
+// 매칭 정책 (2026-05 재작성):
+//   ① division/gender/round_type 정규화는 시간표·명단 양쪽이 동일 헬퍼를 사용 → 표기 차이로 인한
+//      어긋남을 사전 차단 (parseDisplayRound + normalizeDivisionLabel)
+//   ② 종합 sub-event(10종/7종)는 부모 이벤트(10종경기/7종경기)에만 연결.
+//      · 부모 매칭 실패 시: division 표기 fallback만 시도, 절대 일반 종목으로 흘러가지 않음.
+//      · 후보 부모 이름: "10종경기", "10종경기(남)", "남자10종경기", "육상10종경기" 등 다양한 표기 허용.
+//   ③ 일반 종목: name + gender + division + round_type 4개 모두 일치할 때만 strict 매칭.
+//      · Strict 실패 시 fallback은 "division/gender 표기를 normalize한 다음에 비교" 만 허용.
+//        절대로 division 또는 gender 자체를 무시하지 않음 (이전 버그의 직접 원인).
+//      · round_type 표기 차이가 있으면 양쪽 다시 parseDisplayRound로 정규화한 후 비교.
+//   ④ gender가 비어있는 명단(혼성) → ev.gender ∈ {X, ''} 중 하나와 매칭.
+//   ⑤ 매칭이 안 되면 그냥 둠. 잘못된 매칭보다 미매칭이 안전.
 function autoMatchDisplayRoster(compId) {
     const events = db.prepare('SELECT id, name, gender, division, round_type FROM event WHERE competition_id=?').all(compId);
     const unmatched = db.prepare('SELECT id, event_name, round, division, gender FROM display_roster WHERE competition_id=? AND event_id IS NULL').all(compId);
     const updStmt = db.prepare('UPDATE display_roster SET event_id=? WHERE id=?');
 
-    function norm(s) { return (s || '').replace(/\s+/g, '').toLowerCase(); }
-    
-    // Normalize round from roster format to event round_type
-    function roundNorm(r) {
-        if (!r) return 'final';
-        r = r.trim();
-        if (r.includes('예선')) return 'preliminary';
-        if (r.includes('준결') || r.includes('준결승')) return 'semifinal';
-        if (r === '결승' || r === '결승 A,B') return 'final';
-        // Heat patterns like "5-2+6", "4-2", "3-2+2" indicate preliminary rounds
-        if (/^\d+-\d+/.test(r)) return 'preliminary';
-        // Combined events (10종, 7종) are finals
-        if (/\d+종/.test(r)) return 'final';
-        if (r === 'Mixed') return 'final';
-        return 'final';
-    }
-    
-    // Normalize event name for matching
-    function eventNameNorm(name) {
-        if (!name) return '';
-        let n = name.replace(/\s+/g, '');
-        // Remove combined event suffixes like "(10종)" from event_name
+    // ── 정규화 헬퍼 ──
+    function nameNorm(s) {
+        if (!s) return '';
+        let n = s.replace(/\s+/g, '');
+        // 종합경기 접미사 정규화: "10종경기", "100m(10종)" 등에서 (10종)/(7종) 제거
         n = n.replace(/\((\d+종)\)$/, '');
+        // 성별 접미사 제거: "10종경기(남)" / "10종경기 남자" 등의 변형
+        n = n.replace(/\((남|여|혼|남자|여자|혼성)\)$/, '');
+        n = n.replace(/(남자|여자|혼성)$/, '');
+        // 앞 접두어 제거: "남자10종경기", "여자7종경기"
+        n = n.replace(/^(남자|여자|혼성)/, '');
+        // "육상" prefix 제거
+        n = n.replace(/^육상/, '');
         return n.toLowerCase();
     }
 
+    function divNorm(d) { return normalizeDivisionLabel(d || ''); }
+
+    function genderEq(a, b) {
+        const A = (a || '').trim();
+        const B = (b || '').trim();
+        if (A === B) return true;
+        // 혼성: '' / 'X' / undefined 모두 동일 취급
+        const isWild = (g) => !g || g === 'X' || g === '혼' || g === '혼성';
+        if (isWild(A) && isWild(B)) return true;
+        return false;
+    }
+
+    function roundEq(rosterRoundRaw, eventRoundType) {
+        // event.round_type은 시간표 import 시 이미 parseDisplayRound로 만든 값(preliminary/semifinal/final)
+        // 명단의 round 원문(rosterRoundRaw)은 매칭 시점에 한 번 더 parseDisplayRound로 정규화
+        const r = parseDisplayRound(rosterRoundRaw);
+        return r.round_type === (eventRoundType || 'final');
+    }
+
+    // 종합경기 부모 이벤트 후보 매칭: ev.name의 nameNorm 결과가 "Nx종경기"와 일치하면 OK
+    function isCombinedParent(evName, n) {
+        const norm = nameNorm(evName);
+        return norm === `${n}종경기`;
+    }
+
     let matched = 0;
+    let combinedMatched = 0;
+    let strictMatched = 0;
+    let fallbackMatched = 0;
+    let stillUnmatched = 0;
+
     unmatched.forEach(re => {
-        // Check if this is a combined event sub-event (e.g., "100m" with round "10종")
-        const isCombined = /\d+종/.test(re.round);
-        
-        const rosterEventName = eventNameNorm(re.event_name);
-        const rosterRound = roundNorm(re.round);
-        
-        let match = events.find(ev => {
-            const evName = eventNameNorm(ev.name);
-            // For combined events, match the parent combined event
-            if (isCombined) {
-                const combinedName = re.round.replace(/\s/g, '') + '경기'; // e.g., "10종경기"
-                return eventNameNorm(ev.name) === combinedName.toLowerCase() &&
-                    ev.gender === re.gender &&
-                    (ev.division || '') === (re.division || '');
+        const parsed = parseDisplayRound(re.round || '');
+        const isCombined = parsed.is_combined;
+        const rosterDiv = divNorm(re.division);
+        const rosterEvName = nameNorm(re.event_name);
+
+        let match = null;
+
+        // ── (A) 종합 sub-event: 부모 이벤트 매칭 ──
+        if (isCombined && parsed.combined_n) {
+            const n = parsed.combined_n;
+            // (A-1) strict: 부모 + 동일 division + 동일 gender
+            match = events.find(ev =>
+                isCombinedParent(ev.name, n) &&
+                divNorm(ev.division) === rosterDiv &&
+                genderEq(ev.gender, re.gender)
+            );
+            // (A-2) fallback: division 표기가 살짝 다를 가능성 — gender만으로
+            //        단, division 둘 다 비어있지 않은 경우엔 division 일치 강제 (잘못 붙는 것 방지)
+            if (!match && !rosterDiv) {
+                match = events.find(ev =>
+                    isCombinedParent(ev.name, n) &&
+                    genderEq(ev.gender, re.gender)
+                );
             }
-            return evName === rosterEventName &&
-                ev.gender === re.gender &&
-                (ev.division || '') === (re.division || '') &&
-                ev.round_type === rosterRound;
-        });
-        
-        // Fallback: try matching without division (for cases where PDF division detection failed)
-        if (!match && re.division) {
+            // 종합 sub-event는 일반 종목으로 절대 흘러가지 않음 — 여기서 종료
+            if (match) { updStmt.run(match.id, re.id); matched++; combinedMatched++; }
+            else stillUnmatched++;
+            return;
+        }
+
+        // ── (B) 일반 종목 strict 매칭: name + gender + division + round_type 모두 일치 ──
+        match = events.find(ev =>
+            nameNorm(ev.name) === rosterEvName &&
+            divNorm(ev.division) === rosterDiv &&
+            genderEq(ev.gender, re.gender) &&
+            roundEq(re.round, ev.round_type)
+        );
+        if (match) { updStmt.run(match.id, re.id); matched++; strictMatched++; return; }
+
+        // ── (C) Fallback 1: division 표기 차이 흡수 (양쪽 모두 normalize 후 비교)
+        //        ※ rosterDiv가 빈 문자열일 때만 division 비교를 생략. 그렇지 않으면 division mismatch는 절대 매칭 X.
+        if (rosterDiv === '') {
             match = events.find(ev =>
-                eventNameNorm(ev.name) === rosterEventName &&
-                ev.gender === re.gender &&
-                ev.round_type === rosterRound
+                nameNorm(ev.name) === rosterEvName &&
+                genderEq(ev.gender, re.gender) &&
+                roundEq(re.round, ev.round_type)
             );
+            if (match) { updStmt.run(match.id, re.id); matched++; fallbackMatched++; return; }
         }
-        
-        // Fallback: match by event name + round only (ignore gender if not set)
-        if (!match && !re.gender) {
-            match = events.find(ev =>
-                eventNameNorm(ev.name) === rosterEventName &&
-                ev.round_type === rosterRound &&
-                ev.division === '일반부'
-            );
-        }
-        
-        if (match) {
-            updStmt.run(match.id, re.id);
-            matched++;
-        }
+
+        // ── (D) Fallback 2: round_type만 'final' 가정한 매칭 (예선만 있고 결승 event가 없는 케이스 대비)
+        //        예: 1500m 결승만 시간표에 있고 명단도 결승 → strict에서 잡혀야 하지만, round_type이
+        //            엉뚱하게 들어간 레거시 데이터를 위해 round_type 비교를 한 번 더 느슨하게.
+        //        단, 반드시 division + gender는 일치해야 함.
+        match = events.find(ev =>
+            nameNorm(ev.name) === rosterEvName &&
+            divNorm(ev.division) === rosterDiv &&
+            genderEq(ev.gender, re.gender)
+        );
+        if (match) { updStmt.run(match.id, re.id); matched++; fallbackMatched++; return; }
+
+        stillUnmatched++;
     });
+
+    if (matched > 0 || stillUnmatched > 0) {
+        console.log(`[autoMatchDisplayRoster] comp=${compId}: matched=${matched} (strict=${strictMatched}, combined=${combinedMatched}, fallback=${fallbackMatched}), unmatched=${stillUnmatched}`);
+    }
     return matched;
 }
 
@@ -12169,6 +12355,52 @@ const broadcastSSEAndWS = function(eventType, data) {
 // We achieve this by re-assigning the function variable in the closure
 // Since broadcastSSE is used throughout server.js, we wrap it:
 
+// ─────────────────────────────────────────────────────────────────────
+// 일회성 마이그레이션: 기존 DB의 division/round_type 표기 정규화
+//   · event.division: "선수권 남자부" → "선수권(남)", "중학교부" → "중등부" 등
+//   · event.round_type: "결승 2조"/"결승" 등 자유 텍스트 → preliminary/semifinal/final
+//   · display_roster.division: 동일하게 정규화
+// 멱등(idempotent) 함수 — 재실행해도 안전. 서버 시작 시 한 번 자동 실행.
+// ─────────────────────────────────────────────────────────────────────
+function migrateNormalizeDivisionAndRound() {
+    try {
+        // 1) event.division 정규화
+        const events = db.prepare('SELECT id, division, round_type FROM event WHERE division IS NOT NULL OR round_type IS NOT NULL').all();
+        const updEv = db.prepare('UPDATE event SET division=?, round_type=? WHERE id=?');
+        let evChanged = 0;
+        events.forEach(ev => {
+            const newDiv = normalizeDivisionLabel(ev.division || '');
+            // round_type 정규화: 이미 preliminary/semifinal/final 이면 그대로, 아니면 parseDisplayRound로 변환
+            let newRound = ev.round_type;
+            if (newRound && !['preliminary', 'semifinal', 'final'].includes(newRound)) {
+                newRound = parseDisplayRound(newRound).round_type;
+            }
+            if ((newDiv !== (ev.division || '')) || (newRound !== ev.round_type)) {
+                updEv.run(newDiv, newRound, ev.id);
+                evChanged++;
+            }
+        });
+
+        // 2) display_roster.division 정규화
+        const rosters = db.prepare("SELECT id, division FROM display_roster WHERE division IS NOT NULL AND division <> ''").all();
+        const updRo = db.prepare('UPDATE display_roster SET division=? WHERE id=?');
+        let roChanged = 0;
+        rosters.forEach(r => {
+            const newDiv = normalizeDivisionLabel(r.division || '');
+            if (newDiv !== (r.division || '')) {
+                updRo.run(newDiv, r.id);
+                roChanged++;
+            }
+        });
+
+        if (evChanged > 0 || roChanged > 0) {
+            console.log(`[migrate] division/round normalize: event ${evChanged}건, display_roster ${roChanged}건 보정됨`);
+        }
+    } catch (e) {
+        console.warn('[migrate] division/round normalize 경고:', e.message);
+    }
+}
+
 server.listen(PORT, '0.0.0.0', () => {
     try {
         const compCount = db.prepare('SELECT COUNT(*) as c FROM competition').get().c;
@@ -12181,4 +12413,6 @@ server.listen(PORT, '0.0.0.0', () => {
     } catch(e) {
         console.log(`\n  Pace Rise Competition OS v5 — port ${PORT}\n  http://localhost:${PORT}/\n`);
     }
+    // 시작 직후 일회성 마이그레이션 실행 (멱등)
+    try { migrateNormalizeDivisionAndRound(); } catch(e) { console.warn('migrate failed:', e.message); }
 });
