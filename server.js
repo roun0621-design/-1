@@ -11621,23 +11621,36 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
                         lastEntryIdx = -1;
                         lastSeq = 0;
                         const afterHeat = line.replace(/^\d+조/, '');
-                        noSeqMode = (afterHeat && /\S/.test(afterHeat) && !/\s/.test(afterHeat));
+                        // 핵심 규칙:
+                        //  · '순' 키워드가 들어가면 → 무조건 lastSeq 추적 모드 (noSeqMode=false)
+                        //    (1500m 1조처럼 출전 인원이 10명을 넘어 두자리 순번이 나올 수 있음)
+                        //  · '레인' 키워드만 있거나 키워드가 없을 때만 → 공백 유무로 noSeqMode 결정
+                        //    (레인은 1~9 한자리이므로 noSeqMode 적용 안전)
+                        if (/순/.test(afterHeat)) {
+                            noSeqMode = false;
+                        } else if (afterHeat && /\S/.test(afterHeat) && !/\s/.test(afterHeat)) {
+                            noSeqMode = true;
+                        } else {
+                            noSeqMode = false;
+                        }
                         relayCurrentLane = null;
                         continue;
                     }
                     // 비-조 헤더 "레인번호성명소속" / "레인  번호성명소속" (릴레이/필드)
-                    if (/^(?:레인|순)\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?$/.test(line)) {
+                    // 주의: '순'은 여기서 매칭하지 않음 — 순은 lastSeq 추적이 필요하므로 아래 별도 분기
+                    if (/^레인\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?$/.test(line)) {
                         laneHeaderSeen = true;
                         lastSeq = 0;
-                        noSeqMode = true; // 레인 사용 (순 아님)
+                        noSeqMode = true; // 레인은 1~9 한자리 → noSeqMode 안전
                         relayCurrentLane = null;
                         continue;
                     }
-                    // 필드 종목 "순번호성명소속" — 순 사용
-                    if (/^순\s*번호\s*성명\s*소속$/.test(line) || /^순번호성명소속$/.test(line)) {
+                    // 필드 종목 "순번호성명소속" — 순 사용 (10명+ 가능 → lastSeq 추적 필수)
+                    if (/^순\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?$/.test(line)) {
                         laneHeaderSeen = true;
                         lastSeq = 0;
                         noSeqMode = false;
+                        relayCurrentLane = null;
                         continue;
                     }
                     if (/^번호\s*성명/.test(line)) continue;

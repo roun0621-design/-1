@@ -212,9 +212,14 @@ function parsePageLines(pageLines, pageDiv) {
             // 헤더 안에 공백이 있는지(=순 사용) 없는지(=순 없음) 판별
             // line 원본에서 첫 "조" 이후 공백 유무 체크
             const afterHeat = line.replace(/^\d+조/, '');
-            // afterHeat 가 공백 없이 "레인번호성명소속" 처럼 붙어 있으면 noSeq 모드
-            // afterHeat 가 비어있거나 공백 + 키워드 면 일반 모드
-            if (afterHeat && /\S/.test(afterHeat) && !/\s/.test(afterHeat)) {
+            // 핵심 규칙:
+            //  · '순' 키워드가 들어가면 → 무조건 lastSeq 추적 모드 (noSeqMode=false)
+            //    (1500m 1조처럼 출전 인원이 10명을 넘어 두자리 순번이 나올 수 있음)
+            //  · '레인' 키워드만 있거나 키워드가 없을 때만 → 공백 유무로 noSeqMode 결정
+            //    (레인은 1~9 한자리이므로 noSeqMode 적용 안전)
+            if (/순/.test(afterHeat)) {
+                noSeqMode = false;
+            } else if (afterHeat && /\S/.test(afterHeat) && !/\s/.test(afterHeat)) {
                 noSeqMode = true;
             } else {
                 noSeqMode = false;
@@ -225,22 +230,23 @@ function parsePageLines(pageLines, pageDiv) {
         }
 
         // "레인번호성명소속" / "레인  번호성명소속" 형태의 비-조 헤더 (릴레이/필드 등)
-        if (/^(?:레인|순)\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?$/.test(line)) {
+        // 주의: '순'은 여기서 매칭하지 않음 — 순은 lastSeq 추적이 필요하므로 아래 별도 분기
+        if (/^레인\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?$/.test(line)) {
             lastSeq = 0;
-            // 이 형태 헤더는 모두 "공백 분리 또는 키워드만" → noSeq 여부는 다음 데이터 행 자체로 판단
-            // 일반적으로 릴레이 헤더("레인번호성명소속" 붙음)는 noSeq, 트랙 헤더("레인  번호성명소속" 공백)는 noSeq
-            // 둘 다 순(seq)을 쓰지 않고 레인을 쓰므로 noSeqMode 켠다
+            // 레인 헤더는 항상 한자리 레인(1~9) 사용 → noSeqMode 켠다
             noSeqMode = true;
             currentHeat = currentHeat || null;
             relayCurrentLane = null;
             relayPushedForLane = false;
             continue;
         }
-        // "순번호성명소속" — 필드 종목, 순 사용
-        if (/^순\s*번호\s*성명\s*소속$/.test(line) || /^순번호성명소속$/.test(line)) {
+        // "순번호성명소속" — 필드 종목, 순 사용 (10명+ 가능 → lastSeq 추적 필수)
+        if (/^순\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?$/.test(line)) {
             lastSeq = 0;
             noSeqMode = false;
             currentHeat = currentHeat || null;
+            relayCurrentLane = null;
+            relayPushedForLane = false;
             continue;
         }
 
