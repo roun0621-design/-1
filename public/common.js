@@ -1287,18 +1287,64 @@ async function openTimetable(compId) {
         // Day tabs
         const tabContainer = document.getElementById('tt-day-tabs');
 
-        // Auto-detect current day based on competition start_date (KST)
+        // 일차의 마지막 경기 시작시각(분) 계산 헬퍼
+        function _ttModalLastEventMin(dayNum) {
+            const dd = data.days[dayNum];
+            if (!dd) return -1;
+            let last = -1;
+            ['track','field'].forEach(sec => {
+                (dd[sec] || []).forEach(it => {
+                    if (!it.time) return;
+                    const m = String(it.time).match(/^(\d{1,2}):(\d{2})/);
+                    if (!m) return;
+                    const mins = parseInt(m[1],10)*60 + parseInt(m[2],10);
+                    if (mins > last) last = mins;
+                });
+            });
+            return last;
+        }
+
+        // Auto-detect current day with 30-minute transition rule
+        // 규칙: 오늘이 N일차이고 (마지막 경기 시작 + 30분) 지나면 N+1일차 기본 활성.
+        //       대회 마지막 N일차 + 30분 지나면 1일차로 폴백(대회 종료 후 기본 표시).
+        const _TT_NEXT_DAY_OFFSET_MIN = 30;
         let activeDay = dayKeys[0]; // fallback: first day
+        let _allEnded = false; // 대회 전부 종료 여부 (정보용)
         if (data.start_date) {
             const now = new Date(); // browser local time (KST)
             const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
             const start = new Date(data.start_date + 'T00:00:00');
             const today = new Date(todayStr + 'T00:00:00');
             const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24)) + 1;
-            if (dayKeys.includes(diffDays)) {
-                activeDay = diffDays;
+            const nowMin = now.getHours()*60 + now.getMinutes();
+
+            if (diffDays < dayKeys[0]) {
+                // 대회 시작 전
+                activeDay = dayKeys[0];
+            } else if (dayKeys.includes(diffDays)) {
+                // 오늘이 대회 일차 범위 안
+                const lastMin = _ttModalLastEventMin(diffDays);
+                if (lastMin >= 0 && nowMin >= lastMin + _TT_NEXT_DAY_OFFSET_MIN) {
+                    // 오늘 + 30분 지남 → 다음 일차로
+                    const nextDay = dayKeys.find(d => d > diffDays);
+                    if (nextDay) {
+                        activeDay = nextDay;
+                    } else {
+                        // 마지막 날이었음 → 대회 종료, 1일차 기본 표시
+                        activeDay = dayKeys[0];
+                        _allEnded = true;
+                    }
+                } else {
+                    activeDay = diffDays;
+                }
             } else if (diffDays > dayKeys[dayKeys.length - 1]) {
-                activeDay = dayKeys[dayKeys.length - 1]; // last day if past
+                // 대회 마지막 일차도 지남 → 1일차 기본 표시
+                activeDay = dayKeys[0];
+                _allEnded = true;
+            } else {
+                // 사이의 휴식일 등 → 가장 가까운 미래 일차
+                const futureDay = dayKeys.find(d => d >= diffDays);
+                activeDay = futureDay || dayKeys[0];
             }
         }
         // Store current HH:MM for highlighting

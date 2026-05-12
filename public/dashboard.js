@@ -178,6 +178,55 @@ function _ttFlattenDay(dayNum) {
     return all;
 }
 
+// 일차의 마지막 경기 시작시각(분)을 반환 (없으면 -1)
+function _ttLastEventMin(dayNum) {
+    const items = _ttFlattenDay(dayNum);
+    let last = -1;
+    for (const it of items) {
+        const m = _ttToMin(it.time);
+        if (m > last) last = m;
+    }
+    return last;
+}
+
+// 히어로 카드 전환 임계값(분): 마지막 경기 시작시각 + 이 분만큼 지나면 다음 일차로
+const _HERO_NEXT_DAY_OFFSET_MIN = 30;
+
+// 현재 시각 기준 화면에 보여줄 day 번호 결정
+// 규칙: 오늘이 N일차이고 (오늘 마지막 경기 시작시각 + 30분)이 지났으면 N+1일차로 전환.
+//       마지막 N일차 + 30분이 지나면 null (대회 종료) 반환.
+// 대회 시작 전이면 1일차(또는 가장 빠른 일차).
+function _ttGetTargetDay() {
+    const days = _timetableFull.days || {};
+    const dayKeys = Object.keys(days).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+    if (dayKeys.length === 0) return null;
+
+    const todayDay = _ttGetTodayDay();
+    // 대회 시작 전 (todayDay == null 또는 dayKeys[0]보다 작음)
+    if (todayDay == null || todayDay < dayKeys[0]) return dayKeys[0];
+
+    // 오늘이 대회 일차 범위 안에 있는 경우
+    if (days[todayDay]) {
+        const now = new Date();
+        const nowMin = now.getHours()*60 + now.getMinutes();
+        const lastMin = _ttLastEventMin(todayDay);
+        // 마지막 경기 시작 + 30분이 지나면 다음 일차로
+        if (lastMin >= 0 && nowMin >= lastMin + _HERO_NEXT_DAY_OFFSET_MIN) {
+            // 다음 일차 찾기
+            const nextDay = dayKeys.find(d => d > todayDay);
+            if (nextDay) return nextDay;
+            // 다음 일차 없음 → 대회 종료
+            return null;
+        }
+        return todayDay;
+    }
+
+    // 오늘이 대회 일차에 없는 경우 (예: 휴식일 또는 대회 끝난 후)
+    // 오늘보다 큰 일차가 남아있으면 그걸 보여주고, 없으면 종료
+    const futureDay = dayKeys.find(d => d >= todayDay);
+    return futureDay || null;
+}
+
 // 히어로 시간표 카드 갱신
 function renderHeroSchedule() {
     const card = document.getElementById('hero-schedule');
@@ -189,15 +238,22 @@ function renderHeroSchedule() {
         card.style.display = 'none';
         return;
     }
+
+    // 4시간 전환 규칙으로 보여줄 일차 결정 (null이면 대회 종료)
+    const targetDay = _ttGetTargetDay();
+    if (targetDay == null) {
+        // 모든 경기 종료 → 히어로 카드 숨김
+        card.style.display = 'none';
+        return;
+    }
     card.style.display = 'flex';
 
-    const todayDay = _ttGetTodayDay();
-    const targetDay = (todayDay && days[todayDay]) ? todayDay : dayKeys[0];
     const dayItems = _ttFlattenDay(targetDay);
 
     // 현재 시각 기준 진행중/다음 종목 찾기
     const now = new Date();
     const nowMin = now.getHours()*60 + now.getMinutes();
+    const todayDay = _ttGetTodayDay();
     const isToday = (todayDay === targetDay);
 
     let liveItem = null, nextItem = null;
@@ -213,6 +269,7 @@ function renderHeroSchedule() {
             }
         }
     }
+    // 다음 경기 못 찾았으면(혹은 다음 날로 전환된 경우) 해당 일차 첫 경기
     if (!nextItem && dayItems.length > 0) nextItem = dayItems[0];
 
     const totalCount = dayItems.length;
@@ -235,7 +292,10 @@ function renderHeroSchedule() {
         card.classList.remove('live');
         iconEl.textContent = '📅';
         titleEl.innerHTML = `시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
-        subEl.innerHTML = `총 ${totalCount}경기 예정`;
+        const subTxt = nextItem
+            ? `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`
+            : `총 ${totalCount}경기 예정`;
+        subEl.innerHTML = subTxt;
     }
 }
 
