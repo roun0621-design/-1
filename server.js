@@ -15,6 +15,7 @@ const { generateFullRecordPdf } = require('./lib/fullRecordPdf');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const { initDatabase, DB_PATH } = require('./db/init');
+const { getDb } = require('./lib/db');
 const WebSocket = require('ws');
 const PDFDocument = require('pdfkit');
 const { createCanvas, registerFont } = require('canvas');
@@ -139,7 +140,10 @@ app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'public'
 // /open — Android intent:// 중간 리다이렉트 페이지 (카카오톡/인스타 인앱브라우저 대응)
 app.get('/open', (req, res) => res.sendFile(path.join(__dirname, 'public', 'open.html')));
 
-const db = initDatabase();
+// DB 어댑터 사용 (lib/db.js).
+// 기존 better-sqlite3 인터페이스 100% 호환 — db.prepare/.get/.all/.run/.exec/.transaction/.pragma 모두 정상 동작.
+// 환경변수 DB_BACKEND=sqlite (기본) / postgres (예정)로 백엔드 전환 가능.
+const db = getDb();
 
 // ---- Access Keys (persisted in DB via system_config table) ----
 // Ensure tables exist
