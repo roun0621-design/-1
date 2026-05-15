@@ -1382,7 +1382,7 @@ app.delete('/api/competitions/:id', async (req, res) => {
     };
 
     try {
-        db.transaction(async () => {
+        await db.transaction(async () => {
             const events = await db.all('SELECT id FROM event WHERE competition_id=?', comp.id);
             const eventIds = events.map(e => e.id);
 
@@ -1563,7 +1563,7 @@ app.delete('/api/home-popups/:id', async (req, res) => {
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     const old = await db.get('SELECT * FROM home_popup WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
-    db.transaction(async () => {
+    await db.transaction(async () => {
         await db.run('DELETE FROM home_popup_section WHERE popup_id=?', old.id);
         await db.run('DELETE FROM home_popup WHERE id=?', old.id);
     })();
@@ -2338,7 +2338,7 @@ app.post('/api/combined/sync-checkin', async (req, res) => {
     const parentEntries = await db.all('SELECT * FROM event_entry WHERE event_id=?', event_id);
     const subEvents = await db.all('SELECT id FROM event WHERE parent_event_id=?', event_id);
     let synced = 0;
-    db.transaction(async () => {
+    await db.transaction(async () => {
         for (const pe of parentEntries) {
             for (const sub of subEvents) {
                 const subEntry = await db.get('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?', sub.id, pe.athlete_id);
@@ -2687,7 +2687,7 @@ app.post('/api/events/:id/create-semifinal', async (req, res) => {
     }
 
     let semiEventId;
-    db.transaction(async () => {
+    await db.transaction(async () => {
         const upsertQ = db.prepare(`INSERT INTO qualification_selection (event_id,event_entry_id,selected,approved,approved_by,qualification_type) VALUES (?,?,1,1,'admin',?)
             ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=1,approved=1,qualification_type=excluded.qualification_type`);
         for (const sel of qualifiedSels) {
@@ -2733,7 +2733,7 @@ app.delete('/api/events/:id', async (req, res) => {
     if (!_isDisplayMode && event.round_type === 'preliminary' && !event.parent_event_id) {
         return res.status(400).json({ error: '예선은 삭제할 수 없습니다.' });
     }
-    db.transaction(async () => {
+    await db.transaction(async () => {
         const heats = await db.all('SELECT id FROM heat WHERE event_id=?', event.id);
         for (const h of heats) {
             await db.run('DELETE FROM result WHERE heat_id=?', h.id);
@@ -2790,7 +2790,7 @@ app.post('/api/events/:id/sub-events', async (req, res) => {
     const nextSort = (maxSort?.m || 0) + 1;
 
     let subEventId;
-    db.transaction(async () => {
+    await db.transaction(async () => {
         const info = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)', parent.competition_id, subName, category, parent.gender, 'final', 'heats_generated', parent.id, nextSort);
         subEventId = info.lastInsertRowid;
 
@@ -2857,7 +2857,7 @@ app.delete('/api/events/:id/sub-events/:subId', async (req, res) => {
     const sub = await db.get('SELECT * FROM event WHERE id=? AND parent_event_id=?', req.params.subId, parent.id);
     if (!sub) return res.status(404).json({ error: 'Sub-event not found' });
 
-    db.transaction(async () => {
+    await db.transaction(async () => {
         const heats = await db.all('SELECT id FROM heat WHERE event_id=?', sub.id);
         for (const h of heats) {
             await db.run('DELETE FROM result WHERE heat_id=?', h.id);
@@ -2901,7 +2901,7 @@ app.post('/api/events/:id/sub-events/sync-athletes', async (req, res) => {
     const subs = await db.all('SELECT id FROM event WHERE parent_event_id=?', parent.id);
     let addedCount = 0;
 
-    db.transaction(async () => {
+    await db.transaction(async () => {
         for (const sub of subs) {
             const existingAthletes = new Set(
                 await db.all('SELECT athlete_id FROM event_entry WHERE event_id=?', sub.id).map(e => e.athlete_id)
@@ -3375,7 +3375,7 @@ app.delete('/api/admin/athletes/:id', async (req, res) => {
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const ath = await db.get('SELECT * FROM athlete WHERE id=?', req.params.id);
     if (!ath) return res.status(404).json({ error: 'Not found' });
-    db.transaction(async () => {
+    await db.transaction(async () => {
         const entries = await db.all('SELECT id FROM event_entry WHERE athlete_id=?', ath.id);
         for (const e of entries) {
             await db.run('DELETE FROM result WHERE event_entry_id=?', e.id);
@@ -3455,7 +3455,7 @@ app.post('/api/admin/athletes/:id/events', async (req, res) => {
     const exists = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, ath.id);
     if (exists) return res.status(409).json({ error: '이미 등록된 종목입니다.' });
 
-    db.transaction(async () => {
+    await db.transaction(async () => {
         // 1. Create event_entry
         const info = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", event_id, ath.id);
         const entryId = info.lastInsertRowid;
@@ -3481,7 +3481,7 @@ app.delete('/api/admin/athletes/:athleteId/events/:entryId', async (req, res) =>
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const entry = await db.get('SELECT * FROM event_entry WHERE id=?', req.params.entryId);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
-    db.transaction(async () => {
+    await db.transaction(async () => {
         await db.run('DELETE FROM result WHERE event_entry_id=?', entry.id);
         await db.run('DELETE FROM height_attempt WHERE event_entry_id=?', entry.id);
         await db.run('DELETE FROM heat_entry WHERE event_entry_id=?', entry.id);
@@ -3670,7 +3670,7 @@ app.delete('/api/admin/events/:id', async (req, res) => {
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Not found' });
-    db.transaction(async () => {
+    await db.transaction(async () => {
         const subs = await db.all('SELECT id FROM event WHERE parent_event_id=?', event.id);
         for (const sub of subs) {
             const subHeats = await db.all('SELECT id FROM heat WHERE event_id=?', sub.id);
@@ -3707,7 +3707,7 @@ app.delete('/api/admin/heats/:id', async (req, res) => {
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
-    db.transaction(async () => {
+    await db.transaction(async () => {
         await db.run('DELETE FROM result WHERE heat_id=?', heat.id);
         await db.run('DELETE FROM height_attempt WHERE heat_id=?', heat.id);
         await db.run('DELETE FROM heat_entry WHERE heat_id=?', heat.id);
@@ -3723,7 +3723,7 @@ app.post('/api/admin/heats/:id/remove-entry', async (req, res) => {
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
     const he = await db.get('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
     if (!he) return res.status(404).json({ error: '해당 선수가 이 조에 없습니다.' });
-    db.transaction(async () => {
+    await db.transaction(async () => {
         // Remove from heat
         await db.run('DELETE FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
         // Optionally also delete the event_entry (full removal from event)
@@ -3739,10 +3739,10 @@ app.post('/api/admin/heats/:id/remove-entry', async (req, res) => {
     broadcastSSE('entry_status', { event_entry_id, status: 'removed' });
     res.json({ success: true });
 });
-app.post('/api/admin/heats/:id/move-entry', (req, res) => {
+app.post('/api/admin/heats/:id/move-entry', async (req, res) => {
     const { admin_key, event_entry_id, target_heat_id, lane_number } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    db.transaction(async () => {
+    await db.transaction(async () => {
         // Remove from current heat
         await db.run('DELETE FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
         // Add to target heat
@@ -3771,11 +3771,11 @@ app.post('/api/admin/events/:id/force-status', async (req, res) => {
 // ============================================================
 // ADMIN: DB RESET (per competition)
 // ============================================================
-app.post('/api/admin/reset-db', (req, res) => {
+app.post('/api/admin/reset-db', async (req, res) => {
     const { admin_key, competition_id } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
-    db.transaction(async () => {
+    await db.transaction(async () => {
         const events = await db.all('SELECT id FROM event WHERE competition_id=?', competition_id);
         for (const evt of events) {
             const heats = await db.all('SELECT id FROM heat WHERE event_id=?', evt.id);
@@ -3892,7 +3892,7 @@ app.post('/api/federation/preview', upload.single('file'), (req, res) => {
     } catch (err) { res.status(500).json({ error: '파싱 오류: ' + err.message }); }
 });
 
-app.post('/api/federation/import', upload.single('file'), (req, res) => {
+app.post('/api/federation/import', upload.single('file'), async (req, res) => {
     if (!isAdminKey(req.body.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!req.file) return res.status(400).json({ error: '파일이 필요합니다.' });
     const competition_id = parseInt(req.body.competition_id);
@@ -3912,7 +3912,7 @@ app.post('/api/federation/import', upload.single('file'), (req, res) => {
         headers.forEach((h, idx) => { const key = String(h).trim(); if (FED_RELAY_MAP[key]) relayColMap[key] = { idx, ...FED_RELAY_MAP[key] }; });
         let stats = { athletes: 0, events: 0, entries: 0, heats: 0, relayTeams: 0 };
 
-        db.transaction(async () => {
+        await db.transaction(async () => {
             if (clearExisting) {
                 const evts = await db.all('SELECT id FROM event WHERE competition_id=?', competition_id);
                 for (const evt of evts) {
@@ -4292,7 +4292,7 @@ app.post('/api/federation/import', upload.single('file'), (req, res) => {
 //   (A) Fixed: 배번 | 선수명 | 소속 | 성별 | 바코드
 //   (B) Federation: 팀명 | 선수명 | 성별 | 생년월일 | 종목1 | … | 바코드
 // ============================================================
-app.post('/api/athletes/upload', upload.single('file'), (req, res) => {
+app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
     if (!isAdminKey(req.body.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!req.file) return res.status(400).json({ error: '파일이 필요합니다.' });
     const competition_id = parseInt(req.body.competition_id);
@@ -4327,7 +4327,7 @@ app.post('/api/athletes/upload', upload.single('file'), (req, res) => {
         });
         let stats = { added: 0, updated: 0, skipped: 0 };
 
-        db.transaction(async () => {
+        await db.transaction(async () => {
             if (clearExisting) {
                 await db.run('DELETE FROM athlete WHERE competition_id=?', competition_id);
             }
@@ -4501,7 +4501,7 @@ app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => 
 // 카테고리: track, field_distance, field_height, relay, combined, road
 // 라운드: final(기본), preliminary, semifinal
 // ============================================================
-app.post('/api/events/upload', upload.single('file'), (req, res) => {
+app.post('/api/events/upload', upload.single('file'), async (req, res) => {
     if (!isAdminKey(req.body.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!req.file) return res.status(400).json({ error: '파일이 필요합니다.' });
     const competition_id = parseInt(req.body.competition_id);
@@ -4525,7 +4525,7 @@ app.post('/api/events/upload', upload.single('file'), (req, res) => {
 
         let stats = { added: 0, skipped: 0 };
 
-        db.transaction(async () => {
+        await db.transaction(async () => {
             if (clearExisting) {
                 const evts = await db.all('SELECT id FROM event WHERE competition_id=?', competition_id);
                 for (const evt of evts) {
@@ -5035,7 +5035,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
         const { eventGroups, mergeWarnings } = parseHeatAssignmentExcel(req.file.path);
         const stats = { updated: 0, skipped: 0, skippedUnchanged: 0, skippedHasResults: 0, notFound: 0, athletesAdded: 0, entriesCreated: 0 };
 
-        db.transaction(async () => {
+        await db.transaction(async () => {
             // Cache all athletes for this competition by name+team
             const athleteCache = new Map();
             await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id)
@@ -5407,7 +5407,7 @@ app.get('/api/pacing/:id', async (req, res) => {
 
 // POST create or update full pacing config (upsert)
 // Body: { competition_id, event_name, notice, colors: [{ color_key, sort_order, remark, segments: [{ segment_order, distance_meters, lap_seconds }] }] }
-app.post('/api/pacing', (req, res) => {
+app.post('/api/pacing', async (req, res) => {
     const key = req.body.admin_key || req.headers['x-admin-key'] || '';
     if (!isOperationKey(key)) return res.status(403).json({ error: '인증 필요' });
     const { competition_id, event_name, notice, colors } = req.body;
@@ -5438,7 +5438,7 @@ app.post('/api/pacing', (req, res) => {
         return cfg.id;
     });
     try {
-        const cfgId = trx();
+        const cfgId = await trx();
         opLog(`페이싱 라이트 설정 저장: ${event_name}`, 'pacing', getJudgeName(key), competition_id);
         broadcastSSE('pacing_update', { competition_id, event_name });
         res.json({ ok: true, id: cfgId });
@@ -5734,7 +5734,7 @@ app.post('/api/scoreboard/preview', upload.array('files', 50), async (req, res) 
  * POST /api/scoreboard/import
  * Apply .lif results to DB — upsert results for matched athletes
  */
-app.post('/api/scoreboard/import', upload.array('files', 50), (req, res) => {
+app.post('/api/scoreboard/import', upload.array('files', 50), async (req, res) => {
     try {
         const { competition_id } = req.body;
         if (!competition_id) return res.status(400).json({ error: 'competition_id 필수' });
@@ -5937,7 +5937,7 @@ app.post('/api/scoreboard/import', upload.array('files', 50), (req, res) => {
             }
         });
 
-        importTx();
+        await importTx();
         res.json({ success: true, results: importResults });
     } catch (err) {
         console.error('[Scoreboard Import]', err);
@@ -6210,7 +6210,7 @@ app.post('/api/joint-groups', async (req, res) => {
     const groupName = name || events[0].name;
 
     let groupId;
-    db.transaction(async () => {
+    await db.transaction(async () => {
         const info = await db.run('INSERT INTO joint_group (name, joint_scoreboard_key) VALUES (?, ?)', groupName, autoKey);
         groupId = info.lastInsertRowid;
         events.forEach(async (evt, idx) => {
@@ -6273,7 +6273,7 @@ app.delete('/api/joint-groups/:id', async (req, res) => {
     const g = await db.get('SELECT * FROM joint_group WHERE id=?', req.params.id);
     if (!g) return res.status(404).json({ error: 'Joint group not found' });
 
-    db.transaction(async () => {
+    await db.transaction(async () => {
         // Remove backward-compat event_link entries
         const members = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', g.id);
         const ids = members.map(m => m.event_id);
@@ -6307,7 +6307,7 @@ app.post('/api/joint-groups/:id/members', async (req, res) => {
     const existingMembers = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', g.id).map(m => m.event_id);
 
     let added = 0;
-    db.transaction(async () => {
+    await db.transaction(async () => {
         for (const eid of event_ids) {
             const evt = await db.get('SELECT * FROM event WHERE id=?', eid);
             if (!evt) continue;
@@ -6329,11 +6329,11 @@ app.post('/api/joint-groups/:id/members', async (req, res) => {
  * DELETE /api/joint-groups/:groupId/members/:eventId
  * Remove a single event from a joint group
  */
-app.delete('/api/joint-groups/:groupId/members/:eventId', (req, res) => {
+app.delete('/api/joint-groups/:groupId/members/:eventId', async (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const gId = parseInt(req.params.groupId), eId = parseInt(req.params.eventId);
-    db.transaction(async () => {
+    await db.transaction(async () => {
         await db.run('DELETE FROM joint_group_member WHERE joint_group_id=? AND event_id=?', gId, eId);
         // Remove event_link pairs involving this event within the group
         const remaining = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', gId).map(m => m.event_id);
@@ -6386,7 +6386,7 @@ app.post('/api/joint-groups/auto-create', async (req, res) => {
     }
 
     let created = 0;
-    db.transaction(async () => {
+    await db.transaction(async () => {
         for (const [key, events] of Object.entries(eventMap)) {
             if (events.length < 2) continue;
             // Check if already grouped
@@ -7233,7 +7233,7 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
                     insert.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order);
                 });
             });
-            tx(allEntries, uploadedDays);
+            await tx(allEntries, uploadedDays);
             mergeStats.addedCount = allEntries.length;
         } else {
             // SMART MERGE: 행 단위 diff (과거 일차 보존)
@@ -7290,7 +7290,7 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
                     mergeStats.preservedCount += (cnt && cnt.c) || 0;
                 }
             });
-            tx();
+            await tx();
         }
 
         // Auto-link timetable entries to events
@@ -10871,7 +10871,7 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
             };
         });
 
-        const result = tx();
+        const result = await tx();
 
         // Auto-link timetable to events
         try { autoLinkDisplayTimetable(parseInt(competition_id)); } catch(e) { console.warn('Display auto-link warning:', e.message); }

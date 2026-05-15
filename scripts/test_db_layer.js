@@ -199,53 +199,55 @@ sqliteTest('competition 테이블 존재 확인 (스키마 로드)', () => {
     assert.ok(row, 'competition 테이블 없음');
 });
 
-sqliteTest('db.transaction() 작동', () => {
-    const txn = db.transaction(() => {
-        return db.get('SELECT 1 AS x').x;
-    });
-    const r = txn();
-    assert.strictEqual(r, 1);
-});
-
-console.log(`\n  결과: ${sqlitePass} pass / ${sqliteFail} fail\n`);
-
-// ──────────────────────────────────────────────────────────────
-// 3. 싱글톤 동작 확인
-// ──────────────────────────────────────────────────────────────
-console.log('▶ Test Group 3: getDb() 싱글톤 동작');
-console.log('───────────────────────────────────────────────────────');
-
+// db.transaction() / 싱글톤 / 최종 요약 — Phase 2-G 이후 트랜잭션이 async로 통일됐기 때문에
+// 이 뒤의 로직 전체를 async IIFE 안에서 직렬 실행 (출력 순서 보장)
 let singletonPass = 0, singletonFail = 0;
 
-try {
-    const db1 = getDb();
-    const db2 = getDb();
-    assert.strictEqual(db1, db2, '같은 인스턴스여야 함');
-    singletonPass++;
-    console.log('  ✅ getDb() 두 번 호출 시 같은 인스턴스 반환');
-} catch (e) {
-    singletonFail++;
-    console.log(`  ❌ 싱글톤 검증 실패: ${e.message}`);
-}
+(async () => {
+    // ── db.transaction() 작동 (async 시그니처) ──
+    try {
+        const txn = db.transaction(async () => {
+            return db.get('SELECT 1 AS x').x;
+        });
+        const r = await txn();
+        assert.strictEqual(r, 1);
+        sqlitePass++;
+        console.log('  ✅ db.transaction() async 작동');
+    } catch (e) {
+        sqliteFail++;
+        console.log(`  ❌ db.transaction() async 작동: ${e.message}`);
+    }
+    console.log(`\n  결과: ${sqlitePass} pass / ${sqliteFail} fail\n`);
 
-console.log(`\n  결과: ${singletonPass} pass / ${singletonFail} fail\n`);
+    // ── 3. 싱글톤 동작 확인 ──
+    console.log('▶ Test Group 3: getDb() 싱글톤 동작');
+    console.log('───────────────────────────────────────────────────────');
+    try {
+        const db1 = getDb();
+        const db2 = getDb();
+        assert.strictEqual(db1, db2, '같은 인스턴스여야 함');
+        singletonPass++;
+        console.log('  ✅ getDb() 두 번 호출 시 같은 인스턴스 반환');
+    } catch (e) {
+        singletonFail++;
+        console.log(`  ❌ 싱글톤 검증 실패: ${e.message}`);
+    }
+    console.log(`\n  결과: ${singletonPass} pass / ${singletonFail} fail\n`);
 
-// ──────────────────────────────────────────────────────────────
-// 최종 요약
-// ──────────────────────────────────────────────────────────────
-const totalPass = pass + sqlitePass + singletonPass;
-const totalFail = fail + sqliteFail + singletonFail;
+    // ── 최종 요약 ──
+    const totalPass = pass + sqlitePass + singletonPass;
+    const totalFail = fail + sqliteFail + singletonFail;
 
-console.log('═══════════════════════════════════════════════════════');
-console.log(`  최종: ${totalPass} pass / ${totalFail} fail`);
-console.log('═══════════════════════════════════════════════════════');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log(`  최종: ${totalPass} pass / ${totalFail} fail`);
+    console.log('═══════════════════════════════════════════════════════');
 
-// cleanup
-try { db.close(); } catch(e) {}
+    try { db.close(); } catch(e) {}
 
-if (totalFail > 0) {
-    process.exit(1);
-} else {
-    console.log('\n✅ Phase 2-A 검증 통과');
-    process.exit(0);
-}
+    if (totalFail === 0) {
+        console.log('\n✅ Phase 2-A 검증 통과');
+        process.exit(0);
+    } else {
+        process.exit(1);
+    }
+})();
