@@ -1265,9 +1265,9 @@ function autoUpdateCompetitionStatus() {
     db.prepare("UPDATE competition SET status='completed' WHERE status='active' AND end_date < ?").run(today);
 }
 
-app.get('/api/competitions', (req, res) => {
+app.get('/api/competitions', async (req, res) => {
     autoUpdateCompetitionStatus();
-    res.json(db.prepare('SELECT * FROM competition ORDER BY start_date ASC').all());
+    res.json(await db.all('SELECT * FROM competition ORDER BY start_date ASC'));
 });
 // Competitions within 2 weeks (for home top section) — MUST be before /:id
 // 노출 정책:
@@ -1275,16 +1275,16 @@ app.get('/api/competitions', (req, res) => {
 //      · 진행중(active) 대회의 [start_date - 3일, end_date + 3일] 안에 걸치는 대회
 //      · 진행중 대회가 없으면 fallback으로 오늘 ±3일 윈도우 사용
 //  - ?window=all: 전체 대회 (펼침 모드)
-app.get('/api/competitions/recent', (req, res) => {
+app.get('/api/competitions/recent', async (req, res) => {
     const window = (req.query.window || 'active').toLowerCase();
 
     if (window === 'all') {
         // 전체 대회 (펼침 탭에서 사용) — status 우선, 시작일 내림차순
-        const rows = db.prepare(`
+        const rows = await db.all(`
             SELECT * FROM competition
             ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'upcoming' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
                      start_date DESC
-        `).all();
+        `);
         return res.json(rows);
     }
 
@@ -1296,7 +1296,7 @@ app.get('/api/competitions/recent', (req, res) => {
         return d.toISOString().slice(0, 10);
     };
 
-    const activeComps = db.prepare(`SELECT start_date, end_date FROM competition WHERE status='active'`).all();
+    const activeComps = await db.all(`SELECT start_date, end_date FROM competition WHERE status='active'`);
 
     let winStart, winEnd;
     if (activeComps.length > 0) {
@@ -1310,51 +1310,49 @@ app.get('/api/competitions/recent', (req, res) => {
         winEnd = addDays(today, 3);
     }
 
-    const rows = db.prepare(`
+    const rows = await db.all(`
         SELECT * FROM competition
         WHERE status = 'active'
            OR (end_date >= ? AND start_date <= ?)
         ORDER BY CASE WHEN status='active' THEN 0 ELSE 1 END, start_date DESC
-    `).all(winStart, winEnd);
+    `, winStart, winEnd);
     res.json({ window: { start: winStart, end: winEnd, mode: 'active' }, items: rows });
 });
 // Competitions by federation — MUST be before /:id
-app.get('/api/competitions/by-federation/:code', (req, res) => {
-    const rows = db.prepare('SELECT * FROM competition WHERE federation=? ORDER BY start_date DESC').all(req.params.code);
+app.get('/api/competitions/by-federation/:code', async (req, res) => {
+    const rows = await db.all('SELECT * FROM competition WHERE federation=? ORDER BY start_date DESC', req.params.code);
     res.json(rows);
 });
-app.get('/api/competitions/:id', (req, res) => {
-    const c = db.prepare('SELECT * FROM competition WHERE id=?').get(req.params.id);
+app.get('/api/competitions/:id', async (req, res) => {
+    const c = await db.get('SELECT * FROM competition WHERE id=?', req.params.id);
     if (!c) return res.status(404).json({ error: 'Not found' });
     res.json(c);
 });
-app.post('/api/competitions', (req, res) => {
+app.post('/api/competitions', async (req, res) => {
     const { admin_key, name, start_date, end_date, venue, federation, mode } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!name || !start_date || !end_date) return res.status(400).json({ error: '대회명, 시작일, 종료일은 필수입니다.' });
     const compMode = (mode === 'display') ? 'display' : 'operation';
     try {
-        const info = db.prepare('INSERT INTO competition (name,start_date,end_date,venue,federation,mode) VALUES (?,?,?,?,?,?)')
-            .run(name, start_date, end_date, venue || '', federation || '', compMode);
-        const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(info.lastInsertRowid);
+        const info = await db.run('INSERT INTO competition (name,start_date,end_date,venue,federation,mode) VALUES (?,?,?,?,?,?)', name, start_date, end_date, venue || '', federation || '', compMode);
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', info.lastInsertRowid);
         opLog(`대회 생성: ${name} (${compMode === 'display' ? '노출용' : '운영용'})`, 'admin', 'admin', comp.id);
         res.json(comp);
     } catch (e) { res.status(400).json({ error: '대회 생성 실패: ' + e.message }); }
 });
-app.put('/api/competitions/:id', (req, res) => {
+app.put('/api/competitions/:id', async (req, res) => {
     const { admin_key, name, start_date, end_date, venue, status, video_url, federation, division_type, mode } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const old = db.prepare('SELECT * FROM competition WHERE id=?').get(req.params.id);
+    const old = await db.get('SELECT * FROM competition WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
     const compMode = mode ? ((mode === 'display') ? 'display' : 'operation') : old.mode;
-    db.prepare('UPDATE competition SET name=?,start_date=?,end_date=?,venue=?,status=?,video_url=?,federation=?,division_type=?,mode=? WHERE id=?')
-        .run(name||old.name, start_date||old.start_date, end_date||old.end_date, venue??old.venue, status||old.status, video_url??old.video_url??'', federation??old.federation??'', division_type??old.division_type??'', compMode||'operation', old.id);
-    res.json(db.prepare('SELECT * FROM competition WHERE id=?').get(old.id));
+    await db.run('UPDATE competition SET name=?,start_date=?,end_date=?,venue=?,status=?,video_url=?,federation=?,division_type=?,mode=? WHERE id=?', name||old.name, start_date||old.start_date, end_date||old.end_date, venue??old.venue, status||old.status, video_url??old.video_url??'', federation??old.federation??'', division_type??old.division_type??'', compMode||'operation', old.id);
+    res.json(await db.get('SELECT * FROM competition WHERE id=?', old.id));
 });
-app.delete('/api/competitions/:id', (req, res) => {
+app.delete('/api/competitions/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isAdminOrManager(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(req.params.id);
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.id);
     if (!comp) return res.status(404).json({ error: 'Not found' });
 
     // 삭제 전 자동 백업 (트랜잭션 시작 전 — 실제 백업은 삭제 직전 DB를 복사해야 의미가 있음)
@@ -1368,28 +1366,28 @@ app.delete('/api/competitions/:id', (req, res) => {
     } catch(e) { console.error('[Backup] 삭제 전 백업 실패:', e.message); }
 
     // 안전 헬퍼: 테이블/컬럼이 존재할 때만 DELETE 실행 (스키마 다변화 대비)
-    const tableExists = (name) => {
-        try { return !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name); }
+    const tableExists = async (name) => {
+        try { return !!await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name=?", name); }
         catch(_){ return false; }
     };
-    const hasColumn = (table, col) => {
+    const hasColumn = async (table, col) => {
         try {
-            const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+            const cols = await db.all(`PRAGMA table_info(${table})`);
             return cols.some(c => c.name === col);
         } catch(_){ return false; }
     };
-    const safeRun = (sql, ...args) => {
-        try { return db.prepare(sql).run(...args); }
+    const safeRun = async (sql, ...args) => {
+        try { return await db.run(sql, ...args); }
         catch(e){ console.warn('[delete-comp] skip:', sql.split('\n')[0].trim(), '|', e.message); return null; }
     };
 
     try {
-        db.transaction(() => {
-            const events = db.prepare('SELECT id FROM event WHERE competition_id=?').all(comp.id);
+        db.transaction(async () => {
+            const events = await db.all('SELECT id FROM event WHERE competition_id=?', comp.id);
             const eventIds = events.map(e => e.id);
 
             for (const evt of events) {
-                const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(evt.id);
+                const heats = await db.all('SELECT id FROM heat WHERE event_id=?', evt.id);
                 for (const h of heats) {
                     safeRun('DELETE FROM result WHERE heat_id=?', h.id);
                     safeRun('DELETE FROM height_attempt WHERE heat_id=?', h.id);
@@ -1409,10 +1407,10 @@ app.delete('/api/competitions/:id', (req, res) => {
 
             // pacing 트리: pacing_config(competition_id) → pacing_color(pacing_config_id) → pacing_segment(pacing_color_id)
             if (tableExists('pacing_config')) {
-                const cfgs = db.prepare('SELECT id FROM pacing_config WHERE competition_id=?').all(comp.id);
+                const cfgs = await db.all('SELECT id FROM pacing_config WHERE competition_id=?', comp.id);
                 for (const cfg of cfgs) {
                     if (tableExists('pacing_color')) {
-                        const colors = db.prepare('SELECT id FROM pacing_color WHERE pacing_config_id=?').all(cfg.id);
+                        const colors = await db.all('SELECT id FROM pacing_color WHERE pacing_config_id=?', cfg.id);
                         for (const c of colors) {
                             if (tableExists('pacing_segment')) safeRun('DELETE FROM pacing_segment WHERE pacing_color_id=?', c.id);
                         }
@@ -1446,13 +1444,13 @@ app.delete('/api/competitions/:id', (req, res) => {
 });
 
 // Competition info (public — for viewer)
-app.get('/api/competition-info', (req, res) => {
+app.get('/api/competition-info', async (req, res) => {
     const compId = req.query.competition_id;
     if (compId) {
-        const c = db.prepare('SELECT * FROM competition WHERE id=?').get(compId);
+        const c = await db.get('SELECT * FROM competition WHERE id=?', compId);
         if (c) return res.json({ name: c.name, dates: `${c.start_date} ~ ${c.end_date}`, venue: c.venue, video_url: c.video_url || '', federation: c.federation || '' });
     }
-    const c = db.prepare('SELECT * FROM competition ORDER BY start_date DESC LIMIT 1').get();
+    const c = await db.get('SELECT * FROM competition ORDER BY start_date DESC LIMIT 1');
     if (c) return res.json({ name: c.name, dates: `${c.start_date} ~ ${c.end_date}`, venue: c.venue, video_url: c.video_url || '', federation: c.federation || '' });
     res.json({ name: '', dates: '', venue: '', video_url: '', federation: '' });
 });
@@ -1461,18 +1459,17 @@ app.get('/api/competition-info', (req, res) => {
 // FEDERATION LIST — CRUD
 // ============================================================
 // Federation list — CRUD
-app.get('/api/federations', (req, res) => {
-    const rows = db.prepare('SELECT * FROM federation_list ORDER BY sort_order, code').all();
+app.get('/api/federations', async (req, res) => {
+    const rows = await db.all('SELECT * FROM federation_list ORDER BY sort_order, code');
     res.json(rows);
 });
-app.post('/api/federations', (req, res) => {
+app.post('/api/federations', async (req, res) => {
     const { admin_key, code, name, badge_bg, badge_color, gender_label_m, gender_label_f, gender_label_x } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!code || !code.trim()) return res.status(400).json({ error: '연맹 코드는 필수입니다.' });
     try {
-        const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM federation_list').get().m || 0;
-        const info = db.prepare('INSERT INTO federation_list (code, name, badge_bg, badge_color, sort_order, gender_label_m, gender_label_f, gender_label_x) VALUES (?,?,?,?,?,?,?,?)')
-            .run(code.trim().toUpperCase(), name || '', badge_bg || '#e3f2fd', badge_color || '#1565c0', maxOrder + 1, gender_label_m || '', gender_label_f || '', gender_label_x || '');
+        const maxOrder = await db.get('SELECT MAX(sort_order) as m FROM federation_list').m || 0;
+        const info = await db.run('INSERT INTO federation_list (code, name, badge_bg, badge_color, sort_order, gender_label_m, gender_label_f, gender_label_x) VALUES (?,?,?,?,?,?,?,?)', code.trim().toUpperCase(), name || '', badge_bg || '#e3f2fd', badge_color || '#1565c0', maxOrder + 1, gender_label_m || '', gender_label_f || '', gender_label_x || '');
         opLog(`연맹 추가: ${code}`, 'admin', 'admin');
         res.json({ id: info.lastInsertRowid, success: true });
     } catch (e) {
@@ -1480,14 +1477,13 @@ app.post('/api/federations', (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
-app.put('/api/federations/:id', (req, res) => {
+app.put('/api/federations/:id', async (req, res) => {
     const { admin_key, code, name, badge_bg, badge_color, sort_order, gender_label_m, gender_label_f, gender_label_x } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const old = db.prepare('SELECT * FROM federation_list WHERE id=?').get(req.params.id);
+    const old = await db.get('SELECT * FROM federation_list WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
     try {
-        db.prepare('UPDATE federation_list SET code=?, name=?, badge_bg=?, badge_color=?, sort_order=?, gender_label_m=?, gender_label_f=?, gender_label_x=? WHERE id=?')
-            .run(code || old.code, name ?? old.name, badge_bg || old.badge_bg, badge_color || old.badge_color, sort_order ?? old.sort_order, gender_label_m ?? old.gender_label_m ?? '', gender_label_f ?? old.gender_label_f ?? '', gender_label_x ?? old.gender_label_x ?? '', old.id);
+        await db.run('UPDATE federation_list SET code=?, name=?, badge_bg=?, badge_color=?, sort_order=?, gender_label_m=?, gender_label_f=?, gender_label_x=? WHERE id=?', code || old.code, name ?? old.name, badge_bg || old.badge_bg, badge_color || old.badge_color, sort_order ?? old.sort_order, gender_label_m ?? old.gender_label_m ?? '', gender_label_f ?? old.gender_label_f ?? '', gender_label_x ?? old.gender_label_x ?? '', old.id);
         opLog(`연맹 수정: ${code || old.code}`, 'admin', 'admin');
         res.json({ success: true });
     } catch (e) {
@@ -1495,12 +1491,12 @@ app.put('/api/federations/:id', (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
-app.delete('/api/federations/:id', (req, res) => {
+app.delete('/api/federations/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const old = db.prepare('SELECT * FROM federation_list WHERE id=?').get(req.params.id);
+    const old = await db.get('SELECT * FROM federation_list WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
-    db.prepare('DELETE FROM federation_list WHERE id=?').run(old.id);
+    await db.run('DELETE FROM federation_list WHERE id=?', old.id);
     opLog(`연맹 삭제: ${old.code}`, 'admin', 'admin');
     res.json({ success: true });
 });
@@ -1516,19 +1512,18 @@ app.put('/api/federations/reorder', (req, res) => {
 // ============================================================
 // HOME POPUP — CMS
 // ============================================================
-app.get('/api/home-popups', (req, res) => {
-    const popups = db.prepare('SELECT * FROM home_popup ORDER BY sort_order, id').all();
-    const sections = db.prepare('SELECT * FROM home_popup_section ORDER BY popup_id, sort_order').all();
+app.get('/api/home-popups', async (req, res) => {
+    const popups = await db.all('SELECT * FROM home_popup ORDER BY sort_order, id');
+    const sections = await db.all('SELECT * FROM home_popup_section ORDER BY popup_id, sort_order');
     popups.forEach(p => { p.sections = sections.filter(s => s.popup_id === p.id); });
     res.json(popups);
 });
-app.post('/api/home-popups', (req, res) => {
+app.post('/api/home-popups', async (req, res) => {
     const { admin_key, popup_type, title, subtitle, intro_text, bottom_btn_text, bottom_btn_desc, bottom_btn_link, bottom_btn_active, is_active, show_from, show_until, sort_order, sections } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     try {
-        const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM home_popup').get().m || 0;
-        const info = db.prepare(`INSERT INTO home_popup (popup_type, title, subtitle, intro_text, bottom_btn_text, bottom_btn_desc, bottom_btn_link, bottom_btn_active, is_active, show_from, show_until, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-            .run(popup_type || 'public', title || '', subtitle || '', intro_text || '', bottom_btn_text || '', bottom_btn_desc || '', bottom_btn_link || '', bottom_btn_active ?? 1, is_active ?? 1, show_from || null, show_until || null, sort_order ?? maxOrder + 1);
+        const maxOrder = await db.get('SELECT MAX(sort_order) as m FROM home_popup').m || 0;
+        const info = await db.run(`INSERT INTO home_popup (popup_type, title, subtitle, intro_text, bottom_btn_text, bottom_btn_desc, bottom_btn_link, bottom_btn_active, is_active, show_from, show_until, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, popup_type || 'public', title || '', subtitle || '', intro_text || '', bottom_btn_text || '', bottom_btn_desc || '', bottom_btn_link || '', bottom_btn_active ?? 1, is_active ?? 1, show_from || null, show_until || null, sort_order ?? maxOrder + 1);
         const popupId = info.lastInsertRowid;
         if (Array.isArray(sections)) {
             const stmt = db.prepare('INSERT INTO home_popup_section (popup_id, title, content, link_btn_text, link_btn_url, sort_order, is_active) VALUES (?,?,?,?,?,?,?)');
@@ -1546,17 +1541,16 @@ app.put('/api/home-popups/reorder', (req, res) => {
     db.transaction(() => { order.forEach((id, i) => stmt.run(i + 1, id)); })();
     res.json({ success: true });
 });
-app.put('/api/home-popups/:id', (req, res) => {
+app.put('/api/home-popups/:id', async (req, res) => {
     const { admin_key, popup_type, title, subtitle, intro_text, bottom_btn_text, bottom_btn_desc, bottom_btn_link, bottom_btn_active, is_active, show_from, show_until, sort_order, sections } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const old = db.prepare('SELECT * FROM home_popup WHERE id=?').get(req.params.id);
+    const old = await db.get('SELECT * FROM home_popup WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
     try {
-        db.prepare(`UPDATE home_popup SET popup_type=?, title=?, subtitle=?, intro_text=?, bottom_btn_text=?, bottom_btn_desc=?, bottom_btn_link=?, bottom_btn_active=?, is_active=?, show_from=?, show_until=?, sort_order=?, updated_at=datetime('now') WHERE id=?`)
-            .run(popup_type || old.popup_type, title ?? old.title, subtitle ?? old.subtitle, intro_text ?? old.intro_text, bottom_btn_text ?? old.bottom_btn_text, bottom_btn_desc ?? old.bottom_btn_desc, bottom_btn_link ?? old.bottom_btn_link, bottom_btn_active ?? old.bottom_btn_active, is_active ?? old.is_active, show_from || old.show_from, show_until || old.show_until, sort_order ?? old.sort_order ?? 0, old.id);
+        await db.run(`UPDATE home_popup SET popup_type=?, title=?, subtitle=?, intro_text=?, bottom_btn_text=?, bottom_btn_desc=?, bottom_btn_link=?, bottom_btn_active=?, is_active=?, show_from=?, show_until=?, sort_order=?, updated_at=datetime('now') WHERE id=?`, popup_type || old.popup_type, title ?? old.title, subtitle ?? old.subtitle, intro_text ?? old.intro_text, bottom_btn_text ?? old.bottom_btn_text, bottom_btn_desc ?? old.bottom_btn_desc, bottom_btn_link ?? old.bottom_btn_link, bottom_btn_active ?? old.bottom_btn_active, is_active ?? old.is_active, show_from || old.show_from, show_until || old.show_until, sort_order ?? old.sort_order ?? 0, old.id);
         // Replace sections if provided
         if (Array.isArray(sections)) {
-            db.prepare('DELETE FROM home_popup_section WHERE popup_id=?').run(old.id);
+            await db.run('DELETE FROM home_popup_section WHERE popup_id=?', old.id);
             const stmt = db.prepare('INSERT INTO home_popup_section (popup_id, title, content, link_btn_text, link_btn_url, sort_order, is_active) VALUES (?,?,?,?,?,?,?)');
             sections.forEach((s, i) => stmt.run(old.id, s.title || '', s.content || '', s.link_btn_text || '', s.link_btn_url || '', s.sort_order ?? i, s.is_active ?? 1));
         }
@@ -1564,14 +1558,14 @@ app.put('/api/home-popups/:id', (req, res) => {
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
-app.delete('/api/home-popups/:id', (req, res) => {
+app.delete('/api/home-popups/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const old = db.prepare('SELECT * FROM home_popup WHERE id=?').get(req.params.id);
+    const old = await db.get('SELECT * FROM home_popup WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
-    db.transaction(() => {
-        db.prepare('DELETE FROM home_popup_section WHERE popup_id=?').run(old.id);
-        db.prepare('DELETE FROM home_popup WHERE id=?').run(old.id);
+    db.transaction(async () => {
+        await db.run('DELETE FROM home_popup_section WHERE popup_id=?', old.id);
+        await db.run('DELETE FROM home_popup WHERE id=?', old.id);
     })();
     opLog('홈 팝업 삭제', 'admin', 'admin');
     res.json({ success: true });
@@ -3049,16 +3043,16 @@ app.get('/api/events/:id/full-results', (req, res) => {
 // ============================================================
 // LOGS
 // ============================================================
-app.get('/api/audit-log', (req, res) => {
+app.get('/api/audit-log', async (req, res) => {
     const compId = req.query.competition_id;
-    if (compId) return res.json(db.prepare('SELECT * FROM audit_log WHERE competition_id=? ORDER BY created_at DESC LIMIT 30').all(compId));
-    res.json(db.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 30').all());
+    if (compId) return res.json(await db.all('SELECT * FROM audit_log WHERE competition_id=? ORDER BY created_at DESC LIMIT 30', compId));
+    res.json(await db.all('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 30'));
 });
-app.get('/api/operation-log', (req, res) => {
+app.get('/api/operation-log', async (req, res) => {
     const limit = parseInt(req.query.limit) || 100;
     const compId = req.query.competition_id;
-    if (compId) return res.json(db.prepare('SELECT * FROM operation_log WHERE competition_id=? ORDER BY created_at DESC LIMIT ?').all(compId, limit));
-    res.json(db.prepare('SELECT * FROM operation_log ORDER BY created_at DESC LIMIT ?').all(limit));
+    if (compId) return res.json(await db.all('SELECT * FROM operation_log WHERE competition_id=? ORDER BY created_at DESC LIMIT ?', compId, limit));
+    res.json(await db.all('SELECT * FROM operation_log ORDER BY created_at DESC LIMIT ?', limit));
 });
 
 // ============================================================
@@ -3186,39 +3180,37 @@ app.get('/api/sse', (req, res) => {
 // ============================================================
 // PUBLIC VIEWER
 // ============================================================
-app.get('/api/public/events', (req, res) => {
+app.get('/api/public/events', async (req, res) => {
     const compId = req.query.competition_id;
-    if (compId) return res.json(db.prepare("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id").all(compId));
-    res.json(db.prepare("SELECT * FROM event WHERE parent_event_id IS NULL ORDER BY sort_order, id").all());
+    if (compId) return res.json(await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id", compId));
+    res.json(await db.all("SELECT * FROM event WHERE parent_event_id IS NULL ORDER BY sort_order, id"));
 });
-app.get('/api/public/callroom-status', (req, res) => {
-    const logs = db.prepare("SELECT * FROM audit_log WHERE table_name='event' AND new_values LIKE '%callroom_complete%' ORDER BY created_at DESC LIMIT 50").all();
+app.get('/api/public/callroom-status', async (req, res) => {
+    const logs = await db.all("SELECT * FROM audit_log WHERE table_name='event' AND new_values LIKE '%callroom_complete%' ORDER BY created_at DESC LIMIT 50");
     const completedIds = new Set();
     logs.forEach(l => { try { const nv = JSON.parse(l.new_values); if (nv && nv.action === 'callroom_complete') completedIds.add(l.record_id); } catch {} });
     res.json({ completed_event_ids: Array.from(completedIds) });
 });
 
 // Public callroom monitor — 종목별 소집 현황 요약 (인증 불필요)
-app.get('/api/public/callroom-summary', (req, res) => {
+app.get('/api/public/callroom-summary', async (req, res) => {
     const compId = req.query.competition_id;
     if (!compId) return res.status(400).json({ error: 'competition_id 필요' });
 
-    const events = db.prepare(
-        "SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id"
-    ).all(compId);
+    const events = await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id", compId);
 
-    const result = events.map(evt => {
-        const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(evt.id);
+    const result = events.map(async evt => {
+        const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', evt.id);
         let totalEntries = 0, checkedIn = 0, noShow = 0;
-        const heatDetails = heats.map(h => {
-            const entries = db.prepare(`
+        const heatDetails = heats.map(async h => {
+            const entries = await db.all(`
                 SELECT ee.status, a.name, a.bib_number, a.team, he.lane_number, he.sub_group
                 FROM heat_entry he
                 JOIN event_entry ee ON ee.id = he.event_entry_id
                 JOIN athlete a ON a.id = ee.athlete_id
                 WHERE he.heat_id = ?
                 ORDER BY he.lane_number
-            `).all(h.id);
+            `, h.id);
             const hCIn = entries.filter(e => e.status === 'checked_in').length;
             const hNS = entries.filter(e => e.status === 'no_show').length;
             totalEntries += entries.length;
@@ -3270,8 +3262,8 @@ app.get('/api/admin/current-keys', (req, res) => {
     res.json({ operation: ACCESS_KEYS.operation, admin_id: ADMIN_ID() });
 });
 // Public endpoint: get registered judge/operator names (for callroom completion dropdown)
-app.get('/api/registered-judges', (req, res) => {
-    const judges = db.prepare('SELECT judge_name FROM operation_key WHERE active=1 ORDER BY judge_name').all();
+app.get('/api/registered-judges', async (req, res) => {
+    const judges = await db.all('SELECT judge_name FROM operation_key WHERE active=1 ORDER BY judge_name');
     res.json(judges.map(j => j.judge_name));
 });
 
@@ -3303,9 +3295,9 @@ app.delete('/api/admin/operation-keys/:id', (req, res) => {
 // ============================================================
 // SITE CONFIG (editable install guide, manual, about texts & links)
 // ============================================================
-app.get('/api/site-config', (req, res) => {
+app.get('/api/site-config', async (req, res) => {
     // Public: returns all site_* config keys
-    const rows = db.prepare("SELECT key, value FROM system_config WHERE key LIKE 'site_%'").all();
+    const rows = await db.all("SELECT key, value FROM system_config WHERE key LIKE 'site_%'");
     const config = {};
     rows.forEach(r => { config[r.key] = r.value; });
     res.json(config);
@@ -3951,24 +3943,24 @@ app.post('/api/federation/import', upload.single('file'), (req, res) => {
         headers.forEach((h, idx) => { const key = String(h).trim(); if (FED_RELAY_MAP[key]) relayColMap[key] = { idx, ...FED_RELAY_MAP[key] }; });
         let stats = { athletes: 0, events: 0, entries: 0, heats: 0, relayTeams: 0 };
 
-        db.transaction(() => {
+        db.transaction(async () => {
             if (clearExisting) {
-                const evts = db.prepare('SELECT id FROM event WHERE competition_id=?').all(competition_id);
+                const evts = await db.all('SELECT id FROM event WHERE competition_id=?', competition_id);
                 for (const evt of evts) {
-                    const hts = db.prepare('SELECT id FROM heat WHERE event_id=?').all(evt.id);
-                    for (const h of hts) { db.prepare('DELETE FROM result WHERE heat_id=?').run(h.id); db.prepare('DELETE FROM height_attempt WHERE heat_id=?').run(h.id); db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(h.id); }
-                    db.prepare('DELETE FROM heat WHERE event_id=?').run(evt.id);
-                    db.prepare('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(evt.id);
-                    db.prepare('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(evt.id);
-                    db.prepare('DELETE FROM qualification_selection WHERE event_id=?').run(evt.id);
-                    db.prepare('DELETE FROM event_entry WHERE event_id=?').run(evt.id);
+                    const hts = await db.all('SELECT id FROM heat WHERE event_id=?', evt.id);
+                    for (const h of hts) { await db.run('DELETE FROM result WHERE heat_id=?', h.id); await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id); await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id); }
+                    await db.run('DELETE FROM heat WHERE event_id=?', evt.id);
+                    await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', evt.id);
+                    await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', evt.id);
+                    await db.run('DELETE FROM qualification_selection WHERE event_id=?', evt.id);
+                    await db.run('DELETE FROM event_entry WHERE event_id=?', evt.id);
                 }
-                db.prepare('DELETE FROM event WHERE competition_id=?').run(competition_id);
-                db.prepare('DELETE FROM athlete WHERE competition_id=?').run(competition_id);
+                await db.run('DELETE FROM event WHERE competition_id=?', competition_id);
+                await db.run('DELETE FROM athlete WHERE competition_id=?', competition_id);
             }
 
             const eventCache = new Map();
-            db.prepare('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL').all(competition_id).forEach(e => eventCache.set(`${e.name}|${e.category}|${e.gender}`, e.id));
+            await db.all('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id).forEach(e => eventCache.set(`${e.name}|${e.category}|${e.gender}`, e.id));
 
             const neededIndividual = new Map();
             const relayParticipation = new Map();
@@ -4088,12 +4080,12 @@ app.post('/api/federation/import', upload.single('file'), (req, res) => {
             }
 
             const athleteCache = new Map();
-            db.prepare('SELECT * FROM athlete WHERE competition_id=?').all(competition_id).forEach(a => athleteCache.set(`${a.name}|${a.team}|${a.gender}`, a.id));
+            await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id).forEach(a => athleteCache.set(`${a.name}|${a.team}|${a.gender}`, a.id));
             const insertAthlete = db.prepare('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)');
             const updateAthleteBib = db.prepare('UPDATE athlete SET bib_number=? WHERE id=? AND (bib_number IS NULL OR bib_number = ?)');
             const checkBibConflict = db.prepare('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=? AND id!=?');
             const updateAthleteBarcode = db.prepare('UPDATE athlete SET barcode=? WHERE id=? AND (barcode IS NULL OR barcode = ?)');
-            const ensureAthlete = (name, team, gender) => {
+            const ensureAthlete = async (name, team, gender) => {
                 const key = `${name}|${team}|${gender}`;
                 if (athleteCache.has(key)) {
                     const existingId = athleteCache.get(key);
@@ -4101,7 +4093,7 @@ app.post('/api/federation/import', upload.single('file'), (req, res) => {
                     const bib = _bibMap.get(key) || null;
                     const bc = _barcodeMap.get(key) || null;
                     if (bib) {
-                        const existingAth = db.prepare('SELECT gender FROM athlete WHERE id=?').get(existingId);
+                        const existingAth = await db.get('SELECT gender FROM athlete WHERE id=?', existingId);
                         const bibConflict = checkBibConflict.get(competition_id, bib, existingAth?.gender || 'M', existingId);
                         if (!bibConflict) updateAthleteBib.run(bib, existingId, '');
                     }
@@ -4174,7 +4166,7 @@ app.post('/api/federation/import', upload.single('file'), (req, res) => {
                 if (info.category !== 'combined') continue;
                 const parentId = eventCache.get(`${info.name}|${info.category}|${info.gender}`);
                 if (!parentId) continue;
-                const existingSubs = db.prepare('SELECT COUNT(*) AS c FROM event WHERE parent_event_id=?').get(parentId).c;
+                const existingSubs = await db.get('SELECT COUNT(*) AS c FROM event WHERE parent_event_id=?', parentId).c;
                 if (existingSubs > 0) continue;
                 const subs = info.name === '10종경기' ? DECATHLON_SUBS : HEPTATHLON_SUBS;
                 const prefix = info.name === '10종경기' ? '[10종]' : '[7종]';
@@ -4182,12 +4174,12 @@ app.post('/api/federation/import', upload.single('file'), (req, res) => {
                     const subName = `${prefix} ${sub.name}`;
                     const subR = insertSubEvent.run(competition_id, subName, sub.category, info.gender, 'final', 'heats_generated', parentId, sub.order);
                     const subEventId = subR.lastInsertRowid;
-                    const parentEntries = db.prepare('SELECT ee.id, ee.athlete_id FROM event_entry ee WHERE ee.event_id=?').all(parentId);
+                    const parentEntries = await db.all('SELECT ee.id, ee.athlete_id FROM event_entry ee WHERE ee.event_id=?', parentId);
                     for (const pe of parentEntries) {
                         insertEntry.run(subEventId, pe.athlete_id);
                     }
                     const subHeatR = insertHeat.run(subEventId, 1);
-                    const subEntryIds = db.prepare('SELECT id FROM event_entry WHERE event_id=?').all(subEventId);
+                    const subEntryIds = await db.all('SELECT id FROM event_entry WHERE event_id=?', subEventId);
                     subEntryIds.forEach((se, lane) => insertHeatEntry.run(subHeatR.lastInsertRowid, se.id, lane + 1));
                 }
                 console.log(`[Combined] Created ${subs.length} sub-events for ${info.name} (${info.gender}), parent_id=${parentId}`);
@@ -4201,7 +4193,7 @@ app.post('/api/federation/import', upload.single('file'), (req, res) => {
                 const [relayName, gender] = key.split('|');
                 const eventId = eventCache.get(`${relayName}|relay|${gender}`);
                 if (!eventId) continue;
-                if (db.prepare('SELECT COUNT(*) AS c FROM heat WHERE event_id=?').get(eventId).c > 0) continue;
+                if (await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', eventId).c > 0) continue;
                 const entryIds = [];
                 for (const [teamName, members] of teamMap) {
                     // Create a "team athlete" record: name=teamName, bib=teamName, team=teamName
@@ -4280,7 +4272,7 @@ app.post('/api/federation/import', upload.single('file'), (req, res) => {
                             if (!eventId) continue;
                             
                             // 기존 heats 삭제
-                            const existingHeats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(eventId);
+                            const existingHeats = await db.all('SELECT id FROM heat WHERE event_id=?', eventId);
                             for (const eh of existingHeats) { deleteHeatEntries.run(eh.id); }
                             deleteHeats.run(eventId);
                             
@@ -4299,14 +4291,14 @@ app.post('/api/federation/import', upload.single('file'), (req, res) => {
                                     // BIB 또는 이름으로 선수 찾기
                                     let athlete = null;
                                     if (ent.bib) {
-                                        athlete = db.prepare('SELECT * FROM athlete WHERE competition_id=? AND bib_number=?').get(competition_id, ent.bib);
+                                        athlete = await db.get('SELECT * FROM athlete WHERE competition_id=? AND bib_number=?', competition_id, ent.bib);
                                     }
                                     if (!athlete && ent.name) {
-                                        athlete = db.prepare('SELECT * FROM athlete WHERE competition_id=? AND name=?').get(competition_id, ent.name);
+                                        athlete = await db.get('SELECT * FROM athlete WHERE competition_id=? AND name=?', competition_id, ent.name);
                                     }
                                     if (!athlete) continue;
                                     
-                                    const entry = db.prepare('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?').get(eventId, athlete.id);
+                                    const entry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', eventId, athlete.id);
                                     if (!entry) continue;
                                     
                                     insertHeatEntry.run(heatId, entry.id, ent.lane);
@@ -5449,14 +5441,14 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
 // ============================================================
 
 // GET all pacing configs for a competition
-app.get('/api/pacing', (req, res) => {
+app.get('/api/pacing', async (req, res) => {
     const compId = parseInt(req.query.competition_id) || null;
     if (!compId) return res.status(400).json({ error: 'competition_id required' });
-    const configs = db.prepare('SELECT * FROM pacing_config WHERE competition_id=? ORDER BY event_name').all(compId);
-    const result = configs.map(cfg => {
-        const colors = db.prepare('SELECT * FROM pacing_color WHERE pacing_config_id=? ORDER BY sort_order').all(cfg.id);
-        colors.forEach(c => {
-            c.segments = db.prepare('SELECT * FROM pacing_segment WHERE pacing_color_id=? ORDER BY segment_order').all(c.id);
+    const configs = await db.all('SELECT * FROM pacing_config WHERE competition_id=? ORDER BY event_name', compId);
+    const result = configs.map(async cfg => {
+        const colors = await db.all('SELECT * FROM pacing_color WHERE pacing_config_id=? ORDER BY sort_order', cfg.id);
+        colors.forEach(async c => {
+            c.segments = await db.all('SELECT * FROM pacing_segment WHERE pacing_color_id=? ORDER BY segment_order', c.id);
         });
         return { ...cfg, colors };
     });
@@ -5464,12 +5456,12 @@ app.get('/api/pacing', (req, res) => {
 });
 
 // GET single pacing config by id
-app.get('/api/pacing/:id', (req, res) => {
-    const cfg = db.prepare('SELECT * FROM pacing_config WHERE id=?').get(parseInt(req.params.id));
+app.get('/api/pacing/:id', async (req, res) => {
+    const cfg = await db.get('SELECT * FROM pacing_config WHERE id=?', parseInt(req.params.id));
     if (!cfg) return res.status(404).json({ error: 'not found' });
-    const colors = db.prepare('SELECT * FROM pacing_color WHERE pacing_config_id=? ORDER BY sort_order').all(cfg.id);
-    colors.forEach(c => {
-        c.segments = db.prepare('SELECT * FROM pacing_segment WHERE pacing_color_id=? ORDER BY segment_order').all(c.id);
+    const colors = await db.all('SELECT * FROM pacing_color WHERE pacing_config_id=? ORDER BY sort_order', cfg.id);
+    colors.forEach(async c => {
+        c.segments = await db.all('SELECT * FROM pacing_segment WHERE pacing_color_id=? ORDER BY segment_order', c.id);
     });
     res.json({ ...cfg, colors });
 });
@@ -5482,26 +5474,24 @@ app.post('/api/pacing', (req, res) => {
     const { competition_id, event_name, notice, colors } = req.body;
     if (!competition_id || !event_name) return res.status(400).json({ error: 'competition_id and event_name required' });
 
-    const trx = db.transaction(() => {
+    const trx = db.transaction(async () => {
         // Upsert pacing_config
-        let cfg = db.prepare('SELECT id FROM pacing_config WHERE competition_id=? AND event_name=?').get(competition_id, event_name);
+        let cfg = await db.get('SELECT id FROM pacing_config WHERE competition_id=? AND event_name=?', competition_id, event_name);
         if (cfg) {
-            db.prepare('UPDATE pacing_config SET notice=?, updated_at=datetime(\'now\') WHERE id=?').run(notice || '', cfg.id);
+            await db.run('UPDATE pacing_config SET notice=?, updated_at=datetime(\'now\') WHERE id=?', notice || '', cfg.id);
         } else {
-            const r = db.prepare('INSERT INTO pacing_config (competition_id, event_name, notice) VALUES (?,?,?)').run(competition_id, event_name, notice || '');
+            const r = await db.run('INSERT INTO pacing_config (competition_id, event_name, notice) VALUES (?,?,?)', competition_id, event_name, notice || '');
             cfg = { id: r.lastInsertRowid };
         }
         // Delete old colors + segments (cascade)
-        db.prepare('DELETE FROM pacing_color WHERE pacing_config_id=?').run(cfg.id);
+        await db.run('DELETE FROM pacing_color WHERE pacing_config_id=?', cfg.id);
         // Insert colors + segments
         if (Array.isArray(colors)) {
-            colors.forEach((c, ci) => {
-                const cr = db.prepare('INSERT INTO pacing_color (pacing_config_id, color_key, sort_order, remark) VALUES (?,?,?,?)')
-                    .run(cfg.id, c.color_key, c.sort_order != null ? c.sort_order : ci, c.remark || '');
+            colors.forEach(async (c, ci) => {
+                const cr = await db.run('INSERT INTO pacing_color (pacing_config_id, color_key, sort_order, remark) VALUES (?,?,?,?)', cfg.id, c.color_key, c.sort_order != null ? c.sort_order : ci, c.remark || '');
                 if (Array.isArray(c.segments)) {
-                    c.segments.forEach((seg, si) => {
-                        db.prepare('INSERT INTO pacing_segment (pacing_color_id, segment_order, distance_meters, lap_seconds) VALUES (?,?,?,?)')
-                            .run(cr.lastInsertRowid, seg.segment_order != null ? seg.segment_order : si, seg.distance_meters, seg.lap_seconds);
+                    c.segments.forEach(async (seg, si) => {
+                        await db.run('INSERT INTO pacing_segment (pacing_color_id, segment_order, distance_meters, lap_seconds) VALUES (?,?,?,?)', cr.lastInsertRowid, seg.segment_order != null ? seg.segment_order : si, seg.distance_meters, seg.lap_seconds);
                     });
                 }
             });
@@ -5520,26 +5510,26 @@ app.post('/api/pacing', (req, res) => {
 });
 
 // DELETE pacing config
-app.delete('/api/pacing/:id', (req, res) => {
+app.delete('/api/pacing/:id', async (req, res) => {
     const key = req.body.admin_key || req.headers['x-admin-key'] || '';
     if (!isOperationKey(key)) return res.status(403).json({ error: '인증 필요' });
-    const cfg = db.prepare('SELECT * FROM pacing_config WHERE id=?').get(parseInt(req.params.id));
+    const cfg = await db.get('SELECT * FROM pacing_config WHERE id=?', parseInt(req.params.id));
     if (!cfg) return res.status(404).json({ error: 'not found' });
-    db.prepare('DELETE FROM pacing_config WHERE id=?').run(cfg.id);
+    await db.run('DELETE FROM pacing_config WHERE id=?', cfg.id);
     opLog(`페이싱 라이트 삭제: ${cfg.event_name}`, 'pacing', getJudgeName(key), cfg.competition_id);
     broadcastSSE('pacing_update', { competition_id: cfg.competition_id });
     res.json({ ok: true });
 });
 
 // GET pacing configs for dashboard (public, no auth)
-app.get('/api/public/pacing', (req, res) => {
+app.get('/api/public/pacing', async (req, res) => {
     const compId = parseInt(req.query.competition_id) || null;
     if (!compId) return res.status(400).json({ error: 'competition_id required' });
-    const configs = db.prepare('SELECT * FROM pacing_config WHERE competition_id=? ORDER BY event_name').all(compId);
-    const result = configs.map(cfg => {
-        const colors = db.prepare('SELECT * FROM pacing_color WHERE pacing_config_id=? ORDER BY sort_order').all(cfg.id);
-        colors.forEach(c => {
-            c.segments = db.prepare('SELECT * FROM pacing_segment WHERE pacing_color_id=? ORDER BY segment_order').all(c.id);
+    const configs = await db.all('SELECT * FROM pacing_config WHERE competition_id=? ORDER BY event_name', compId);
+    const result = configs.map(async cfg => {
+        const colors = await db.all('SELECT * FROM pacing_color WHERE pacing_config_id=? ORDER BY sort_order', cfg.id);
+        colors.forEach(async c => {
+            c.segments = await db.all('SELECT * FROM pacing_segment WHERE pacing_color_id=? ORDER BY segment_order', c.id);
         });
         return { ...cfg, colors };
     });
@@ -6240,18 +6230,18 @@ app.post('/api/event-links/auto-match', (req, res) => {
  * GET /api/joint-groups?competition_id=N
  * List all joint groups that contain events from the given competition
  */
-app.get('/api/joint-groups', (req, res) => {
+app.get('/api/joint-groups', async (req, res) => {
     const { competition_id } = req.query;
     if (!competition_id) return res.status(400).json({ error: 'competition_id 필수' });
-    const groups = db.prepare(`
+    const groups = await db.all(`
         SELECT DISTINCT jg.* FROM joint_group jg
         JOIN joint_group_member jgm ON jgm.joint_group_id = jg.id
         WHERE jgm.competition_id = ?
         ORDER BY jg.id
-    `).all(competition_id);
+    `, competition_id);
     // For each group, fetch members
-    const result = groups.map(g => {
-        const members = db.prepare(`
+    const result = groups.map(async g => {
+        const members = await db.all(`
             SELECT jgm.*, e.name as event_name, e.gender, e.round_type, e.category,
                    c.name as comp_name, c.federation
             FROM joint_group_member jgm
@@ -6259,7 +6249,7 @@ app.get('/api/joint-groups', (req, res) => {
             JOIN competition c ON c.id = jgm.competition_id
             WHERE jgm.joint_group_id = ?
             ORDER BY jgm.sort_order
-        `).all(g.id);
+        `, g.id);
         return { ...g, members };
     });
     res.json(result);
@@ -6270,14 +6260,14 @@ app.get('/api/joint-groups', (req, res) => {
  * Create a new joint group with selected events (multi-select)
  * Body: { admin_key, name, event_ids: [id1, id2, ...] }
  */
-app.post('/api/joint-groups', (req, res) => {
+app.post('/api/joint-groups', async (req, res) => {
     const { admin_key, name, event_ids } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!event_ids || !Array.isArray(event_ids) || event_ids.length < 2) {
         return res.status(400).json({ error: '최소 2개 이상의 종목을 선택하세요.' });
     }
     // Verify all events exist
-    const events = event_ids.map(id => db.prepare('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?').get(id)).filter(Boolean);
+    const events = event_ids.map(async id => await db.get('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?', id)).filter(Boolean);
     if (events.length < 2) return res.status(400).json({ error: '유효한 종목이 2개 미만입니다.' });
 
     // Auto-generate scoreboard key
@@ -6287,25 +6277,24 @@ app.post('/api/joint-groups', (req, res) => {
     const groupName = name || events[0].name;
 
     let groupId;
-    db.transaction(() => {
-        const info = db.prepare('INSERT INTO joint_group (name, joint_scoreboard_key) VALUES (?, ?)').run(groupName, autoKey);
+    db.transaction(async () => {
+        const info = await db.run('INSERT INTO joint_group (name, joint_scoreboard_key) VALUES (?, ?)', groupName, autoKey);
         groupId = info.lastInsertRowid;
-        events.forEach((evt, idx) => {
-            db.prepare('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, ?)')
-                .run(groupId, evt.id, evt.competition_id, idx);
+        events.forEach(async (evt, idx) => {
+            await db.run('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, ?)', groupId, evt.id, evt.competition_id, idx);
         });
         // Also maintain backward-compat event_link for scoreboard (pair-wise)
         for (let i = 0; i < events.length; i++) {
             for (let j = i + 1; j < events.length; j++) {
                 const [idA, idB] = events[i].id < events[j].id ? [events[i].id, events[j].id] : [events[j].id, events[i].id];
-                db.prepare('INSERT OR IGNORE INTO event_link (event_id_a, event_id_b, joint_scoreboard_key) VALUES (?, ?, ?)').run(idA, idB, autoKey);
+                await db.run('INSERT OR IGNORE INTO event_link (event_id_a, event_id_b, joint_scoreboard_key) VALUES (?, ?, ?)', idA, idB, autoKey);
             }
         }
     })();
 
     const feds = events.map(e => e.federation || e.comp_name).join('+');
     opLog(`합동 그룹 생성: ${groupName} (${feds}, ${events.length}개 종목)`, 'admin', 'admin');
-    const created = db.prepare('SELECT * FROM joint_group WHERE id=?').get(groupId);
+    const created = await db.get('SELECT * FROM joint_group WHERE id=?', groupId);
     res.json({ success: true, group: created });
 });
 
@@ -6314,10 +6303,10 @@ app.post('/api/joint-groups', (req, res) => {
  * Update a joint group (name, scoreboard key)
  * Body: { admin_key, name?, joint_scoreboard_key? }
  */
-app.put('/api/joint-groups/:id', (req, res) => {
+app.put('/api/joint-groups/:id', async (req, res) => {
     const { admin_key, name, joint_scoreboard_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const g = db.prepare('SELECT * FROM joint_group WHERE id=?').get(req.params.id);
+    const g = await db.get('SELECT * FROM joint_group WHERE id=?', req.params.id);
     if (!g) return res.status(404).json({ error: 'Joint group not found' });
 
     const updates = [], params = [];
@@ -6326,18 +6315,18 @@ app.put('/api/joint-groups/:id', (req, res) => {
         updates.push('joint_scoreboard_key=?');
         params.push(joint_scoreboard_key);
         // Also update event_link backward compat keys
-        const members = db.prepare('SELECT event_id FROM joint_group_member WHERE joint_group_id=?').all(g.id);
+        const members = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', g.id);
         const ids = members.map(m => m.event_id);
         for (let i = 0; i < ids.length; i++) {
             for (let j = i + 1; j < ids.length; j++) {
                 const [idA, idB] = ids[i] < ids[j] ? [ids[i], ids[j]] : [ids[j], ids[i]];
-                db.prepare('UPDATE event_link SET joint_scoreboard_key=? WHERE event_id_a=? AND event_id_b=?').run(joint_scoreboard_key, idA, idB);
+                await db.run('UPDATE event_link SET joint_scoreboard_key=? WHERE event_id_a=? AND event_id_b=?', joint_scoreboard_key, idA, idB);
             }
         }
     }
     if (updates.length === 0) return res.status(400).json({ error: '수정할 항목이 없습니다.' });
     params.push(g.id);
-    db.prepare(`UPDATE joint_group SET ${updates.join(',')} WHERE id=?`).run(...params);
+    await db.run(`UPDATE joint_group SET ${updates.join(',')} WHERE id=?`, ...params);
     res.json({ success: true });
 });
 
@@ -6345,24 +6334,24 @@ app.put('/api/joint-groups/:id', (req, res) => {
  * DELETE /api/joint-groups/:id
  * Delete a joint group and its members
  */
-app.delete('/api/joint-groups/:id', (req, res) => {
+app.delete('/api/joint-groups/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const g = db.prepare('SELECT * FROM joint_group WHERE id=?').get(req.params.id);
+    const g = await db.get('SELECT * FROM joint_group WHERE id=?', req.params.id);
     if (!g) return res.status(404).json({ error: 'Joint group not found' });
 
-    db.transaction(() => {
+    db.transaction(async () => {
         // Remove backward-compat event_link entries
-        const members = db.prepare('SELECT event_id FROM joint_group_member WHERE joint_group_id=?').all(g.id);
+        const members = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', g.id);
         const ids = members.map(m => m.event_id);
         for (let i = 0; i < ids.length; i++) {
             for (let j = i + 1; j < ids.length; j++) {
                 const [idA, idB] = ids[i] < ids[j] ? [ids[i], ids[j]] : [ids[j], ids[i]];
-                db.prepare('DELETE FROM event_link WHERE event_id_a=? AND event_id_b=?').run(idA, idB);
+                await db.run('DELETE FROM event_link WHERE event_id_a=? AND event_id_b=?', idA, idB);
             }
         }
-        db.prepare('DELETE FROM joint_group_member WHERE joint_group_id=?').run(g.id);
-        db.prepare('DELETE FROM joint_group WHERE id=?').run(g.id);
+        await db.run('DELETE FROM joint_group_member WHERE joint_group_id=?', g.id);
+        await db.run('DELETE FROM joint_group WHERE id=?', g.id);
     })();
     opLog(`합동 그룹 삭제: ${g.name}`, 'admin', 'admin');
     res.json({ success: true });
@@ -6373,30 +6362,28 @@ app.delete('/api/joint-groups/:id', (req, res) => {
  * Add events to an existing joint group
  * Body: { admin_key, event_ids: [id1, id2, ...] }
  */
-app.post('/api/joint-groups/:id/members', (req, res) => {
+app.post('/api/joint-groups/:id/members', async (req, res) => {
     const { admin_key, event_ids } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const g = db.prepare('SELECT * FROM joint_group WHERE id=?').get(req.params.id);
+    const g = await db.get('SELECT * FROM joint_group WHERE id=?', req.params.id);
     if (!g) return res.status(404).json({ error: 'Joint group not found' });
     if (!event_ids || !Array.isArray(event_ids) || event_ids.length === 0) return res.status(400).json({ error: 'event_ids 필수' });
 
-    const maxSort = db.prepare('SELECT MAX(sort_order) AS m FROM joint_group_member WHERE joint_group_id=?').get(g.id);
+    const maxSort = await db.get('SELECT MAX(sort_order) AS m FROM joint_group_member WHERE joint_group_id=?', g.id);
     let nextSort = (maxSort?.m || 0) + 1;
-    const existingMembers = db.prepare('SELECT event_id FROM joint_group_member WHERE joint_group_id=?').all(g.id).map(m => m.event_id);
+    const existingMembers = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', g.id).map(m => m.event_id);
 
     let added = 0;
-    db.transaction(() => {
+    db.transaction(async () => {
         for (const eid of event_ids) {
-            const evt = db.prepare('SELECT * FROM event WHERE id=?').get(eid);
+            const evt = await db.get('SELECT * FROM event WHERE id=?', eid);
             if (!evt) continue;
             if (existingMembers.includes(eid)) continue;
-            db.prepare('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, ?)')
-                .run(g.id, eid, evt.competition_id, nextSort++);
+            await db.run('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, ?)', g.id, eid, evt.competition_id, nextSort++);
             // Add event_link pairs with all existing members
             for (const existId of existingMembers) {
                 const [idA, idB] = eid < existId ? [eid, existId] : [existId, eid];
-                db.prepare('INSERT OR IGNORE INTO event_link (event_id_a, event_id_b, joint_scoreboard_key) VALUES (?, ?, ?)')
-                    .run(idA, idB, g.joint_scoreboard_key || '');
+                await db.run('INSERT OR IGNORE INTO event_link (event_id_a, event_id_b, joint_scoreboard_key) VALUES (?, ?, ?)', idA, idB, g.joint_scoreboard_key || '');
             }
             existingMembers.push(eid);
             added++;
@@ -6413,27 +6400,27 @@ app.delete('/api/joint-groups/:groupId/members/:eventId', (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const gId = parseInt(req.params.groupId), eId = parseInt(req.params.eventId);
-    db.transaction(() => {
-        db.prepare('DELETE FROM joint_group_member WHERE joint_group_id=? AND event_id=?').run(gId, eId);
+    db.transaction(async () => {
+        await db.run('DELETE FROM joint_group_member WHERE joint_group_id=? AND event_id=?', gId, eId);
         // Remove event_link pairs involving this event within the group
-        const remaining = db.prepare('SELECT event_id FROM joint_group_member WHERE joint_group_id=?').all(gId).map(m => m.event_id);
+        const remaining = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', gId).map(m => m.event_id);
         // Remove links between this event and any remaining group member
         // (careful: only remove if no other group links them)
         for (const rId of remaining) {
             const [idA, idB] = eId < rId ? [eId, rId] : [rId, eId];
             // Check if any other group still links these two
-            const otherLink = db.prepare(`SELECT 1 FROM joint_group_member jgm1
+            const otherLink = await db.get(`SELECT 1 FROM joint_group_member jgm1
                 JOIN joint_group_member jgm2 ON jgm2.joint_group_id=jgm1.joint_group_id AND jgm2.event_id=?
-                WHERE jgm1.event_id=? AND jgm1.joint_group_id != ?`).get(idA, idB, gId);
+                WHERE jgm1.event_id=? AND jgm1.joint_group_id != ?`, idA, idB, gId);
             if (!otherLink) {
-                db.prepare('DELETE FROM event_link WHERE event_id_a=? AND event_id_b=?').run(idA, idB);
+                await db.run('DELETE FROM event_link WHERE event_id_a=? AND event_id_b=?', idA, idB);
             }
         }
         // If group now has < 2 members, delete the whole group
-        const count = db.prepare('SELECT COUNT(*) AS c FROM joint_group_member WHERE joint_group_id=?').get(gId).c;
+        const count = await db.get('SELECT COUNT(*) AS c FROM joint_group_member WHERE joint_group_id=?', gId).c;
         if (count < 2) {
-            db.prepare('DELETE FROM joint_group_member WHERE joint_group_id=?').run(gId);
-            db.prepare('DELETE FROM joint_group WHERE id=?').run(gId);
+            await db.run('DELETE FROM joint_group_member WHERE joint_group_id=?', gId);
+            await db.run('DELETE FROM joint_group WHERE id=?', gId);
         }
     })();
     res.json({ success: true });
@@ -6444,7 +6431,7 @@ app.delete('/api/joint-groups/:groupId/members/:eventId', (req, res) => {
  * Auto-create joint groups for competitions by matching event names
  * Body: { admin_key, competition_ids: [id1, id2, ...] }
  */
-app.post('/api/joint-groups/auto-create', (req, res) => {
+app.post('/api/joint-groups/auto-create', async (req, res) => {
     const { admin_key, competition_ids } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!competition_ids || competition_ids.length < 2) return res.status(400).json({ error: '최소 2개 대회를 선택하세요.' });
@@ -6452,7 +6439,7 @@ app.post('/api/joint-groups/auto-create', (req, res) => {
     // Get all events for each competition
     const compEvents = {};
     for (const cid of competition_ids) {
-        compEvents[cid] = db.prepare('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.competition_id=? AND e.parent_event_id IS NULL').all(cid);
+        compEvents[cid] = await db.all('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.competition_id=? AND e.parent_event_id IS NULL', cid);
     }
 
     // Group events by name+gender+round_type across competitions
@@ -6466,31 +6453,30 @@ app.post('/api/joint-groups/auto-create', (req, res) => {
     }
 
     let created = 0;
-    db.transaction(() => {
+    db.transaction(async () => {
         for (const [key, events] of Object.entries(eventMap)) {
             if (events.length < 2) continue;
             // Check if already grouped
             const eventIds = events.map(e => e.id);
-            const existing = db.prepare(`SELECT jg.id FROM joint_group jg
+            const existing = await db.get(`SELECT jg.id FROM joint_group jg
                 JOIN joint_group_member jgm ON jgm.joint_group_id=jg.id
                 WHERE jgm.event_id IN (${eventIds.map(() => '?').join(',')})
-                GROUP BY jg.id HAVING COUNT(*)>=2`).get(...eventIds);
+                GROUP BY jg.id HAVING COUNT(*)>=2`, ...eventIds);
             if (existing) continue;
 
             const genderLabel = { M: '남자', F: '여자', X: '혼성' }[events[0].gender] || '';
             const roundLabel = { preliminary: '예선', semifinal: '준결승', final: '결승' }[events[0].round_type] || '';
             const jointKey = `합동 ${genderLabel} ${events[0].name} ${roundLabel}`.trim();
 
-            const gInfo = db.prepare('INSERT INTO joint_group (name, joint_scoreboard_key) VALUES (?, ?)').run(events[0].name, jointKey);
-            events.forEach((evt, idx) => {
-                db.prepare('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, ?)')
-                    .run(gInfo.lastInsertRowid, evt.id, evt.competition_id, idx);
+            const gInfo = await db.run('INSERT INTO joint_group (name, joint_scoreboard_key) VALUES (?, ?)', events[0].name, jointKey);
+            events.forEach(async (evt, idx) => {
+                await db.run('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, ?)', gInfo.lastInsertRowid, evt.id, evt.competition_id, idx);
             });
             // backward-compat event_link
             for (let i = 0; i < events.length; i++) {
                 for (let j = i + 1; j < events.length; j++) {
                     const [idA, idB] = events[i].id < events[j].id ? [events[i].id, events[j].id] : [events[j].id, events[i].id];
-                    db.prepare('INSERT OR IGNORE INTO event_link (event_id_a, event_id_b, joint_scoreboard_key) VALUES (?, ?, ?)').run(idA, idB, jointKey);
+                    await db.run('INSERT OR IGNORE INTO event_link (event_id_a, event_id_b, joint_scoreboard_key) VALUES (?, ?, ?)', idA, idB, jointKey);
                 }
             }
             created++;
@@ -6505,18 +6491,18 @@ app.post('/api/joint-groups/auto-create', (req, res) => {
  * GET /api/joint-groups/by-event/:eventId
  * Get joint group info for a specific event (for callroom/record pages)
  */
-app.get('/api/joint-groups/by-event/:eventId', (req, res) => {
+app.get('/api/joint-groups/by-event/:eventId', async (req, res) => {
     const eventId = parseInt(req.params.eventId);
-    const membership = db.prepare(`
+    const membership = await db.all(`
         SELECT jg.*, jgm.sort_order FROM joint_group jg
         JOIN joint_group_member jgm ON jgm.joint_group_id = jg.id
         WHERE jgm.event_id = ?
-    `).all(eventId);
+    `, eventId);
     if (membership.length === 0) return res.json(null);
 
     // Return all groups this event belongs to, with all their members
-    const result = membership.map(g => {
-        const members = db.prepare(`
+    const result = membership.map(async g => {
+        const members = await db.all(`
             SELECT jgm.*, e.name as event_name, e.gender, e.round_type, e.category,
                    c.name as comp_name, c.federation
             FROM joint_group_member jgm
@@ -6524,7 +6510,7 @@ app.get('/api/joint-groups/by-event/:eventId', (req, res) => {
             JOIN competition c ON c.id = jgm.competition_id
             WHERE jgm.joint_group_id = ?
             ORDER BY jgm.sort_order
-        `).all(g.id);
+        `, g.id);
         return { ...g, members };
     });
     res.json(result);
@@ -6534,12 +6520,12 @@ app.get('/api/joint-groups/by-event/:eventId', (req, res) => {
  * GET /api/joint-groups/:id/entries
  * Get combined entries from all events in a joint group (for callroom view)
  */
-app.get('/api/joint-groups/:id/entries', (req, res) => {
+app.get('/api/joint-groups/:id/entries', async (req, res) => {
     const gId = parseInt(req.params.id);
-    const g = db.prepare('SELECT * FROM joint_group WHERE id=?').get(gId);
+    const g = await db.get('SELECT * FROM joint_group WHERE id=?', gId);
     if (!g) return res.status(404).json({ error: 'Joint group not found' });
 
-    const members = db.prepare(`
+    const members = await db.all(`
         SELECT jgm.*, e.name as event_name, e.category, e.gender, e.round_type,
                c.name as comp_name, c.federation
         FROM joint_group_member jgm
@@ -6547,13 +6533,13 @@ app.get('/api/joint-groups/:id/entries', (req, res) => {
         JOIN competition c ON c.id = jgm.competition_id
         WHERE jgm.joint_group_id = ?
         ORDER BY jgm.sort_order
-    `).all(gId);
+    `, gId);
 
     const allEntries = [];
     for (const m of members) {
-        const heat = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1').get(m.event_id);
+        const heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1', m.event_id);
         if (!heat) continue;
-        const entries = db.prepare(`
+        const entries = await db.all(`
             SELECT he.lane_number, he.sub_group, ee.id as event_entry_id, ee.status, ee.event_id,
                    a.id as athlete_id, a.name, a.bib_number, a.team, a.gender, a.barcode
             FROM heat_entry he
@@ -6561,7 +6547,7 @@ app.get('/api/joint-groups/:id/entries', (req, res) => {
             JOIN athlete a ON a.id = ee.athlete_id
             WHERE he.heat_id = ?
             ORDER BY he.lane_number
-        `).all(heat.id);
+        `, heat.id);
         entries.forEach(e => {
             allEntries.push({
                 ...e,
@@ -6969,20 +6955,20 @@ app.get('/api/doc-templates/:compId', (req, res) => {
     res.json(getDocTemplate(req.params.compId));
 });
 
-app.post('/api/doc-templates', (req, res) => {
+app.post('/api/doc-templates', async (req, res) => {
     const { admin_key, competition_id, templates } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!competition_id || !templates) return res.status(400).json({ error: 'competition_id, templates required' });
     const ad = JSON.stringify(templates.ad_card || {});
     const sl = JSON.stringify(templates.start_list || {});
     const rs = JSON.stringify(templates.result_sheet || {});
-    db.prepare('INSERT OR REPLACE INTO doc_template (competition_id, ad_card, start_list, result_sheet) VALUES (?, ?, ?, ?)').run(competition_id, ad, sl, rs);
+    await db.run('INSERT OR REPLACE INTO doc_template (competition_id, ad_card, start_list, result_sheet) VALUES (?, ?, ?, ?)', competition_id, ad, sl, rs);
     opLog('문서 양식 설정 업데이트', 'admin', 'admin', competition_id);
     res.json({ success: true });
 });
 
 // Logo upload for PDF documents
-app.post('/api/doc-logos/upload', upload.single('logo'), (req, res) => {
+app.post('/api/doc-logos/upload', upload.single('logo'), async (req, res) => {
     if (!req.body.admin_key || !isOperationKey(req.body.admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const compId = req.body.competition_id;
@@ -7003,14 +6989,14 @@ app.post('/api/doc-logos/upload', upload.single('logo'), (req, res) => {
     // Auto-update doc_template with the logo path for all document types
     const logoField = position === 'left' ? 'logo_left' : position === 'right' ? 'logo_right' : null;
     if (logoField) {
-        const existing = db.prepare('SELECT * FROM doc_template WHERE competition_id=?').get(compId);
+        const existing = await db.get('SELECT * FROM doc_template WHERE competition_id=?', compId);
         if (existing) {
             // Update each template sub-object with the new logo path
             for (const docType of ['start_list', 'result_sheet', 'ad_card']) {
                 try {
                     const tpl = JSON.parse(existing[docType] || '{}');
                     tpl[logoField] = publicUrl;
-                    db.prepare(`UPDATE doc_template SET ${docType}=? WHERE competition_id=?`).run(JSON.stringify(tpl), compId);
+                    await db.run(`UPDATE doc_template SET ${docType}=? WHERE competition_id=?`, JSON.stringify(tpl), compId);
                 } catch(e) {}
             }
         } else {
@@ -7018,8 +7004,7 @@ app.post('/api/doc-logos/upload', upload.single('logo'), (req, res) => {
             const sl = { ...DOC_DEFAULTS.start_list, [logoField]: publicUrl };
             const rs = { ...DOC_DEFAULTS.result_sheet, [logoField]: publicUrl };
             const ac = { ...DOC_DEFAULTS.ad_card, [logoField]: publicUrl };
-            db.prepare('INSERT INTO doc_template (competition_id, ad_card, start_list, result_sheet) VALUES (?,?,?,?)')
-                .run(compId, JSON.stringify(ac), JSON.stringify(sl), JSON.stringify(rs));
+            await db.run('INSERT INTO doc_template (competition_id, ad_card, start_list, result_sheet) VALUES (?,?,?,?)', compId, JSON.stringify(ac), JSON.stringify(sl), JSON.stringify(rs));
         }
     }
 
@@ -7028,21 +7013,21 @@ app.post('/api/doc-logos/upload', upload.single('logo'), (req, res) => {
 });
 
 // Logo delete for PDF documents
-app.post('/api/doc-logos/delete', (req, res) => {
+app.post('/api/doc-logos/delete', async (req, res) => {
     if (!req.body.admin_key || !isOperationKey(req.body.admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const compId = req.body.competition_id;
     const position = req.body.position;
     if (!compId || !['left', 'right'].includes(position)) return res.status(400).json({ error: 'competition_id and position required' });
 
     const logoField = position === 'left' ? 'logo_left' : 'logo_right';
-    const existing = db.prepare('SELECT * FROM doc_template WHERE competition_id=?').get(compId);
+    const existing = await db.get('SELECT * FROM doc_template WHERE competition_id=?', compId);
     if (existing) {
         for (const docType of ['start_list', 'result_sheet', 'ad_card']) {
             try {
                 const tpl = JSON.parse(existing[docType] || '{}');
                 const oldPath = tpl[logoField];
                 tpl[logoField] = '';
-                db.prepare(`UPDATE doc_template SET ${docType}=? WHERE competition_id=?`).run(JSON.stringify(tpl), compId);
+                await db.run(`UPDATE doc_template SET ${docType}=? WHERE competition_id=?`, JSON.stringify(tpl), compId);
                 // Delete file if exists
                 if (oldPath) {
                     const filePath = path.join(__dirname, 'public', oldPath.replace(/^\//, ''));
@@ -7058,8 +7043,8 @@ app.post('/api/doc-logos/delete', (req, res) => {
 // ============================================================
 // Per-Event Records (NR/DR/CR)
 // ============================================================
-app.get('/api/event-records/:eventId', (req, res) => {
-    const row = db.prepare('SELECT * FROM event_records WHERE event_id=?').get(req.params.eventId);
+app.get('/api/event-records/:eventId', async (req, res) => {
+    const row = await db.get('SELECT * FROM event_records WHERE event_id=?', req.params.eventId);
     if (!row) return res.json({ event_id: parseInt(req.params.eventId), records: {} });
     try {
         res.json({ event_id: row.event_id, records: JSON.parse(row.records || '{}') });
@@ -7068,11 +7053,11 @@ app.get('/api/event-records/:eventId', (req, res) => {
     }
 });
 
-app.post('/api/event-records', (req, res) => {
+app.post('/api/event-records', async (req, res) => {
     const { admin_key, event_id, records } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!event_id || !records) return res.status(400).json({ error: 'event_id, records required' });
-    db.prepare('INSERT OR REPLACE INTO event_records (event_id, records) VALUES (?, ?)').run(event_id, JSON.stringify(records));
+    await db.run('INSERT OR REPLACE INTO event_records (event_id, records) VALUES (?, ?)', event_id, JSON.stringify(records));
     opLog(`종목별 기록(NR/DR/CR) 저장 event_id=${event_id}`, 'admin', 'admin');
     res.json({ success: true });
 });
@@ -7149,20 +7134,20 @@ try {
 } catch(e) { console.warn('[migration] timetable UNIQUE 점검 실패:', e.message); }
 
 // GET timetable for a competition
-app.get('/api/timetable/:compId', (req, res) => {
+app.get('/api/timetable/:compId', async (req, res) => {
     // FIX: time 우선 정렬 (HH:MM 문자열 정렬은 24시간 형식에서 안전), 같은 시간이면 sort_order
-    const rows = db.prepare('SELECT * FROM timetable WHERE competition_id=? ORDER BY day, time, section, sort_order').all(req.params.compId);
+    const rows = await db.all('SELECT * FROM timetable WHERE competition_id=? ORDER BY day, time, section, sort_order', req.params.compId);
     // Include competition start_date for auto-day detection
-    const comp = db.prepare('SELECT start_date FROM competition WHERE id=?').get(req.params.compId);
+    const comp = await db.get('SELECT start_date FROM competition WHERE id=?', req.params.compId);
     // Group by day
     const days = {};
-    rows.forEach(r => {
+    rows.forEach(async r => {
         if (!days[r.day]) days[r.day] = { track: [], field: [] };
         const s = r.section === 'field' ? 'field' : 'track';
         // Include result_url from linked event (if any)
         let result_url = null;
         if (r.event_id) {
-            const evt = db.prepare('SELECT result_url FROM event WHERE id=?').get(r.event_id);
+            const evt = await db.get('SELECT result_url FROM event WHERE id=?', r.event_id);
             if (evt) result_url = evt.result_url || null;
         }
         days[r.day][s].push({ id: r.id, time: r.time, event_name: r.event_name, category: r.category, round: r.round, note: r.note, event_id: r.event_id, callroom_time: r.callroom_time, scheduled_date: r.scheduled_date, result_url });
@@ -7171,7 +7156,7 @@ app.get('/api/timetable/:compId', (req, res) => {
 });
 
 // Upload timetable Excel
-app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
+app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
     try {
         const { competition_id, admin_key } = req.body;
         if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
@@ -7182,7 +7167,7 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
         const allEntries = [];
 
         // 대회 시작일을 미리 조회 (날짜 컬럼이 있을 때 day 계산용)
-        const _compStartRow = db.prepare('SELECT start_date FROM competition WHERE id=?').get(parseInt(competition_id));
+        const _compStartRow = await db.get('SELECT start_date FROM competition WHERE id=?', parseInt(competition_id));
         const _startDateMs = (_compStartRow && _compStartRow.start_date)
             ? new Date(_compStartRow.start_date + 'T00:00:00').getTime() : null;
 
@@ -7277,7 +7262,7 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
         const overwriteMode = req.body.overwrite_mode || 'smart'; // 'smart' (default) | 'force'
 
         // Compute scheduled_date for each entry (based on competition start_date)
-        const compRow = db.prepare('SELECT start_date FROM competition WHERE id=?').get(parseInt(competition_id));
+        const compRow = await db.get('SELECT start_date FROM competition WHERE id=?', parseInt(competition_id));
         if (compRow && compRow.start_date) {
             const startDate = new Date(compRow.start_date + 'T00:00:00');
             allEntries.forEach(e => {
@@ -7323,11 +7308,9 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
             const updateStmt = db.prepare('UPDATE timetable SET section=?, note=?, sort_order=? WHERE id=?');
             const delOne = db.prepare('DELETE FROM timetable WHERE id=?');
 
-            const tx = db.transaction(() => {
-                effectiveDays.forEach(day => {
-                    const existingRows = db.prepare(
-                        'SELECT * FROM timetable WHERE competition_id=? AND day=?'
-                    ).all(parseInt(competition_id), day);
+            const tx = db.transaction(async () => {
+                effectiveDays.forEach(async day => {
+                    const existingRows = await db.all('SELECT * FROM timetable WHERE competition_id=? AND day=?', parseInt(competition_id), day);
 
                     // Safety: skip if past day
                     const sampleRow = existingRows[0];
@@ -7370,9 +7353,7 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
                 });
 
                 if (skippedPastDays.length > 0) {
-                    const cnt = db.prepare(
-                        `SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND day IN (${skippedPastDays.map(()=>'?').join(',')})`
-                    ).get(parseInt(competition_id), ...skippedPastDays);
+                    const cnt = await db.get(`SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND day IN (${skippedPastDays.map(()=>'?').join(',')})`, parseInt(competition_id), ...skippedPastDays);
                     mergeStats.preservedCount += (cnt && cnt.c) || 0;
                 }
             });
@@ -7389,7 +7370,7 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
         // Auto-compute callroom_time (WA standard: 30 min before event time for track, 45 min for field)
         try {
             const crStmt = db.prepare('UPDATE timetable SET callroom_time=? WHERE id=? AND callroom_time IS NULL');
-            const needCR = db.prepare('SELECT id, time, section FROM timetable WHERE competition_id=? AND callroom_time IS NULL').all(parseInt(competition_id));
+            const needCR = await db.all('SELECT id, time, section FROM timetable WHERE competition_id=? AND callroom_time IS NULL', parseInt(competition_id));
             needCR.forEach(tt => {
                 const m = (tt.time || '').match(/^(\d{1,2}):(\d{2})/);
                 if (!m) return;
@@ -7407,7 +7388,7 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
 
         // Compute scheduled_date for any rows still missing it
         try {
-            const comp = db.prepare('SELECT start_date FROM competition WHERE id=?').get(parseInt(competition_id));
+            const comp = await db.get('SELECT start_date FROM competition WHERE id=?', parseInt(competition_id));
             if (comp && comp.start_date) {
                 const startDate = new Date(comp.start_date + 'T00:00:00');
                 const updateDateStmt = db.prepare('UPDATE timetable SET scheduled_date=? WHERE competition_id=? AND day=? AND scheduled_date IS NULL');
@@ -7456,35 +7437,35 @@ app.post('/api/timetable/upload', upload.single('file'), (req, res) => {
 });
 
 // Delete timetable for a competition (all days)
-app.delete('/api/timetable/:compId', (req, res) => {
+app.delete('/api/timetable/:compId', async (req, res) => {
     const { admin_key } = req.body || {};
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    db.prepare('DELETE FROM timetable WHERE competition_id=?').run(req.params.compId);
+    await db.run('DELETE FROM timetable WHERE competition_id=?', req.params.compId);
     opLog(`시간표 전체 삭제 (대회ID=${req.params.compId})`, 'admin', 'admin');
     res.json({ success: true });
 });
 
 // Delete timetable for a specific day
-app.delete('/api/timetable/:compId/:day', (req, res) => {
+app.delete('/api/timetable/:compId/:day', async (req, res) => {
     const { admin_key } = req.body || {};
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
     const { compId, day } = req.params;
-    db.prepare('DELETE FROM timetable WHERE competition_id=? AND day=?').run(compId, parseInt(day));
+    await db.run('DELETE FROM timetable WHERE competition_id=? AND day=?', compId, parseInt(day));
     opLog(`시간표 ${day}일차 삭제 (대회ID=${compId})`, 'admin', 'admin');
     res.json({ success: true });
 });
 
 // Manual link: connect timetable entry to event
-app.put('/api/timetable/:id/link', (req, res) => {
+app.put('/api/timetable/:id/link', async (req, res) => {
     const { admin_key, event_id } = req.body || {};
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
     if (!event_id) return res.status(400).json({ error: 'event_id required' });
-    const tt = db.prepare('SELECT * FROM timetable WHERE id=?').get(req.params.id);
+    const tt = await db.get('SELECT * FROM timetable WHERE id=?', req.params.id);
     if (!tt) return res.status(404).json({ error: '시간표 항목 없음' });
     // Prevent duplicate: check if this event_id is already linked to another timetable entry in the same competition
-    const existing = db.prepare('SELECT id FROM timetable WHERE competition_id=? AND event_id=? AND id!=?').get(tt.competition_id, event_id, req.params.id);
+    const existing = await db.get('SELECT id FROM timetable WHERE competition_id=? AND event_id=? AND id!=?', tt.competition_id, event_id, req.params.id);
     if (existing) return res.status(400).json({ error: '이 종목은 이미 다른 시간표 항목에 연결되어 있습니다.' });
-    db.prepare('UPDATE timetable SET event_id=? WHERE id=?').run(event_id, req.params.id);
+    await db.run('UPDATE timetable SET event_id=? WHERE id=?', event_id, req.params.id);
     // Auto-compute callroom_time if not set
     if (!tt.callroom_time && tt.time) {
         const m = tt.time.match(/^(\d{1,2}):(\d{2})/);
@@ -7495,7 +7476,7 @@ app.put('/api/timetable/:id/link', (req, res) => {
             while (min < 0) { min += 60; h -= 1; }
             if (h >= 0) {
                 const crTime = String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
-                db.prepare('UPDATE timetable SET callroom_time=? WHERE id=?').run(crTime, req.params.id);
+                await db.run('UPDATE timetable SET callroom_time=? WHERE id=?', crTime, req.params.id);
             }
         }
     }
@@ -7503,20 +7484,20 @@ app.put('/api/timetable/:id/link', (req, res) => {
 });
 
 // Manual unlink: disconnect timetable entry from event
-app.put('/api/timetable/:id/unlink', (req, res) => {
+app.put('/api/timetable/:id/unlink', async (req, res) => {
     const { admin_key } = req.body || {};
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    db.prepare('UPDATE timetable SET event_id=NULL WHERE id=?').run(req.params.id);
+    await db.run('UPDATE timetable SET event_id=NULL WHERE id=?', req.params.id);
     res.json({ success: true });
 });
 
 // Edit single timetable entry (inline edit from display-manage)
 // Allows editing: time, event_name, category(jongbyul), round, note, callroom_time, section, day, scheduled_date
-app.put('/api/timetable/entry/:id', (req, res) => {
+app.put('/api/timetable/entry/:id', async (req, res) => {
     try {
         const { admin_key, time, event_name, category, round, note, callroom_time, section, day, scheduled_date, event_id } = req.body || {};
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        const tt = db.prepare('SELECT * FROM timetable WHERE id=?').get(req.params.id);
+        const tt = await db.get('SELECT * FROM timetable WHERE id=?', req.params.id);
         if (!tt) return res.status(404).json({ error: '시간표 항목 없음' });
 
         const fields = [];
@@ -7539,11 +7520,11 @@ app.put('/api/timetable/entry/:id', (req, res) => {
         if (fields.length === 0) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
 
         values.push(req.params.id);
-        db.prepare(`UPDATE timetable SET ${fields.join(', ')} WHERE id=?`).run(...values);
+        await db.run(`UPDATE timetable SET ${fields.join(', ')} WHERE id=?`, ...values);
 
         // If time changed and callroom_time wasn't explicitly provided, recompute it
         if (time !== undefined && callroom_time === undefined) {
-            const updated = db.prepare('SELECT * FROM timetable WHERE id=?').get(req.params.id);
+            const updated = await db.get('SELECT * FROM timetable WHERE id=?', req.params.id);
             const m = (updated.time || '').match(/^(\d{1,2}):(\d{2})/);
             if (m) {
                 let h = parseInt(m[1]), min = parseInt(m[2]);
@@ -7552,7 +7533,7 @@ app.put('/api/timetable/entry/:id', (req, res) => {
                 while (min < 0) { min += 60; h -= 1; }
                 if (h >= 0) {
                     const crTime = String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
-                    db.prepare('UPDATE timetable SET callroom_time=? WHERE id=?').run(crTime, req.params.id);
+                    await db.run('UPDATE timetable SET callroom_time=? WHERE id=?', crTime, req.params.id);
                 }
             }
         }
@@ -7566,7 +7547,7 @@ app.put('/api/timetable/entry/:id', (req, res) => {
 });
 
 // Add new timetable entry (single row)
-app.post('/api/timetable/entry', (req, res) => {
+app.post('/api/timetable/entry', async (req, res) => {
     try {
         const { admin_key, competition_id, day, section, time, event_name, category, round, note, callroom_time, scheduled_date } = req.body || {};
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
@@ -7576,7 +7557,7 @@ app.post('/api/timetable/entry', (req, res) => {
         // Compute scheduled_date if not provided
         let schedDate = scheduled_date || null;
         if (!schedDate) {
-            const comp = db.prepare('SELECT start_date FROM competition WHERE id=?').get(parseInt(competition_id));
+            const comp = await db.get('SELECT start_date FROM competition WHERE id=?', parseInt(competition_id));
             if (comp && comp.start_date) {
                 const d = new Date(comp.start_date + 'T00:00:00');
                 d.setDate(d.getDate() + parseInt(day) - 1);
@@ -7598,15 +7579,12 @@ app.post('/api/timetable/entry', (req, res) => {
         }
 
         // Get next sort_order for the day
-        const maxSort = db.prepare('SELECT MAX(sort_order) AS m FROM timetable WHERE competition_id=? AND day=?').get(parseInt(competition_id), parseInt(day));
+        const maxSort = await db.get('SELECT MAX(sort_order) AS m FROM timetable WHERE competition_id=? AND day=?', parseInt(competition_id), parseInt(day));
         const sortOrder = (maxSort && maxSort.m !== null ? maxSort.m : -1) + 1;
 
-        const result = db.prepare(`INSERT INTO timetable
+        const result = await db.run(`INSERT INTO timetable
             (competition_id, day, section, time, event_name, category, round, note, sort_order, callroom_time, scheduled_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            parseInt(competition_id), parseInt(day), section || 'track', time,
-            event_name, category || '', round || '', note || '', sortOrder, cr, schedDate
-        );
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, parseInt(competition_id), parseInt(day), section || 'track', time, event_name, category || '', round || '', note || '', sortOrder, cr, schedDate);
         opLog(`시간표 항목 추가 (대회ID=${competition_id}, ${day}일차, ${event_name})`, 'admin', 'admin', parseInt(competition_id));
         res.json({ success: true, id: result.lastInsertRowid });
     } catch(e) {
@@ -7616,13 +7594,13 @@ app.post('/api/timetable/entry', (req, res) => {
 });
 
 // Delete single timetable entry
-app.delete('/api/timetable/entry/:id', (req, res) => {
+app.delete('/api/timetable/entry/:id', async (req, res) => {
     try {
         const adminKey = req.body?.admin_key || req.query?.admin_key || req.headers['x-admin-key'];
         if (!isOperationKey(adminKey) && !isAdminKey(adminKey)) return res.status(403).json({ error: '권한 없음' });
-        const tt = db.prepare('SELECT * FROM timetable WHERE id=?').get(req.params.id);
+        const tt = await db.get('SELECT * FROM timetable WHERE id=?', req.params.id);
         if (!tt) return res.status(404).json({ error: '시간표 항목 없음' });
-        db.prepare('DELETE FROM timetable WHERE id=?').run(req.params.id);
+        await db.run('DELETE FROM timetable WHERE id=?', req.params.id);
         opLog(`시간표 항목 삭제 (ID=${req.params.id}, 대회ID=${tt.competition_id}, ${tt.event_name})`, 'admin', 'admin', tt.competition_id);
         res.json({ success: true });
     } catch(e) {
@@ -7752,37 +7730,33 @@ function autoLinkTimetable(compId) {
 }
 
 // Re-run auto-matching for a competition's timetable
-app.post('/api/timetable/:compId/rematch', (req, res) => {
+app.post('/api/timetable/:compId/rematch', async (req, res) => {
     const { admin_key } = req.body || {};
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
     const compId = parseInt(req.params.compId);
     // Clear existing links first so we can re-match everything
-    db.prepare('UPDATE timetable SET event_id=NULL WHERE competition_id=?').run(compId);
+    await db.run('UPDATE timetable SET event_id=NULL WHERE competition_id=?', compId);
     const result = autoLinkTimetable(compId);
     res.json({ success: true, linked: result.linked, total: result.total });
 });
 
 // GET today's scheduled events (for monitor/app notifications)
-app.get('/api/timetable/:compId/today', (req, res) => {
+app.get('/api/timetable/:compId/today', async (req, res) => {
     const compId = req.params.compId;
     const today = new Date().toISOString().split('T')[0];
     
     // Try to find rows by scheduled_date first, then fall back to day-based lookup
-    let rows = db.prepare(
-        'SELECT t.*, e.round_status as event_round_status, e.id as linked_event_id FROM timetable t LEFT JOIN event e ON t.event_id = e.id WHERE t.competition_id=? AND t.scheduled_date=? ORDER BY t.sort_order, t.time'
-    ).all(compId, today);
+    let rows = await db.all('SELECT t.*, e.round_status as event_round_status, e.id as linked_event_id FROM timetable t LEFT JOIN event e ON t.event_id = e.id WHERE t.competition_id=? AND t.scheduled_date=? ORDER BY t.sort_order, t.time', compId, today);
     
     if (rows.length === 0) {
         // Fall back: determine day from competition start_date
-        const comp = db.prepare('SELECT start_date FROM competition WHERE id=?').get(compId);
+        const comp = await db.get('SELECT start_date FROM competition WHERE id=?', compId);
         if (comp && comp.start_date) {
             const start = new Date(comp.start_date + 'T00:00:00');
             const now = new Date(today + 'T00:00:00');
             const dayNum = Math.floor((now - start) / (24 * 60 * 60 * 1000)) + 1;
             if (dayNum > 0) {
-                rows = db.prepare(
-                    'SELECT t.*, e.round_status as event_round_status, e.id as linked_event_id FROM timetable t LEFT JOIN event e ON t.event_id = e.id WHERE t.competition_id=? AND t.day=? ORDER BY t.sort_order, t.time'
-                ).all(compId, dayNum);
+                rows = await db.all('SELECT t.*, e.round_status as event_round_status, e.id as linked_event_id FROM timetable t LEFT JOIN event e ON t.event_id = e.id WHERE t.competition_id=? AND t.day=? ORDER BY t.sort_order, t.time', compId, dayNum);
             }
         }
     }
@@ -7803,15 +7777,13 @@ app.get('/api/timetable/:compId/today', (req, res) => {
 });
 
 // GET timetable schedule info for events (for matrix dot indicators)
-app.get('/api/timetable/:compId/event-schedule', (req, res) => {
+app.get('/api/timetable/:compId/event-schedule', async (req, res) => {
     const compId = req.params.compId;
     const today = new Date().toISOString().split('T')[0];
-    const rows = db.prepare(
-        `SELECT t.event_id, t.event_ids, t.time, t.callroom_time, t.scheduled_date, t.event_name, t.round, t.day, e.round_status
+    const rows = await db.all(`SELECT t.event_id, t.event_ids, t.time, t.callroom_time, t.scheduled_date, t.event_name, t.round, t.day, e.round_status
          FROM timetable t LEFT JOIN event e ON t.event_id = e.id
          WHERE t.competition_id=? AND t.event_id IS NOT NULL
-         ORDER BY t.scheduled_date, t.time`
-    ).all(compId);
+         ORDER BY t.scheduled_date, t.time`, compId);
     // Return a map: event_id -> schedule info
     // A7: Also map additional event_ids from multi-linked rows
     const schedule = {};
@@ -9111,14 +9083,14 @@ app.get('/api/documents/ad-card/:compId', (req, res) => {
 // ============================================================
 
 // GET all event records (optionally filter by gender)
-app.get('/api/event-records', (req, res) => {
+app.get('/api/event-records', async (req, res) => {
     try {
         const gender = req.query.gender; // M or F
         let rows;
         if (gender) {
-            rows = db.prepare('SELECT * FROM event_record WHERE gender=? ORDER BY event_name, record_type').all(gender);
+            rows = await db.all('SELECT * FROM event_record WHERE gender=? ORDER BY event_name, record_type', gender);
         } else {
-            rows = db.prepare('SELECT * FROM event_record ORDER BY gender, event_name, record_type').all();
+            rows = await db.all('SELECT * FROM event_record ORDER BY gender, event_name, record_type');
         }
         res.json(rows);
     } catch (err) {
@@ -9127,10 +9099,10 @@ app.get('/api/event-records', (req, res) => {
 });
 
 // GET records for a specific event
-app.get('/api/event-records/:gender/:eventName', (req, res) => {
+app.get('/api/event-records/:gender/:eventName', async (req, res) => {
     try {
         const { gender, eventName } = req.params;
-        const rows = db.prepare('SELECT * FROM event_record WHERE gender=? AND event_name=? ORDER BY record_type').all(gender, decodeURIComponent(eventName));
+        const rows = await db.all('SELECT * FROM event_record WHERE gender=? AND event_name=? ORDER BY record_type', gender, decodeURIComponent(eventName));
         // Return as object: { national: {...}, division: {...}, competition: {...} }
         const result = {};
         for (const r of rows) result[r.record_type] = r;
@@ -9141,7 +9113,7 @@ app.get('/api/event-records/:gender/:eventName', (req, res) => {
 });
 
 // PUT (upsert) event record
-app.put('/api/event-records', (req, res) => {
+app.put('/api/event-records', async (req, res) => {
     try {
         const { admin_key, gender, event_name, record_type, record_value, holder_name, holder_team, record_year } = req.body;
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
@@ -9149,13 +9121,13 @@ app.put('/api/event-records', (req, res) => {
         if (!['M','F'].includes(gender)) return res.status(400).json({ error: 'gender는 M 또는 F' });
         if (!['national','division','competition'].includes(record_type)) return res.status(400).json({ error: 'record_type는 national/division/competition' });
 
-        db.prepare(`INSERT INTO event_record (gender, event_name, record_type, record_value, holder_name, holder_team, record_year, updated_at)
+        await db.run(`INSERT INTO event_record (gender, event_name, record_type, record_value, holder_name, holder_team, record_year, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
             ON CONFLICT(gender, event_name, record_type) DO UPDATE SET
                 record_value=excluded.record_value, holder_name=excluded.holder_name,
                 holder_team=excluded.holder_team, record_year=excluded.record_year,
                 updated_at=datetime('now')
-        `).run(gender, event_name, record_type, record_value || '', holder_name || '', holder_team || '', record_year || '');
+        `, gender, event_name, record_type, record_value || '', holder_name || '', holder_team || '', record_year || '');
 
         res.json({ success: true });
     } catch (err) {
@@ -12528,27 +12500,27 @@ app.get('/overlay/lower-third', (req, res) => {
 });
 
 // Overlay data API — current live event data for overlay consumption
-app.get('/api/overlay/current', (req, res) => {
+app.get('/api/overlay/current', async (req, res) => {
     const compId = req.query.competition_id;
     if (!compId) return res.status(400).json({ error: 'competition_id required' });
 
     // Find the currently active event (in_progress)
-    const activeEvent = db.prepare("SELECT * FROM event WHERE competition_id=? AND round_status='in_progress' AND parent_event_id IS NULL ORDER BY sort_order LIMIT 1").get(compId);
+    const activeEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND round_status='in_progress' AND parent_event_id IS NULL ORDER BY sort_order LIMIT 1", compId);
     if (!activeEvent) return res.json({ event: null, heat: null, entries: [] });
 
-    const heat = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1').get(activeEvent.id);
+    const heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1', activeEvent.id);
     if (!heat) return res.json({ event: activeEvent, heat: null, entries: [] });
 
-    const entries = db.prepare(`
+    const entries = await db.all(`
         SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
                a.name, a.bib_number, a.team, a.gender
         FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
         JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
         ORDER BY he.lane_number ASC
-    `).all(heat.id);
+    `, heat.id);
 
-    const results = db.prepare('SELECT * FROM result WHERE heat_id=?').all(heat.id);
-    const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(compId);
+    const results = await db.all('SELECT * FROM result WHERE heat_id=?', heat.id);
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', compId);
 
     res.json({
         competition: comp,
