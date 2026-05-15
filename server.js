@@ -2534,10 +2534,11 @@ app.post('/api/events/:id/create-final', async (req, res) => {
         await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
         // WA lane assignment for single heat with pattern-based random shuffle
         const lanes = waAssignLanesBulk(qualSels, qualSels.length, isShortTrack_, event.name);
-        qualSels.forEach(async (ath, idx) => {
+        for (let idx = 0; idx < qualSels.length; idx++) {
+            const ath = qualSels[idx];
             const newEntry = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", finalEventId, ath.athlete_id);
             await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
-        });
+        }
     } else {
         // Multi-heat final with WA seeding
         const seeded = waSeededDistribution(event, qualSels, numHeats, db);
@@ -2550,10 +2551,11 @@ app.post('/api/events/:id/create-final', async (req, res) => {
             // Sort within group by performance for correct WA lane assignment
             groupAthletes.sort((a, b) => a.perf - b.perf);
             const lanes = waAssignLanesBulk(groupAthletes, groupAthletes.length, isShortTrack_, event.name);
-            groupAthletes.forEach(async (ath, idx) => {
+            for (let idx = 0; idx < groupAthletes.length; idx++) {
+                const ath = groupAthletes[idx];
                 const newEntry = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", finalEventId, ath.athlete_id);
                 await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
-            });
+            }
         }
     }
     opLog(`${event.name} ${event.gender === 'M' ? '남자' : '여자'} 결승 라운드 생성 (${qualified.length}명 진출)`, 'round', 'system', event.competition_id);
@@ -2730,10 +2732,11 @@ app.post('/api/events/:id/create-semifinal', async (req, res) => {
             // Sort within group by performance for correct WA lane assignment
             groupAthletes.sort((a, b) => a.perf - b.perf);
             const lanes = waAssignLanesBulk(groupAthletes, groupAthletes.length, isShortTrack, event.name);
-            groupAthletes.forEach(async (ath, idx) => {
+            for (let idx = 0; idx < groupAthletes.length; idx++) {
+                const ath = groupAthletes[idx];
                 const newEntry = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", semiEventId, ath.athlete_id);
                 await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
-            });
+            }
         }
     })();
     opLog(`${event.name} 준결승 생성 (${qualifiedIds.length}명, ${group_count}개 조)`, 'round', 'system', event.competition_id);
@@ -2823,9 +2826,10 @@ app.post('/api/events/:id/sub-events', async (req, res) => {
         // Create 1 heat and assign all athletes
         const heatInfo = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)', subEventId);
         const subEntries = await db.all('SELECT id FROM event_entry WHERE event_id=?', subEventId);
-        subEntries.forEach(async (se, idx) => {
+        for (let idx = 0; idx < subEntries.length; idx++) {
+            const se = subEntries[idx];
             await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heatInfo.lastInsertRowid, se.id, idx + 1);
-        });
+        }
     })();
 
     opLog(`세부종목 추가: ${subName} (부모: ${parent.name})`, 'event', 'admin', parent.competition_id);
@@ -3816,13 +3820,13 @@ app.post('/api/admin/reset-db', async (req, res) => {
 // ============================================================
 // ADMIN: BACKUP
 // ============================================================
-app.get('/api/admin/backup', (req, res) => {
+app.get('/api/admin/backup', async (req, res) => {
     if (!isOperationKey(req.query.key)) return res.status(403).json({ error: '운영키가 필요합니다.' });
     const format = req.query.format || 'json';
     const compId = req.query.competition_id;
     const tables = ['competition','event','athlete','event_entry','heat','heat_entry','result','height_attempt','combined_score','qualification_selection','relay_member','audit_log','operation_log'];
     const backup = {};
-    tables.forEach(async t => {
+    for (const t of tables) {
         try {
             if (compId && t !== 'operation_log' && t !== 'audit_log') {
                 // Scoped backup: filter by competition_id where possible
@@ -3842,7 +3846,7 @@ app.get('/api/admin/backup', (req, res) => {
                 backup[t] = await db.all(`SELECT * FROM ${t}`);
             }
         } catch(e) { backup[t] = []; }
-    });
+    }
     backup._timestamp = new Date().toISOString();
 
     if (format === 'xlsx') {
@@ -4559,12 +4563,15 @@ app.post('/api/events/upload', upload.single('file'), async (req, res) => {
             }
 
             const existingCache = new Map();
-            await db.all('SELECT * FROM event WHERE competition_id=?', competition_id)
-                .forEach(e => existingCache.set(`${e.name}|${e.category}|${e.gender}|${e.round_type}`, e.id));
+            const existingEvents = await db.all('SELECT * FROM event WHERE competition_id=?', competition_id);
+            for (const e of existingEvents) {
+                existingCache.set(`${e.name}|${e.category}|${e.gender}|${e.round_type}`, e.id);
+            }
 
-            const insertEvt = db.prepare('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order) VALUES (?,?,?,?,?,?,?)');
-            const insertHeat = db.prepare('INSERT INTO heat (event_id,heat_number) VALUES (?,?)');
-            let sortOrder = (await db.get('SELECT MAX(sort_order) AS mx FROM event WHERE competition_id=?', competition_id).mx || 0) + 1;
+            const INSERT_EVT_SQL = 'INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order) VALUES (?,?,?,?,?,?,?)';
+            const INSERT_HEAT_SQL = 'INSERT INTO heat (event_id,heat_number) VALUES (?,?)';
+            const mxRow = await db.get('SELECT MAX(sort_order) AS mx FROM event WHERE competition_id=?', competition_id);
+            let sortOrder = ((mxRow && mxRow.mx) || 0) + 1;
 
             for (const row of dataRows) {
                 const name = String(row[0] || '').trim();
@@ -4580,9 +4587,9 @@ app.post('/api/events/upload', upload.single('file'), async (req, res) => {
                 const key = `${name}|${category}|${gender}|${roundType}`;
                 if (existingCache.has(key)) { stats.skipped++; continue; }
 
-                const r = insertEvt.run(competition_id, name, category, gender, roundType, 'created', sortOrder++);
+                const r = await db.run(INSERT_EVT_SQL, competition_id, name, category, gender, roundType, 'created', sortOrder++);
                 // Auto-create first heat
-                insertHeat.run(r.lastInsertRowid, 1);
+                await db.run(INSERT_HEAT_SQL, r.lastInsertRowid, 1);
                 existingCache.set(key, r.lastInsertRowid);
 
                 // Auto-create combined sub-events
@@ -4592,12 +4599,12 @@ app.post('/api/events/upload', upload.single('file'), async (req, res) => {
                     const subDefs = (gender === 'M') ? DECA : HEPTA;
                     const subCats = { '멀리뛰기':'field_distance','포환던지기':'field_distance','높이뛰기':'field_height',
                         '원반던지기':'field_distance','장대높이뛰기':'field_height','창던지기':'field_distance' };
-                    subDefs.forEach(async (sn, idx) => {
+                    for (const sn of subDefs) {
                         const sc = subCats[sn] || 'track';
-                        const sr = insertEvt.run(competition_id, sn, sc, gender, 'final', 'created', sortOrder++);
+                        const sr = await db.run(INSERT_EVT_SQL, competition_id, sn, sc, gender, 'final', 'created', sortOrder++);
                         await db.run('UPDATE event SET parent_event_id=? WHERE id=?', r.lastInsertRowid, sr.lastInsertRowid);
-                        insertHeat.run(sr.lastInsertRowid, 1);
-                    });
+                        await db.run(INSERT_HEAT_SQL, sr.lastInsertRowid, 1);
+                    }
                 }
 
                 stats.added++;
@@ -5404,13 +5411,14 @@ app.get('/api/pacing', async (req, res) => {
     const compId = parseInt(req.query.competition_id) || null;
     if (!compId) return res.status(400).json({ error: 'competition_id required' });
     const configs = await db.all('SELECT * FROM pacing_config WHERE competition_id=? ORDER BY event_name', compId);
-    const result = configs.map(async cfg => {
+    const result = [];
+    for (const cfg of configs) {
         const colors = await db.all('SELECT * FROM pacing_color WHERE pacing_config_id=? ORDER BY sort_order', cfg.id);
-        colors.forEach(async c => {
+        for (const c of colors) {
             c.segments = await db.all('SELECT * FROM pacing_segment WHERE pacing_color_id=? ORDER BY segment_order', c.id);
-        });
-        return { ...cfg, colors };
-    });
+        }
+        result.push({ ...cfg, colors });
+    }
     res.json(result);
 });
 
@@ -5419,9 +5427,9 @@ app.get('/api/pacing/:id', async (req, res) => {
     const cfg = await db.get('SELECT * FROM pacing_config WHERE id=?', parseInt(req.params.id));
     if (!cfg) return res.status(404).json({ error: 'not found' });
     const colors = await db.all('SELECT * FROM pacing_color WHERE pacing_config_id=? ORDER BY sort_order', cfg.id);
-    colors.forEach(async c => {
+    for (const c of colors) {
         c.segments = await db.all('SELECT * FROM pacing_segment WHERE pacing_color_id=? ORDER BY segment_order', c.id);
-    });
+    }
     res.json({ ...cfg, colors });
 });
 
@@ -5446,14 +5454,16 @@ app.post('/api/pacing', async (req, res) => {
         await db.run('DELETE FROM pacing_color WHERE pacing_config_id=?', cfg.id);
         // Insert colors + segments
         if (Array.isArray(colors)) {
-            colors.forEach(async (c, ci) => {
+            for (let ci = 0; ci < colors.length; ci++) {
+                const c = colors[ci];
                 const cr = await db.run('INSERT INTO pacing_color (pacing_config_id, color_key, sort_order, remark) VALUES (?,?,?,?)', cfg.id, c.color_key, c.sort_order != null ? c.sort_order : ci, c.remark || '');
                 if (Array.isArray(c.segments)) {
-                    c.segments.forEach(async (seg, si) => {
+                    for (let si = 0; si < c.segments.length; si++) {
+                        const seg = c.segments[si];
                         await db.run('INSERT INTO pacing_segment (pacing_color_id, segment_order, distance_meters, lap_seconds) VALUES (?,?,?,?)', cr.lastInsertRowid, seg.segment_order != null ? seg.segment_order : si, seg.distance_meters, seg.lap_seconds);
-                    });
+                    }
                 }
-            });
+            }
         }
         return cfg.id;
     });
@@ -5485,13 +5495,14 @@ app.get('/api/public/pacing', async (req, res) => {
     const compId = parseInt(req.query.competition_id) || null;
     if (!compId) return res.status(400).json({ error: 'competition_id required' });
     const configs = await db.all('SELECT * FROM pacing_config WHERE competition_id=? ORDER BY event_name', compId);
-    const result = configs.map(async cfg => {
+    const result = [];
+    for (const cfg of configs) {
         const colors = await db.all('SELECT * FROM pacing_color WHERE pacing_config_id=? ORDER BY sort_order', cfg.id);
-        colors.forEach(async c => {
+        for (const c of colors) {
             c.segments = await db.all('SELECT * FROM pacing_segment WHERE pacing_color_id=? ORDER BY segment_order', c.id);
-        });
-        return { ...cfg, colors };
-    });
+        }
+        result.push({ ...cfg, colors });
+    }
     res.json(result);
 });
 
