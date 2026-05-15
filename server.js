@@ -6231,7 +6231,11 @@ app.post('/api/joint-groups', async (req, res) => {
         return res.status(400).json({ error: '최소 2개 이상의 종목을 선택하세요.' });
     }
     // Verify all events exist
-    const events = event_ids.map(async id => await db.get('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?', id)).filter(Boolean);
+    const events = [];
+    for (const id of event_ids) {
+        const e = await db.get('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?', id);
+        if (e) events.push(e);
+    }
     if (events.length < 2) return res.status(400).json({ error: '유효한 종목이 2개 미만입니다.' });
 
     // Auto-generate scoreboard key
@@ -6244,9 +6248,10 @@ app.post('/api/joint-groups', async (req, res) => {
     await db.transaction(async () => {
         const info = await db.run('INSERT INTO joint_group (name, joint_scoreboard_key) VALUES (?, ?)', groupName, autoKey);
         groupId = info.lastInsertRowid;
-        events.forEach(async (evt, idx) => {
+        for (let idx = 0; idx < events.length; idx++) {
+            const evt = events[idx];
             await db.run('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, ?)', groupId, evt.id, evt.competition_id, idx);
-        });
+        }
         // Also maintain backward-compat event_link for scoreboard (pair-wise)
         for (let i = 0; i < events.length; i++) {
             for (let j = i + 1; j < events.length; j++) {
@@ -6433,9 +6438,10 @@ app.post('/api/joint-groups/auto-create', async (req, res) => {
             const jointKey = `합동 ${genderLabel} ${events[0].name} ${roundLabel}`.trim();
 
             const gInfo = await db.run('INSERT INTO joint_group (name, joint_scoreboard_key) VALUES (?, ?)', events[0].name, jointKey);
-            events.forEach(async (evt, idx) => {
+            for (let idx = 0; idx < events.length; idx++) {
+                const evt = events[idx];
                 await db.run('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, ?)', gInfo.lastInsertRowid, evt.id, evt.competition_id, idx);
-            });
+            }
             // backward-compat event_link
             for (let i = 0; i < events.length; i++) {
                 for (let j = i + 1; j < events.length; j++) {
@@ -7105,7 +7111,7 @@ app.get('/api/timetable/:compId', async (req, res) => {
     const comp = await db.get('SELECT start_date FROM competition WHERE id=?', req.params.compId);
     // Group by day
     const days = {};
-    rows.forEach(async r => {
+    for (const r of rows) {
         if (!days[r.day]) days[r.day] = { track: [], field: [] };
         const s = r.section === 'field' ? 'field' : 'track';
         // Include result_url from linked event (if any)
@@ -7115,7 +7121,7 @@ app.get('/api/timetable/:compId', async (req, res) => {
             if (evt) result_url = evt.result_url || null;
         }
         days[r.day][s].push({ id: r.id, time: r.time, event_name: r.event_name, category: r.category, round: r.round, note: r.note, event_id: r.event_id, callroom_time: r.callroom_time, scheduled_date: r.scheduled_date, result_url });
-    });
+    }
     res.json({ competition_id: parseInt(req.params.compId), days, start_date: comp ? comp.start_date : null });
 });
 
@@ -8937,7 +8943,8 @@ app.get('/api/documents/ad-card/:compId', async (req, res) => {
         CARD_W = 260; CARD_H = 360; COLS = 2; ROWS = 2; GAP_X = 15; GAP_Y = 15; START_X = 25; START_Y = 25;
     }
 
-    athletes.forEach(async (athlete, idx) => {
+    for (let idx = 0; idx < athletes.length; idx++) {
+        const athlete = athletes[idx];
         if (idx > 0 && idx % cardsPerPage === 0) doc.addPage();
         const posInPage = idx % cardsPerPage;
         const col = posInPage % COLS;
@@ -9037,7 +9044,7 @@ app.get('/api/documents/ad-card/:compId', async (req, res) => {
         doc.text('PACE RISE Competition OS', centerX, y + CARD_H - 18, { width: contentW, align: 'center' });
 
         doc.restore();
-    });
+    }
 
     doc.end();
 });
@@ -10775,15 +10782,19 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
             let deletedCount = 0;
             let preservedCount = 0;
 
+            const INS_TT_SQL = `INSERT INTO timetable
+                (competition_id, day, section, time, event_name, category, round, note, sort_order, scheduled_date)
+                VALUES (?,?,?,?,?,?,?,?,?,?)`;
+
             if (overwriteMode === 'force') {
                 // LEGACY: full delete for uploaded days
-                const delTT = db.prepare('DELETE FROM timetable WHERE competition_id=? AND day=?');
-                uploadedDays.forEach(d => delTT.run(parseInt(competition_id), d));
-                const insTT = db.prepare('INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, note, sort_order, scheduled_date) VALUES (?,?,?,?,?,?,?,?,?,?)');
-                timetableEntries.forEach(e => {
-                    insTT.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order, e.scheduled_date);
+                for (const d of uploadedDays) {
+                    await db.run('DELETE FROM timetable WHERE competition_id=? AND day=?', parseInt(competition_id), d);
+                }
+                for (const e of timetableEntries) {
+                    await db.run(INS_TT_SQL, e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order, e.scheduled_date);
                     addedCount++;
-                });
+                }
             } else {
                 // SMART MERGE (옵션 C):
                 //   - 과거 일차(scheduled_date < today): 절대 건드리지 않음
@@ -10792,17 +10803,14 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
                 //     * 매칭 시 → UPDATE (event_id, callroom_time, note 등 보존)
                 //     * 신규 → INSERT
                 //     * 엑셀에 없는 기존 미래 행 → DELETE
-                const insTT = db.prepare(`INSERT INTO timetable
-                    (competition_id, day, section, time, event_name, category, round, note, sort_order, scheduled_date)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)`);
                 // FIX: event_id를 NULL로 리셋해서 autoLinkDisplayTimetable이 새 division/gender로 재링크하도록 함
                 //       (예전 잘못된 라벨로 만들어진 event에 링크된 채 남아있는 문제 방지)
-                const updTT = db.prepare(`UPDATE timetable SET
+                const UPD_TT_SQL = `UPDATE timetable SET
                     section=?, note=?, sort_order=?, scheduled_date=?, event_id=NULL
-                    WHERE id=?`);
-                const delOne = db.prepare('DELETE FROM timetable WHERE id=?');
+                    WHERE id=?`;
+                const DEL_ONE_SQL = 'DELETE FROM timetable WHERE id=?';
 
-                effectiveDays.forEach(async day => {
+                for (const day of effectiveDays) {
                     // Existing rows for this day (only future/today, since past days are filtered upstream)
                     const existingRows = await db.all('SELECT * FROM timetable WHERE competition_id=? AND day=?', parseInt(competition_id), day);
 
@@ -10810,7 +10818,7 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
                     const sampleRow = existingRows[0];
                     if (sampleRow && sampleRow.scheduled_date && sampleRow.scheduled_date < todayStr) {
                         preservedCount += existingRows.length;
-                        return;
+                        continue;
                     }
 
                     // Build match key for existing rows
@@ -10826,30 +10834,30 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
                     const newEntries = filteredEntries.filter(e => e.day === day);
                     const matchedExistingIds = new Set();
 
-                    newEntries.forEach(e => {
+                    for (const e of newEntries) {
                         const k = buildKey(e);
                         const candidates = existingByKey.get(k);
                         if (candidates && candidates.length > 0) {
                             // UPDATE: take first unmatched candidate
                             const target = candidates.shift();
                             matchedExistingIds.add(target.id);
-                            updTT.run(e.section, e.note || target.note, e.sort_order, e.scheduled_date, target.id);
+                            await db.run(UPD_TT_SQL, e.section, e.note || target.note, e.sort_order, e.scheduled_date, target.id);
                             updatedCount++;
                         } else {
                             // INSERT new row
-                            insTT.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order, e.scheduled_date);
+                            await db.run(INS_TT_SQL, e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order, e.scheduled_date);
                             addedCount++;
                         }
-                    });
+                    }
 
                     // DELETE existing rows that are not in the new upload
-                    existingRows.forEach(r => {
+                    for (const r of existingRows) {
                         if (!matchedExistingIds.has(r.id)) {
-                            delOne.run(r.id);
+                            await db.run(DEL_ONE_SQL, r.id);
                             deletedCount++;
                         }
-                    });
-                });
+                    }
+                }
 
                 // Count preserved (past) days
                 if (skippedPastDays.length > 0) {
@@ -10862,11 +10870,11 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
             const existingEvents = await db.all('SELECT id, name, gender, division, round_type FROM event WHERE competition_id=?', parseInt(competition_id));
             const existingSet = new Set(existingEvents.map(e => `${e.name}|${e.gender}|${e.division || ''}|${e.round_type}`));
 
-            const insEvent = db.prepare('INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)');
+            const INS_EVENT_SQL = 'INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)';
             let eventCount = 0;
             let sortIdx = existingEvents.length;
 
-            Object.values(eventMap).forEach(ev => {
+            for (const ev of Object.values(eventMap)) {
                 const rounds = ev.rounds.size > 0 ? [...ev.rounds] : ['final'];
                 const hasP = rounds.includes('preliminary');
                 const hasS = rounds.includes('semifinal');
@@ -10876,15 +10884,15 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
                 roundsToCreate.push('final');
                 const uniqueRounds = [...new Set(roundsToCreate)];
 
-                uniqueRounds.forEach(rt => {
+                for (const rt of uniqueRounds) {
                     const key = `${ev.name}|${ev.gender}|${ev.division || ''}|${rt}`;
                     if (!existingSet.has(key)) {
-                        insEvent.run(parseInt(competition_id), ev.name, ev.category, ev.gender, rt, ev.division || '', sortIdx++);
+                        await db.run(INS_EVENT_SQL, parseInt(competition_id), ev.name, ev.category, ev.gender, rt, ev.division || '', sortIdx++);
                         existingSet.add(key);
                         eventCount++;
                     }
-                });
-            });
+                }
+            }
 
             return {
                 ttCount: filteredEntries.length,
@@ -10903,16 +10911,17 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
 
         // Compute callroom times
         try {
-            const crStmt = db.prepare('UPDATE timetable SET callroom_time=? WHERE id=? AND callroom_time IS NULL');
             const needCR = await db.all('SELECT id, time, section FROM timetable WHERE competition_id=? AND callroom_time IS NULL', parseInt(competition_id));
-            needCR.forEach(tt => {
+            for (const tt of needCR) {
                 const m = (tt.time || '').match(/^(\d{1,2}):(\d{2})/);
-                if (!m) return;
+                if (!m) continue;
                 let h = parseInt(m[1]), min = parseInt(m[2]);
                 const offset = (tt.section === 'field') ? 45 : 30;
                 min -= offset; while (min < 0) { min += 60; h -= 1; }
-                if (h >= 0) crStmt.run(String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0'), tt.id);
-            });
+                if (h >= 0) {
+                    await db.run('UPDATE timetable SET callroom_time=? WHERE id=? AND callroom_time IS NULL', String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0'), tt.id);
+                }
+            }
         } catch(e) {}
 
         try { fs.unlinkSync(req.file.path); } catch(e) {}
@@ -10949,10 +10958,12 @@ app.post('/api/display/timetable/relink/:compId', async (req, res) => {
         const compId = parseInt(req.params.compId);
         if (!compId) return res.status(400).json({ error: 'competition_id required' });
 
-        const before = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND event_id IS NOT NULL', compId).c;
+        const beforeRow = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND event_id IS NOT NULL', compId);
+        const before = beforeRow ? beforeRow.c : 0;
         await db.run('UPDATE timetable SET event_id=NULL WHERE competition_id=?', compId);
         const linked = autoLinkDisplayTimetable(compId);
-        const total = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=?', compId).c;
+        const totalRow = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=?', compId);
+        const total = totalRow ? totalRow.c : 0;
         const stillUnlinked = total - linked;
         opLog(`시간표 재링크 (이전 ${before} → 현재 ${linked}, 미매칭 ${stillUnlinked})`, 'admin', 'admin', compId);
         res.json({ success: true, total, linked, unlinked: stillUnlinked, before });
@@ -10973,10 +10984,12 @@ app.post('/api/display/roster/relink/:compId', async (req, res) => {
         const compId = parseInt(req.params.compId);
         if (!compId) return res.status(400).json({ error: 'competition_id required' });
 
-        const before = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NOT NULL', compId).c;
+        const beforeRow = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NOT NULL', compId);
+        const before = beforeRow ? beforeRow.c : 0;
         await db.run('UPDATE display_roster SET event_id=NULL WHERE competition_id=?', compId);
         const matched = autoMatchDisplayRoster(compId);
-        const total = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=?', compId).c;
+        const totalRow = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=?', compId);
+        const total = totalRow ? totalRow.c : 0;
         const stillUnmatched = total - matched;
         opLog(`명단 재매칭 (이전 ${before} → 현재 ${matched}, 미매칭 ${stillUnmatched})`, 'admin', 'admin', compId);
         res.json({ success: true, total, matched, unmatched: stillUnmatched, before });
@@ -11001,7 +11014,8 @@ app.get('/api/display/roster/unmatched/:compId', async (req, res) => {
             GROUP BY event_name, round, division, gender
             ORDER BY event_name, round, division, gender
         `, compId);
-        const total = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NULL', compId).c;
+        const totalRow = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NULL', compId);
+        const total = totalRow ? totalRow.c : 0;
         res.json({ success: true, total_unmatched: total, groups: rows });
     } catch (e) {
         console.error('unmatched report error:', e);
@@ -11059,7 +11073,8 @@ app.get('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
         if (comp.mode !== 'display') return res.status(400).json({ error: '노출용(display) 대회에서만 사용 가능합니다.' });
 
         const orphans = _findOrphanEvents(compId);
-        const totalEvents = await db.get('SELECT COUNT(*) AS c FROM event WHERE competition_id=?', compId).c;
+        const totalEventsRow = await db.get('SELECT COUNT(*) AS c FROM event WHERE competition_id=?', compId);
+        const totalEvents = totalEventsRow ? totalEventsRow.c : 0;
 
         // 그룹 요약
         const byBucket = {};
