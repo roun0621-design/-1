@@ -293,8 +293,8 @@ output.push(`-- Source: ${DB_PATH}`);
 output.push(`-- Generated: ${new Date().toISOString()}`);
 output.push('-- ============================================================');
 output.push('');
-output.push('-- 외래키 제약 잠시 끔 (삽입 순서 무관하게 전체 생성)');
-output.push('SET session_replication_role = replica;');
+// FK는 ALTER TABLE 로 후처리하므로 별도 SET 불필요
+output.push('-- (외래키는 모든 테이블 생성 후 ALTER TABLE로 추가, 순서 의존 없음)');
 output.push('');
 
 const tableStats = [];
@@ -342,9 +342,6 @@ for (const idx of indexes) {
     }
 }
 
-output.push('');
-output.push('-- 외래키 제약 다시 켬');
-output.push('SET session_replication_role = origin;');
 output.push('');
 
 console.log(`[stat]  foreign keys: ${fkCount}`);

@@ -2,11 +2,10 @@
 -- Pace Rise Competition OS — PostgreSQL Schema
 -- Auto-generated from SQLite by scripts/sqlite_to_postgres_schema.js
 -- Source: /home/user/webapp/db/competition.db
--- Generated: 2026-05-15T15:59:18.880Z
+-- Generated: 2026-05-15T16:00:11.770Z
 -- ============================================================
 
--- 외래키 제약 잠시 끔 (삽입 순서 무관하게 전체 생성)
-SET session_replication_role = replica;
+-- (외래키는 모든 테이블 생성 후 ALTER TABLE로 추가, 순서 의존 없음)
 
 -- Table: athlete
 CREATE TABLE IF NOT EXISTS "athlete" (
@@ -485,6 +484,3 @@ CREATE INDEX IF NOT EXISTS idx_relay_member_entry ON relay_member(event_entry_id
 CREATE INDEX IF NOT EXISTS idx_result_event_entry ON result(event_entry_id);
 CREATE INDEX IF NOT EXISTS idx_result_heat ON result(heat_id);
 CREATE INDEX IF NOT EXISTS ux_timetable_full ON timetable(competition_id, day, section, time, event_name, category, round);
-
--- 외래키 제약 다시 켬
-SET session_replication_role = origin;
