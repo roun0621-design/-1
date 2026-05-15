@@ -192,13 +192,13 @@ walk.simple(ast, {
             const newArgs = [sqlSrc, ...argsSrc].join(', ');
             const newText = `await db.${method}(${newArgs})`;
 
-            // 호출자 함수가 async가 아니면 async로 만들 필요 있음
+            // top-level 호출은 변환하지 않음 (Node CommonJS는 TLA 불허)
             const fn = enclosingFunction(node);
-            if (fn) {
-                if (!fn.async) funcsToAsync.add(fn);
-            } else {
-                // top-level: 이미 await 허용 (모듈 top-level await OK)
+            if (!fn) {
+                skipped.push({ line: node.loc.start.line, reason: 'top-level — keep sync', kind: 'top-level' });
+                return;
             }
+            if (!fn.async) funcsToAsync.add(fn);
 
             replacements.push({
                 start: node.start, end: node.end, text: newText,
@@ -216,11 +216,16 @@ walk.simple(ast, {
             const parent = parentMap.get(node);
             if (parent && parent.type === 'AwaitExpression') return;
 
+            const fn = enclosingFunction(node);
+            if (!fn) {
+                // 부팅 시 스키마 초기화 등 top-level 호출 — sync 유지 (CommonJS)
+                skipped.push({ line: node.loc.start.line, reason: 'top-level — keep sync', kind: 'top-level' });
+                return;
+            }
+            if (!fn.async) funcsToAsync.add(fn);
+
             const srcText = source.slice(node.start, node.end);
             const newText = 'await ' + srcText;
-            const fn = enclosingFunction(node);
-            if (fn && !fn.async) funcsToAsync.add(fn);
-
             replacements.push({
                 start: node.start, end: node.end, text: newText,
                 line: node.loc.start.line, kind: 'db.exec', fn

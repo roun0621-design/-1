@@ -264,3 +264,94 @@ html2canvas-pro.min.js      → 결과지 스크린샷
 8. **2-I** — 동시 입력 부하 테스트 (PostgreSQL 환경)
 9. **2-J** — AWS PostgreSQL 설치 + 환경변수 전환 + 실전 검증
 10. **2-post** — 사진 업로드 회귀 테스트
+
+---
+
+## 10. Phase 2 진행 현황 (2026-05-15 갱신)
+
+### ✅ 완료된 단계
+
+| 단계 | 산출물 | 검증 결과 | 커밋 |
+|---|---|---|---|
+| 2-A | `lib/db.js` PostgreSQL 비동기 어댑터 | 단위 28/28, 동시쓰기 250/250 | `a0404a1` |
+| 2-B | `scripts/sqlite_to_postgres_schema.js` + `db/schema.pg.sql` | PG15에 적용 OK, 통합 16/16 (500 concurrent INSERT 292ms) | `59aae8c` |
+| 2-C | `scripts/migrate_sqlite_to_postgres.js` | 31/31 테이블, 3,236행 100% 이관 | `72fb8b0`, `03e3cdc` |
+| 2-D | server.js 1차 라우트 17개 async 변환 | 174건 변환 / smoke OK | `67df5d2` |
+| 2-E,F | server.js 2차+3차 라우트 28개 async 변환 | 593건 변환 / smoke OK / 동시쓰기 250/250 | `8c6f23e` |
+
+**누적 변환량:** `db.prepare(...)` → `await db.*(...)` **757건 / 924건 = 82.0% 완료**
+
+### 🚧 잔존 167건 분포 (Phase 2-G 작업 대상)
+
+`server.js` 안에 남은 `db.prepare` 167건의 패턴 분류 (자동 분석):
+
+| 카테고리 | 건수 | 위치 특성 | 처리 전략 |
+|---|---:|---|---|
+| `stmt = db.prepare(SQL)` 변수 저장 | 37 | 라우트 내부, 재사용 stmt | 인라인화 후 변환 |
+| `db.transaction(()=>{...})` 콜백 내부 | 30 | 트랜잭션 블록 | Phase 2-G 통째로 async 트랜잭션 패턴으로 재작성 |
+| 인라인 메서드 호출 (변환 가능했어야 함) | 54 | helper/getter 안 + codemod 누락 | 수동 또는 codemod v2 |
+| 기타 (체이닝 변형 등) | 45 | 라우트 깊은 곳, ternary, async helper 등 | 케이스별 수동 |
+| top-level/주석 | 1 | line 144 (주석) | 무시 |
+
+**라인 분포:**
+- `0000~0599` (init/helpers): 22건 — `getConfigKey`/`setConfigKey` 캐스케이드 영역
+- `0600~1999`: 29건
+- `2000~4999`: 45건
+- `5000~7999`: 21건
+- `8000~10999`: 14건
+- `11000~`: 36건
+
+**보조 통계:**
+- `db.transaction(...)` 사이트: 51건 (Phase 2-G 메인 대상)
+- `db.exec(...)` 잔존: 89건 (대부분 top-level 스키마 init — CommonJS 보호상 sync 유지)
+- `await db.*` 호출 (변환 완료): 758건
+
+### 🚫 자동 변환 중단 이유 (전체 변환 시도 시 발견된 두 가지 부작용)
+
+**부작용 1: Top-level await → ESM 강제 전환**
+- server.js의 라인 150 부근 top-level `db.exec("CREATE TABLE IF NOT EXISTS ...")` 등을 `await db.exec(...)`로 일괄 변환 시
+- Node가 파일을 ESM으로 판정 → `Error [ERR_REQUIRE_ASYNC_MODULE]: require() cannot be used on an ESM graph with top-level await`
+- **해결책:** `scripts/async_codemod.js`에 top-level skip 로직 추가 (이 커밋)
+
+**부작용 2: 헬퍼 함수 async 캐스케이드**
+```js
+// getConfigKey가 async가 되면…
+async function getConfigKey(k, def) { ... }
+
+// 이 줄들이 전부 깨짐:
+const ADMIN_ID = () => getConfigKey('admin_id', 'admin');   // Promise 반환
+get adminHash() { return getConfigKey('admin_pw', ''); }    // getter는 sync 강제
+const existingPw = getConfigKey('admin_pw', '');             // existingPw.startsWith → TypeError
+```
+- **재현 에러:** `TypeError: existingPw.startsWith is not a function at server.js:530:35`
+- **해결책:** Phase 2-G에서 헬퍼 → 호출자 → 호출자의 호출자 순으로 재귀적 수동 변환 필요
+  - `getConfigKey`/`setConfigKey` 자체를 sync 유지 + DB 캐시 도입 (캐시는 boot 시 1회 비동기 로딩)
+  - 또는 전부 async로 만들고 getter/closure를 method로 리팩토링
+  - 결정은 Phase 2-G 시작 시점에 사장님 검토 후 진행
+
+### 📋 Phase 2-G 작업 계획 (예정)
+
+1. **G-1** — `db.transaction()` 30~51건을 async 트랜잭션 패턴으로 일괄 변환
+   - `lib/db.js`의 `AsyncLocalStorage` 기반 트랜잭션 컨텍스트 이미 준비됨
+   - 패턴: `db.transaction(()=>{...})` → `await db.transactionAsync(async()=>{...})`
+2. **G-2** — `stmt = db.prepare(SQL)` 변수 저장 37건 인라인화
+3. **G-3** — `getConfigKey`/`setConfigKey` 캐스케이드 처리
+   - 전략 결정 후 헬퍼 → 호출자 트리 따라 재귀 변환
+4. **G-4** — 남은 인라인 케이스 54건 + 기타 45건 케이스별 수동 정리
+5. **G-5** — `db.prepare` 0건 도달 검증 + 풀 부팅 회귀
+
+**예상 작업량:** 약 200건 수동 검토 + 50건 자동 변환
+
+### 🔬 다음 검증 단계 (Phase 2-G 완료 후)
+
+| 단계 | 내용 | 합격 기준 |
+|---|---|---|
+| 2-H | SQLite ↔ PostgreSQL 결과 동등성 자동 테스트 | 모든 라우트 GET 응답이 byte-identical |
+| 2-I | PostgreSQL 부하 테스트 (10,000+ 동시 쓰기) | 0건 손실, p99 < 200ms |
+| 2-J | AWS RDS PostgreSQL 환경 전환 + 실전 검증 | 사장님 입회하 라이브 대회 시뮬레이션 |
+
+### 🛡️ 안전 장치 (현재 가동 중)
+
+- `lib/db.js`: PG 백엔드에서 `db.prepare()` 호출 시 명시적 에러 throw — 100% 변환 검증용 그물망
+- SQLite 환경(`DB_BACKEND=sqlite`)은 100% 호환 유지 — 운영 무중단
+- pm2 daemon `pacerise` — 부팅 실패 시 즉시 인지
