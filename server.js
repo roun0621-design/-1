@@ -2366,12 +2366,16 @@ app.get('/api/qualifications', async (req, res) => {
     res.json(await db.all(`SELECT qs.*, a.name, a.bib_number, a.team FROM qualification_selection qs
         JOIN event_entry ee ON ee.id=qs.event_entry_id JOIN athlete a ON a.id=ee.athlete_id WHERE qs.event_id=?`, req.query.event_id));
 });
-app.post('/api/qualifications/save', (req, res) => {
+app.post('/api/qualifications/save', async (req, res) => {
     const { event_id, selections } = req.body;
     if (!event_id || !selections) return res.status(400).json({ error: 'Missing fields' });
-    const upsert = db.prepare(`INSERT INTO qualification_selection (event_id,event_entry_id,selected,qualification_type) VALUES (?,?,?,?)
-        ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=excluded.selected, qualification_type=excluded.qualification_type, updated_at=datetime('now')`);
-    db.transaction(() => { for (const s of selections) upsert.run(event_id, s.event_entry_id, s.selected ? 1 : 0, s.qualification_type || ''); })();
+    await db.transaction(async () => {
+        for (const s of selections) {
+            await db.run(`INSERT INTO qualification_selection (event_id,event_entry_id,selected,qualification_type) VALUES (?,?,?,?)
+                ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=excluded.selected, qualification_type=excluded.qualification_type, updated_at=datetime('now')`,
+                event_id, s.event_entry_id, s.selected ? 1 : 0, s.qualification_type || '');
+        }
+    })();
     res.json({ success: true });
 });
 app.post('/api/qualifications/approve', async (req, res) => {
@@ -2887,11 +2891,10 @@ app.post('/api/events/:id/sub-events/reorder', async (req, res) => {
     const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!parent) return res.status(404).json({ error: 'Parent event not found' });
 
-    const stmt = db.prepare('UPDATE event SET sort_order=? WHERE id=? AND parent_event_id=?');
-    db.transaction(() => {
-        order.forEach((subId, idx) => {
-            stmt.run(idx + 1, subId, parent.id);
-        });
+    await db.transaction(async () => {
+        for (let idx = 0; idx < order.length; idx++) {
+            await db.run('UPDATE event SET sort_order=? WHERE id=? AND parent_event_id=?', idx + 1, order[idx], parent.id);
+        }
     })();
     res.json({ success: true });
 });
@@ -2931,40 +2934,44 @@ app.post('/api/events/:id/sub-events/sync-athletes', async (req, res) => {
 });
 
 // POST /api/lanes/bulk-update — Update lane assignments by heat_entry_id
-app.post('/api/lanes/bulk-update', (req, res) => {
+app.post('/api/lanes/bulk-update', async (req, res) => {
     const { assignments } = req.body;
     if (!assignments || !Array.isArray(assignments)) return res.status(400).json({ error: 'assignments array required' });
 
     try {
-        const updateStmt = db.prepare('UPDATE heat_entry SET lane_number = ? WHERE id = ?');
-        const txn = db.transaction(() => {
+        await db.transaction(async () => {
             for (const a of assignments) {
                 if (!a.heat_entry_id || !a.lane_number) continue;
-                updateStmt.run(a.lane_number, a.heat_entry_id);
+                await db.run('UPDATE heat_entry SET lane_number = ? WHERE id = ?', a.lane_number, a.heat_entry_id);
             }
-        });
-        txn();
+        })();
         res.json({ success: true, updated: assignments.length });
     } catch (err) {
         res.status(500).json({ error: '레인 업데이트 실패: ' + err.message });
     }
 });
 
-app.post('/api/lanes/assign', (req, res) => {
+app.post('/api/lanes/assign', async (req, res) => {
     const { heat_id, assignments } = req.body;
     if (!heat_id || !assignments) return res.status(400).json({ error: 'Missing fields' });
-    const upd = db.prepare('UPDATE heat_entry SET lane_number=? WHERE heat_id=? AND event_entry_id=?');
-    db.transaction(() => { for (const a of assignments) upd.run(a.lane_number, heat_id, a.event_entry_id); })();
+    await db.transaction(async () => {
+        for (const a of assignments) {
+            await db.run('UPDATE heat_entry SET lane_number=? WHERE heat_id=? AND event_entry_id=?', a.lane_number, heat_id, a.event_entry_id);
+        }
+    })();
     res.json({ success: true });
 });
 
 // Update heat entries — batch move athletes between heats and update lane numbers
-app.post('/api/admin/heats/update-entries', (req, res) => {
+app.post('/api/admin/heats/update-entries', async (req, res) => {
     const { heat_id, entries, admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!heat_id || !entries) return res.status(400).json({ error: 'Missing fields' });
-    const upd = db.prepare('UPDATE heat_entry SET lane_number=? WHERE heat_id=? AND event_entry_id=?');
-    db.transaction(() => { for (const e of entries) upd.run(e.lane_number, heat_id, e.event_entry_id); })();
+    await db.transaction(async () => {
+        for (const e of entries) {
+            await db.run('UPDATE heat_entry SET lane_number=? WHERE heat_id=? AND event_entry_id=?', e.lane_number, heat_id, e.event_entry_id);
+        }
+    })();
     res.json({ success: true });
 });
 
@@ -3287,17 +3294,15 @@ app.get('/api/site-config', async (req, res) => {
     rows.forEach(r => { config[r.key] = r.value; });
     res.json(config);
 });
-app.post('/api/admin/site-config', (req, res) => {
+app.post('/api/admin/site-config', async (req, res) => {
     const { admin_key, configs } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '운영키가 필요합니다.' });
     if (!configs || typeof configs !== 'object') return res.status(400).json({ error: 'configs object required' });
-    const upsert = db.prepare('INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)');
-    const tx = db.transaction(() => {
+    await db.transaction(async () => {
         for (const [k, v] of Object.entries(configs)) {
-            if (k.startsWith('site_')) upsert.run(k, String(v));
+            if (k.startsWith('site_')) await db.run('INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)', k, String(v));
         }
-    });
-    tx();
+    })();
     opLog('사이트 설정 업데이트', 'admin', 'admin');
     res.json({ success: true });
 });
@@ -3612,15 +3617,14 @@ function getStandardSortOrder(eventName) {
     }
     return 9990;
 }
-function autoSortCompetitionEvents(competitionId) {
-    const events = db.prepare('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL').all(competitionId);
-    const update = db.prepare('UPDATE event SET sort_order=? WHERE id=?');
-    db.transaction(() => {
-        events.forEach(evt => {
+async function autoSortCompetitionEvents(competitionId) {
+    const events = await db.all('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL', competitionId);
+    await db.transaction(async () => {
+        for (const evt of events) {
             const order = getStandardSortOrder(evt.name);
-            update.run(order, evt.id);
-            db.prepare('UPDATE event SET sort_order=? WHERE parent_event_id=?').run(order, evt.id);
-        });
+            await db.run('UPDATE event SET sort_order=? WHERE id=?', order, evt.id);
+            await db.run('UPDATE event SET sort_order=? WHERE parent_event_id=?', order, evt.id);
+        }
     })();
 }
 
@@ -3666,8 +3670,9 @@ app.post('/api/admin/events/auto-sort', async (req, res) => {
     const { admin_key, competition_id } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
-    autoSortCompetitionEvents(competition_id);
-    const count = await db.get('SELECT COUNT(*) as cnt FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id).cnt;
+    await autoSortCompetitionEvents(competition_id);
+    const row = await db.get('SELECT COUNT(*) as cnt FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id);
+    const count = row ? row.cnt : 0;
     res.json({ success: true, message: `${count}개 종목 자동정렬 완료 (WA 표준 순서)` });
 });
 
@@ -4491,9 +4496,8 @@ app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => 
         }
 
         // Apply updates
-        db.transaction(() => {
-            const stmt = db.prepare('UPDATE athlete SET bib_number=? WHERE id=?');
-            for (const u of updates) stmt.run(u.new_bib, u.id);
+        await db.transaction(async () => {
+            for (const u of updates) await db.run('UPDATE athlete SET bib_number=? WHERE id=?', u.new_bib, u.id);
         })();
 
         opLog(`BIB 일괄 수정: ${results.updated}명 업데이트, ${results.matched}명 매칭`, 'import', 'admin', competition_id);
@@ -4592,7 +4596,7 @@ app.post('/api/events/upload', upload.single('file'), async (req, res) => {
 
         opLog(`종목 업로드: ${stats.added}개 추가, ${stats.skipped}개 스킵`, 'import', 'admin', competition_id);
         // Auto-sort after upload
-        autoSortCompetitionEvents(competition_id);
+        await autoSortCompetitionEvents(competition_id);
         res.json({ success: true, stats });
     } catch (err) { console.error(err); res.status(500).json({ error: '업로드 오류: ' + err.message }); }
 });
@@ -7231,15 +7235,15 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
 
         if (overwriteMode === 'force') {
             // LEGACY: full delete for uploaded days
-            const deleteDayStmt = db.prepare('DELETE FROM timetable WHERE competition_id=? AND day=?');
-            const insert = db.prepare('INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            const tx = db.transaction((entries, days) => {
-                days.forEach(d => deleteDayStmt.run(parseInt(competition_id), d));
-                entries.forEach(e => {
-                    insert.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order);
-                });
-            });
-            await tx(allEntries, uploadedDays);
+            await db.transaction(async () => {
+                for (const d of uploadedDays) {
+                    await db.run('DELETE FROM timetable WHERE competition_id=? AND day=?', parseInt(competition_id), d);
+                }
+                for (const e of allEntries) {
+                    await db.run('INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order);
+                }
+            })();
             mergeStats.addedCount = allEntries.length;
         } else {
             // SMART MERGE: 행 단위 diff (과거 일차 보존)
@@ -9075,25 +9079,23 @@ app.put('/api/event-records', async (req, res) => {
 });
 
 // PUT batch upsert for a single event (all 3 record types at once)
-app.put('/api/event-records/batch', (req, res) => {
+app.put('/api/event-records/batch', async (req, res) => {
     try {
         const { admin_key, gender, event_name, records } = req.body;
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
         if (!gender || !event_name || !records) return res.status(400).json({ error: 'gender, event_name, records 필수' });
 
-        const stmt = db.prepare(`INSERT INTO event_record (gender, event_name, record_type, record_value, holder_name, holder_team, record_year, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            ON CONFLICT(gender, event_name, record_type) DO UPDATE SET
-                record_value=excluded.record_value, holder_name=excluded.holder_name,
-                holder_team=excluded.holder_team, record_year=excluded.record_year,
-                updated_at=datetime('now')
-        `);
-
-        db.transaction(() => {
+        await db.transaction(async () => {
             for (const rt of ['national', 'division', 'competition']) {
                 const r = records[rt];
                 if (r) {
-                    stmt.run(gender, event_name, rt, r.record_value || '', r.holder_name || '', r.holder_team || '', r.record_year || '');
+                    await db.run(`INSERT INTO event_record (gender, event_name, record_type, record_value, holder_name, holder_team, record_year, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                        ON CONFLICT(gender, event_name, record_type) DO UPDATE SET
+                            record_value=excluded.record_value, holder_name=excluded.holder_name,
+                            holder_team=excluded.holder_team, record_year=excluded.record_year,
+                            updated_at=datetime('now')
+                    `, gender, event_name, rt, r.record_value || '', r.holder_name || '', r.holder_team || '', r.record_year || '');
                 }
             }
         })();
@@ -10151,21 +10153,17 @@ app.post('/api/external/event-result-link/batch', externalApiAuth, async (req, r
     }
 
     // 2) 트랜잭션 적용
-    const stmtResult = db.prepare('UPDATE event SET result_url = ? WHERE id = ?');
-    const stmtVideo  = db.prepare('UPDATE event SET video_url = ? WHERE id = ?');
-    const apply = db.transaction((rows) => {
-        for (const r of rows) {
-            if (!r.ok || !r.willApply) continue;
-            if (r.field === 'result_url') stmtResult.run(r.url, r.event_id);
-            else stmtVideo.run(r.url, r.event_id);
-            r.applied = true;
-            r.previous_value = r.oldValue;
-            r.new_value = r.url;
-        }
-    });
-
     try {
-        apply(prepared);
+        await db.transaction(async () => {
+            for (const r of prepared) {
+                if (!r.ok || !r.willApply) continue;
+                if (r.field === 'result_url') await db.run('UPDATE event SET result_url = ? WHERE id = ?', r.url, r.event_id);
+                else                          await db.run('UPDATE event SET video_url = ? WHERE id = ?', r.url, r.event_id);
+                r.applied = true;
+                r.previous_value = r.oldValue;
+                r.new_value = r.url;
+            }
+        })();
     } catch (e) {
         console.error('[external/event-result-link/batch]', e);
         return res.status(500).json({ ok: false, code: 'INTERNAL_ERROR', message: e.message || 'internal error' });
@@ -11087,13 +11085,14 @@ app.post('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
             });
         }
 
-        const tx = db.transaction(() => {
-            const del = db.prepare('DELETE FROM event WHERE id=?');
-            let deleted = 0;
-            orphans.forEach(o => { del.run(o.id); deleted++; });
-            return deleted;
-        });
-        const deleted = tx();
+        const deleted = await db.transaction(async () => {
+            let n = 0;
+            for (const o of orphans) {
+                await db.run('DELETE FROM event WHERE id=?', o.id);
+                n++;
+            }
+            return n;
+        })();
 
         opLog(`고아 event 정리 (${deleted}개 삭제)`, 'admin', 'admin', compId);
         res.json({
@@ -11733,11 +11732,12 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
             await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=?', parseInt(competition_id), dayNum);
 
             // Insert parsed roster
-            const ins = db.prepare('INSERT INTO display_roster (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, heat, lane) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-            const insTx = db.transaction((entries) => {
-                entries.forEach(e => ins.run(e.competition_id, e.day, e.event_name, e.round, e.division, e.gender, e.bib_number, e.athlete_name, e.team, e.sort_order, e.heat || null, e.lane || null));
-            });
-            insTx(rosterEntries);
+            await db.transaction(async () => {
+                for (const e of rosterEntries) {
+                    await db.run('INSERT INTO display_roster (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, heat, lane) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                        e.competition_id, e.day, e.event_name, e.round, e.division, e.gender, e.bib_number, e.athlete_name, e.team, e.sort_order, e.heat || null, e.lane || null);
+                }
+            })();
 
             // Auto-match roster to events
             try { autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) { console.warn('Roster auto-match warning:', e.message); }
@@ -11869,13 +11869,15 @@ app.post('/api/display/roster/upload-excel', upload.single('file'), async (req, 
         }
 
         // 트랜잭션: day별 삭제 후 INSERT
-        const insStmt = db.prepare('INSERT INTO display_roster (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, heat, lane) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-        const delStmt = db.prepare('DELETE FROM display_roster WHERE competition_id=? AND day=?');
-        const tx = db.transaction(() => {
-            [...daysSeen].forEach(d => delStmt.run(parseInt(competition_id), d));
-            entries.forEach(e => insStmt.run(e.competition_id, e.day, e.event_name, e.round, e.division, e.gender, e.bib_number, e.athlete_name, e.team, e.sort_order, e.heat, e.lane));
-        });
-        tx();
+        await db.transaction(async () => {
+            for (const d of [...daysSeen]) {
+                await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=?', parseInt(competition_id), d);
+            }
+            for (const e of entries) {
+                await db.run('INSERT INTO display_roster (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, heat, lane) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                    e.competition_id, e.day, e.event_name, e.round, e.division, e.gender, e.bib_number, e.athlete_name, e.team, e.sort_order, e.heat, e.lane);
+            }
+        })();
 
         // Auto-match
         try { autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) { console.warn('Roster auto-match warning:', e.message); }
@@ -12161,15 +12163,15 @@ app.put('/api/display/events/:id/result-url', async (req, res) => {
 });
 
 // Bulk update result URLs
-app.put('/api/display/events/bulk-result-url', (req, res) => {
+app.put('/api/display/events/bulk-result-url', async (req, res) => {
     const { admin_key, updates } = req.body;
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
     if (!Array.isArray(updates)) return res.status(400).json({ error: 'updates array required' });
-    const stmt = db.prepare('UPDATE event SET result_url=? WHERE id=?');
-    const tx = db.transaction((items) => {
-        items.forEach(u => stmt.run(u.result_url || '', u.id));
-    });
-    tx(updates);
+    await db.transaction(async () => {
+        for (const u of updates) {
+            await db.run('UPDATE event SET result_url=? WHERE id=?', u.result_url || '', u.id);
+        }
+    })();
     res.json({ success: true, count: updates.length });
 });
 
