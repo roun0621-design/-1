@@ -1577,20 +1577,20 @@ app.delete('/api/home-popups/:id', async (req, res) => {
 // EVENTS — scoped to competition
 // ============================================================
 // Heat allocations view — shows all heats/lanes for an event (used in manual edit UI)
-app.get('/api/events/:id/heat-allocations', (req, res) => {
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+app.get('/api/events/:id/heat-allocations', async (req, res) => {
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
-    const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(event.id);
-    const result = heats.map(h => {
-        const entries = db.prepare(`SELECT he.lane_number, he.sub_group, he.id AS heat_entry_id, ee.id AS event_entry_id, ee.status,
+    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
+    const result = heats.map(async h => {
+        const entries = await db.all(`SELECT he.lane_number, he.sub_group, he.id AS heat_entry_id, ee.id AS event_entry_id, ee.status,
                a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender
         FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-        JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`).all(h.id);
+        JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`, h.id);
         return { ...h, entries };
     });
     res.json({ event, heats: result });
 });
-app.get('/api/events', (req, res) => {
+app.get('/api/events', async (req, res) => {
     const { gender, category, competition_id } = req.query;
     let q = 'SELECT * FROM event WHERE 1=1';
     const p = [];
@@ -1598,34 +1598,34 @@ app.get('/api/events', (req, res) => {
     if (gender) { q += ' AND gender=?'; p.push(gender); }
     if (category) { q += ' AND category=?'; p.push(category); }
     q += ' ORDER BY sort_order, id';
-    const events = db.prepare(q).all(...p);
+    const events = await db.all(q, ...p);
     // Attach heat_count so dashboard can show roster button for events with heats
     const hcStmt = db.prepare('SELECT COUNT(*) AS cnt FROM heat WHERE event_id=?');
     events.forEach(e => { e.heat_count = hcStmt.get(e.id).cnt; });
     res.json(events);
 });
-app.get('/api/events/:id', (req, res) => {
-    const e = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+app.get('/api/events/:id', async (req, res) => {
+    const e = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!e) return res.status(404).json({ error: 'Not found' });
     res.json(e);
 });
-app.get('/api/events/:id/entries', (req, res) => {
-    res.json(db.prepare(`
+app.get('/api/events/:id/entries', async (req, res) => {
+    res.json(await db.all(`
         SELECT ee.id AS event_entry_id, ee.status, ee.event_id,
                a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender
         FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id
         WHERE ee.event_id=? ORDER BY CAST(a.bib_number AS INTEGER)
-    `).all(req.params.id));
+    `, req.params.id));
 });
 
 // ============================================================
 // HEATS
 // ============================================================
-app.get('/api/heats', (req, res) => {
+app.get('/api/heats', async (req, res) => {
     if (!req.query.event_id) return res.status(400).json({ error: 'event_id required' });
-    res.json(db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(req.query.event_id));
+    res.json(await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', req.query.event_id));
 });
-app.get('/api/heats/:id/entries', (req, res) => {
+app.get('/api/heats/:id/entries', async (req, res) => {
     const statusFilter = req.query.status;
     let query = `SELECT he.id AS heat_entry_id, he.lane_number, he.sub_group,
                ee.id AS event_entry_id, ee.status, ee.callroom_memo,
@@ -1635,29 +1635,29 @@ app.get('/api/heats/:id/entries', (req, res) => {
     const params = [req.params.id];
     if (statusFilter) { query += ` AND ee.status=?`; params.push(statusFilter); }
     query += ` ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`;
-    res.json(db.prepare(query).all(...params));
+    res.json(await db.all(query, ...params));
 });
 
 // ============================================================
 // RESULTS
 // ============================================================
-app.get('/api/results', (req, res) => {
+app.get('/api/results', async (req, res) => {
     if (!req.query.heat_id) return res.status(400).json({ error: 'heat_id required' });
-    res.json(db.prepare(`
+    res.json(await db.all(`
         SELECT r.*, a.name, a.bib_number, a.team
         FROM result r JOIN event_entry ee ON ee.id=r.event_entry_id
         JOIN athlete a ON a.id=ee.athlete_id
         WHERE r.heat_id=? ORDER BY r.event_entry_id, r.attempt_number
-    `).all(req.query.heat_id));
+    `, req.query.heat_id));
 });
-app.post('/api/results/upsert', (req, res) => {
+app.post('/api/results/upsert', async (req, res) => {
     const { heat_id, event_entry_id, attempt_number, distance_meters, time_seconds, remark, status_code, wind, admin_key } = req.body;
     if (!heat_id || !event_entry_id) return res.status(400).json({ error: 'heat_id and event_entry_id required' });
-    const he = db.prepare('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?').get(heat_id, event_entry_id);
+    const he = await db.get('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?', heat_id, event_entry_id);
     if (!he) return res.status(404).json({ error: 'Entry not in heat' });
-    const heat = db.prepare('SELECT * FROM heat WHERE id=?').get(heat_id);
+    const heat = await db.get('SELECT * FROM heat WHERE id=?', heat_id);
     if (heat) {
-        const event = db.prepare('SELECT * FROM event WHERE id=?').get(heat.event_id);
+        const event = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
         // Post-competition lock: only admin can modify after competition ends
         if (event && requireAdminAfterCompEnd(event.competition_id, admin_key, res)) return;
         // Completed events require admin_key to modify
@@ -1668,25 +1668,25 @@ app.post('/api/results/upsert', (req, res) => {
             let allowed = false;
             // Allow combined sub-events: auto-promote both parent and sub-event
             if (event.parent_event_id) {
-                const parent = db.prepare('SELECT * FROM event WHERE id=?').get(event.parent_event_id);
+                const parent = await db.get('SELECT * FROM event WHERE id=?', event.parent_event_id);
                 if (parent && parent.category === 'combined') {
                     allowed = true;
                     // Auto-promote parent if needed
                     if (parent.round_status !== 'in_progress' && parent.round_status !== 'completed') {
-                        db.prepare("UPDATE event SET round_status='in_progress' WHERE id=?").run(parent.id);
+                        await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", parent.id);
                         broadcastSSE('event_status_changed', { event_id: parent.id, round_status: 'in_progress' });
                     }
                     // Auto-promote sub-event
-                    db.prepare("UPDATE event SET round_status='in_progress' WHERE id=?").run(event.id);
+                    await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
                     broadcastSSE('event_status_changed', { event_id: event.id, round_status: 'in_progress' });
                 }
             }
             // Auto-promote from 'created' or 'heats_generated' to 'in_progress' when heats exist
             if (!allowed && (event.round_status === 'created' || event.round_status === 'heats_generated')) {
-                const heatCount = db.prepare('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?').get(event.id).cnt;
+                const heatCount = await db.get('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?', event.id).cnt;
                 if (heatCount > 0) {
                     allowed = true;
-                    db.prepare("UPDATE event SET round_status='in_progress' WHERE id=?").run(event.id);
+                    await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
                     broadcastSSE('event_status_changed', { event_id: event.id, round_status: 'in_progress' });
                     const gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
                     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
@@ -1709,9 +1709,9 @@ app.post('/api/results/upsert', (req, res) => {
     }
     // Auto-update round_status to in_progress when first result is saved
     if (heat) {
-        const event = db.prepare('SELECT * FROM event WHERE id=?').get(heat.event_id);
+        const event = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
         if (event && (event.round_status === 'heats_generated' || event.round_status === 'created')) {
-            db.prepare("UPDATE event SET round_status='in_progress' WHERE id=?").run(event.id);
+            await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
             broadcastSSE('event_status_changed', { event_id: event.id, round_status: 'in_progress' });
             const gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
             const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
@@ -1719,21 +1719,19 @@ app.post('/api/results/upsert', (req, res) => {
         }
         // Also update parent combined event status if this is a sub-event
         if (event && event.parent_event_id) {
-            const parentEvt = db.prepare('SELECT * FROM event WHERE id=?').get(event.parent_event_id);
+            const parentEvt = await db.get('SELECT * FROM event WHERE id=?', event.parent_event_id);
             if (parentEvt && parentEvt.category === 'combined' && (parentEvt.round_status === 'heats_generated' || parentEvt.round_status === 'created')) {
-                db.prepare("UPDATE event SET round_status='in_progress' WHERE id=?").run(parentEvt.id);
+                await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", parentEvt.id);
                 broadcastSSE('event_status_changed', { event_id: parentEvt.id, round_status: 'in_progress' });
                 opLog(`${parentEvt.name} 기록 입력 시작 (세부종목 자동 진행중 전환)`, 'record', 'system', parentEvt.competition_id);
             }
         }
     }
     try {
-        let existing = db.prepare('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS ?')
-            .get(heat_id, event_entry_id, attempt_number || null);
+        let existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS ?', heat_id, event_entry_id, attempt_number || null);
         // Fallback: for track/relay/road (no attempt_number), find any existing result for this entry
         if (!existing && !attempt_number) {
-            existing = db.prepare('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? ORDER BY id DESC LIMIT 1')
-                .get(heat_id, event_entry_id);
+            existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? ORDER BY id DESC LIMIT 1', heat_id, event_entry_id);
         }
         if (existing) {
             // Preserve existing values for fields not included in the request (undefined → keep existing)
@@ -1746,14 +1744,13 @@ app.post('/api/results/upsert', (req, res) => {
             
             // If everything is being cleared (no time, no distance, no status, no remark), DELETE the result instead
             if (updDist == null && updTime == null && !updSc && !updRemark && status_code !== undefined) {
-                db.prepare('DELETE FROM result WHERE id=?').run(existing.id);
+                await db.run('DELETE FROM result WHERE id=?', existing.id);
                 // Also clear combined_score for this entry if parent is combined
                 if (heat) {
-                    const _delEvt = db.prepare('SELECT * FROM event WHERE id=?').get(heat.event_id);
+                    const _delEvt = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
                     if (_delEvt && _delEvt.parent_event_id) {
-                        const _subOrd = db.prepare('SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND id<=?').get(_delEvt.parent_event_id, _delEvt.id)?.cnt || 0;
-                        db.prepare('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=? AND athlete_id=(SELECT athlete_id FROM event_entry WHERE id=?)) AND sub_event_order=?')
-                            .run(_delEvt.parent_event_id, event_entry_id, _subOrd);
+                        const _subOrd = await db.get('SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND id<=?', _delEvt.parent_event_id, _delEvt.id)?.cnt || 0;
+                        await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=? AND athlete_id=(SELECT athlete_id FROM event_entry WHERE id=?)) AND sub_event_order=?', _delEvt.parent_event_id, event_entry_id, _subOrd);
                         broadcastSSE('combined_update', { event_id: _delEvt.parent_event_id });
                     }
                 }
@@ -1762,16 +1759,14 @@ app.post('/api/results/upsert', (req, res) => {
                 return res.json({ success: true, deleted: true, deleted_id: existing.id });
             }
             
-            db.prepare("UPDATE result SET distance_meters=?,time_seconds=?,remark=?,status_code=?,wind=?,updated_at=datetime('now') WHERE id=?")
-                .run(updDist, updTime, updRemark, updSc, updWind, existing.id);
-            const upd = db.prepare('SELECT * FROM result WHERE id=?').get(existing.id);
+            await db.run("UPDATE result SET distance_meters=?,time_seconds=?,remark=?,status_code=?,wind=?,updated_at=datetime('now') WHERE id=?", updDist, updTime, updRemark, updSc, updWind, existing.id);
+            const upd = await db.get('SELECT * FROM result WHERE id=?', existing.id);
             audit('result', existing.id, 'UPDATE', existing, upd, 'operator', null, req);
             broadcastSSE('result_update', { heat_id, event_entry_id });
             res.json(upd);
         } else {
-            const info = db.prepare('INSERT INTO result (heat_id,event_entry_id,attempt_number,distance_meters,time_seconds,remark,status_code,wind) VALUES (?,?,?,?,?,?,?,?)')
-                .run(heat_id, event_entry_id, attempt_number || null, distance_meters ?? null, time_seconds ?? null, remark || '', sc || '', wind ?? null);
-            const ins = db.prepare('SELECT * FROM result WHERE id=?').get(info.lastInsertRowid);
+            const info = await db.run('INSERT INTO result (heat_id,event_entry_id,attempt_number,distance_meters,time_seconds,remark,status_code,wind) VALUES (?,?,?,?,?,?,?,?)', heat_id, event_entry_id, attempt_number || null, distance_meters ?? null, time_seconds ?? null, remark || '', sc || '', wind ?? null);
+            const ins = await db.get('SELECT * FROM result WHERE id=?', info.lastInsertRowid);
             audit('result', ins.id, 'INSERT', null, ins, 'operator', null, req);
             broadcastSSE('result_update', { heat_id, event_entry_id });
             res.json(ins);
@@ -1780,13 +1775,13 @@ app.post('/api/results/upsert', (req, res) => {
 });
 
 // Delete a single result by heat_id + event_entry_id + attempt_number (for clearing field entries)
-app.delete('/api/results', (req, res) => {
+app.delete('/api/results', async (req, res) => {
     const { heat_id, event_entry_id, attempt_number, admin_key } = req.body;
     if (!heat_id || !event_entry_id) return res.status(400).json({ error: 'heat_id and event_entry_id required' });
     // Check if event is completed — require admin_key
-    const _dHeat = db.prepare('SELECT * FROM heat WHERE id=?').get(heat_id);
+    const _dHeat = await db.get('SELECT * FROM heat WHERE id=?', heat_id);
     if (_dHeat) {
-        const _dEvt = db.prepare('SELECT * FROM event WHERE id=?').get(_dHeat.event_id);
+        const _dEvt = await db.get('SELECT * FROM event WHERE id=?', _dHeat.event_id);
         // Post-competition lock
         if (_dEvt && requireAdminAfterCompEnd(_dEvt.competition_id, admin_key, res)) return;
         if (_dEvt && _dEvt.round_status === 'completed' && !isAdminKey(admin_key) && !isOperationKey(admin_key))
@@ -1794,60 +1789,58 @@ app.delete('/api/results', (req, res) => {
     }
     let row;
     if (attempt_number) {
-        row = db.prepare('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number=?').get(heat_id, event_entry_id, attempt_number);
+        row = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number=?', heat_id, event_entry_id, attempt_number);
     } else {
-        row = db.prepare('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NULL ORDER BY id DESC LIMIT 1').get(heat_id, event_entry_id);
+        row = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NULL ORDER BY id DESC LIMIT 1', heat_id, event_entry_id);
     }
     if (!row) return res.status(404).json({ error: 'Result not found' });
-    db.prepare('DELETE FROM result WHERE id=?').run(row.id);
+    await db.run('DELETE FROM result WHERE id=?', row.id);
     // Also clear combined_score for this entry if parent is combined
-    const heat = db.prepare('SELECT * FROM heat WHERE id=?').get(heat_id);
+    const heat = await db.get('SELECT * FROM heat WHERE id=?', heat_id);
     if (heat) {
-        const evt = db.prepare('SELECT * FROM event WHERE id=?').get(heat.event_id);
+        const evt = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
         if (evt && evt.parent_event_id) {
-            const subOrder = db.prepare('SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND id<=?').get(evt.parent_event_id, evt.id)?.cnt || 0;
-            db.prepare('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=? AND athlete_id=(SELECT athlete_id FROM event_entry WHERE id=?)) AND sub_event_order=?')
-                .run(evt.parent_event_id, event_entry_id, subOrder);
+            const subOrder = await db.get('SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND id<=?', evt.parent_event_id, evt.id)?.cnt || 0;
+            await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=? AND athlete_id=(SELECT athlete_id FROM event_entry WHERE id=?)) AND sub_event_order=?', evt.parent_event_id, event_entry_id, subOrder);
         }
     }
     audit('result', row.id, 'DELETE', row, null, 'operator', null, req);
     broadcastSSE('result_update', { heat_id, event_entry_id });
     if (heat) {
-        const evt = db.prepare('SELECT * FROM event WHERE id=?').get(heat.event_id);
+        const evt = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
         if (evt && evt.parent_event_id) broadcastSSE('combined_update', { event_id: evt.parent_event_id });
     }
     res.json({ success: true, deleted_id: row.id });
 });
 
 // Reset all results for a sub-event (combined 서브이벤트 기록 전체 초기화)
-app.post('/api/results/reset-sub-event', (req, res) => {
+app.post('/api/results/reset-sub-event', async (req, res) => {
     const { event_id } = req.body;
     if (!event_id) return res.status(400).json({ error: 'event_id required' });
-    const evt = db.prepare('SELECT * FROM event WHERE id=?').get(event_id);
+    const evt = await db.get('SELECT * FROM event WHERE id=?', event_id);
     if (!evt) return res.status(404).json({ error: 'Event not found' });
     
-    const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(event_id);
+    const heats = await db.all('SELECT id FROM heat WHERE event_id=?', event_id);
     let deletedResults = 0, deletedAttempts = 0;
     
     for (const h of heats) {
-        const rc = db.prepare('DELETE FROM result WHERE heat_id=?').run(h.id);
+        const rc = await db.run('DELETE FROM result WHERE heat_id=?', h.id);
         deletedResults += rc.changes;
-        const ac = db.prepare('DELETE FROM height_attempt WHERE heat_id=?').run(h.id);
+        const ac = await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id);
         deletedAttempts += ac.changes;
     }
     
     // Clear combined_score for this sub-event
     if (evt.parent_event_id) {
-        const subOrder = db.prepare('SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND id<=?').get(evt.parent_event_id, evt.id)?.cnt || 0;
+        const subOrder = await db.get('SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND id<=?', evt.parent_event_id, evt.id)?.cnt || 0;
         if (subOrder > 0) {
-            db.prepare('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?) AND sub_event_order=?')
-                .run(evt.parent_event_id, subOrder);
+            await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?) AND sub_event_order=?', evt.parent_event_id, subOrder);
         }
     }
     
     // Reset round_status back to heats_generated
     if (evt.round_status === 'in_progress' || evt.round_status === 'completed') {
-        db.prepare("UPDATE event SET round_status='heats_generated' WHERE id=?").run(event_id);
+        await db.run("UPDATE event SET round_status='heats_generated' WHERE id=?", event_id);
         broadcastSSE('event_status_changed', { event_id, round_status: 'heats_generated' });
     }
     
@@ -1861,9 +1854,9 @@ app.post('/api/results/reset-sub-event', (req, res) => {
 // ============================================================
 // HEAT WIND (track events: per-heat wind)
 // ============================================================
-app.post('/api/heats/:id/wind', (req, res) => {
+app.post('/api/heats/:id/wind', async (req, res) => {
     const { wind } = req.body;
-    const heat = db.prepare('SELECT * FROM heat WHERE id=?').get(req.params.id);
+    const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
     // Store as "N.N m/s" text format for scoreboard system compatibility
     let windValue = null;
@@ -1871,21 +1864,21 @@ app.post('/api/heats/:id/wind', (req, res) => {
         const v = parseFloat(wind);
         if (!isNaN(v)) windValue = v.toFixed(1) + ' m/s';
     }
-    db.prepare('UPDATE heat SET wind=? WHERE id=?').run(windValue, heat.id);
+    await db.run('UPDATE heat SET wind=? WHERE id=?', windValue, heat.id);
     broadcastSSE('wind_update', { heat_id: heat.id, wind: windValue });
     res.json({ success: true, wind: windValue });
 });
-app.get('/api/heats/:id/wind', (req, res) => {
-    const heat = db.prepare('SELECT * FROM heat WHERE id=?').get(req.params.id);
+app.get('/api/heats/:id/wind', async (req, res) => {
+    const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
     res.json({ heat_id: heat.id, wind: heat.wind });
 });
 
 // Rename heat (custom display name)
-app.post('/api/heats/:id/rename', (req, res) => {
+app.post('/api/heats/:id/rename', async (req, res) => {
     const key = req.body.admin_key || req.headers['x-admin-key'] || '';
     if (!isOperationKey(key)) return res.status(403).json({ error: '인증 필요' });
-    const heat = db.prepare('SELECT * FROM heat WHERE id=?').get(parseInt(req.params.id));
+    const heat = await db.get('SELECT * FROM heat WHERE id=?', parseInt(req.params.id));
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
     const heat_name = req.body.heat_name != null ? String(req.body.heat_name).trim() || null : null;
 
@@ -1904,19 +1897,19 @@ app.post('/api/heats/:id/rename', (req, res) => {
         }
     }
 
-    db.prepare('UPDATE heat SET heat_name=?, scoreboard_key=? WHERE id=?').run(heat_name, scoreboard_key, heat.id);
+    await db.run('UPDATE heat SET heat_name=?, scoreboard_key=? WHERE id=?', heat_name, scoreboard_key, heat.id);
     broadcastSSE('heat_update', { heat_id: heat.id, event_id: heat.event_id, heat_name, scoreboard_key });
     res.json({ success: true, heat_id: heat.id, heat_name, scoreboard_key });
 });
 
 // Update scoreboard_key directly
-app.post('/api/heats/:id/scoreboard-key', (req, res) => {
+app.post('/api/heats/:id/scoreboard-key', async (req, res) => {
     const key = req.body.admin_key || req.headers['x-admin-key'] || '';
     if (!isOperationKey(key)) return res.status(403).json({ error: '인증 필요' });
-    const heat = db.prepare('SELECT * FROM heat WHERE id=?').get(parseInt(req.params.id));
+    const heat = await db.get('SELECT * FROM heat WHERE id=?', parseInt(req.params.id));
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
     const scoreboard_key = req.body.scoreboard_key != null ? String(req.body.scoreboard_key).trim() || null : null;
-    db.prepare('UPDATE heat SET scoreboard_key=? WHERE id=?').run(scoreboard_key, heat.id);
+    await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', scoreboard_key, heat.id);
     broadcastSSE('heat_update', { heat_id: heat.id, event_id: heat.event_id, scoreboard_key });
     res.json({ success: true, heat_id: heat.id, scoreboard_key });
 });
@@ -1924,20 +1917,20 @@ app.post('/api/heats/:id/scoreboard-key', (req, res) => {
 // ============================================================
 // LIVE RESULTS API — for dashboard real-time view
 // ============================================================
-app.get('/api/events/:id/live-results', (req, res) => {
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+app.get('/api/events/:id/live-results', async (req, res) => {
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
-    const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(event.id);
+    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
     // Also load qualifications if available
-    const quals = db.prepare('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1').all(event.id);
-    const result = heats.map(h => {
-        const entries = db.prepare(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status,
+    const quals = await db.all('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
+    const result = heats.map(async h => {
+        const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status,
                a.name, a.bib_number, a.team FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-               JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`).all(h.id);
+               JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`, h.id);
         if (event.category === 'field_height') {
-            return { ...h, entries, height_attempts: db.prepare('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number').all(h.id) };
+            return { ...h, entries, height_attempts: await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', h.id) };
         }
-        return { ...h, entries, results: db.prepare('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number').all(h.id) };
+        return { ...h, entries, results: await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', h.id) };
     });
     res.json({ event, heats: result, qualifications: quals });
 });
@@ -1945,24 +1938,24 @@ app.get('/api/events/:id/live-results', (req, res) => {
 // ============================================================
 // HEIGHT ATTEMPTS
 // ============================================================
-app.get('/api/height-attempts', (req, res) => {
+app.get('/api/height-attempts', async (req, res) => {
     if (!req.query.heat_id) return res.status(400).json({ error: 'heat_id required' });
-    res.json(db.prepare(`
+    res.json(await db.all(`
         SELECT ha.*, a.name, a.bib_number, a.team
         FROM height_attempt ha JOIN event_entry ee ON ee.id=ha.event_entry_id
         JOIN athlete a ON a.id=ee.athlete_id
         WHERE ha.heat_id=? ORDER BY ha.bar_height, ha.event_entry_id, ha.attempt_number
-    `).all(req.query.heat_id));
+    `, req.query.heat_id));
 });
-app.post('/api/height-attempts/save', (req, res) => {
+app.post('/api/height-attempts/save', async (req, res) => {
     const { heat_id, event_entry_id, bar_height, attempt_number, result_mark, admin_key } = req.body;
     if (!heat_id || !event_entry_id || !bar_height || !attempt_number)
         return res.status(400).json({ error: 'heat_id, event_entry_id, bar_height, attempt_number required' });
 
     // Check if event is completed — require admin_key
-    const _hHeat = db.prepare('SELECT * FROM heat WHERE id=?').get(heat_id);
+    const _hHeat = await db.get('SELECT * FROM heat WHERE id=?', heat_id);
     if (_hHeat) {
-        const _hEvt = db.prepare('SELECT * FROM event WHERE id=?').get(_hHeat.event_id);
+        const _hEvt = await db.get('SELECT * FROM event WHERE id=?', _hHeat.event_id);
         // Post-competition lock
         if (_hEvt && requireAdminAfterCompEnd(_hEvt.competition_id, admin_key, res)) return;
         if (_hEvt && _hEvt.round_status === 'completed' && !isAdminKey(admin_key) && !isOperationKey(admin_key))
@@ -1971,10 +1964,9 @@ app.post('/api/height-attempts/save', (req, res) => {
 
     // Empty mark = delete the attempt (toggle back to empty)
     if (!result_mark || result_mark === '') {
-        const existing = db.prepare('SELECT * FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND bar_height=? AND attempt_number=?')
-            .get(heat_id, event_entry_id, bar_height, attempt_number);
+        const existing = await db.get('SELECT * FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND bar_height=? AND attempt_number=?', heat_id, event_entry_id, bar_height, attempt_number);
         if (existing) {
-            db.prepare('DELETE FROM height_attempt WHERE id=?').run(existing.id);
+            await db.run('DELETE FROM height_attempt WHERE id=?', existing.id);
             broadcastSSE('height_update', { heat_id, event_entry_id, bar_height });
         }
         return res.json({ success: true, deleted: true });
@@ -1984,11 +1976,11 @@ app.post('/api/height-attempts/save', (req, res) => {
     let normalizedMark = result_mark;
     if (normalizedMark === '-') normalizedMark = 'PASS';
     // Auto-update round_status to in_progress when first height attempt is saved
-    const heat = db.prepare('SELECT * FROM heat WHERE id=?').get(heat_id);
+    const heat = await db.get('SELECT * FROM heat WHERE id=?', heat_id);
     if (heat) {
-        const event = db.prepare('SELECT * FROM event WHERE id=?').get(heat.event_id);
+        const event = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
         if (event && (event.round_status === 'heats_generated' || event.round_status === 'created')) {
-            db.prepare("UPDATE event SET round_status='in_progress' WHERE id=?").run(event.id);
+            await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
             broadcastSSE('event_status_changed', { event_id: event.id, round_status: 'in_progress' });
             const gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
             const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
@@ -1996,26 +1988,24 @@ app.post('/api/height-attempts/save', (req, res) => {
         }
         // Also update parent combined event status if this is a sub-event
         if (event && event.parent_event_id) {
-            const parentEvt = db.prepare('SELECT * FROM event WHERE id=?').get(event.parent_event_id);
+            const parentEvt = await db.get('SELECT * FROM event WHERE id=?', event.parent_event_id);
             if (parentEvt && parentEvt.category === 'combined' && (parentEvt.round_status === 'heats_generated' || parentEvt.round_status === 'created')) {
-                db.prepare("UPDATE event SET round_status='in_progress' WHERE id=?").run(parentEvt.id);
+                await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", parentEvt.id);
                 broadcastSSE('event_status_changed', { event_id: parentEvt.id, round_status: 'in_progress' });
                 opLog(`${parentEvt.name} 기록 입력 시작 (세부종목 자동 진행중 전환)`, 'record', 'system', parentEvt.competition_id);
             }
         }
     }
     try {
-        const existing = db.prepare('SELECT * FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND bar_height=? AND attempt_number=?')
-            .get(heat_id, event_entry_id, bar_height, attempt_number);
+        const existing = await db.get('SELECT * FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND bar_height=? AND attempt_number=?', heat_id, event_entry_id, bar_height, attempt_number);
         if (existing) {
-            db.prepare('UPDATE height_attempt SET result_mark=? WHERE id=?').run(normalizedMark, existing.id);
-            const upd = db.prepare('SELECT * FROM height_attempt WHERE id=?').get(existing.id);
+            await db.run('UPDATE height_attempt SET result_mark=? WHERE id=?', normalizedMark, existing.id);
+            const upd = await db.get('SELECT * FROM height_attempt WHERE id=?', existing.id);
             broadcastSSE('height_update', { heat_id, event_entry_id, bar_height });
             res.json(upd);
         } else {
-            const info = db.prepare('INSERT INTO height_attempt (heat_id,event_entry_id,bar_height,attempt_number,result_mark) VALUES (?,?,?,?,?)')
-                .run(heat_id, event_entry_id, bar_height, attempt_number, normalizedMark);
-            const ins = db.prepare('SELECT * FROM height_attempt WHERE id=?').get(info.lastInsertRowid);
+            const info = await db.run('INSERT INTO height_attempt (heat_id,event_entry_id,bar_height,attempt_number,result_mark) VALUES (?,?,?,?,?)', heat_id, event_entry_id, bar_height, attempt_number, normalizedMark);
+            const ins = await db.get('SELECT * FROM height_attempt WHERE id=?', info.lastInsertRowid);
             broadcastSSE('height_update', { heat_id, event_entry_id, bar_height });
             res.json(ins);
         }
@@ -2023,18 +2013,18 @@ app.post('/api/height-attempts/save', (req, res) => {
 });
 
 // Delete all height attempts for a specific bar_height in a heat
-app.post('/api/height-attempts/delete-bar', (req, res) => {
+app.post('/api/height-attempts/delete-bar', async (req, res) => {
     const { heat_id, bar_height, admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!heat_id || bar_height == null) return res.status(400).json({ error: 'heat_id and bar_height required' });
     // Check if event is completed — require admin_key
-    const _dbHeat = db.prepare('SELECT * FROM heat WHERE id=?').get(heat_id);
+    const _dbHeat = await db.get('SELECT * FROM heat WHERE id=?', heat_id);
     if (_dbHeat) {
-        const _dbEvt = db.prepare('SELECT * FROM event WHERE id=?').get(_dbHeat.event_id);
+        const _dbEvt = await db.get('SELECT * FROM event WHERE id=?', _dbHeat.event_id);
         if (_dbEvt && _dbEvt.round_status === 'completed' && !isAdminKey(admin_key) && !isOperationKey(admin_key))
             return res.status(403).json({ error: '완료된 경기의 기록 삭제는 관리자 키가 필요합니다.' });
     }
-    const deleted = db.prepare('DELETE FROM height_attempt WHERE heat_id=? AND bar_height=?').run(heat_id, parseFloat(bar_height));
+    const deleted = await db.run('DELETE FROM height_attempt WHERE heat_id=? AND bar_height=?', heat_id, parseFloat(bar_height));
     broadcastSSE('height_update', { heat_id, bar_height });
     res.json({ success: true, deleted: deleted.changes });
 });
@@ -2042,79 +2032,76 @@ app.post('/api/height-attempts/delete-bar', (req, res) => {
 // ============================================================
 // COMBINED SCORES
 // ============================================================
-app.get('/api/combined-scores', (req, res) => {
+app.get('/api/combined-scores', async (req, res) => {
     if (!req.query.event_id) return res.status(400).json({ error: 'event_id required' });
-    res.json(db.prepare(`
+    res.json(await db.all(`
         SELECT cs.*, a.name, a.bib_number, a.team
         FROM combined_score cs JOIN event_entry ee ON ee.id=cs.event_entry_id
         JOIN athlete a ON a.id=ee.athlete_id
         WHERE ee.event_id=? ORDER BY cs.event_entry_id, cs.sub_event_order
-    `).all(req.query.event_id));
+    `, req.query.event_id));
 });
-app.post('/api/combined-scores/save', (req, res) => {
+app.post('/api/combined-scores/save', async (req, res) => {
     const { event_entry_id, sub_event_name, sub_event_order, raw_record, wa_points, admin_key } = req.body;
     if (!event_entry_id || !sub_event_name || !sub_event_order) return res.status(400).json({ error: 'Required fields missing' });
     // Post-competition lock
     try {
-        const ee = db.prepare('SELECT e.competition_id FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.id=?').get(event_entry_id);
+        const ee = await db.get('SELECT e.competition_id FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.id=?', event_entry_id);
         if (ee && requireAdminAfterCompEnd(ee.competition_id, admin_key, res)) return;
     } catch(e) {}
     try {
-        const existing = db.prepare('SELECT * FROM combined_score WHERE event_entry_id=? AND sub_event_order=?')
-            .get(event_entry_id, sub_event_order);
+        const existing = await db.get('SELECT * FROM combined_score WHERE event_entry_id=? AND sub_event_order=?', event_entry_id, sub_event_order);
         if (existing) {
-            db.prepare('UPDATE combined_score SET raw_record=?,wa_points=?,sub_event_name=? WHERE id=?')
-                .run(raw_record ?? null, wa_points || 0, sub_event_name, existing.id);
-            res.json(db.prepare('SELECT * FROM combined_score WHERE id=?').get(existing.id));
+            await db.run('UPDATE combined_score SET raw_record=?,wa_points=?,sub_event_name=? WHERE id=?', raw_record ?? null, wa_points || 0, sub_event_name, existing.id);
+            res.json(await db.get('SELECT * FROM combined_score WHERE id=?', existing.id));
         } else {
-            const info = db.prepare('INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points) VALUES (?,?,?,?,?)')
-                .run(event_entry_id, sub_event_name, sub_event_order, raw_record ?? null, wa_points || 0);
-            res.json(db.prepare('SELECT * FROM combined_score WHERE id=?').get(info.lastInsertRowid));
+            const info = await db.run('INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points) VALUES (?,?,?,?,?)', event_entry_id, sub_event_name, sub_event_order, raw_record ?? null, wa_points || 0);
+            res.json(await db.get('SELECT * FROM combined_score WHERE id=?', info.lastInsertRowid));
         }
         broadcastSSE('combined_update', { event_entry_id, sub_event_order });
     } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
-app.get('/api/combined-sub-events', (req, res) => {
+app.get('/api/combined-sub-events', async (req, res) => {
     if (!req.query.parent_event_id) return res.status(400).json({ error: 'parent_event_id required' });
-    res.json(db.prepare('SELECT * FROM event WHERE parent_event_id=? ORDER BY id').all(req.query.parent_event_id));
+    res.json(await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY id', req.query.parent_event_id));
 });
-app.post('/api/combined-scores/sync', (req, res) => {
+app.post('/api/combined-scores/sync', async (req, res) => {
     const { parent_event_id } = req.body;
     if (!parent_event_id) return res.status(400).json({ error: 'parent_event_id required' });
-    const parentEvent = db.prepare('SELECT * FROM event WHERE id=?').get(parent_event_id);
+    const parentEvent = await db.get('SELECT * FROM event WHERE id=?', parent_event_id);
     if (!parentEvent || parentEvent.category !== 'combined') return res.status(400).json({ error: 'Not a combined event' });
-    const subEvents = db.prepare('SELECT * FROM event WHERE parent_event_id=? ORDER BY id').all(parent_event_id);
-    const parentEntries = db.prepare('SELECT ee.id AS event_entry_id, ee.athlete_id FROM event_entry ee WHERE ee.event_id=?').all(parent_event_id);
+    const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY id', parent_event_id);
+    const parentEntries = await db.all('SELECT ee.id AS event_entry_id, ee.athlete_id FROM event_entry ee WHERE ee.event_id=?', parent_event_id);
     let syncCount = 0;
     const upsert = db.prepare(`INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points)
         VALUES (?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name`);
     db.transaction(() => {
-        subEvents.forEach((subEvt, idx) => {
+        subEvents.forEach(async (subEvt, idx) => {
             const subOrder = idx + 1;
-            const subHeat = db.prepare('SELECT id FROM heat WHERE event_id=? LIMIT 1').get(subEvt.id);
+            const subHeat = await db.get('SELECT id FROM heat WHERE event_id=? LIMIT 1', subEvt.id);
             if (!subHeat) return;
-            parentEntries.forEach(pe => {
-                const subEntry = db.prepare('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?').get(subEvt.id, pe.athlete_id);
+            parentEntries.forEach(async pe => {
+                const subEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', subEvt.id, pe.athlete_id);
                 if (!subEntry) return;
                 let bestRecord = null;
                 let hasAttempts = false;
                 if (subEvt.category === 'track') {
-                    const r = db.prepare('SELECT MIN(time_seconds) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds > 0').get(subHeat.id, subEntry.id);
+                    const r = await db.get('SELECT MIN(time_seconds) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds > 0', subHeat.id, subEntry.id);
                     if (r && r.best) bestRecord = r.best;
                     // Check if athlete has any result rows (including DNS/DNF/NM)
-                    const cnt = db.prepare('SELECT COUNT(*) AS c FROM result WHERE heat_id=? AND event_entry_id=?').get(subHeat.id, subEntry.id);
+                    const cnt = await db.get('SELECT COUNT(*) AS c FROM result WHERE heat_id=? AND event_entry_id=?', subHeat.id, subEntry.id);
                     if (cnt && cnt.c > 0) hasAttempts = true;
                 } else if (subEvt.category === 'field_distance') {
-                    const r = db.prepare('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters > 0').get(subHeat.id, subEntry.id);
+                    const r = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters > 0', subHeat.id, subEntry.id);
                     if (r && r.best) bestRecord = r.best;
                     // NM check: has attempts but all fouls (distance=0)
-                    const cnt = db.prepare('SELECT COUNT(*) AS c FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NOT NULL').get(subHeat.id, subEntry.id);
+                    const cnt = await db.get('SELECT COUNT(*) AS c FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NOT NULL', subHeat.id, subEntry.id);
                     if (cnt && cnt.c > 0) hasAttempts = true;
                 } else if (subEvt.category === 'field_height') {
-                    const r = db.prepare("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'").get(subHeat.id, subEntry.id);
+                    const r = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", subHeat.id, subEntry.id);
                     if (r && r.best) bestRecord = r.best;
                     // NM check: has height attempts but no clearance (all X or PASS)
-                    const cnt = db.prepare('SELECT COUNT(*) AS c FROM height_attempt WHERE heat_id=? AND event_entry_id=?').get(subHeat.id, subEntry.id);
+                    const cnt = await db.get('SELECT COUNT(*) AS c FROM height_attempt WHERE heat_id=? AND event_entry_id=?', subHeat.id, subEntry.id);
                     if (cnt && cnt.c > 0) hasAttempts = true;
                 }
                 if (bestRecord != null) {
@@ -2129,7 +2116,7 @@ app.post('/api/combined-scores/sync', (req, res) => {
                     syncCount++;
                 } else {
                     // No record and no attempts → DELETE any existing combined_score for this sub-event
-                    const delResult = db.prepare('DELETE FROM combined_score WHERE event_entry_id=? AND sub_event_order=?').run(pe.event_entry_id, subOrder);
+                    const delResult = await db.run('DELETE FROM combined_score WHERE event_entry_id=? AND sub_event_order=?', pe.event_entry_id, subOrder);
                     if (delResult.changes > 0) syncCount++;
                 }
             });
@@ -2141,14 +2128,14 @@ app.post('/api/combined-scores/sync', (req, res) => {
 // ============================================================
 // CALLROOM
 // ============================================================
-app.get('/api/barcode/:code', (req, res) => {
+app.get('/api/barcode/:code', async (req, res) => {
     const raw = req.params.code.trim();
 
     // W/w prefix → female athlete by bib
     const wMatch = raw.match(/^[Ww][-]?(\d+)$/);
     if (wMatch) {
         const bibNum = wMatch[1].replace(/^0+/, '') || '0';
-        const a = db.prepare("SELECT * FROM athlete WHERE bib_number=? AND gender='F'").get(bibNum);
+        const a = await db.get("SELECT * FROM athlete WHERE bib_number=? AND gender='F'", bibNum);
         if (!a) return res.status(404).json({ error: 'Barcode not found' });
         return res.json(a);
     }
@@ -2166,61 +2153,61 @@ app.get('/api/barcode/:code', (req, res) => {
     }
     let a = null;
     for (const v of variants) {
-        a = db.prepare('SELECT * FROM athlete WHERE barcode=?').get(v);
+        a = await db.get('SELECT * FROM athlete WHERE barcode=?', v);
         if (a) break;
     }
     if (!a) {
         for (const v of variants) {
-            a = db.prepare('SELECT * FROM athlete WHERE bib_number=?').get(v);
+            a = await db.get('SELECT * FROM athlete WHERE bib_number=?', v);
             if (a) break;
         }
     }
     if (!a) return res.status(404).json({ error: 'Barcode not found' });
     res.json(a);
 });
-app.patch('/api/event-entries/:id/status', (req, res) => {
+app.patch('/api/event-entries/:id/status', async (req, res) => {
     const { status, admin_key } = req.body;
     if (!['registered', 'checked_in', 'no_show'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
-    const entry = db.prepare('SELECT * FROM event_entry WHERE id=?').get(req.params.id);
+    const entry = await db.get('SELECT * FROM event_entry WHERE id=?', req.params.id);
     if (!entry) return res.status(404).json({ error: 'Not found' });
     // Post-competition lock
-    const _evt = db.prepare('SELECT competition_id FROM event WHERE id=?').get(entry.event_id);
+    const _evt = await db.get('SELECT competition_id FROM event WHERE id=?', entry.event_id);
     if (_evt && requireAdminAfterCompEnd(_evt.competition_id, admin_key, res)) return;
-    db.prepare('UPDATE event_entry SET status=? WHERE id=?').run(status, req.params.id);
+    await db.run('UPDATE event_entry SET status=? WHERE id=?', status, req.params.id);
     syncCombinedSubEventCheckin(entry.event_id, entry.athlete_id, status);
-    const _he = db.prepare('SELECT heat_id FROM heat_entry WHERE event_entry_id=?').get(entry.id);
+    const _he = await db.get('SELECT heat_id FROM heat_entry WHERE event_entry_id=?', entry.id);
     broadcastSSE('entry_status', { event_entry_id: entry.id, status, event_id: entry.event_id, heat_id: _he ? _he.heat_id : null });
-    res.json(db.prepare('SELECT * FROM event_entry WHERE id=?').get(req.params.id));
+    res.json(await db.get('SELECT * FROM event_entry WHERE id=?', req.params.id));
 });
 // Save callroom memo
-app.patch('/api/event-entries/:id/memo', (req, res) => {
+app.patch('/api/event-entries/:id/memo', async (req, res) => {
     const { memo } = req.body;
-    const entry = db.prepare('SELECT * FROM event_entry WHERE id=?').get(req.params.id);
+    const entry = await db.get('SELECT * FROM event_entry WHERE id=?', req.params.id);
     if (!entry) return res.status(404).json({ error: 'Not found' });
-    db.prepare('UPDATE event_entry SET callroom_memo=? WHERE id=?').run(memo || '', req.params.id);
+    await db.run('UPDATE event_entry SET callroom_memo=? WHERE id=?', memo || '', req.params.id);
     res.json({ success: true });
 });
 // Get/Save event-level callroom memo (소집실 종목 메모 — 인쇄 시 제목 하단)
-app.get('/api/events/:id/callroom-memo', (req, res) => {
-    const evt = db.prepare('SELECT callroom_event_memo FROM event WHERE id=?').get(req.params.id);
+app.get('/api/events/:id/callroom-memo', async (req, res) => {
+    const evt = await db.get('SELECT callroom_event_memo FROM event WHERE id=?', req.params.id);
     if (!evt) return res.status(404).json({ error: 'Event not found' });
     res.json({ memo: evt.callroom_event_memo || '' });
 });
-app.patch('/api/events/:id/callroom-memo', (req, res) => {
+app.patch('/api/events/:id/callroom-memo', async (req, res) => {
     const { memo } = req.body;
-    const evt = db.prepare('SELECT id FROM event WHERE id=?').get(req.params.id);
+    const evt = await db.get('SELECT id FROM event WHERE id=?', req.params.id);
     if (!evt) return res.status(404).json({ error: 'Event not found' });
-    db.prepare('UPDATE event SET callroom_event_memo=? WHERE id=?').run(memo || '', req.params.id);
+    await db.run('UPDATE event SET callroom_event_memo=? WHERE id=?', memo || '', req.params.id);
     res.json({ success: true, memo: memo || '' });
 });
-app.post('/api/callroom/checkin', (req, res) => {
+app.post('/api/callroom/checkin', async (req, res) => {
     const { barcode, event_id, admin_key } = req.body;
     if (!barcode) return res.status(400).json({ error: 'barcode required' });
 
     // Determine competition_id from event_id for scoped athlete search
     let competition_id = null;
     if (event_id) {
-        const evt = db.prepare('SELECT competition_id FROM event WHERE id=?').get(event_id);
+        const evt = await db.get('SELECT competition_id FROM event WHERE id=?', event_id);
         if (evt) competition_id = evt.competition_id;
     }
     // Post-competition lock removed for callroom — callroom stays accessible after competition ends
@@ -2235,10 +2222,10 @@ app.post('/api/callroom/checkin', (req, res) => {
         const bibNum = wMatch[1].replace(/^0+/, '') || '0';
         let athlete = null;
         if (competition_id) {
-            athlete = db.prepare("SELECT * FROM athlete WHERE bib_number=? AND gender='F' AND competition_id=?").get(bibNum, competition_id);
+            athlete = await db.get("SELECT * FROM athlete WHERE bib_number=? AND gender='F' AND competition_id=?", bibNum, competition_id);
         }
         if (!athlete) {
-            athlete = db.prepare("SELECT * FROM athlete WHERE bib_number=? AND gender='F'").get(bibNum);
+            athlete = await db.get("SELECT * FROM athlete WHERE bib_number=? AND gender='F'", bibNum);
         }
         if (!athlete) return res.status(404).json({ error: `여자 배번 ${bibNum} 선수를 찾을 수 없습니다`, barcode });
         // Jump directly to entry lookup (skip normal barcode search)
@@ -2263,17 +2250,17 @@ app.post('/api/callroom/checkin', (req, res) => {
     }
     const variantArr = [...variants];
 
-    function findAthlete(scope) {
+    async function findAthlete(scope) {
         for (const v of variantArr) {
             const a = scope
-                ? db.prepare('SELECT * FROM athlete WHERE barcode=? AND competition_id=?').get(v, scope)
-                : db.prepare('SELECT * FROM athlete WHERE barcode=?').get(v);
+                ? await db.get('SELECT * FROM athlete WHERE barcode=? AND competition_id=?', v, scope)
+                : await db.get('SELECT * FROM athlete WHERE barcode=?', v);
             if (a) return a;
         }
         for (const v of variantArr) {
             const a = scope
-                ? db.prepare('SELECT * FROM athlete WHERE bib_number=? AND competition_id=?').get(v, scope)
-                : db.prepare('SELECT * FROM athlete WHERE bib_number=?').get(v);
+                ? await db.get('SELECT * FROM athlete WHERE bib_number=? AND competition_id=?', v, scope)
+                : await db.get('SELECT * FROM athlete WHERE bib_number=?', v);
             if (a) return a;
         }
         return null;
@@ -2343,20 +2330,20 @@ function syncCombinedSubEventCheckin(parentEventId, athleteId, status) {
 }
 
 // Bulk sync: set all sub-event entries to match parent checked_in status
-app.post('/api/combined/sync-checkin', (req, res) => {
+app.post('/api/combined/sync-checkin', async (req, res) => {
     const { event_id } = req.body;
     if (!event_id) return res.status(400).json({ error: 'event_id required' });
-    const evt = db.prepare('SELECT * FROM event WHERE id=?').get(event_id);
+    const evt = await db.get('SELECT * FROM event WHERE id=?', event_id);
     if (!evt || evt.category !== 'combined') return res.status(400).json({ error: 'Not a combined event' });
-    const parentEntries = db.prepare('SELECT * FROM event_entry WHERE event_id=?').all(event_id);
-    const subEvents = db.prepare('SELECT id FROM event WHERE parent_event_id=?').all(event_id);
+    const parentEntries = await db.all('SELECT * FROM event_entry WHERE event_id=?', event_id);
+    const subEvents = await db.all('SELECT id FROM event WHERE parent_event_id=?', event_id);
     let synced = 0;
-    db.transaction(() => {
+    db.transaction(async () => {
         for (const pe of parentEntries) {
             for (const sub of subEvents) {
-                const subEntry = db.prepare('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?').get(sub.id, pe.athlete_id);
+                const subEntry = await db.get('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?', sub.id, pe.athlete_id);
                 if (subEntry && subEntry.status !== pe.status) {
-                    db.prepare('UPDATE event_entry SET status=? WHERE id=?').run(pe.status, subEntry.id);
+                    await db.run('UPDATE event_entry SET status=? WHERE id=?', pe.status, subEntry.id);
                     synced++;
                 }
             }
@@ -2368,10 +2355,10 @@ app.post('/api/combined/sync-checkin', (req, res) => {
 // ============================================================
 // QUALIFICATIONS
 // ============================================================
-app.get('/api/qualifications', (req, res) => {
+app.get('/api/qualifications', async (req, res) => {
     if (!req.query.event_id) return res.status(400).json({ error: 'event_id required' });
-    res.json(db.prepare(`SELECT qs.*, a.name, a.bib_number, a.team FROM qualification_selection qs
-        JOIN event_entry ee ON ee.id=qs.event_entry_id JOIN athlete a ON a.id=ee.athlete_id WHERE qs.event_id=?`).all(req.query.event_id));
+    res.json(await db.all(`SELECT qs.*, a.name, a.bib_number, a.team FROM qualification_selection qs
+        JOIN event_entry ee ON ee.id=qs.event_entry_id JOIN athlete a ON a.id=ee.athlete_id WHERE qs.event_id=?`, req.query.event_id));
 });
 app.post('/api/qualifications/save', (req, res) => {
     const { event_id, selections } = req.body;
@@ -2381,77 +2368,77 @@ app.post('/api/qualifications/save', (req, res) => {
     db.transaction(() => { for (const s of selections) upsert.run(event_id, s.event_entry_id, s.selected ? 1 : 0, s.qualification_type || ''); })();
     res.json({ success: true });
 });
-app.post('/api/qualifications/approve', (req, res) => {
+app.post('/api/qualifications/approve', async (req, res) => {
     const { event_id } = req.body;
     if (!event_id) return res.status(400).json({ error: 'event_id required' });
-    db.prepare("UPDATE qualification_selection SET approved=1,approved_by='admin',updated_at=datetime('now') WHERE event_id=? AND selected=1").run(event_id);
+    await db.run("UPDATE qualification_selection SET approved=1,approved_by='admin',updated_at=datetime('now') WHERE event_id=? AND selected=1", event_id);
     res.json({ success: true });
 });
 
 // ============================================================
 // ROUND MANAGEMENT
 // ============================================================
-app.post('/api/events/:id/complete', (req, res) => {
+app.post('/api/events/:id/complete', async (req, res) => {
     const { judge_name, admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '유효하지 않은 운영키입니다.' });
     if (!judge_name || !judge_name.trim()) return res.status(400).json({ error: 'Judge name required' });
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     if (event.round_status === 'completed') return res.status(400).json({ error: '이미 완료된 경기입니다.' });
     if (event.round_status !== 'in_progress') return res.status(400).json({ error: '진행 중인 경기만 완료 처리할 수 있습니다.' });
-    db.prepare("UPDATE event SET round_status='completed' WHERE id=?").run(event.id);
+    await db.run("UPDATE event SET round_status='completed' WHERE id=?", event.id);
     broadcastSSE('event_completed', { event_id: event.id, judge_name });
     const gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
     opLog(`${event.name} ${roundL} 경기완료 - ${judge_name}`, 'completion', judge_name, event.competition_id);
-    res.json({ success: true, event: db.prepare('SELECT * FROM event WHERE id=?').get(event.id) });
+    res.json({ success: true, event: await db.get('SELECT * FROM event WHERE id=?', event.id) });
 });
-app.post('/api/events/:id/revert-complete', (req, res) => {
+app.post('/api/events/:id/revert-complete', async (req, res) => {
     const { admin_key } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     if (event.round_status !== 'completed') return res.status(400).json({ error: '완료 상태의 경기만 되돌릴 수 있습니다.' });
-    db.prepare("UPDATE event SET round_status='in_progress' WHERE id=?").run(event.id);
+    await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
     broadcastSSE('event_reverted', { event_id: event.id });
     opLog(`${event.name} 경기완료 취소 (관리자)`, 'revert', 'admin', event.competition_id);
-    res.json({ success: true, event: db.prepare('SELECT * FROM event WHERE id=?').get(event.id) });
+    res.json({ success: true, event: await db.get('SELECT * FROM event WHERE id=?', event.id) });
 });
-app.post('/api/events/:id/callroom-complete', (req, res) => {
+app.post('/api/events/:id/callroom-complete', async (req, res) => {
     const { judge_name, heat_id, admin_key } = req.body;
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     // Post-competition lock removed for callroom — callroom stays accessible after competition ends
     if (event.round_status === 'completed') return res.status(400).json({ error: '이미 완료된 경기입니다.' });
     // Allow multiple callroom-complete calls for different heats (예선 1조, 2조, etc.)
     if (event.round_status !== 'in_progress') {
-        db.prepare("UPDATE event SET round_status='in_progress' WHERE id=?").run(event.id);
+        await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
     }
     const performer = judge_name || 'operator';
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
     // If heat_id provided, identify which heat number
     let heatLabel = '';
     if (heat_id) {
-        const heats = db.prepare('SELECT id FROM heat WHERE event_id=? ORDER BY heat_number').all(event.id);
+        const heats = await db.all('SELECT id FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
         const heatIdx = heats.findIndex(h => h.id === parseInt(heat_id));
         if (heatIdx >= 0) heatLabel = ` ${heatIdx + 1}조`;
     }
     // Auto-insert DNS result for no_show entries in the relevant heat(s)
     let dnsCount = 0;
     const targetHeats = heat_id
-        ? [db.prepare('SELECT * FROM heat WHERE id=?').get(parseInt(heat_id))]
-        : db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(event.id);
+        ? [await db.get('SELECT * FROM heat WHERE id=?', parseInt(heat_id))]
+        : await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
     const insertDNS = db.prepare(`INSERT OR IGNORE INTO result (heat_id, event_entry_id, attempt_number, status_code) VALUES (?, ?, NULL, 'DNS')`);
     for (const h of targetHeats) {
         if (!h) continue;
-        const noShowEntries = db.prepare(`
+        const noShowEntries = await db.all(`
             SELECT he.event_entry_id FROM heat_entry he
             JOIN event_entry ee ON ee.id = he.event_entry_id
             WHERE he.heat_id = ? AND ee.status = 'no_show'
-        `).all(h.id);
+        `, h.id);
         for (const ns of noShowEntries) {
             // Only insert if no result row exists yet for this entry in this heat
-            const existing = db.prepare('SELECT id FROM result WHERE heat_id=? AND event_entry_id=? LIMIT 1').get(h.id, ns.event_entry_id);
+            const existing = await db.get('SELECT id FROM result WHERE heat_id=? AND event_entry_id=? LIMIT 1', h.id, ns.event_entry_id);
             if (!existing) {
                 insertDNS.run(h.id, ns.event_entry_id);
                 dnsCount++;
@@ -2467,13 +2454,12 @@ app.post('/api/events/:id/callroom-complete', (req, res) => {
     opLog(`${event.name} ${roundL}${heatLabel} 소집 완료 - ${performer}`, 'callroom', performer, event.competition_id);
     res.json({ success: true, dns_auto: dnsCount });
 });
-app.post('/api/events/:id/create-final', (req, res) => {
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+app.post('/api/events/:id/create-final', async (req, res) => {
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
-    const existingFinal = db.prepare("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND round_type='final' AND competition_id=? AND parent_event_id IS NULL AND id!=?")
-        .get(event.name, event.gender, event.category, event.competition_id, event.id);
+    const existingFinal = await db.get("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND round_type='final' AND competition_id=? AND parent_event_id IS NULL AND id!=?", event.name, event.gender, event.category, event.competition_id, event.id);
     if (existingFinal) return res.status(400).json({ error: '이미 결승이 존재합니다.' });
-    const qualified = db.prepare(`SELECT event_entry_id, qualification_type FROM qualification_selection WHERE event_id=? AND selected=1 AND approved=1`).all(event.id);
+    const qualified = await db.all(`SELECT event_entry_id, qualification_type FROM qualification_selection WHERE event_id=? AND selected=1 AND approved=1`, event.id);
     if (qualified.length === 0) return res.status(400).json({ error: 'No approved qualifiers' });
 
     const isShortTrack_ = isShortTrackEvent(event.name);
@@ -2481,28 +2467,27 @@ app.post('/api/events/:id/create-final', (req, res) => {
     const { group_count: finalGroupCount } = req.body;
     const numHeats = finalGroupCount || 1;
 
-    const info = db.prepare(`INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,'final','heats_generated')`)
-        .run(event.competition_id, event.name, event.category, event.gender);
+    const info = await db.run(`INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,'final','heats_generated')`, event.competition_id, event.name, event.category, event.gender);
     const finalEventId = info.lastInsertRowid;
 
     // Build athlete data for WA seeding — with best performance for sorting
-    const qualSels = qualified.map(q => {
-        const origEntry = db.prepare('SELECT * FROM event_entry WHERE id=?').get(q.event_entry_id);
+    const qualSels = qualified.map(async q => {
+        const origEntry = await db.get('SELECT * FROM event_entry WHERE id=?', q.event_entry_id);
         if (!origEntry) return { event_entry_id: q.event_entry_id, athlete_id: null, qualification_type: q.qualification_type || '', perf: Infinity };
         // Get best performance across all heats of the source event
         let bestPerf = Infinity;
-        const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(event.id);
+        const heats = await db.all('SELECT id FROM heat WHERE event_id=?', event.id);
         for (const h of heats) {
-            const entryInHeat = db.prepare('SELECT id FROM heat_entry WHERE heat_id=? AND event_entry_id=?').get(h.id, q.event_entry_id);
+            const entryInHeat = await db.get('SELECT id FROM heat_entry WHERE heat_id=? AND event_entry_id=?', h.id, q.event_entry_id);
             if (!entryInHeat) continue;
             if (event.category === 'track' || event.category === 'relay' || event.category === 'road') {
-                const r = db.prepare('SELECT MIN(time_seconds) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds > 0').get(h.id, q.event_entry_id);
+                const r = await db.get('SELECT MIN(time_seconds) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds > 0', h.id, q.event_entry_id);
                 if (r && r.best != null && r.best < bestPerf) bestPerf = r.best;
             } else if (event.category === 'field_distance') {
-                const r = db.prepare('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters > 0').get(h.id, q.event_entry_id);
+                const r = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters > 0', h.id, q.event_entry_id);
                 if (r && r.best) bestPerf = -r.best; // negate so ascending sort = best first
             } else if (event.category === 'field_height') {
-                const r = db.prepare("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'").get(h.id, q.event_entry_id);
+                const r = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", h.id, q.event_entry_id);
                 if (r && r.best) bestPerf = -r.best;
             }
         }
@@ -2520,34 +2505,34 @@ app.post('/api/events/:id/create-final', (req, res) => {
     });
 
     // Fetch the newly created final event for scoreboard key generation
-    const finalEvent = db.prepare('SELECT * FROM event WHERE id=?').get(finalEventId);
+    const finalEvent = await db.get('SELECT * FROM event WHERE id=?', finalEventId);
 
     if (numHeats === 1) {
-        const heatInfo = db.prepare('INSERT INTO heat (event_id,heat_number) VALUES (?,1)').run(finalEventId);
+        const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,1)', finalEventId);
         // Auto-generate scoreboard_key
         const sbKey = generateScoreboardKey(finalEvent, 1, db, numHeats);
-        db.prepare('UPDATE heat SET scoreboard_key=? WHERE id=?').run(sbKey, heatInfo.lastInsertRowid);
+        await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
         // WA lane assignment for single heat with pattern-based random shuffle
         const lanes = waAssignLanesBulk(qualSels, qualSels.length, isShortTrack_, event.name);
-        qualSels.forEach((ath, idx) => {
-            const newEntry = db.prepare("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')").run(finalEventId, ath.athlete_id);
-            db.prepare('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)').run(heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
+        qualSels.forEach(async (ath, idx) => {
+            const newEntry = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", finalEventId, ath.athlete_id);
+            await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
         });
     } else {
         // Multi-heat final with WA seeding
         const seeded = waSeededDistribution(event, qualSels, numHeats, db);
         for (let g = 0; g < numHeats; g++) {
-            const heatInfo = db.prepare('INSERT INTO heat (event_id,heat_number) VALUES (?,?)').run(finalEventId, g + 1);
+            const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', finalEventId, g + 1);
             // Auto-generate scoreboard_key
             const sbKey = generateScoreboardKey(finalEvent, g + 1, db, numHeats);
-            db.prepare('UPDATE heat SET scoreboard_key=? WHERE id=?').run(sbKey, heatInfo.lastInsertRowid);
+            await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
             const groupAthletes = seeded[g] || [];
             // Sort within group by performance for correct WA lane assignment
             groupAthletes.sort((a, b) => a.perf - b.perf);
             const lanes = waAssignLanesBulk(groupAthletes, groupAthletes.length, isShortTrack_, event.name);
-            groupAthletes.forEach((ath, idx) => {
-                const newEntry = db.prepare("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')").run(finalEventId, ath.athlete_id);
-                db.prepare('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)').run(heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
+            groupAthletes.forEach(async (ath, idx) => {
+                const newEntry = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", finalEventId, ath.athlete_id);
+                await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
             });
         }
     }
@@ -2558,11 +2543,11 @@ app.post('/api/events/:id/create-final', (req, res) => {
 });
 
 // GET /api/events/:id/lane-assignments — Return lane assignments with WA rule explanations
-app.get('/api/events/:id/lane-assignments', (req, res) => {
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+app.get('/api/events/:id/lane-assignments', async (req, res) => {
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
 
-    const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(event.id);
+    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
     if (heats.length === 0) return res.json({ heats: [] });
 
     const isShortTrack = isShortTrackEvent(event.name);
@@ -2600,8 +2585,8 @@ app.get('/api/events/:id/lane-assignments', (req, res) => {
         groupDescs[2] = '시드 7~8위 그룹 (레인 1,2)';
     }
 
-    const result = heats.map(heat => {
-        const entries = db.prepare(`
+    const result = heats.map(async heat => {
+        const entries = await db.all(`
             SELECT he.id AS heat_entry_id, he.event_entry_id, he.lane_number,
                    ee.athlete_id, a.name, a.bib_number, a.team
             FROM heat_entry he
@@ -2609,15 +2594,14 @@ app.get('/api/events/:id/lane-assignments', (req, res) => {
             JOIN athlete a ON a.id = ee.athlete_id
             WHERE he.heat_id = ?
             ORDER BY he.lane_number
-        `).all(heat.id);
+        `, heat.id);
 
         // Build seed rank by looking at source event results
         // Find source event (preliminary/semifinal) that led to this event
-        const sourceEvent = db.prepare("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND competition_id=? AND round_type IN ('preliminary','semifinal') AND id!=?")
-            .all(event.name, event.gender, event.category, event.competition_id, event.id);
+        const sourceEvent = await db.all("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND competition_id=? AND round_type IN ('preliminary','semifinal') AND id!=?", event.name, event.gender, event.category, event.competition_id, event.id);
 
         // Get qualification info for each athlete
-        const athleteDetails = entries.map(e => {
+        const athleteDetails = entries.map(async e => {
             let qualType = '';
             let seedRank = null;
             let bestPerf = null;
@@ -2626,14 +2610,12 @@ app.get('/api/events/:id/lane-assignments', (req, res) => {
 
             // Find qualification info
             for (const src of sourceEvent) {
-                const q = db.prepare('SELECT qualification_type FROM qualification_selection WHERE event_id=? AND event_entry_id=? AND selected=1 AND approved=1')
-                    .get(src.id, e.event_entry_id);
+                const q = await db.get('SELECT qualification_type FROM qualification_selection WHERE event_id=? AND event_entry_id=? AND selected=1 AND approved=1', src.id, e.event_entry_id);
                 if (!q) {
                     // Find by athlete_id instead (new event_entry in final)
-                    const origEntry = db.prepare('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?').get(src.id, e.athlete_id);
+                    const origEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', src.id, e.athlete_id);
                     if (origEntry) {
-                        const q2 = db.prepare('SELECT qualification_type FROM qualification_selection WHERE event_id=? AND event_entry_id=? AND selected=1 AND approved=1')
-                            .get(src.id, origEntry.id);
+                        const q2 = await db.get('SELECT qualification_type FROM qualification_selection WHERE event_id=? AND event_entry_id=? AND selected=1 AND approved=1', src.id, origEntry.id);
                         if (q2) qualType = q2.qualification_type || '';
                     }
                 } else {
@@ -2682,11 +2664,10 @@ app.get('/api/events/:id/lane-assignments', (req, res) => {
     });
 });
 
-app.post('/api/events/:id/create-semifinal', (req, res) => {
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+app.post('/api/events/:id/create-semifinal', async (req, res) => {
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
-    const existingSemi = db.prepare("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND round_type='semifinal' AND competition_id=? AND parent_event_id IS NULL")
-        .get(event.name, event.gender, event.category, event.competition_id);
+    const existingSemi = await db.get("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND round_type='semifinal' AND competition_id=? AND parent_event_id IS NULL", event.name, event.gender, event.category, event.competition_id);
     if (existingSemi) return res.status(400).json({ error: '이미 준결승이 존재합니다.' });
     const { group_count, selections } = req.body;
     if (!group_count || group_count < 1) return res.status(400).json({ error: 'group_count required' });
@@ -2706,33 +2687,32 @@ app.post('/api/events/:id/create-semifinal', (req, res) => {
     }
 
     let semiEventId;
-    db.transaction(() => {
+    db.transaction(async () => {
         const upsertQ = db.prepare(`INSERT INTO qualification_selection (event_id,event_entry_id,selected,approved,approved_by,qualification_type) VALUES (?,?,1,1,'admin',?)
             ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=1,approved=1,qualification_type=excluded.qualification_type`);
         for (const sel of qualifiedSels) {
             upsertQ.run(event.id, sel.event_entry_id, sel.qualification_type || '');
         }
-        const info = db.prepare(`INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,'semifinal','heats_generated')`)
-            .run(event.competition_id, event.name, event.category, event.gender);
+        const info = await db.run(`INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,'semifinal','heats_generated')`, event.competition_id, event.name, event.category, event.gender);
         semiEventId = info.lastInsertRowid;
 
         // Fetch the newly created semi event for scoreboard key generation
-        const semiEvent = db.prepare('SELECT * FROM event WHERE id=?').get(semiEventId);
+        const semiEvent = await db.get('SELECT * FROM event WHERE id=?', semiEventId);
 
         // WA serpentine seeding: sort athletes by performance, distribute in zigzag
         const seeded = waSeededDistribution(event, qualifiedSels, group_count, db);
         for (let g = 0; g < group_count; g++) {
-            const heatInfo = db.prepare('INSERT INTO heat (event_id,heat_number) VALUES (?,?)').run(semiEventId, g + 1);
+            const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', semiEventId, g + 1);
             // Auto-generate scoreboard_key
             const sbKey = generateScoreboardKey(semiEvent, g + 1, db, group_count);
-            db.prepare('UPDATE heat SET scoreboard_key=? WHERE id=?').run(sbKey, heatInfo.lastInsertRowid);
+            await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
             const groupAthletes = seeded[g] || [];
             // Sort within group by performance for correct WA lane assignment
             groupAthletes.sort((a, b) => a.perf - b.perf);
             const lanes = waAssignLanesBulk(groupAthletes, groupAthletes.length, isShortTrack, event.name);
-            groupAthletes.forEach((ath, idx) => {
-                const newEntry = db.prepare("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')").run(semiEventId, ath.athlete_id);
-                db.prepare('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)').run(heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
+            groupAthletes.forEach(async (ath, idx) => {
+                const newEntry = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", semiEventId, ath.athlete_id);
+                await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
             });
         }
     })();
@@ -2741,30 +2721,30 @@ app.post('/api/events/:id/create-semifinal', (req, res) => {
     broadcastSSE('event_status_changed', { event_id: semiEventId, round_status: 'heats_generated' });
     res.json({ success: true, semi_event_id: semiEventId, count: qualifiedIds.length });
 });
-app.delete('/api/events/:id', (req, res) => {
+app.delete('/api/events/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     // FIX: 노출용(display) 모드 대회는 자동 결승 생성 로직이 없으므로 예선 삭제 허용
     // 운영용(operation) 대회에서만 예선 삭제 보호 가드 적용
-    const _comp = db.prepare('SELECT mode FROM competition WHERE id=?').get(event.competition_id);
+    const _comp = await db.get('SELECT mode FROM competition WHERE id=?', event.competition_id);
     const _isDisplayMode = _comp && _comp.mode === 'display';
     if (!_isDisplayMode && event.round_type === 'preliminary' && !event.parent_event_id) {
         return res.status(400).json({ error: '예선은 삭제할 수 없습니다.' });
     }
-    db.transaction(() => {
-        const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(event.id);
+    db.transaction(async () => {
+        const heats = await db.all('SELECT id FROM heat WHERE event_id=?', event.id);
         for (const h of heats) {
-            db.prepare('DELETE FROM result WHERE heat_id=?').run(h.id);
-            db.prepare('DELETE FROM height_attempt WHERE heat_id=?').run(h.id);
-            db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(h.id);
+            await db.run('DELETE FROM result WHERE heat_id=?', h.id);
+            await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id);
+            await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id);
         }
-        db.prepare('DELETE FROM heat WHERE event_id=?').run(event.id);
-        db.prepare('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(event.id);
-        db.prepare('DELETE FROM event_entry WHERE event_id=?').run(event.id);
-        db.prepare('DELETE FROM qualification_selection WHERE event_id=?').run(event.id);
-        db.prepare('DELETE FROM event WHERE id=?').run(event.id);
+        await db.run('DELETE FROM heat WHERE event_id=?', event.id);
+        await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', event.id);
+        await db.run('DELETE FROM event_entry WHERE event_id=?', event.id);
+        await db.run('DELETE FROM qualification_selection WHERE event_id=?', event.id);
+        await db.run('DELETE FROM event WHERE id=?', event.id);
     })();
     res.json({ success: true });
 });
@@ -2774,11 +2754,11 @@ app.delete('/api/events/:id', (req, res) => {
 // ============================================================
 
 // GET /api/events/:id/sub-events — List sub-events of a combined parent
-app.get('/api/events/:id/sub-events', (req, res) => {
-    const parent = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+app.get('/api/events/:id/sub-events', async (req, res) => {
+    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!parent) return res.status(404).json({ error: 'Event not found' });
     if (parent.category !== 'combined') return res.status(400).json({ error: '혼성경기(combined)만 세부종목을 가질 수 있습니다.' });
-    const subs = db.prepare('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id').all(parent.id);
+    const subs = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', parent.id);
     // Enrich with entry_count and heat_count
     const stmtEntry = db.prepare('SELECT COUNT(*) as cnt FROM event_entry WHERE event_id=?');
     const stmtHeat = db.prepare('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?');
@@ -2790,10 +2770,10 @@ app.get('/api/events/:id/sub-events', (req, res) => {
 });
 
 // POST /api/events/:id/sub-events — Add a sub-event to a combined parent
-app.post('/api/events/:id/sub-events', (req, res) => {
+app.post('/api/events/:id/sub-events', async (req, res) => {
     const { admin_key, name, category } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const parent = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!parent) return res.status(404).json({ error: 'Event not found' });
     if (parent.category !== 'combined') return res.status(400).json({ error: '혼성경기만 세부종목을 추가할 수 있습니다.' });
     if (!name || !category) return res.status(400).json({ error: '종목명과 카테고리는 필수입니다.' });
@@ -2806,41 +2786,40 @@ app.post('/api/events/:id/sub-events', (req, res) => {
     const subName = name.startsWith('[') ? name : `${prefix} ${name}`;
 
     // Get next sort_order
-    const maxSort = db.prepare('SELECT MAX(sort_order) AS m FROM event WHERE parent_event_id=?').get(parent.id);
+    const maxSort = await db.get('SELECT MAX(sort_order) AS m FROM event WHERE parent_event_id=?', parent.id);
     const nextSort = (maxSort?.m || 0) + 1;
 
     let subEventId;
-    db.transaction(() => {
-        const info = db.prepare('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)')
-            .run(parent.competition_id, subName, category, parent.gender, 'final', 'heats_generated', parent.id, nextSort);
+    db.transaction(async () => {
+        const info = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)', parent.competition_id, subName, category, parent.gender, 'final', 'heats_generated', parent.id, nextSort);
         subEventId = info.lastInsertRowid;
 
         // Copy athletes from parent
-        const parentEntries = db.prepare('SELECT id, athlete_id FROM event_entry WHERE event_id=?').all(parent.id);
+        const parentEntries = await db.all('SELECT id, athlete_id FROM event_entry WHERE event_id=?', parent.id);
         for (const pe of parentEntries) {
-            db.prepare('INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?, ?, ?)').run(subEventId, pe.athlete_id, 'registered');
+            await db.run('INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?, ?, ?)', subEventId, pe.athlete_id, 'registered');
         }
 
         // Create 1 heat and assign all athletes
-        const heatInfo = db.prepare('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)').run(subEventId);
-        const subEntries = db.prepare('SELECT id FROM event_entry WHERE event_id=?').all(subEventId);
-        subEntries.forEach((se, idx) => {
-            db.prepare('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)').run(heatInfo.lastInsertRowid, se.id, idx + 1);
+        const heatInfo = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)', subEventId);
+        const subEntries = await db.all('SELECT id FROM event_entry WHERE event_id=?', subEventId);
+        subEntries.forEach(async (se, idx) => {
+            await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heatInfo.lastInsertRowid, se.id, idx + 1);
         });
     })();
 
     opLog(`세부종목 추가: ${subName} (부모: ${parent.name})`, 'event', 'admin', parent.competition_id);
-    const created = db.prepare('SELECT * FROM event WHERE id=?').get(subEventId);
+    const created = await db.get('SELECT * FROM event WHERE id=?', subEventId);
     res.json({ success: true, sub_event: created });
 });
 
 // PUT /api/events/:id/sub-events/:subId — Update a sub-event (name, category, sort_order)
-app.put('/api/events/:id/sub-events/:subId', (req, res) => {
+app.put('/api/events/:id/sub-events/:subId', async (req, res) => {
     const { admin_key, name, category, sort_order } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const parent = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!parent) return res.status(404).json({ error: 'Parent event not found' });
-    const sub = db.prepare('SELECT * FROM event WHERE id=? AND parent_event_id=?').get(req.params.subId, parent.id);
+    const sub = await db.get('SELECT * FROM event WHERE id=? AND parent_event_id=?', req.params.subId, parent.id);
     if (!sub) return res.status(404).json({ error: 'Sub-event not found' });
 
     const updates = [];
@@ -2864,42 +2843,42 @@ app.put('/api/events/:id/sub-events/:subId', (req, res) => {
     if (updates.length === 0) return res.status(400).json({ error: '수정할 항목이 없습니다.' });
 
     params.push(sub.id);
-    db.prepare(`UPDATE event SET ${updates.join(',')} WHERE id=?`).run(...params);
-    const updated = db.prepare('SELECT * FROM event WHERE id=?').get(sub.id);
+    await db.run(`UPDATE event SET ${updates.join(',')} WHERE id=?`, ...params);
+    const updated = await db.get('SELECT * FROM event WHERE id=?', sub.id);
     res.json({ success: true, sub_event: updated });
 });
 
 // DELETE /api/events/:parentId/sub-events/:subId — Delete a sub-event
-app.delete('/api/events/:id/sub-events/:subId', (req, res) => {
+app.delete('/api/events/:id/sub-events/:subId', async (req, res) => {
     const { admin_key } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const parent = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!parent) return res.status(404).json({ error: 'Parent event not found' });
-    const sub = db.prepare('SELECT * FROM event WHERE id=? AND parent_event_id=?').get(req.params.subId, parent.id);
+    const sub = await db.get('SELECT * FROM event WHERE id=? AND parent_event_id=?', req.params.subId, parent.id);
     if (!sub) return res.status(404).json({ error: 'Sub-event not found' });
 
-    db.transaction(() => {
-        const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(sub.id);
+    db.transaction(async () => {
+        const heats = await db.all('SELECT id FROM heat WHERE event_id=?', sub.id);
         for (const h of heats) {
-            db.prepare('DELETE FROM result WHERE heat_id=?').run(h.id);
-            db.prepare('DELETE FROM height_attempt WHERE heat_id=?').run(h.id);
-            db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(h.id);
+            await db.run('DELETE FROM result WHERE heat_id=?', h.id);
+            await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id);
+            await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id);
         }
-        db.prepare('DELETE FROM heat WHERE event_id=?').run(sub.id);
-        db.prepare('DELETE FROM event_entry WHERE event_id=?').run(sub.id);
-        db.prepare('DELETE FROM combined_score WHERE sub_event_order=? AND event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(sub.sort_order, parent.id);
-        db.prepare('DELETE FROM event WHERE id=?').run(sub.id);
+        await db.run('DELETE FROM heat WHERE event_id=?', sub.id);
+        await db.run('DELETE FROM event_entry WHERE event_id=?', sub.id);
+        await db.run('DELETE FROM combined_score WHERE sub_event_order=? AND event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', sub.sort_order, parent.id);
+        await db.run('DELETE FROM event WHERE id=?', sub.id);
     })();
     opLog(`세부종목 삭제: ${sub.name} (부모: ${parent.name})`, 'event', 'admin', parent.competition_id);
     res.json({ success: true });
 });
 
 // POST /api/events/:id/sub-events/reorder — Reorder sub-events
-app.post('/api/events/:id/sub-events/reorder', (req, res) => {
+app.post('/api/events/:id/sub-events/reorder', async (req, res) => {
     const { admin_key, order } = req.body; // order = [subEventId, subEventId, ...]
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!order || !Array.isArray(order)) return res.status(400).json({ error: 'order 배열이 필요합니다.' });
-    const parent = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!parent) return res.status(404).json({ error: 'Parent event not found' });
 
     const stmt = db.prepare('UPDATE event SET sort_order=? WHERE id=? AND parent_event_id=?');
@@ -2912,29 +2891,29 @@ app.post('/api/events/:id/sub-events/reorder', (req, res) => {
 });
 
 // POST /api/events/:id/sub-events/sync-athletes — Sync parent athletes to all sub-events
-app.post('/api/events/:id/sub-events/sync-athletes', (req, res) => {
+app.post('/api/events/:id/sub-events/sync-athletes', async (req, res) => {
     const { admin_key } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const parent = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!parent) return res.status(404).json({ error: 'Parent event not found' });
 
-    const parentAthletes = db.prepare('SELECT athlete_id FROM event_entry WHERE event_id=?').all(parent.id).map(e => e.athlete_id);
-    const subs = db.prepare('SELECT id FROM event WHERE parent_event_id=?').all(parent.id);
+    const parentAthletes = await db.all('SELECT athlete_id FROM event_entry WHERE event_id=?', parent.id).map(e => e.athlete_id);
+    const subs = await db.all('SELECT id FROM event WHERE parent_event_id=?', parent.id);
     let addedCount = 0;
 
-    db.transaction(() => {
+    db.transaction(async () => {
         for (const sub of subs) {
             const existingAthletes = new Set(
-                db.prepare('SELECT athlete_id FROM event_entry WHERE event_id=?').all(sub.id).map(e => e.athlete_id)
+                await db.all('SELECT athlete_id FROM event_entry WHERE event_id=?', sub.id).map(e => e.athlete_id)
             );
             for (const athId of parentAthletes) {
                 if (!existingAthletes.has(athId)) {
-                    const info = db.prepare('INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?, ?, ?)').run(sub.id, athId, 'registered');
+                    const info = await db.run('INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?, ?, ?)', sub.id, athId, 'registered');
                     // Add to existing heat (heat 1)
-                    const heat = db.prepare('SELECT id FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1').get(sub.id);
+                    const heat = await db.get('SELECT id FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1', sub.id);
                     if (heat) {
-                        const laneCount = db.prepare('SELECT COUNT(*) AS c FROM heat_entry WHERE heat_id=?').get(heat.id).c;
-                        db.prepare('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)').run(heat.id, info.lastInsertRowid, laneCount + 1);
+                        const laneCount = await db.get('SELECT COUNT(*) AS c FROM heat_entry WHERE heat_id=?', heat.id).c;
+                        await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat.id, info.lastInsertRowid, laneCount + 1);
                     }
                     addedCount++;
                 }
@@ -2984,14 +2963,14 @@ app.post('/api/admin/heats/update-entries', (req, res) => {
 });
 
 // Update sub_group (A/B) for a heat entry
-app.post('/api/admin/heat-entry/set-group', (req, res) => {
+app.post('/api/admin/heat-entry/set-group', async (req, res) => {
     const { heat_entry_id, event_entry_id, heat_id, sub_group, admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const g = sub_group ? String(sub_group).toUpperCase() : null;
     if (heat_entry_id) {
-        db.prepare('UPDATE heat_entry SET sub_group=? WHERE id=?').run(g, heat_entry_id);
+        await db.run('UPDATE heat_entry SET sub_group=? WHERE id=?', g, heat_entry_id);
     } else if (heat_id && event_entry_id) {
-        db.prepare('UPDATE heat_entry SET sub_group=? WHERE heat_id=? AND event_entry_id=?').run(g, heat_id, event_entry_id);
+        await db.run('UPDATE heat_entry SET sub_group=? WHERE heat_id=? AND event_entry_id=?', g, heat_id, event_entry_id);
     } else {
         return res.status(400).json({ error: 'heat_entry_id or (heat_id + event_entry_id) required' });
     }
@@ -3001,19 +2980,19 @@ app.post('/api/admin/heat-entry/set-group', (req, res) => {
 // ============================================================
 // ROUND STATUS
 // ============================================================
-app.get('/api/round-status', (req, res) => {
+app.get('/api/round-status', async (req, res) => {
     const compId = req.query.competition_id;
     let q = 'SELECT * FROM event WHERE parent_event_id IS NULL';
     const p = [];
     if (compId) { q += ' AND competition_id=?'; p.push(compId); }
     q += ' ORDER BY sort_order, id';
-    const events = db.prepare(q).all(...p);
-    const result = events.map(e => {
-        const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(e.id);
+    const events = await db.all(q, ...p);
+    const result = events.map(async e => {
+        const heats = await db.all('SELECT id FROM heat WHERE event_id=?', e.id);
         let totalEntries = 0, totalResults = 0;
         for (const h of heats) {
-            totalEntries += db.prepare('SELECT COUNT(*) AS c FROM heat_entry WHERE heat_id=?').get(h.id).c;
-            totalResults += db.prepare('SELECT COUNT(DISTINCT event_entry_id) AS c FROM result WHERE heat_id=?').get(h.id).c;
+            totalEntries += await db.get('SELECT COUNT(*) AS c FROM heat_entry WHERE heat_id=?', h.id).c;
+            totalResults += await db.get('SELECT COUNT(DISTINCT event_entry_id) AS c FROM result WHERE heat_id=?', h.id).c;
         }
         return { ...e, heat_count: heats.length, total_entries: totalEntries, total_results: totalResults };
     });
@@ -3023,19 +3002,19 @@ app.get('/api/round-status', (req, res) => {
 // ============================================================
 // FULL RESULTS EXPORT
 // ============================================================
-app.get('/api/events/:id/full-results', (req, res) => {
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+app.get('/api/events/:id/full-results', async (req, res) => {
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
-    const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(event.id);
-    const quals = db.prepare('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1').all(event.id);
-    const result = heats.map(h => {
-        const entries = db.prepare(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status,
+    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
+    const quals = await db.all('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
+    const result = heats.map(async h => {
+        const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status,
                a.name, a.bib_number, a.team FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-               JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`).all(h.id);
+               JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`, h.id);
         if (event.category === 'field_height') {
-            return { ...h, entries, height_attempts: db.prepare('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number').all(h.id) };
+            return { ...h, entries, height_attempts: await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', h.id) };
         }
-        return { ...h, entries, results: db.prepare('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number').all(h.id) };
+        return { ...h, entries, results: await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', h.id) };
     });
     res.json({ event, heats: result, qualifications: quals });
 });
@@ -3058,79 +3037,79 @@ app.get('/api/operation-log', async (req, res) => {
 // ============================================================
 // HEAT ENTRY — add athlete to heat (for post-heat-creation additions)
 // ============================================================
-app.post('/api/heat-entries/add', (req, res) => {
+app.post('/api/heat-entries/add', async (req, res) => {
     const { heat_id, athlete_id, event_id } = req.body;
     if (!heat_id || !athlete_id || !event_id) return res.status(400).json({ error: 'heat_id, athlete_id, event_id required' });
     // Validate heat belongs to the correct event
-    const heat = db.prepare('SELECT * FROM heat WHERE id=?').get(heat_id);
+    const heat = await db.get('SELECT * FROM heat WHERE id=?', heat_id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
     if (heat.event_id !== parseInt(event_id)) return res.status(400).json({ error: '조가 해당 종목에 속하지 않습니다.' });
     // Ensure event_entry exists (or create)
-    let entry = db.prepare('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?').get(event_id, athlete_id);
+    let entry = await db.get('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, athlete_id);
     if (!entry) {
-        const info = db.prepare('INSERT INTO event_entry (event_id, athlete_id) VALUES (?, ?)').run(event_id, athlete_id);
-        entry = db.prepare('SELECT * FROM event_entry WHERE id=?').get(info.lastInsertRowid);
+        const info = await db.run('INSERT INTO event_entry (event_id, athlete_id) VALUES (?, ?)', event_id, athlete_id);
+        entry = await db.get('SELECT * FROM event_entry WHERE id=?', info.lastInsertRowid);
     }
     // Check if already in heat
-    const existing = db.prepare('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?').get(heat_id, entry.id);
+    const existing = await db.get('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?', heat_id, entry.id);
     if (existing) return res.json({ success: true, already: true, entry });
     // Add to heat with next lane number
-    const maxLane = db.prepare('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?').get(heat_id).mx || 0;
-    db.prepare('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)').run(heat_id, entry.id, maxLane + 1);
+    const maxLane = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat_id).mx || 0;
+    await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat_id, entry.id, maxLane + 1);
     broadcastSSE('entry_status', { event_entry_id: entry.id, status: entry.status });
     res.json({ success: true, entry });
 });
 
 // Relay team members — relay_member table only (no fallback to avoid wrong data)
-app.get('/api/relay-members', (req, res) => {
+app.get('/api/relay-members', async (req, res) => {
     const { event_id, team, event_entry_id } = req.query;
     if (!event_id && !event_entry_id) return res.status(400).json({ error: 'event_id or event_entry_id required' });
     
     let entryId = event_entry_id;
     if (!entryId && event_id && team) {
-        const evt = db.prepare('SELECT * FROM event WHERE id=?').get(event_id);
+        const evt = await db.get('SELECT * FROM event WHERE id=?', event_id);
         if (!evt) return res.status(404).json({ error: 'Event not found' });
-        const teamEntry = db.prepare(`
+        const teamEntry = await db.get(`
             SELECT ee.id FROM event_entry ee
             JOIN athlete a ON a.id = ee.athlete_id
             WHERE ee.event_id = ? AND a.name = ?
-        `).get(event_id, team);
+        `, event_id, team);
         if (!teamEntry) return res.json([]);
         entryId = teamEntry.id;
     }
     if (!entryId) return res.json([]);
     
     // Return only athletes registered in relay_member for this entry
-    const members = db.prepare(`
+    const members = await db.all(`
         SELECT a.*, rm.leg_order, rm.event_entry_id FROM relay_member rm
         JOIN athlete a ON a.id = rm.athlete_id
         WHERE rm.event_entry_id = ?
         ORDER BY rm.leg_order, CAST(a.bib_number AS INTEGER)
-    `).all(entryId);
+    `, entryId);
     res.json(members);
 });
 
 // Relay members batch — all relay members for all teams in one event
-app.get('/api/relay-members/batch', (req, res) => {
+app.get('/api/relay-members/batch', async (req, res) => {
     const eventId = parseInt(req.query.event_id);
     if (!eventId) return res.status(400).json({ error: 'event_id required' });
     
     // Get all event_entries for this relay event
-    const entries = db.prepare(`
+    const entries = await db.all(`
         SELECT ee.id AS event_entry_id, a.name AS team_name, a.id AS athlete_id
         FROM event_entry ee JOIN athlete a ON a.id = ee.athlete_id
         WHERE ee.event_id = ?
-    `).all(eventId);
+    `, eventId);
     
     // For each entry, fetch relay members
     const result = {};
     for (const entry of entries) {
-        const members = db.prepare(`
+        const members = await db.all(`
             SELECT a.id, a.name, a.team, a.bib_number, a.gender, rm.leg_order
             FROM relay_member rm JOIN athlete a ON a.id = rm.athlete_id
             WHERE rm.event_entry_id = ?
             ORDER BY rm.leg_order, a.name
-        `).all(entry.event_entry_id);
+        `, entry.event_entry_id);
         if (members.length > 0) {
             result[entry.event_entry_id] = { team_name: entry.team_name, members };
         }
@@ -3139,19 +3118,19 @@ app.get('/api/relay-members/batch', (req, res) => {
 });
 
 // Relay member management APIs
-app.post('/api/relay-members', (req, res) => {
+app.post('/api/relay-members', async (req, res) => {
     const { event_entry_id, athlete_id, leg_order } = req.body;
     if (!event_entry_id || !athlete_id) return res.status(400).json({ error: 'event_entry_id and athlete_id required' });
     try {
-        db.prepare('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)').run(event_entry_id, athlete_id, leg_order || null);
+        await db.run('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)', event_entry_id, athlete_id, leg_order || null);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/relay-members', (req, res) => {
+app.delete('/api/relay-members', async (req, res) => {
     const { event_entry_id, athlete_id } = req.body;
     if (!event_entry_id || !athlete_id) return res.status(400).json({ error: 'event_entry_id and athlete_id required' });
-    db.prepare('DELETE FROM relay_member WHERE event_entry_id=? AND athlete_id=?').run(event_entry_id, athlete_id);
+    await db.run('DELETE FROM relay_member WHERE event_entry_id=? AND athlete_id=?', event_entry_id, athlete_id);
     res.json({ success: true });
 });
 
@@ -3268,26 +3247,26 @@ app.get('/api/registered-judges', async (req, res) => {
 });
 
 // Multi-key CRUD
-app.get('/api/admin/operation-keys', (req, res) => {
+app.get('/api/admin/operation-keys', async (req, res) => {
     if (!isAdminKey(req.query.key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    res.json(db.prepare('SELECT id, judge_name, key_value, role, can_manage, active, created_at FROM operation_key ORDER BY created_at DESC').all());
+    res.json(await db.all('SELECT id, judge_name, key_value, role, can_manage, active, created_at FROM operation_key ORDER BY created_at DESC'));
 });
-app.post('/api/admin/operation-keys', (req, res) => {
+app.post('/api/admin/operation-keys', async (req, res) => {
     const { admin_key, judge_name, key_value, can_manage } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!judge_name || !key_value || key_value.length < 4) return res.status(400).json({ error: '심판명과 키(4자 이상)를 입력하세요.' });
     try {
-        const info = db.prepare('INSERT INTO operation_key (judge_name, key_value, can_manage) VALUES (?, ?, ?)').run(judge_name, key_value, can_manage ? 1 : 0);
+        const info = await db.run('INSERT INTO operation_key (judge_name, key_value, can_manage) VALUES (?, ?, ?)', judge_name, key_value, can_manage ? 1 : 0);
         opLog(`운영키 생성: ${judge_name}${can_manage ? ' (관리권한)' : ''}`, 'admin', 'admin');
-        res.json(db.prepare('SELECT * FROM operation_key WHERE id=?').get(info.lastInsertRowid));
+        res.json(await db.get('SELECT * FROM operation_key WHERE id=?', info.lastInsertRowid));
     } catch (e) { res.status(400).json({ error: '키가 중복되었습니다.' }); }
 });
-app.delete('/api/admin/operation-keys/:id', (req, res) => {
+app.delete('/api/admin/operation-keys/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const key = db.prepare('SELECT * FROM operation_key WHERE id=?').get(req.params.id);
+    const key = await db.get('SELECT * FROM operation_key WHERE id=?', req.params.id);
     if (!key) return res.status(404).json({ error: 'Not found' });
-    db.prepare('DELETE FROM operation_key WHERE id=?').run(req.params.id);
+    await db.run('DELETE FROM operation_key WHERE id=?', req.params.id);
     opLog(`운영키 삭제: ${key.judge_name}`, 'admin', 'admin');
     res.json({ success: true });
 });
@@ -3316,15 +3295,15 @@ app.post('/api/admin/site-config', (req, res) => {
     opLog('사이트 설정 업데이트', 'admin', 'admin');
     res.json({ success: true });
 });
-app.patch('/api/admin/operation-keys/:id', (req, res) => {
+app.patch('/api/admin/operation-keys/:id', async (req, res) => {
     const { admin_key, active, can_manage } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const key = db.prepare('SELECT * FROM operation_key WHERE id=?').get(req.params.id);
+    const key = await db.get('SELECT * FROM operation_key WHERE id=?', req.params.id);
     if (!key) return res.status(404).json({ error: 'Not found' });
     const newActive = active !== undefined ? (active ? 1 : 0) : key.active;
     const newCanManage = can_manage !== undefined ? (can_manage ? 1 : 0) : key.can_manage;
-    db.prepare('UPDATE operation_key SET active=?, can_manage=? WHERE id=?').run(newActive, newCanManage, req.params.id);
-    const updated = db.prepare('SELECT * FROM operation_key WHERE id=?').get(req.params.id);
+    await db.run('UPDATE operation_key SET active=?, can_manage=? WHERE id=?', newActive, newCanManage, req.params.id);
+    const updated = await db.get('SELECT * FROM operation_key WHERE id=?', req.params.id);
     if (can_manage !== undefined) {
         opLog(`${key.judge_name} 심판 권한 변경: ${newCanManage ? '관리자' : '운영'}`, 'admin', 'admin');
     }
@@ -3334,17 +3313,17 @@ app.patch('/api/admin/operation-keys/:id', (req, res) => {
 // ============================================================
 // PUBLIC: Athletes by competition (callroom / record use)
 // ============================================================
-app.get('/api/athletes', (req, res) => {
+app.get('/api/athletes', async (req, res) => {
     const compId = req.query.competition_id;
     if (!compId) return res.status(400).json({ error: 'competition_id 필요' });
-    res.json(db.prepare('SELECT * FROM athlete WHERE competition_id=? ORDER BY CAST(bib_number AS INTEGER)').all(compId));
+    res.json(await db.all('SELECT * FROM athlete WHERE competition_id=? ORDER BY CAST(bib_number AS INTEGER)', compId));
 });
 
 // Athlete entries — list events an athlete is entered in
-app.get('/api/athletes/:id/entries', (req, res) => {
+app.get('/api/athletes/:id/entries', async (req, res) => {
     const athleteId = req.params.id;
     try {
-        const rows = db.prepare(`
+        const rows = await db.all(`
             SELECT ee.id as event_entry_id, ee.event_id, ee.status,
                    e.name as event_name, e.round_type, e.category, e.gender,
                    he.heat_id, he.lane_number,
@@ -3355,7 +3334,7 @@ app.get('/api/athletes/:id/entries', (req, res) => {
             LEFT JOIN heat h ON h.id = he.heat_id
             WHERE ee.athlete_id = ?
             ORDER BY e.sort_order, e.name
-        `).all(athleteId);
+        `, athleteId);
         res.json(rows);
     } catch (e) { res.json([]); }
 });
@@ -3363,156 +3342,153 @@ app.get('/api/athletes/:id/entries', (req, res) => {
 // ============================================================
 // ADMIN: ATHLETE CRUD (scoped to competition)
 // ============================================================
-app.get('/api/admin/athletes', (req, res) => {
+app.get('/api/admin/athletes', async (req, res) => {
     if (!isAdminKey(req.query.key) && !isOperationKey(req.query.key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const compId = req.query.competition_id;
-    if (compId) return res.json(db.prepare('SELECT * FROM athlete WHERE competition_id=? ORDER BY CAST(bib_number AS INTEGER)').all(compId));
-    res.json(db.prepare('SELECT * FROM athlete ORDER BY CAST(bib_number AS INTEGER)').all());
+    if (compId) return res.json(await db.all('SELECT * FROM athlete WHERE competition_id=? ORDER BY CAST(bib_number AS INTEGER)', compId));
+    res.json(await db.all('SELECT * FROM athlete ORDER BY CAST(bib_number AS INTEGER)'));
 });
-app.post('/api/admin/athletes', (req, res) => {
+app.post('/api/admin/athletes', async (req, res) => {
     const { admin_key, competition_id, name, bib_number, team, gender, barcode } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!name || !gender || !competition_id) return res.status(400).json({ error: '필수 항목이 누락되었습니다 (이름, 성별, 대회ID).' });
     try {
         const bib = bib_number ? String(bib_number).trim() : null;
         const bc = barcode || '';
-        const info = db.prepare('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)')
-            .run(competition_id, name, bib, team || '', bc, gender);
-        res.json(db.prepare('SELECT * FROM athlete WHERE id=?').get(info.lastInsertRowid));
+        const info = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', competition_id, name, bib, team || '', bc, gender);
+        res.json(await db.get('SELECT * FROM athlete WHERE id=?', info.lastInsertRowid));
     } catch (e) { res.status(400).json({ error: '등록 오류: ' + e.message }); }
 });
-app.put('/api/admin/athletes/:id', (req, res) => {
+app.put('/api/admin/athletes/:id', async (req, res) => {
     const { admin_key, name, bib_number, team, gender, barcode } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const old = db.prepare('SELECT * FROM athlete WHERE id=?').get(req.params.id);
+    const old = await db.get('SELECT * FROM athlete WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
     try {
         const newBib = bib_number !== undefined ? (bib_number ? String(bib_number).trim() : null) : old.bib_number;
-        db.prepare('UPDATE athlete SET name=?,bib_number=?,team=?,gender=?,barcode=? WHERE id=?')
-            .run(name || old.name, newBib, team ?? old.team, gender || old.gender, barcode ?? old.barcode, old.id);
-        res.json(db.prepare('SELECT * FROM athlete WHERE id=?').get(old.id));
+        await db.run('UPDATE athlete SET name=?,bib_number=?,team=?,gender=?,barcode=? WHERE id=?', name || old.name, newBib, team ?? old.team, gender || old.gender, barcode ?? old.barcode, old.id);
+        res.json(await db.get('SELECT * FROM athlete WHERE id=?', old.id));
     } catch (e) { res.status(400).json({ error: '수정 오류: ' + e.message }); }
 });
-app.delete('/api/admin/athletes/:id', (req, res) => {
+app.delete('/api/admin/athletes/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const ath = db.prepare('SELECT * FROM athlete WHERE id=?').get(req.params.id);
+    const ath = await db.get('SELECT * FROM athlete WHERE id=?', req.params.id);
     if (!ath) return res.status(404).json({ error: 'Not found' });
-    db.transaction(() => {
-        const entries = db.prepare('SELECT id FROM event_entry WHERE athlete_id=?').all(ath.id);
+    db.transaction(async () => {
+        const entries = await db.all('SELECT id FROM event_entry WHERE athlete_id=?', ath.id);
         for (const e of entries) {
-            db.prepare('DELETE FROM result WHERE event_entry_id=?').run(e.id);
-            db.prepare('DELETE FROM height_attempt WHERE event_entry_id=?').run(e.id);
-            db.prepare('DELETE FROM heat_entry WHERE event_entry_id=?').run(e.id);
-            db.prepare('DELETE FROM combined_score WHERE event_entry_id=?').run(e.id);
-            db.prepare('DELETE FROM qualification_selection WHERE event_entry_id=?').run(e.id);
+            await db.run('DELETE FROM result WHERE event_entry_id=?', e.id);
+            await db.run('DELETE FROM height_attempt WHERE event_entry_id=?', e.id);
+            await db.run('DELETE FROM heat_entry WHERE event_entry_id=?', e.id);
+            await db.run('DELETE FROM combined_score WHERE event_entry_id=?', e.id);
+            await db.run('DELETE FROM qualification_selection WHERE event_entry_id=?', e.id);
         }
-        db.prepare('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE athlete_id=?)').run(ath.id);
-        db.prepare('DELETE FROM event_entry WHERE athlete_id=?').run(ath.id);
-        db.prepare('DELETE FROM athlete WHERE id=?').run(ath.id);
+        await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE athlete_id=?)', ath.id);
+        await db.run('DELETE FROM event_entry WHERE athlete_id=?', ath.id);
+        await db.run('DELETE FROM athlete WHERE id=?', ath.id);
     })();
     res.json({ success: true });
 });
 
 // ---- Athlete ↔ Event Assignment ----
-app.get('/api/admin/athletes/:id/events', (req, res) => {
+app.get('/api/admin/athletes/:id/events', async (req, res) => {
     if (!isAdminKey(req.query.key) && !isOperationKey(req.query.key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    res.json(db.prepare(`
+    res.json(await db.all(`
         SELECT ee.id AS event_entry_id, ee.event_id, ee.status, e.name AS event_name, e.category, e.gender, e.round_type
         FROM event_entry ee JOIN event e ON e.id=ee.event_id
         WHERE ee.athlete_id=? ORDER BY e.sort_order, e.id
-    `).all(req.params.id));
+    `, req.params.id));
 });
-app.post('/api/admin/athletes/:id/events', (req, res) => {
+app.post('/api/admin/athletes/:id/events', async (req, res) => {
     const { admin_key, event_id } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const ath = db.prepare('SELECT * FROM athlete WHERE id=?').get(req.params.id);
+    const ath = await db.get('SELECT * FROM athlete WHERE id=?', req.params.id);
     if (!ath) return res.status(404).json({ error: 'Athlete not found' });
-    const evt = db.prepare('SELECT * FROM event WHERE id=?').get(event_id);
+    const evt = await db.get('SELECT * FROM event WHERE id=?', event_id);
     if (!evt) return res.status(404).json({ error: 'Event not found' });
 
     // For relay events: add athlete as relay_member to existing team, don't create new team
     if (evt.category === 'relay') {
         // Find existing team entry for this athlete's team
         const teamName = ath.team || ath.name;
-        const existingTeamEntry = db.prepare(`
+        const existingTeamEntry = await db.get(`
             SELECT ee.id FROM event_entry ee
             JOIN athlete a ON a.id = ee.athlete_id
             WHERE ee.event_id = ? AND a.name = ?
-        `).get(event_id, teamName);
+        `, event_id, teamName);
 
         if (existingTeamEntry) {
             // Add as relay member to existing team
-            const existingMember = db.prepare('SELECT id FROM relay_member WHERE event_entry_id=? AND athlete_id=?').get(existingTeamEntry.id, ath.id);
+            const existingMember = await db.get('SELECT id FROM relay_member WHERE event_entry_id=? AND athlete_id=?', existingTeamEntry.id, ath.id);
             if (existingMember) return res.status(409).json({ error: '이미 등록된 릴레이 멤버입니다.' });
-            const maxLeg = db.prepare('SELECT MAX(leg_order) AS mx FROM relay_member WHERE event_entry_id=?').get(existingTeamEntry.id).mx || 0;
-            db.prepare('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)').run(existingTeamEntry.id, ath.id, maxLeg + 1);
+            const maxLeg = await db.get('SELECT MAX(leg_order) AS mx FROM relay_member WHERE event_entry_id=?', existingTeamEntry.id).mx || 0;
+            await db.run('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)', existingTeamEntry.id, ath.id, maxLeg + 1);
             return res.json({ success: true, event_entry_id: existingTeamEntry.id, added_as: 'relay_member' });
         }
         // No existing team → create a dummy team athlete and add this athlete as relay_member
         const rGender = evt.gender === 'X' ? 'M' : evt.gender;
-        let teamAthlete = db.prepare('SELECT * FROM athlete WHERE competition_id=? AND name=? AND bib_number=?').get(evt.competition_id, teamName, teamName);
+        let teamAthlete = await db.get('SELECT * FROM athlete WHERE competition_id=? AND name=? AND bib_number=?', evt.competition_id, teamName, teamName);
         if (!teamAthlete) {
-            const teamInfo = db.prepare('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)')
-                .run(evt.competition_id, teamName, teamName, teamName, `RELAY_${teamName}`, rGender);
-            teamAthlete = db.prepare('SELECT * FROM athlete WHERE id=?').get(teamInfo.lastInsertRowid);
+            const teamInfo = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', evt.competition_id, teamName, teamName, teamName, `RELAY_${teamName}`, rGender);
+            teamAthlete = await db.get('SELECT * FROM athlete WHERE id=?', teamInfo.lastInsertRowid);
         }
         // Create event_entry for the team
-        let teamEntry = db.prepare('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?').get(event_id, teamAthlete.id);
+        let teamEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, teamAthlete.id);
         if (!teamEntry) {
-            const teInfo = db.prepare("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')").run(event_id, teamAthlete.id);
+            const teInfo = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", event_id, teamAthlete.id);
             teamEntry = { id: teInfo.lastInsertRowid };
             // Assign to first heat
-            let heat = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1').get(event_id);
+            let heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1', event_id);
             if (!heat) {
-                const hInfo = db.prepare('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)').run(event_id);
+                const hInfo = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)', event_id);
                 heat = { id: hInfo.lastInsertRowid };
             }
-            const maxLane = db.prepare('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?').get(heat.id).mx || 0;
-            db.prepare('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)').run(heat.id, teamEntry.id, maxLane + 1);
+            const maxLane = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat.id).mx || 0;
+            await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat.id, teamEntry.id, maxLane + 1);
         }
         // Add the athlete as relay member
-        db.prepare('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)').run(teamEntry.id, ath.id, 1);
+        await db.run('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)', teamEntry.id, ath.id, 1);
         return res.json({ success: true, event_entry_id: teamEntry.id, added_as: 'relay_member_new_team' });
     }
 
-    const exists = db.prepare('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?').get(event_id, ath.id);
+    const exists = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, ath.id);
     if (exists) return res.status(409).json({ error: '이미 등록된 종목입니다.' });
 
-    db.transaction(() => {
+    db.transaction(async () => {
         // 1. Create event_entry
-        const info = db.prepare("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')").run(event_id, ath.id);
+        const info = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", event_id, ath.id);
         const entryId = info.lastInsertRowid;
 
         // 2. Auto-assign to first heat (create heat if none exists)
-        let heat = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1').get(event_id);
+        let heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1', event_id);
         if (!heat) {
-            const hInfo = db.prepare('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)').run(event_id);
+            const hInfo = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)', event_id);
             heat = { id: hInfo.lastInsertRowid };
         }
         // Determine next lane number
-        const maxLane = db.prepare('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?').get(heat.id).mx || 0;
-        db.prepare('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)').run(heat.id, entryId, maxLane + 1);
+        const maxLane = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat.id).mx || 0;
+        await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat.id, entryId, maxLane + 1);
 
         audit('event_entry', entryId, 'INSERT', null, { event_id, athlete_id: ath.id }, 'admin', evt.competition_id, req);
         broadcastSSE('entry_status', { event_entry_id: entryId, status: 'registered' });
     })();
 
-    res.json({ success: true, event_entry_id: db.prepare('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?').get(event_id, ath.id).id });
+    res.json({ success: true, event_entry_id: await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, ath.id).id });
 });
-app.delete('/api/admin/athletes/:athleteId/events/:entryId', (req, res) => {
+app.delete('/api/admin/athletes/:athleteId/events/:entryId', async (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const entry = db.prepare('SELECT * FROM event_entry WHERE id=?').get(req.params.entryId);
+    const entry = await db.get('SELECT * FROM event_entry WHERE id=?', req.params.entryId);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
-    db.transaction(() => {
-        db.prepare('DELETE FROM result WHERE event_entry_id=?').run(entry.id);
-        db.prepare('DELETE FROM height_attempt WHERE event_entry_id=?').run(entry.id);
-        db.prepare('DELETE FROM heat_entry WHERE event_entry_id=?').run(entry.id);
-        db.prepare('DELETE FROM combined_score WHERE event_entry_id=?').run(entry.id);
-        db.prepare('DELETE FROM qualification_selection WHERE event_entry_id=?').run(entry.id);
-        db.prepare('DELETE FROM relay_member WHERE event_entry_id=?').run(entry.id);
-        db.prepare('DELETE FROM event_entry WHERE id=?').run(entry.id);
+    db.transaction(async () => {
+        await db.run('DELETE FROM result WHERE event_entry_id=?', entry.id);
+        await db.run('DELETE FROM height_attempt WHERE event_entry_id=?', entry.id);
+        await db.run('DELETE FROM heat_entry WHERE event_entry_id=?', entry.id);
+        await db.run('DELETE FROM combined_score WHERE event_entry_id=?', entry.id);
+        await db.run('DELETE FROM qualification_selection WHERE event_entry_id=?', entry.id);
+        await db.run('DELETE FROM relay_member WHERE event_entry_id=?', entry.id);
+        await db.run('DELETE FROM event_entry WHERE id=?', entry.id);
     })();
     res.json({ success: true });
 });
@@ -3520,11 +3496,11 @@ app.delete('/api/admin/athletes/:athleteId/events/:entryId', (req, res) => {
 // ============================================================
 // ADMIN: EVENT CRUD
 // ============================================================
-app.get('/api/admin/events', (req, res) => {
+app.get('/api/admin/events', async (req, res) => {
     if (!isAdminKey(req.query.key) && !isOperationKey(req.query.key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const compId = req.query.competition_id;
-    if (compId) return res.json(db.prepare('SELECT * FROM event WHERE competition_id=? ORDER BY sort_order, id').all(compId));
-    res.json(db.prepare('SELECT * FROM event ORDER BY sort_order, id').all());
+    if (compId) return res.json(await db.all('SELECT * FROM event WHERE competition_id=? ORDER BY sort_order, id', compId));
+    res.json(await db.all('SELECT * FROM event ORDER BY sort_order, id'));
 });
 // Standard athletics event order (WA + KAAF) - reusable
 // Order: Sprints(100~400) → Middle(800~1500) → Long(3000~10000) → Hurdles → SC → Walks(track) → Road → Jumps → Throws → Combined → Relays
@@ -3642,80 +3618,73 @@ function autoSortCompetitionEvents(competitionId) {
     })();
 }
 
-app.post('/api/admin/events', (req, res) => {
+app.post('/api/admin/events', async (req, res) => {
     const { admin_key, competition_id, name, category, gender, round_type, sort_order, division, video_url, result_url } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!name || !category || !gender || !competition_id) return res.status(400).json({ error: '필수 항목이 누락되었습니다.' });
     try {
         const autoOrder = sort_order || getStandardSortOrder(name);
-        const info = db.prepare('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order,division,video_url,result_url) VALUES (?,?,?,?,?,?,?,?,?,?)')
-            .run(competition_id, name, category, gender, round_type || 'final', 'created', autoOrder, division || '', video_url || '', result_url || '');
-        const evt = db.prepare('SELECT * FROM event WHERE id=?').get(info.lastInsertRowid);
-        db.prepare('INSERT INTO heat (event_id,heat_number) VALUES (?,1)').run(evt.id);
+        const info = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order,division,video_url,result_url) VALUES (?,?,?,?,?,?,?,?,?,?)', competition_id, name, category, gender, round_type || 'final', 'created', autoOrder, division || '', video_url || '', result_url || '');
+        const evt = await db.get('SELECT * FROM event WHERE id=?', info.lastInsertRowid);
+        await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,1)', evt.id);
         res.json(evt);
     } catch (e) { res.status(400).json({ error: '추가 오류: ' + e.message }); }
 });
-app.put('/api/admin/events/:id', (req, res) => {
+app.put('/api/admin/events/:id', async (req, res) => {
     const { admin_key, name, category, gender, round_type, sort_order, round_status, video_url, division, result_url } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const old = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const old = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
-    db.prepare('UPDATE event SET name=?,category=?,gender=?,round_type=?,sort_order=?,round_status=?,video_url=?,division=?,result_url=? WHERE id=?')
-        .run(name || old.name, category || old.category, gender || old.gender, round_type || old.round_type,
-             sort_order ?? old.sort_order, round_status || old.round_status,
-             video_url ?? old.video_url ?? '',
-             division ?? old.division ?? '',
-             result_url ?? old.result_url ?? '',
-             old.id);
-    res.json(db.prepare('SELECT * FROM event WHERE id=?').get(old.id));
+    await db.run('UPDATE event SET name=?,category=?,gender=?,round_type=?,sort_order=?,round_status=?,video_url=?,division=?,result_url=? WHERE id=?', name || old.name, category || old.category, gender || old.gender, round_type || old.round_type, sort_order ?? old.sort_order, round_status || old.round_status, video_url ?? old.video_url ?? '', division ?? old.division ?? '', result_url ?? old.result_url ?? '', old.id);
+    res.json(await db.get('SELECT * FROM event WHERE id=?', old.id));
 });
 
 // Event video URL (accessible by operation key holders)
-app.put('/api/events/:id/video-url', (req, res) => {
+app.put('/api/events/:id/video-url', async (req, res) => {
     const { key, video_url } = req.body;
     if (!isOperationKey(key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const evt = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const evt = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!evt) return res.status(404).json({ error: 'Not found' });
-    db.prepare('UPDATE event SET video_url=? WHERE id=?').run(video_url || '', evt.id);
+    await db.run('UPDATE event SET video_url=? WHERE id=?', video_url || '', evt.id);
     res.json({ ok: true, video_url: video_url || '' });
 });
-app.get('/api/events/:id/video-url', (req, res) => {
-    const evt = db.prepare('SELECT video_url FROM event WHERE id=?').get(req.params.id);
+app.get('/api/events/:id/video-url', async (req, res) => {
+    const evt = await db.get('SELECT video_url FROM event WHERE id=?', req.params.id);
     if (!evt) return res.status(404).json({ error: 'Not found' });
     res.json({ video_url: evt.video_url || '' });
 });
 
 // Auto-sort events by standard athletics order (WA + KAAF)
 // Allow operation key as well so on-site staff can trigger this without master admin key
-app.post('/api/admin/events/auto-sort', (req, res) => {
+app.post('/api/admin/events/auto-sort', async (req, res) => {
     const { admin_key, competition_id } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
     autoSortCompetitionEvents(competition_id);
-    const count = db.prepare('SELECT COUNT(*) as cnt FROM event WHERE competition_id=? AND parent_event_id IS NULL').get(competition_id).cnt;
+    const count = await db.get('SELECT COUNT(*) as cnt FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id).cnt;
     res.json({ success: true, message: `${count}개 종목 자동정렬 완료 (WA 표준 순서)` });
 });
 
-app.delete('/api/admin/events/:id', (req, res) => {
+app.delete('/api/admin/events/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Not found' });
-    db.transaction(() => {
-        const subs = db.prepare('SELECT id FROM event WHERE parent_event_id=?').all(event.id);
+    db.transaction(async () => {
+        const subs = await db.all('SELECT id FROM event WHERE parent_event_id=?', event.id);
         for (const sub of subs) {
-            const subHeats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(sub.id);
-            for (const h of subHeats) { db.prepare('DELETE FROM result WHERE heat_id=?').run(h.id); db.prepare('DELETE FROM height_attempt WHERE heat_id=?').run(h.id); db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(h.id); }
-            db.prepare('DELETE FROM heat WHERE event_id=?').run(sub.id); db.prepare('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(sub.id); db.prepare('DELETE FROM event_entry WHERE event_id=?').run(sub.id); db.prepare('DELETE FROM event WHERE id=?').run(sub.id);
+            const subHeats = await db.all('SELECT id FROM heat WHERE event_id=?', sub.id);
+            for (const h of subHeats) { await db.run('DELETE FROM result WHERE heat_id=?', h.id); await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id); await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id); }
+            await db.run('DELETE FROM heat WHERE event_id=?', sub.id); await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', sub.id); await db.run('DELETE FROM event_entry WHERE event_id=?', sub.id); await db.run('DELETE FROM event WHERE id=?', sub.id);
         }
-        const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(event.id);
-        for (const h of heats) { db.prepare('DELETE FROM result WHERE heat_id=?').run(h.id); db.prepare('DELETE FROM height_attempt WHERE heat_id=?').run(h.id); db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(h.id); }
-        db.prepare('DELETE FROM heat WHERE event_id=?').run(event.id);
-        db.prepare('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(event.id);
-        db.prepare('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(event.id);
-        db.prepare('DELETE FROM qualification_selection WHERE event_id=?').run(event.id);
-        db.prepare('DELETE FROM event_entry WHERE event_id=?').run(event.id);
-        db.prepare('DELETE FROM event WHERE id=?').run(event.id);
+        const heats = await db.all('SELECT id FROM heat WHERE event_id=?', event.id);
+        for (const h of heats) { await db.run('DELETE FROM result WHERE heat_id=?', h.id); await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id); await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id); }
+        await db.run('DELETE FROM heat WHERE event_id=?', event.id);
+        await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', event.id);
+        await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', event.id);
+        await db.run('DELETE FROM qualification_selection WHERE event_id=?', event.id);
+        await db.run('DELETE FROM event_entry WHERE event_id=?', event.id);
+        await db.run('DELETE FROM event WHERE id=?', event.id);
     })();
     res.json({ success: true });
 });
@@ -3723,48 +3692,48 @@ app.delete('/api/admin/events/:id', (req, res) => {
 // ============================================================
 // ADMIN: HEAT MANAGEMENT (merge, add, delete, move athlete)
 // ============================================================
-app.post('/api/admin/events/:id/add-heat', (req, res) => {
+app.post('/api/admin/events/:id/add-heat', async (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
-    const maxHeat = db.prepare('SELECT MAX(heat_number) AS mx FROM heat WHERE event_id=?').get(event.id);
+    const maxHeat = await db.get('SELECT MAX(heat_number) AS mx FROM heat WHERE event_id=?', event.id);
     const nextNum = (maxHeat.mx || 0) + 1;
-    const info = db.prepare('INSERT INTO heat (event_id, heat_number) VALUES (?, ?)').run(event.id, nextNum);
+    const info = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, ?)', event.id, nextNum);
     res.json({ success: true, heat_id: info.lastInsertRowid, heat_number: nextNum });
 });
-app.delete('/api/admin/heats/:id', (req, res) => {
+app.delete('/api/admin/heats/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const heat = db.prepare('SELECT * FROM heat WHERE id=?').get(req.params.id);
+    const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
-    db.transaction(() => {
-        db.prepare('DELETE FROM result WHERE heat_id=?').run(heat.id);
-        db.prepare('DELETE FROM height_attempt WHERE heat_id=?').run(heat.id);
-        db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(heat.id);
-        db.prepare('DELETE FROM heat WHERE id=?').run(heat.id);
+    db.transaction(async () => {
+        await db.run('DELETE FROM result WHERE heat_id=?', heat.id);
+        await db.run('DELETE FROM height_attempt WHERE heat_id=?', heat.id);
+        await db.run('DELETE FROM heat_entry WHERE heat_id=?', heat.id);
+        await db.run('DELETE FROM heat WHERE id=?', heat.id);
     })();
     res.json({ success: true });
 });
 // Remove athlete from heat (without deleting event_entry — just unlink from heat)
-app.post('/api/admin/heats/:id/remove-entry', (req, res) => {
+app.post('/api/admin/heats/:id/remove-entry', async (req, res) => {
     const { admin_key, event_entry_id, delete_event_entry } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const heat = db.prepare('SELECT * FROM heat WHERE id=?').get(req.params.id);
+    const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
-    const he = db.prepare('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?').get(req.params.id, event_entry_id);
+    const he = await db.get('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
     if (!he) return res.status(404).json({ error: '해당 선수가 이 조에 없습니다.' });
-    db.transaction(() => {
+    db.transaction(async () => {
         // Remove from heat
-        db.prepare('DELETE FROM heat_entry WHERE heat_id=? AND event_entry_id=?').run(req.params.id, event_entry_id);
+        await db.run('DELETE FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
         // Optionally also delete the event_entry (full removal from event)
         if (delete_event_entry) {
-            db.prepare('DELETE FROM result WHERE event_entry_id=?').run(event_entry_id);
-            db.prepare('DELETE FROM height_attempt WHERE event_entry_id=?').run(event_entry_id);
-            db.prepare('DELETE FROM combined_score WHERE event_entry_id=?').run(event_entry_id);
-            db.prepare('DELETE FROM qualification_selection WHERE event_entry_id=?').run(event_entry_id);
-            db.prepare('DELETE FROM relay_member WHERE event_entry_id=?').run(event_entry_id);
-            db.prepare('DELETE FROM event_entry WHERE id=?').run(event_entry_id);
+            await db.run('DELETE FROM result WHERE event_entry_id=?', event_entry_id);
+            await db.run('DELETE FROM height_attempt WHERE event_entry_id=?', event_entry_id);
+            await db.run('DELETE FROM combined_score WHERE event_entry_id=?', event_entry_id);
+            await db.run('DELETE FROM qualification_selection WHERE event_entry_id=?', event_entry_id);
+            await db.run('DELETE FROM relay_member WHERE event_entry_id=?', event_entry_id);
+            await db.run('DELETE FROM event_entry WHERE id=?', event_entry_id);
         }
     })();
     broadcastSSE('entry_status', { event_entry_id, status: 'removed' });
@@ -3773,19 +3742,19 @@ app.post('/api/admin/heats/:id/remove-entry', (req, res) => {
 app.post('/api/admin/heats/:id/move-entry', (req, res) => {
     const { admin_key, event_entry_id, target_heat_id, lane_number } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    db.transaction(() => {
+    db.transaction(async () => {
         // Remove from current heat
-        db.prepare('DELETE FROM heat_entry WHERE heat_id=? AND event_entry_id=?').run(req.params.id, event_entry_id);
+        await db.run('DELETE FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
         // Add to target heat
-        db.prepare('INSERT OR REPLACE INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)').run(target_heat_id, event_entry_id, lane_number || null);
+        await db.run('INSERT OR REPLACE INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', target_heat_id, event_entry_id, lane_number || null);
     })();
     res.json({ success: true });
 });
 // Force event status change (admin override)
-app.post('/api/admin/events/:id/force-status', (req, res) => {
+app.post('/api/admin/events/:id/force-status', async (req, res) => {
     const { admin_key, round_status, round_type } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.id);
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     const updates = [];
     const params = [];
@@ -3793,10 +3762,10 @@ app.post('/api/admin/events/:id/force-status', (req, res) => {
     if (round_type) { updates.push('round_type=?'); params.push(round_type); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nothing to update' });
     params.push(event.id);
-    db.prepare(`UPDATE event SET ${updates.join(',')} WHERE id=?`).run(...params);
+    await db.run(`UPDATE event SET ${updates.join(',')} WHERE id=?`, ...params);
     opLog(`${event.name} 강제 상태변경: ${round_status || ''} ${round_type || ''}`, 'admin', 'admin', event.competition_id);
     broadcastSSE('event_reverted', { event_id: event.id });
-    res.json({ success: true, event: db.prepare('SELECT * FROM event WHERE id=?').get(event.id) });
+    res.json({ success: true, event: await db.get('SELECT * FROM event WHERE id=?', event.id) });
 });
 
 // ============================================================
@@ -3806,19 +3775,19 @@ app.post('/api/admin/reset-db', (req, res) => {
     const { admin_key, competition_id } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
-    db.transaction(() => {
-        const events = db.prepare('SELECT id FROM event WHERE competition_id=?').all(competition_id);
+    db.transaction(async () => {
+        const events = await db.all('SELECT id FROM event WHERE competition_id=?', competition_id);
         for (const evt of events) {
-            const heats = db.prepare('SELECT id FROM heat WHERE event_id=?').all(evt.id);
-            for (const h of heats) { db.prepare('DELETE FROM result WHERE heat_id=?').run(h.id); db.prepare('DELETE FROM height_attempt WHERE heat_id=?').run(h.id); db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(h.id); }
-            db.prepare('DELETE FROM heat WHERE event_id=?').run(evt.id);
-            db.prepare('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(evt.id);
-            db.prepare('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(evt.id);
-            db.prepare('DELETE FROM qualification_selection WHERE event_id=?').run(evt.id);
-            db.prepare('DELETE FROM event_entry WHERE event_id=?').run(evt.id);
+            const heats = await db.all('SELECT id FROM heat WHERE event_id=?', evt.id);
+            for (const h of heats) { await db.run('DELETE FROM result WHERE heat_id=?', h.id); await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id); await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id); }
+            await db.run('DELETE FROM heat WHERE event_id=?', evt.id);
+            await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', evt.id);
+            await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', evt.id);
+            await db.run('DELETE FROM qualification_selection WHERE event_id=?', evt.id);
+            await db.run('DELETE FROM event_entry WHERE event_id=?', evt.id);
         }
-        db.prepare('DELETE FROM event WHERE competition_id=?').run(competition_id);
-        db.prepare('DELETE FROM athlete WHERE competition_id=?').run(competition_id);
+        await db.run('DELETE FROM event WHERE competition_id=?', competition_id);
+        await db.run('DELETE FROM athlete WHERE competition_id=?', competition_id);
     })();
     res.json({ success: true, message: '해당 대회 데이터가 초기화되었습니다.' });
 });
@@ -3832,24 +3801,24 @@ app.get('/api/admin/backup', (req, res) => {
     const compId = req.query.competition_id;
     const tables = ['competition','event','athlete','event_entry','heat','heat_entry','result','height_attempt','combined_score','qualification_selection','relay_member','audit_log','operation_log'];
     const backup = {};
-    tables.forEach(t => {
+    tables.forEach(async t => {
         try {
             if (compId && t !== 'operation_log' && t !== 'audit_log') {
                 // Scoped backup: filter by competition_id where possible
-                if (t === 'competition') backup[t] = db.prepare('SELECT * FROM competition WHERE id=?').all(compId);
-                else if (t === 'event') backup[t] = db.prepare('SELECT * FROM event WHERE competition_id=?').all(compId);
-                else if (t === 'athlete') backup[t] = db.prepare('SELECT * FROM athlete WHERE competition_id=?').all(compId);
-                else if (t === 'event_entry') backup[t] = db.prepare('SELECT ee.* FROM event_entry ee JOIN event e ON ee.event_id=e.id WHERE e.competition_id=?').all(compId);
-                else if (t === 'heat') backup[t] = db.prepare('SELECT h.* FROM heat h JOIN event e ON h.event_id=e.id WHERE e.competition_id=?').all(compId);
-                else if (t === 'heat_entry') backup[t] = db.prepare('SELECT he.* FROM heat_entry he JOIN heat h ON he.heat_id=h.id JOIN event e ON h.event_id=e.id WHERE e.competition_id=?').all(compId);
-                else if (t === 'result') backup[t] = db.prepare('SELECT r.* FROM result r JOIN heat h ON r.heat_id=h.id JOIN event e ON h.event_id=e.id WHERE e.competition_id=?').all(compId);
-                else if (t === 'height_attempt') backup[t] = db.prepare('SELECT ha.* FROM height_attempt ha JOIN heat h ON ha.heat_id=h.id JOIN event e ON h.event_id=e.id WHERE e.competition_id=?').all(compId);
-                else if (t === 'combined_score') backup[t] = db.prepare('SELECT cs.* FROM combined_score cs JOIN event_entry ee ON cs.event_entry_id=ee.id JOIN event e ON ee.event_id=e.id WHERE e.competition_id=?').all(compId);
-                else if (t === 'qualification_selection') backup[t] = db.prepare('SELECT qs.* FROM qualification_selection qs JOIN event e ON qs.event_id=e.id WHERE e.competition_id=?').all(compId);
-                else if (t === 'relay_member') backup[t] = db.prepare('SELECT rm.* FROM relay_member rm JOIN event_entry ee ON rm.event_entry_id=ee.id JOIN event e ON ee.event_id=e.id WHERE e.competition_id=?').all(compId);
-                else backup[t] = db.prepare(`SELECT * FROM ${t}`).all();
+                if (t === 'competition') backup[t] = await db.all('SELECT * FROM competition WHERE id=?', compId);
+                else if (t === 'event') backup[t] = await db.all('SELECT * FROM event WHERE competition_id=?', compId);
+                else if (t === 'athlete') backup[t] = await db.all('SELECT * FROM athlete WHERE competition_id=?', compId);
+                else if (t === 'event_entry') backup[t] = await db.all('SELECT ee.* FROM event_entry ee JOIN event e ON ee.event_id=e.id WHERE e.competition_id=?', compId);
+                else if (t === 'heat') backup[t] = await db.all('SELECT h.* FROM heat h JOIN event e ON h.event_id=e.id WHERE e.competition_id=?', compId);
+                else if (t === 'heat_entry') backup[t] = await db.all('SELECT he.* FROM heat_entry he JOIN heat h ON he.heat_id=h.id JOIN event e ON h.event_id=e.id WHERE e.competition_id=?', compId);
+                else if (t === 'result') backup[t] = await db.all('SELECT r.* FROM result r JOIN heat h ON r.heat_id=h.id JOIN event e ON h.event_id=e.id WHERE e.competition_id=?', compId);
+                else if (t === 'height_attempt') backup[t] = await db.all('SELECT ha.* FROM height_attempt ha JOIN heat h ON ha.heat_id=h.id JOIN event e ON h.event_id=e.id WHERE e.competition_id=?', compId);
+                else if (t === 'combined_score') backup[t] = await db.all('SELECT cs.* FROM combined_score cs JOIN event_entry ee ON cs.event_entry_id=ee.id JOIN event e ON ee.event_id=e.id WHERE e.competition_id=?', compId);
+                else if (t === 'qualification_selection') backup[t] = await db.all('SELECT qs.* FROM qualification_selection qs JOIN event e ON qs.event_id=e.id WHERE e.competition_id=?', compId);
+                else if (t === 'relay_member') backup[t] = await db.all('SELECT rm.* FROM relay_member rm JOIN event_entry ee ON rm.event_entry_id=ee.id JOIN event e ON ee.event_id=e.id WHERE e.competition_id=?', compId);
+                else backup[t] = await db.all(`SELECT * FROM ${t}`);
             } else {
-                backup[t] = db.prepare(`SELECT * FROM ${t}`).all();
+                backup[t] = await db.all(`SELECT * FROM ${t}`);
             }
         } catch(e) { backup[t] = []; }
     });
@@ -4358,12 +4327,12 @@ app.post('/api/athletes/upload', upload.single('file'), (req, res) => {
         });
         let stats = { added: 0, updated: 0, skipped: 0 };
 
-        db.transaction(() => {
+        db.transaction(async () => {
             if (clearExisting) {
-                db.prepare('DELETE FROM athlete WHERE competition_id=?').run(competition_id);
+                await db.run('DELETE FROM athlete WHERE competition_id=?', competition_id);
             }
             const existingCache = new Map();
-            db.prepare('SELECT * FROM athlete WHERE competition_id=?').all(competition_id)
+            await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id)
                 .forEach(a => existingCache.set(`${a.name}|${a.team}|${a.gender}`, a));
 
             const insertAth = db.prepare('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)');
@@ -4394,11 +4363,11 @@ app.post('/api/athletes/upload', upload.single('file'), (req, res) => {
                     if (existing && existing.id) {
                         let didUpdate = false;
                         if (bib && !existing.bib_number) {
-                            db.prepare('UPDATE athlete SET bib_number=? WHERE id=?').run(bib, existing.id);
+                            await db.run('UPDATE athlete SET bib_number=? WHERE id=?', bib, existing.id);
                             didUpdate = true;
                         }
                         if (barcode && !existing.barcode) {
-                            db.prepare('UPDATE athlete SET barcode=? WHERE id=?').run(barcode, existing.id);
+                            await db.run('UPDATE athlete SET barcode=? WHERE id=?', barcode, existing.id);
                             didUpdate = true;
                         }
                         if (didUpdate) stats.updated = (stats.updated || 0) + 1;
@@ -4420,7 +4389,7 @@ app.post('/api/athletes/upload', upload.single('file'), (req, res) => {
 // BIB NUMBER BATCH UPDATE (from Excel)
 // Matches by name+team+gender, updates bib_number only
 // ============================================================
-app.post('/api/athletes/update-bib', upload.single('file'), (req, res) => {
+app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => {
     const adminKey = req.body.admin_key || req.headers['x-admin-key'];
     if (!isAdminKey(adminKey) && !isOperationKey(adminKey)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!req.file) return res.status(400).json({ error: '파일이 필요합니다.' });
@@ -4458,7 +4427,7 @@ app.post('/api/athletes/update-bib', upload.single('file'), (req, res) => {
         // Build existing athlete cache — support both with and without gender
         const existingCache = new Map();      // name|team|gender → athlete
         const existingNoGender = new Map();   // name|team → athlete (fallback when no gender column)
-        db.prepare('SELECT * FROM athlete WHERE competition_id=?').all(competition_id)
+        await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id)
             .forEach(a => {
                 existingCache.set(`${a.name}|${a.team}|${a.gender}`, a);
                 // For name+team only matching, store first match (if no duplicate)
@@ -4556,26 +4525,26 @@ app.post('/api/events/upload', upload.single('file'), (req, res) => {
 
         let stats = { added: 0, skipped: 0 };
 
-        db.transaction(() => {
+        db.transaction(async () => {
             if (clearExisting) {
-                const evts = db.prepare('SELECT id FROM event WHERE competition_id=?').all(competition_id);
+                const evts = await db.all('SELECT id FROM event WHERE competition_id=?', competition_id);
                 for (const evt of evts) {
-                    const hts = db.prepare('SELECT id FROM heat WHERE event_id=?').all(evt.id);
-                    for (const h of hts) { db.prepare('DELETE FROM result WHERE heat_id=?').run(h.id); db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(h.id); }
-                    db.prepare('DELETE FROM heat WHERE event_id=?').run(evt.id);
-                    db.prepare('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)').run(evt.id);
-                    db.prepare('DELETE FROM event_entry WHERE event_id=?').run(evt.id);
+                    const hts = await db.all('SELECT id FROM heat WHERE event_id=?', evt.id);
+                    for (const h of hts) { await db.run('DELETE FROM result WHERE heat_id=?', h.id); await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id); }
+                    await db.run('DELETE FROM heat WHERE event_id=?', evt.id);
+                    await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', evt.id);
+                    await db.run('DELETE FROM event_entry WHERE event_id=?', evt.id);
                 }
-                db.prepare('DELETE FROM event WHERE competition_id=?').run(competition_id);
+                await db.run('DELETE FROM event WHERE competition_id=?', competition_id);
             }
 
             const existingCache = new Map();
-            db.prepare('SELECT * FROM event WHERE competition_id=?').all(competition_id)
+            await db.all('SELECT * FROM event WHERE competition_id=?', competition_id)
                 .forEach(e => existingCache.set(`${e.name}|${e.category}|${e.gender}|${e.round_type}`, e.id));
 
             const insertEvt = db.prepare('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order) VALUES (?,?,?,?,?,?,?)');
             const insertHeat = db.prepare('INSERT INTO heat (event_id,heat_number) VALUES (?,?)');
-            let sortOrder = (db.prepare('SELECT MAX(sort_order) AS mx FROM event WHERE competition_id=?').get(competition_id).mx || 0) + 1;
+            let sortOrder = (await db.get('SELECT MAX(sort_order) AS mx FROM event WHERE competition_id=?', competition_id).mx || 0) + 1;
 
             for (const row of dataRows) {
                 const name = String(row[0] || '').trim();
@@ -4603,10 +4572,10 @@ app.post('/api/events/upload', upload.single('file'), (req, res) => {
                     const subDefs = (gender === 'M') ? DECA : HEPTA;
                     const subCats = { '멀리뛰기':'field_distance','포환던지기':'field_distance','높이뛰기':'field_height',
                         '원반던지기':'field_distance','장대높이뛰기':'field_height','창던지기':'field_distance' };
-                    subDefs.forEach((sn, idx) => {
+                    subDefs.forEach(async (sn, idx) => {
                         const sc = subCats[sn] || 'track';
                         const sr = insertEvt.run(competition_id, sn, sc, gender, 'final', 'created', sortOrder++);
-                        db.prepare('UPDATE event SET parent_event_id=? WHERE id=?').run(r.lastInsertRowid, sr.lastInsertRowid);
+                        await db.run('UPDATE event SET parent_event_id=? WHERE id=?', r.lastInsertRowid, sr.lastInsertRowid);
                         insertHeat.run(sr.lastInsertRowid, 1);
                     });
                 }
@@ -4801,7 +4770,7 @@ function parseHeatAssignmentExcel(filePath) {
 }
 
 // PREVIEW API — Compare Excel data with DB, show changes
-app.post('/api/heat-assignment/preview', upload.single('file'), (req, res) => {
+app.post('/api/heat-assignment/preview', upload.single('file'), async (req, res) => {
     if (!isAdminKey(req.body.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!req.file) return res.status(400).json({ error: '파일이 필요합니다.' });
     const competition_id = parseInt(req.body.competition_id);
@@ -4818,37 +4787,25 @@ app.post('/api/heat-assignment/preview', upload.single('file'), (req, res) => {
             // Find matching event in DB
             let dbEvent = null;
             if (gender && gender !== '?') {
-                dbEvent = db.prepare(
-                    'SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL'
-                ).get(competition_id, eventName, gender, round);
+                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL', competition_id, eventName, gender, round);
             }
             // Fallback: try without round_type match (some events only have final)
             if (!dbEvent && gender && gender !== '?') {
-                dbEvent = db.prepare(
-                    'SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL'
-                ).get(competition_id, eventName, gender);
+                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL', competition_id, eventName, gender);
             }
             // Fallback: try without parent_event_id constraint (for child events like [10종] 100m, [7종] 100mH)
             if (!dbEvent && gender && gender !== '?') {
-                dbEvent = db.prepare(
-                    'SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=?'
-                ).get(competition_id, eventName, gender, round);
+                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=?', competition_id, eventName, gender, round);
             }
             if (!dbEvent && gender && gender !== '?') {
-                dbEvent = db.prepare(
-                    'SELECT * FROM event WHERE competition_id=? AND name=? AND gender=?'
-                ).get(competition_id, eventName, gender);
+                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=?', competition_id, eventName, gender);
             }
             // Fuzzy fallback: LIKE match for partial names (e.g., "10K 국제 남자부" → DB has "10K국제남자부")
             if (!dbEvent && gender && gender !== '?') {
                 const stripped = eventName.replace(/\s+/g, '%');
-                dbEvent = db.prepare(
-                    "SELECT * FROM event WHERE competition_id=? AND REPLACE(REPLACE(name,' ',''),' ','') = ? AND gender=?"
-                ).get(competition_id, eventName.replace(/\s+/g, ''), gender);
+                dbEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND REPLACE(REPLACE(name,' ',''),' ','') = ? AND gender=?", competition_id, eventName.replace(/\s+/g, ''), gender);
                 if (!dbEvent) {
-                    dbEvent = db.prepare(
-                        "SELECT * FROM event WHERE competition_id=? AND name LIKE ? AND gender=?"
-                    ).get(competition_id, `%${stripped}%`, gender);
+                    dbEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND name LIKE ? AND gender=?", competition_id, `%${stripped}%`, gender);
                 }
             }
             
@@ -4856,9 +4813,7 @@ app.post('/api/heat-assignment/preview', upload.single('file'), (req, res) => {
                 // Try to find similar events as suggestions
                 let suggestions = [];
                 if (gender && gender !== '?') {
-                    suggestions = db.prepare(
-                        'SELECT id, name, round_type FROM event WHERE competition_id=? AND gender=? AND parent_event_id IS NULL ORDER BY name'
-                    ).all(competition_id, gender).map(e => ({ id: e.id, name: e.name, round: e.round_type }));
+                    suggestions = await db.all('SELECT id, name, round_type FROM event WHERE competition_id=? AND gender=? AND parent_event_id IS NULL ORDER BY name', competition_id, gender).map(e => ({ id: e.id, name: e.name, round: e.round_type }));
                 }
                 preview.push({
                     eventKey, eventName, gender, round,
@@ -4875,10 +4830,10 @@ app.post('/api/heat-assignment/preview', upload.single('file'), (req, res) => {
             }
 
             // Get current DB heats + entries for this event
-            const dbHeats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(dbEvent.id);
+            const dbHeats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', dbEvent.id);
             const dbHeatEntries = [];
             for (const h of dbHeats) {
-                const hEntries = db.prepare(`
+                const hEntries = await db.all(`
                     SELECT he.id, he.heat_id, he.lane_number, he.event_entry_id, he.sub_group,
                            a.name, a.bib_number, a.team, a.id as athlete_id
                     FROM heat_entry he
@@ -4886,7 +4841,7 @@ app.post('/api/heat-assignment/preview', upload.single('file'), (req, res) => {
                     JOIN athlete a ON a.id = ee.athlete_id
                     WHERE he.heat_id = ?
                     ORDER BY he.lane_number
-                `).all(h.id);
+                `, h.id);
                 dbHeatEntries.push({ heat: h, entries: hEntries });
             }
 
@@ -4894,8 +4849,8 @@ app.post('/api/heat-assignment/preview', upload.single('file'), (req, res) => {
             let resultCount = 0;
             let heightAttemptCount = 0;
             for (const h of dbHeats) {
-                resultCount += db.prepare('SELECT COUNT(*) as c FROM result WHERE heat_id=?').get(h.id).c;
-                heightAttemptCount += db.prepare('SELECT COUNT(*) as c FROM height_attempt WHERE heat_id=?').get(h.id).c;
+                resultCount += await db.get('SELECT COUNT(*) as c FROM result WHERE heat_id=?', h.id).c;
+                heightAttemptCount += await db.get('SELECT COUNT(*) as c FROM height_attempt WHERE heat_id=?', h.id).c;
             }
             const hasResults = resultCount > 0 || heightAttemptCount > 0;
 
@@ -5014,7 +4969,7 @@ app.post('/api/heat-assignment/preview', upload.single('file'), (req, res) => {
 });
 
 // AUTO-CREATE missing events from heat assignment Excel
-app.post('/api/heat-assignment/create-events', express.json(), (req, res) => {
+app.post('/api/heat-assignment/create-events', express.json(), async (req, res) => {
     if (!isAdminKey(req.body.admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     const { competition_id, events } = req.body;
     if (!competition_id || !events || !Array.isArray(events)) return res.status(400).json({ error: 'competition_id와 events 배열이 필요합니다.' });
@@ -5036,14 +4991,14 @@ app.post('/api/heat-assignment/create-events', express.json(), (req, res) => {
 
     const created = [];
     const stmt = db.prepare('INSERT INTO event (competition_id, name, gender, category, round_type, round_status, sort_order) VALUES (?,?,?,?,?,?,?)');
-    const maxSort = db.prepare('SELECT MAX(sort_order) as m FROM event WHERE competition_id=?').get(competition_id).m || 0;
+    const maxSort = await db.get('SELECT MAX(sort_order) as m FROM event WHERE competition_id=?', competition_id).m || 0;
 
     let sortOrder = maxSort + 1;
     for (const evt of events) {
         const { eventName, gender, round } = evt;
         if (!eventName || !gender) continue;
         // Check if already exists
-        const existing = db.prepare('SELECT id FROM event WHERE competition_id=? AND name=? AND gender=?').get(competition_id, eventName, gender);
+        const existing = await db.get('SELECT id FROM event WHERE competition_id=? AND name=? AND gender=?', competition_id, eventName, gender);
         if (existing) continue;
 
         const category = detectCategory(eventName);
@@ -5059,7 +5014,7 @@ app.post('/api/heat-assignment/create-events', express.json(), (req, res) => {
 });
 
 // APPLY API — Actually update heats based on Excel
-app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
+app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) => {
     if (!isAdminKey(req.body.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!req.file) return res.status(400).json({ error: '파일이 필요합니다.' });
     const competition_id = parseInt(req.body.competition_id);
@@ -5072,7 +5027,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
 
     try {
         // Validate competition exists
-        const comp = db.prepare('SELECT id FROM competition WHERE id=?').get(competition_id);
+        const comp = await db.get('SELECT id FROM competition WHERE id=?', competition_id);
         if (!comp) {
             return res.status(400).json({ success: false, error: `대회를 찾을 수 없습니다 (ID: ${competition_id})` });
         }
@@ -5080,10 +5035,10 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
         const { eventGroups, mergeWarnings } = parseHeatAssignmentExcel(req.file.path);
         const stats = { updated: 0, skipped: 0, skippedUnchanged: 0, skippedHasResults: 0, notFound: 0, athletesAdded: 0, entriesCreated: 0 };
 
-        db.transaction(() => {
+        db.transaction(async () => {
             // Cache all athletes for this competition by name+team
             const athleteCache = new Map();
-            db.prepare('SELECT * FROM athlete WHERE competition_id=?').all(competition_id)
+            await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id)
                 .forEach(a => {
                     athleteCache.set(`${a.name}|${a.team}|${a.gender}`, a);
                     // Also index by name+team (without gender) for flexible matching
@@ -5100,10 +5055,10 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
             const insertHeatEntry = db.prepare('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number,sub_group) VALUES (?,?,?,?)');
 
             // Build scoreboard_key: look up federation gender labels for this competition
-            const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(competition_id);
+            const comp = await db.get('SELECT * FROM competition WHERE id=?', competition_id);
             let _sbLabelM = '', _sbLabelF = '', _sbLabelX = '';
             if (comp && comp.federation) {
-                const fed = db.prepare('SELECT * FROM federation_list WHERE code=?').get(comp.federation);
+                const fed = await db.get('SELECT * FROM federation_list WHERE code=?', comp.federation);
                 if (fed) {
                     _sbLabelM = fed.gender_label_m || '';
                     _sbLabelF = fed.gender_label_f || '';
@@ -5129,25 +5084,17 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                 // Find matching event in DB
                 let dbEvent = null;
                 if (gender && gender !== '?') {
-                    dbEvent = db.prepare(
-                        'SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL'
-                    ).get(competition_id, eventName, gender, round);
+                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL', competition_id, eventName, gender, round);
                 }
                 if (!dbEvent && gender && gender !== '?') {
-                    dbEvent = db.prepare(
-                        'SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL'
-                    ).get(competition_id, eventName, gender);
+                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL', competition_id, eventName, gender);
                 }
                 // Fallback: try without parent_event_id constraint (for child events like [10종] 100m, [7종] 100mH)
                 if (!dbEvent && gender && gender !== '?') {
-                    dbEvent = db.prepare(
-                        'SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=?'
-                    ).get(competition_id, eventName, gender, round);
+                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=?', competition_id, eventName, gender, round);
                 }
                 if (!dbEvent && gender && gender !== '?') {
-                    dbEvent = db.prepare(
-                        'SELECT * FROM event WHERE competition_id=? AND name=? AND gender=?'
-                    ).get(competition_id, eventName, gender);
+                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=?', competition_id, eventName, gender);
                 }
 
                 if (!dbEvent) {
@@ -5156,17 +5103,17 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                 }
 
                 // Get current DB state
-                const dbHeats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(dbEvent.id);
+                const dbHeats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', dbEvent.id);
                 
                 // Check if data is identical (quick comparison: same athlete count and names)
                 const dbAthleteNames = new Set();
                 for (const h of dbHeats) {
-                    const hEntries = db.prepare(`
+                    const hEntries = await db.all(`
                         SELECT a.name, a.team FROM heat_entry he
                         JOIN event_entry ee ON ee.id = he.event_entry_id
                         JOIN athlete a ON a.id = ee.athlete_id
                         WHERE he.heat_id = ?
-                    `).all(h.id);
+                    `, h.id);
                     hEntries.forEach(e => dbAthleteNames.add(`${e.name}|${e.team}`));
                 }
                 const excelAthleteNames = new Set(entries.map(e => `${e.name}|${e.team}`));
@@ -5182,11 +5129,11 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                     // Also check lane assignments (use Set of full keys to handle duplicate lanes in field events)
                     const dbStateSet = new Set();
                     for (const h of dbHeats) {
-                        const hEntries = db.prepare(`
+                        const hEntries = await db.all(`
                             SELECT he.lane_number, he.sub_group, a.name, a.team
                             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
                             JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-                        `).all(h.id);
+                        `, h.id);
                         hEntries.forEach(e => dbStateSet.add(`${h.heat_number}|${e.lane_number}|${e.sub_group || ''}|${e.name}|${e.team}`));
                     }
                     const excelStateSet = new Set();
@@ -5211,8 +5158,8 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                 // Check if results exist
                 let resultCount = 0;
                 for (const h of dbHeats) {
-                    resultCount += db.prepare('SELECT COUNT(*) as c FROM result WHERE heat_id=?').get(h.id).c;
-                    resultCount += db.prepare('SELECT COUNT(*) as c FROM height_attempt WHERE heat_id=?').get(h.id).c;
+                    resultCount += await db.get('SELECT COUNT(*) as c FROM result WHERE heat_id=?', h.id).c;
+                    resultCount += await db.get('SELECT COUNT(*) as c FROM height_attempt WHERE heat_id=?', h.id).c;
                 }
 
                 if (resultCount > 0 && !forceEventIds.has(dbEvent.id)) {
@@ -5225,11 +5172,11 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                 
                 // 1. Delete existing heats, heat_entries, results for this event
                 for (const h of dbHeats) {
-                    db.prepare('DELETE FROM result WHERE heat_id=?').run(h.id);
-                    db.prepare('DELETE FROM height_attempt WHERE heat_id=?').run(h.id);
-                    db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(h.id);
+                    await db.run('DELETE FROM result WHERE heat_id=?', h.id);
+                    await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id);
+                    await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id);
                 }
-                db.prepare('DELETE FROM heat WHERE event_id=?').run(dbEvent.id);
+                await db.run('DELETE FROM heat WHERE event_id=?', dbEvent.id);
 
                 // 2. For relay events: also clear old event_entries (team "athletes")
                 const isRelay = dbEvent.category === 'relay';
@@ -5274,7 +5221,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                             // Also try finding by bib number if provided
                             // IMPORTANT: Only match if name also matches to prevent wrong athlete assignment
                             if (!athlete && entry.bib) {
-                                const byBib = db.prepare('SELECT * FROM athlete WHERE competition_id=? AND bib_number=?').get(competition_id, String(entry.bib));
+                                const byBib = await db.get('SELECT * FROM athlete WHERE competition_id=? AND bib_number=?', competition_id, String(entry.bib));
                                 if (byBib && byBib.name === entry.name) {
                                     athlete = byBib;
                                 }
@@ -5286,7 +5233,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                             // Create new athlete — bib only if provided and not already taken
                             let newBib = entry.bib ? String(entry.bib) : null;
                             if (newBib) {
-                                const bibTaken = db.prepare('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=?').get(competition_id, newBib, effGender || 'M');
+                                const bibTaken = await db.get('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=?', competition_id, newBib, effGender || 'M');
                                 if (bibTaken) newBib = null; // bib already used by another athlete of same gender, leave NULL
                             }
                             // Do NOT auto-assign bib — keep NULL if not provided
@@ -5300,7 +5247,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                         } else if (entry.bib && !athlete.bib_number) {
                             // Athlete exists but has no bib — update from heat assignment data
                             const bibStr = String(entry.bib);
-                            const bibTaken = db.prepare('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=? AND id!=?').get(competition_id, bibStr, athlete.gender || effGender || 'M', athlete.id);
+                            const bibTaken = await db.get('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=? AND id!=?', competition_id, bibStr, athlete.gender || effGender || 'M', athlete.id);
                             if (!bibTaken) {
                                 updateAthleteBibHA.run(bibStr, athlete.id);
                                 athlete.bib_number = bibStr;
@@ -5317,7 +5264,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
 
                         if (eventEntryId) {
                             // Prevent UNIQUE constraint violation: skip if this event_entry is already in this heat
-                            const alreadyInHeat = db.prepare('SELECT id FROM heat_entry WHERE heat_id=? AND event_entry_id=?').get(heatId, eventEntryId);
+                            const alreadyInHeat = await db.get('SELECT id FROM heat_entry WHERE heat_id=? AND event_entry_id=?', heatId, eventEntryId);
                             if (!alreadyInHeat) {
                                 insertHeatEntry.run(heatId, eventEntryId, entry.lane, entry.group || null);
                                 stats.entriesCreated++;
@@ -5333,15 +5280,13 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                 //    for call-room and result entry to work properly.
                 //    → After processing Excel entries, add missing parent athletes to the heat.
                 if (dbEvent.parent_event_id) {
-                    const parentEvt = db.prepare('SELECT * FROM event WHERE id=?').get(dbEvent.parent_event_id);
+                    const parentEvt = await db.get('SELECT * FROM event WHERE id=?', dbEvent.parent_event_id);
                     if (parentEvt && parentEvt.category === 'combined') {
                         // Get all athletes from parent event_entry
-                        const parentEntries = db.prepare(
-                            'SELECT ee.athlete_id, a.name, a.team FROM event_entry ee JOIN athlete a ON ee.athlete_id=a.id WHERE ee.event_id=?'
-                        ).all(dbEvent.parent_event_id);
+                        const parentEntries = await db.all('SELECT ee.athlete_id, a.name, a.team FROM event_entry ee JOIN athlete a ON ee.athlete_id=a.id WHERE ee.event_id=?', dbEvent.parent_event_id);
                         
                         // Get currently assigned heat(s) for this sub-event
-                        const currentHeats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(dbEvent.id);
+                        const currentHeats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', dbEvent.id);
                         // Use the first heat (combined sub-events typically have 1 heat)
                         let targetHeatId = currentHeats.length > 0 ? currentHeats[0].id : null;
                         if (!targetHeatId) {
@@ -5352,7 +5297,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                         }
                         
                         // Find max lane number currently in this heat
-                        const maxLane = db.prepare('SELECT MAX(lane_number) as m FROM heat_entry WHERE heat_id=?').get(targetHeatId);
+                        const maxLane = await db.get('SELECT MAX(lane_number) as m FROM heat_entry WHERE heat_id=?', targetHeatId);
                         let nextLane = (maxLane && maxLane.m) ? maxLane.m + 1 : 1;
                         
                         for (const pEntry of parentEntries) {
@@ -5366,9 +5311,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                             if (!eeId) continue;
                             
                             // Check if already in any heat for this sub-event
-                            const alreadyAssigned = db.prepare(
-                                'SELECT he.id FROM heat_entry he JOIN heat h ON he.heat_id=h.id WHERE h.event_id=? AND he.event_entry_id=?'
-                            ).get(dbEvent.id, eeId);
+                            const alreadyAssigned = await db.get('SELECT he.id FROM heat_entry he JOIN heat h ON he.heat_id=h.id WHERE h.event_id=? AND he.event_entry_id=?', dbEvent.id, eeId);
                             
                             if (!alreadyAssigned) {
                                 // Not in heat → add to the target heat with next available lane
@@ -5389,7 +5332,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                 //    For each relay team entry, find athletes belonging to the same team
                 //    and add them as relay_member if not already present.
                 if (isRelay) {
-                    const allEventEntries = db.prepare('SELECT ee.id, ee.athlete_id, a.name, a.team FROM event_entry ee JOIN athlete a ON ee.athlete_id=a.id WHERE ee.event_id=?').all(dbEvent.id);
+                    const allEventEntries = await db.all('SELECT ee.id, ee.athlete_id, a.name, a.team FROM event_entry ee JOIN athlete a ON ee.athlete_id=a.id WHERE ee.event_id=?', dbEvent.id);
                     const insertRelayMem = db.prepare('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)');
                     
                     for (const teamEntry of allEventEntries) {
@@ -5397,20 +5340,16 @@ app.post('/api/heat-assignment/apply', upload.single('file'), (req, res) => {
                         if (teamEntry.name !== teamEntry.team) continue;
                         
                         // Check if this team entry already has relay members
-                        const existingMembers = db.prepare('SELECT COUNT(*) AS c FROM relay_member WHERE event_entry_id=?').get(teamEntry.id).c;
+                        const existingMembers = await db.get('SELECT COUNT(*) AS c FROM relay_member WHERE event_entry_id=?', teamEntry.id).c;
                         if (existingMembers > 0) continue; // Already has members, skip
                         
                         // Find individual athletes from the same team
                         const effGender = gender === 'X' ? null : gender; // For mixed, accept any gender
                         let teamAthletes;
                         if (effGender) {
-                            teamAthletes = db.prepare(
-                                'SELECT id, name, team FROM athlete WHERE competition_id=? AND team=? AND gender=? AND name!=team ORDER BY id'
-                            ).all(competition_id, teamEntry.team, effGender);
+                            teamAthletes = await db.all('SELECT id, name, team FROM athlete WHERE competition_id=? AND team=? AND gender=? AND name!=team ORDER BY id', competition_id, teamEntry.team, effGender);
                         } else {
-                            teamAthletes = db.prepare(
-                                'SELECT id, name, team FROM athlete WHERE competition_id=? AND team=? AND name!=team ORDER BY id'
-                            ).all(competition_id, teamEntry.team);
+                            teamAthletes = await db.all('SELECT id, name, team FROM athlete WHERE competition_id=? AND team=? AND name!=team ORDER BY id', competition_id, teamEntry.team);
                         }
                         
                         // Add each athlete as relay member
@@ -5653,7 +5592,7 @@ function parseLifBuffer(buffer) {
  * POST /api/scoreboard/preview
  * Upload .lif files and preview parsed data + matching status
  */
-app.post('/api/scoreboard/preview', upload.array('files', 50), (req, res) => {
+app.post('/api/scoreboard/preview', upload.array('files', 50), async (req, res) => {
     try {
         const { competition_id } = req.body;
         if (!competition_id) return res.status(400).json({ error: 'competition_id 필수' });
@@ -5668,28 +5607,28 @@ app.post('/api/scoreboard/preview', upload.array('files', 50), (req, res) => {
                 const parsed = parseLifBuffer(buf);
 
                 // Try to find matching heat by scoreboard_key
-                let heat = db.prepare(`
+                let heat = await db.get(`
                     SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
                     FROM heat h
                     JOIN event e ON e.id = h.event_id
                     WHERE h.scoreboard_key = ? AND e.competition_id = ?
-                `).get(parsed.header.scoreboardKey, competition_id);
+                `, parsed.header.scoreboardKey, competition_id);
 
                 // Fallback: try joint_scoreboard_key
                 if (!heat) {
-                    const jg = db.prepare('SELECT * FROM joint_group WHERE joint_scoreboard_key = ?').get(parsed.header.scoreboardKey);
+                    const jg = await db.get('SELECT * FROM joint_group WHERE joint_scoreboard_key = ?', parsed.header.scoreboardKey);
                     if (jg) {
-                        const members = db.prepare('SELECT event_id FROM joint_group_member WHERE joint_group_id = ?').all(jg.id);
+                        const members = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id = ?', jg.id);
                         for (const m of members) {
-                            const mh = db.prepare(`SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
-                                FROM heat h JOIN event e ON e.id=h.event_id WHERE h.event_id=? AND e.competition_id=? ORDER BY h.heat_number LIMIT 1`).get(m.event_id, competition_id);
+                            const mh = await db.get(`SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
+                                FROM heat h JOIN event e ON e.id=h.event_id WHERE h.event_id=? AND e.competition_id=? ORDER BY h.heat_number LIMIT 1`, m.event_id, competition_id);
                             if (mh) { heat = mh; break; }
                         }
                         // If not in this competition, use any
                         if (!heat) {
                             for (const m of members) {
-                                const mh = db.prepare(`SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
-                                    FROM heat h JOIN event e ON e.id=h.event_id WHERE h.event_id=? ORDER BY h.heat_number LIMIT 1`).get(m.event_id);
+                                const mh = await db.get(`SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
+                                    FROM heat h JOIN event e ON e.id=h.event_id WHERE h.event_id=? ORDER BY h.heat_number LIMIT 1`, m.event_id);
                                 if (mh) { heat = mh; break; }
                             }
                         }
@@ -5712,14 +5651,14 @@ app.post('/api/scoreboard/preview', upload.array('files', 50), (req, res) => {
                     };
 
                     // Check athlete matches for each result row
-                    const heatEntries = db.prepare(`
+                    const heatEntries = await db.all(`
                         SELECT he.*, ee.athlete_id, ee.id as event_entry_id,
                                a.name, a.bib_number, a.team
                         FROM heat_entry he
                         JOIN event_entry ee ON ee.id = he.event_entry_id
                         JOIN athlete a ON a.id = ee.athlete_id
                         WHERE he.heat_id = ?
-                    `).all(heat.id);
+                    `, heat.id);
 
                     for (const row of parsed.rows) {
                         if (row.type === 'empty') continue;
@@ -5804,7 +5743,7 @@ app.post('/api/scoreboard/import', upload.array('files', 50), (req, res) => {
         if (!files || files.length === 0) return res.status(400).json({ error: '.lif 파일을 선택해 주세요.' });
 
         const importResults = [];
-        const importTx = db.transaction(() => {
+        const importTx = db.transaction(async () => {
             for (const file of files) {
                 let buf, parsed;
                 try {
@@ -5817,27 +5756,27 @@ app.post('/api/scoreboard/import', upload.array('files', 50), (req, res) => {
                 }
 
                 // Find heat — first try direct scoreboard_key match
-                let heat = db.prepare(`
+                let heat = await db.get(`
                     SELECT h.*, e.name as event_name, e.gender, e.round_type, e.category,
                            e.competition_id as comp_id, e.id as event_id
                     FROM heat h
                     JOIN event e ON e.id = h.event_id
                     WHERE h.scoreboard_key = ? AND e.competition_id = ?
-                `).get(parsed.header.scoreboardKey, competition_id);
+                `, parsed.header.scoreboardKey, competition_id);
 
                 // If no direct match, try joint_scoreboard_key — find all heats in this joint group
                 let jointHeats = [];
                 if (!heat) {
-                    const jointGroup = db.prepare(`SELECT jg.* FROM joint_group jg WHERE jg.joint_scoreboard_key = ?`).get(parsed.header.scoreboardKey);
+                    const jointGroup = await db.get(`SELECT jg.* FROM joint_group jg WHERE jg.joint_scoreboard_key = ?`, parsed.header.scoreboardKey);
                     if (jointGroup) {
-                        const members = db.prepare(`SELECT jgm.event_id FROM joint_group_member jgm WHERE jgm.joint_group_id = ?`).all(jointGroup.id);
+                        const members = await db.all(`SELECT jgm.event_id FROM joint_group_member jgm WHERE jgm.joint_group_id = ?`, jointGroup.id);
                         for (const m of members) {
-                            const mHeat = db.prepare(`
+                            const mHeat = await db.get(`
                                 SELECT h.*, e.name as event_name, e.gender, e.round_type, e.category,
                                        e.competition_id as comp_id, e.id as event_id
                                 FROM heat h JOIN event e ON e.id = h.event_id
                                 WHERE h.event_id = ? ORDER BY h.heat_number LIMIT 1
-                            `).get(m.event_id);
+                            `, m.event_id);
                             if (mHeat) jointHeats.push(mHeat);
                         }
                         // Use the first heat that belongs to this competition as primary
@@ -5858,27 +5797,27 @@ app.post('/api/scoreboard/import', upload.array('files', 50), (req, res) => {
                 }
 
                 // Get heat entries — include all joint heat entries for athlete matching
-                let heatEntries = db.prepare(`
+                let heatEntries = await db.all(`
                     SELECT he.*, ee.athlete_id, ee.id as event_entry_id,
                            a.name, a.bib_number, a.team, ? as source_heat_id
                     FROM heat_entry he
                     JOIN event_entry ee ON ee.id = he.event_entry_id
                     JOIN athlete a ON a.id = ee.athlete_id
                     WHERE he.heat_id = ?
-                `).all(heat.id, heat.id);
+                `, heat.id, heat.id);
 
                 // If joint import, also gather entries from other joint heats
                 if (jointHeats.length > 1) {
                     for (const jh of jointHeats) {
                         if (jh.id === heat.id) continue;
-                        const jhEntries = db.prepare(`
+                        const jhEntries = await db.all(`
                             SELECT he.*, ee.athlete_id, ee.id as event_entry_id,
                                    a.name, a.bib_number, a.team, ? as source_heat_id
                             FROM heat_entry he
                             JOIN event_entry ee ON ee.id = he.event_entry_id
                             JOIN athlete a ON a.id = ee.athlete_id
                             WHERE he.heat_id = ?
-                        `).all(jh.id, jh.id);
+                        `, jh.id, jh.id);
                         heatEntries = heatEntries.concat(jhEntries);
                     }
                 }
@@ -5929,21 +5868,15 @@ app.post('/api/scoreboard/import', upload.array('files', 50), (req, res) => {
                     }
 
                     // Upsert result
-                    const existing = db.prepare(
-                        'SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NULL ORDER BY id DESC LIMIT 1'
-                    ).get(heat_id, event_entry_id);
+                    const existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NULL ORDER BY id DESC LIMIT 1', heat_id, event_entry_id);
 
                     if (existing) {
-                        db.prepare(
-                            "UPDATE result SET time_seconds=?,status_code=?,remark=?,updated_at=datetime('now') WHERE id=?"
-                        ).run(time_seconds, status_code, '', existing.id);
-                        const upd = db.prepare('SELECT * FROM result WHERE id=?').get(existing.id);
+                        await db.run("UPDATE result SET time_seconds=?,status_code=?,remark=?,updated_at=datetime('now') WHERE id=?", time_seconds, status_code, '', existing.id);
+                        const upd = await db.get('SELECT * FROM result WHERE id=?', existing.id);
                         audit('result', existing.id, 'UPDATE', existing, upd, 'scoreboard', null, req);
                     } else {
-                        const info = db.prepare(
-                            'INSERT INTO result (heat_id,event_entry_id,time_seconds,status_code,remark) VALUES (?,?,?,?,?)'
-                        ).run(heat_id, event_entry_id, time_seconds, status_code, '');
-                        const ins = db.prepare('SELECT * FROM result WHERE id=?').get(info.lastInsertRowid);
+                        const info = await db.run('INSERT INTO result (heat_id,event_entry_id,time_seconds,status_code,remark) VALUES (?,?,?,?,?)', heat_id, event_entry_id, time_seconds, status_code, '');
+                        const ins = await db.get('SELECT * FROM result WHERE id=?', info.lastInsertRowid);
                         audit('result', ins.id, 'INSERT', null, ins, 'scoreboard', null, req);
                     }
 
@@ -5958,7 +5891,7 @@ app.post('/api/scoreboard/import', upload.array('files', 50), (req, res) => {
                     // Apply wind to all joint heats
                     const windHeats = jointHeats.length > 0 ? jointHeats : [heat];
                     for (const wh of windHeats) {
-                        db.prepare('UPDATE heat SET wind=? WHERE id=?').run(windStr, wh.id);
+                        await db.run('UPDATE heat SET wind=? WHERE id=?', windStr, wh.id);
                         broadcastSSE('wind_update', { heat_id: wh.id, wind: windStr });
                     }
                     windImported = windStr;
@@ -5967,9 +5900,9 @@ app.post('/api/scoreboard/import', upload.array('files', 50), (req, res) => {
                 // Auto-update event round_status to in_progress (all joint events)
                 const statusHeats = jointHeats.length > 0 ? jointHeats : [heat];
                 for (const sh of statusHeats) {
-                    const event = db.prepare('SELECT * FROM event WHERE id=?').get(sh.event_id);
+                    const event = await db.get('SELECT * FROM event WHERE id=?', sh.event_id);
                     if (event && (event.round_status === 'heats_generated' || event.round_status === 'created') && imported > 0) {
-                        db.prepare("UPDATE event SET round_status='in_progress' WHERE id=?").run(event.id);
+                        await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
                         broadcastSSE('event_status_changed', { event_id: event.id, round_status: 'in_progress' });
                     }
                 }
@@ -6016,10 +5949,10 @@ app.post('/api/scoreboard/import', upload.array('files', 50), (req, res) => {
  * GET /api/scoreboard/keys?competition_id=N
  * List all scoreboard_keys for a given competition (for debugging/review)
  */
-app.get('/api/scoreboard/keys', (req, res) => {
+app.get('/api/scoreboard/keys', async (req, res) => {
     const { competition_id } = req.query;
     if (!competition_id) return res.status(400).json({ error: 'competition_id 필수' });
-    const keys = db.prepare(`
+    const keys = await db.all(`
         SELECT h.id as heat_id, h.heat_number, h.scoreboard_key, h.heat_name, h.wind,
                e.id as event_id, e.name as event_name, e.gender, e.round_type, e.category,
                e.competition_id
@@ -6027,17 +5960,17 @@ app.get('/api/scoreboard/keys', (req, res) => {
         JOIN event e ON e.id = h.event_id
         WHERE e.competition_id = ? AND h.scoreboard_key IS NOT NULL
         ORDER BY e.sort_order, h.heat_number
-    `).all(competition_id);
+    `, competition_id);
     
     // Also include joint scoreboard keys from event_link
-    const jointKeys = db.prepare(`
+    const jointKeys = await db.all(`
         SELECT el.id as link_id, el.joint_scoreboard_key, el.event_id_a, el.event_id_b,
                ea.name as event_name, ea.gender, ea.round_type, ea.category
         FROM event_link el
         JOIN event ea ON ea.id = el.event_id_a
         WHERE (ea.competition_id = ? OR el.event_id_b IN (SELECT id FROM event WHERE competition_id = ?))
               AND el.joint_scoreboard_key IS NOT NULL
-    `).all(competition_id, competition_id);
+    `, competition_id, competition_id);
     
     res.json({
         heat_keys: keys,
@@ -6049,29 +5982,29 @@ app.get('/api/scoreboard/keys', (req, res) => {
  * GET /api/scoreboard/lookup?key=남자실업부 100m 예선 1조&competition_id=N
  * 전광판 시스템에서 scoreboard_key로 heat + 선수 목록 조회
  */
-app.get('/api/scoreboard/lookup', (req, res) => {
+app.get('/api/scoreboard/lookup', async (req, res) => {
     const { key, competition_id } = req.query;
     if (!key) return res.status(400).json({ error: 'key 필수 (scoreboard_key)' });
     
     // First try direct heat scoreboard_key match
     let heat;
     if (competition_id) {
-        heat = db.prepare(`
+        heat = await db.get(`
             SELECT h.*, e.name as event_name, e.gender, e.round_type, e.category, e.competition_id
             FROM heat h JOIN event e ON e.id = h.event_id
             WHERE h.scoreboard_key = ? AND e.competition_id = ?
-        `).get(key, competition_id);
+        `, key, competition_id);
     } else {
-        heat = db.prepare(`
+        heat = await db.get(`
             SELECT h.*, e.name as event_name, e.gender, e.round_type, e.category, e.competition_id
             FROM heat h JOIN event e ON e.id = h.event_id
             WHERE h.scoreboard_key = ?
-        `).get(key);
+        `, key);
     }
     
     // If not found, check for joint scoreboard key
     if (!heat) {
-        const jointLink = db.prepare(`SELECT * FROM event_link WHERE joint_scoreboard_key = ?`).get(key);
+        const jointLink = await db.get(`SELECT * FROM event_link WHERE joint_scoreboard_key = ?`, key);
         if (jointLink) {
             // Found a joint key — redirect to joint scoreboard data
             const eventId = jointLink.event_id_a;
@@ -6087,7 +6020,7 @@ app.get('/api/scoreboard/lookup', (req, res) => {
         return res.status(404).json({ error: `매칭되는 조를 찾을 수 없습니다: "${key}"` });
     }
     
-    const entries = db.prepare(`
+    const entries = await db.all(`
         SELECT he.lane_number, he.sub_group,
                ee.id as event_entry_id, ee.status,
                a.id as athlete_id, a.name, a.bib_number, a.team, a.gender
@@ -6096,7 +6029,7 @@ app.get('/api/scoreboard/lookup', (req, res) => {
         JOIN athlete a ON a.id = ee.athlete_id
         WHERE he.heat_id = ?
         ORDER BY he.lane_number
-    `).all(heat.id);
+    `, heat.id);
     
     res.json({
         heat_id: heat.id,
@@ -6120,10 +6053,10 @@ app.get('/api/scoreboard/lookup', (req, res) => {
  * GET /api/event-links?competition_id=N
  * 해당 대회에 연결된 모든 합동 종목 목록
  */
-app.get('/api/event-links', (req, res) => {
+app.get('/api/event-links', async (req, res) => {
     const { competition_id } = req.query;
     if (!competition_id) return res.status(400).json({ error: 'competition_id 필수' });
-    const links = db.prepare(`
+    const links = await db.all(`
         SELECT el.*,
                ea.name as event_a_name, ea.gender as event_a_gender, ea.category as event_a_category,
                ca.name as comp_a_name, ca.federation as comp_a_federation,
@@ -6136,7 +6069,7 @@ app.get('/api/event-links', (req, res) => {
         JOIN competition cb ON cb.id = eb.competition_id
         WHERE ea.competition_id = ? OR eb.competition_id = ?
         ORDER BY ea.name, ea.gender
-    `).all(competition_id, competition_id);
+    `, competition_id, competition_id);
     res.json(links);
 });
 
@@ -6145,31 +6078,31 @@ app.get('/api/event-links', (req, res) => {
  * 합동 종목 연결 생성
  * Body: { admin_key, event_id_a, event_id_b }
  */
-app.post('/api/event-links', (req, res) => {
+app.post('/api/event-links', async (req, res) => {
     const { admin_key, event_id_a, event_id_b } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!event_id_a || !event_id_b) return res.status(400).json({ error: 'event_id_a, event_id_b 필수' });
     if (event_id_a === event_id_b) return res.status(400).json({ error: '같은 종목끼리 연결할 수 없습니다.' });
     
     // Verify events exist
-    const evA = db.prepare('SELECT * FROM event WHERE id=?').get(event_id_a);
-    const evB = db.prepare('SELECT * FROM event WHERE id=?').get(event_id_b);
+    const evA = await db.get('SELECT * FROM event WHERE id=?', event_id_a);
+    const evB = await db.get('SELECT * FROM event WHERE id=?', event_id_b);
     if (!evA || !evB) return res.status(404).json({ error: '종목을 찾을 수 없습니다.' });
     
     try {
         // Ensure consistent order (smaller id first)
         const [idA, idB] = event_id_a < event_id_b ? [event_id_a, event_id_b] : [event_id_b, event_id_a];
-        db.prepare('INSERT OR IGNORE INTO event_link (event_id_a, event_id_b) VALUES (?, ?)').run(idA, idB);
+        await db.run('INSERT OR IGNORE INTO event_link (event_id_a, event_id_b) VALUES (?, ?)', idA, idB);
         
-        const compA = db.prepare('SELECT name, federation FROM competition WHERE id=?').get(evA.competition_id);
-        const compB = db.prepare('SELECT name, federation FROM competition WHERE id=?').get(evB.competition_id);
+        const compA = await db.get('SELECT name, federation FROM competition WHERE id=?', evA.competition_id);
+        const compB = await db.get('SELECT name, federation FROM competition WHERE id=?', evB.competition_id);
         opLog(`합동 종목 연결: ${evA.name}(${compA?.federation || compA?.name}) ↔ ${evB.name}(${compB?.federation || compB?.name})`, 'admin', 'admin');
         
         // Auto-generate joint scoreboard key
         const jointKey = generateJointScoreboardKey(evA, db);
-        const link = db.prepare('SELECT id FROM event_link WHERE event_id_a=? AND event_id_b=?').get(idA, idB);
+        const link = await db.get('SELECT id FROM event_link WHERE event_id_a=? AND event_id_b=?', idA, idB);
         if (link) {
-            db.prepare('UPDATE event_link SET joint_scoreboard_key=? WHERE id=?').run(jointKey, link.id);
+            await db.run('UPDATE event_link SET joint_scoreboard_key=? WHERE id=?', jointKey, link.id);
         }
         
         res.json({ success: true, joint_scoreboard_key: jointKey });
@@ -6182,10 +6115,10 @@ app.post('/api/event-links', (req, res) => {
  * DELETE /api/event-links/:id
  * 합동 종목 연결 삭제
  */
-app.delete('/api/event-links/:id', (req, res) => {
+app.delete('/api/event-links/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    db.prepare('DELETE FROM event_link WHERE id=?').run(req.params.id);
+    await db.run('DELETE FROM event_link WHERE id=?', req.params.id);
     res.json({ success: true });
 });
 
@@ -6194,13 +6127,13 @@ app.delete('/api/event-links/:id', (req, res) => {
  * 두 대회 간 같은 종목명+성별 자동 매칭
  * Body: { admin_key, competition_id_a, competition_id_b }
  */
-app.post('/api/event-links/auto-match', (req, res) => {
+app.post('/api/event-links/auto-match', async (req, res) => {
     const { admin_key, competition_id_a, competition_id_b } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!competition_id_a || !competition_id_b) return res.status(400).json({ error: 'competition_id_a, competition_id_b 필수' });
     
-    const eventsA = db.prepare('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL').all(competition_id_a);
-    const eventsB = db.prepare('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL').all(competition_id_b);
+    const eventsA = await db.all('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id_a);
+    const eventsB = await db.all('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id_b);
     
     let linked = 0;
     const matches = [];
@@ -6208,10 +6141,10 @@ app.post('/api/event-links/auto-match', (req, res) => {
         const b = eventsB.find(e => e.name === a.name && e.gender === a.gender && e.round_type === a.round_type);
         if (b) {
             const [idA, idB] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
-            const existing = db.prepare('SELECT id FROM event_link WHERE event_id_a=? AND event_id_b=?').get(idA, idB);
+            const existing = await db.get('SELECT id FROM event_link WHERE event_id_a=? AND event_id_b=?', idA, idB);
             if (!existing) {
                 const jointKey = generateJointScoreboardKey(a, db);
-                db.prepare('INSERT INTO event_link (event_id_a, event_id_b, joint_scoreboard_key) VALUES (?, ?, ?)').run(idA, idB, jointKey);
+                await db.run('INSERT INTO event_link (event_id_a, event_id_b, joint_scoreboard_key) VALUES (?, ?, ?)', idA, idB, jointKey);
                 linked++;
             }
             matches.push({ event_name: a.name, gender: a.gender, event_id_a: a.id, event_id_b: b.id });
@@ -6566,15 +6499,15 @@ app.get('/api/joint-groups/:id/entries', async (req, res) => {
  * GET /api/scoreboard/joint?event_id=N
  * 합동 종목 전광판 데이터 — 연결된 모든 대회의 선수를 합쳐서 반환
  */
-app.get('/api/scoreboard/joint', (req, res) => {
+app.get('/api/scoreboard/joint', async (req, res) => {
     const { event_id } = req.query;
     if (!event_id) return res.status(400).json({ error: 'event_id 필수' });
     
     // Find all linked events
-    const links = db.prepare(`
+    const links = await db.all(`
         SELECT event_id_a, event_id_b FROM event_link
         WHERE event_id_a = ? OR event_id_b = ?
-    `).all(event_id, event_id);
+    `, event_id, event_id);
     
     const eventIds = new Set([parseInt(event_id)]);
     links.forEach(l => { eventIds.add(l.event_id_a); eventIds.add(l.event_id_b); });
@@ -6582,13 +6515,13 @@ app.get('/api/scoreboard/joint', (req, res) => {
     // Gather entries from all linked events
     const allEntries = [];
     for (const eid of eventIds) {
-        const evt = db.prepare('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?').get(eid);
+        const evt = await db.get('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?', eid);
         if (!evt) continue;
         
-        const heat = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1').get(eid);
+        const heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1', eid);
         if (!heat) continue;
         
-        const entries = db.prepare(`
+        const entries = await db.all(`
             SELECT he.lane_number, he.sub_group, ee.id as event_entry_id, ee.status,
                    a.name, a.bib_number, a.team, a.gender, a.federation as athlete_federation
             FROM heat_entry he
@@ -6596,9 +6529,9 @@ app.get('/api/scoreboard/joint', (req, res) => {
             JOIN athlete a ON a.id = ee.athlete_id
             WHERE he.heat_id = ?
             ORDER BY he.lane_number
-        `).all(heat.id);
+        `, heat.id);
         
-        const results = db.prepare('SELECT * FROM result WHERE heat_id=?').all(heat.id);
+        const results = await db.all('SELECT * FROM result WHERE heat_id=?', heat.id);
         
         // Label: use competition federation or name
         const fedLabel = evt.federation || evt.comp_name;
@@ -6619,7 +6552,7 @@ app.get('/api/scoreboard/joint', (req, res) => {
     }
     
     // Get primary event info
-    const primaryEvt = db.prepare('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?').get(event_id);
+    const primaryEvt = await db.get('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?', event_id);
     
     res.json({
         event: primaryEvt,
@@ -6636,10 +6569,10 @@ app.get('/api/scoreboard/joint', (req, res) => {
  * GET /api/result-image/:eventId
  * 종목별 결과 이미지를 1080x1350 PNG로 생성
  */
-app.get('/api/result-image/:eventId', (req, res) => {
+app.get('/api/result-image/:eventId', async (req, res) => {
     try {
         const eventId = parseInt(req.params.eventId);
-        const evt = db.prepare('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?').get(eventId);
+        const evt = await db.get('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?', eventId);
         if (!evt) return res.status(404).json({ error: 'Event not found' });
 
         const W = 1080, H = 1350;
@@ -6682,7 +6615,7 @@ app.get('/api/result-image/:eventId', (req, res) => {
         }
 
         // Get heat data
-        const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(eventId);
+        const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', eventId);
         const isTrack = ['track', 'relay', 'road'].includes(evt.category);
 
         let y = 150;
@@ -6723,7 +6656,7 @@ app.get('/api/result-image/:eventId', (req, res) => {
             y += 36;
 
             // Get entries with results
-            const entries = db.prepare(`
+            const entries = await db.all(`
                 SELECT he.lane_number, ee.id as event_entry_id, ee.status,
                        a.name, a.bib_number, a.team
                 FROM heat_entry he
@@ -6731,9 +6664,9 @@ app.get('/api/result-image/:eventId', (req, res) => {
                 JOIN athlete a ON a.id = ee.athlete_id
                 WHERE he.heat_id = ?
                 ORDER BY he.lane_number
-            `).all(heat.id);
+            `, heat.id);
 
-            const results = db.prepare('SELECT * FROM result WHERE heat_id=?').all(heat.id);
+            const results = await db.all('SELECT * FROM result WHERE heat_id=?', heat.id);
 
             // Build sorted entries
             const sortedEntries = entries.map(e => {
@@ -7968,11 +7901,11 @@ function drawBrandingFooter(doc, pageW, pageH, margin) {
 }
 
 // ==================== START LIST PDF ====================
-app.get('/api/documents/start-list/:eventId', (req, res) => {
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.eventId);
+app.get('/api/documents/start-list/:eventId', async (req, res) => {
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.eventId);
     if (!event) return res.status(404).json({ error: 'Event not found' });
-    const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(event.competition_id);
-    const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(event.id);
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', event.competition_id);
+    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
     const tpl = getDocTemplate(event.competition_id).start_list;
 
     const pageW = 595.28; const pageH = 841.89; const margin = 40;
@@ -8037,12 +7970,12 @@ app.get('/api/documents/start-list/:eventId', (req, res) => {
     if (tpl.show_status !== false) { slCols.push({ key: 'status', label: '출 석', x: xOff, w: totalW * 0.12 }); xOff += totalW * 0.12; }
 
     for (const heat of heats) {
-        const entries = db.prepare(`
+        const entries = await db.all(`
             SELECT he.lane_number, he.sub_group, ee.status, a.name, a.bib_number, a.team, a.date_of_birth, a.personal_best
             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
             JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
             ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)
-        `).all(heat.id);
+        `, heat.id);
 
         // Check page break (use dynamic row height based on fontSize)
         const headerRowH = Math.max(22, fontSize + 12);
@@ -8092,12 +8025,12 @@ app.get('/api/documents/start-list/:eventId', (req, res) => {
 });
 
 // ==================== RESULT SHEET PDF ====================
-app.get('/api/documents/result-sheet/:eventId', (req, res) => {
+app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
   try {
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(req.params.eventId);
+    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.eventId);
     if (!event) return res.status(404).json({ error: 'Event not found' });
-    const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(event.competition_id);
-    const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(event.id);
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', event.competition_id);
+    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
     const tpl = getDocTemplate(event.competition_id).result_sheet;
 
     const pageW = 595.28; const pageH = 841.89; const margin = 40;
@@ -8159,16 +8092,16 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
     // COMBINED EVENT (10종/7종) — completely different layout
     // ============================================================
     if (isCombined) {
-        const subEvents = db.prepare('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id').all(event.id);
+        const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', event.id);
         const heat = heats[0];
         if (!heat) { doc.end(); return; }
-        const entries = db.prepare(`
+        const entries = await db.all(`
             SELECT he.lane_number, ee.id AS event_entry_id, ee.status, ee.athlete_id,
                    a.name, a.bib_number, a.team
             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
             JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
             ORDER BY he.lane_number ASC
-        `).all(heat.id);
+        `, heat.id);
 
         // Build sub-event short names for columns
         const subLabels = subEvents.map(se => {
@@ -8178,8 +8111,8 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
         });
 
         // Gather all combined_scores and sub-event results for each athlete
-        const athleteData = entries.map(e => {
-            const scores = db.prepare('SELECT * FROM combined_score WHERE event_entry_id=? ORDER BY sub_event_order').all(e.event_entry_id);
+        const athleteData = entries.map(async e => {
+            const scores = await db.all('SELECT * FROM combined_score WHERE event_entry_id=? ORDER BY sub_event_order', e.event_entry_id);
             let totalPoints = 0;
             const subScores = [];
             for (let i = 0; i < subEvents.length; i++) {
@@ -8192,11 +8125,11 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
                     totalPoints += points;
                 } else {
                     // Try to get from sub-event's result table
-                    const subHeat = db.prepare('SELECT id FROM heat WHERE event_id=?').get(se.id);
+                    const subHeat = await db.get('SELECT id FROM heat WHERE event_id=?', se.id);
                     if (subHeat) {
-                        const subEE = db.prepare('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?').get(se.id, e.athlete_id);
+                        const subEE = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', se.id, e.athlete_id);
                         if (subEE) {
-                            const subRes = db.prepare('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? ORDER BY attempt_number LIMIT 1').get(subHeat.id, subEE.id);
+                            const subRes = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? ORDER BY attempt_number LIMIT 1', subHeat.id, subEE.id);
                             if (subRes) {
                                 const isST = se.category === 'track' || se.category === 'road' || se.category === 'relay';
                                 rawRecord = isST ? subRes.time_seconds : subRes.distance_meters;
@@ -8204,12 +8137,12 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
                             }
                             // For field_height, get best cleared height
                             if (se.category === 'field_height') {
-                                const best = db.prepare("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'").get(subHeat.id, subEE.id);
+                                const best = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", subHeat.id, subEE.id);
                                 if (best && best.best) rawRecord = best.best;
                             }
                             // For field_distance, get best attempt
                             if (se.category === 'field_distance' && !rawRecord) {
-                                const bestD = db.prepare('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters IS NOT NULL').get(subHeat.id, subEE.id);
+                                const bestD = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters IS NOT NULL', subHeat.id, subEE.id);
                                 if (bestD && bestD.best) rawRecord = bestD.best;
                             }
                         }
@@ -8218,7 +8151,7 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
                 subScores.push({ rawRecord, wind, points, subEvent: se });
             }
             // Check for DNF status
-            const status = db.prepare("SELECT status_code FROM result WHERE heat_id=? AND event_entry_id=? AND status_code IN ('DNF','DNS','DQ') LIMIT 1").get(heat.id, e.event_entry_id);
+            const status = await db.get("SELECT status_code FROM result WHERE heat_id=? AND event_entry_id=? AND status_code IN ('DNF','DNS','DQ') LIMIT 1", heat.id, e.event_entry_id);
             let statusCode = status?.status_code || '';
             // Fallback: if entry status is no_show and no explicit DNS result, treat as DNS
             if (!statusCode && e.status === 'no_show') statusCode = 'DNS';
@@ -8354,21 +8287,21 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
     } else if (isFieldHeight) {
         const heat = heats[0]; // field height typically has one heat
         if (!heat) { doc.end(); return; }
-        const entries = db.prepare(`
+        const entries = await db.all(`
             SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
                    a.name, a.bib_number, a.team
             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
             JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
             ORDER BY he.lane_number ASC
-        `).all(heat.id);
+        `, heat.id);
 
         // Get all height attempts for this heat
-        const allAttempts = db.prepare('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number').all(heat.id);
+        const allAttempts = await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', heat.id);
         // Get unique bar heights
         const barHeights = [...new Set(allAttempts.map(a => a.bar_height))].sort((a, b) => a - b);
 
         // Build athlete data
-        const athleteData = entries.map(e => {
+        const athleteData = entries.map(async e => {
             const myAttempts = allAttempts.filter(a => a.event_entry_id === e.event_entry_id);
             let bestCleared = null;
             let totalMisses = 0; let missesAtBest = 0;
@@ -8389,7 +8322,7 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
                 }
             }
             // Also check result table for status
-            const results = db.prepare('SELECT * FROM result WHERE heat_id=? AND event_entry_id=?').all(heat.id, e.event_entry_id);
+            const results = await db.all('SELECT * FROM result WHERE heat_id=? AND event_entry_id=?', heat.id, e.event_entry_id);
             let status = results.find(r => r.status_code && r.status_code !== '')?.status_code || '';
             // Fallback: if entry status is no_show and no explicit DNS result, treat as DNS
             if (!status && e.status === 'no_show') status = 'DNS';
@@ -8480,15 +8413,15 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
     // ============================================================
     } else if (isFieldDist) {
         for (const heat of heats) {
-            const entries = db.prepare(`
+            const entries = await db.all(`
                 SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
                        a.name, a.bib_number, a.team
                 FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
                 JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
                 ORDER BY he.lane_number ASC
-            `).all(heat.id);
+            `, heat.id);
 
-            const results = db.prepare('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number').all(heat.id);
+            const results = await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', heat.id);
 
             // Determine max attempts (usually 6 for final, 3 for qualifying)
             const maxAttempt = results.reduce((max, r) => Math.max(max, r.attempt_number || 0), 0) || 6;
@@ -8679,20 +8612,20 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
         // Load Q/q qualifications for non-final rounds
         let qualMap = {};
         if (event.round_type !== 'final') {
-            const quals = db.prepare('SELECT event_entry_id, qualification_type FROM qualification_selection WHERE event_id=? AND selected=1').all(event.id);
+            const quals = await db.all('SELECT event_entry_id, qualification_type FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
             for (const q of quals) { qualMap[q.event_entry_id] = q.qualification_type || 'Q'; }
         }
 
         for (const heat of heats) {
-            const entries = db.prepare(`
+            const entries = await db.all(`
                 SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
                        a.name, a.bib_number, a.team
                 FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
                 JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
                 ORDER BY he.lane_number ASC
-            `).all(heat.id);
+            `, heat.id);
 
-            const results = db.prepare('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number').all(heat.id);
+            const results = await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', heat.id);
 
             if (heats.length > 1) {
                 const headerRowH2 = Math.max(22, fontSize + 12);
@@ -8799,7 +8732,7 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
     if (tpl.show_records_table !== false) {
         if (curY > pageH - margin - 100) { doc.addPage(); curY = margin; }
         // Load per-event records from event_records table
-        const evtRecRow = db.prepare('SELECT records FROM event_records WHERE event_id=?').get(event.id);
+        const evtRecRow = await db.get('SELECT records FROM event_records WHERE event_id=?', event.id);
         let evtRec = {};
         if (evtRecRow) { try { evtRec = JSON.parse(evtRecRow.records || '{}'); } catch(e) {} }
         
@@ -8809,7 +8742,7 @@ app.get('/api/documents/result-sheet/:eventId', (req, res) => {
         const nameMap = { '110m허들':'110mH','100m허들':'100mH','400m허들':'400mH','3000m장애물':'3000mSC','10000m경보':'10000mW','십종경기':'10종경기','칠종경기':'7종경기','4x100m릴레이':'4x100mR','4x400m릴레이':'4x400mR','혼성4x400mR':'MIXED 4x400mR','MIXED4x400mR':'MIXED 4x400mR','4x800m릴레이':'4x800mR','4x1500m릴레이':'4x1500mR' };
         normName = nameMap[normName] || normName;
         try {
-            const globalRecs = db.prepare('SELECT * FROM event_record WHERE gender=? AND event_name=?').all(event.gender, normName);
+            const globalRecs = await db.all('SELECT * FROM event_record WHERE gender=? AND event_name=?', event.gender, normName);
             for (const gr of globalRecs) {
                 const keyMap = { national: 'nr', division: 'dr', competition: 'cr' };
                 const shortKey = keyMap[gr.record_type];
@@ -8943,10 +8876,10 @@ function formatTimeForPDF(s) {
 }
 
 // AD Card PDF — 선수 인가증 (Template-aware)
-app.get('/api/documents/ad-card/:compId', (req, res) => {
-    const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(req.params.compId);
+app.get('/api/documents/ad-card/:compId', async (req, res) => {
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
-    const athletes = db.prepare('SELECT * FROM athlete WHERE competition_id=? ORDER BY CAST(bib_number AS INTEGER)').all(comp.id);
+    const athletes = await db.all('SELECT * FROM athlete WHERE competition_id=? ORDER BY CAST(bib_number AS INTEGER)', comp.id);
     if (athletes.length === 0) return res.status(404).json({ error: 'No athletes found' });
     const tpl = getDocTemplate(comp.id).ad_card;
 
@@ -8973,7 +8906,7 @@ app.get('/api/documents/ad-card/:compId', (req, res) => {
         CARD_W = 260; CARD_H = 360; COLS = 2; ROWS = 2; GAP_X = 15; GAP_Y = 15; START_X = 25; START_Y = 25;
     }
 
-    athletes.forEach((athlete, idx) => {
+    athletes.forEach(async (athlete, idx) => {
         if (idx > 0 && idx % cardsPerPage === 0) doc.addPage();
         const posInPage = idx % cardsPerPage;
         const col = posInPage % COLS;
@@ -9035,12 +8968,12 @@ app.get('/api/documents/ad-card/:compId', (req, res) => {
 
         // Events enrolled (conditional)
         if (tpl.show_events !== false) {
-            const events = db.prepare(`
+            const events = await db.all(`
                 SELECT e.name, e.gender, e.round_type FROM event_entry ee
                 JOIN event e ON e.id = ee.event_id
                 WHERE ee.athlete_id = ? AND e.competition_id = ? AND e.parent_event_id IS NULL
                 ORDER BY e.sort_order
-            `).all(athlete.id, comp.id);
+            `, athlete.id, comp.id);
 
             contentY += 5;
             pdfFont(doc, true).fontSize(7).fillColor('#999');
@@ -9168,9 +9101,9 @@ app.put('/api/event-records/batch', (req, res) => {
 // ============================================================
 // COMPREHENSIVE RESULT SHEET — 종합기록지 (Excel)
 // ============================================================
-app.get('/api/documents/comprehensive/:compId/excel', (req, res) => {
+app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
   try {
-    const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(req.params.compId);
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
     const gender = req.query.gender || 'M'; // M or F
     const templateFile = gender === 'F' ? 'template_women.xlsx' : 'template_men.xlsx';
@@ -9235,17 +9168,17 @@ app.get('/api/documents/comprehensive/:compId/excel', (req, res) => {
     // (필드/투척/도약/복합 종목은 항상 round_type='final'로 생성됨)
     let allEvents;
     if (gender === 'M' || gender === 'F') {
-      allEvents = db.prepare(`
+      allEvents = await db.all(`
         SELECT e.* FROM event e WHERE e.competition_id=? AND e.gender IN (?, 'X')
         AND e.round_type='final'
         ORDER BY e.sort_order, e.id
-      `).all(comp.id, gender);
+      `, comp.id, gender);
     } else {
-      allEvents = db.prepare(`
+      allEvents = await db.all(`
         SELECT e.* FROM event e WHERE e.competition_id=?
         AND e.round_type='final'
         ORDER BY e.sort_order, e.id
-      `).all(comp.id);
+      `, comp.id);
     }
 
     // ---- Format helpers ----
@@ -9317,7 +9250,7 @@ app.get('/api/documents/comprehensive/:compId/excel', (req, res) => {
       const isJump = JUMP_EVENTS.has(templateName);
       const isHeight = HEIGHT_EVENTS.has(templateName);
 
-      const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(evt.id);
+      const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', evt.id);
       if (heats.length === 0) continue;
 
       let rankings = [];
@@ -9325,17 +9258,17 @@ app.get('/api/documents/comprehensive/:compId/excel', (req, res) => {
       // ===== COMBINED EVENT =====
       if (isCombined) {
         const heat = heats[0];
-        const entries = db.prepare(`
+        const entries = await db.all(`
           SELECT he.lane_number, ee.id AS event_entry_id, ee.status, ee.athlete_id,
                  a.name, a.bib_number, a.team
           FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
           JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-        `).all(heat.id);
+        `, heat.id);
 
-        const athleteData = entries.map(e => {
-          const scores = db.prepare('SELECT * FROM combined_score WHERE event_entry_id=? ORDER BY sub_event_order').all(e.event_entry_id);
+        const athleteData = entries.map(async e => {
+          const scores = await db.all('SELECT * FROM combined_score WHERE event_entry_id=? ORDER BY sub_event_order', e.event_entry_id);
           let totalPoints = scores.reduce((s, sc) => s + (sc.wa_points || 0), 0);
-          const status = db.prepare("SELECT status_code FROM result WHERE heat_id=? AND event_entry_id=? AND status_code IN ('DNF','DNS','DQ') LIMIT 1").get(heat.id, e.event_entry_id);
+          const status = await db.get("SELECT status_code FROM result WHERE heat_id=? AND event_entry_id=? AND status_code IN ('DNF','DNS','DQ') LIMIT 1", heat.id, e.event_entry_id);
           let statusCode = status?.status_code || '';
           if (!statusCode && e.status === 'no_show') statusCode = 'DNS';
           return { ...e, totalPoints, status_code: statusCode };
@@ -9360,16 +9293,16 @@ app.get('/api/documents/comprehensive/:compId/excel', (req, res) => {
       // ===== FIELD HEIGHT =====
       } else if (isFieldHeight) {
         const heat = heats[0];
-        const entries = db.prepare(`
+        const entries = await db.all(`
           SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
                  a.name, a.bib_number, a.team
           FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
           JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-        `).all(heat.id);
+        `, heat.id);
 
-        const allAttempts = db.prepare('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number').all(heat.id);
+        const allAttempts = await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', heat.id);
 
-        const athleteData = entries.map(e => {
+        const athleteData = entries.map(async e => {
           const myAttempts = allAttempts.filter(a => a.event_entry_id === e.event_entry_id);
           let bestCleared = null; let totalMisses = 0; let missesAtBest = 0;
           const heights = [...new Set(myAttempts.map(a => a.bar_height))].sort((a,b) => a-b);
@@ -9379,7 +9312,7 @@ app.get('/api/documents/comprehensive/:compId/excel', (req, res) => {
             totalMisses += misses;
             if (attH.some(a => a.result_mark === 'O')) { bestCleared = h; missesAtBest = misses; }
           }
-          const results = db.prepare('SELECT * FROM result WHERE heat_id=? AND event_entry_id=?').all(heat.id, e.event_entry_id);
+          const results = await db.all('SELECT * FROM result WHERE heat_id=? AND event_entry_id=?', heat.id, e.event_entry_id);
           let status = results.find(r => r.status_code && ['DNS','DNF','DQ','NM'].includes(r.status_code))?.status_code || '';
           if (!status && e.status === 'no_show') status = 'DNS';
           if (bestCleared === null && !status) {
@@ -9420,13 +9353,13 @@ app.get('/api/documents/comprehensive/:compId/excel', (req, res) => {
         // Combine all heats
         const allEntries = [];
         for (const heat of heats) {
-          const entries = db.prepare(`
+          const entries = await db.all(`
             SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
                    a.name, a.bib_number, a.team
             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
             JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-          `).all(heat.id);
-          const results = db.prepare('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number').all(heat.id);
+          `, heat.id);
+          const results = await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', heat.id);
           const resMap = {};
           for (const r of results) { if (!resMap[r.event_entry_id]) resMap[r.event_entry_id] = []; resMap[r.event_entry_id].push(r); }
 
@@ -9469,13 +9402,13 @@ app.get('/api/documents/comprehensive/:compId/excel', (req, res) => {
       } else {
         const allEntries = [];
         for (const heat of heats) {
-          const entries = db.prepare(`
+          const entries = await db.all(`
             SELECT he.lane_number, ee.id AS event_entry_id, ee.status, ee.athlete_id,
                    a.name, a.bib_number, a.team
             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
             JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-          `).all(heat.id);
-          const results = db.prepare('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number').all(heat.id);
+          `, heat.id);
+          const results = await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', heat.id);
           const resMap = {};
           for (const r of results) { if (!resMap[r.event_entry_id]) resMap[r.event_entry_id] = []; resMap[r.event_entry_id].push(r); }
 
@@ -9517,10 +9450,10 @@ app.get('/api/documents/comprehensive/:compId/excel', (req, res) => {
 
           // Relay: fetch members
           if (isRelay) {
-            const members = db.prepare(`
+            const members = await db.all(`
               SELECT a.name FROM relay_member rm JOIN athlete a ON a.id=rm.athlete_id
               WHERE rm.event_entry_id=? ORDER BY rm.leg_order, CAST(a.bib_number AS INTEGER)
-            `).all(a.event_entry_id).map(m => m.name);
+            `, a.event_entry_id).map(m => m.name);
             entry.members = members;
             entry.is_relay = true;
           }
@@ -9649,7 +9582,7 @@ app.get('/api/documents/comprehensive/:compId/excel', (req, res) => {
 // ============================================================
 app.get('/api/documents/full-record/:compId/excel', async (req, res) => {
   try {
-    const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(req.params.compId);
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
     const gender = req.query.gender || 'M';
     const genderLabel = gender === 'M' ? '남자' : '여자';
@@ -9674,7 +9607,7 @@ app.get('/api/documents/full-record/:compId/excel', async (req, res) => {
 // ============================================================
 app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
   try {
-    const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(req.params.compId);
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
     const gender = req.query.gender || 'M';
     const genderLabel = gender === 'M' ? '남자' : '여자';
@@ -9693,10 +9626,10 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
 });
 
 // Document listing — available documents for a competition
-app.get('/api/documents/:compId', (req, res) => {
-    const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(req.params.compId);
+app.get('/api/documents/:compId', async (req, res) => {
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
-    const events = db.prepare("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id").all(comp.id);
+    const events = await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id", comp.id);
     const docs = [];
     docs.push({ type: 'comprehensive-excel', label: '종합기록지 (남자)', url: `/api/documents/comprehensive/${comp.id}/excel?gender=M` });
     docs.push({ type: 'comprehensive-excel', label: '종합기록지 (여자)', url: `/api/documents/comprehensive/${comp.id}/excel?gender=F` });
@@ -9907,7 +9840,7 @@ function _isValidUrl(url) {
 //     gender         (M | F | X)
 //     round_type     (preliminary | semifinal | final)
 //     limit          (default 50, max 200)
-app.get('/api/external/events/search', externalApiAuth, (req, res) => {
+app.get('/api/external/events/search', externalApiAuth, async (req, res) => {
     const extKey = req.extApiKey;
     let compId = req.query.competition_id ? parseInt(req.query.competition_id) : null;
 
@@ -9967,7 +9900,7 @@ app.get('/api/external/events/search', externalApiAuth, (req, res) => {
     params.push(limit);
 
     try {
-        const rows = db.prepare(sql).all(...params);
+        const rows = await db.all(sql, ...params);
         return res.json({
             ok: true,
             competition: { id: compCheck.comp.id, name: compCheck.comp.name, mode: compCheck.comp.mode, start_date: compCheck.comp.start_date, end_date: compCheck.comp.end_date },
@@ -9983,20 +9916,20 @@ app.get('/api/external/events/search', externalApiAuth, (req, res) => {
 
 // ── Phase 4: 종목 단건 조회 ──
 // GET /api/external/event/:id
-app.get('/api/external/event/:id', externalApiAuth, (req, res) => {
+app.get('/api/external/event/:id', externalApiAuth, async (req, res) => {
     const eventId = parseInt(req.params.id);
     if (!Number.isFinite(eventId) || eventId <= 0) {
         return res.status(400).json({ ok: false, code: 'INVALID_EVENT_ID', message: 'event id가 올바르지 않습니다.' });
     }
 
-    const evt = db.prepare(`
+    const evt = await db.get(`
         SELECT e.id, e.competition_id, e.name, e.category, e.gender, e.division,
                e.round_type, e.round_status, e.sort_order,
                COALESCE(e.result_url, '') AS result_url,
                COALESCE(e.video_url, '')  AS video_url
         FROM event e
         WHERE e.id = ?
-    `).get(eventId);
+    `, eventId);
 
     if (!evt) {
         return res.status(404).json({ ok: false, code: 'EVENT_NOT_FOUND', message: '종목을 찾을 수 없습니다.' });
@@ -10024,7 +9957,7 @@ app.get('/api/external/event/:id', externalApiAuth, (req, res) => {
 //     field    (optional, default 'result_url' / 또는 'video_url')
 //     dry_run  (optional bool)  — 검증만, 저장 X
 //     force    (optional bool)  — 기존 값 덮어쓰기 허용
-app.post('/api/external/event-result-link', externalApiAuth, (req, res) => {
+app.post('/api/external/event-result-link', externalApiAuth, async (req, res) => {
     const body = req.body || {};
     const eventId = parseInt(body.event_id);
     const url = (body.url || '').trim();
@@ -10042,10 +9975,10 @@ app.post('/api/external/event-result-link', externalApiAuth, (req, res) => {
         return res.status(400).json({ ok: false, code: 'INVALID_FIELD', message: "field는 'result_url' 또는 'video_url'이어야 합니다." });
     }
 
-    const evt = db.prepare(`SELECT id, competition_id, name, division, gender, round_type,
+    const evt = await db.get(`SELECT id, competition_id, name, division, gender, round_type,
                                    COALESCE(result_url,'') AS result_url,
                                    COALESCE(video_url,'')  AS video_url
-                            FROM event WHERE id = ?`).get(eventId);
+                            FROM event WHERE id = ?`, eventId);
     if (!evt) {
         return res.status(404).json({ ok: false, code: 'EVENT_NOT_FOUND', message: '종목을 찾을 수 없습니다.' });
     }
@@ -10086,9 +10019,9 @@ app.post('/api/external/event-result-link', externalApiAuth, (req, res) => {
     // 실제 저장
     try {
         if (field === 'result_url') {
-            db.prepare('UPDATE event SET result_url = ? WHERE id = ?').run(url, eventId);
+            await db.run('UPDATE event SET result_url = ? WHERE id = ?', url, eventId);
         } else {
-            db.prepare('UPDATE event SET video_url = ? WHERE id = ?').run(url, eventId);
+            await db.run('UPDATE event SET video_url = ? WHERE id = ?', url, eventId);
         }
         // 응답에 사용할 메타
         req._extLogMeta = { competition_id: evt.competition_id, event_id: eventId };
@@ -10114,7 +10047,7 @@ app.post('/api/external/event-result-link', externalApiAuth, (req, res) => {
 //     items:   [{ event_id, url, field?, force? }, ...]   (1~100개)
 //     dry_run: bool (전체 dry-run)
 //     stop_on_error: bool (default false)
-app.post('/api/external/event-result-link/batch', externalApiAuth, (req, res) => {
+app.post('/api/external/event-result-link/batch', externalApiAuth, async (req, res) => {
     const body = req.body || {};
     const items = Array.isArray(body.items) ? body.items : null;
     const dryRun = !!body.dry_run;
@@ -10149,10 +10082,10 @@ app.post('/api/external/event-result-link/batch', externalApiAuth, (req, res) =>
             continue;
         }
 
-        const evt = db.prepare(`SELECT id, competition_id, name, division, gender, round_type,
+        const evt = await db.get(`SELECT id, competition_id, name, division, gender, round_type,
                                        COALESCE(result_url,'') AS result_url,
                                        COALESCE(video_url,'')  AS video_url
-                                FROM event WHERE id = ?`).get(eventId);
+                                FROM event WHERE id = ?`, eventId);
         if (!evt) {
             prepared.push({ index: i, ok: false, code: 'EVENT_NOT_FOUND', message: '종목 없음.', event_id: eventId });
             continue;
@@ -10268,7 +10201,7 @@ app.post('/api/external/event-result-link/batch', externalApiAuth, (req, res) =>
 //   GET    /api/admin/external-keys           목록
 //   POST   /api/admin/external-keys/:id/revoke 회수
 //   GET    /api/admin/external-keys/logs      로그 조회
-app.post('/api/admin/external-keys', (req, res) => {
+app.post('/api/admin/external-keys', async (req, res) => {
     const { admin_key, label, allowed_competition_id, rate_limit_per_min, expires_at } = req.body || {};
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한 필요' });
 
@@ -10279,7 +10212,7 @@ app.post('/api/admin/external-keys', (req, res) => {
     if (allowed_competition_id) {
         const cid = parseInt(allowed_competition_id);
         if (!Number.isFinite(cid) || cid <= 0) return res.status(400).json({ error: 'allowed_competition_id가 올바르지 않습니다.' });
-        const c = db.prepare('SELECT id, mode FROM competition WHERE id=?').get(cid);
+        const c = await db.get('SELECT id, mode FROM competition WHERE id=?', cid);
         if (!c) return res.status(400).json({ error: '해당 대회가 존재하지 않습니다.' });
         allowedComp = cid;
     }
@@ -10304,10 +10237,10 @@ app.post('/api/admin/external-keys', (req, res) => {
     const hash = _hashApiKey(plain);
     const prefix = _keyPrefix(plain);
 
-    const info = db.prepare(`
+    const info = await db.run(`
         INSERT INTO external_api_key (key_hash, key_prefix, label, allowed_competition_id, rate_limit_per_min, expires_at, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(hash, prefix, lbl, allowedComp, rate, expiresAt, 'admin');
+    `, hash, prefix, lbl, allowedComp, rate, expiresAt, 'admin');
 
     return res.json({
         ok: true,
@@ -10322,34 +10255,34 @@ app.post('/api/admin/external-keys', (req, res) => {
     });
 });
 
-app.get('/api/admin/external-keys', (req, res) => {
+app.get('/api/admin/external-keys', async (req, res) => {
     const adminKey = req.query.admin_key || req.headers['x-admin-key'];
     if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한 필요' });
 
-    const rows = db.prepare(`
+    const rows = await db.all(`
         SELECT k.id, k.key_prefix, k.label, k.allowed_competition_id, k.rate_limit_per_min,
                k.expires_at, k.revoked_at, k.last_used_at, k.total_calls, k.created_at,
                c.name AS competition_name
         FROM external_api_key k
         LEFT JOIN competition c ON c.id = k.allowed_competition_id
         ORDER BY k.id DESC
-    `).all();
+    `);
 
     return res.json({ ok: true, items: rows });
 });
 
-app.post('/api/admin/external-keys/:id/revoke', (req, res) => {
+app.post('/api/admin/external-keys/:id/revoke', async (req, res) => {
     const { admin_key } = req.body || {};
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한 필요' });
     const id = parseInt(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'id 오류' });
 
-    const r = db.prepare(`UPDATE external_api_key SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`).run(id);
+    const r = await db.run(`UPDATE external_api_key SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`, id);
     if (r.changes === 0) return res.status(404).json({ error: '해당 키 없음 또는 이미 회수됨' });
     return res.json({ ok: true, id, revoked_at: new Date().toISOString() });
 });
 
-app.get('/api/admin/external-keys/logs', (req, res) => {
+app.get('/api/admin/external-keys/logs', async (req, res) => {
     const adminKey = req.query.admin_key || req.headers['x-admin-key'];
     if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한 필요' });
 
@@ -10371,7 +10304,7 @@ app.get('/api/admin/external-keys/logs', (req, res) => {
     sql += ' ORDER BY l.id DESC LIMIT ?';
     params.push(limit);
 
-    const rows = db.prepare(sql).all(...params);
+    const rows = await db.all(sql, ...params);
     return res.json({ ok: true, count: rows.length, items: rows });
 });
 
@@ -10621,14 +10554,14 @@ function guessEventCategory(eventName) {
 }
 
 // Upload timetable for display-mode competition → auto-create events
-app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
+app.post('/api/display/timetable/upload', upload.single('file'), async (req, res) => {
     try {
         const { competition_id, admin_key } = req.body;
         if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
         if (!req.file) return res.status(400).json({ error: '파일이 없습니다.' });
 
-        const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(parseInt(competition_id));
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', parseInt(competition_id));
         if (!comp) { try { fs.unlinkSync(req.file.path); } catch(e) {} return res.status(404).json({ error: '대회를 찾을 수 없습니다.' }); }
 
         const wb = XLSX.readFile(req.file.path);
@@ -10811,7 +10744,7 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
         const effectiveDays = [...new Set(filteredEntries.map(e => e.day))].sort((a, b) => a - b);
 
         // Transaction: smart-merge timetable + create events
-        const tx = db.transaction(() => {
+        const tx = db.transaction(async () => {
             let addedCount = 0;
             let updatedCount = 0;
             let deletedCount = 0;
@@ -10844,11 +10777,9 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
                     WHERE id=?`);
                 const delOne = db.prepare('DELETE FROM timetable WHERE id=?');
 
-                effectiveDays.forEach(day => {
+                effectiveDays.forEach(async day => {
                     // Existing rows for this day (only future/today, since past days are filtered upstream)
-                    const existingRows = db.prepare(
-                        'SELECT * FROM timetable WHERE competition_id=? AND day=?'
-                    ).all(parseInt(competition_id), day);
+                    const existingRows = await db.all('SELECT * FROM timetable WHERE competition_id=? AND day=?', parseInt(competition_id), day);
 
                     // Skip if this day is in the past (safety)
                     const sampleRow = existingRows[0];
@@ -10897,15 +10828,13 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
 
                 // Count preserved (past) days
                 if (skippedPastDays.length > 0) {
-                    const cnt = db.prepare(
-                        `SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND day IN (${skippedPastDays.map(()=>'?').join(',')})`
-                    ).get(parseInt(competition_id), ...skippedPastDays);
+                    const cnt = await db.get(`SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND day IN (${skippedPastDays.map(()=>'?').join(',')})`, parseInt(competition_id), ...skippedPastDays);
                     preservedCount += (cnt && cnt.c) || 0;
                 }
             }
 
             // Create events (skip if already exists for this competition)
-            const existingEvents = db.prepare('SELECT id, name, gender, division, round_type FROM event WHERE competition_id=?').all(parseInt(competition_id));
+            const existingEvents = await db.all('SELECT id, name, gender, division, round_type FROM event WHERE competition_id=?', parseInt(competition_id));
             const existingSet = new Set(existingEvents.map(e => `${e.name}|${e.gender}|${e.division || ''}|${e.round_type}`));
 
             const insEvent = db.prepare('INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)');
@@ -10950,7 +10879,7 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
         // Compute callroom times
         try {
             const crStmt = db.prepare('UPDATE timetable SET callroom_time=? WHERE id=? AND callroom_time IS NULL');
-            const needCR = db.prepare('SELECT id, time, section FROM timetable WHERE competition_id=? AND callroom_time IS NULL').all(parseInt(competition_id));
+            const needCR = await db.all('SELECT id, time, section FROM timetable WHERE competition_id=? AND callroom_time IS NULL', parseInt(competition_id));
             needCR.forEach(tt => {
                 const m = (tt.time || '').match(/^(\d{1,2}):(\d{2})/);
                 if (!m) return;
@@ -10988,17 +10917,17 @@ app.post('/api/display/timetable/upload', upload.single('file'), (req, res) => {
 
 // 수동 재링크 API: 시간표의 모든 event_id를 NULL로 리셋한 뒤 autoLink 재실행
 //   사용 케이스: 잘못된 라벨로 매칭됐던 행을 일괄 재매칭 (필요 시 누락된 event 자동 생성)
-app.post('/api/display/timetable/relink/:compId', (req, res) => {
+app.post('/api/display/timetable/relink/:compId', async (req, res) => {
     try {
         const { admin_key } = req.body;
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
         const compId = parseInt(req.params.compId);
         if (!compId) return res.status(400).json({ error: 'competition_id required' });
 
-        const before = db.prepare('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND event_id IS NOT NULL').get(compId).c;
-        db.prepare('UPDATE timetable SET event_id=NULL WHERE competition_id=?').run(compId);
+        const before = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND event_id IS NOT NULL', compId).c;
+        await db.run('UPDATE timetable SET event_id=NULL WHERE competition_id=?', compId);
         const linked = autoLinkDisplayTimetable(compId);
-        const total = db.prepare('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=?').get(compId).c;
+        const total = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=?', compId).c;
         const stillUnlinked = total - linked;
         opLog(`시간표 재링크 (이전 ${before} → 현재 ${linked}, 미매칭 ${stillUnlinked})`, 'admin', 'admin', compId);
         res.json({ success: true, total, linked, unlinked: stillUnlinked, before });
@@ -11012,17 +10941,17 @@ app.post('/api/display/timetable/relink/:compId', (req, res) => {
 // 명단 재매칭 API: 노출용 대회의 모든 명단 row event_id를 NULL로 리셋한 뒤
 // autoMatchDisplayRoster 재실행. 명단 PDF 재업로드 없이 매칭 로직만 갱신할 때 사용.
 // ─────────────────────────────────────────────────────────────────────
-app.post('/api/display/roster/relink/:compId', (req, res) => {
+app.post('/api/display/roster/relink/:compId', async (req, res) => {
     try {
         const { admin_key } = req.body;
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
         const compId = parseInt(req.params.compId);
         if (!compId) return res.status(400).json({ error: 'competition_id required' });
 
-        const before = db.prepare('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NOT NULL').get(compId).c;
-        db.prepare('UPDATE display_roster SET event_id=NULL WHERE competition_id=?').run(compId);
+        const before = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NOT NULL', compId).c;
+        await db.run('UPDATE display_roster SET event_id=NULL WHERE competition_id=?', compId);
         const matched = autoMatchDisplayRoster(compId);
-        const total = db.prepare('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=?').get(compId).c;
+        const total = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=?', compId).c;
         const stillUnmatched = total - matched;
         opLog(`명단 재매칭 (이전 ${before} → 현재 ${matched}, 미매칭 ${stillUnmatched})`, 'admin', 'admin', compId);
         res.json({ success: true, total, matched, unmatched: stillUnmatched, before });
@@ -11036,18 +10965,18 @@ app.post('/api/display/roster/relink/:compId', (req, res) => {
 // 미매칭 리포트 API: event_id가 NULL인 명단 row를 (event_name, round, division, gender) 별로 그룹화해서 반환.
 // 어떤 종목이 시간표에 없거나 표기가 다른지 한눈에 확인 가능.
 // ─────────────────────────────────────────────────────────────────────
-app.get('/api/display/roster/unmatched/:compId', (req, res) => {
+app.get('/api/display/roster/unmatched/:compId', async (req, res) => {
     try {
         const compId = parseInt(req.params.compId);
         if (!compId) return res.status(400).json({ error: 'competition_id required' });
-        const rows = db.prepare(`
+        const rows = await db.all(`
             SELECT event_name, round, division, gender, COUNT(*) AS cnt
             FROM display_roster
             WHERE competition_id=? AND event_id IS NULL
             GROUP BY event_name, round, division, gender
             ORDER BY event_name, round, division, gender
-        `).all(compId);
-        const total = db.prepare('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NULL').get(compId).c;
+        `, compId);
+        const total = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NULL', compId).c;
         res.json({ success: true, total_unmatched: total, groups: rows });
     } catch (e) {
         console.error('unmatched report error:', e);
@@ -11093,19 +11022,19 @@ function _findOrphanEvents(compId) {
 }
 
 // 미리보기
-app.get('/api/display/cleanup-orphan-events/:compId', (req, res) => {
+app.get('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
     try {
         const admin_key = req.query.admin_key || req.headers['x-admin-key'] || '';
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
         const compId = parseInt(req.params.compId);
         if (!compId) return res.status(400).json({ error: 'competition_id required' });
 
-        const comp = db.prepare('SELECT id, name, mode FROM competition WHERE id=?').get(compId);
+        const comp = await db.get('SELECT id, name, mode FROM competition WHERE id=?', compId);
         if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
         if (comp.mode !== 'display') return res.status(400).json({ error: '노출용(display) 대회에서만 사용 가능합니다.' });
 
         const orphans = _findOrphanEvents(compId);
-        const totalEvents = db.prepare('SELECT COUNT(*) AS c FROM event WHERE competition_id=?').get(compId).c;
+        const totalEvents = await db.get('SELECT COUNT(*) AS c FROM event WHERE competition_id=?', compId).c;
 
         // 그룹 요약
         const byBucket = {};
@@ -11132,14 +11061,14 @@ app.get('/api/display/cleanup-orphan-events/:compId', (req, res) => {
 });
 
 // 실제 삭제
-app.post('/api/display/cleanup-orphan-events/:compId', (req, res) => {
+app.post('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
     try {
         const { admin_key, dry_run } = req.body || {};
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
         const compId = parseInt(req.params.compId);
         if (!compId) return res.status(400).json({ error: 'competition_id required' });
 
-        const comp = db.prepare('SELECT id, name, mode FROM competition WHERE id=?').get(compId);
+        const comp = await db.get('SELECT id, name, mode FROM competition WHERE id=?', compId);
         if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
         if (comp.mode !== 'display') return res.status(400).json({ error: '노출용(display) 대회에서만 사용 가능합니다.' });
 
@@ -11260,7 +11189,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
         const pdfParse = require('pdf-parse');
         const pdfBuffer = fs.readFileSync(req.file.path);
 
-        pdfParse(pdfBuffer).then(pdfData => {
+        pdfParse(pdfBuffer).then(async pdfData => {
             const text = pdfData.text;
             const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
@@ -11795,7 +11724,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
             for (const e of dedupedEntries) rosterEntries.push(e);
 
             // Delete existing roster for this day
-            db.prepare('DELETE FROM display_roster WHERE competition_id=? AND day=?').run(parseInt(competition_id), dayNum);
+            await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=?', parseInt(competition_id), dayNum);
 
             // Insert parsed roster
             const ins = db.prepare('INSERT INTO display_roster (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, heat, lane) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
@@ -11836,14 +11765,14 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
 //   ① day 별로 기존 display_roster를 삭제 후 새로 INSERT
 //   ② 업로드 직후 autoMatchDisplayRoster 호출 (시간표 events와 매칭)
 //   ③ 매칭이 안 된 행은 관리 페이지에서 "수동 매칭"으로 직접 지정 가능
-app.post('/api/display/roster/upload-excel', upload.single('file'), (req, res) => {
+app.post('/api/display/roster/upload-excel', upload.single('file'), async (req, res) => {
     try {
         const { competition_id, admin_key } = req.body;
         if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
         if (!req.file) return res.status(400).json({ error: '파일이 없습니다.' });
 
-        const comp = db.prepare('SELECT * FROM competition WHERE id=?').get(parseInt(competition_id));
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', parseInt(competition_id));
         if (!comp) { try { fs.unlinkSync(req.file.path); } catch(e) {} return res.status(404).json({ error: '대회를 찾을 수 없습니다.' }); }
 
         const wb = XLSX.readFile(req.file.path);
@@ -11963,7 +11892,7 @@ app.post('/api/display/roster/upload-excel', upload.single('file'), (req, res) =
 //   ③ POST /api/display/roster/assign                — 단건 event_id 변경
 //   ④ POST /api/display/roster/assign-bulk           — 다건 동시 변경 (그룹 단위)
 //   ⑤ POST /api/display/roster/clear-event/:rosterId — event_id를 NULL로 (미매칭으로 되돌림)
-app.get('/api/display/roster/list/:compId', (req, res) => {
+app.get('/api/display/roster/list/:compId', async (req, res) => {
     try {
         const compId = parseInt(req.params.compId);
         const { day, only_unmatched, event_id } = req.query;
@@ -11979,7 +11908,7 @@ app.get('/api/display/roster/list/:compId', (req, res) => {
         if (only_unmatched === '1' || only_unmatched === 'true') sql += ' AND r.event_id IS NULL';
         if (event_id) { sql += ' AND r.event_id=?'; args.push(parseInt(event_id)); }
         sql += ' ORDER BY r.day, r.event_name, r.round, r.heat, r.lane, r.sort_order';
-        const rows = db.prepare(sql).all(...args);
+        const rows = await db.all(sql, ...args);
         res.json({ success: true, rows, total: rows.length });
     } catch(e) {
         console.error('roster/list error:', e);
@@ -11987,14 +11916,12 @@ app.get('/api/display/roster/list/:compId', (req, res) => {
     }
 });
 
-app.get('/api/display/roster/events/:compId', (req, res) => {
+app.get('/api/display/roster/events/:compId', async (req, res) => {
     try {
         const compId = parseInt(req.params.compId);
-        const events = db.prepare(
-            `SELECT id, name, gender, division, round_type, category
+        const events = await db.all(`SELECT id, name, gender, division, round_type, category
              FROM event WHERE competition_id=?
-             ORDER BY name, division, gender, round_type`
-        ).all(compId);
+             ORDER BY name, division, gender, round_type`, compId);
         res.json({ success: true, events });
     } catch(e) {
         console.error('roster/events error:', e);
@@ -12002,17 +11929,17 @@ app.get('/api/display/roster/events/:compId', (req, res) => {
     }
 });
 
-app.post('/api/display/roster/assign', (req, res) => {
+app.post('/api/display/roster/assign', async (req, res) => {
     try {
         const { admin_key, roster_id, event_id } = req.body;
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
         if (!roster_id) return res.status(400).json({ error: 'roster_id required' });
         const evId = event_id ? parseInt(event_id) : null;
         if (evId) {
-            const ev = db.prepare('SELECT id FROM event WHERE id=?').get(evId);
+            const ev = await db.get('SELECT id FROM event WHERE id=?', evId);
             if (!ev) return res.status(404).json({ error: '해당 종목이 존재하지 않습니다.' });
         }
-        db.prepare('UPDATE display_roster SET event_id=? WHERE id=?').run(evId, parseInt(roster_id));
+        await db.run('UPDATE display_roster SET event_id=? WHERE id=?', evId, parseInt(roster_id));
         res.json({ success: true });
     } catch(e) {
         console.error('roster/assign error:', e);
@@ -12020,14 +11947,14 @@ app.post('/api/display/roster/assign', (req, res) => {
     }
 });
 
-app.post('/api/display/roster/assign-bulk', (req, res) => {
+app.post('/api/display/roster/assign-bulk', async (req, res) => {
     try {
         const { admin_key, competition_id, filter, event_id } = req.body;
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
         if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
         const evId = event_id ? parseInt(event_id) : null;
         if (evId) {
-            const ev = db.prepare('SELECT id FROM event WHERE id=?').get(evId);
+            const ev = await db.get('SELECT id FROM event WHERE id=?', evId);
             if (!ev) return res.status(404).json({ error: '해당 종목이 존재하지 않습니다.' });
         }
         // filter: { event_name, division, gender, round, day }
@@ -12039,7 +11966,7 @@ app.post('/api/display/roster/assign-bulk', (req, res) => {
         if (f.gender !== undefined) { sql += ' AND gender=?'; args.push(f.gender || ''); }
         if (f.round !== undefined) { sql += ' AND round=?'; args.push(f.round || ''); }
         if (f.day) { sql += ' AND day=?'; args.push(parseInt(f.day)); }
-        const info = db.prepare(sql).run(...args);
+        const info = await db.run(sql, ...args);
         res.json({ success: true, updated: info.changes });
     } catch(e) {
         console.error('roster/assign-bulk error:', e);
@@ -12047,11 +11974,11 @@ app.post('/api/display/roster/assign-bulk', (req, res) => {
     }
 });
 
-app.post('/api/display/roster/clear-event/:rosterId', (req, res) => {
+app.post('/api/display/roster/clear-event/:rosterId', async (req, res) => {
     try {
         const { admin_key } = req.body;
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        db.prepare('UPDATE display_roster SET event_id=NULL WHERE id=?').run(parseInt(req.params.rosterId));
+        await db.run('UPDATE display_roster SET event_id=NULL WHERE id=?', parseInt(req.params.rosterId));
         res.json({ success: true });
     } catch(e) {
         console.error('roster/clear-event error:', e);
@@ -12197,33 +12124,33 @@ function autoMatchDisplayRoster(compId) {
 }
 
 // Get display roster for a competition
-app.get('/api/display/roster/:compId', (req, res) => {
+app.get('/api/display/roster/:compId', async (req, res) => {
     const { event_id, day } = req.query;
     let sql = 'SELECT * FROM display_roster WHERE competition_id=?';
     const params = [req.params.compId];
     if (event_id) { sql += ' AND event_id=?'; params.push(event_id); }
     if (day) { sql += ' AND day=?'; params.push(parseInt(day)); }
     sql += ' ORDER BY event_name, sort_order';
-    res.json(db.prepare(sql).all(...params));
+    res.json(await db.all(sql, ...params));
 });
 
 // Get display events for a competition (with roster counts)
-app.get('/api/display/events/:compId', (req, res) => {
-    const events = db.prepare(`
+app.get('/api/display/events/:compId', async (req, res) => {
+    const events = await db.all(`
         SELECT e.*, 
             (SELECT COUNT(*) FROM display_roster dr WHERE dr.event_id = e.id) as roster_count
         FROM event e 
         WHERE e.competition_id=? AND e.parent_event_id IS NULL
         ORDER BY e.division, e.sort_order, e.name
-    `).all(req.params.compId);
+    `, req.params.compId);
     res.json(events);
 });
 
 // Update event result_url
-app.put('/api/display/events/:id/result-url', (req, res) => {
+app.put('/api/display/events/:id/result-url', async (req, res) => {
     const { admin_key, result_url } = req.body;
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    db.prepare('UPDATE event SET result_url=? WHERE id=?').run(result_url || '', req.params.id);
+    await db.run('UPDATE event SET result_url=? WHERE id=?', result_url || '', req.params.id);
     res.json({ success: true });
 });
 
@@ -12241,15 +12168,15 @@ app.put('/api/display/events/bulk-result-url', (req, res) => {
 });
 
 // Get matching status overview
-app.get('/api/display/match-status/:compId', (req, res) => {
-    const events = db.prepare(`
+app.get('/api/display/match-status/:compId', async (req, res) => {
+    const events = await db.all(`
         SELECT e.id, e.name, e.gender, e.division, e.round_type, e.result_url,
             (SELECT COUNT(*) FROM display_roster dr WHERE dr.event_id = e.id) as roster_count,
             (SELECT COUNT(*) FROM timetable tt WHERE tt.event_id = e.id AND tt.competition_id = e.competition_id) as timetable_count
         FROM event e
         WHERE e.competition_id=? AND e.parent_event_id IS NULL
         ORDER BY e.division, e.name, e.round_type
-    `).all(req.params.compId);
+    `, req.params.compId);
     res.json(events);
 });
 
@@ -12264,19 +12191,19 @@ app.post('/api/display/roster/match', (req, res) => {
 });
 
 // Re-run auto-matching for roster
-app.post('/api/display/roster/:compId/rematch', (req, res) => {
+app.post('/api/display/roster/:compId/rematch', async (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    db.prepare('UPDATE display_roster SET event_id=NULL WHERE competition_id=?').run(req.params.compId);
+    await db.run('UPDATE display_roster SET event_id=NULL WHERE competition_id=?', req.params.compId);
     const matched = autoMatchDisplayRoster(parseInt(req.params.compId));
     res.json({ success: true, matched });
 });
 
 // Delete display roster for a specific day
-app.delete('/api/display/roster/:compId/:day', (req, res) => {
+app.delete('/api/display/roster/:compId/:day', async (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    db.prepare('DELETE FROM display_roster WHERE competition_id=? AND day=?').run(req.params.compId, parseInt(req.params.day));
+    await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=?', req.params.compId, parseInt(req.params.day));
     res.json({ success: true });
 });
 
@@ -12379,23 +12306,23 @@ app.post('/api/display/cleanup-undefined/:compId', (req, res) => {
     const plan = _planCleanupUndefined(compId);
     let merged = 0, deleted = 0, skipped = 0;
     const tx = db.transaction(() => {
-        plan.forEach(p => {
+        plan.forEach(async p => {
             if (p.action === 'merge') {
                 // timetable / display_roster 의 event_id 재연결
-                db.prepare('UPDATE timetable SET event_id=? WHERE event_id=?').run(p.target_event.id, p.undefined_event.id);
-                db.prepare('UPDATE display_roster SET event_id=? WHERE event_id=?').run(p.target_event.id, p.undefined_event.id);
-                db.prepare('DELETE FROM event WHERE id=?').run(p.undefined_event.id);
+                await db.run('UPDATE timetable SET event_id=? WHERE event_id=?', p.target_event.id, p.undefined_event.id);
+                await db.run('UPDATE display_roster SET event_id=? WHERE event_id=?', p.target_event.id, p.undefined_event.id);
+                await db.run('DELETE FROM event WHERE id=?', p.undefined_event.id);
                 merged++;
             } else if (p.action === 'delete') {
-                db.prepare('UPDATE timetable SET event_id=NULL WHERE event_id=?').run(p.undefined_event.id);
-                db.prepare('UPDATE display_roster SET event_id=NULL WHERE event_id=?').run(p.undefined_event.id);
-                db.prepare('DELETE FROM event WHERE id=?').run(p.undefined_event.id);
+                await db.run('UPDATE timetable SET event_id=NULL WHERE event_id=?', p.undefined_event.id);
+                await db.run('UPDATE display_roster SET event_id=NULL WHERE event_id=?', p.undefined_event.id);
+                await db.run('DELETE FROM event WHERE id=?', p.undefined_event.id);
                 deleted++;
             } else if (p.action === 'orphan') {
                 if (mode === 'force_delete') {
-                    db.prepare('UPDATE timetable SET event_id=NULL WHERE event_id=?').run(p.undefined_event.id);
-                    db.prepare('UPDATE display_roster SET event_id=NULL WHERE event_id=?').run(p.undefined_event.id);
-                    db.prepare('DELETE FROM event WHERE id=?').run(p.undefined_event.id);
+                    await db.run('UPDATE timetable SET event_id=NULL WHERE event_id=?', p.undefined_event.id);
+                    await db.run('UPDATE display_roster SET event_id=NULL WHERE event_id=?', p.undefined_event.id);
+                    await db.run('DELETE FROM event WHERE id=?', p.undefined_event.id);
                     deleted++;
                 } else {
                     skipped++;
@@ -12410,31 +12337,17 @@ app.post('/api/display/cleanup-undefined/:compId', (req, res) => {
 
 // ─── Display roster: 단일 행 CRUD (인라인 편집 / 릴레이 팀 편집) ───
 // PUT  /api/display/roster/entry/:id  — 개별 행 수정
-app.put('/api/display/roster/entry/:id', (req, res) => {
+app.put('/api/display/roster/entry/:id', async (req, res) => {
     try {
         const { admin_key, day, event_name, round, division, gender, bib_number, athlete_name, team, heat, lane, sort_order, event_id } = req.body;
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        const old = db.prepare('SELECT * FROM display_roster WHERE id=?').get(req.params.id);
+        const old = await db.get('SELECT * FROM display_roster WHERE id=?', req.params.id);
         if (!old) return res.status(404).json({ error: '명단 행을 찾을 수 없습니다.' });
-        db.prepare(`UPDATE display_roster SET
+        await db.run(`UPDATE display_roster SET
             day=?, event_name=?, round=?, division=?, gender=?,
             bib_number=?, athlete_name=?, team=?,
             heat=?, lane=?, sort_order=?, event_id=?
-            WHERE id=?`).run(
-            day != null ? parseInt(day) : old.day,
-            event_name != null ? event_name : old.event_name,
-            round != null ? round : old.round,
-            division != null ? division : old.division,
-            gender != null ? gender : old.gender,
-            bib_number != null ? String(bib_number) : old.bib_number,
-            athlete_name != null ? athlete_name : old.athlete_name,
-            team != null ? team : old.team,
-            heat != null && heat !== '' ? parseInt(heat) : null,
-            lane != null && lane !== '' ? parseInt(lane) : null,
-            sort_order != null ? parseInt(sort_order) : old.sort_order,
-            event_id != null ? (event_id || null) : old.event_id,
-            old.id
-        );
+            WHERE id=?`, day != null ? parseInt(day) : old.day, event_name != null ? event_name : old.event_name, round != null ? round : old.round, division != null ? division : old.division, gender != null ? gender : old.gender, bib_number != null ? String(bib_number) : old.bib_number, athlete_name != null ? athlete_name : old.athlete_name, team != null ? team : old.team, heat != null && heat !== '' ? parseInt(heat) : null, lane != null && lane !== '' ? parseInt(lane) : null, sort_order != null ? parseInt(sort_order) : old.sort_order, event_id != null ? (event_id || null) : old.event_id, old.id);
         res.json({ success: true, id: old.id });
     } catch (e) {
         res.status(500).json({ error: '수정 실패: ' + e.message });
@@ -12442,28 +12355,14 @@ app.put('/api/display/roster/entry/:id', (req, res) => {
 });
 
 // POST /api/display/roster/entry — 새 행 추가
-app.post('/api/display/roster/entry', (req, res) => {
+app.post('/api/display/roster/entry', async (req, res) => {
     try {
         const { admin_key, competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, heat, lane, sort_order, event_id } = req.body;
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
         if (!competition_id || !athlete_name) return res.status(400).json({ error: 'competition_id, athlete_name 필수' });
-        const info = db.prepare(`INSERT INTO display_roster
+        const info = await db.run(`INSERT INTO display_roster
             (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, event_id, heat, lane)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-            parseInt(competition_id),
-            parseInt(day) || 1,
-            event_name || '',
-            round || '',
-            division || '',
-            gender || '',
-            bib_number != null ? String(bib_number) : '',
-            athlete_name,
-            team || '',
-            sort_order != null ? parseInt(sort_order) : 0,
-            event_id || null,
-            heat != null && heat !== '' ? parseInt(heat) : null,
-            lane != null && lane !== '' ? parseInt(lane) : null
-        );
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, parseInt(competition_id), parseInt(day) || 1, event_name || '', round || '', division || '', gender || '', bib_number != null ? String(bib_number) : '', athlete_name, team || '', sort_order != null ? parseInt(sort_order) : 0, event_id || null, heat != null && heat !== '' ? parseInt(heat) : null, lane != null && lane !== '' ? parseInt(lane) : null);
         // 자동 매칭 시도
         try { autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) {}
         res.json({ success: true, id: info.lastInsertRowid });
@@ -12473,11 +12372,11 @@ app.post('/api/display/roster/entry', (req, res) => {
 });
 
 // DELETE /api/display/roster/entry/:id — 개별 행 삭제
-app.delete('/api/display/roster/entry/:id', (req, res) => {
+app.delete('/api/display/roster/entry/:id', async (req, res) => {
     try {
         const { admin_key } = req.body;
         if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        const info = db.prepare('DELETE FROM display_roster WHERE id=?').run(req.params.id);
+        const info = await db.run('DELETE FROM display_roster WHERE id=?', req.params.id);
         res.json({ success: true, deleted: info.changes });
     } catch (e) {
         res.status(500).json({ error: '삭제 실패: ' + e.message });
