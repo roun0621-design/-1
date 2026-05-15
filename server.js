@@ -1477,7 +1477,8 @@ app.post('/api/federations', async (req, res) => {
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!code || !code.trim()) return res.status(400).json({ error: '연맹 코드는 필수입니다.' });
     try {
-        const maxOrder = await db.get('SELECT MAX(sort_order) as m FROM federation_list').m || 0;
+        const maxOrderRow = await db.get('SELECT MAX(sort_order) as m FROM federation_list');
+        const maxOrder = (maxOrderRow && maxOrderRow.m) || 0;
         const info = await db.run('INSERT INTO federation_list (code, name, badge_bg, badge_color, sort_order, gender_label_m, gender_label_f, gender_label_x) VALUES (?,?,?,?,?,?,?,?)', code.trim().toUpperCase(), name || '', badge_bg || '#e3f2fd', badge_color || '#1565c0', maxOrder + 1, gender_label_m || '', gender_label_f || '', gender_label_x || '');
         opLog(`연맹 추가: ${code}`, 'admin', 'admin');
         res.json({ id: info.lastInsertRowid, success: true });
@@ -1534,7 +1535,8 @@ app.post('/api/home-popups', async (req, res) => {
     const { admin_key, popup_type, title, subtitle, intro_text, bottom_btn_text, bottom_btn_desc, bottom_btn_link, bottom_btn_active, is_active, show_from, show_until, sort_order, sections } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     try {
-        const maxOrder = await db.get('SELECT MAX(sort_order) as m FROM home_popup').m || 0;
+        const maxOrderRow = await db.get('SELECT MAX(sort_order) as m FROM home_popup');
+        const maxOrder = (maxOrderRow && maxOrderRow.m) || 0;
         const info = await db.run(`INSERT INTO home_popup (popup_type, title, subtitle, intro_text, bottom_btn_text, bottom_btn_desc, bottom_btn_link, bottom_btn_active, is_active, show_from, show_until, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, popup_type || 'public', title || '', subtitle || '', intro_text || '', bottom_btn_text || '', bottom_btn_desc || '', bottom_btn_link || '', bottom_btn_active ?? 1, is_active ?? 1, show_from || null, show_until || null, sort_order ?? maxOrder + 1);
         const popupId = info.lastInsertRowid;
         if (Array.isArray(sections)) {
@@ -1698,7 +1700,8 @@ app.post('/api/results/upsert', async (req, res) => {
             }
             // Auto-promote from 'created' or 'heats_generated' to 'in_progress' when heats exist
             if (!allowed && (event.round_status === 'created' || event.round_status === 'heats_generated')) {
-                const heatCount = await db.get('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?', event.id).cnt;
+                const heatCountRow = await db.get('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?', event.id);
+                const heatCount = (heatCountRow && heatCountRow.cnt) || 0;
                 if (heatCount > 0) {
                     allowed = true;
                     await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
@@ -2920,22 +2923,23 @@ app.post('/api/events/:id/sub-events/sync-athletes', async (req, res) => {
     const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!parent) return res.status(404).json({ error: 'Parent event not found' });
 
-    const parentAthletes = await db.all('SELECT athlete_id FROM event_entry WHERE event_id=?', parent.id).map(e => e.athlete_id);
+    const parentAthleteRows = await db.all('SELECT athlete_id FROM event_entry WHERE event_id=?', parent.id);
+    const parentAthletes = parentAthleteRows.map(e => e.athlete_id);
     const subs = await db.all('SELECT id FROM event WHERE parent_event_id=?', parent.id);
     let addedCount = 0;
 
     await db.transaction(async () => {
         for (const sub of subs) {
-            const existingAthletes = new Set(
-                await db.all('SELECT athlete_id FROM event_entry WHERE event_id=?', sub.id).map(e => e.athlete_id)
-            );
+            const existingAthleteRows = await db.all('SELECT athlete_id FROM event_entry WHERE event_id=?', sub.id);
+            const existingAthletes = new Set(existingAthleteRows.map(e => e.athlete_id));
             for (const athId of parentAthletes) {
                 if (!existingAthletes.has(athId)) {
                     const info = await db.run('INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?, ?, ?)', sub.id, athId, 'registered');
                     // Add to existing heat (heat 1)
                     const heat = await db.get('SELECT id FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1', sub.id);
                     if (heat) {
-                        const laneCount = await db.get('SELECT COUNT(*) AS c FROM heat_entry WHERE heat_id=?', heat.id).c;
+                        const laneCountRow = await db.get('SELECT COUNT(*) AS c FROM heat_entry WHERE heat_id=?', heat.id);
+                        const laneCount = (laneCountRow && laneCountRow.c) || 0;
                         await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat.id, info.lastInsertRowid, laneCount + 1);
                     }
                     addedCount++;
@@ -3018,8 +3022,10 @@ app.get('/api/round-status', async (req, res) => {
         const heats = await db.all('SELECT id FROM heat WHERE event_id=?', e.id);
         let totalEntries = 0, totalResults = 0;
         for (const h of heats) {
-            totalEntries += await db.get('SELECT COUNT(*) AS c FROM heat_entry WHERE heat_id=?', h.id).c;
-            totalResults += await db.get('SELECT COUNT(DISTINCT event_entry_id) AS c FROM result WHERE heat_id=?', h.id).c;
+            const entRow = await db.get('SELECT COUNT(*) AS c FROM heat_entry WHERE heat_id=?', h.id);
+            totalEntries += (entRow && entRow.c) || 0;
+            const resRow = await db.get('SELECT COUNT(DISTINCT event_entry_id) AS c FROM result WHERE heat_id=?', h.id);
+            totalResults += (resRow && resRow.c) || 0;
         }
         return { ...e, heat_count: heats.length, total_entries: totalEntries, total_results: totalResults };
     });
@@ -3081,7 +3087,8 @@ app.post('/api/heat-entries/add', async (req, res) => {
     const existing = await db.get('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?', heat_id, entry.id);
     if (existing) return res.json({ success: true, already: true, entry });
     // Add to heat with next lane number
-    const maxLane = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat_id).mx || 0;
+    const maxLaneRow = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat_id);
+    const maxLane = (maxLaneRow && maxLaneRow.mx) || 0;
     await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat_id, entry.id, maxLane + 1);
     broadcastSSE('entry_status', { event_entry_id: entry.id, status: entry.status });
     res.json({ success: true, entry });
@@ -3447,7 +3454,8 @@ app.post('/api/admin/athletes/:id/events', async (req, res) => {
             // Add as relay member to existing team
             const existingMember = await db.get('SELECT id FROM relay_member WHERE event_entry_id=? AND athlete_id=?', existingTeamEntry.id, ath.id);
             if (existingMember) return res.status(409).json({ error: '이미 등록된 릴레이 멤버입니다.' });
-            const maxLeg = await db.get('SELECT MAX(leg_order) AS mx FROM relay_member WHERE event_entry_id=?', existingTeamEntry.id).mx || 0;
+            const maxLegRow = await db.get('SELECT MAX(leg_order) AS mx FROM relay_member WHERE event_entry_id=?', existingTeamEntry.id);
+            const maxLeg = (maxLegRow && maxLegRow.mx) || 0;
             await db.run('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)', existingTeamEntry.id, ath.id, maxLeg + 1);
             return res.json({ success: true, event_entry_id: existingTeamEntry.id, added_as: 'relay_member' });
         }
@@ -3469,7 +3477,8 @@ app.post('/api/admin/athletes/:id/events', async (req, res) => {
                 const hInfo = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)', event_id);
                 heat = { id: hInfo.lastInsertRowid };
             }
-            const maxLane = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat.id).mx || 0;
+            const maxLaneRow = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat.id);
+            const maxLane = (maxLaneRow && maxLaneRow.mx) || 0;
             await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat.id, teamEntry.id, maxLane + 1);
         }
         // Add the athlete as relay member
@@ -3492,14 +3501,16 @@ app.post('/api/admin/athletes/:id/events', async (req, res) => {
             heat = { id: hInfo.lastInsertRowid };
         }
         // Determine next lane number
-        const maxLane = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat.id).mx || 0;
+        const maxLaneRow = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat.id);
+        const maxLane = (maxLaneRow && maxLaneRow.mx) || 0;
         await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat.id, entryId, maxLane + 1);
 
         audit('event_entry', entryId, 'INSERT', null, { event_id, athlete_id: ath.id }, 'admin', evt.competition_id, req);
         broadcastSSE('entry_status', { event_entry_id: entryId, status: 'registered' });
     })();
 
-    res.json({ success: true, event_entry_id: await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, ath.id).id });
+    const eeRow = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, ath.id);
+    res.json({ success: true, event_entry_id: eeRow ? eeRow.id : null });
 });
 app.delete('/api/admin/athletes/:athleteId/events/:entryId', async (req, res) => {
     const { admin_key } = req.body;
@@ -3954,7 +3965,8 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
             }
 
             const eventCache = new Map();
-            await db.all('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id).forEach(e => eventCache.set(`${e.name}|${e.category}|${e.gender}`, e.id));
+            const evRows = await db.all('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id);
+            for (const e of evRows) eventCache.set(`${e.name}|${e.category}|${e.gender}`, e.id);
 
             const neededIndividual = new Map();
             const relayParticipation = new Map();
@@ -4074,7 +4086,8 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
             }
 
             const athleteCache = new Map();
-            await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id).forEach(a => athleteCache.set(`${a.name}|${a.team}|${a.gender}`, a.id));
+            const athRows = await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id);
+            for (const a of athRows) athleteCache.set(`${a.name}|${a.team}|${a.gender}`, a.id);
             const insertAthlete = db.prepare('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)');
             const updateAthleteBib = db.prepare('UPDATE athlete SET bib_number=? WHERE id=? AND (bib_number IS NULL OR bib_number = ?)');
             const checkBibConflict = db.prepare('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=? AND id!=?');
@@ -4160,7 +4173,8 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 if (info.category !== 'combined') continue;
                 const parentId = eventCache.get(`${info.name}|${info.category}|${info.gender}`);
                 if (!parentId) continue;
-                const existingSubs = await db.get('SELECT COUNT(*) AS c FROM event WHERE parent_event_id=?', parentId).c;
+                const existingSubsRow = await db.get('SELECT COUNT(*) AS c FROM event WHERE parent_event_id=?', parentId);
+                const existingSubs = (existingSubsRow && existingSubsRow.c) || 0;
                 if (existingSubs > 0) continue;
                 const subs = info.name === '10종경기' ? DECATHLON_SUBS : HEPTATHLON_SUBS;
                 const prefix = info.name === '10종경기' ? '[10종]' : '[7종]';
@@ -4187,7 +4201,8 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 const [relayName, gender] = key.split('|');
                 const eventId = eventCache.get(`${relayName}|relay|${gender}`);
                 if (!eventId) continue;
-                if (await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', eventId).c > 0) continue;
+                const heatChkRow = await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', eventId);
+                if (((heatChkRow && heatChkRow.c) || 0) > 0) continue;
                 const entryIds = [];
                 for (const [teamName, members] of teamMap) {
                     // Create a "team athlete" record: name=teamName, bib=teamName, team=teamName
@@ -4840,7 +4855,8 @@ app.post('/api/heat-assignment/preview', upload.single('file'), async (req, res)
                 // Try to find similar events as suggestions
                 let suggestions = [];
                 if (gender && gender !== '?') {
-                    suggestions = await db.all('SELECT id, name, round_type FROM event WHERE competition_id=? AND gender=? AND parent_event_id IS NULL ORDER BY name', competition_id, gender).map(e => ({ id: e.id, name: e.name, round: e.round_type }));
+                    const sugRows = await db.all('SELECT id, name, round_type FROM event WHERE competition_id=? AND gender=? AND parent_event_id IS NULL ORDER BY name', competition_id, gender);
+                    suggestions = sugRows.map(e => ({ id: e.id, name: e.name, round: e.round_type }));
                 }
                 preview.push({
                     eventKey, eventName, gender, round,
@@ -4876,8 +4892,10 @@ app.post('/api/heat-assignment/preview', upload.single('file'), async (req, res)
             let resultCount = 0;
             let heightAttemptCount = 0;
             for (const h of dbHeats) {
-                resultCount += await db.get('SELECT COUNT(*) as c FROM result WHERE heat_id=?', h.id).c;
-                heightAttemptCount += await db.get('SELECT COUNT(*) as c FROM height_attempt WHERE heat_id=?', h.id).c;
+                const rRow = await db.get('SELECT COUNT(*) as c FROM result WHERE heat_id=?', h.id);
+                resultCount += (rRow && rRow.c) || 0;
+                const haRow = await db.get('SELECT COUNT(*) as c FROM height_attempt WHERE heat_id=?', h.id);
+                heightAttemptCount += (haRow && haRow.c) || 0;
             }
             const hasResults = resultCount > 0 || heightAttemptCount > 0;
 
@@ -5018,7 +5036,8 @@ app.post('/api/heat-assignment/create-events', express.json(), async (req, res) 
 
     const created = [];
     const stmt = db.prepare('INSERT INTO event (competition_id, name, gender, category, round_type, round_status, sort_order) VALUES (?,?,?,?,?,?,?)');
-    const maxSort = await db.get('SELECT MAX(sort_order) as m FROM event WHERE competition_id=?', competition_id).m || 0;
+    const maxSortRow = await db.get('SELECT MAX(sort_order) as m FROM event WHERE competition_id=?', competition_id);
+    const maxSort = (maxSortRow && maxSortRow.m) || 0;
 
     let sortOrder = maxSort + 1;
     for (const evt of events) {
@@ -5185,8 +5204,10 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                 // Check if results exist
                 let resultCount = 0;
                 for (const h of dbHeats) {
-                    resultCount += await db.get('SELECT COUNT(*) as c FROM result WHERE heat_id=?', h.id).c;
-                    resultCount += await db.get('SELECT COUNT(*) as c FROM height_attempt WHERE heat_id=?', h.id).c;
+                    const rRow = await db.get('SELECT COUNT(*) as c FROM result WHERE heat_id=?', h.id);
+                    resultCount += (rRow && rRow.c) || 0;
+                    const haRow = await db.get('SELECT COUNT(*) as c FROM height_attempt WHERE heat_id=?', h.id);
+                    resultCount += (haRow && haRow.c) || 0;
                 }
 
                 if (resultCount > 0 && !forceEventIds.has(dbEvent.id)) {
@@ -5367,7 +5388,8 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                         if (teamEntry.name !== teamEntry.team) continue;
                         
                         // Check if this team entry already has relay members
-                        const existingMembers = await db.get('SELECT COUNT(*) AS c FROM relay_member WHERE event_entry_id=?', teamEntry.id).c;
+                        const existingMembersRow = await db.get('SELECT COUNT(*) AS c FROM relay_member WHERE event_entry_id=?', teamEntry.id);
+                        const existingMembers = (existingMembersRow && existingMembersRow.c) || 0;
                         if (existingMembers > 0) continue; // Already has members, skip
                         
                         // Find individual athletes from the same team
@@ -6340,7 +6362,8 @@ app.post('/api/joint-groups/:id/members', async (req, res) => {
 
     const maxSort = await db.get('SELECT MAX(sort_order) AS m FROM joint_group_member WHERE joint_group_id=?', g.id);
     let nextSort = (maxSort?.m || 0) + 1;
-    const existingMembers = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', g.id).map(m => m.event_id);
+    const existingMemberRows = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', g.id);
+    const existingMembers = existingMemberRows.map(m => m.event_id);
 
     let added = 0;
     await db.transaction(async () => {
@@ -6372,7 +6395,8 @@ app.delete('/api/joint-groups/:groupId/members/:eventId', async (req, res) => {
     await db.transaction(async () => {
         await db.run('DELETE FROM joint_group_member WHERE joint_group_id=? AND event_id=?', gId, eId);
         // Remove event_link pairs involving this event within the group
-        const remaining = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', gId).map(m => m.event_id);
+        const remainingRows = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id=?', gId);
+        const remaining = remainingRows.map(m => m.event_id);
         // Remove links between this event and any remaining group member
         // (careful: only remove if no other group links them)
         for (const rId of remaining) {
@@ -6386,7 +6410,8 @@ app.delete('/api/joint-groups/:groupId/members/:eventId', async (req, res) => {
             }
         }
         // If group now has < 2 members, delete the whole group
-        const count = await db.get('SELECT COUNT(*) AS c FROM joint_group_member WHERE joint_group_id=?', gId).c;
+        const countRow = await db.get('SELECT COUNT(*) AS c FROM joint_group_member WHERE joint_group_id=?', gId);
+        const count = (countRow && countRow.c) || 0;
         if (count < 2) {
             await db.run('DELETE FROM joint_group_member WHERE joint_group_id=?', gId);
             await db.run('DELETE FROM joint_group WHERE id=?', gId);
