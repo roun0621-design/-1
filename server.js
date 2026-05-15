@@ -1500,12 +1500,15 @@ app.delete('/api/federations/:id', async (req, res) => {
     opLog(`연맹 삭제: ${old.code}`, 'admin', 'admin');
     res.json({ success: true });
 });
-app.put('/api/federations/reorder', (req, res) => {
+app.put('/api/federations/reorder', async (req, res) => {
     const { admin_key, order } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!Array.isArray(order)) return res.status(400).json({ error: 'order array required' });
-    const stmt = db.prepare('UPDATE federation_list SET sort_order=? WHERE id=?');
-    db.transaction(() => { order.forEach((id, i) => stmt.run(i + 1, id)); })();
+    await db.transaction(async () => {
+        for (let i = 0; i < order.length; i++) {
+            await db.run('UPDATE federation_list SET sort_order=? WHERE id=?', i + 1, order[i]);
+        }
+    })();
     res.json({ success: true });
 });
 
@@ -1533,12 +1536,15 @@ app.post('/api/home-popups', async (req, res) => {
         res.json({ id: popupId, success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
-app.put('/api/home-popups/reorder', (req, res) => {
+app.put('/api/home-popups/reorder', async (req, res) => {
     const { admin_key, order } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!Array.isArray(order)) return res.status(400).json({ error: 'order array required' });
-    const stmt = db.prepare('UPDATE home_popup SET sort_order=? WHERE id=?');
-    db.transaction(() => { order.forEach((id, i) => stmt.run(i + 1, id)); })();
+    await db.transaction(async () => {
+        for (let i = 0; i < order.length; i++) {
+            await db.run('UPDATE home_popup SET sort_order=? WHERE id=?', i + 1, order[i]);
+        }
+    })();
     res.json({ success: true });
 });
 app.put('/api/home-popups/:id', async (req, res) => {

@@ -355,3 +355,80 @@ const existingPw = getConfigKey('admin_pw', '');             // existingPw.start
 - `lib/db.js`: PG 백엔드에서 `db.prepare()` 호출 시 명시적 에러 throw — 100% 변환 검증용 그물망
 - SQLite 환경(`DB_BACKEND=sqlite`)은 100% 호환 유지 — 운영 무중단
 - pm2 daemon `pacerise` — 부팅 실패 시 즉시 인지
+
+---
+
+## 11. Phase 2-G 진행 현황 (2026-05-15 추가)
+
+### ✅ G-1 완료 — db.transaction 시그니처 통일 + 38건 자동 변환 (`32f873d`)
+
+**핵심 발견**: better-sqlite3는 async 콜백을 받으면
+`TypeError: Transaction function cannot return a promise`로 거부함.
+Phase 2-E/F에서 자동 변환된 `db.transaction(async () => {...})` 25건이
+**SQLite 환경의 잠재 500 에러 폭탄**이었음 (해당 라우트 호출 시점에 터짐).
+
+**해결**:
+- `lib/db.js` SQLite 어댑터의 `transaction(fn)`을 PG와 시그니처 동일하게 재작성:
+  - 콜백을 sync든 async든 받음
+  - 내부에서 `raw.exec('BEGIN')` → `await fn(...)` → `raw.exec('COMMIT')`
+  - 에러 시 `raw.exec('ROLLBACK')`
+- 양쪽 PoC (`scripts/poc/sqlite_async_tx_poc.js`, `postgres_async_tx_poc.js`) 각 8/8 PASS
+- AST 기반 codemod `scripts/tx_codemod.js` 작성 → 자동 38건 변환:
+  - 25 async-iife: `db.transaction(async () => {...})()` → `await db.transaction(async () => {...})()`
+  - 5 async-stored-call: stored 변수 호출에 `await` 추가
+  - 8 mark-async: 호출자 함수에 `async` 키워드 자동 부착
+
+### 🚧 G-2 진행 중 — sync 트랜잭션 22건 인라인화
+
+`stmt = db.prepare(SQL)` 변수 의존이라 자동 변환 어려운 22건 → 수동 인라인.
+
+**진행률: 2 / 22**
+
+| Line | 라우트 | 상태 |
+|---:|---|---|
+| 1508 | `/api/federations/reorder` | ✅ 변환 완료 (handler sync→async) |
+| 1541 | `/api/home-popups/reorder` | ✅ 변환 완료 (handler sync→async) |
+| 190 | top-level wind 마이그레이션 | ⏳ 잔여 |
+| 314 | top-level joint_group 마이그레이션 | ⏳ 잔여 |
+| 1186 | (자동 조 재배정) | ⏳ 잔여 |
+| 2078 | combined 점수 sync (forEach+async 버그도 존재) | ⏳ 잔여 — 추가 버그 |
+| 2368 | qualification save | ⏳ 잔여 |
+| 2885 | sub-events reorder | ⏳ 잔여 |
+| 2934 | heat lane assignment | ⏳ 잔여 |
+| 2951 / 2961 | lane updates × 2 | ⏳ 잔여 |
+| 3289 / 3612 / 4488 / 7230 / 9086 / 10150 / 11084 / 11731 / 11868 / 12163 / 12308 | 기타 | ⏳ 잔여 |
+
+**패턴**: 모두 동일 — 다음 형태로 일관 변환:
+```js
+// Before
+const stmt = db.prepare('UPDATE ... WHERE id=?');
+db.transaction(() => { for (const x of arr) stmt.run(x.v, x.id); })();
+
+// After
+await db.transaction(async () => {
+    for (const x of arr) await db.run('UPDATE ... WHERE id=?', x.v, x.id);
+})();
+```
+
+### 🚧 G-3,4,5 미착수 — 다음 세션 작업 대상
+
+- **G-3** — `getConfigKey`/`setConfigKey` 헬퍼 async 캐스케이드 (전략 확정 필요)
+- **G-4** — `stmt = db.prepare()` 변수 저장 패턴 143건 중 트랜잭션과 무관한 것들 인라인화
+- **G-5** — `db.prepare` 0건 도달 검증 + 풀 부팅 회귀
+
+### 📊 현재 상태 (G-1 + G-2 partial 적용 후)
+
+| 항목 | 변경 전 | 변경 후 |
+|---|---:|---:|
+| `db.prepare` 호출 | 167 | **165** |
+| `db.transaction` 호출 | 51 | 51 (유지) |
+| `await db.transaction` (= 트랜잭션 정상 await) | 0 | **27** |
+| `await db.*` 호출 (Phase 2-D~G 누적) | 758 | **760** |
+
+**검증 (G-1 + G-2 partial 적용 후 모두 통과)**:
+- `node --check server.js` ✅
+- pm2 부팅 ✅ (pid 800482, online)
+- HTTP smoke: `/api/competitions` `/api/events` `/api/federations` 200 ✅
+- 단위 테스트 28/28 ✅
+- 동시쓰기 250/250 ✅
+- 에러 로그 0건 ✅
