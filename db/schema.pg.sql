@@ -2,7 +2,7 @@
 -- Pace Rise Competition OS — PostgreSQL Schema
 -- Auto-generated from SQLite by scripts/sqlite_to_postgres_schema.js
 -- Source: /home/user/webapp/db/competition.db
--- Generated: 2026-05-15T15:51:52.390Z
+-- Generated: 2026-05-15T15:59:18.880Z
 -- ============================================================
 
 -- 외래키 제약 잠시 끔 (삽입 순서 무관하게 전체 생성)
@@ -217,7 +217,7 @@ CREATE TABLE IF NOT EXISTS "heat" (
     "event_id" BIGINT NOT NULL,
     "heat_number" BIGINT NOT NULL,
     "created_at" TEXT NOT NULL DEFAULT NOW(),
-    "wind" DOUBLE PRECISION DEFAULT NULL,
+    "wind" TEXT DEFAULT NULL,
     "heat_name" TEXT DEFAULT NULL,
     "scoreboard_key" TEXT DEFAULT NULL,
     UNIQUE ("event_id", "heat_number")

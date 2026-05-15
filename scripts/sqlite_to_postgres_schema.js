@@ -77,6 +77,41 @@ const indexes = db.prepare(`
 console.log(`[scan] ${tables.length} tables, ${indexes.length} indexes found in ${DB_PATH}`);
 
 // ──────────────────────────────────────────────
+// 실데이터 샘플링 기반 타입 추론
+// SQLite는 컬럼 선언 타입과 실제 저장 타입이 다를 수 있다 (storage class affinity).
+// 운영 데이터의 실제 타입을 확인해 선언과 충돌하면 보수적으로 TEXT 처리.
+// ──────────────────────────────────────────────
+function inferActualType(tableName, columnName, declaredType) {
+    try {
+        const rows = db.prepare(
+            `SELECT "${columnName}" AS v FROM "${tableName}" WHERE "${columnName}" IS NOT NULL LIMIT 200`
+        ).all();
+        if (rows.length === 0) return null;
+
+        let hasString = false, hasNumber = false, hasBuffer = false;
+        for (const r of rows) {
+            const v = r.v;
+            if (v === null) continue;
+            if (typeof v === 'string') hasString = true;
+            else if (typeof v === 'number') hasNumber = true;
+            else if (Buffer.isBuffer(v)) hasBuffer = true;
+        }
+
+        // 선언이 숫자형(REAL/INTEGER)인데 실데이터에 문자열이 섞여있으면 → TEXT 다운그레이드
+        const decl = (declaredType || '').toUpperCase();
+        const isNumericDecl = decl === 'REAL' || decl === 'FLOAT' || decl === 'DOUBLE' || decl === 'INTEGER' || decl === 'NUMERIC';
+        if (isNumericDecl && hasString) {
+            console.warn(`[infer] ${tableName}.${columnName}: declared ${decl} but contains strings → downgrade to TEXT`);
+            return 'TEXT_OVERRIDE';
+        }
+        if (hasBuffer) return 'BYTEA_OVERRIDE';
+        return null;
+    } catch (e) {
+        return null;
+    }
+}
+
+// ──────────────────────────────────────────────
 // 컬럼 타입 변환
 // ──────────────────────────────────────────────
 function convertType(sqliteType, isPrimaryKey, isAutoincrement) {
@@ -158,7 +193,14 @@ function emitTable(tableName) {
     for (const col of cols) {
         const isPK = col.pk > 0 && pkCols.length === 1;
         const isAuto = isPK && hasAutoincrement && /INTEGER/i.test(col.type);
-        const pgType = convertType(col.type, isPK, isAuto);
+        let pgType = convertType(col.type, isPK, isAuto);
+
+        // 실데이터 기반 타입 오버라이드 (선언 vs 실제 불일치 처리)
+        if (!isPK) {
+            const inferred = inferActualType(tableName, col.name, col.type);
+            if (inferred === 'TEXT_OVERRIDE') pgType = 'TEXT';
+            else if (inferred === 'BYTEA_OVERRIDE') pgType = 'BYTEA';
+        }
 
         let line = `    "${col.name}" ${pgType}`;
         if (isPK) line += ' PRIMARY KEY';
