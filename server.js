@@ -183,19 +183,23 @@ try { db.exec(`ALTER TABLE result ADD COLUMN status_code TEXT DEFAULT ''`); } ca
 try { db.exec(`ALTER TABLE result ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE heat ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 // Migrate existing numeric wind values to "N.N m/s" text format for scoreboard compatibility
-try {
-    const numericWindHeats = db.prepare("SELECT id, wind FROM heat WHERE wind IS NOT NULL AND CAST(wind AS TEXT) NOT LIKE '% m/s'").all();
-    if (numericWindHeats.length > 0) {
-        const upd = db.prepare('UPDATE heat SET wind=? WHERE id=?');
-        db.transaction(() => {
-            for (const h of numericWindHeats) {
-                const v = parseFloat(h.wind);
-                if (!isNaN(v)) upd.run(v.toFixed(1) + ' m/s', h.id);
-            }
-        })();
-        console.log(`[DB Migration] heat.wind: ${numericWindHeats.length}건 → "N.N m/s" 형식으로 변환`);
-    }
-} catch(e) { console.error('[DB Migration] wind format migration error:', e.message); }
+// (SQLite 부팅 전용 마이그레이션 — PG 백엔드에서는 별도 마이그레이션 스크립트로 처리)
+if (!db.isAsync) {
+    try {
+        const numericWindHeats = db.raw.prepare("SELECT id, wind FROM heat WHERE wind IS NOT NULL AND CAST(wind AS TEXT) NOT LIKE '% m/s'").all();
+        if (numericWindHeats.length > 0) {
+            const upd = db.raw.prepare('UPDATE heat SET wind=? WHERE id=?');
+            const tx = db.raw.transaction(() => {
+                for (const h of numericWindHeats) {
+                    const v = parseFloat(h.wind);
+                    if (!isNaN(v)) upd.run(v.toFixed(1) + ' m/s', h.id);
+                }
+            });
+            tx();
+            console.log(`[DB Migration] heat.wind: ${numericWindHeats.length}건 → "N.N m/s" 형식으로 변환`);
+        }
+    } catch(e) { console.error('[DB Migration] wind format migration error:', e.message); }
+}
 // Add heat_name to heat (custom display name, e.g. "준결1조", "A조")
 try { db.exec(`ALTER TABLE heat ADD COLUMN heat_name TEXT DEFAULT NULL`); } catch(e) {}
 // Add scoreboard_key to heat (전광판 매칭키, e.g. "남자실업부 100m 예선 1조")
@@ -304,24 +308,28 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS joint_group_member (
 )`); } catch(e) {}
 
 // Migration: convert existing event_link rows to joint_group (one-time)
-try {
-    const existingLinks = db.prepare(`SELECT el.*, ea.name as event_name, ea.gender, ea.round_type, ea.competition_id as comp_a_id,
-            eb.competition_id as comp_b_id
-        FROM event_link el JOIN event ea ON ea.id=el.event_id_a JOIN event eb ON eb.id=el.event_id_b`).all();
-    const migrateStmt = db.prepare('SELECT COUNT(*) AS c FROM joint_group');
-    const groupCount = migrateStmt.get().c;
-    if (existingLinks.length > 0 && groupCount === 0) {
-        db.transaction(() => {
-            for (const link of existingLinks) {
-                const key = link.joint_scoreboard_key || `합동 ${link.event_name}`;
-                const gInfo = db.prepare('INSERT INTO joint_group (name, joint_scoreboard_key) VALUES (?, ?)').run(link.event_name, key);
-                db.prepare('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, 0)').run(gInfo.lastInsertRowid, link.event_id_a, link.comp_a_id);
-                db.prepare('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, 1)').run(gInfo.lastInsertRowid, link.event_id_b, link.comp_b_id);
-            }
-        })();
-        console.log(`[Migration] Converted ${existingLinks.length} event_links to joint_groups`);
-    }
-} catch(e) { console.error('[Migration] joint_group migration error:', e.message); }
+// (SQLite 부팅 전용 마이그레이션 — PG 백엔드에서는 별도 마이그레이션 스크립트로 처리)
+if (!db.isAsync) {
+    try {
+        const existingLinks = db.raw.prepare(`SELECT el.*, ea.name as event_name, ea.gender, ea.round_type, ea.competition_id as comp_a_id,
+                eb.competition_id as comp_b_id
+            FROM event_link el JOIN event ea ON ea.id=el.event_id_a JOIN event eb ON eb.id=el.event_id_b`).all();
+        const migrateStmt = db.raw.prepare('SELECT COUNT(*) AS c FROM joint_group');
+        const groupCount = migrateStmt.get().c;
+        if (existingLinks.length > 0 && groupCount === 0) {
+            const tx = db.raw.transaction(() => {
+                for (const link of existingLinks) {
+                    const key = link.joint_scoreboard_key || `합동 ${link.event_name}`;
+                    const gInfo = db.raw.prepare('INSERT INTO joint_group (name, joint_scoreboard_key) VALUES (?, ?)').run(link.event_name, key);
+                    db.raw.prepare('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, 0)').run(gInfo.lastInsertRowid, link.event_id_a, link.comp_a_id);
+                    db.raw.prepare('INSERT OR IGNORE INTO joint_group_member (joint_group_id, event_id, competition_id, sort_order) VALUES (?, ?, ?, 1)').run(gInfo.lastInsertRowid, link.event_id_b, link.comp_b_id);
+                }
+            });
+            tx();
+            console.log(`[Migration] Converted ${existingLinks.length} event_links to joint_groups`);
+        }
+    } catch(e) { console.error('[Migration] joint_group migration error:', e.message); }
+}
 
 // Pacing Light tables migration (ensure they exist in older DBs)
 try { db.exec(`CREATE TABLE IF NOT EXISTS pacing_config (
@@ -1007,18 +1015,18 @@ function waAssignLanesBulk(athletes, totalInHeat, isShortTrack, eventName) {
 }
 
 // WA Regulation Validator — check and auto-correct heat/lane assignments
-function validateWAHeatLanes(eventId, db) {
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(eventId);
+async function validateWAHeatLanes(eventId, db) {
+    const event = await db.get('SELECT * FROM event WHERE id=?', eventId);
     if (!event) return { valid: true, issues: [], corrections: 0 };
     const isShort = isShortTrackEvent(event.name);
-    const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(eventId);
+    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', eventId);
     const issues = [];
     let corrections = 0;
 
     for (const heat of heats) {
-        const entries = db.prepare(`SELECT he.*, ee.athlete_id, a.name, a.team
+        const entries = await db.all(`SELECT he.*, ee.athlete_id, a.name, a.team
             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-            JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number`).all(heat.id);
+            JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number`, heat.id);
 
         // Rule 1: Short track (≤800m) — max 8 athletes per heat
         if (isShort && entries.length > 8) {
@@ -1175,18 +1183,18 @@ function getJointScoreboardData(eventId, dbRef) {
 }
 
 // Auto-correct WA violations: reassign lanes using WA lane preference
-function autoCorrectWALanes(eventId, db) {
-    const event = db.prepare('SELECT * FROM event WHERE id=?').get(eventId);
+async function autoCorrectWALanes(eventId, db) {
+    const event = await db.get('SELECT * FROM event WHERE id=?', eventId);
     if (!event) return { corrections: 0, issues: [] };
     const isShort = isShortTrackEvent(event.name);
-    const heats = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(eventId);
+    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', eventId);
     let corrections = 0;
     const issues = [];
 
-    db.transaction(() => {
+    await db.transaction(async () => {
         for (const heat of heats) {
-            const entries = db.prepare(`SELECT he.*, ee.athlete_id FROM heat_entry he
-                JOIN event_entry ee ON ee.id=he.event_entry_id WHERE he.heat_id=? ORDER BY he.lane_number`).all(heat.id);
+            const entries = await db.all(`SELECT he.*, ee.athlete_id FROM heat_entry he
+                JOIN event_entry ee ON ee.id=he.event_entry_id WHERE he.heat_id=? ORDER BY he.lane_number`, heat.id);
 
             if (isShort) {
                 // Check for duplicate lanes or invalid lanes
@@ -1200,13 +1208,14 @@ function autoCorrectWALanes(eventId, db) {
                 if (needsReassign && entries.length <= 8) {
                     // Reassign using WA lane preference order with pattern-based shuffle
                     const lanes = waAssignLanesBulk(entries, entries.length, true, event.name);
-                    entries.forEach((e, idx) => {
+                    for (let idx = 0; idx < entries.length; idx++) {
+                        const e = entries[idx];
                         const newLane = lanes[idx];
                         if (newLane !== e.lane_number) {
-                            db.prepare('UPDATE heat_entry SET lane_number=? WHERE id=?').run(newLane, e.id);
+                            await db.run('UPDATE heat_entry SET lane_number=? WHERE id=?', newLane, e.id);
                             corrections++;
                         }
-                    });
+                    }
                     issues.push({ heat: heat.heat_number, type: 'corrected', message: `Heat ${heat.heat_number}: WA 레인 규정에 따라 자동 수정됨` });
                 }
             }
@@ -2079,16 +2088,17 @@ app.post('/api/combined-scores/sync', async (req, res) => {
     const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY id', parent_event_id);
     const parentEntries = await db.all('SELECT ee.id AS event_entry_id, ee.athlete_id FROM event_entry ee WHERE ee.event_id=?', parent_event_id);
     let syncCount = 0;
-    const upsert = db.prepare(`INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points)
-        VALUES (?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name`);
-    db.transaction(() => {
-        subEvents.forEach(async (subEvt, idx) => {
+    const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points)
+        VALUES (?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name`;
+    await db.transaction(async () => {
+        for (let idx = 0; idx < subEvents.length; idx++) {
+            const subEvt = subEvents[idx];
             const subOrder = idx + 1;
             const subHeat = await db.get('SELECT id FROM heat WHERE event_id=? LIMIT 1', subEvt.id);
-            if (!subHeat) return;
-            parentEntries.forEach(async pe => {
+            if (!subHeat) continue;
+            for (const pe of parentEntries) {
                 const subEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', subEvt.id, pe.athlete_id);
-                if (!subEntry) return;
+                if (!subEntry) continue;
                 let bestRecord = null;
                 let hasAttempts = false;
                 if (subEvt.category === 'track') {
@@ -2114,19 +2124,19 @@ app.post('/api/combined-scores/sync', async (req, res) => {
                     const waKeys = parentEvent.gender === 'M' ? DECATHLON_KEYS : HEPTATHLON_KEYS;
                     const waKey = waKeys[subOrder - 1];
                     const waPoints = waKey ? calcWAPoints(waKey, bestRecord) : 0;
-                    upsert.run(pe.event_entry_id, subEvt.name, subOrder, bestRecord, waPoints);
+                    await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, bestRecord, waPoints);
                     syncCount++;
                 } else if (hasAttempts) {
                     // NM (No Mark): athlete attempted but has no valid record → 0 points
-                    upsert.run(pe.event_entry_id, subEvt.name, subOrder, 0, 0);
+                    await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, 0, 0);
                     syncCount++;
                 } else {
                     // No record and no attempts → DELETE any existing combined_score for this sub-event
                     const delResult = await db.run('DELETE FROM combined_score WHERE event_entry_id=? AND sub_event_order=?', pe.event_entry_id, subOrder);
                     if (delResult.changes > 0) syncCount++;
                 }
-            });
-        });
+            }
+        }
     })();
     res.json({ success: true, synced: syncCount });
 });
@@ -6813,12 +6823,12 @@ process.on('unhandledRejection', (reason) => {
 });
 
 // WA Validation API endpoints
-app.get('/api/wa-validate/:id', (req, res) => {
-    const result = validateWAHeatLanes(parseInt(req.params.id), db);
+app.get('/api/wa-validate/:id', async (req, res) => {
+    const result = await validateWAHeatLanes(parseInt(req.params.id), db);
     res.json(result);
 });
-app.post('/api/wa-correct/:id', (req, res) => {
-    const result = autoCorrectWALanes(parseInt(req.params.id), db);
+app.post('/api/wa-correct/:id', async (req, res) => {
+    const result = await autoCorrectWALanes(parseInt(req.params.id), db);
     res.json(result);
 });
 
@@ -7247,19 +7257,19 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
             mergeStats.addedCount = allEntries.length;
         } else {
             // SMART MERGE: 행 단위 diff (과거 일차 보존)
-            const insert = db.prepare('INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            const updateStmt = db.prepare('UPDATE timetable SET section=?, note=?, sort_order=? WHERE id=?');
-            const delOne = db.prepare('DELETE FROM timetable WHERE id=?');
+            const INSERT_SQL = 'INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            const UPDATE_SQL = 'UPDATE timetable SET section=?, note=?, sort_order=? WHERE id=?';
+            const DELETE_ONE_SQL = 'DELETE FROM timetable WHERE id=?';
 
             const tx = db.transaction(async () => {
-                effectiveDays.forEach(async day => {
+                for (const day of effectiveDays) {
                     const existingRows = await db.all('SELECT * FROM timetable WHERE competition_id=? AND day=?', parseInt(competition_id), day);
 
                     // Safety: skip if past day
                     const sampleRow = existingRows[0];
                     if (sampleRow && sampleRow.scheduled_date && sampleRow.scheduled_date < todayStr) {
                         mergeStats.preservedCount += existingRows.length;
-                        return;
+                        continue;
                     }
 
                     const buildKey = (r) => `${r.time||''}|${(r.event_name||'').trim()}|${(r.category||'').trim()}|${(r.round||'').trim()}`;
@@ -7273,27 +7283,27 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
                     const newEntries = filteredEntries.filter(e => e.day === day);
                     const matchedIds = new Set();
 
-                    newEntries.forEach(e => {
+                    for (const e of newEntries) {
                         const k = buildKey(e);
                         const candidates = existingByKey.get(k);
                         if (candidates && candidates.length > 0) {
                             const target = candidates.shift();
                             matchedIds.add(target.id);
-                            updateStmt.run(e.section, e.note || target.note, e.sort_order, target.id);
+                            await db.run(UPDATE_SQL, e.section, e.note || target.note, e.sort_order, target.id);
                             mergeStats.updatedCount++;
                         } else {
-                            insert.run(e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order);
+                            await db.run(INSERT_SQL, e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order);
                             mergeStats.addedCount++;
                         }
-                    });
+                    }
 
-                    existingRows.forEach(r => {
+                    for (const r of existingRows) {
                         if (!matchedIds.has(r.id)) {
-                            delOne.run(r.id);
+                            await db.run(DELETE_ONE_SQL, r.id);
                             mergeStats.deletedCount++;
                         }
-                    });
-                });
+                    }
+                }
 
                 if (skippedPastDays.length > 0) {
                     const cnt = await db.get(`SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND day IN (${skippedPastDays.map(()=>'?').join(',')})`, parseInt(competition_id), ...skippedPastDays);
@@ -12224,25 +12234,25 @@ app.delete('/api/display/roster/:compId/:day', async (req, res) => {
 //   2) 각각에 대해 같은 (name, gender, round_type)을 가지면서 division이 채워진 동일 종목이 있는지 확인
 //   3) 흡수 가능: 미지정 종목에 연결된 timetable.event_id, display_roster.event_id를 흡수 대상에 재연결 후 미지정 종목 삭제
 //   4) 흡수 불가능 (동일 종목 없음): 단순 삭제 (timetable.event_id NULL로 끊고 display_roster도 NULL로 끊음)
-function _findUndefinedEvents(compId) {
-    return db.prepare(`
+async function _findUndefinedEvents(compId) {
+    return await db.all(`
         SELECT id, name, gender, division, round_type, category, sort_order
         FROM event
         WHERE competition_id=?
           AND (division IS NULL OR division='')
           AND gender != 'X'
           AND parent_event_id IS NULL
-    `).all(compId);
+    `, compId);
 }
-function _planCleanupUndefined(compId) {
-    const undefinedEvents = _findUndefinedEvents(compId);
-    const allEvents = db.prepare(`
+async function _planCleanupUndefined(compId) {
+    const undefinedEvents = await _findUndefinedEvents(compId);
+    const allEvents = await db.all(`
         SELECT id, name, gender, division, round_type
         FROM event
         WHERE competition_id=? AND parent_event_id IS NULL
-    `).all(compId);
+    `, compId);
     const plan = [];
-    undefinedEvents.forEach(u => {
+    for (const u of undefinedEvents) {
         // 같은 name + gender + round_type, division이 채워진 후보 찾기
         const candidates = allEvents.filter(e =>
             e.id !== u.id &&
@@ -12258,8 +12268,10 @@ function _planCleanupUndefined(compId) {
             const bi = order.indexOf(b.division);
             return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
         });
-        const ttCnt = db.prepare('SELECT COUNT(*) AS c FROM timetable WHERE event_id=?').get(u.id).c;
-        const rosterCnt = db.prepare('SELECT COUNT(*) AS c FROM display_roster WHERE event_id=?').get(u.id).c;
+        const ttRow = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE event_id=?', u.id);
+        const rosterRow = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE event_id=?', u.id);
+        const ttCnt = ttRow ? ttRow.c : 0;
+        const rosterCnt = rosterRow ? rosterRow.c : 0;
         if (candidates.length === 1) {
             // 후보가 1개뿐이면 자동 흡수
             plan.push({
@@ -12290,13 +12302,13 @@ function _planCleanupUndefined(compId) {
                 note: `흡수 대상 없음 → 단순 삭제`
             });
         }
-    });
+    }
     return plan;
 }
-app.get('/api/display/cleanup-undefined/:compId', (req, res) => {
+app.get('/api/display/cleanup-undefined/:compId', async (req, res) => {
     const { admin_key } = req.query;
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    const plan = _planCleanupUndefined(parseInt(req.params.compId));
+    const plan = await _planCleanupUndefined(parseInt(req.params.compId));
     res.json({
         success: true,
         total: plan.length,
@@ -12306,15 +12318,15 @@ app.get('/api/display/cleanup-undefined/:compId', (req, res) => {
         plan
     });
 });
-app.post('/api/display/cleanup-undefined/:compId', (req, res) => {
+app.post('/api/display/cleanup-undefined/:compId', async (req, res) => {
     const { admin_key, mode } = req.body;
     // mode: 'auto' (merge+delete만 자동 처리, orphan 제외) | 'force_delete' (orphan도 삭제)
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
     const compId = parseInt(req.params.compId);
-    const plan = _planCleanupUndefined(compId);
+    const plan = await _planCleanupUndefined(compId);
     let merged = 0, deleted = 0, skipped = 0;
-    const tx = db.transaction(() => {
-        plan.forEach(async p => {
+    await db.transaction(async () => {
+        for (const p of plan) {
             if (p.action === 'merge') {
                 // timetable / display_roster 의 event_id 재연결
                 await db.run('UPDATE timetable SET event_id=? WHERE event_id=?', p.target_event.id, p.undefined_event.id);
@@ -12336,9 +12348,8 @@ app.post('/api/display/cleanup-undefined/:compId', (req, res) => {
                     skipped++;
                 }
             }
-        });
-    });
-    tx();
+        }
+    })();
     opLog(`미지정 종목 정리 (병합 ${merged}, 삭제 ${deleted}, 스킵 ${skipped})`, 'admin', 'admin', compId);
     res.json({ success: true, merged, deleted, skipped, total: plan.length });
 });
