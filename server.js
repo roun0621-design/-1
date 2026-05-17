@@ -285,15 +285,17 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS event_link (
 // Add joint_scoreboard_key column to event_link (migration for existing DBs)
 try { db.exec(`ALTER TABLE event_link ADD COLUMN joint_scoreboard_key TEXT DEFAULT NULL`); } catch(e) {}
 // Backfill joint_scoreboard_key for existing links that don't have one
+// (SQLite 전용 — 상위 if (!db.isAsync) 블록 내부이므로 db.raw 사용)
 try {
-    const linksNoKey = db.prepare(`SELECT el.*, ea.name, ea.gender, ea.round_type, ea.competition_id
+    const linksNoKey = db.raw.prepare(`SELECT el.*, ea.name, ea.gender, ea.round_type, ea.competition_id
         FROM event_link el JOIN event ea ON ea.id = el.event_id_a
         WHERE el.joint_scoreboard_key IS NULL`).all();
+    const updStmt = db.raw.prepare('UPDATE event_link SET joint_scoreboard_key=? WHERE id=?');
     for (const link of linksNoKey) {
         const genderLabel = { M: '남자', F: '여자', X: '혼성' }[link.gender] || '';
         const roundLabel = { preliminary: '예선', semifinal: '준결승', final: '결승' }[link.round_type] || link.round_type;
         const key = `합동 ${genderLabel} ${link.name} ${roundLabel}`;
-        db.prepare('UPDATE event_link SET joint_scoreboard_key=? WHERE id=?').run(key, link.id);
+        updStmt.run(key, link.id);
     }
     if (linksNoKey.length > 0) console.log(`[Migration] Backfilled ${linksNoKey.length} joint scoreboard keys`);
 } catch(e) { console.error('[Migration] joint key backfill error:', e.message); }
@@ -381,9 +383,9 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS federation_list (
 try { db.exec(`ALTER TABLE federation_list ADD COLUMN gender_label_m TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE federation_list ADD COLUMN gender_label_f TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE federation_list ADD COLUMN gender_label_x TEXT DEFAULT ''`); } catch(e) {}
-// Seed default federations if table is empty
+// Seed default federations if table is empty (SQLite 전용 — 상위 가드 블록 내부)
 try {
-    const fedCount = db.prepare('SELECT COUNT(*) as cnt FROM federation_list').get().cnt;
+    const fedCount = db.raw.prepare('SELECT COUNT(*) as cnt FROM federation_list').get().cnt;
     if (fedCount === 0) {
         db.exec(`INSERT INTO federation_list (code, name, badge_bg, badge_color, sort_order) VALUES
             ('KTFL', '한국실업육상연맹', '#e3f2fd', '#1565c0', 1),
@@ -617,6 +619,18 @@ function isOperationKey(key) {
     if (key === ACCESS_KEYS.operation) return true;
     if (bcrypt.compareSync(key, ACCESS_KEYS.adminHash)) return true;
     return _opKeyCache.has(key);
+}
+
+// ─── ORDER BY bib_number 헬퍼 (PG/SQLite 호환) ─────────────────────────
+// bib_number 는 TEXT 컬럼이고 "100.0", "" 등 비정상 값을 포함할 수 있음.
+// SQLite의 CAST(... AS INTEGER) 는 lenient하지만 PG는 strict → invalid syntax.
+// 컬럼명만 받아서 백엔드별 안전한 ORDER BY 식을 반환.
+function orderByBibSql(colExpr = 'bib_number') {
+    if (db.isAsync) {
+        // PG: 비숫자 문자 제거 후 NUMERIC 캐스팅, NULL/빈문자는 마지막
+        return `CAST(NULLIF(regexp_replace(COALESCE(${colExpr},''), '[^0-9.]', '', 'g'), '') AS NUMERIC) NULLS LAST`;
+    }
+    return `CAST(${colExpr} AS INTEGER)`;
 }
 function isAdminKey(key) {
     if (!key) return false;
@@ -1615,8 +1629,10 @@ app.post('/api/home-popups', async (req, res) => {
         const info = await db.run(`INSERT INTO home_popup (popup_type, title, subtitle, intro_text, bottom_btn_text, bottom_btn_desc, bottom_btn_link, bottom_btn_active, is_active, show_from, show_until, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, popup_type || 'public', title || '', subtitle || '', intro_text || '', bottom_btn_text || '', bottom_btn_desc || '', bottom_btn_link || '', bottom_btn_active ?? 1, is_active ?? 1, show_from || null, show_until || null, sort_order ?? maxOrder + 1);
         const popupId = info.lastInsertRowid;
         if (Array.isArray(sections)) {
-            const stmt = db.prepare('INSERT INTO home_popup_section (popup_id, title, content, link_btn_text, link_btn_url, sort_order, is_active) VALUES (?,?,?,?,?,?,?)');
-            sections.forEach((s, i) => stmt.run(popupId, s.title || '', s.content || '', s.link_btn_text || '', s.link_btn_url || '', s.sort_order ?? i, s.is_active ?? 1));
+            for (let i = 0; i < sections.length; i++) {
+                const s = sections[i];
+                await db.run('INSERT INTO home_popup_section (popup_id, title, content, link_btn_text, link_btn_url, sort_order, is_active) VALUES (?,?,?,?,?,?,?)', popupId, s.title || '', s.content || '', s.link_btn_text || '', s.link_btn_url || '', s.sort_order ?? i, s.is_active ?? 1);
+            }
         }
         opLog('홈 팝업 생성', 'admin', 'admin');
         res.json({ id: popupId, success: true });
@@ -1643,8 +1659,10 @@ app.put('/api/home-popups/:id', async (req, res) => {
         // Replace sections if provided
         if (Array.isArray(sections)) {
             await db.run('DELETE FROM home_popup_section WHERE popup_id=?', old.id);
-            const stmt = db.prepare('INSERT INTO home_popup_section (popup_id, title, content, link_btn_text, link_btn_url, sort_order, is_active) VALUES (?,?,?,?,?,?,?)');
-            sections.forEach((s, i) => stmt.run(old.id, s.title || '', s.content || '', s.link_btn_text || '', s.link_btn_url || '', s.sort_order ?? i, s.is_active ?? 1));
+            for (let i = 0; i < sections.length; i++) {
+                const s = sections[i];
+                await db.run('INSERT INTO home_popup_section (popup_id, title, content, link_btn_text, link_btn_url, sort_order, is_active) VALUES (?,?,?,?,?,?,?)', old.id, s.title || '', s.content || '', s.link_btn_text || '', s.link_btn_url || '', s.sort_order ?? i, s.is_active ?? 1);
+            }
         }
         opLog('홈 팝업 수정', 'admin', 'admin');
         res.json({ success: true });
@@ -1712,7 +1730,7 @@ app.get('/api/events/:id/entries', async (req, res) => {
         SELECT ee.id AS event_entry_id, ee.status, ee.event_id,
                a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender
         FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id
-        WHERE ee.event_id=? ORDER BY CAST(a.bib_number AS INTEGER)
+        WHERE ee.event_id=? ORDER BY ${orderByBibSql('a.bib_number')}
     `, req.params.id));
 });
 
@@ -2536,7 +2554,6 @@ app.post('/api/events/:id/callroom-complete', async (req, res) => {
     const targetHeats = heat_id
         ? [await db.get('SELECT * FROM heat WHERE id=?', parseInt(heat_id))]
         : await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    const insertDNS = db.prepare(`INSERT OR IGNORE INTO result (heat_id, event_entry_id, attempt_number, status_code) VALUES (?, ?, NULL, 'DNS')`);
     for (const h of targetHeats) {
         if (!h) continue;
         const noShowEntries = await db.all(`
@@ -2548,7 +2565,7 @@ app.post('/api/events/:id/callroom-complete', async (req, res) => {
             // Only insert if no result row exists yet for this entry in this heat
             const existing = await db.get('SELECT id FROM result WHERE heat_id=? AND event_entry_id=? LIMIT 1', h.id, ns.event_entry_id);
             if (!existing) {
-                insertDNS.run(h.id, ns.event_entry_id);
+                await db.run(`INSERT OR IGNORE INTO result (heat_id, event_entry_id, attempt_number, status_code) VALUES (?, ?, NULL, 'DNS')`, h.id, ns.event_entry_id);
                 dnsCount++;
             }
         }
@@ -2798,10 +2815,9 @@ app.post('/api/events/:id/create-semifinal', async (req, res) => {
 
     let semiEventId;
     await db.transaction(async () => {
-        const upsertQ = db.prepare(`INSERT INTO qualification_selection (event_id,event_entry_id,selected,approved,approved_by,qualification_type) VALUES (?,?,1,1,'admin',?)
-            ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=1,approved=1,qualification_type=excluded.qualification_type`);
         for (const sel of qualifiedSels) {
-            upsertQ.run(event.id, sel.event_entry_id, sel.qualification_type || '');
+            await db.run(`INSERT INTO qualification_selection (event_id,event_entry_id,selected,approved,approved_by,qualification_type) VALUES (?,?,1,1,'admin',?)
+                ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=1,approved=1,qualification_type=excluded.qualification_type`, event.id, sel.event_entry_id, sel.qualification_type || '');
         }
         const info = await db.run(`INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,'semifinal','heats_generated')`, event.competition_id, event.name, event.category, event.gender);
         semiEventId = info.lastInsertRowid;
@@ -2870,13 +2886,19 @@ app.get('/api/events/:id/sub-events', async (req, res) => {
     if (!parent) return res.status(404).json({ error: 'Event not found' });
     if (parent.category !== 'combined') return res.status(400).json({ error: '혼성경기(combined)만 세부종목을 가질 수 있습니다.' });
     const subs = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', parent.id);
-    // Enrich with entry_count and heat_count
-    const stmtEntry = db.prepare('SELECT COUNT(*) as cnt FROM event_entry WHERE event_id=?');
-    const stmtHeat = db.prepare('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?');
-    subs.forEach(s => {
-        s.entry_count = stmtEntry.get(s.id).cnt;
-        s.heat_count = stmtHeat.get(s.id).cnt;
-    });
+    // Enrich with entry_count and heat_count — PG-safe batch query
+    if (subs.length > 0) {
+        const ids = subs.map(s => s.id);
+        const ph = ids.map(() => '?').join(',');
+        const entryCounts = await db.all(`SELECT event_id, COUNT(*) as cnt FROM event_entry WHERE event_id IN (${ph}) GROUP BY event_id`, ...ids);
+        const heatCounts = await db.all(`SELECT event_id, COUNT(*) as cnt FROM heat WHERE event_id IN (${ph}) GROUP BY event_id`, ...ids);
+        const entryMap = new Map(entryCounts.map(c => [c.event_id, Number(c.cnt)]));
+        const heatMap = new Map(heatCounts.map(c => [c.event_id, Number(c.cnt)]));
+        subs.forEach(s => {
+            s.entry_count = entryMap.get(s.id) || 0;
+            s.heat_count = heatMap.get(s.id) || 0;
+        });
+    }
     res.json(subs);
 });
 
@@ -3253,12 +3275,15 @@ app.delete('/api/relay-members', async (req, res) => {
     res.json({ success: true });
 });
 
-app.put('/api/relay-members/order', (req, res) => {
+app.put('/api/relay-members/order', async (req, res) => {
     const { event_entry_id, members } = req.body;
     if (!event_entry_id || !Array.isArray(members)) return res.status(400).json({ error: 'event_entry_id and members array required' });
     try {
-        const stmt = db.prepare('UPDATE relay_member SET leg_order=? WHERE event_entry_id=? AND athlete_id=?');
-        members.forEach(m => stmt.run(m.leg_order, event_entry_id, m.athlete_id));
+        await db.transaction(async () => {
+            for (const m of members) {
+                await db.run('UPDATE relay_member SET leg_order=? WHERE event_entry_id=? AND athlete_id=?', m.leg_order, event_entry_id, m.athlete_id);
+            }
+        })();
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3436,7 +3461,7 @@ app.patch('/api/admin/operation-keys/:id', async (req, res) => {
 app.get('/api/athletes', async (req, res) => {
     const compId = req.query.competition_id;
     if (!compId) return res.status(400).json({ error: 'competition_id 필요' });
-    res.json(await db.all('SELECT * FROM athlete WHERE competition_id=? ORDER BY CAST(bib_number AS INTEGER)', compId));
+    res.json(await db.all(`SELECT * FROM athlete WHERE competition_id=? ORDER BY ${orderByBibSql()}, id`, compId));
 });
 
 // Athlete entries — list events an athlete is entered in
@@ -3465,8 +3490,8 @@ app.get('/api/athletes/:id/entries', async (req, res) => {
 app.get('/api/admin/athletes', async (req, res) => {
     if (!isAdminKey(req.query.key) && !isOperationKey(req.query.key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const compId = req.query.competition_id;
-    if (compId) return res.json(await db.all('SELECT * FROM athlete WHERE competition_id=? ORDER BY CAST(bib_number AS INTEGER)', compId));
-    res.json(await db.all('SELECT * FROM athlete ORDER BY CAST(bib_number AS INTEGER)'));
+    if (compId) return res.json(await db.all(`SELECT * FROM athlete WHERE competition_id=? ORDER BY ${orderByBibSql()}`, compId));
+    res.json(await db.all(`SELECT * FROM athlete ORDER BY ${orderByBibSql()}`));
 });
 app.post('/api/admin/athletes', async (req, res) => {
     const { admin_key, competition_id, name, bib_number, team, gender, barcode } = req.body;
@@ -4119,7 +4144,6 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 }
             });
 
-            const insertEvent = db.prepare('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)');
             for (const [key, info] of neededIndividual) {
                 const ck = `${info.name}|${info.category}|${info.gender}`;
                 if (!eventCache.has(ck)) {
@@ -4129,7 +4153,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     const ALWAYS_FINAL_EVENTS = ['5000m','5000mW','10,000m','10,000mW','10000m','3000mSC','3000m장애물','마라톤','하프마라톤','20KmW','35kmW','10K','5K'];
                     const isFinalOnly = ALWAYS_FINAL_CATEGORIES.includes(info.category) || ALWAYS_FINAL_EVENTS.some(e => info.name === e || info.name.startsWith(e + ' '));
                     const rt = (!isFinalOnly && info.athletes.length > heatSize) ? 'preliminary' : 'final';
-                    const r = insertEvent.run(competition_id, info.name, info.category, info.gender, rt, 'heats_generated');
+                    const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)', competition_id, info.name, info.category, info.gender, rt, 'heats_generated');
                     eventCache.set(ck, r.lastInsertRowid);
                     stats.events++;
                 }
@@ -4138,7 +4162,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 const [relayName, gender] = key.split('|');
                 const ck = `${relayName}|relay|${gender}`;
                 if (!eventCache.has(ck)) {
-                    const r = insertEvent.run(competition_id, relayName, 'relay', gender, 'final', 'heats_generated');
+                    const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)', competition_id, relayName, 'relay', gender, 'final', 'heats_generated');
                     eventCache.set(ck, r.lastInsertRowid);
                     stats.events++;
                 }
@@ -4176,10 +4200,6 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
             const athleteCache = new Map();
             const athRows = await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id);
             for (const a of athRows) athleteCache.set(`${a.name}|${a.team}|${a.gender}`, a.id);
-            const insertAthlete = db.prepare('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)');
-            const updateAthleteBib = db.prepare('UPDATE athlete SET bib_number=? WHERE id=? AND (bib_number IS NULL OR bib_number = ?)');
-            const checkBibConflict = db.prepare('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=? AND id!=?');
-            const updateAthleteBarcode = db.prepare('UPDATE athlete SET barcode=? WHERE id=? AND (barcode IS NULL OR barcode = ?)');
             const ensureAthlete = async (name, team, gender) => {
                 const key = `${name}|${team}|${gender}`;
                 if (athleteCache.has(key)) {
@@ -4189,35 +4209,34 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     const bc = _barcodeMap.get(key) || null;
                     if (bib) {
                         const existingAth = await db.get('SELECT gender FROM athlete WHERE id=?', existingId);
-                        const bibConflict = checkBibConflict.get(competition_id, bib, existingAth?.gender || 'M', existingId);
-                        if (!bibConflict) updateAthleteBib.run(bib, existingId, '');
+                        const bibConflict = await db.get('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=? AND id!=?', competition_id, bib, existingAth?.gender || 'M', existingId);
+                        if (!bibConflict) await db.run('UPDATE athlete SET bib_number=? WHERE id=? AND (bib_number IS NULL OR bib_number = ?)', bib, existingId, '');
                     }
-                    if (bc) updateAthleteBarcode.run(bc, existingId, bc);
+                    if (bc) await db.run('UPDATE athlete SET barcode=? WHERE id=? AND (barcode IS NULL OR barcode = ?)', bc, existingId, bc);
                     return existingId;
                 }
                 const bib = _bibMap.get(key) || null;
                 const bc = _barcodeMap.get(key) || '';
-                const r = insertAthlete.run(competition_id, name, bib, team, bc, gender);
+                const r = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', competition_id, name, bib, team, bc, gender);
                 athleteCache.set(key, r.lastInsertRowid);
                 stats.athletes++;
                 return r.lastInsertRowid;
             };
 
-            const insertEntry = db.prepare("INSERT OR IGNORE INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')");
-            const insertHeat = db.prepare('INSERT INTO heat (event_id,heat_number) VALUES (?,?)');
-            const insertHeatEntry = db.prepare('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)');
-            const countHeats = db.prepare('SELECT COUNT(*) AS c FROM heat WHERE event_id=?');
-            const getEntryId = db.prepare('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?');
-
             for (const [key, info] of neededIndividual) {
                 const eventId = eventCache.get(`${info.name}|${info.category}|${info.gender}`);
                 if (!eventId) continue;
-                if (countHeats.get(eventId).c > 0) continue;
+                const hcRow = await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', eventId);
+                if (hcRow && hcRow.c > 0) continue;
                 const entryIds = [];
                 for (const ath of info.athletes) {
-                    const aid = ensureAthlete(ath.name, ath.team, ath.gender);
-                    const er = insertEntry.run(eventId, aid);
-                    const eid = er.lastInsertRowid || getEntryId.get(eventId, aid)?.id;
+                    const aid = await ensureAthlete(ath.name, ath.team, ath.gender);
+                    const er = await db.run("INSERT OR IGNORE INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", eventId, aid);
+                    let eid = er.lastInsertRowid;
+                    if (!eid) {
+                        const existing = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', eventId, aid);
+                        eid = existing?.id;
+                    }
                     if (eid) { entryIds.push(eid); stats.entries++; }
                 }
                 // Only short track events (≤800m) split into multiple heats (max 8 per heat)
@@ -4226,9 +4245,12 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 const effectiveHeatSize = isShort ? heatSize : entryIds.length;
                 const heatCount = isShort ? Math.ceil(entryIds.length / heatSize) : 1;
                 for (let h = 0; h < heatCount; h++) {
-                    const hr = insertHeat.run(eventId, h + 1);
+                    const hr = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', eventId, h + 1);
                     stats.heats++;
-                    entryIds.slice(h * effectiveHeatSize, (h + 1) * effectiveHeatSize).forEach((eid, lane) => insertHeatEntry.run(hr.lastInsertRowid, eid, lane + 1));
+                    const slice = entryIds.slice(h * effectiveHeatSize, (h + 1) * effectiveHeatSize);
+                    for (let lane = 0; lane < slice.length; lane++) {
+                        await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', hr.lastInsertRowid, slice[lane], lane + 1);
+                    }
                 }
             }
 
@@ -4256,7 +4278,6 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 {order:6, name:'창던지기', category:'field_distance'},
                 {order:7, name:'800m', category:'track'},
             ];
-            const insertSubEvent = db.prepare('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)');
             for (const [key, info] of neededIndividual) {
                 if (info.category !== 'combined') continue;
                 const parentId = eventCache.get(`${info.name}|${info.category}|${info.gender}`);
@@ -4268,15 +4289,17 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 const prefix = info.name === '10종경기' ? '[10종]' : '[7종]';
                 for (const sub of subs) {
                     const subName = `${prefix} ${sub.name}`;
-                    const subR = insertSubEvent.run(competition_id, subName, sub.category, info.gender, 'final', 'heats_generated', parentId, sub.order);
+                    const subR = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)', competition_id, subName, sub.category, info.gender, 'final', 'heats_generated', parentId, sub.order);
                     const subEventId = subR.lastInsertRowid;
                     const parentEntries = await db.all('SELECT ee.id, ee.athlete_id FROM event_entry ee WHERE ee.event_id=?', parentId);
                     for (const pe of parentEntries) {
-                        insertEntry.run(subEventId, pe.athlete_id);
+                        await db.run("INSERT OR IGNORE INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", subEventId, pe.athlete_id);
                     }
-                    const subHeatR = insertHeat.run(subEventId, 1);
+                    const subHeatR = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', subEventId, 1);
                     const subEntryIds = await db.all('SELECT id FROM event_entry WHERE event_id=?', subEventId);
-                    subEntryIds.forEach((se, lane) => insertHeatEntry.run(subHeatR.lastInsertRowid, se.id, lane + 1));
+                    for (let lane = 0; lane < subEntryIds.length; lane++) {
+                        await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', subHeatR.lastInsertRowid, subEntryIds[lane].id, lane + 1);
+                    }
                 }
                 console.log(`[Combined] Created ${subs.length} sub-events for ${info.name} (${info.gender}), parent_id=${parentId}`);
             }
@@ -4284,7 +4307,6 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
             // ============================================================
             // RELAY: Create team entries + store relay members
             // ============================================================
-            const insertRelayMember = db.prepare('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)');
             for (const [key, teamMap] of relayParticipation) {
                 const [relayName, gender] = key.split('|');
                 const eventId = eventCache.get(`${relayName}|relay|${gender}`);
@@ -4295,9 +4317,13 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 for (const [teamName, members] of teamMap) {
                     // Create a "team athlete" record: name=teamName, bib=teamName, team=teamName
                     const rGender = gender === 'X' ? 'M' : gender;
-                    const aid = ensureAthlete(teamName, teamName, rGender);
-                    const er = insertEntry.run(eventId, aid);
-                    const eid = er.lastInsertRowid || getEntryId.get(eventId, aid)?.id;
+                    const aid = await ensureAthlete(teamName, teamName, rGender);
+                    const er = await db.run("INSERT OR IGNORE INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", eventId, aid);
+                    let eid = er.lastInsertRowid;
+                    if (!eid) {
+                        const existing = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', eventId, aid);
+                        eid = existing?.id;
+                    }
                     if (eid) {
                         entryIds.push(eid);
                         stats.entries++;
@@ -4307,18 +4333,21 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                         let legOrder = 1;
                         for (const member of members) {
                             const memberGender = member.gender || rGender;
-                            const memberAid = ensureAthlete(member.name, teamName, memberGender);
+                            const memberAid = await ensureAthlete(member.name, teamName, memberGender);
                             if (memberAid) {
-                                insertRelayMember.run(eid, memberAid, legOrder++);
+                                await db.run('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)', eid, memberAid, legOrder++);
                             }
                         }
                     }
                 }
                 const heatCount = Math.ceil(entryIds.length / 8);
                 for (let h = 0; h < heatCount; h++) {
-                    const hr = insertHeat.run(eventId, h + 1);
+                    const hr = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', eventId, h + 1);
                     stats.heats++;
-                    entryIds.slice(h * 8, (h + 1) * 8).forEach((eid, lane) => insertHeatEntry.run(hr.lastInsertRowid, eid, lane + 1));
+                    const slice = entryIds.slice(h * 8, (h + 1) * 8);
+                    for (let lane = 0; lane < slice.length; lane++) {
+                        await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', hr.lastInsertRowid, slice[lane], lane + 1);
+                    }
                 }
             }
 
@@ -4360,18 +4389,14 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                             heatAssign.get(key).push({ heat, lane, bib, name });
                         });
 
-                        // 기존 heat/heat_entry 삭제 후 조편성대로 재배정
-                        const deleteHeatEntries = db.prepare('DELETE FROM heat_entry WHERE heat_id=?');
-                        const deleteHeats = db.prepare('DELETE FROM heat WHERE event_id=?');
-                        
                         for (const [evtKey, assignments] of heatAssign) {
                             const eventId = eventCache.get(evtKey);
                             if (!eventId) continue;
                             
                             // 기존 heats 삭제
                             const existingHeats = await db.all('SELECT id FROM heat WHERE event_id=?', eventId);
-                            for (const eh of existingHeats) { deleteHeatEntries.run(eh.id); }
-                            deleteHeats.run(eventId);
+                            for (const eh of existingHeats) { await db.run('DELETE FROM heat_entry WHERE heat_id=?', eh.id); }
+                            await db.run('DELETE FROM heat WHERE event_id=?', eventId);
                             
                             // 조별 그룹핑
                             const heatGroups = new Map();
@@ -4382,7 +4407,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                             
                             // 조 생성 및 선수 배정
                             for (const [heatNum, entries] of [...heatGroups].sort((a,b) => a[0] - b[0])) {
-                                const hr = insertHeat.run(eventId, heatNum);
+                                const hr = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', eventId, heatNum);
                                 const heatId = hr.lastInsertRowid;
                                 for (const ent of entries) {
                                     // BIB 또는 이름으로 선수 찾기
@@ -4398,7 +4423,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                                     const entry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', eventId, athlete.id);
                                     if (!entry) continue;
                                     
-                                    insertHeatEntry.run(heatId, entry.id, ent.lane);
+                                    await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', heatId, entry.id, ent.lane);
                                 }
                             }
                         }
@@ -4460,10 +4485,8 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
                 await db.run('DELETE FROM athlete WHERE competition_id=?', competition_id);
             }
             const existingCache = new Map();
-            await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id)
-                .forEach(a => existingCache.set(`${a.name}|${a.team}|${a.gender}`, a));
-
-            const insertAth = db.prepare('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)');
+            const existingRows = await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id);
+            existingRows.forEach(a => existingCache.set(`${a.name}|${a.team}|${a.gender}`, a));
 
             for (const row of dataRows) {
                 let name, team, genderRaw, bib, barcode;
@@ -4502,7 +4525,7 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
                     }
                     stats.skipped++; continue;
                 }
-                insertAth.run(competition_id, name, bib, team, barcode, gender);
+                await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', competition_id, name, bib, team, barcode, gender);
                 existingCache.set(key, { id: null, bib_number: bib, barcode });
                 stats.added++;
             }
@@ -5123,7 +5146,6 @@ app.post('/api/heat-assignment/create-events', express.json(), async (req, res) 
     }
 
     const created = [];
-    const stmt = db.prepare('INSERT INTO event (competition_id, name, gender, category, round_type, round_status, sort_order) VALUES (?,?,?,?,?,?,?)');
     const maxSortRow = await db.get('SELECT MAX(sort_order) as m FROM event WHERE competition_id=?', competition_id);
     const maxSort = (maxSortRow && maxSortRow.m) || 0;
 
@@ -5136,7 +5158,7 @@ app.post('/api/heat-assignment/create-events', express.json(), async (req, res) 
         if (existing) continue;
 
         const category = detectCategory(eventName);
-        const info = stmt.run(competition_id, eventName, gender, category, round || 'final', 'created', sortOrder++);
+        const info = await db.run('INSERT INTO event (competition_id, name, gender, category, round_type, round_status, sort_order) VALUES (?,?,?,?,?,?,?)', competition_id, eventName, gender, category, round || 'final', 'created', sortOrder++);
         created.push({ id: info.lastInsertRowid, name: eventName, gender, category, round: round || 'final' });
     }
 
@@ -5181,12 +5203,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                     }
                 });
             
-            const insertAthlete = db.prepare('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)');
-            const updateAthleteBibHA = db.prepare('UPDATE athlete SET bib_number=? WHERE id=? AND bib_number IS NULL');
-            const insertEntry = db.prepare("INSERT OR IGNORE INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')");
-            const getEntryId = db.prepare('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?');
-            const insertHeat = db.prepare('INSERT INTO heat (event_id,heat_number,scoreboard_key) VALUES (?,?,?)');
-            const insertHeatEntry = db.prepare('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number,sub_group) VALUES (?,?,?,?)');
+            // (PG 호환: sync prepare 제거. 아래 루프에서 await db.run 사용.)
 
             // Build scoreboard_key: look up federation gender labels for this competition
             const comp = await db.get('SELECT * FROM competition WHERE id=?', competition_id);
@@ -5336,7 +5353,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                 for (const [origHeatNum, heatEntries] of [...heatGroups].sort((a, b) => a[0] - b[0])) {
                     const heatNum = heatRenumberMap.get(origHeatNum);
                     const sbKey = buildScoreboardKey(gender, eventName, round, heatNum, heatGroups.size);
-                    const heatRow = insertHeat.run(dbEvent.id, heatNum, sbKey);
+                    const heatRow = await db.run('INSERT INTO heat (event_id,heat_number,scoreboard_key) VALUES (?,?,?)', dbEvent.id, heatNum, sbKey);
                     const heatId = heatRow.lastInsertRowid;
 
                     for (const entry of heatEntries) {
@@ -5375,7 +5392,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                             // Do NOT auto-assign bib — keep NULL if not provided
                             const bc = ''; // barcode managed by user
                             const newGender = isRelay ? (effGender || 'M') : (effGender || 'M');
-                            const r = insertAthlete.run(competition_id, entry.name, newBib, entry.team || entry.name, bc, newGender);
+                            const r = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', competition_id, entry.name, newBib, entry.team || entry.name, bc, newGender);
                             athlete = { id: r.lastInsertRowid, name: entry.name, bib_number: newBib, team: entry.team || entry.name, gender: newGender };
                             athleteCache.set(`${entry.name}|${entry.team || entry.name}|${newGender}`, athlete);
                             athleteCache.set(`${entry.name}|${entry.team || entry.name}`, athlete);
@@ -5385,16 +5402,16 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                             const bibStr = String(entry.bib);
                             const bibTaken = await db.get('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=? AND id!=?', competition_id, bibStr, athlete.gender || effGender || 'M', athlete.id);
                             if (!bibTaken) {
-                                updateAthleteBibHA.run(bibStr, athlete.id);
+                                await db.run('UPDATE athlete SET bib_number=? WHERE id=? AND bib_number IS NULL', bibStr, athlete.id);
                                 athlete.bib_number = bibStr;
                             }
                         }
 
                         // Ensure event_entry exists
-                        const entryResult = insertEntry.run(dbEvent.id, athlete.id);
+                        const entryResult = await db.run("INSERT OR IGNORE INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", dbEvent.id, athlete.id);
                         let eventEntryId = entryResult.changes > 0 ? entryResult.lastInsertRowid : null;
                         if (!eventEntryId) {
-                            const existing = getEntryId.get(dbEvent.id, athlete.id);
+                            const existing = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', dbEvent.id, athlete.id);
                             eventEntryId = existing ? existing.id : null;
                         }
 
@@ -5402,7 +5419,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                             // Prevent UNIQUE constraint violation: skip if this event_entry is already in this heat
                             const alreadyInHeat = await db.get('SELECT id FROM heat_entry WHERE heat_id=? AND event_entry_id=?', heatId, eventEntryId);
                             if (!alreadyInHeat) {
-                                insertHeatEntry.run(heatId, eventEntryId, entry.lane, entry.group || null);
+                                await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number,sub_group) VALUES (?,?,?,?)', heatId, eventEntryId, entry.lane, entry.group || null);
                                 stats.entriesCreated++;
                             }
                         }
@@ -5428,7 +5445,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                         if (!targetHeatId) {
                             // No heat exists yet → create one
                             const sbKey = buildScoreboardKey(gender, eventName, round, 1, 1);
-                            const hRow = insertHeat.run(dbEvent.id, 1, sbKey);
+                            const hRow = await db.run('INSERT INTO heat (event_id,heat_number,scoreboard_key) VALUES (?,?,?)', dbEvent.id, 1, sbKey);
                             targetHeatId = hRow.lastInsertRowid;
                         }
                         
@@ -5438,10 +5455,10 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                         
                         for (const pEntry of parentEntries) {
                             // Ensure event_entry exists in sub-event
-                            const eeResult = insertEntry.run(dbEvent.id, pEntry.athlete_id);
+                            const eeResult = await db.run("INSERT OR IGNORE INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", dbEvent.id, pEntry.athlete_id);
                             let eeId = eeResult.changes > 0 ? eeResult.lastInsertRowid : null;
                             if (!eeId) {
-                                const existing = getEntryId.get(dbEvent.id, pEntry.athlete_id);
+                                const existing = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', dbEvent.id, pEntry.athlete_id);
                                 eeId = existing ? existing.id : null;
                             }
                             if (!eeId) continue;
@@ -5451,7 +5468,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                             
                             if (!alreadyAssigned) {
                                 // Not in heat → add to the target heat with next available lane
-                                insertHeatEntry.run(targetHeatId, eeId, nextLane++, null);
+                                await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number,sub_group) VALUES (?,?,?,?)', targetHeatId, eeId, nextLane++, null);
                                 stats.entriesCreated++;
                             }
                         }
@@ -5469,7 +5486,6 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                 //    and add them as relay_member if not already present.
                 if (isRelay) {
                     const allEventEntries = await db.all('SELECT ee.id, ee.athlete_id, a.name, a.team FROM event_entry ee JOIN athlete a ON ee.athlete_id=a.id WHERE ee.event_id=?', dbEvent.id);
-                    const insertRelayMem = db.prepare('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)');
                     
                     for (const teamEntry of allEventEntries) {
                         // "Team athlete" records: name === team (e.g., name='광주광역시청', team='광주광역시청')
@@ -5492,7 +5508,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                         // Add each athlete as relay member
                         let legOrder = 1;
                         for (const ath of teamAthletes) {
-                            insertRelayMem.run(teamEntry.id, ath.id, legOrder++);
+                            await db.run('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)', teamEntry.id, ath.id, legOrder++);
                         }
                         if (teamAthletes.length > 0) {
                             stats.relayMembersAdded = (stats.relayMembersAdded || 0) + teamAthletes.length;
@@ -7458,19 +7474,18 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
 
         // Auto-compute callroom_time (WA standard: 30 min before event time for track, 45 min for field)
         try {
-            const crStmt = db.prepare('UPDATE timetable SET callroom_time=? WHERE id=? AND callroom_time IS NULL');
             const needCR = await db.all('SELECT id, time, section FROM timetable WHERE competition_id=? AND callroom_time IS NULL', parseInt(competition_id));
-            needCR.forEach(tt => {
+            for (const tt of needCR) {
                 const m = (tt.time || '').match(/^(\d{1,2}):(\d{2})/);
-                if (!m) return;
+                if (!m) continue;
                 let h = parseInt(m[1]), min = parseInt(m[2]);
                 const offset = (tt.section === 'field') ? 45 : 30; // WA standard offsets
                 min -= offset;
                 while (min < 0) { min += 60; h -= 1; }
-                if (h < 0) return; // invalid
+                if (h < 0) continue; // invalid
                 const crTime = String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
-                crStmt.run(crTime, tt.id);
-            });
+                await db.run('UPDATE timetable SET callroom_time=? WHERE id=? AND callroom_time IS NULL', crTime, tt.id);
+            }
         } catch(crErr) {
             console.warn('Callroom time auto-compute warning:', crErr.message);
         }
@@ -7480,13 +7495,12 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
             const comp = await db.get('SELECT start_date FROM competition WHERE id=?', parseInt(competition_id));
             if (comp && comp.start_date) {
                 const startDate = new Date(comp.start_date + 'T00:00:00');
-                const updateDateStmt = db.prepare('UPDATE timetable SET scheduled_date=? WHERE competition_id=? AND day=? AND scheduled_date IS NULL');
-                effectiveDays.forEach(d => {
+                for (const d of effectiveDays) {
                     const dayDate = new Date(startDate);
                     dayDate.setDate(dayDate.getDate() + d - 1);
                     const dateStr = dayDate.toISOString().split('T')[0];
-                    updateDateStmt.run(dateStr, parseInt(competition_id), d);
-                });
+                    await db.run('UPDATE timetable SET scheduled_date=? WHERE competition_id=? AND day=? AND scheduled_date IS NULL', dateStr, parseInt(competition_id), d);
+                }
             }
         } catch(dateErr) {
             console.warn('Timetable date computation warning:', dateErr.message);
@@ -9034,7 +9048,7 @@ function formatTimeForPDF(s) {
 app.get('/api/documents/ad-card/:compId', async (req, res) => {
     const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
-    const athletes = await db.all('SELECT * FROM athlete WHERE competition_id=? ORDER BY CAST(bib_number AS INTEGER)', comp.id);
+    const athletes = await db.all(`SELECT * FROM athlete WHERE competition_id=? ORDER BY ${orderByBibSql()}`, comp.id);
     if (athletes.length === 0) return res.status(404).json({ error: 'No athletes found' });
     const tpl = (await getDocTemplate(comp.id)).ad_card;
 
@@ -12355,12 +12369,15 @@ app.get('/api/display/match-status/:compId', async (req, res) => {
 });
 
 // Manual match roster to event
-app.post('/api/display/roster/match', (req, res) => {
+app.post('/api/display/roster/match', async (req, res) => {
     const { admin_key, roster_ids, event_id } = req.body;
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
     if (!Array.isArray(roster_ids) || !event_id) return res.status(400).json({ error: 'roster_ids and event_id required' });
-    const stmt = db.prepare('UPDATE display_roster SET event_id=? WHERE id=?');
-    roster_ids.forEach(rid => stmt.run(event_id, rid));
+    await db.transaction(async () => {
+        for (const rid of roster_ids) {
+            await db.run('UPDATE display_roster SET event_id=? WHERE id=?', event_id, rid);
+        }
+    })();
     res.json({ success: true, count: roster_ids.length });
 });
 
