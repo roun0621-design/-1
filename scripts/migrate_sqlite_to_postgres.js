@@ -116,6 +116,28 @@ console.log('  ' + workTables.join(' → '));
 console.log();
 
 // ─────────────────────────────────────────
+// PG에 실제 존재하는 테이블만 필터링 (SQLite 측의 임시/테스트 테이블 제외)
+// ─────────────────────────────────────────
+async function filterTablesExistingInPg() {
+    const client = await pgPool.connect();
+    try {
+        const res = await client.query(`
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema='public' AND table_type='BASE TABLE'
+        `);
+        const pgTableSet = new Set(res.rows.map(r => r.table_name));
+        const skipped = workTables.filter(t => !pgTableSet.has(t));
+        workTables = workTables.filter(t => pgTableSet.has(t));
+        if (skipped.length) {
+            console.log(`⚠ PG 스키마에 없는 테이블 ${skipped.length}건 무시: ${skipped.join(', ')}`);
+            console.log();
+        }
+    } finally {
+        client.release();
+    }
+}
+
+// ─────────────────────────────────────────
 // 헬퍼: PG identity 컬럼 알아내기
 // ─────────────────────────────────────────
 async function getIdentityColumns(client, tableName) {
@@ -234,6 +256,9 @@ function normalizeValue(v) {
 // 메인
 // ─────────────────────────────────────────
 (async () => {
+    // 0) PG에 실제 존재하는 테이블만 남기기 (SQLite 측 임시/테스트 테이블 제외)
+    await filterTablesExistingInPg();
+
     const client = await pgPool.connect();
     const results = [];
     let errored = false;

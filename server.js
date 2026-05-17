@@ -81,9 +81,9 @@ function cleanOldBackups() {
 cron.schedule('0 18 * * *', () => performBackup('daily'));
 
 // 대회 진행 중 30분마다 백업 (활성 대회가 있을 때만)
-cron.schedule('*/30 * * * *', () => {
+cron.schedule('*/30 * * * *', async () => {
     try {
-        const active = db.prepare("SELECT COUNT(*) as c FROM competition WHERE status IN ('in_progress','active')").get();
+        const active = await db.get("SELECT COUNT(*) as c FROM competition WHERE status IN ('in_progress','active')");
         if (active && active.c > 0) performBackup('live');
     } catch(e) {}
 });
@@ -147,6 +147,12 @@ const db = getDb();
 
 // ---- Access Keys (persisted in DB via system_config table) ----
 // Ensure tables exist
+// ──────────────────────────────────────────────────────────────────
+// SQLite-only 부트 마이그레이션 블록 (Phase 2-G-9)
+// PG 모드(db.isAsync=true)에서는 db/schema.pg.sql 이 모든 테이블/컬럼/인덱스를
+// 이미 정의하므로 이 블록 전체를 건너뛴다. SQLite 부트 시에만 멱등 마이그레이션 실행.
+// ──────────────────────────────────────────────────────────────────
+if (!db.isAsync) {
 try { db.exec(`CREATE TABLE IF NOT EXISTS operation_key (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     judge_name TEXT NOT NULL,
@@ -519,6 +525,7 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS external_api_log (
 )`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_extlog_keyid ON external_api_log(api_key_id, created_at)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_extlog_created ON external_api_log(created_at)`); } catch(e) {}
+} // end if (!db.isAsync) — SQLite-only 부트 마이그레이션 블록 종료
 
 // ─── system_config 메모리 캐시 (Phase 2-G-2-extra-3b-1) ───────────────
 // 목적: getConfigKey/setConfigKey 를 sync 유지하되 DB query는 제거.
@@ -1685,8 +1692,14 @@ app.get('/api/events', async (req, res) => {
     q += ' ORDER BY sort_order, id';
     const events = await db.all(q, ...p);
     // Attach heat_count so dashboard can show roster button for events with heats
-    const hcStmt = db.prepare('SELECT COUNT(*) AS cnt FROM heat WHERE event_id=?');
-    events.forEach(e => { e.heat_count = hcStmt.get(e.id).cnt; });
+    // (PG-safe: 단일 GROUP BY 쿼리로 일괄 조회, 이전 N+1 sync prepare 제거)
+    if (events.length > 0) {
+        const ids = events.map(e => e.id);
+        const placeholders = ids.map(() => '?').join(',');
+        const counts = await db.all(`SELECT event_id, COUNT(*) AS cnt FROM heat WHERE event_id IN (${placeholders}) GROUP BY event_id`, ...ids);
+        const countMap = new Map(counts.map(c => [c.event_id, Number(c.cnt)]));
+        events.forEach(e => { e.heat_count = countMap.get(e.id) || 0; });
+    }
     res.json(events);
 });
 app.get('/api/events/:id', async (req, res) => {
@@ -6952,19 +6965,21 @@ app.post('/api/wa-correct/:id', async (req, res) => {
 // ============================================================
 // DOCUMENT TEMPLATE SETTINGS — 문서 양식 커스터마이징
 // ============================================================
-// Ensure doc_template table exists
-try { db.exec(`CREATE TABLE IF NOT EXISTS doc_template (
-    competition_id INTEGER PRIMARY KEY,
-    ad_card TEXT DEFAULT '{}',
-    start_list TEXT DEFAULT '{}',
-    result_sheet TEXT DEFAULT '{}'
-)`); } catch(e) {}
+// Ensure doc_template / event_records tables exist — SQLite-only 부트 마이그레이션
+// PG 모드: schema.pg.sql 이 이미 정의함.
+if (!db.isAsync) {
+    try { db.exec(`CREATE TABLE IF NOT EXISTS doc_template (
+        competition_id INTEGER PRIMARY KEY,
+        ad_card TEXT DEFAULT '{}',
+        start_list TEXT DEFAULT '{}',
+        result_sheet TEXT DEFAULT '{}'
+    )`); } catch(e) {}
 
-// Ensure event_records table exists (per-event NR/DR/CR records)
-try { db.exec(`CREATE TABLE IF NOT EXISTS event_records (
-    event_id INTEGER PRIMARY KEY,
-    records TEXT DEFAULT '{}'
-)`); } catch(e) {}
+    try { db.exec(`CREATE TABLE IF NOT EXISTS event_records (
+        event_id INTEGER PRIMARY KEY,
+        records TEXT DEFAULT '{}'
+    )`); } catch(e) {}
+}
 
 const DOC_DEFAULTS = {
     ad_card: {
@@ -7135,28 +7150,31 @@ app.post('/api/event-records', async (req, res) => {
 // ============================================================
 // TIMETABLE (시간표) — Excel upload, parse, store, serve
 // ============================================================
-try { db.exec(`CREATE TABLE IF NOT EXISTS timetable (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    competition_id INTEGER NOT NULL,
-    day INTEGER NOT NULL DEFAULT 1,
-    section TEXT NOT NULL DEFAULT 'track',
-    time TEXT NOT NULL,
-    event_name TEXT NOT NULL,
-    category TEXT NOT NULL DEFAULT '',
-    round TEXT NOT NULL DEFAULT '',
-    note TEXT DEFAULT '',
-    sort_order INTEGER DEFAULT 0,
-    event_id INTEGER DEFAULT NULL,
-    callroom_time TEXT DEFAULT NULL,
-    scheduled_date TEXT DEFAULT NULL,
-    UNIQUE(competition_id, day, section, time, event_name, category)
-)`); } catch(e) {}
+// SQLite-only 부트 마이그레이션 (PG 모드: schema.pg.sql 이 이미 모든 컬럼 포함)
+if (!db.isAsync) {
+    try { db.exec(`CREATE TABLE IF NOT EXISTS timetable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        competition_id INTEGER NOT NULL,
+        day INTEGER NOT NULL DEFAULT 1,
+        section TEXT NOT NULL DEFAULT 'track',
+        time TEXT NOT NULL,
+        event_name TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT '',
+        round TEXT NOT NULL DEFAULT '',
+        note TEXT DEFAULT '',
+        sort_order INTEGER DEFAULT 0,
+        event_id INTEGER DEFAULT NULL,
+        callroom_time TEXT DEFAULT NULL,
+        scheduled_date TEXT DEFAULT NULL,
+        UNIQUE(competition_id, day, section, time, event_name, category)
+    )`); } catch(e) {}
 
-// Add new columns to existing timetable tables (migration)
-try { db.exec('ALTER TABLE timetable ADD COLUMN event_id INTEGER DEFAULT NULL'); } catch(e) {}
-try { db.exec('ALTER TABLE timetable ADD COLUMN callroom_time TEXT DEFAULT NULL'); } catch(e) {}
-try { db.exec('ALTER TABLE timetable ADD COLUMN scheduled_date TEXT DEFAULT NULL'); } catch(e) {}
-try { db.exec('ALTER TABLE timetable ADD COLUMN event_ids TEXT DEFAULT NULL'); } catch(e) {}
+    // Add new columns to existing timetable tables (migration)
+    try { db.exec('ALTER TABLE timetable ADD COLUMN event_id INTEGER DEFAULT NULL'); } catch(e) {}
+    try { db.exec('ALTER TABLE timetable ADD COLUMN callroom_time TEXT DEFAULT NULL'); } catch(e) {}
+    try { db.exec('ALTER TABLE timetable ADD COLUMN scheduled_date TEXT DEFAULT NULL'); } catch(e) {}
+    try { db.exec('ALTER TABLE timetable ADD COLUMN event_ids TEXT DEFAULT NULL'); } catch(e) {}
+}
 
 // Migration: UNIQUE 제약에 round 포함 (혼성/10종/5종 등 같은 시간·종목·부별이라도 round가 다르면 별개 행)
 // 기존 UNIQUE(competition_id, day, section, time, event_name, category) → UNIQUE(... , round) 로 확장
@@ -12738,10 +12756,13 @@ const broadcastSSEAndWS = function(eventType, data) {
 // 멱등(idempotent) 함수 — 재실행해도 안전. 서버 시작 시 한 번 자동 실행.
 // ─────────────────────────────────────────────────────────────────────
 function migrateNormalizeDivisionAndRound() {
+    // PG 모드: 데이터 정리는 마이그레이션 스크립트(scripts/migrate_sqlite_to_postgres.js)에서 별도 처리.
+    // 부트 시 sync db.prepare 사용으로 PG 백엔드에서 throw 되므로 SQLite 전용 가드.
+    if (db.isAsync) return;
     try {
         // 1) event.division 정규화
-        const events = db.prepare('SELECT id, division, round_type FROM event WHERE division IS NOT NULL OR round_type IS NOT NULL').all();
-        const updEv = db.prepare('UPDATE event SET division=?, round_type=? WHERE id=?');
+        const events = db.raw.prepare('SELECT id, division, round_type FROM event WHERE division IS NOT NULL OR round_type IS NOT NULL').all();
+        const updEv = db.raw.prepare('UPDATE event SET division=?, round_type=? WHERE id=?');
         let evChanged = 0;
         events.forEach(ev => {
             const newDiv = normalizeDivisionLabel(ev.division || '');
@@ -12757,8 +12778,8 @@ function migrateNormalizeDivisionAndRound() {
         });
 
         // 2) display_roster.division 정규화
-        const rosters = db.prepare("SELECT id, division FROM display_roster WHERE division IS NOT NULL AND division <> ''").all();
-        const updRo = db.prepare('UPDATE display_roster SET division=? WHERE id=?');
+        const rosters = db.raw.prepare("SELECT id, division FROM display_roster WHERE division IS NOT NULL AND division <> ''").all();
+        const updRo = db.raw.prepare('UPDATE display_roster SET division=? WHERE id=?');
         let roChanged = 0;
         rosters.forEach(r => {
             const newDiv = normalizeDivisionLabel(r.division || '');
@@ -12776,18 +12797,22 @@ function migrateNormalizeDivisionAndRound() {
     }
 }
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
     try {
-        const compCount = db.prepare('SELECT COUNT(*) as c FROM competition').get().c;
-        const evtCount = db.prepare('SELECT COUNT(*) as c FROM event').get().c;
-        const athCount = db.prepare('SELECT COUNT(*) as c FROM athlete').get().c;
+        const compRow = await db.get('SELECT COUNT(*) as c FROM competition');
+        const evtRow = await db.get('SELECT COUNT(*) as c FROM event');
+        const athRow = await db.get('SELECT COUNT(*) as c FROM athlete');
+        const compCount = compRow ? compRow.c : 0;
+        const evtCount = evtRow ? evtRow.c : 0;
+        const athCount = athRow ? athRow.c : 0;
         console.log(`\n  Pace Rise Competition OS v5 — port ${PORT}`);
         console.log(`  http://localhost:${PORT}/`);
         console.log(`  WebSocket Scoreboard: ws://localhost:${PORT}/ws/scoreboard`);
+        console.log(`  DB backend: ${db.isAsync ? 'PostgreSQL' : 'SQLite'}`);
         console.log(`  DB: ${compCount} competitions, ${evtCount} events, ${athCount} athletes\n`);
     } catch(e) {
-        console.log(`\n  Pace Rise Competition OS v5 — port ${PORT}\n  http://localhost:${PORT}/\n`);
+        console.log(`\n  Pace Rise Competition OS v5 — port ${PORT}\n  http://localhost:${PORT}/\n  (DB count failed: ${e.message})\n`);
     }
-    // 시작 직후 일회성 마이그레이션 실행 (멱등)
+    // 시작 직후 일회성 마이그레이션 실행 (멱등, SQLite 전용 — PG는 내부 가드)
     try { migrateNormalizeDivisionAndRound(); } catch(e) { console.warn('migrate failed:', e.message); }
 });
