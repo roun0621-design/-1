@@ -519,28 +519,54 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS external_api_log (
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_extlog_keyid ON external_api_log(api_key_id, created_at)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_extlog_created ON external_api_log(created_at)`); } catch(e) {}
 
-// Persist default admin in DB if not exists
+// ─── system_config 메모리 캐시 (Phase 2-G-2-extra-3b-1) ───────────────
+// 목적: getConfigKey/setConfigKey 를 sync 유지하되 DB query는 제거.
+//   - ACCESS_KEYS proxy / ADMIN_ID() 가 매 request마다 DB 히트하던 문제 해결
+//   - boot 시 1회 sync 로드(SQLite) 또는 비동기 로드(PG)
+//   - setConfigKey 는 캐시 + DB write (SQLite raw sync / PG async — 별도 PG boot 스크립트에서 처리)
+const _configCache = new Map();
+function _loadConfigCacheSync() {
+    if (db.isAsync) return; // PG: boot async loader가 별도로 처리(없으면 빈 캐시→default fallback)
+    try {
+        const rows = db.raw.prepare('SELECT key, value FROM system_config').all();
+        for (const r of rows) _configCache.set(r.key, r.value);
+    } catch (e) {
+        console.error('[config-cache] sync load failed:', e.message);
+    }
+}
 function getConfigKey(k, def) {
-    const row = db.prepare('SELECT value FROM system_config WHERE key=?').get(k);
-    return row ? row.value : def;
+    if (_configCache.has(k)) return _configCache.get(k);
+    return def;
 }
 function setConfigKey(k, v) {
-    db.prepare('INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)').run(k, v);
+    _configCache.set(k, v);
+    if (!db.isAsync) {
+        // SQLite: sync write via raw API
+        db.raw.prepare('INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)').run(k, v);
+    } else {
+        // PG: fire-and-forget async write — 캐시는 즉시 갱신, DB는 백그라운드
+        db.run('INSERT INTO system_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value', k, v)
+            .catch(e => console.error('[setConfigKey] async write failed:', e.message));
+    }
+}
+// 캐시 로드 (SQLite boot 시점)
+if (!db.isAsync) {
+    _loadConfigCacheSync();
 }
 // Initialize default admin account if not in system_config (bcrypt hashed)
-if (!db.prepare("SELECT 1 FROM system_config WHERE key='admin_id'").get()) {
+if (!db.isAsync && !db.raw.prepare("SELECT 1 FROM system_config WHERE key='admin_id'").get()) {
     setConfigKey('admin_id', process.env.ADMIN_ID || 'admin');
     setConfigKey('admin_pw', bcrypt.hashSync(process.env.ADMIN_PW || 'changeme', 10));
 }
 // Migrate: if existing admin_pw is plaintext (not bcrypt hash), hash it
-{
+if (!db.isAsync) {
     const existingPw = getConfigKey('admin_pw', '');
     if (existingPw && !existingPw.startsWith('$2a$') && !existingPw.startsWith('$2b$')) {
         setConfigKey('admin_pw', bcrypt.hashSync(existingPw, 10));
     }
 }
 // Legacy compat: also store operation key in DB
-if (!db.prepare("SELECT 1 FROM system_config WHERE key='operation_key'").get()) {
+if (!db.isAsync && !db.raw.prepare("SELECT 1 FROM system_config WHERE key='operation_key'").get()) {
     setConfigKey('operation_key', process.env.OPERATION_KEY || '1234');
 }
 
@@ -552,12 +578,37 @@ const ACCESS_KEYS = {
 };
 const ADMIN_ID = () => getConfigKey('admin_id', 'admin');
 
+// ─── operation_key 메모리 캐시 (Phase 2-G-2-extra-3b-2) ───────────────
+// 목적: isOperationKey/isAdminOrManager/getJudgeName/getKeyRole 의 DB hit을 boot 1회 + 변경 시로 축소.
+//   매 request마다 발생하던 DB query 제거. caller 89건 무변경 유지.
+// 캐시 형태: Map<key_value, { judge_name, can_manage, active }>
+const _opKeyCache = new Map();
+function _loadOpKeyCacheSync() {
+    if (db.isAsync) return; // PG: 별도 async 로더 필요(추후)
+    try {
+        const rows = db.raw.prepare('SELECT key_value, judge_name, can_manage, active FROM operation_key WHERE active=1').all();
+        _opKeyCache.clear();
+        for (const r of rows) _opKeyCache.set(r.key_value, r);
+    } catch (e) {
+        console.error('[opkey-cache] sync load failed:', e.message);
+    }
+}
+async function _reloadOpKeyCacheAsync() {
+    try {
+        const rows = await db.all('SELECT key_value, judge_name, can_manage, active FROM operation_key WHERE active=1');
+        _opKeyCache.clear();
+        for (const r of rows) _opKeyCache.set(r.key_value, r);
+    } catch (e) {
+        console.error('[opkey-cache] async reload failed:', e.message);
+    }
+}
+if (!db.isAsync) _loadOpKeyCacheSync();
+
 function isOperationKey(key) {
     if (!key) return false;
     if (key === ACCESS_KEYS.operation) return true;
     if (bcrypt.compareSync(key, ACCESS_KEYS.adminHash)) return true;
-    const dbKey = db.prepare('SELECT * FROM operation_key WHERE key_value=? AND active=1').get(key);
-    return !!dbKey;
+    return _opKeyCache.has(key);
 }
 function isAdminKey(key) {
     if (!key) return false;
@@ -565,19 +616,19 @@ function isAdminKey(key) {
 }
 function isAdminOrManager(key) {
     if (isAdminKey(key)) return true;
-    const dbKey = db.prepare('SELECT * FROM operation_key WHERE key_value=? AND active=1 AND can_manage=1').get(key);
-    return !!dbKey;
+    const r = _opKeyCache.get(key);
+    return !!(r && r.can_manage);
 }
 function getJudgeName(key) {
     if (isAdminKey(key)) return '관리자';
     if (key === ACCESS_KEYS.operation) return '운영(기본키)';
-    const dbKey = db.prepare('SELECT judge_name FROM operation_key WHERE key_value=? AND active=1').get(key);
-    return dbKey ? dbKey.judge_name : 'unknown';
+    const r = _opKeyCache.get(key);
+    return r ? r.judge_name : 'unknown';
 }
 function getKeyRole(key) {
     if (isAdminKey(key)) return 'admin';
-    const dbKey = db.prepare('SELECT * FROM operation_key WHERE key_value=? AND active=1').get(key);
-    if (dbKey) return dbKey.can_manage ? 'admin' : 'operation';
+    const r = _opKeyCache.get(key);
+    if (r) return r.can_manage ? 'admin' : 'operation';
     if (key === ACCESS_KEYS.operation) return 'operation';
     return null;
 }
@@ -3295,6 +3346,7 @@ app.post('/api/admin/operation-keys', async (req, res) => {
     if (!judge_name || !key_value || key_value.length < 4) return res.status(400).json({ error: '심판명과 키(4자 이상)를 입력하세요.' });
     try {
         const info = await db.run('INSERT INTO operation_key (judge_name, key_value, can_manage) VALUES (?, ?, ?)', judge_name, key_value, can_manage ? 1 : 0);
+        await _reloadOpKeyCacheAsync();
         opLog(`운영키 생성: ${judge_name}${can_manage ? ' (관리권한)' : ''}`, 'admin', 'admin');
         res.json(await db.get('SELECT * FROM operation_key WHERE id=?', info.lastInsertRowid));
     } catch (e) { res.status(400).json({ error: '키가 중복되었습니다.' }); }
@@ -3305,6 +3357,7 @@ app.delete('/api/admin/operation-keys/:id', async (req, res) => {
     const key = await db.get('SELECT * FROM operation_key WHERE id=?', req.params.id);
     if (!key) return res.status(404).json({ error: 'Not found' });
     await db.run('DELETE FROM operation_key WHERE id=?', req.params.id);
+    await _reloadOpKeyCacheAsync();
     opLog(`운영키 삭제: ${key.judge_name}`, 'admin', 'admin');
     res.json({ success: true });
 });
@@ -3339,6 +3392,7 @@ app.patch('/api/admin/operation-keys/:id', async (req, res) => {
     const newActive = active !== undefined ? (active ? 1 : 0) : key.active;
     const newCanManage = can_manage !== undefined ? (can_manage ? 1 : 0) : key.can_manage;
     await db.run('UPDATE operation_key SET active=?, can_manage=? WHERE id=?', newActive, newCanManage, req.params.id);
+    await _reloadOpKeyCacheAsync();
     const updated = await db.get('SELECT * FROM operation_key WHERE id=?', req.params.id);
     if (can_manage !== undefined) {
         opLog(`${key.judge_name} 심판 권한 변경: ${newCanManage ? '관리자' : '운영'}`, 'admin', 'admin');
