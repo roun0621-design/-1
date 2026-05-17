@@ -583,9 +583,9 @@ function getKeyRole(key) {
 }
 
 // Check if competition has ended (for post-competition lock)
-function isCompetitionEnded(competitionId) {
+async function isCompetitionEnded(competitionId) {
     if (!competitionId) return false;
-    const comp = db.prepare('SELECT status, end_date FROM competition WHERE id=?').get(competitionId);
+    const comp = await db.get('SELECT status, end_date FROM competition WHERE id=?', competitionId);
     if (!comp) return false;
     if (comp.status === 'completed') return true;
     const today = kstNow().slice(0, 10);
@@ -594,21 +594,21 @@ function isCompetitionEnded(competitionId) {
 }
 
 // Check if action should be blocked for non-admin after competition ends
-function requireAdminAfterCompEnd(competitionId, adminKey, res) {
-    if (isCompetitionEnded(competitionId) && !isAdminKey(adminKey)) {
+async function requireAdminAfterCompEnd(competitionId, adminKey, res) {
+    if ((await isCompetitionEnded(competitionId)) && !isAdminKey(adminKey)) {
         res.status(403).json({ error: '대회가 종료되었습니다. 관리자 권한으로만 수정할 수 있습니다.' });
         return true; // blocked
     }
     return false; // allowed
 }
 
-function verifyJudgeLogin(judgeName, key) {
+async function verifyJudgeLogin(judgeName, key) {
     // Admin login: id + password (bcrypt)
     if (judgeName === ADMIN_ID() && bcrypt.compareSync(key, ACCESS_KEYS.adminHash)) {
         return { role: 'admin', judge_name: '관리자' };
     }
     // Judge login: judge_name + key_value must both match
-    const dbKey = db.prepare('SELECT * FROM operation_key WHERE judge_name=? AND key_value=? AND active=1').get(judgeName, key);
+    const dbKey = await db.get('SELECT * FROM operation_key WHERE judge_name=? AND key_value=? AND active=1', judgeName, key);
     if (dbKey) return { role: dbKey.can_manage ? 'admin' : 'operation', judge_name: dbKey.judge_name };
     return null;
 }
@@ -767,33 +767,37 @@ function isShortTrackEvent(eventName) {
 // Athletes sorted by record, distributed across heats in snake order
 // Same-team athletes separated when possible
 // Same-heat-of-origin athletes separated when possible (WA Rule 20.4.3)
-function waSeededDistribution(event, qualifiedSels, groupCount, db) {
+async function waSeededDistribution(event, qualifiedSels, groupCount, db) {
     // Get best performance for each qualified athlete + source heat info
-    const athletePerf = qualifiedSels.map(sel => {
-        const origEntry = db.prepare('SELECT * FROM event_entry WHERE id=?').get(sel.event_entry_id);
-        if (!origEntry) return { ...sel, athlete_id: null, team: '', perf: Infinity, sourceHeat: null };
-        const athlete = db.prepare('SELECT * FROM athlete WHERE id=?').get(origEntry.athlete_id);
+    const athletePerf = [];
+    for (const sel of qualifiedSels) {
+        const origEntry = await db.get('SELECT * FROM event_entry WHERE id=?', sel.event_entry_id);
+        if (!origEntry) {
+            athletePerf.push({ ...sel, athlete_id: null, team: '', perf: Infinity, sourceHeat: null });
+            continue;
+        }
+        const athlete = await db.get('SELECT * FROM athlete WHERE id=?', origEntry.athlete_id);
         // Get best result from all heats of the source event + track source heat
         let bestPerf = Infinity;
         let sourceHeat = null;
-        const heats = db.prepare('SELECT id, heat_number FROM heat WHERE event_id=?').all(event.id);
+        const heats = await db.all('SELECT id, heat_number FROM heat WHERE event_id=?', event.id);
         for (const h of heats) {
-            const entryInHeat = db.prepare('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?').get(h.id, sel.event_entry_id);
+            const entryInHeat = await db.get('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?', h.id, sel.event_entry_id);
             if (!entryInHeat) continue;
             if (!sourceHeat) sourceHeat = h.heat_number; // track which heat the athlete came from
             if (event.category === 'track' || event.category === 'relay' || event.category === 'road') {
-                const r = db.prepare('SELECT MIN(time_seconds) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds > 0').get(h.id, sel.event_entry_id);
+                const r = await db.get('SELECT MIN(time_seconds) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds > 0', h.id, sel.event_entry_id);
                 if (r && r.best && r.best < bestPerf) { bestPerf = r.best; sourceHeat = h.heat_number; }
             } else if (event.category === 'field_distance') {
-                const r = db.prepare('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters > 0').get(h.id, sel.event_entry_id);
+                const r = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters > 0', h.id, sel.event_entry_id);
                 if (r && r.best) { bestPerf = -r.best; sourceHeat = h.heat_number; }
             } else if (event.category === 'field_height') {
-                const r = db.prepare("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'").get(h.id, sel.event_entry_id);
+                const r = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", h.id, sel.event_entry_id);
                 if (r && r.best) { bestPerf = -r.best; sourceHeat = h.heat_number; }
             }
         }
-        return { ...sel, athlete_id: origEntry.athlete_id, team: athlete ? athlete.team : '', perf: bestPerf, sourceHeat };
-    });
+        athletePerf.push({ ...sel, athlete_id: origEntry.athlete_id, team: athlete ? athlete.team : '', perf: bestPerf, sourceHeat });
+    }
 
     // WA seeding: Q (순위 진출) first by performance, then q (기록 진출) by performance
     // A q athlete cannot outrank a Q athlete even with a better record
@@ -1095,11 +1099,11 @@ function generateScoreboardKey(event, heatNumber, db, totalHeats) {
 
 // Generate joint scoreboard key for linked events
 // Format: "합동 남자 100m 결승" or "합동 여자 200m 예선 1조"
-function generateJointScoreboardKey(event, db) {
+async function generateJointScoreboardKey(event, db) {
     const genderLabel = { M: '남자', F: '여자', X: '혼성' }[event.gender] || '';
     const roundLabel = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
     // Count heats for this event to decide whether to add heat numbers
-    const heats = db.prepare('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?').get(event.id);
+    const heats = await db.get('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?', event.id);
     const heatCount = heats ? heats.cnt : 0;
     if (heatCount <= 1) {
         return `합동 ${genderLabel} ${event.name} ${roundLabel}`;
@@ -1109,14 +1113,14 @@ function generateJointScoreboardKey(event, db) {
 }
 
 // Generate per-heat joint scoreboard keys and store them
-function generateJointHeatKeys(eventIdA, eventIdB, db) {
-    const evA = db.prepare('SELECT * FROM event WHERE id=?').get(eventIdA);
+async function generateJointHeatKeys(eventIdA, eventIdB, db) {
+    const evA = await db.get('SELECT * FROM event WHERE id=?', eventIdA);
     if (!evA) return null;
-    const baseKey = generateJointScoreboardKey(evA, db);
+    const baseKey = await generateJointScoreboardKey(evA, db);
 
     // Find all heats for both events, pair them by heat_number
-    const heatsA = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(eventIdA);
-    const heatsB = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number').all(eventIdB);
+    const heatsA = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', eventIdA);
+    const heatsB = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', eventIdB);
     const maxHeats = Math.max(heatsA.length, heatsB.length);
 
     if (maxHeats <= 1) {
@@ -1127,26 +1131,26 @@ function generateJointHeatKeys(eventIdA, eventIdB, db) {
 }
 
 // Get joint scoreboard data for a given event_id (used by lookup fallback)
-function getJointScoreboardData(eventId, dbRef) {
-    const links = dbRef.prepare(`
+async function getJointScoreboardData(eventId, dbRef) {
+    const links = await dbRef.all(`
         SELECT event_id_a, event_id_b FROM event_link
         WHERE event_id_a = ? OR event_id_b = ?
-    `).all(eventId, eventId);
-    
+    `, eventId, eventId);
+
     const eventIds = new Set([parseInt(eventId)]);
-    links.forEach(l => { eventIds.add(l.event_id_a); eventIds.add(l.event_id_b); });
-    
+    for (const l of links) { eventIds.add(l.event_id_a); eventIds.add(l.event_id_b); }
+
     const allEntries = [];
     let primaryEvt = null;
     for (const eid of eventIds) {
-        const evt = dbRef.prepare('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?').get(eid);
+        const evt = await dbRef.get('SELECT e.*, c.name as comp_name, c.federation FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?', eid);
         if (!evt) continue;
         if (eid === parseInt(eventId) || !primaryEvt) primaryEvt = evt;
-        
-        const heat = dbRef.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1').get(eid);
+
+        const heat = await dbRef.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1', eid);
         if (!heat) continue;
-        
-        const entries = dbRef.prepare(`
+
+        const entries = await dbRef.all(`
             SELECT he.lane_number, he.sub_group, ee.id as event_entry_id, ee.status,
                    a.name, a.bib_number, a.team, a.gender, a.federation as athlete_federation
             FROM heat_entry he
@@ -1154,12 +1158,12 @@ function getJointScoreboardData(eventId, dbRef) {
             JOIN athlete a ON a.id = ee.athlete_id
             WHERE he.heat_id = ?
             ORDER BY he.lane_number
-        `).all(heat.id);
-        
-        const results = dbRef.prepare('SELECT * FROM result WHERE heat_id=?').all(heat.id);
+        `, heat.id);
+
+        const results = await dbRef.all('SELECT * FROM result WHERE heat_id=?', heat.id);
         const fedLabel = evt.federation || evt.comp_name;
-        
-        entries.forEach(e => {
+
+        for (const e of entries) {
             const r = results.find(r => r.event_entry_id === e.event_entry_id);
             allEntries.push({
                 ...e,
@@ -1171,9 +1175,9 @@ function getJointScoreboardData(eventId, dbRef) {
                 heat_id: heat.id,
                 wind: heat.wind,
             });
-        });
+        }
     }
-    
+
     if (!primaryEvt) return null;
     return {
         event: primaryEvt,
@@ -1228,11 +1232,11 @@ async function autoCorrectWALanes(eventId, db) {
 // ============================================================
 // AUTH — judge_name + key login (rate limited)
 // ============================================================
-app.post('/api/auth/verify', authLimiter, (req, res) => {
+app.post('/api/auth/verify', authLimiter, async (req, res) => {
     const { key, judge_name } = req.body;
     // New: judge_name + key login
     if (judge_name && key) {
-        const result = verifyJudgeLogin(judge_name, key);
+        const result = await verifyJudgeLogin(judge_name, key);
         if (result) return res.json({ success: true, role: result.role, label: result.role === 'admin' ? '관리자' : '운영', judge_name: result.judge_name });
         return res.status(403).json({ error: '심판명 또는 운영키가 일치하지 않습니다.' });
     }
@@ -1676,7 +1680,7 @@ app.post('/api/results/upsert', async (req, res) => {
     if (heat) {
         const event = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
         // Post-competition lock: only admin can modify after competition ends
-        if (event && requireAdminAfterCompEnd(event.competition_id, admin_key, res)) return;
+        if (event && await requireAdminAfterCompEnd(event.competition_id, admin_key, res)) return;
         // Completed events require admin_key to modify
         if (event && event.round_status === 'completed') {
             if (!isAdminKey(admin_key) && !isOperationKey(admin_key)) return res.status(403).json({ error: '완료된 경기의 기록 수정은 관리자 키가 필요합니다.' });
@@ -1801,7 +1805,7 @@ app.delete('/api/results', async (req, res) => {
     if (_dHeat) {
         const _dEvt = await db.get('SELECT * FROM event WHERE id=?', _dHeat.event_id);
         // Post-competition lock
-        if (_dEvt && requireAdminAfterCompEnd(_dEvt.competition_id, admin_key, res)) return;
+        if (_dEvt && await requireAdminAfterCompEnd(_dEvt.competition_id, admin_key, res)) return;
         if (_dEvt && _dEvt.round_status === 'completed' && !isAdminKey(admin_key) && !isOperationKey(admin_key))
             return res.status(403).json({ error: '완료된 경기의 기록 삭제는 관리자 키가 필요합니다.' });
     }
@@ -1975,7 +1979,7 @@ app.post('/api/height-attempts/save', async (req, res) => {
     if (_hHeat) {
         const _hEvt = await db.get('SELECT * FROM event WHERE id=?', _hHeat.event_id);
         // Post-competition lock
-        if (_hEvt && requireAdminAfterCompEnd(_hEvt.competition_id, admin_key, res)) return;
+        if (_hEvt && await requireAdminAfterCompEnd(_hEvt.competition_id, admin_key, res)) return;
         if (_hEvt && _hEvt.round_status === 'completed' && !isAdminKey(admin_key) && !isOperationKey(admin_key))
             return res.status(403).json({ error: '완료된 경기의 기록 수정은 관리자 키가 필요합니다.' });
     }
@@ -2065,7 +2069,7 @@ app.post('/api/combined-scores/save', async (req, res) => {
     // Post-competition lock
     try {
         const ee = await db.get('SELECT e.competition_id FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.id=?', event_entry_id);
-        if (ee && requireAdminAfterCompEnd(ee.competition_id, admin_key, res)) return;
+        if (ee && await requireAdminAfterCompEnd(ee.competition_id, admin_key, res)) return;
     } catch(e) {}
     try {
         const existing = await db.get('SELECT * FROM combined_score WHERE event_entry_id=? AND sub_event_order=?', event_entry_id, sub_event_order);
@@ -2191,7 +2195,7 @@ app.patch('/api/event-entries/:id/status', async (req, res) => {
     if (!entry) return res.status(404).json({ error: 'Not found' });
     // Post-competition lock
     const _evt = await db.get('SELECT competition_id FROM event WHERE id=?', entry.event_id);
-    if (_evt && requireAdminAfterCompEnd(_evt.competition_id, admin_key, res)) return;
+    if (_evt && await requireAdminAfterCompEnd(_evt.competition_id, admin_key, res)) return;
     await db.run('UPDATE event_entry SET status=? WHERE id=?', status, req.params.id);
     syncCombinedSubEventCheckin(entry.event_id, entry.athlete_id, status);
     const _he = await db.get('SELECT heat_id FROM heat_entry WHERE event_entry_id=?', entry.id);
@@ -2544,7 +2548,7 @@ app.post('/api/events/:id/create-final', async (req, res) => {
         }
     } else {
         // Multi-heat final with WA seeding
-        const seeded = waSeededDistribution(event, qualSels, numHeats, db);
+        const seeded = await waSeededDistribution(event, qualSels, numHeats, db);
         for (let g = 0; g < numHeats; g++) {
             const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', finalEventId, g + 1);
             // Auto-generate scoreboard_key
@@ -2725,7 +2729,7 @@ app.post('/api/events/:id/create-semifinal', async (req, res) => {
         const semiEvent = await db.get('SELECT * FROM event WHERE id=?', semiEventId);
 
         // WA serpentine seeding: sort athletes by performance, distribute in zigzag
-        const seeded = waSeededDistribution(event, qualifiedSels, group_count, db);
+        const seeded = await waSeededDistribution(event, qualifiedSels, group_count, db);
         for (let g = 0; g < group_count; g++) {
             const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', semiEventId, g + 1);
             // Auto-generate scoreboard_key
@@ -6061,7 +6065,7 @@ app.get('/api/scoreboard/lookup', async (req, res) => {
         if (jointLink) {
             // Found a joint key — redirect to joint scoreboard data
             const eventId = jointLink.event_id_a;
-            const jointData = getJointScoreboardData(eventId, db);
+            const jointData = await getJointScoreboardData(eventId, db);
             if (jointData) {
                 return res.json({
                     is_joint: true,
@@ -6152,7 +6156,7 @@ app.post('/api/event-links', async (req, res) => {
         opLog(`합동 종목 연결: ${evA.name}(${compA?.federation || compA?.name}) ↔ ${evB.name}(${compB?.federation || compB?.name})`, 'admin', 'admin');
         
         // Auto-generate joint scoreboard key
-        const jointKey = generateJointScoreboardKey(evA, db);
+        const jointKey = await generateJointScoreboardKey(evA, db);
         const link = await db.get('SELECT id FROM event_link WHERE event_id_a=? AND event_id_b=?', idA, idB);
         if (link) {
             await db.run('UPDATE event_link SET joint_scoreboard_key=? WHERE id=?', jointKey, link.id);
@@ -6196,7 +6200,7 @@ app.post('/api/event-links/auto-match', async (req, res) => {
             const [idA, idB] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
             const existing = await db.get('SELECT id FROM event_link WHERE event_id_a=? AND event_id_b=?', idA, idB);
             if (!existing) {
-                const jointKey = generateJointScoreboardKey(a, db);
+                const jointKey = await generateJointScoreboardKey(a, db);
                 await db.run('INSERT INTO event_link (event_id_a, event_id_b, joint_scoreboard_key) VALUES (?, ?, ?)', idA, idB, jointKey);
                 linked++;
             }
@@ -11067,8 +11071,8 @@ app.get('/api/display/roster/unmatched/:compId', async (req, res) => {
 //     GET  /api/display/cleanup-orphan-events/:compId  → 미리보기(삭제 안 함)
 //     POST /api/display/cleanup-orphan-events/:compId  → 실제 삭제
 // ─────────────────────────────────────────────────────────────────────
-function _findOrphanEvents(compId) {
-    return db.prepare(`
+async function _findOrphanEvents(compId) {
+    return await db.all(`
         SELECT e.id, e.name, e.gender, e.division, e.round_type, e.category,
                COALESCE(e.result_url,'') AS result_url,
                COALESCE(e.video_url,'')  AS video_url
@@ -11082,7 +11086,7 @@ function _findOrphanEvents(compId) {
           AND NOT EXISTS (SELECT 1 FROM heat         h  WHERE h.event_id        = e.id)
           AND NOT EXISTS (SELECT 1 FROM event        e2 WHERE e2.parent_event_id = e.id)
         ORDER BY e.id
-    `).all(compId);
+    `, compId);
 }
 
 // 미리보기
@@ -11097,7 +11101,7 @@ app.get('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
         if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
         if (comp.mode !== 'display') return res.status(400).json({ error: '노출용(display) 대회에서만 사용 가능합니다.' });
 
-        const orphans = _findOrphanEvents(compId);
+        const orphans = await _findOrphanEvents(compId);
         const totalEventsRow = await db.get('SELECT COUNT(*) AS c FROM event WHERE competition_id=?', compId);
         const totalEvents = totalEventsRow ? totalEventsRow.c : 0;
 
@@ -11137,7 +11141,7 @@ app.post('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
         if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
         if (comp.mode !== 'display') return res.status(400).json({ error: '노출용(display) 대회에서만 사용 가능합니다.' });
 
-        const orphans = _findOrphanEvents(compId);
+        const orphans = await _findOrphanEvents(compId);
         if (dry_run) {
             return res.json({
                 success: true, dry_run: true,
