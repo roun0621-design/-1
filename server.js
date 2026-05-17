@@ -706,18 +706,37 @@ function calcWAPoints(key, rawRecord) {
     else { val = rawRecord - t.B; if (val <= 0) return 0; return Math.floor(t.A * Math.pow(val, t.C)); }
 }
 
-// ---- Audit & OpLog ----
+// ---- Audit & OpLog (Phase 2-G-2-extra-3c-1: SQLite sync raw / PG fire-and-forget) ----
+// 호출부는 모두 fire-and-forget 패턴(return 값 무시). caller 67건 무변경 유지.
+// SQLite: db.raw.prepare(...).run() 으로 sync write — 트랜잭션 보장은 caller route 책임 외부.
+// PG: db.run(...).catch() — INSERT 실패는 로깅만 (감사 로그 누락이 비즈니스 로직을 막지 않도록).
+const AUDIT_INSERT_SQL = `INSERT INTO audit_log (competition_id,table_name,record_id,action,old_values,new_values,performed_by,created_at,ip_address,user_agent) VALUES (?,?,?,?,?,?,?,?,?,?)`;
+const OPLOG_INSERT_SQL = `INSERT INTO operation_log (competition_id,message,category,performed_by,created_at) VALUES (?,?,?,?,?)`;
 function audit(table, id, action, oldV, newV, by = 'operator', compId = null, req = null) {
     const ts = kstNow();
     const ip = req ? (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim() : null;
     const ua = req ? (req.headers['user-agent'] || '').substring(0, 256) : null;
-    db.prepare(`INSERT INTO audit_log (competition_id,table_name,record_id,action,old_values,new_values,performed_by,created_at,ip_address,user_agent) VALUES (?,?,?,?,?,?,?,?,?,?)`)
-        .run(compId, table, id, action, oldV ? JSON.stringify(oldV) : null, newV ? JSON.stringify(newV) : null, by, ts, ip, ua);
+    const oldJson = oldV ? JSON.stringify(oldV) : null;
+    const newJson = newV ? JSON.stringify(newV) : null;
+    if (!db.isAsync) {
+        try {
+            db.raw.prepare(AUDIT_INSERT_SQL).run(compId, table, id, action, oldJson, newJson, by, ts, ip, ua);
+        } catch (e) { console.error('[audit] sync write failed:', e.message); }
+    } else {
+        db.run(AUDIT_INSERT_SQL, compId, table, id, action, oldJson, newJson, by, ts, ip, ua)
+            .catch(e => console.error('[audit] async write failed:', e.message));
+    }
 }
 function opLog(message, category = 'general', performedBy = 'system', compId = null) {
     const ts = kstNow();
-    db.prepare(`INSERT INTO operation_log (competition_id,message,category,performed_by,created_at) VALUES (?,?,?,?,?)`)
-        .run(compId, message, category, performedBy, ts);
+    if (!db.isAsync) {
+        try {
+            db.raw.prepare(OPLOG_INSERT_SQL).run(compId, message, category, performedBy, ts);
+        } catch (e) { console.error('[opLog] sync write failed:', e.message); }
+    } else {
+        db.run(OPLOG_INSERT_SQL, compId, message, category, performedBy, ts)
+            .catch(e => console.error('[opLog] async write failed:', e.message));
+    }
     broadcastSSE('operation_log', { message, category, performed_by: performedBy, created_at: ts });
 }
 
@@ -1127,12 +1146,12 @@ async function validateWAHeatLanes(eventId, db) {
 
 // Generate scoreboard_key for a heat
 // Format: "남자실업부 100m 결승" (single heat) or "여자 200m 준결승 2조" (multi heat)
-function generateScoreboardKey(event, heatNumber, db, totalHeats) {
+async function generateScoreboardKey(event, heatNumber, db, totalHeats) {
     const genderLabel = { M: '남자', F: '여자', X: '혼성' }[event.gender] || '';
     const roundLabel = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
     let federationLabel = '';
     if (event.competition_id) {
-        const comp = db.prepare('SELECT federation, division_type FROM competition WHERE id=?').get(event.competition_id);
+        const comp = await db.get('SELECT federation, division_type FROM competition WHERE id=?', event.competition_id);
         if (comp) {
             if (comp.federation === 'KTFL' || comp.division_type === 'pro') federationLabel = '실업부';
             else if (comp.federation === 'KUAF' || comp.division_type === 'univ') federationLabel = '대학부';
@@ -1321,16 +1340,16 @@ app.post('/api/staff/verify', authLimiter, (req, res) => {
 // ============================================================
 // COMPETITIONS CRUD — with auto-status update
 // ============================================================
-function autoUpdateCompetitionStatus() {
+async function autoUpdateCompetitionStatus() {
     const today = kstNow().slice(0, 10); // YYYY-MM-DD (KST)
     // upcoming → active if start_date <= today
-    db.prepare("UPDATE competition SET status='active' WHERE status='upcoming' AND start_date <= ?").run(today);
+    await db.run("UPDATE competition SET status='active' WHERE status='upcoming' AND start_date <= ?", today);
     // active → completed if end_date < today
-    db.prepare("UPDATE competition SET status='completed' WHERE status='active' AND end_date < ?").run(today);
+    await db.run("UPDATE competition SET status='completed' WHERE status='active' AND end_date < ?", today);
 }
 
 app.get('/api/competitions', async (req, res) => {
-    autoUpdateCompetitionStatus();
+    await autoUpdateCompetitionStatus();
     res.json(await db.all('SELECT * FROM competition ORDER BY start_date ASC'));
 });
 // Competitions within 2 weeks (for home top section) — MUST be before /:id
@@ -2248,7 +2267,7 @@ app.patch('/api/event-entries/:id/status', async (req, res) => {
     const _evt = await db.get('SELECT competition_id FROM event WHERE id=?', entry.event_id);
     if (_evt && await requireAdminAfterCompEnd(_evt.competition_id, admin_key, res)) return;
     await db.run('UPDATE event_entry SET status=? WHERE id=?', status, req.params.id);
-    syncCombinedSubEventCheckin(entry.event_id, entry.athlete_id, status);
+    await syncCombinedSubEventCheckin(entry.event_id, entry.athlete_id, status);
     const _he = await db.get('SELECT heat_id FROM heat_entry WHERE event_entry_id=?', entry.id);
     broadcastSSE('entry_status', { event_entry_id: entry.id, status, event_id: entry.event_id, heat_id: _he ? _he.heat_id : null });
     res.json(await db.get('SELECT * FROM event_entry WHERE id=?', req.params.id));
@@ -2303,7 +2322,7 @@ app.post('/api/callroom/checkin', async (req, res) => {
         }
         if (!athlete) return res.status(404).json({ error: `여자 배번 ${bibNum} 선수를 찾을 수 없습니다`, barcode });
         // Jump directly to entry lookup (skip normal barcode search)
-        return continueCheckin(res, athlete, event_id, competition_id);
+        return await continueCheckin(res, athlete, event_id, competition_id);
     }
 
     // ── Normal barcode variants ──
@@ -2341,48 +2360,52 @@ app.post('/api/callroom/checkin', async (req, res) => {
     }
 
     let athlete = null;
-    if (competition_id) athlete = findAthlete(competition_id);
-    if (!athlete) athlete = findAthlete(null);
+    if (competition_id) athlete = await findAthlete(competition_id);
+    if (!athlete) athlete = await findAthlete(null);
     if (!athlete) return res.status(404).json({ error: '선수를 찾을 수 없습니다', barcode });
-    return continueCheckin(res, athlete, event_id, competition_id);
+    return await continueCheckin(res, athlete, event_id, competition_id);
 });
 
 // Shared checkin logic: find entry → update status → respond
-function continueCheckin(res, athlete, event_id, competition_id) {
+async function continueCheckin(res, athlete, event_id, competition_id) {
     let entry;
     if (event_id) {
-        entry = db.prepare('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?').get(event_id, athlete.id);
+        entry = await db.get('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, athlete.id);
         if (!entry) {
-            const cid = competition_id || (db.prepare('SELECT competition_id FROM event WHERE id=?').get(event_id))?.competition_id;
+            let cid = competition_id;
+            if (!cid) {
+                const evRow = await db.get('SELECT competition_id FROM event WHERE id=?', event_id);
+                cid = evRow ? evRow.competition_id : null;
+            }
             if (cid) {
-                const allEntries = db.prepare(`
+                const allEntries = await db.all(`
                     SELECT ee.*, e.name as event_name FROM event_entry ee 
                     JOIN event e ON ee.event_id=e.id 
                     WHERE ee.athlete_id=? AND e.competition_id=?
                     ORDER BY CASE ee.status WHEN 'registered' THEN 0 WHEN 'checked_in' THEN 1 ELSE 2 END
-                `).all(athlete.id, cid);
+                `, athlete.id, cid);
                 if (allEntries.length > 0) {
                     entry = allEntries.find(e => e.status === 'registered') || allEntries[0];
                 }
             }
         }
     } else {
-        entry = db.prepare("SELECT * FROM event_entry WHERE athlete_id=? AND status='registered' LIMIT 1").get(athlete.id);
+        entry = await db.get("SELECT * FROM event_entry WHERE athlete_id=? AND status='registered' LIMIT 1", athlete.id);
     }
     if (!entry) return res.status(404).json({ error: '해당 종목에 등록되지 않은 선수입니다', athlete: { name: athlete.name, bib: athlete.bib_number } });
-    
+
     const wasAlready = entry.status === 'checked_in';
     if (!wasAlready) {
-        db.prepare("UPDATE event_entry SET status='checked_in' WHERE id=?").run(entry.id);
-        syncCombinedSubEventCheckin(entry.event_id, athlete.id, 'checked_in');
-        const _he2 = db.prepare('SELECT heat_id FROM heat_entry WHERE event_entry_id=?').get(entry.id);
+        await db.run("UPDATE event_entry SET status='checked_in' WHERE id=?", entry.id);
+        await syncCombinedSubEventCheckin(entry.event_id, athlete.id, 'checked_in');
+        const _he2 = await db.get('SELECT heat_id FROM heat_entry WHERE event_entry_id=?', entry.id);
         broadcastSSE('entry_status', { event_entry_id: entry.id, status: 'checked_in', event_id: entry.event_id, heat_id: _he2 ? _he2.heat_id : null });
     }
-    
-    const heatEntry = db.prepare(`SELECT he.heat_id, h.heat_number FROM heat_entry he JOIN heat h ON he.heat_id=h.id WHERE he.event_entry_id=?`).get(entry.id);
-    
-    res.json({ 
-        success: true, already: wasAlready, athlete, 
+
+    const heatEntry = await db.get(`SELECT he.heat_id, h.heat_number FROM heat_entry he JOIN heat h ON he.heat_id=h.id WHERE he.event_entry_id=?`, entry.id);
+
+    res.json({
+        success: true, already: wasAlready, athlete,
         entry: { ...entry, status: 'checked_in' },
         heat_id: heatEntry ? heatEntry.heat_id : null,
         heat_number: heatEntry ? heatEntry.heat_number : null,
@@ -2391,14 +2414,14 @@ function continueCheckin(res, athlete, event_id, competition_id) {
 }
 
 // Helper: sync combined sub-event entries when parent is checked in
-function syncCombinedSubEventCheckin(parentEventId, athleteId, status) {
-    const parentEvt = db.prepare('SELECT * FROM event WHERE id=?').get(parentEventId);
+async function syncCombinedSubEventCheckin(parentEventId, athleteId, status) {
+    const parentEvt = await db.get('SELECT * FROM event WHERE id=?', parentEventId);
     if (!parentEvt || parentEvt.category !== 'combined') return;
-    const subEvents = db.prepare('SELECT id FROM event WHERE parent_event_id=?').all(parentEventId);
+    const subEvents = await db.all('SELECT id FROM event WHERE parent_event_id=?', parentEventId);
     for (const sub of subEvents) {
-        const subEntry = db.prepare('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?').get(sub.id, athleteId);
+        const subEntry = await db.get('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?', sub.id, athleteId);
         if (subEntry && subEntry.status !== status) {
-            db.prepare('UPDATE event_entry SET status=? WHERE id=?').run(status, subEntry.id);
+            await db.run('UPDATE event_entry SET status=? WHERE id=?', status, subEntry.id);
         }
     }
 }
@@ -2588,7 +2611,7 @@ app.post('/api/events/:id/create-final', async (req, res) => {
     if (numHeats === 1) {
         const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,1)', finalEventId);
         // Auto-generate scoreboard_key
-        const sbKey = generateScoreboardKey(finalEvent, 1, db, numHeats);
+        const sbKey = await generateScoreboardKey(finalEvent, 1, db, numHeats);
         await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
         // WA lane assignment for single heat with pattern-based random shuffle
         const lanes = waAssignLanesBulk(qualSels, qualSels.length, isShortTrack_, event.name);
@@ -2603,7 +2626,7 @@ app.post('/api/events/:id/create-final', async (req, res) => {
         for (let g = 0; g < numHeats; g++) {
             const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', finalEventId, g + 1);
             // Auto-generate scoreboard_key
-            const sbKey = generateScoreboardKey(finalEvent, g + 1, db, numHeats);
+            const sbKey = await generateScoreboardKey(finalEvent, g + 1, db, numHeats);
             await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
             const groupAthletes = seeded[g] || [];
             // Sort within group by performance for correct WA lane assignment
@@ -2784,7 +2807,7 @@ app.post('/api/events/:id/create-semifinal', async (req, res) => {
         for (let g = 0; g < group_count; g++) {
             const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', semiEventId, g + 1);
             // Auto-generate scoreboard_key
-            const sbKey = generateScoreboardKey(semiEvent, g + 1, db, group_count);
+            const sbKey = await generateScoreboardKey(semiEvent, g + 1, db, group_count);
             await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
             const groupAthletes = seeded[g] || [];
             // Sort within group by performance for correct WA lane assignment
@@ -6972,8 +6995,8 @@ const DOC_DEFAULTS = {
     }
 };
 
-function getDocTemplate(compId) {
-    const row = db.prepare('SELECT * FROM doc_template WHERE competition_id=?').get(compId);
+async function getDocTemplate(compId) {
+    const row = await db.get('SELECT * FROM doc_template WHERE competition_id=?', compId);
     let result;
     if (!row) {
         result = JSON.parse(JSON.stringify(DOC_DEFAULTS));
@@ -7004,8 +7027,8 @@ function getDocTemplate(compId) {
     return result;
 }
 
-app.get('/api/doc-templates/:compId', (req, res) => {
-    res.json(getDocTemplate(req.params.compId));
+app.get('/api/doc-templates/:compId', async (req, res) => {
+    res.json(await getDocTemplate(req.params.compId));
 });
 
 app.post('/api/doc-templates', async (req, res) => {
@@ -7415,7 +7438,7 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
 
         // Auto-link timetable entries to events
         try {
-            autoLinkTimetable(parseInt(competition_id));
+            await autoLinkTimetable(parseInt(competition_id));
         } catch(linkErr) {
             console.warn('Timetable auto-link warning:', linkErr.message);
         }
@@ -7663,13 +7686,12 @@ app.delete('/api/timetable/entry/:id', async (req, res) => {
 });
 
 // ---- Shared timetable auto-link function ----
-function autoLinkTimetable(compId) {
-    const compEvents = db.prepare('SELECT id, name, gender, category, round_type FROM event WHERE competition_id=? AND parent_event_id IS NULL').all(compId);
-    const linkStmt = db.prepare('UPDATE timetable SET event_id=?, event_ids=? WHERE id=?');
-    const ttRows = db.prepare('SELECT id, event_name, category, round FROM timetable WHERE competition_id=? AND event_id IS NULL').all(compId);
+async function autoLinkTimetable(compId) {
+    const compEvents = await db.all('SELECT id, name, gender, category, round_type FROM event WHERE competition_id=? AND parent_event_id IS NULL', compId);
+    const ttRows = await db.all('SELECT id, event_name, category, round FROM timetable WHERE competition_id=? AND event_id IS NULL', compId);
 
     // Determine competition federation and division_type (for A6 filtering)
-    const comp = db.prepare('SELECT federation, division_type FROM competition WHERE id=?').get(compId);
+    const comp = await db.get('SELECT federation, division_type FROM competition WHERE id=?', compId);
     const federation = (comp && comp.federation) || '';
     const divisionType = (comp && comp.division_type) || '';
 
@@ -7740,13 +7762,13 @@ function autoLinkTimetable(compId) {
     }
 
     let linked = 0;
-    ttRows.forEach(tt => {
+    for (const tt of ttRows) {
         const parsed = parseRound(tt.round, tt.event_name);
         const ttRound = parsed.round;
         const catInfo = parseCategory(tt.category);
 
         // A6: Skip if division doesn't match this competition's federation
-        if (!isDivisionMatch(catInfo)) return;
+        if (!isDivisionMatch(catInfo)) continue;
 
         // For combined sub-events (10종/7종), match to the combined event
         let targetName = tt.event_name;
@@ -7756,7 +7778,7 @@ function autoLinkTimetable(compId) {
         }
 
         const ttNorm = norm(targetName);
-        
+
         // A7: Find ALL matching events (for multi-gender entries like "경보 남녀 동시출발")
         const matches = compEvents.filter(ev => {
             if (ev.round_type !== ttRound) return false;
@@ -7769,16 +7791,16 @@ function autoLinkTimetable(compId) {
             }
             return true;
         });
-        
+
         if (matches.length > 0) {
             // Primary link: first match (for backward compatibility with event_id)
             const primaryId = matches[0].id;
             const allIds = matches.map(m => m.id);
             const eventIdsJson = allIds.length > 1 ? JSON.stringify(allIds) : null;
-            linkStmt.run(primaryId, eventIdsJson, tt.id);
+            await db.run('UPDATE timetable SET event_id=?, event_ids=? WHERE id=?', primaryId, eventIdsJson, tt.id);
             linked++;
         }
-    });
+    }
     return { linked, total: ttRows.length };
 }
 
@@ -7789,7 +7811,7 @@ app.post('/api/timetable/:compId/rematch', async (req, res) => {
     const compId = parseInt(req.params.compId);
     // Clear existing links first so we can re-match everything
     await db.run('UPDATE timetable SET event_id=NULL WHERE competition_id=?', compId);
-    const result = autoLinkTimetable(compId);
+    const result = await autoLinkTimetable(compId);
     res.json({ success: true, linked: result.linked, total: result.total });
 });
 
@@ -8026,7 +8048,7 @@ app.get('/api/documents/start-list/:eventId', async (req, res) => {
     if (!event) return res.status(404).json({ error: 'Event not found' });
     const comp = await db.get('SELECT * FROM competition WHERE id=?', event.competition_id);
     const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    const tpl = getDocTemplate(event.competition_id).start_list;
+    const tpl = (await getDocTemplate(event.competition_id)).start_list;
 
     const pageW = 595.28; const pageH = 841.89; const margin = 40;
     const doc = new PDFDocument({ size: 'A4', margin, bufferPages: true });
@@ -8151,7 +8173,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
     if (!event) return res.status(404).json({ error: 'Event not found' });
     const comp = await db.get('SELECT * FROM competition WHERE id=?', event.competition_id);
     const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    const tpl = getDocTemplate(event.competition_id).result_sheet;
+    const tpl = (await getDocTemplate(event.competition_id)).result_sheet;
 
     const pageW = 595.28; const pageH = 841.89; const margin = 40;
     const doc = new PDFDocument({ size: 'A4', margin, bufferPages: true });
@@ -9001,7 +9023,7 @@ app.get('/api/documents/ad-card/:compId', async (req, res) => {
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
     const athletes = await db.all('SELECT * FROM athlete WHERE competition_id=? ORDER BY CAST(bib_number AS INTEGER)', comp.id);
     if (athletes.length === 0) return res.status(404).json({ error: 'No athletes found' });
-    const tpl = getDocTemplate(comp.id).ad_card;
+    const tpl = (await getDocTemplate(comp.id)).ad_card;
 
     const cardsPerPage = tpl.cards_per_page || 4;
     const bibSize = tpl.bib_font_size || 48;
@@ -9592,7 +9614,7 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
     const dateStr = comp.start_date && comp.end_date
       ? `${comp.start_date} ~ ${comp.end_date}`
       : comp.start_date || '';
-    const tpl = getDocTemplate(comp.id);
+    const tpl = await getDocTemplate(comp.id);
     const chiefJudgeName = tpl?.comprehensive?.chief_judge || tpl?.result_sheet?.chief_judge || tpl?.result_sheet?.chief_recorder_name || '';
     const chiefJudge = chiefJudgeName ? `심판장: ${chiefJudgeName} (인)` : '';
 
@@ -9795,28 +9817,32 @@ function _keyPrefix(plain) {
     return (plain || '').slice(0, 12);
 }
 
-// 외부 API 호출 로그 기록
+// 외부 API 호출 로그 기록 (fire-and-forget: SQLite sync raw / PG async)
+const EXT_LOG_INSERT_SQL = `INSERT INTO external_api_log
+    (api_key_id, key_prefix, endpoint, method, request_ip, user_agent,
+     competition_id, event_id, request_body, response_status, response_code, duration_ms)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`;
 function _logExternalCall(opts) {
-    try {
-        db.prepare(`INSERT INTO external_api_log
-            (api_key_id, key_prefix, endpoint, method, request_ip, user_agent,
-             competition_id, event_id, request_body, response_status, response_code, duration_ms)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-            opts.api_key_id || null,
-            opts.key_prefix || '',
-            opts.endpoint || '',
-            opts.method || 'POST',
-            opts.request_ip || '',
-            (opts.user_agent || '').slice(0, 500),
-            opts.competition_id || null,
-            opts.event_id || null,
-            (opts.request_body || '').slice(0, 4000),
-            opts.response_status || 0,
-            opts.response_code || '',
-            opts.duration_ms || 0
-        );
-    } catch(e) {
-        console.warn('external_api_log insert failed:', e.message);
+    const args = [
+        opts.api_key_id || null,
+        opts.key_prefix || '',
+        opts.endpoint || '',
+        opts.method || 'POST',
+        opts.request_ip || '',
+        (opts.user_agent || '').slice(0, 500),
+        opts.competition_id || null,
+        opts.event_id || null,
+        (opts.request_body || '').slice(0, 4000),
+        opts.response_status || 0,
+        opts.response_code || '',
+        opts.duration_ms || 0,
+    ];
+    if (!db.isAsync) {
+        try { db.raw.prepare(EXT_LOG_INSERT_SQL).run(...args); }
+        catch(e) { console.warn('external_api_log sync insert failed:', e.message); }
+    } else {
+        db.run(EXT_LOG_INSERT_SQL, ...args)
+            .catch(e => console.warn('external_api_log async insert failed:', e.message));
     }
 }
 
@@ -9883,41 +9909,50 @@ function externalApiAuth(req, res, next) {
     req._extKeyPrefix = _keyPrefix(plainKey);
 
     // prefix로 후보 조회 (보통 1개) → bcrypt 비교
-    const prefix = _keyPrefix(plainKey);
-    const candidates = db.prepare('SELECT * FROM external_api_key WHERE key_prefix=?').all(prefix);
-    let matched = null;
-    for (const c of candidates) {
-        if (bcrypt.compareSync(plainKey, c.key_hash)) { matched = c; break; }
-    }
-    if (!matched) {
-        return res.status(403).json({ success: false, error_code: 'INVALID_API_KEY', message: '유효하지 않은 API 키입니다.' });
-    }
-    if (matched.revoked_at) {
-        return res.status(403).json({ success: false, error_code: 'KEY_REVOKED', message: '회수된 API 키입니다.' });
-    }
-    if (matched.expires_at && matched.expires_at < new Date().toISOString()) {
-        return res.status(403).json({ success: false, error_code: 'KEY_EXPIRED', message: '만료된 API 키입니다.' });
-    }
+    //   SQLite: sync raw / PG: async — 미들웨어는 async 흐름으로 통일
+    (async () => {
+        try {
+            const prefix = _keyPrefix(plainKey);
+            const candidates = await db.all('SELECT * FROM external_api_key WHERE key_prefix=?', prefix);
+            let matched = null;
+            for (const c of candidates) {
+                if (bcrypt.compareSync(plainKey, c.key_hash)) { matched = c; break; }
+            }
+            if (!matched) {
+                return res.status(403).json({ success: false, error_code: 'INVALID_API_KEY', message: '유효하지 않은 API 키입니다.' });
+            }
+            if (matched.revoked_at) {
+                return res.status(403).json({ success: false, error_code: 'KEY_REVOKED', message: '회수된 API 키입니다.' });
+            }
+            if (matched.expires_at && matched.expires_at < new Date().toISOString()) {
+                return res.status(403).json({ success: false, error_code: 'KEY_EXPIRED', message: '만료된 API 키입니다.' });
+            }
 
-    // 레이트 리밋
-    const rl = _checkRateLimit(matched.id, matched.rate_limit_per_min || 60);
-    res.setHeader('X-RateLimit-Limit', String(matched.rate_limit_per_min || 60));
-    res.setHeader('X-RateLimit-Remaining', String(rl.remaining));
-    if (!rl.allowed) {
-        return res.status(429).json({
-            success: false, error_code: 'RATE_LIMITED',
-            message: `분당 ${matched.rate_limit_per_min || 60}회 호출 한도를 초과했습니다.`,
-            reset_in_ms: rl.resetIn,
-        });
-    }
+            // 레이트 리밋
+            const rl = _checkRateLimit(matched.id, matched.rate_limit_per_min || 60);
+            res.setHeader('X-RateLimit-Limit', String(matched.rate_limit_per_min || 60));
+            res.setHeader('X-RateLimit-Remaining', String(rl.remaining));
+            if (!rl.allowed) {
+                return res.status(429).json({
+                    success: false, error_code: 'RATE_LIMITED',
+                    message: `분당 ${matched.rate_limit_per_min || 60}회 호출 한도를 초과했습니다.`,
+                    reset_in_ms: rl.resetIn,
+                });
+            }
 
-    // 통계 업데이트 (비차단)
-    try {
-        db.prepare('UPDATE external_api_key SET last_used_at=datetime(\'now\'), total_calls=total_calls+1 WHERE id=?').run(matched.id);
-    } catch(_){}
+            // 통계 업데이트 (fire-and-forget — 미들웨어 응답 막지 않음)
+            const USAGE_SQL = !db.isAsync
+                ? 'UPDATE external_api_key SET last_used_at=datetime(\'now\'), total_calls=total_calls+1 WHERE id=?'
+                : "UPDATE external_api_key SET last_used_at=NOW(), total_calls=total_calls+1 WHERE id=?";
+            db.run(USAGE_SQL, matched.id).catch(()=>{});
 
-    req.extApiKey = matched;
-    next();
+            req.extApiKey = matched;
+            next();
+        } catch (e) {
+            console.error('[externalApiAuth] error:', e.message);
+            return res.status(500).json({ success: false, error_code: 'AUTH_INTERNAL', message: 'API 인증 처리 중 오류가 발생했습니다.' });
+        }
+    })();
 }
 
 // 헬퍼: 키의 적용 대회 제한 검증
@@ -9933,8 +9968,8 @@ function _checkCompetitionScope(extApiKey, requestedCompId) {
 }
 
 // 헬퍼: 노출용 대회인지 확인
-function _ensureDisplayCompetition(compId) {
-    const comp = db.prepare('SELECT id, name, mode, start_date, end_date FROM competition WHERE id=?').get(parseInt(compId));
+async function _ensureDisplayCompetition(compId) {
+    const comp = await db.get('SELECT id, name, mode, start_date, end_date FROM competition WHERE id=?', parseInt(compId));
     if (!comp) return { ok: false, code: 'COMPETITION_NOT_FOUND', message: '대회를 찾을 수 없습니다.' };
     if (comp.mode !== 'display') return { ok: false, code: 'NOT_DISPLAY_MODE', message: '이 API는 노출용(display) 대회에만 사용 가능합니다.' };
     return { ok: true, comp };
@@ -9975,7 +10010,7 @@ app.get('/api/external/events/search', externalApiAuth, async (req, res) => {
     }
 
     // 노출용 대회 강제
-    const compCheck = _ensureDisplayCompetition(compId);
+    const compCheck = await _ensureDisplayCompetition(compId);
     if (!compCheck.ok) return res.status(404).json({ ok: false, code: compCheck.code, message: compCheck.message });
 
     const name = (req.query.name || '').trim();
@@ -10058,7 +10093,7 @@ app.get('/api/external/event/:id', externalApiAuth, async (req, res) => {
     const scope = _checkCompetitionScope(req.extApiKey, evt.competition_id);
     if (!scope.ok) return res.status(403).json({ ok: false, code: scope.code, message: scope.message });
 
-    const compCheck = _ensureDisplayCompetition(evt.competition_id);
+    const compCheck = await _ensureDisplayCompetition(evt.competition_id);
     if (!compCheck.ok) return res.status(404).json({ ok: false, code: compCheck.code, message: compCheck.message });
 
     return res.json({
@@ -10105,7 +10140,7 @@ app.post('/api/external/event-result-link', externalApiAuth, async (req, res) =>
     const scope = _checkCompetitionScope(req.extApiKey, evt.competition_id);
     if (!scope.ok) return res.status(403).json({ ok: false, code: scope.code, message: scope.message });
 
-    const compCheck = _ensureDisplayCompetition(evt.competition_id);
+    const compCheck = await _ensureDisplayCompetition(evt.competition_id);
     if (!compCheck.ok) return res.status(404).json({ ok: false, code: compCheck.code, message: compCheck.message });
 
     const oldValue = evt[field] || '';
@@ -10214,7 +10249,7 @@ app.post('/api/external/event-result-link/batch', externalApiAuth, async (req, r
             prepared.push({ index: i, ok: false, code: scope.code, message: scope.message, event_id: eventId });
             continue;
         }
-        const compCheck = _ensureDisplayCompetition(evt.competition_id);
+        const compCheck = await _ensureDisplayCompetition(evt.competition_id);
         if (!compCheck.ok) {
             prepared.push({ index: i, ok: false, code: compCheck.code, message: compCheck.message, event_id: eventId });
             continue;
@@ -10990,7 +11025,7 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
         const result = await tx();
 
         // Auto-link timetable to events
-        try { autoLinkDisplayTimetable(parseInt(competition_id)); } catch(e) { console.warn('Display auto-link warning:', e.message); }
+        try { await autoLinkDisplayTimetable(parseInt(competition_id)); } catch(e) { console.warn('Display auto-link warning:', e.message); }
 
         // Compute callroom times
         try {
@@ -11044,7 +11079,7 @@ app.post('/api/display/timetable/relink/:compId', async (req, res) => {
         const beforeRow = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND event_id IS NOT NULL', compId);
         const before = beforeRow ? beforeRow.c : 0;
         await db.run('UPDATE timetable SET event_id=NULL WHERE competition_id=?', compId);
-        const linked = autoLinkDisplayTimetable(compId);
+        const linked = await autoLinkDisplayTimetable(compId);
         const totalRow = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=?', compId);
         const total = totalRow ? totalRow.c : 0;
         const stillUnlinked = total - linked;
@@ -11070,7 +11105,7 @@ app.post('/api/display/roster/relink/:compId', async (req, res) => {
         const beforeRow = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NOT NULL', compId);
         const before = beforeRow ? beforeRow.c : 0;
         await db.run('UPDATE display_roster SET event_id=NULL WHERE competition_id=?', compId);
-        const matched = autoMatchDisplayRoster(compId);
+        const matched = await autoMatchDisplayRoster(compId);
         const totalRow = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=?', compId);
         const total = totalRow ? totalRow.c : 0;
         const stillUnmatched = total - matched;
@@ -11226,11 +11261,9 @@ app.post('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
 });
 
 // Auto-link timetable to display-mode events
-function autoLinkDisplayTimetable(compId) {
-    let events = db.prepare('SELECT id, name, gender, division, round_type, category FROM event WHERE competition_id=?').all(compId);
-    const ttRows = db.prepare('SELECT id, event_name, category AS jongbyul, round, event_id FROM timetable WHERE competition_id=?').all(compId);
-    const linkStmt = db.prepare('UPDATE timetable SET event_id=? WHERE id=?');
-    const insEvent = db.prepare('INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)');
+async function autoLinkDisplayTimetable(compId) {
+    let events = await db.all('SELECT id, name, gender, division, round_type, category FROM event WHERE competition_id=?', compId);
+    const ttRows = await db.all('SELECT id, event_name, category AS jongbyul, round, event_id FROM timetable WHERE competition_id=?', compId);
 
     function norm(s) { return (s || '').replace(/\s+/g, '').toLowerCase().replace(/[×xX]/g, 'x'); }
 
@@ -11248,8 +11281,8 @@ function autoLinkDisplayTimetable(compId) {
     // 시간표 측에서도 동일한 정규화 기준 사용 (매칭 표기 차이 제거)
     function divNorm(d) { return normalizeDivisionLabel(d || ''); }
 
-    ttRows.forEach(tt => {
-        if (tt.event_id) return; // already linked
+    for (const tt of ttRows) {
+        if (tt.event_id) continue; // already linked
         const parsed = parseDisplayRound(tt.round);
         const jbParsed = parseJongbyulNormalized(tt.jongbyul);
 
@@ -11273,7 +11306,8 @@ function autoLinkDisplayTimetable(compId) {
         // 2) Auto-create: 매칭 실패 시, parseJongbyul이 division을 추출했다면 누락된 event를 자동 생성
         if (!match && targetDivNorm) {
             const cat = guessCat(targetName);
-            const info = insEvent.run(compId, targetName, cat, jbParsed.gender || 'X', targetRound, targetDivNorm, nextSort++);
+            const info = await db.run('INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)',
+                compId, targetName, cat, jbParsed.gender || 'X', targetRound, targetDivNorm, nextSort++);
             match = {
                 id: info.lastInsertRowid,
                 name: targetName,
@@ -11287,10 +11321,10 @@ function autoLinkDisplayTimetable(compId) {
         }
 
         if (match) {
-            linkStmt.run(match.id, tt.id);
+            await db.run('UPDATE timetable SET event_id=? WHERE id=?', match.id, tt.id);
             linked++;
         }
-    });
+    }
 
     if (createdEvents > 0) {
         console.log(`[autoLink] competition_id=${compId}: ${linked} linked, ${createdEvents} events auto-created from timetable`);
@@ -11299,7 +11333,7 @@ function autoLinkDisplayTimetable(compId) {
 }
 
 // Upload roster PDF for display-mode competition
-app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
+app.post('/api/display/roster/upload', upload.single('file'), async (req, res) => {
     try {
         const { competition_id, admin_key, day, division_hint } = req.body;
         if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
@@ -11859,7 +11893,7 @@ app.post('/api/display/roster/upload', upload.single('file'), (req, res) => {
             })();
 
             // Auto-match roster to events
-            try { autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) { console.warn('Roster auto-match warning:', e.message); }
+            try { await autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) { console.warn('Roster auto-match warning:', e.message); }
 
             try { fs.unlinkSync(req.file.path); } catch(e) {}
             opLog(`노출용 명단 업로드 (${dayNum}일차, ${rosterEntries.length}명)`, 'admin', 'admin', parseInt(competition_id));
@@ -11999,7 +12033,7 @@ app.post('/api/display/roster/upload-excel', upload.single('file'), async (req, 
         })();
 
         // Auto-match
-        try { autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) { console.warn('Roster auto-match warning:', e.message); }
+        try { await autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) { console.warn('Roster auto-match warning:', e.message); }
 
         try { fs.unlinkSync(req.file.path); } catch(e) {}
         opLog(`노출용 명단 Excel 업로드 (일차 ${[...daysSeen].sort().join(',')}, ${entries.length}명)`, 'admin', 'admin', parseInt(competition_id));
@@ -12127,10 +12161,10 @@ app.post('/api/display/roster/clear-event/:rosterId', async (req, res) => {
 //      · round_type 표기 차이가 있으면 양쪽 다시 parseDisplayRound로 정규화한 후 비교.
 //   ④ gender가 비어있는 명단(혼성) → ev.gender ∈ {X, ''} 중 하나와 매칭.
 //   ⑤ 매칭이 안 되면 그냥 둠. 잘못된 매칭보다 미매칭이 안전.
-function autoMatchDisplayRoster(compId) {
-    const events = db.prepare('SELECT id, name, gender, division, round_type FROM event WHERE competition_id=?').all(compId);
-    const unmatched = db.prepare('SELECT id, event_name, round, division, gender FROM display_roster WHERE competition_id=? AND event_id IS NULL').all(compId);
-    const updStmt = db.prepare('UPDATE display_roster SET event_id=? WHERE id=?');
+async function autoMatchDisplayRoster(compId) {
+    const events = await db.all('SELECT id, name, gender, division, round_type FROM event WHERE competition_id=?', compId);
+    const unmatched = await db.all('SELECT id, event_name, round, division, gender FROM display_roster WHERE competition_id=? AND event_id IS NULL', compId);
+    const UPD_RM_SQL = 'UPDATE display_roster SET event_id=? WHERE id=?';
 
     // ── 정규화 헬퍼 ──
     function nameNorm(s) {
@@ -12179,7 +12213,7 @@ function autoMatchDisplayRoster(compId) {
     let fallbackMatched = 0;
     let stillUnmatched = 0;
 
-    unmatched.forEach(re => {
+    for (const re of unmatched) {
         const parsed = parseDisplayRound(re.round || '');
         const isCombined = parsed.is_combined;
         const rosterDiv = divNorm(re.division);
@@ -12205,9 +12239,9 @@ function autoMatchDisplayRoster(compId) {
                 );
             }
             // 종합 sub-event는 일반 종목으로 절대 흘러가지 않음 — 여기서 종료
-            if (match) { updStmt.run(match.id, re.id); matched++; combinedMatched++; }
+            if (match) { await db.run(UPD_RM_SQL, match.id, re.id); matched++; combinedMatched++; }
             else stillUnmatched++;
-            return;
+            continue;
         }
 
         // ── (B) 일반 종목 strict 매칭: name + gender + division + round_type 모두 일치 ──
@@ -12217,7 +12251,7 @@ function autoMatchDisplayRoster(compId) {
             genderEq(ev.gender, re.gender) &&
             roundEq(re.round, ev.round_type)
         );
-        if (match) { updStmt.run(match.id, re.id); matched++; strictMatched++; return; }
+        if (match) { await db.run(UPD_RM_SQL, match.id, re.id); matched++; strictMatched++; continue; }
 
         // ── (C) Fallback 1: division 표기 차이 흡수 (양쪽 모두 normalize 후 비교)
         //        ※ rosterDiv가 빈 문자열일 때만 division 비교를 생략. 그렇지 않으면 division mismatch는 절대 매칭 X.
@@ -12227,7 +12261,7 @@ function autoMatchDisplayRoster(compId) {
                 genderEq(ev.gender, re.gender) &&
                 roundEq(re.round, ev.round_type)
             );
-            if (match) { updStmt.run(match.id, re.id); matched++; fallbackMatched++; return; }
+            if (match) { await db.run(UPD_RM_SQL, match.id, re.id); matched++; fallbackMatched++; continue; }
         }
 
         // ── (D) Fallback 2: round_type만 'final' 가정한 매칭 (예선만 있고 결승 event가 없는 케이스 대비)
@@ -12239,10 +12273,10 @@ function autoMatchDisplayRoster(compId) {
             divNorm(ev.division) === rosterDiv &&
             genderEq(ev.gender, re.gender)
         );
-        if (match) { updStmt.run(match.id, re.id); matched++; fallbackMatched++; return; }
+        if (match) { await db.run(UPD_RM_SQL, match.id, re.id); matched++; fallbackMatched++; continue; }
 
         stillUnmatched++;
-    });
+    }
 
     if (matched > 0 || stillUnmatched > 0) {
         console.log(`[autoMatchDisplayRoster] comp=${compId}: matched=${matched} (strict=${strictMatched}, combined=${combinedMatched}, fallback=${fallbackMatched}), unmatched=${stillUnmatched}`);
@@ -12322,7 +12356,7 @@ app.post('/api/display/roster/:compId/rematch', async (req, res) => {
     const { admin_key } = req.body;
     if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
     await db.run('UPDATE display_roster SET event_id=NULL WHERE competition_id=?', req.params.compId);
-    const matched = autoMatchDisplayRoster(parseInt(req.params.compId));
+    const matched = await autoMatchDisplayRoster(parseInt(req.params.compId));
     res.json({ success: true, matched });
 });
 
@@ -12492,7 +12526,7 @@ app.post('/api/display/roster/entry', async (req, res) => {
             (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, event_id, heat, lane)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, parseInt(competition_id), parseInt(day) || 1, event_name || '', round || '', division || '', gender || '', bib_number != null ? String(bib_number) : '', athlete_name, team || '', sort_order != null ? parseInt(sort_order) : 0, event_id || null, heat != null && heat !== '' ? parseInt(heat) : null, lane != null && lane !== '' ? parseInt(lane) : null);
         // 자동 매칭 시도
-        try { autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) {}
+        try { await autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) {}
         res.json({ success: true, id: info.lastInsertRowid });
     } catch (e) {
         res.status(500).json({ error: '추가 실패: ' + e.message });
@@ -12585,7 +12619,7 @@ wss.on('connection', (ws) => {
     // Send initial state
     ws.send(JSON.stringify({ type: 'connected', timestamp: Date.now(), protocol: 'pacerise-scoreboard-v1' }));
 
-    ws.on('message', (msg) => {
+    ws.on('message', async (msg) => {
         try {
             const data = JSON.parse(msg);
             // Handle client requests
@@ -12594,7 +12628,7 @@ wss.on('connection', (ws) => {
                 ws.send(JSON.stringify({ type: 'subscribed', competition_id: data.competition_id }));
             }
             if (data.type === 'request_current') {
-                sendCurrentScoreboard(ws, data.competition_id);
+                await sendCurrentScoreboard(ws, data.competition_id);
             }
         } catch(e) {}
     });
@@ -12619,51 +12653,52 @@ function broadcastToScoreboard(eventType, data) {
     });
 }
 
-function sendCurrentScoreboard(ws, compId) {
+async function sendCurrentScoreboard(ws, compId) {
     if (!compId) return;
-    const activeEvent = db.prepare("SELECT * FROM event WHERE competition_id=? AND round_status='in_progress' AND parent_event_id IS NULL ORDER BY sort_order LIMIT 1").get(compId);
+    const activeEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND round_status='in_progress' AND parent_event_id IS NULL ORDER BY sort_order LIMIT 1", compId);
     if (!activeEvent) {
         ws.send(JSON.stringify({ type: 'scoreboard_state', data: { event: null } }));
         return;
     }
-    const heat = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1').get(activeEvent.id);
-    const totalHeats = db.prepare('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?').get(activeEvent.id)?.cnt || 0;
+    const heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1', activeEvent.id);
+    const totalHeatsRow = await db.get('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?', activeEvent.id);
+    const totalHeats = (totalHeatsRow && totalHeatsRow.cnt) || 0;
     
     // Get entries for this event's heat
-    let entries = heat ? db.prepare(`
+    let entries = heat ? await db.all(`
         SELECT he.lane_number, ee.id as event_entry_id, ee.status, a.name, a.bib_number, a.team
         FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
         JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
         ORDER BY he.lane_number ASC
-    `).all(heat.id) : [];
-    let results = heat ? db.prepare('SELECT * FROM result WHERE heat_id=?').all(heat.id) : [];
+    `, heat.id) : [];
+    let results = heat ? await db.all('SELECT * FROM result WHERE heat_id=?', heat.id) : [];
     
     // Check for linked (joint) events — 합동 종목 전광판
-    const linkedEvents = db.prepare(`
+    const linkedEvents = await db.all(`
         SELECT CASE WHEN event_id_a = ? THEN event_id_b ELSE event_id_a END as linked_id
         FROM event_link WHERE event_id_a = ? OR event_id_b = ?
-    `).all(activeEvent.id, activeEvent.id, activeEvent.id);
+    `, activeEvent.id, activeEvent.id, activeEvent.id);
     
-    const comp = db.prepare('SELECT federation, name FROM competition WHERE id=?').get(compId);
-    const primaryFed = comp?.federation || comp?.name || '';
+    const comp = await db.get('SELECT federation, name FROM competition WHERE id=?', compId);
+    const primaryFed = (comp && (comp.federation || comp.name)) || '';
     
     // Tag primary entries with federation
     entries = entries.map(e => ({ ...e, federation: primaryFed }));
     
     // Merge linked event entries
     for (const link of linkedEvents) {
-        const linkedEvt = db.prepare('SELECT e.*, c.federation, c.name as comp_name FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?').get(link.linked_id);
+        const linkedEvt = await db.get('SELECT e.*, c.federation, c.name as comp_name FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?', link.linked_id);
         if (!linkedEvt) continue;
-        const linkedHeat = db.prepare('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1').get(link.linked_id);
+        const linkedHeat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1', link.linked_id);
         if (!linkedHeat) continue;
         
-        const linkedEntries = db.prepare(`
+        const linkedEntries = await db.all(`
             SELECT he.lane_number, ee.id as event_entry_id, ee.status, a.name, a.bib_number, a.team
             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
             JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
             ORDER BY he.lane_number ASC
-        `).all(linkedHeat.id);
-        const linkedResults = db.prepare('SELECT * FROM result WHERE heat_id=?').all(linkedHeat.id);
+        `, linkedHeat.id);
+        const linkedResults = await db.all('SELECT * FROM result WHERE heat_id=?', linkedHeat.id);
         
         const linkedFed = linkedEvt.federation || linkedEvt.comp_name || '';
         entries = entries.concat(linkedEntries.map(e => ({ ...e, federation: linkedFed })));
