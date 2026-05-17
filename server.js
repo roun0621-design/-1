@@ -229,8 +229,9 @@ try { db.exec(`ALTER TABLE event ADD COLUMN video_url TEXT DEFAULT ''`); } catch
 try { db.exec(`UPDATE height_attempt SET result_mark='-' WHERE result_mark='PASS'`); } catch(e) {}
 // Migration: Allow NULL bib_number and remove strict UNIQUE constraint
 // (SQLite treats NULL as distinct in UNIQUE, so NULL bibs won't conflict)
-try {
-    const tableInfo = db.prepare("PRAGMA table_info(athlete)").all();
+// PG 모드에서는 schema.pg.sql이 이미 nullable 상태로 정의되어 있으므로 SQLite 전용.
+if (!db.isAsync) try {
+    const tableInfo = db.raw.prepare("PRAGMA table_info(athlete)").all();
     const bibCol = tableInfo.find(c => c.name === 'bib_number');
     if (bibCol && bibCol.notnull === 1) {
         // bib_number is currently NOT NULL — need to recreate table
@@ -1449,16 +1450,9 @@ app.delete('/api/competitions/:id', async (req, res) => {
     } catch(e) { console.error('[Backup] 삭제 전 백업 실패:', e.message); }
 
     // 안전 헬퍼: 테이블/컬럼이 존재할 때만 DELETE 실행 (스키마 다변화 대비)
-    const tableExists = async (name) => {
-        try { return !!await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name=?", name); }
-        catch(_){ return false; }
-    };
-    const hasColumn = async (table, col) => {
-        try {
-            const cols = await db.all(`PRAGMA table_info(${table})`);
-            return cols.some(c => c.name === col);
-        } catch(_){ return false; }
-    };
+    // lib/db.js 메타 헬퍼 사용 — 양 백엔드 호환 (SQLite=sqlite_master/PRAGMA, PG=information_schema)
+    const tableExists = (name) => db.tableExists(name);
+    const hasColumn = (table, col) => db.columnExists(table, col);
     const safeRun = async (sql, ...args) => {
         try { return await db.run(sql, ...args); }
         catch(e){ console.warn('[delete-comp] skip:', sql.split('\n')[0].trim(), '|', e.message); return null; }
@@ -3401,7 +3395,7 @@ app.post('/api/admin/site-config', async (req, res) => {
     if (!configs || typeof configs !== 'object') return res.status(400).json({ error: 'configs object required' });
     await db.transaction(async () => {
         for (const [k, v] of Object.entries(configs)) {
-            if (k.startsWith('site_')) await db.run('INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)', k, String(v));
+            if (k.startsWith('site_')) await db.run('INSERT INTO system_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', k, String(v));
         }
     })();
     opLog('사이트 설정 업데이트', 'admin', 'admin');
@@ -3863,7 +3857,7 @@ app.post('/api/admin/heats/:id/move-entry', async (req, res) => {
         // Remove from current heat
         await db.run('DELETE FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
         // Add to target heat
-        await db.run('INSERT OR REPLACE INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', target_heat_id, event_entry_id, lane_number || null);
+        await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?) ON CONFLICT(heat_id, event_entry_id) DO UPDATE SET lane_number=excluded.lane_number', target_heat_id, event_entry_id, lane_number || null);
     })();
     res.json({ success: true });
 });
@@ -7038,7 +7032,7 @@ app.post('/api/doc-templates', async (req, res) => {
     const ad = JSON.stringify(templates.ad_card || {});
     const sl = JSON.stringify(templates.start_list || {});
     const rs = JSON.stringify(templates.result_sheet || {});
-    await db.run('INSERT OR REPLACE INTO doc_template (competition_id, ad_card, start_list, result_sheet) VALUES (?, ?, ?, ?)', competition_id, ad, sl, rs);
+    await db.run('INSERT INTO doc_template (competition_id, ad_card, start_list, result_sheet) VALUES (?, ?, ?, ?) ON CONFLICT(competition_id) DO UPDATE SET ad_card=excluded.ad_card, start_list=excluded.start_list, result_sheet=excluded.result_sheet', competition_id, ad, sl, rs);
     opLog('문서 양식 설정 업데이트', 'admin', 'admin', competition_id);
     res.json({ success: true });
 });
@@ -7133,7 +7127,7 @@ app.post('/api/event-records', async (req, res) => {
     const { admin_key, event_id, records } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!event_id || !records) return res.status(400).json({ error: 'event_id, records required' });
-    await db.run('INSERT OR REPLACE INTO event_records (event_id, records) VALUES (?, ?)', event_id, JSON.stringify(records));
+    await db.run('INSERT INTO event_records (event_id, records) VALUES (?, ?) ON CONFLICT(event_id) DO UPDATE SET records=excluded.records', event_id, JSON.stringify(records));
     opLog(`종목별 기록(NR/DR/CR) 저장 event_id=${event_id}`, 'admin', 'admin');
     res.json({ success: true });
 });
@@ -7166,11 +7160,12 @@ try { db.exec('ALTER TABLE timetable ADD COLUMN event_ids TEXT DEFAULT NULL'); }
 
 // Migration: UNIQUE 제약에 round 포함 (혼성/10종/5종 등 같은 시간·종목·부별이라도 round가 다르면 별개 행)
 // 기존 UNIQUE(competition_id, day, section, time, event_name, category) → UNIQUE(... , round) 로 확장
-try {
-    const idxRows = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='timetable' AND name='ux_timetable_full'").all();
+// PG 모드에서는 schema.pg.sql이 이미 round 포함 UNIQUE 로 정의됨 — SQLite 전용 마이그레이션.
+if (!db.isAsync) try {
+    const idxRows = db.raw.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='timetable' AND name='ux_timetable_full'").all();
     if (idxRows.length === 0) {
         // 자동 인덱스(sqlite_autoindex_timetable_1)는 그대로 두면 round 미포함 충돌이 발생하므로 테이블 재구성
-        const hasOldAutoIdx = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='sqlite_autoindex_timetable_1'").get();
+        const hasOldAutoIdx = db.raw.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='sqlite_autoindex_timetable_1'").get();
         if (hasOldAutoIdx) {
             console.log('[migration] timetable UNIQUE 재구성: round 컬럼 포함');
             db.exec('BEGIN');
