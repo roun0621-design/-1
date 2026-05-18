@@ -536,12 +536,21 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_extlog_created ON external_api_log
 //   - setConfigKey 는 캐시 + DB write (SQLite raw sync / PG async — 별도 PG boot 스크립트에서 처리)
 const _configCache = new Map();
 function _loadConfigCacheSync() {
-    if (db.isAsync) return; // PG: boot async loader가 별도로 처리(없으면 빈 캐시→default fallback)
+    if (db.isAsync) return; // PG: _loadConfigCacheAsync 가 별도 처리
     try {
         const rows = db.raw.prepare('SELECT key, value FROM system_config').all();
         for (const r of rows) _configCache.set(r.key, r.value);
     } catch (e) {
         console.error('[config-cache] sync load failed:', e.message);
+    }
+}
+async function _loadConfigCacheAsync() {
+    try {
+        const rows = await db.all('SELECT key, value FROM system_config');
+        _configCache.clear();
+        for (const r of rows) _configCache.set(r.key, r.value);
+    } catch (e) {
+        console.error('[config-cache] async load failed:', e.message);
     }
 }
 function getConfigKey(k, def) {
@@ -12815,6 +12824,26 @@ function migrateNormalizeDivisionAndRound() {
 }
 
 server.listen(PORT, '0.0.0.0', async () => {
+    // PG 모드: boot 시 1회 async 캐시 로드 (SQLite는 boot 직후 sync 로드 완료됨)
+    if (db.isAsync) {
+        try {
+            await _loadConfigCacheAsync();
+            await _reloadOpKeyCacheAsync();
+            // PG 모드 초기 admin 자동 시드: admin_pw 가 없으면 env 값으로 bcrypt 해시 저장
+            if (!_configCache.has('admin_id')) {
+                setConfigKey('admin_id', process.env.ADMIN_ID || 'admin');
+            }
+            if (!_configCache.has('admin_pw')) {
+                setConfigKey('admin_pw', bcrypt.hashSync(process.env.ADMIN_PW || 'changeme', 10));
+            }
+            if (!_configCache.has('operation_key')) {
+                setConfigKey('operation_key', process.env.OPERATION_KEY || '1234');
+            }
+            console.log(`  [PG cache] config: ${_configCache.size} keys, opkey: ${_opKeyCache.size} keys`);
+        } catch (e) {
+            console.error('[PG cache load] failed:', e.message);
+        }
+    }
     try {
         const compRow = await db.get('SELECT COUNT(*) as c FROM competition');
         const evtRow = await db.get('SELECT COUNT(*) as c FROM event');
