@@ -1854,7 +1854,14 @@ app.post('/api/results/upsert', async (req, res) => {
         }
     }
     try {
-        let existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS ?', heat_id, event_entry_id, attempt_number || null);
+        // PG는 'IS ?' 바인딩 미지원 (SQLite는 IS NULL 비교 허용) → attempt_number NULL/값 분기
+        const _attNum = attempt_number || null;
+        let existing;
+        if (_attNum === null) {
+            existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NULL', heat_id, event_entry_id);
+        } else {
+            existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number=?', heat_id, event_entry_id, _attNum);
+        }
         // Fallback: for track/relay/road (no attempt_number), find any existing result for this entry
         if (!existing && !attempt_number) {
             existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? ORDER BY id DESC LIMIT 1', heat_id, event_entry_id);
