@@ -1700,13 +1700,13 @@ app.get('/api/events/:id/heat-allocations', async (req, res) => {
     const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    const result = heats.map(async h => {
+    const result = await Promise.all(heats.map(async h => {
         const entries = await db.all(`SELECT he.lane_number, he.sub_group, he.id AS heat_entry_id, ee.id AS event_entry_id, ee.status,
                a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender
         FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-        JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`, h.id);
+        JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`, h.id);
         return { ...h, entries };
-    });
+    }));
     res.json({ event, heats: result });
 });
 app.get('/api/events', async (req, res) => {
@@ -1759,7 +1759,7 @@ app.get('/api/heats/:id/entries', async (req, res) => {
         JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?`;
     const params = [req.params.id];
     if (statusFilter) { query += ` AND ee.status=?`; params.push(statusFilter); }
-    query += ` ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`;
+    query += ` ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`;
     res.json(await db.all(query, ...params));
 });
 
@@ -2049,15 +2049,15 @@ app.get('/api/events/:id/live-results', async (req, res) => {
     const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
     // Also load qualifications if available
     const quals = await db.all('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
-    const result = heats.map(async h => {
+    const result = await Promise.all(heats.map(async h => {
         const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status,
                a.name, a.bib_number, a.team FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-               JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`, h.id);
+               JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`, h.id);
         if (event.category === 'field_height') {
             return { ...h, entries, height_attempts: await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', h.id) };
         }
         return { ...h, entries, results: await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', h.id) };
-    });
+    }));
     res.json({ event, heats: result, qualifications: quals });
 });
 
@@ -2605,7 +2605,7 @@ app.post('/api/events/:id/create-final', async (req, res) => {
     const finalEventId = info.lastInsertRowid;
 
     // Build athlete data for WA seeding — with best performance for sorting
-    const qualSels = qualified.map(async q => {
+    const qualSels = await Promise.all(qualified.map(async q => {
         const origEntry = await db.get('SELECT * FROM event_entry WHERE id=?', q.event_entry_id);
         if (!origEntry) return { event_entry_id: q.event_entry_id, athlete_id: null, qualification_type: q.qualification_type || '', perf: Infinity };
         // Get best performance across all heats of the source event
@@ -2626,7 +2626,7 @@ app.post('/api/events/:id/create-final', async (req, res) => {
             }
         }
         return { event_entry_id: q.event_entry_id, athlete_id: origEntry.athlete_id, qualification_type: q.qualification_type || '', perf: bestPerf };
-    });
+    }));
 
     // WA seeding: Q (순위 진출) first by performance, then q (기록 진출) by performance
     // A q athlete cannot outrank a Q athlete even with a better record
@@ -2721,7 +2721,7 @@ app.get('/api/events/:id/lane-assignments', async (req, res) => {
         groupDescs[2] = '시드 7~8위 그룹 (레인 1,2)';
     }
 
-    const result = heats.map(async heat => {
+    const result = await Promise.all(heats.map(async heat => {
         const entries = await db.all(`
             SELECT he.id AS heat_entry_id, he.event_entry_id, he.lane_number,
                    ee.athlete_id, a.name, a.bib_number, a.team
@@ -2737,7 +2737,7 @@ app.get('/api/events/:id/lane-assignments', async (req, res) => {
         const sourceEvent = await db.all("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND competition_id=? AND round_type IN ('preliminary','semifinal') AND id!=?", event.name, event.gender, event.category, event.competition_id, event.id);
 
         // Get qualification info for each athlete
-        const athleteDetails = entries.map(async e => {
+        const athleteDetails = await Promise.all(entries.map(async e => {
             let qualType = '';
             let seedRank = null;
             let bestPerf = null;
@@ -2780,7 +2780,7 @@ app.get('/api/events/:id/lane-assignments', async (req, res) => {
                 qualification_type: qualType,
                 reason: reason
             };
-        });
+        }));
 
         return {
             heat_id: heat.id,
@@ -2788,7 +2788,7 @@ app.get('/api/events/:id/lane-assignments', async (req, res) => {
             heat_name: heat.heat_name || `Heat ${heat.heat_number}`,
             entries: athleteDetails
         };
-    });
+    }));
 
     res.json({
         event_id: event.id,
@@ -3134,7 +3134,7 @@ app.get('/api/round-status', async (req, res) => {
     if (compId) { q += ' AND competition_id=?'; p.push(compId); }
     q += ' ORDER BY sort_order, id';
     const events = await db.all(q, ...p);
-    const result = events.map(async e => {
+    const result = await Promise.all(events.map(async e => {
         const heats = await db.all('SELECT id FROM heat WHERE event_id=?', e.id);
         let totalEntries = 0, totalResults = 0;
         for (const h of heats) {
@@ -3144,7 +3144,7 @@ app.get('/api/round-status', async (req, res) => {
             totalResults += (resRow && resRow.c) || 0;
         }
         return { ...e, heat_count: heats.length, total_entries: totalEntries, total_results: totalResults };
-    });
+    }));
     res.json(result);
 });
 
@@ -3156,15 +3156,15 @@ app.get('/api/events/:id/full-results', async (req, res) => {
     if (!event) return res.status(404).json({ error: 'Event not found' });
     const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
     const quals = await db.all('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
-    const result = heats.map(async h => {
+    const result = await Promise.all(heats.map(async h => {
         const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status,
                a.name, a.bib_number, a.team FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-               JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)`, h.id);
+               JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`, h.id);
         if (event.category === 'field_height') {
             return { ...h, entries, height_attempts: await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', h.id) };
         }
         return { ...h, entries, results: await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', h.id) };
-    });
+    }));
     res.json({ event, heats: result, qualifications: quals });
 });
 
@@ -3234,7 +3234,7 @@ app.get('/api/relay-members', async (req, res) => {
         SELECT a.*, rm.leg_order, rm.event_entry_id FROM relay_member rm
         JOIN athlete a ON a.id = rm.athlete_id
         WHERE rm.event_entry_id = ?
-        ORDER BY rm.leg_order, CAST(a.bib_number AS INTEGER)
+        ORDER BY rm.leg_order, ${orderByBibSql('a.bib_number')}
     `, entryId);
     res.json(members);
 });
@@ -3331,10 +3331,10 @@ app.get('/api/public/callroom-summary', async (req, res) => {
 
     const events = await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id", compId);
 
-    const result = events.map(async evt => {
+    const result = await Promise.all(events.map(async evt => {
         const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', evt.id);
         let totalEntries = 0, checkedIn = 0, noShow = 0;
-        const heatDetails = heats.map(async h => {
+        const heatDetails = await Promise.all(heats.map(async h => {
             const entries = await db.all(`
                 SELECT ee.status, a.name, a.bib_number, a.team, he.lane_number, he.sub_group
                 FROM heat_entry he
@@ -3360,7 +3360,7 @@ app.get('/api/public/callroom-summary', async (req, res) => {
                     lane: e.lane_number, group: e.sub_group, status: e.status
                 }))
             };
-        });
+        }));
         return {
             event_id: evt.id,
             name: evt.name,
@@ -3374,7 +3374,7 @@ app.get('/api/public/callroom-summary', async (req, res) => {
             pending: totalEntries - checkedIn - noShow,
             heats: heatDetails
         };
-    });
+    }));
     res.json(result);
 });
 
@@ -6339,7 +6339,7 @@ app.get('/api/joint-groups', async (req, res) => {
         ORDER BY jg.id
     `, competition_id);
     // For each group, fetch members
-    const result = groups.map(async g => {
+    const result = await Promise.all(groups.map(async g => {
         const members = await db.all(`
             SELECT jgm.*, e.name as event_name, e.gender, e.round_type, e.category,
                    c.name as comp_name, c.federation
@@ -6350,7 +6350,7 @@ app.get('/api/joint-groups', async (req, res) => {
             ORDER BY jgm.sort_order
         `, g.id);
         return { ...g, members };
-    });
+    }));
     res.json(result);
 });
 
@@ -6609,7 +6609,7 @@ app.get('/api/joint-groups/by-event/:eventId', async (req, res) => {
     if (membership.length === 0) return res.json(null);
 
     // Return all groups this event belongs to, with all their members
-    const result = membership.map(async g => {
+    const result = await Promise.all(membership.map(async g => {
         const members = await db.all(`
             SELECT jgm.*, e.name as event_name, e.gender, e.round_type, e.category,
                    c.name as comp_name, c.federation
@@ -6620,7 +6620,7 @@ app.get('/api/joint-groups/by-event/:eventId', async (req, res) => {
             ORDER BY jgm.sort_order
         `, g.id);
         return { ...g, members };
-    });
+    }));
     res.json(result);
 });
 
@@ -8152,7 +8152,7 @@ app.get('/api/documents/start-list/:eventId', async (req, res) => {
             SELECT he.lane_number, he.sub_group, ee.status, a.name, a.bib_number, a.team, a.date_of_birth, a.personal_best
             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
             JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-            ORDER BY he.lane_number ASC, CAST(a.bib_number AS INTEGER)
+            ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}
         `, heat.id);
 
         // Check page break (use dynamic row height based on fontSize)
@@ -8289,7 +8289,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         });
 
         // Gather all combined_scores and sub-event results for each athlete
-        const athleteData = entries.map(async e => {
+        const athleteData = await Promise.all(entries.map(async e => {
             const scores = await db.all('SELECT * FROM combined_score WHERE event_entry_id=? ORDER BY sub_event_order', e.event_entry_id);
             let totalPoints = 0;
             const subScores = [];
@@ -8336,7 +8336,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
             // 0 points with no explicit status → DNF
             if (!statusCode && totalPoints === 0) statusCode = 'DNF';
             return { ...e, subScores, totalPoints, status_code: statusCode };
-        });
+        }));
 
         // Sort by total points descending; DNF at bottom
         athleteData.sort((a, b) => {
@@ -8479,7 +8479,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         const barHeights = [...new Set(allAttempts.map(a => a.bar_height))].sort((a, b) => a - b);
 
         // Build athlete data
-        const athleteData = entries.map(async e => {
+        const athleteData = await Promise.all(entries.map(async e => {
             const myAttempts = allAttempts.filter(a => a.event_entry_id === e.event_entry_id);
             let bestCleared = null;
             let totalMisses = 0; let missesAtBest = 0;
@@ -8510,7 +8510,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 if (bestR) bestCleared = bestR.distance_meters;
             }
             return { ...e, bestCleared, totalMisses, missesAtBest, heightResults, status_code: status };
-        });
+        }));
 
         // Sort: highest cleared → fewest misses at best → fewest total misses
         athleteData.sort((a, b) => {
@@ -9442,14 +9442,14 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
         `, heat.id);
 
-        const athleteData = entries.map(async e => {
+        const athleteData = await Promise.all(entries.map(async e => {
           const scores = await db.all('SELECT * FROM combined_score WHERE event_entry_id=? ORDER BY sub_event_order', e.event_entry_id);
           let totalPoints = scores.reduce((s, sc) => s + (sc.wa_points || 0), 0);
           const status = await db.get("SELECT status_code FROM result WHERE heat_id=? AND event_entry_id=? AND status_code IN ('DNF','DNS','DQ') LIMIT 1", heat.id, e.event_entry_id);
           let statusCode = status?.status_code || '';
           if (!statusCode && e.status === 'no_show') statusCode = 'DNS';
           return { ...e, totalPoints, status_code: statusCode };
-        });
+        }));
 
         athleteData.sort((a, b) => {
           const aS = ['DNS','DNF','DQ'].includes(a.status_code);
@@ -9479,7 +9479,7 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
 
         const allAttempts = await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', heat.id);
 
-        const athleteData = entries.map(async e => {
+        const athleteData = await Promise.all(entries.map(async e => {
           const myAttempts = allAttempts.filter(a => a.event_entry_id === e.event_entry_id);
           let bestCleared = null; let totalMisses = 0; let missesAtBest = 0;
           const heights = [...new Set(myAttempts.map(a => a.bar_height))].sort((a,b) => a-b);
@@ -9498,7 +9498,7 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           }
           if (!status && bestCleared === null && myAttempts.length > 0) status = 'NM';
           return { ...e, bestCleared, totalMisses, missesAtBest, status_code: status };
-        });
+        }));
 
         athleteData.sort((a, b) => {
           const aS = ['DNS','DNF','DQ','NM'].includes(a.status_code);
@@ -9629,7 +9629,7 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           if (isRelay) {
             const members = await db.all(`
               SELECT a.name FROM relay_member rm JOIN athlete a ON a.id=rm.athlete_id
-              WHERE rm.event_entry_id=? ORDER BY rm.leg_order, CAST(a.bib_number AS INTEGER)
+              WHERE rm.event_entry_id=? ORDER BY rm.leg_order, ${orderByBibSql('a.bib_number')}
             `, a.event_entry_id).map(m => m.name);
             entry.members = members;
             entry.is_relay = true;
