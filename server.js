@@ -12842,6 +12842,13 @@ server.listen(PORT, '0.0.0.0', async () => {
             }
             if (!_configCache.has('admin_pw')) {
                 setConfigKey('admin_pw', bcrypt.hashSync(process.env.ADMIN_PW || 'changeme', 10));
+            } else {
+                // 평문 → bcrypt 자동 마이그레이션 (SQLite L581 와 동일 로직, PG 누락 보완)
+                const existingPw = _configCache.get('admin_pw') || '';
+                if (existingPw && !existingPw.startsWith('$2a$') && !existingPw.startsWith('$2b$') && !existingPw.startsWith('$2y$')) {
+                    console.log('  [PG migration] admin_pw 가 평문 형태 → bcrypt 해시로 자동 변환');
+                    setConfigKey('admin_pw', bcrypt.hashSync(existingPw, 10));
+                }
             }
             if (!_configCache.has('operation_key')) {
                 setConfigKey('operation_key', process.env.OPERATION_KEY || '1234');
