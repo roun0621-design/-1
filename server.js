@@ -4587,7 +4587,7 @@ app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => 
         // Build existing athlete cache — support both with and without gender
         const existingCache = new Map();      // name|team|gender → athlete
         const existingNoGender = new Map();   // name|team → athlete (fallback when no gender column)
-        await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id)
+        (await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id))
             .forEach(a => {
                 existingCache.set(`${a.name}|${a.team}|${a.gender}`, a);
                 // For name+team only matching, store first match (if no duplicate)
@@ -5203,7 +5203,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
         await db.transaction(async () => {
             // Cache all athletes for this competition by name+team
             const athleteCache = new Map();
-            await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id)
+            (await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id))
                 .forEach(a => {
                     athleteCache.set(`${a.name}|${a.team}|${a.gender}`, a);
                     // Also index by name+team (without gender) for flexible matching
@@ -9627,11 +9627,11 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
 
           // Relay: fetch members
           if (isRelay) {
-            const members = await db.all(`
+            const memberRows = await db.all(`
               SELECT a.name FROM relay_member rm JOIN athlete a ON a.id=rm.athlete_id
               WHERE rm.event_entry_id=? ORDER BY rm.leg_order, ${orderByBibSql('a.bib_number')}
-            `, a.event_entry_id).map(m => m.name);
-            entry.members = members;
+            `, a.event_entry_id);
+            entry.members = memberRows.map(m => m.name);
             entry.is_relay = true;
           }
 
