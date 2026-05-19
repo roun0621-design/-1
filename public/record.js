@@ -3366,7 +3366,14 @@ function showAdminKeyModal(onSubmit) {
         <div class="modal-header"><div class="modal-title">관리자 인증 필요</div></div>
         <div class="modal-form">
             <p style="padding:8px 0;font-size:13px;">경기가 완료된 상태입니다. 수정하려면 관리자 키를 입력하세요.</p>
-            <input type="password" id="admin-key-modal-input" class="form-input" placeholder="관리자 키" style="width:100%;padding:8px 12px;margin-top:4px;">
+            <input type="password" id="admin-key-modal-input" class="form-input"
+                   placeholder="관리자 키 (영문/숫자)"
+                   autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                   lang="en" inputmode="text"
+                   style="width:100%;padding:8px 12px;margin-top:4px;ime-mode:disabled;">
+            <div id="admin-key-ime-warn" style="display:none;color:#d97706;font-size:12px;margin-top:6px;font-weight:600;">
+                ⚠️ 한글이 입력되었습니다. 키보드 <b>한/영 키</b>를 눌러 영문 모드로 전환 후 다시 입력해 주세요.
+            </div>
             <div id="admin-key-modal-error" style="display:none;color:var(--danger);font-size:12px;margin-top:6px;"></div>
         </div>
         <div class="modal-footer">
@@ -3377,11 +3384,30 @@ function showAdminKeyModal(onSubmit) {
     document.body.appendChild(overlay);
     overlay.style.display = 'flex';
     const inp = document.getElementById('admin-key-modal-input');
+    const imeWarn = document.getElementById('admin-key-ime-warn');
     inp.value = '';
+    // 한글(가-힣) 또는 한글 자모(ㄱ-ㅣ) 감지 함수
+    const _hasHangul = (s) => /[\u3131-\u318E\uAC00-\uD7A3]/.test(s || '');
+    const _checkIme = () => {
+        if (_hasHangul(inp.value)) {
+            imeWarn.style.display = 'block';
+        } else {
+            imeWarn.style.display = 'none';
+        }
+    };
+    inp.addEventListener('input', _checkIme);
+    inp.addEventListener('compositionend', _checkIme);
     let submitted = false;
     const closeOverlay = () => { overlay.remove(); };
     const submit = () => {
         if (submitted) return;
+        // 한글 감지 시 제출 차단 + 경고 + 자동 클리어
+        if (_hasHangul(inp.value)) {
+            imeWarn.style.display = 'block';
+            inp.value = '';
+            setTimeout(() => inp.focus(), 50);
+            return;
+        }
         submitted = true;
         closeOverlay();
         onSubmit(inp.value);
