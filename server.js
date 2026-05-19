@@ -1767,13 +1767,18 @@ app.get('/api/heats/:id/entries', async (req, res) => {
 // RESULTS
 // ============================================================
 app.get('/api/results', async (req, res) => {
-    if (!req.query.heat_id) return res.status(400).json({ error: 'heat_id required' });
+    const heatId = parseInt(req.query.heat_id, 10);
+    // PG는 BIGINT에 'undefined'/'abc' 같은 문자열을 넘기면 500 에러를 던지므로
+    // 정수로 변환 가능한지 명시 검증 (SQLite는 lenient 처리하지만 PG와 동작 통일).
+    if (!Number.isFinite(heatId) || heatId <= 0) {
+        return res.status(400).json({ error: 'heat_id (positive integer) required' });
+    }
     res.json(await db.all(`
         SELECT r.*, a.name, a.bib_number, a.team
         FROM result r JOIN event_entry ee ON ee.id=r.event_entry_id
         JOIN athlete a ON a.id=ee.athlete_id
         WHERE r.heat_id=? ORDER BY r.event_entry_id, r.attempt_number
-    `, req.query.heat_id));
+    `, heatId));
 });
 app.post('/api/results/upsert', async (req, res) => {
     const { heat_id, event_entry_id, attempt_number, distance_meters, time_seconds, remark, status_code, wind, admin_key } = req.body;
@@ -6969,9 +6974,32 @@ function formatTimeForImage(s, isTrack) {
 // Root serves index.html via express.static
 
 // ============================================================
-// GLOBAL ERROR HANDLER — 서버 크래시 방지
+// GLOBAL ERROR HANDLER — 서버 크래시 방지 + PG/DB 입력 검증 에러 정규화
 // ============================================================
 app.use((err, req, res, next) => {
+    // PG 특유의 잘못된 입력 → 400 으로 정규화 (SQLite는 lenient 처리, PG와 동작 통일)
+    // 대표 코드:
+    //   22P02 invalid_text_representation (예: BIGINT 컬럼에 'abc' 바인딩)
+    //   22003 numeric_value_out_of_range
+    //   22001 string_data_right_truncation
+    //   23502 not_null_violation (필수 컬럼 NULL)
+    //   23505 unique_violation
+    //   23503 foreign_key_violation
+    //   42P01 undefined_table, 42703 undefined_column (스키마 버그 — 운영 중에 발생하면 안 됨)
+    const pgCode = err && err.code;
+    if (pgCode === '22P02' || pgCode === '22003' || pgCode === '22001') {
+        console.warn('[PG input invalid]', req.method, req.originalUrl, err.message);
+        return res.status(400).json({ error: '잘못된 입력 형식입니다.', detail: err.message });
+    }
+    if (pgCode === '23505') {
+        return res.status(409).json({ error: '이미 존재하는 값입니다 (중복).', detail: err.message });
+    }
+    if (pgCode === '23503') {
+        return res.status(409).json({ error: '참조 무결성 위반 (연결된 데이터 존재).', detail: err.message });
+    }
+    if (pgCode === '23502') {
+        return res.status(400).json({ error: '필수 값이 누락되었습니다.', detail: err.message });
+    }
     console.error('[ERROR]', new Date().toISOString(), err.stack || err);
     res.status(500).json({ error: '서버 내부 오류가 발생했습니다.' });
 });

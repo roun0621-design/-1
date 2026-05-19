@@ -243,7 +243,7 @@ CREATE TABLE IF NOT EXISTS "height_attempt" (
     "result_mark" TEXT NOT NULL,
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     CHECK (attempt_number BETWEEN 1 AND 3),
-    CHECK (result_mark IN ('O','X','PASS')),
+    CHECK (result_mark IN ('O','X','PASS','-')),  -- '-' = 시기 자체 무시(미시도). 운영 PG는 ALTER 로 패치 완료(2026-05-19), 신규 부팅도 호환.
     UNIQUE ("heat_id", "event_entry_id", "bar_height", "attempt_number")
 );
 
