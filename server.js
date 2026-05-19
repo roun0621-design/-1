@@ -2537,6 +2537,11 @@ app.post('/api/events/:id/complete', async (req, res) => {
 });
 app.post('/api/events/:id/revert-complete', async (req, res) => {
     const { admin_key } = req.body;
+    // [DEBUG-TEMP] 진단용 로그 — 운영 안정화 후 제거 예정
+    try {
+        const _hashSample = (ACCESS_KEYS.adminHash || '').slice(0, 10);
+        console.log(`[DEBUG revert-complete] event=${req.params.id} body.admin_key=${JSON.stringify(admin_key)} typeof=${typeof admin_key} len=${admin_key?admin_key.length:0} cacheHash10=${_hashSample} isAdminKey=${isAdminKey(admin_key)}`);
+    } catch(e) { console.log('[DEBUG revert-complete] log err:', e.message); }
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
