@@ -607,7 +607,7 @@
                             <img id="quick-logo-left-preview" src="" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;display:none;">
                             <input type="file" id="quick-logo-left-file" accept="image/*" style="font-size:11px;width:200px;">
                             <button class="btn btn-sm btn-outline" onclick="quickUploadLogo('left')">업로드</button>
-                            <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;display:none;" id="quick-logo-left-del" onclick="quickDeleteLogo('left')">삭제</button>
+                            <button class="btn btn-sm btn-danger-soft" style="display:none;" id="quick-logo-left-del" onclick="quickDeleteLogo('left')">삭제</button>
                             <span id="quick-logo-left-status" style="font-size:11px;color:var(--green);"></span>
                         </div>
                     </div>
@@ -617,12 +617,12 @@
                             <img id="quick-logo-right-preview" src="" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;display:none;">
                             <input type="file" id="quick-logo-right-file" accept="image/*" style="font-size:11px;width:200px;">
                             <button class="btn btn-sm btn-outline" onclick="quickUploadLogo('right')">업로드</button>
-                            <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;display:none;" id="quick-logo-right-del" onclick="quickDeleteLogo('right')">삭제</button>
+                            <button class="btn btn-sm btn-danger-soft" style="display:none;" id="quick-logo-right-del" onclick="quickDeleteLogo('right')">삭제</button>
                             <span id="quick-logo-right-status" style="font-size:11px;color:var(--green);"></span>
                         </div>
                     </div>
                     <div style="margin-top:14px;">
-                        <button class="btn btn-primary" onclick="saveQuickJudgeLogo()">💾 저장</button>
+                        <button class="btn btn-primary" onclick="saveQuickJudgeLogo()">저장</button>
                         <span id="quick-judge-save-status" style="font-size:12px;color:var(--green);font-weight:600;margin-left:10px;"></span>
                     </div>
                 </div>
@@ -719,7 +719,7 @@
                     <div class="admin-card" style="border:2px solid #6366f1;background:#fafafe;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                             <h4 id="popup-editor-heading" style="margin:0;">팝업 편집</h4>
-                            <button class="btn btn-sm btn-ghost" onclick="closePopupEditor()">✕ 닫기</button>
+                            <button class="btn btn-sm btn-ghost" onclick="closePopupEditor()">닫기</button>
                         </div>
                         <div class="admin-form-row" style="margin-bottom:10px;">
                             <div class="admin-form-group"><label>팝업 종류</label>
@@ -924,7 +924,7 @@ POST /api/external/event-result-link/batch<br>
                             <div style="display:flex;gap:6px;">
                                 <button class="btn btn-sm btn-outline" onclick="addPacingSegmentAll()">+ 구간</button>
                                 <button class="btn btn-sm btn-danger" onclick="deletePacingConfig()">삭제</button>
-                                <button class="btn btn-sm btn-primary" onclick="savePacingConfig()">✓ 저장</button>
+                                <button class="btn btn-sm btn-primary" onclick="savePacingConfig()">저장</button>
                             </div>
                         </div>
                         <!-- Notice text -->
@@ -1043,12 +1043,12 @@ POST /api/external/event-result-link/batch<br>
                             <h5 style="font-size:13px;margin-bottom:8px;">종합기록지</h5>
                             <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">종합기록 + 개별 종목별 기록시트 (트랙/필드/릴레이) 전체 포함</p>
                             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-                                <button class="btn btn-sm" onclick="downloadFullRecord('M')" style="background:#2d5016;color:#fff;">남자 Excel</button>
-                                <button class="btn btn-sm" onclick="downloadFullRecord('F')" style="background:#2d5016;color:#fff;">여자 Excel</button>
+                                <button class="btn btn-sm btn-excel" onclick="downloadFullRecord('M')">남자 Excel</button>
+                                <button class="btn btn-sm btn-excel" onclick="downloadFullRecord('F')">여자 Excel</button>
                             </div>
                             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;">
-                                <button class="btn btn-sm" onclick="downloadFullRecordPdf('M')" style="background:#c0392b;color:#fff;">남자 PDF</button>
-                                <button class="btn btn-sm" onclick="downloadFullRecordPdf('F')" style="background:#c0392b;color:#fff;">여자 PDF</button>
+                                <button class="btn btn-sm btn-pdf" onclick="downloadFullRecordPdf('M')">남자 PDF</button>
+                                <button class="btn btn-sm btn-pdf" onclick="downloadFullRecordPdf('F')">여자 PDF</button>
                                 <span style="font-size:10px;color:var(--text-muted);">인쇄용</span>
                             </div>
                         </div>
@@ -1114,7 +1114,7 @@ POST /api/external/event-result-link/batch<br>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                     <input type="file" id="doc-comp-logo-left-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('comprehensive','left','doc-comp-logo-left-file')">업로드</button>
-                                    <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;display:none;" id="doc-comp-logo-left-del" onclick="deleteDocLogo('comprehensive','left')">삭제</button>
+                                    <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-comp-logo-left-del" onclick="deleteDocLogo('comprehensive','left')">삭제</button>
                                     <span id="doc-comp-logo-left-status" style="font-size:11px;color:var(--text-muted);"></span>
                                 </div>
                                 <input type="hidden" id="doc-comp-logo-left" value="">
@@ -1124,7 +1124,7 @@ POST /api/external/event-result-link/batch<br>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                     <input type="file" id="doc-comp-logo-right-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('comprehensive','right','doc-comp-logo-right-file')">업로드</button>
-                                    <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;display:none;" id="doc-comp-logo-right-del" onclick="deleteDocLogo('comprehensive','right')">삭제</button>
+                                    <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-comp-logo-right-del" onclick="deleteDocLogo('comprehensive','right')">삭제</button>
                                     <span id="doc-comp-logo-right-status" style="font-size:11px;color:var(--text-muted);"></span>
                                 </div>
                                 <input type="hidden" id="doc-comp-logo-right" value="">
@@ -1204,7 +1204,7 @@ POST /api/external/event-result-link/batch<br>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                     <input type="file" id="doc-sl-logo-left-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('start_list','left','doc-sl-logo-left-file')">업로드</button>
-                                    <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;display:none;" id="doc-sl-logo-left-del" onclick="deleteDocLogo('start_list','left')">삭제</button>
+                                    <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-sl-logo-left-del" onclick="deleteDocLogo('start_list','left')">삭제</button>
                                     <span id="doc-sl-logo-left-status" style="font-size:11px;color:var(--text-muted);"></span>
                                 </div>
                                 <input type="hidden" id="doc-sl-logo-left" value="">
@@ -1214,7 +1214,7 @@ POST /api/external/event-result-link/batch<br>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                     <input type="file" id="doc-sl-logo-right-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('start_list','right','doc-sl-logo-right-file')">업로드</button>
-                                    <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;display:none;" id="doc-sl-logo-right-del" onclick="deleteDocLogo('start_list','right')">삭제</button>
+                                    <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-sl-logo-right-del" onclick="deleteDocLogo('start_list','right')">삭제</button>
                                     <span id="doc-sl-logo-right-status" style="font-size:11px;color:var(--text-muted);"></span>
                                 </div>
                                 <input type="hidden" id="doc-sl-logo-right" value="">
@@ -1270,7 +1270,7 @@ POST /api/external/event-result-link/batch<br>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                     <input type="file" id="doc-rs-logo-left-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('result_sheet','left','doc-rs-logo-left-file')">업로드</button>
-                                    <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;display:none;" id="doc-rs-logo-left-del" onclick="deleteDocLogo('result_sheet','left')">삭제</button>
+                                    <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-rs-logo-left-del" onclick="deleteDocLogo('result_sheet','left')">삭제</button>
                                     <span id="doc-rs-logo-left-status" style="font-size:11px;color:var(--text-muted);"></span>
                                 </div>
                                 <input type="hidden" id="doc-rs-logo-left" value="">
@@ -1280,7 +1280,7 @@ POST /api/external/event-result-link/batch<br>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                     <input type="file" id="doc-rs-logo-right-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('result_sheet','right','doc-rs-logo-right-file')">업로드</button>
-                                    <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;display:none;" id="doc-rs-logo-right-del" onclick="deleteDocLogo('result_sheet','right')">삭제</button>
+                                    <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-rs-logo-right-del" onclick="deleteDocLogo('result_sheet','right')">삭제</button>
                                     <span id="doc-rs-logo-right-status" style="font-size:11px;color:var(--text-muted);"></span>
                                 </div>
                                 <input type="hidden" id="doc-rs-logo-right" value="">
@@ -1329,7 +1329,7 @@ POST /api/external/event-result-link/batch<br>
                                     <select id="doc-rs-records-event" style="font-size:12px;padding:4px 8px;border:1px solid var(--gray);border-radius:6px;min-width:200px;" onchange="loadEventRecords()">
                                         <option value="">-- 종목을 선택하세요 --</option>
                                     </select>
-                                    <button class="btn btn-sm btn-outline" onclick="saveEventRecords()" style="font-size:11px;">이 종목 저장</button>
+                                    <button class="btn btn-sm btn-primary" onclick="saveEventRecords()">이 종목 저장</button>
                                     <span id="doc-rs-records-save-status" style="font-size:11px;color:var(--green);font-weight:600;"></span>
                                 </div>
                                 <table style="width:100%;font-size:11px;border-collapse:collapse;">
@@ -1416,18 +1416,7 @@ POST /api/external/event-result-link/batch<br>
                 </div>
             </div>
 
-            <div id="tab-relay" class="admin-tab-panel">
-                <div class="admin-card" style="border-left:4px solid #8a7640;">
-                    <h4 style="display:flex;align-items:center;gap:8px;">→ 릴레이 팀 주자 관리</h4>
-                    <p style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.8;">
-                        릴레이 주자 관리는 <strong style="color:var(--blue);">종목 관리</strong> 탭에서 진행합니다.<br>
-                        <span style="font-size:12px;color:var(--text-muted);">① 종목 관리 탭 → ② 카테고리 필터에서 <strong>"릴레이"</strong> 선택 → ③ 릴레이 종목 카드 클릭 → ④ 조(Heat) 안의 <span style="color:var(--blue);text-decoration:underline;cursor:pointer;" onclick="switchTab('events',document.querySelector('[data-tab=events]'))">팀명을 클릭</span>하면 선수 추가/제거/순서변경이 가능합니다.</span>
-                    </p>
-                    <div style="margin-top:12px;">
-                        <button class="btn btn-primary btn-sm" onclick="switchTab('events',document.querySelector('[data-tab=events]'))">종목 관리로 이동 →</button>
-                    </div>
-                </div>
-            </div>
+            <!-- tab-relay panel removed — orphan with no tab button; relay management is in events tab -->
 
         </div>
     </div>
@@ -5756,7 +5745,7 @@ POST /api/external/event-result-link/batch<br>
             <div style="background:var(--bg);border:1px solid var(--gray);border-radius:8px;padding:12px 14px;margin-bottom:10px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                     <span style="font-size:14px;font-weight:700;">${eventName}</span>
-                    <button class="btn btn-sm" onclick="saveEventRecord('${eventName}','${eid}')" style="font-size:11px;padding:4px 12px;">저장</button>
+                    <button class="btn btn-sm btn-primary" onclick="saveEventRecord('${eventName}','${eid}')">저장</button>
                 </div>
                 <table style="width:100%;border-collapse:collapse;">
                     <thead><tr style="font-size:11px;color:var(--text-muted);">
@@ -5858,7 +5847,7 @@ POST /api/external/event-result-link/batch<br>
                         <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">라벨: ${_esc(data.label)} · ID #${data.id} · 분당 ${data.rate_limit_per_min}회${data.allowed_competition_id ? ' · 대회 #'+data.allowed_competition_id+' 전용' : ' · 모든 노출용 대회'}${data.expires_at ? ' · 만료 '+_esc(data.expires_at) : ''}</div>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <input id="ext-issued-key-text" readonly value="${_esc(data.api_key)}" style="flex:1;font-family:monospace;font-size:13px;font-weight:700;padding:10px;border:1.5px solid #10b981;border-radius:6px;background:#fff;">
-                            <button class="btn btn-sm btn-primary" onclick="extCopyIssuedKey()">📋 복사</button>
+                            <button class="btn btn-sm btn-primary" onclick="extCopyIssuedKey()">복사</button>
                             <button class="btn btn-sm btn-ghost" onclick="document.getElementById('ext-issued-result').style.display='none'">닫기</button>
                         </div>
                         <div style="font-size:11px;color:#b45309;margin-top:8px;">⚠️ 이 페이지를 닫거나 새로고침하면 더 이상 표시되지 않습니다. 즉시 안전한 곳에 보관하세요.</div>

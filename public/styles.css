@@ -200,7 +200,8 @@ body {
     padding: 7px 18px; border: none; border-radius: var(--radius);
     font-size: 13px; font-weight: 600; cursor: pointer;
     transition: all 0.12s; display: inline-flex; align-items: center;
-    gap: 4px; line-height: 1.3;
+    justify-content: center; gap: 4px; line-height: 1.3;
+    text-align: center; vertical-align: middle;
 }
 .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .btn-primary { background: var(--green); color: #fff; }
@@ -218,6 +219,14 @@ body {
 .btn-ghost:hover:not(:disabled) { background: var(--gray-light); }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
 .btn-xs { padding: 2px 8px; font-size: 10px; border-radius: 4px; }
+/* Document export buttons — semantic color coding */
+.btn-excel { background: #2d5016; color: #fff; }
+.btn-excel:hover:not(:disabled) { background: #1f3a0f; }
+.btn-pdf { background: #c0392b; color: #fff; }
+.btn-pdf:hover:not(:disabled) { background: #962f23; }
+/* Soft danger — for destructive secondary actions (e.g. delete logo) */
+.btn-danger-soft { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
+.btn-danger-soft:hover:not(:disabled) { background: #fecaca; border-color: #f87171; }
 
 /* ============================================================
    STATUS BADGES
@@ -225,6 +234,7 @@ body {
 .status-badge {
     display: inline-block; padding: 2px 10px;
     border-radius: 99px; font-size: 11px; font-weight: 600;
+    text-align: center; vertical-align: middle; line-height: 1.5;
 }
 .status-registered { background: var(--warning-light); color: #7a6400; }
 .status-checked_in { background: var(--green-light); color: #065f46; }
@@ -332,6 +342,7 @@ body {
     border-radius: 4px; font-size: 11px; font-weight: 700;
     text-decoration: none; cursor: pointer; border: none;
     transition: all 0.12s; margin: 1px;
+    text-align: center; vertical-align: middle; line-height: 1.4;
 }
 .round-btn.status-none { background: var(--gray-light); color: var(--text-muted); cursor: default; }
 .round-btn.status-created { background: var(--gray-light); color: var(--gray-dark); }
