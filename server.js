@@ -7031,7 +7031,7 @@ app.get('/api/joint-groups/:id/entries', async (req, res) => {
     const g = await db.get('SELECT * FROM joint_group WHERE id=?', gId);
     if (!g) return res.status(404).json({ error: 'Joint group not found' });
 
-    const members = await db.all(`
+    const rawMembers = await db.all(`
         SELECT jgm.*, e.name as event_name, e.category, e.gender, e.round_type,
                c.name as comp_name, c.federation
         FROM joint_group_member jgm
@@ -7041,7 +7041,20 @@ app.get('/api/joint-groups/:id/entries', async (req, res) => {
         ORDER BY jgm.sort_order
     `, gId);
 
+    // Dedupe members by (competition_id, event_name, gender, round_type)
+    // — 조편성 재업로드 등으로 같은 대회에 동일 종목이 여러 번 등록된 경우 1개만 사용
+    const seenKey = new Set();
+    const members = [];
+    for (const m of rawMembers) {
+        const k = `${m.competition_id}|${m.event_name}|${m.gender}|${m.round_type}`;
+        if (seenKey.has(k)) continue;
+        seenKey.add(k);
+        members.push(m);
+    }
+
     const allEntries = [];
+    const seenEntry = new Set();   // dedupe by event_entry_id
+    const seenAthHeat = new Set(); // dedupe by (athlete_id, source_event_key) — 안전장치
     for (const m of members) {
         const heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1', m.event_id);
         if (!heat) continue;
@@ -7055,6 +7068,11 @@ app.get('/api/joint-groups/:id/entries', async (req, res) => {
             ORDER BY he.lane_number
         `, heat.id);
         entries.forEach(e => {
+            if (seenEntry.has(e.event_entry_id)) return;
+            const athKey = `${e.athlete_id}|${m.competition_id}|${m.event_name}|${m.gender}|${m.round_type}`;
+            if (seenAthHeat.has(athKey)) return;
+            seenEntry.add(e.event_entry_id);
+            seenAthHeat.add(athKey);
             allEntries.push({
                 ...e,
                 heat_id: heat.id,

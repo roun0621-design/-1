@@ -5307,7 +5307,22 @@ POST /api/external/event-result-link/batch<br>
                 const fallback = ['#6b6b6b', '#ea580c', '#8a7640', '#475569', '#be185d'];
                 let html = '';
                 groups.forEach((g, gi) => {
-                    const members = g.members || [];
+                    // 같은 (competition_id, event_name, gender, round_type) 멤버는 1개로 합침
+                    // (DB에 중복 종목이 등록되어 있으면 그룹 멤버도 중복될 수 있음)
+                    const rawMembers = g.members || [];
+                    const memSeen = new Map();
+                    const dupEventIds = [];
+                    rawMembers.forEach(m => {
+                        const key = `${m.competition_id}|${m.event_name}|${m.gender}|${m.round_type}`;
+                        if (memSeen.has(key)) {
+                            // 중복 발견 → 해제 시 같이 정리할 event_id 모음
+                            dupEventIds.push(m.event_id);
+                        } else {
+                            memSeen.set(key, m);
+                        }
+                    });
+                    const members = [...memSeen.values()];
+                    const hasDups = dupEventIds.length > 0;
                     const first = members[0] || {};
                     const genderLabel = _jgGL(first.gender);
                     const roundLabel = _jgRL(first.round_type);
@@ -5333,6 +5348,7 @@ POST /api/external/event-result-link/batch<br>
                                 </div>
                             </div>
                             <div style="display:flex;gap:4px;flex-shrink:0;">
+                                ${hasDups ? `<button class="btn btn-xs" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;" onclick='jgCleanDups(${g.id},${JSON.stringify(dupEventIds)})' title="이 그룹에 중복 등록된 종목 ${dupEventIds.length}개를 정리합니다">⚠ 중복 ${dupEventIds.length} 정리</button>` : ''}
                                 <button class="btn btn-xs btn-outline" onclick="jgShowAddMemberModal(${g.id},'${escapeJs(g.name)}')" title="종목 추가">+ 종목</button>
                                 <button class="btn btn-xs btn-ghost" style="color:#dc2626;" onclick="jgDeleteGroup(${g.id},'${escapeJs(g.name)}')" title="합동 해제">🔓 해제</button>
                             </div>
@@ -5481,16 +5497,26 @@ POST /api/external/event-result-link/batch<br>
                         _jgEventCache[cid] = await api('GET', `/api/events?competition_id=${cid}`);
                     }
                 }
-                // Group events by name+gender+round_type
+                // Group events by name+gender+round_type — and DEDUPE per competition
+                // (대회 내에서 같은 종목이 중복 등록된 경우 — 조편성 재업로드 등 — 하나로 합침)
                 const allEvts = {};
                 checked.forEach(cid => {
                     const comp = _jgAllComps.find(c => String(c.id) === String(cid));
                     (_jgEventCache[cid] || []).filter(e => !e.parent_event_id).forEach(e => {
                         const key = `${e.name}|${e.gender}|${e.round_type}`;
-                        if (!allEvts[key]) allEvts[key] = { name: e.name, gender: e.gender, round_type: e.round_type, category: e.category, events: [] };
-                        allEvts[key].events.push({ ...e, comp_name: comp?.name, federation: comp?.federation });
+                        if (!allEvts[key]) allEvts[key] = { name: e.name, gender: e.gender, round_type: e.round_type, category: e.category, events: [], _seenComps: new Set(), _dupIds: {} };
+                        const ck = String(e.competition_id);
+                        if (allEvts[key]._seenComps.has(ck)) {
+                            // 같은 대회 중복 종목 — 모든 event_id를 보존하되 카드는 하나만 표시
+                            (allEvts[key]._dupIds[ck] = allEvts[key]._dupIds[ck] || []).push(e.id);
+                        } else {
+                            allEvts[key]._seenComps.add(ck);
+                            allEvts[key]._dupIds[ck] = [e.id];
+                            allEvts[key].events.push({ ...e, comp_name: comp?.name, federation: comp?.federation });
+                        }
                     });
                 });
+                // events 배열은 대회당 1개씩만 들어있음 (중복 제거됨)
                 let matchable = Object.values(allEvts).filter(g => g.events.length >= 2);
                 // Filters
                 const searchQ = (document.getElementById('jg-event-search').value || '').toLowerCase().trim();
@@ -5508,21 +5534,27 @@ POST /api/external/event-result-link/batch<br>
 
                 const fedColors = { KTFL:'#9a8548', KUAF:'#0891b2', KAAF:'#dc2626', KHSF:'#15803d', KMSF:'#7c3aed' };
                 container.innerHTML = matchable.map(g => {
+                    // event_id는 대회당 첫 번째 것만 사용 (중복 종목이 있어도 1개만 그룹에 추가)
                     const ids = g.events.map(e => e.id).join(',');
+                    // 중복 경고 계산: 같은 대회에 동일 종목이 2번 이상 등록된 경우
+                    const dupCompCount = Object.values(g._dupIds || {}).filter(arr => arr.length > 1).length;
                     const memberRows = g.events.map(e => {
                         const c = fedColors[e.federation] || '#6b6b6b';
+                        const extraDup = (g._dupIds[String(e.competition_id)] || []).length;
+                        const dupMark = extraDup > 1 ? `<span style="background:#fee2e2;color:#991b1b;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;margin-left:2px;" title="이 대회에 동일 종목이 ${extraDup}회 중복 등록되어 있습니다. 합동 그룹에는 자동으로 1개만 추가됩니다.">중복 ${extraDup}</span>` : '';
                         return `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#6b7280;margin-right:8px;">
                             <span style="background:${c};color:#fff;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;">${escapeHtml(e.federation || 'N/A')}</span>
-                            ${escapeHtml(e.comp_name || '')}
+                            ${escapeHtml(e.comp_name || '')}${dupMark}
                         </span>`;
                     }).join('');
+                    const countLabel = `${g.events.length}개 대회`; // events는 이미 dedupe됨
                     return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
                         <input type="checkbox" class="jg-evt-cb" data-event-ids="${ids}" data-event-name="${escapeHtml(g.name)}" onchange="jgUpdateSummary()" style="margin-top:2px;">
                         <div style="flex:1;min-width:0;">
                             <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
                                 <span style="background:${g.category==='field'?'#fef3c7':g.category==='track'?'#dbeafe':g.category==='relay'?'#fce7f3':'#f3f4f6'};color:#374151;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:600;">${_jgCatLabel(g.category)}</span>
                                 <span style="font-weight:600;font-size:13px;color:#111827;">${_jgGL(g.gender)} ${_jgRL(g.round_type)} ${escapeHtml(g.name)}</span>
-                                <span style="font-size:10px;color:#9ca3af;margin-left:auto;">${g.events.length}개 대회 일치</span>
+                                <span style="font-size:10px;color:#9ca3af;margin-left:auto;">${countLabel}</span>
                             </div>
                             <div style="font-size:10px;line-height:1.4;">${memberRows}</div>
                         </div>
@@ -5579,6 +5611,24 @@ POST /api/external/event-result-link/batch<br>
                 toast('제거 완료');
                 jgLoadGroups();
             } catch(e) { toast('제거 실패', 'error'); }
+        }
+
+        // 중복 종목 일괄 정리 — 같은 (대회, 종목, 성별, 라운드)에 여러 event_id가 묶여 있을 때
+        // 중복된 event_id 들을 그룹에서 제거 (DB의 event 테이블은 건드리지 않음, 그룹 멤버만 정리)
+        async function jgCleanDups(groupId, dupEventIds) {
+            if (!Array.isArray(dupEventIds) || dupEventIds.length === 0) return;
+            if (!confirm(`이 그룹에 중복 등록된 종목 ${dupEventIds.length}개를 정리합니다.\n(중복된 멤버만 제거하며, 원래 종목·기록은 그대로 유지됩니다)`)) return;
+            try {
+                let ok = 0;
+                for (const eid of dupEventIds) {
+                    try {
+                        await api('DELETE', `/api/joint-groups/${groupId}/members/${eid}`, { admin_key: AK() });
+                        ok++;
+                    } catch(e) { /* 일부 실패 무시 */ }
+                }
+                toast(`${ok}개 중복 멤버 정리 완료`);
+                jgLoadGroups();
+            } catch(e) { toast('정리 실패: ' + (e.error || e.message), 'error'); }
         }
 
         // ── 종목 추가 모달 (prompt() 대체)

@@ -492,9 +492,20 @@ async function loadCallroomHeatData() {
             try {
                 const jData = await api('GET', `/api/joint-groups/${jointGroup.id}/entries`);
                 if (jData && jData.entries) {
-                    // Add entries from other events in the joint group (not the current event)
+                    // 중복 방지: 이미 allDisplayEntries에 있는 event_entry_id는 추가하지 않음
+                    // (서버에서 이미 dedupe 되지만, current event entries 와의 겹침은 클라이언트에서 처리)
+                    const seenEntryIds = new Set(allDisplayEntries.map(e => e.event_entry_id));
+                    // 추가 안전장치: (athlete_id, source_event_id) 키로 동일 선수 중복도 방지
+                    const seenAth = new Set(
+                        allDisplayEntries.map(e => `${e.athlete_id}|${e.event_id || crSelectedEventId}`)
+                    );
                     const otherEntries = jData.entries.filter(e => e.source_event_id !== crSelectedEventId);
                     otherEntries.forEach(e => {
+                        if (seenEntryIds.has(e.event_entry_id)) return;
+                        const ak = `${e.athlete_id}|${e.source_event_id}`;
+                        if (seenAth.has(ak)) return;
+                        seenEntryIds.add(e.event_entry_id);
+                        seenAth.add(ak);
                         allDisplayEntries.push({
                             ...e,
                             _isJoint: true,
@@ -510,6 +521,11 @@ async function loadCallroomHeatData() {
                 }
             } catch(e) { console.error('Joint entries load failed:', e); }
         }
+        // 통계 카운터를 합동 뷰의 실제 표시 row 기준으로 동기화 (없으면 0)
+        window._crDisplayCount = allDisplayEntries.length;
+        window._crDisplayCheckedIn = allDisplayEntries.filter(e => e.status === 'checked_in').length;
+        window._crDisplayNoShow = allDisplayEntries.filter(e => e.status === 'no_show').length;
+        window._crDisplayPending = allDisplayEntries.filter(e => e.status === 'registered').length;
         const hasJoint = allDisplayEntries.some(e => e._isJoint);
         const fedColors = { };
         if (hasJoint) {
@@ -518,7 +534,25 @@ async function loadCallroomHeatData() {
             feds.forEach((f, i) => { fedColors[f] = colors[i % colors.length]; });
         }
 
-        heatContent.innerHTML = statsHtml + `
+        // 합동 모드일 때는 통계 카운터를 합산 entries 기준으로 다시 계산해서 statsHtml을 교체
+        let finalStatsHtml = statsHtml;
+        if (hasJoint) {
+            const t = allDisplayEntries.length;
+            const ci = allDisplayEntries.filter(e => e.status === 'checked_in').length;
+            const ns = allDisplayEntries.filter(e => e.status === 'no_show').length;
+            const pe = allDisplayEntries.filter(e => e.status === 'registered').length;
+            const pct = t > 0 ? Math.round((ci / t) * 100) : 0;
+            finalStatsHtml = `
+                <div class="callroom-stats">
+                    <div class="stat-card" style="border-top-color:var(--text)"><div class="stat-number">${t}</div><div class="stat-label">전체</div></div>
+                    <div class="stat-card" style="border-top-color:var(--green)"><div class="stat-number" style="color:var(--green)">${ci}</div><div class="stat-label">출석</div></div>
+                    <div class="stat-card" style="border-top-color:var(--danger)"><div class="stat-number" style="color:var(--danger)">${ns}</div><div class="stat-label">결석</div></div>
+                    <div class="stat-card" style="border-top-color:var(--warning)"><div class="stat-number" style="color:var(--warning)">${pe}</div><div class="stat-label">미확인</div></div>
+                </div>
+                <div class="cr-progress-bar"><div class="cr-progress-fill" style="width:${pct}%"></div></div>
+                <div class="cr-progress-label">${pct}% 출석완료</div>`;
+        }
+        heatContent.innerHTML = finalStatsHtml + `
         <table class="data-table">
             <thead><tr>${hasJoint ? '<th>대회</th>' : ''}<th>BIB</th><th>바코드</th><th>스몰넘버</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>${hasSubGroup ? '<th>그룹</th>' : ''}<th>상태</th><th>ACTION</th></tr></thead>
             <tbody>
