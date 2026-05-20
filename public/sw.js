@@ -18,7 +18,6 @@ const APP_SHELL = [
     '/results.html',
     '/results.js',
     '/dashboard.js',
-    '/app.js',
     '/callroom.js',
     '/icons/icon-192.png',
     '/icons/icon-512.png',
