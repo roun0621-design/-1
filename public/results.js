@@ -4,8 +4,7 @@
  * Added: all-groups unified download, SSE real-time, improved UI
  */
 
-// Helper: display bib_number safely (null/undefined → '—')
-function bib(val) { return val != null && val !== '' ? val : '—'; }
+// Helper: bib() is shared from common.js (loaded before results.js)
 
 let allEvents = [];
 let rSelectedEvent = null;

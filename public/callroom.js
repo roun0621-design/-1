@@ -4,8 +4,7 @@
  * all-heats modal, barcode display, sticky barcode input, relay popup, add athlete
  */
 
-// Helper: display bib_number safely (null/undefined → '—')
-function bib(val) { return val != null && val !== '' ? val : '—'; }
+// Helper: bib() is shared from common.js (loaded before callroom.js)
 
 let allEvents = [];
 let currentGender = 'M';

@@ -5,8 +5,7 @@
  * Video modal integration on event matrix + comp header
  */
 
-// Helper: display bib_number safely (null/undefined → '—')
-function bib(val) { return val != null && val !== '' ? val : '—'; }
+// Helper: bib() is shared from common.js (loaded before dashboard.js)
 
 let allEvents = [];
 let currentGender = 'M';

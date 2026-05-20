@@ -5,6 +5,12 @@
  */
 
 // ============================================================
+// Shared formatting helpers
+// (deduplicated from record.js / dashboard.js / results.js / callroom.js)
+// ============================================================
+function bib(val) { return val != null && val !== '' ? val : '—'; }
+
+// ============================================================
 // WA Scoring Tables
 // ============================================================
 const WA_TABLES = {

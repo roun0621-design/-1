@@ -5,8 +5,7 @@
  *     heat count for semi/final, manual heat edit, Q/q badges everywhere
  */
 
-// Helper: display bib_number safely (null/undefined → '—')
-function bib(val) { return val != null && val !== '' ? val : '—'; }
+// Helper: bib() is shared from common.js (loaded before record.js)
 
 // Helper: heat display label (custom name or "Heat N")
 function heatLabel(h) { return h.heat_name || ('Heat ' + h.heat_number); }
