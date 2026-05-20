@@ -1359,14 +1359,8 @@ app.post('/api/admin/verify', authLimiter, (req, res) => {
     }
     res.status(403).json({ error: 'Invalid admin key' });
 });
-app.post('/api/staff/verify', authLimiter, (req, res) => {
-    const { key } = req.body;
-    if (isOperationKey(key)) {
-        const jn = getJudgeName(key);
-        return res.json({ success: true, role: getKeyRole(key) || 'operation', judge_name: jn });
-    }
-    res.status(403).json({ error: 'Invalid key' });
-});
+// /api/staff/verify removed — was never called from any client.
+// Use /api/admin/verify (admin/operation key verification) instead.
 
 // ============================================================
 // COMPETITIONS CRUD — with auto-status update
@@ -5145,50 +5139,8 @@ app.post('/api/heat-assignment/preview', upload.single('file'), async (req, res)
     }
 });
 
-// AUTO-CREATE missing events from heat assignment Excel
-app.post('/api/heat-assignment/create-events', express.json(), async (req, res) => {
-    if (!isAdminKey(req.body.admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const { competition_id, events } = req.body;
-    if (!competition_id || !events || !Array.isArray(events)) return res.status(400).json({ error: 'competition_id와 events 배열이 필요합니다.' });
-
-    // Detect category from event name
-    function detectCategory(name) {
-        const n = name.toLowerCase();
-        if (n.includes('릴레이') || n.includes('relay') || /^\d+x\d+m/i.test(n)) return 'relay';
-        // FIX: 트랙 경보(5000mW, 10000mW 등)는 트랙. 도로 경보(20kmW, 35kmW, 50kmW)만 road.
-        if (/\d+\s*km\s*w/i.test(n)) return 'road'; // 20kmW, 35kmW, 50kmW (도로경보)
-        if (/\d+\s*m\s*w$/i.test(n)) return 'track'; // 5000mW, 10000mW (트랙경보)
-        if (n.includes('마라톤') || n.includes('하프') || n.includes('half') || n.includes('road')) return 'road';
-        if (/\d+\s*k(m)?\b/i.test(n)) return 'road'; // 5K, 10K, 10km (도로)
-        if (n.includes('높이') || n.includes('장대') || n.includes('high') || n.includes('pole')) return 'field_height';
-        if (n.includes('멀리') || n.includes('세단') || n.includes('포환') || n.includes('원반') || n.includes('창') || n.includes('해머') || n.includes('투척') || n.includes('long') || n.includes('triple') || n.includes('shot') || n.includes('discus') || n.includes('javelin') || n.includes('hammer')) return 'field_distance';
-        if (n.includes('10종') || n.includes('7종') || n.includes('decathlon') || n.includes('heptathlon') || n.includes('combined')) return 'combined';
-        return 'track'; // default: 알 수 없는 종목은 트랙으로 처리 (이전엔 road 기본값으로 잘못 처리됨)
-    }
-
-    const created = [];
-    const maxSortRow = await db.get('SELECT MAX(sort_order) as m FROM event WHERE competition_id=?', competition_id);
-    const maxSort = (maxSortRow && maxSortRow.m) || 0;
-
-    let sortOrder = maxSort + 1;
-    for (const evt of events) {
-        const { eventName, gender, round } = evt;
-        if (!eventName || !gender) continue;
-        // Check if already exists
-        const existing = await db.get('SELECT id FROM event WHERE competition_id=? AND name=? AND gender=?', competition_id, eventName, gender);
-        if (existing) continue;
-
-        const category = detectCategory(eventName);
-        const info = await db.run('INSERT INTO event (competition_id, name, gender, category, round_type, round_status, sort_order) VALUES (?,?,?,?,?,?,?)', competition_id, eventName, gender, category, round || 'final', 'created', sortOrder++);
-        created.push({ id: info.lastInsertRowid, name: eventName, gender, category, round: round || 'final' });
-    }
-
-    if (created.length > 0) {
-        opLog(`종목 자동 생성 (${created.length}개): ${created.map(e => e.name).join(', ')}`, 'admin', 'admin');
-    }
-
-    res.json({ success: true, created, count: created.length });
-});
+// /api/heat-assignment/create-events removed — was never called from any client.
+// The /api/heat-assignment/apply route now creates missing events inline as part of its transaction.
 
 // APPLY API — Actually update heats based on Excel
 app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) => {
@@ -12386,18 +12338,8 @@ app.put('/api/display/events/:id/result-url', async (req, res) => {
     res.json({ success: true });
 });
 
-// Bulk update result URLs
-app.put('/api/display/events/bulk-result-url', async (req, res) => {
-    const { admin_key, updates } = req.body;
-    if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    if (!Array.isArray(updates)) return res.status(400).json({ error: 'updates array required' });
-    await db.transaction(async () => {
-        for (const u of updates) {
-            await db.run('UPDATE event SET result_url=? WHERE id=?', u.result_url || '', u.id);
-        }
-    })();
-    res.json({ success: true, count: updates.length });
-});
+// /api/display/events/bulk-result-url removed — was never called from any client.
+// Use single PUT /api/display/events/:id/result-url instead.
 
 // Get matching status overview
 app.get('/api/display/match-status/:compId', async (req, res) => {
