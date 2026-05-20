@@ -4527,8 +4527,15 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
             }
 
             const eventCache = new Map();
+            const eventNormCache = new Map();  // normalized name → event id (for fuzzy match on re-upload)
             const evRows = await db.all('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id);
-            for (const e of evRows) eventCache.set(`${e.name}|${e.category}|${e.gender}`, e.id);
+            // Normalize: strip commas/spaces/case to match variants like '10,000m' vs '10000m'
+            const _normEvtName = s => String(s || '').replace(/[,\s]+/g, '').toLowerCase();
+            for (const e of evRows) {
+                eventCache.set(`${e.name}|${e.category}|${e.gender}`, e.id);
+                // Also index by (normalized_name | gender) as fallback for re-upload with different formatting
+                eventNormCache.set(`${_normEvtName(e.name)}|${e.gender}`, e.id);
+            }
 
             const neededIndividual = new Map();
             const relayParticipation = new Map();
@@ -4596,6 +4603,14 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
             for (const [key, info] of neededIndividual) {
                 const ck = `${info.name}|${info.category}|${info.gender}`;
                 if (!eventCache.has(ck)) {
+                    // 재업로드 안전장치: 같은 이름·성별의 종목이 이미 DB에 있는지 normalized 키로 한번 더 확인
+                    // (예: '10,000m' vs '10000m', '10000mW' vs '10,000mW')
+                    const normKey = `${_normEvtName(info.name)}|${info.gender}`;
+                    if (eventNormCache.has(normKey)) {
+                        const existingId = eventNormCache.get(normKey);
+                        eventCache.set(ck, existingId);
+                        continue;  // 새로 만들지 않음 — 기존 종목 재사용
+                    }
                     // Field, combined, road events are always 'final'
                     // Only track short-distance events can have preliminary rounds
                     const ALWAYS_FINAL_CATEGORIES = ['field_distance', 'field_height', 'combined', 'relay', 'road'];
@@ -4604,6 +4619,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     const rt = (!isFinalOnly && info.athletes.length > heatSize) ? 'preliminary' : 'final';
                     const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)', competition_id, info.name, info.category, info.gender, rt, 'heats_generated');
                     eventCache.set(ck, r.lastInsertRowid);
+                    eventNormCache.set(normKey, r.lastInsertRowid);
                     stats.events++;
                 }
             }
@@ -4611,8 +4627,15 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 const [relayName, gender] = key.split('|');
                 const ck = `${relayName}|relay|${gender}`;
                 if (!eventCache.has(ck)) {
+                    const normKey = `${_normEvtName(relayName)}|${gender}`;
+                    if (eventNormCache.has(normKey)) {
+                        const existingId = eventNormCache.get(normKey);
+                        eventCache.set(ck, existingId);
+                        continue;
+                    }
                     const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)', competition_id, relayName, 'relay', gender, 'final', 'heats_generated');
                     eventCache.set(ck, r.lastInsertRowid);
+                    eventNormCache.set(normKey, r.lastInsertRowid);
                     stats.events++;
                 }
             }
@@ -7084,6 +7107,158 @@ app.get('/api/joint-groups/:id/entries', async (req, res) => {
         });
     }
     res.json({ group: g, members, entries: allEntries });
+});
+
+// ============================================================
+// EVENT DUPLICATE DIAGNOSTICS / CLEANUP — 중복 종목 진단·병합
+// ============================================================
+
+/**
+ * GET /api/admin/event-duplicates?competition_id=N
+ * 한 대회 안에서 같은 (normalized_name, gender, round_type)을 가진
+ * parent_event 중복을 찾아서 그룹별로 반환.
+ * 각 그룹의 첫 번째 id는 'keep', 나머지는 'duplicates'.
+ * 함께 묶임 entry/heat/result 개수를 보여줘 사용자가 안전성 판단 가능.
+ */
+app.get('/api/admin/event-duplicates', async (req, res) => {
+    if (!isAdminKey(req.query.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+    const competition_id = parseInt(req.query.competition_id);
+    if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
+    try {
+        const events = await db.all(
+            'SELECT id, name, category, gender, round_type, round_status FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY id',
+            competition_id
+        );
+        const _norm = s => String(s || '').replace(/[,\s]+/g, '').toLowerCase();
+        const groups = new Map();
+        for (const e of events) {
+            const k = `${_norm(e.name)}|${e.gender}|${e.round_type || ''}`;
+            if (!groups.has(k)) groups.set(k, []);
+            groups.get(k).push(e);
+        }
+        const result = [];
+        for (const [key, list] of groups) {
+            if (list.length < 2) continue;
+            // For each event in the group, count attached data
+            const enriched = [];
+            for (const e of list) {
+                const heatCnt = (await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', e.id))?.c || 0;
+                const entryCnt = (await db.get('SELECT COUNT(*) AS c FROM event_entry WHERE event_id=?', e.id))?.c || 0;
+                const resultCnt = (await db.get('SELECT COUNT(*) AS c FROM result r JOIN heat h ON h.id=r.heat_id WHERE h.event_id=?', e.id))?.c || 0;
+                const inJointCnt = (await db.get('SELECT COUNT(*) AS c FROM joint_group_member WHERE event_id=?', e.id))?.c || 0;
+                enriched.push({ ...e, heat_count: heatCnt, entry_count: entryCnt, result_count: resultCnt, joint_member_count: inJointCnt });
+            }
+            // Sort: prefer the one with most data (results > entries > heats > lowest id)
+            enriched.sort((a, b) =>
+                (b.result_count - a.result_count) ||
+                (b.entry_count - a.entry_count) ||
+                (b.heat_count - a.heat_count) ||
+                (a.id - b.id)
+            );
+            result.push({
+                key,
+                name: list[0].name,
+                gender: list[0].gender,
+                round_type: list[0].round_type,
+                keep: enriched[0],         // 보존 대상
+                duplicates: enriched.slice(1),  // 삭제 대상 (사용자 확인 필요)
+            });
+        }
+        res.json({ competition_id, duplicate_groups: result, total_dup_events: result.reduce((s,g) => s + g.duplicates.length, 0) });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/**
+ * POST /api/admin/event-duplicates/cleanup
+ * Body: { admin_key, competition_id, dry_run?: bool, only_empty?: bool }
+ * 중복 종목 중 데이터가 비어있는 것(empty) 또는 명시적으로 안전한 것만 삭제.
+ * dry_run=true 이면 삭제는 안 하고 어떤 것들이 삭제될지 목록만 반환.
+ * only_empty=true (default) 이면 entry/result/heat이 전부 0인 중복만 삭제 (가장 안전).
+ */
+app.post('/api/admin/event-duplicates/cleanup', async (req, res) => {
+    if (!isAdminKey(req.body.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+    const competition_id = parseInt(req.body.competition_id);
+    if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
+    const dryRun = req.body.dry_run === true || req.body.dry_run === 'true';
+    const onlyEmpty = req.body.only_empty !== false && req.body.only_empty !== 'false';  // default true
+
+    try {
+        // Reuse diagnostic
+        const events = await db.all(
+            'SELECT id, name, category, gender, round_type FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY id',
+            competition_id
+        );
+        const _norm = s => String(s || '').replace(/[,\s]+/g, '').toLowerCase();
+        const groups = new Map();
+        for (const e of events) {
+            const k = `${_norm(e.name)}|${e.gender}|${e.round_type || ''}`;
+            if (!groups.has(k)) groups.set(k, []);
+            groups.get(k).push(e);
+        }
+
+        const candidates = [];   // events that will/would be deleted
+        const skipped = [];      // events skipped (had data, not safe to delete)
+
+        for (const [key, list] of groups) {
+            if (list.length < 2) continue;
+            const enriched = [];
+            for (const e of list) {
+                const heatCnt = (await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', e.id))?.c || 0;
+                const entryCnt = (await db.get('SELECT COUNT(*) AS c FROM event_entry WHERE event_id=?', e.id))?.c || 0;
+                const resultCnt = (await db.get('SELECT COUNT(*) AS c FROM result r JOIN heat h ON h.id=r.heat_id WHERE h.event_id=?', e.id))?.c || 0;
+                enriched.push({ ...e, heat_count: heatCnt, entry_count: entryCnt, result_count: resultCnt });
+            }
+            // keep best (most data); delete others IF empty
+            enriched.sort((a, b) =>
+                (b.result_count - a.result_count) ||
+                (b.entry_count - a.entry_count) ||
+                (b.heat_count - a.heat_count) ||
+                (a.id - b.id)
+            );
+            const keep = enriched[0];
+            for (const dup of enriched.slice(1)) {
+                const isEmpty = dup.heat_count === 0 && dup.entry_count === 0 && dup.result_count === 0;
+                if (onlyEmpty && !isEmpty) {
+                    skipped.push({ ...dup, reason: 'has data (heat/entry/result)' });
+                    continue;
+                }
+                candidates.push({ ...dup, keep_id: keep.id });
+            }
+        }
+
+        if (dryRun) {
+            return res.json({ dry_run: true, would_delete: candidates, skipped, total: candidates.length });
+        }
+
+        // Actually delete
+        let deleted = 0;
+        await db.transaction(async () => {
+            for (const c of candidates) {
+                // Re-point joint_group_member rows to the kept event (de-dupe later if same group)
+                await db.run('UPDATE OR IGNORE joint_group_member SET event_id=? WHERE event_id=?', c.keep_id, c.id);
+                // Remove the joint_group_member rows that conflicted (same group already had keep_id)
+                await db.run('DELETE FROM joint_group_member WHERE event_id=?', c.id);
+                // Clean up child rows (these should all be 0 if onlyEmpty=true, defensive otherwise)
+                const heats = await db.all('SELECT id FROM heat WHERE event_id=?', c.id);
+                for (const h of heats) {
+                    await db.run('DELETE FROM result WHERE heat_id=?', h.id);
+                    await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id);
+                    await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id);
+                }
+                await db.run('DELETE FROM heat WHERE event_id=?', c.id);
+                await db.run('DELETE FROM event_entry WHERE event_id=?', c.id);
+                await db.run('DELETE FROM event_link WHERE event_id_a=? OR event_id_b=?', c.id, c.id);
+                await db.run('DELETE FROM event WHERE id=?', c.id);
+                deleted++;
+            }
+        });
+        opLog(`중복 종목 정리: ${deleted}개 종목 삭제 (대회 ${competition_id})`, 'admin', 'admin');
+        res.json({ dry_run: false, deleted, skipped, total: candidates.length });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 /**

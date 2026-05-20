@@ -523,6 +523,7 @@
                             <span id="jg-count-badge" class="t-sm" style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-weight:600;">활성 0</span>
                         </h4>
                         <div style="display:flex;gap:6px;align-items:center;">
+                            <button class="btn btn-sm btn-outline" onclick="jgShowDupModal()" title="조편성 재업로드 등으로 동일 종목이 여러 번 등록되었는지 확인 후 정리합니다">🔍 중복 종목 진단</button>
                             <button class="btn btn-sm btn-primary" onclick="jgShowCreateModal()">+ 합동 그룹 추가</button>
                             <button class="btn btn-sm btn-ghost" onclick="jgLoadGroups()" title="새로고침">↻</button>
                         </div>
@@ -533,6 +534,33 @@
                     </p>
                     <div id="jg-groups-list" class="t-md"></div>
                 </div>
+
+    <!-- 중복 종목 진단/정리 모달 -->
+    <div id="jg-dup-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;align-items:center;justify-content:center;">
+        <div style="background:var(--white);border-radius:12px;padding:0;width:760px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
+            <div style="padding:16px 22px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;font-size:15px;font-weight:700;">🔍 중복 종목 진단 — <span id="jg-dup-compname" style="color:#6b5520;"></span></h3>
+                <button class="btn btn-ghost" style="padding:2px 8px;font-size:18px;line-height:1;" onclick="document.getElementById('jg-dup-modal').style.display='none'">×</button>
+            </div>
+            <div style="padding:14px 22px;flex:1;overflow-y:auto;">
+                <p class="t-help" style="color:#6b7280;margin-bottom:12px;font-size:12px;line-height:1.6;">
+                    조편성을 재업로드하면 같은 종목이 DB에 여러 번 등록될 수 있습니다.
+                    이렇게 되면 합동 그룹 모달이나 소집 화면에서 같은 선수가 중복 표시됩니다.<br>
+                    <strong>안전 정리</strong>: 데이터(조/엔트리/기록)가 전혀 없는 빈 중복 종목만 자동 삭제합니다.<br>
+                    <span style="color:#dc2626;">⚠ 데이터가 있는 중복 종목은 자동으로 건드리지 않습니다 (수동 검토 필요).</span>
+                </p>
+                <div id="jg-dup-loading" style="text-align:center;padding:20px;color:#6b7280;">분석 중...</div>
+                <div id="jg-dup-content" style="display:none;"></div>
+            </div>
+            <div style="padding:12px 22px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#fafafa;">
+                <span id="jg-dup-summary" style="font-size:12px;color:#6b7280;"></span>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn btn-ghost" onclick="document.getElementById('jg-dup-modal').style.display='none'">닫기</button>
+                    <button id="jg-dup-cleanbtn" class="btn btn-primary" onclick="jgRunCleanup()" style="display:none;background:#dc2626;border-color:#dc2626;">⚠ 빈 중복 종목 삭제</button>
+                </div>
+            </div>
+        </div>
+    </div>
                 <!-- Legacy 1:1 links (hidden, kept for backward compat) -->
                 <div class="admin-card" style="margin-top:8px;display:none;">
                     <h4 class="t-lg">레거시 1:1 연결 (구버전)</h4>
@@ -5611,6 +5639,102 @@ POST /api/external/event-result-link/batch<br>
                 toast('제거 완료');
                 jgLoadGroups();
             } catch(e) { toast('제거 실패', 'error'); }
+        }
+
+        // ============================================================
+        // 중복 종목 진단/정리 (DB-level: event 테이블의 중복 종목 자체 정리)
+        // ============================================================
+        let _jgDupData = null;
+        async function jgShowDupModal() {
+            const modal = document.getElementById('jg-dup-modal');
+            modal.style.display = 'flex';
+            modal.onclick = ev => { if (ev.target === modal) modal.style.display = 'none'; };
+            document.getElementById('jg-dup-loading').style.display = '';
+            document.getElementById('jg-dup-content').style.display = 'none';
+            document.getElementById('jg-dup-cleanbtn').style.display = 'none';
+            document.getElementById('jg-dup-summary').textContent = '';
+            // Set comp name
+            try {
+                const comps = await api('GET', '/api/competitions');
+                const me = comps.find(c => String(c.id) === String(CID()));
+                document.getElementById('jg-dup-compname').textContent = me?.name || `대회 ${CID()}`;
+            } catch(e) {}
+            // Fetch diagnostic
+            try {
+                const r = await api('GET', `/api/admin/event-duplicates?competition_id=${CID()}&admin_key=${encodeURIComponent(AK())}`);
+                _jgDupData = r;
+                jgRenderDupReport();
+            } catch(e) {
+                document.getElementById('jg-dup-loading').style.display = 'none';
+                document.getElementById('jg-dup-content').style.display = '';
+                document.getElementById('jg-dup-content').innerHTML = `<div style="color:#dc2626;padding:12px;background:#fef2f2;border-radius:8px;">오류: ${escapeHtml(e.message || String(e))}</div>`;
+            }
+        }
+        function jgRenderDupReport() {
+            const r = _jgDupData;
+            document.getElementById('jg-dup-loading').style.display = 'none';
+            const content = document.getElementById('jg-dup-content');
+            content.style.display = '';
+            if (!r || !r.duplicate_groups || r.duplicate_groups.length === 0) {
+                content.innerHTML = `<div style="text-align:center;padding:30px;color:#15803d;background:#f0fdf4;border-radius:8px;">
+                    ✅ 중복된 종목이 없습니다.<br><span style="font-size:12px;color:#6b7280;">이 대회의 종목 데이터가 깨끗합니다.</span>
+                </div>`;
+                document.getElementById('jg-dup-summary').textContent = `총 ${r?.total_dup_events || 0}개`;
+                return;
+            }
+            const gL = g => g === 'M' ? '남' : g === 'F' ? '여' : '혼';
+            const rL = r => ({preliminary:'예선', semifinal:'준결승', final:'결승'}[r] || r);
+            let safeCount = 0;
+            let riskyCount = 0;
+            let html = '';
+            r.duplicate_groups.forEach(grp => {
+                html += `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fafafa;">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+                        <strong>${gL(grp.gender)} ${rL(grp.round_type)} ${escapeHtml(grp.name)}</strong>
+                        <span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600;">중복 ${grp.duplicates.length + 1}개</span>
+                    </div>
+                    <div style="font-size:11px;line-height:1.6;">
+                        <div style="padding:4px 8px;background:#dcfce7;border-radius:4px;margin-bottom:4px;">
+                            <strong style="color:#15803d;">✓ 보존:</strong> ID ${grp.keep.id} ·
+                            조 ${grp.keep.heat_count} / 엔트리 ${grp.keep.entry_count} / 기록 ${grp.keep.result_count}${grp.keep.joint_member_count > 0 ? ' · 🔗 합동 ' + grp.keep.joint_member_count : ''}
+                        </div>`;
+                grp.duplicates.forEach(dup => {
+                    const isEmpty = dup.heat_count === 0 && dup.entry_count === 0 && dup.result_count === 0;
+                    if (isEmpty) safeCount++; else riskyCount++;
+                    const bg = isEmpty ? '#fef3c7' : '#fee2e2';
+                    const label = isEmpty ? '🗑 빈 종목 (안전 삭제 가능)' : '⚠ 데이터 있음 (수동 검토 필요)';
+                    const labelColor = isEmpty ? '#92400e' : '#991b1b';
+                    html += `<div style="padding:4px 8px;background:${bg};border-radius:4px;margin-bottom:4px;">
+                        <strong style="color:${labelColor};">${label}:</strong> ID ${dup.id} ·
+                        조 ${dup.heat_count} / 엔트리 ${dup.entry_count} / 기록 ${dup.result_count}${dup.joint_member_count > 0 ? ' · 🔗 합동 ' + dup.joint_member_count : ''}
+                    </div>`;
+                });
+                html += `</div></div>`;
+            });
+            content.innerHTML = html;
+            document.getElementById('jg-dup-summary').textContent = `중복 그룹 ${r.duplicate_groups.length}개 · 안전 삭제 ${safeCount}개 · 수동 검토 필요 ${riskyCount}개`;
+            if (safeCount > 0) {
+                const btn = document.getElementById('jg-dup-cleanbtn');
+                btn.textContent = `🗑 빈 중복 종목 ${safeCount}개 삭제`;
+                btn.style.display = '';
+            }
+        }
+        async function jgRunCleanup() {
+            if (!confirm('데이터(조/엔트리/기록)가 전혀 없는 빈 중복 종목만 삭제합니다.\n계속하시겠습니까?')) return;
+            try {
+                const r = await api('POST', '/api/admin/event-duplicates/cleanup', {
+                    admin_key: AK(),
+                    competition_id: CID(),
+                    only_empty: true,
+                    dry_run: false,
+                });
+                toast(`${r.deleted}개 중복 종목 삭제 완료 (검토 필요 ${r.skipped?.length || 0}개)`);
+                // Refresh
+                jgShowDupModal();
+                jgLoadGroups();
+            } catch(e) {
+                alert('정리 실패: ' + (e.error || e.message));
+            }
         }
 
         // 중복 종목 일괄 정리 — 같은 (대회, 종목, 성별, 라운드)에 여러 event_id가 묶여 있을 때
