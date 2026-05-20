@@ -450,6 +450,34 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_operation_log_comp ON operation_lo
 try { db.exec(`ALTER TABLE audit_log ADD COLUMN ip_address TEXT`); } catch(e) {}
 try { db.exec(`ALTER TABLE audit_log ADD COLUMN user_agent TEXT`); } catch(e) {}
 
+// ============================================================
+// 🔒 재업로드 중복 방지 — DB 레벨 UNIQUE 인덱스
+// ============================================================
+// 정책: 같은 대회 안에서 (종목명+성별+라운드) 조합은 단 하나만 존재.
+//       sub-event(parent_event_id 있음)는 부모마다 같은 이름 가능하므로 partial index 사용.
+//
+// 주의: 기존 데이터에 이미 중복이 있으면 CREATE UNIQUE INDEX 가 실패하므로
+//       try/catch 로 감싸고, 실패 시 startup log 에 경고만 출력. (사용자가 중복 정리 후 재시작하면 됨)
+try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_event_top_level ON event(competition_id, name, gender, round_type) WHERE parent_event_id IS NULL`);
+    console.log('[DB Migration] ux_event_top_level UNIQUE 인덱스 생성/확인');
+} catch(e) {
+    console.warn('[DB Migration] ux_event_top_level 생성 실패 — 기존 중복 종목이 있을 수 있음:', e.message);
+    console.warn('  → 관리자: /api/admin/event-duplicates/cleanup 으로 정리 후 서버 재시작 필요');
+}
+
+// athlete 중복 방지: 같은 대회 안에서 (이름+소속+성별) 조합은 단 하나만 존재
+// 동명이인이라도 소속이 다르거나 성별이 다르면 OK. 같은 소속·성별의 동명이인은 매우 드물고 운영 혼선 방지.
+try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_athlete_per_competition ON athlete(competition_id, name, team, gender)`);
+    console.log('[DB Migration] ux_athlete_per_competition UNIQUE 인덱스 생성/확인');
+} catch(e) {
+    console.warn('[DB Migration] ux_athlete_per_competition 생성 실패 — 기존 중복 선수가 있을 수 있음:', e.message);
+}
+
+// event_entry 는 이미 sqlite_autoindex_event_entry_1 (UNIQUE event_id, athlete_id) 존재
+// — 스키마 정의에서 UNIQUE 제약. 별도 인덱스 불필요.
+
 // ---- Display-mode (노출용) migrations ----
 // competition.mode: 'operation' (운영용) or 'display' (노출용)
 try { db.exec(`ALTER TABLE competition ADD COLUMN mode TEXT NOT NULL DEFAULT 'operation'`); } catch(e) {}
@@ -1824,6 +1852,21 @@ app.delete('/api/competitions/:id', async (req, res) => {
             // 마지막에 대회 본체 삭제
             safeRun('DELETE FROM competition WHERE id=?', comp.id);
         })();
+
+        // ⭐ 대회 삭제 후 UNIQUE INDEX 재시도
+        //    (이전에 중복 데이터로 인해 인덱스 생성이 실패했더라도, 삭제 후엔 성공할 수 있음)
+        try {
+            db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_event_top_level ON event(competition_id, name, gender, round_type) WHERE parent_event_id IS NULL`);
+            console.log('[delete-comp] ux_event_top_level UNIQUE 인덱스 생성/확인 (대회 삭제 후 재시도)');
+        } catch(e) {
+            // 다른 대회에 여전히 중복이 있을 수 있음 — 경고만
+            console.warn('[delete-comp] ux_event_top_level 재생성 실패:', e.message);
+        }
+        try {
+            db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_athlete_per_competition ON athlete(competition_id, name, team, gender)`);
+        } catch(e) {
+            console.warn('[delete-comp] ux_athlete_per_competition 재생성 실패:', e.message);
+        }
 
         return res.json({ success: true });
     } catch(e) {
@@ -4519,6 +4562,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
         const relayColMap = {};
         headers.forEach((h, idx) => { const key = String(h).trim(); if (FED_RELAY_MAP[key]) relayColMap[key] = { idx, ...FED_RELAY_MAP[key] }; });
         let stats = { athletes: 0, events: 0, entries: 0, heats: 0, relayTeams: 0 };
+        const createdEventNames = [];  // ⭐ 트랜잭션 안에서 push, 응답에서 전달
 
         await db.transaction(async () => {
             if (clearExisting) {
@@ -4538,6 +4582,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
 
             const eventCache = new Map();
             const eventNormCache = new Map();  // normalized name → event id (for fuzzy match on re-upload)
+            const eventByNameGender = new Map();  // ⭐ 재업로드 핵심 안전장치: name|gender → existing event id (round_type 무관)
             const evRows = await db.all('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id);
             // Normalize: strip commas/spaces/case to match variants like '10,000m' vs '10000m'
             const _normEvtName = s => String(s || '').replace(/[,\s]+/g, '').toLowerCase();
@@ -4545,6 +4590,10 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 eventCache.set(`${e.name}|${e.category}|${e.gender}`, e.id);
                 // Also index by (normalized_name | gender) as fallback for re-upload with different formatting
                 eventNormCache.set(`${_normEvtName(e.name)}|${e.gender}`, e.id);
+                // ⭐ round_type 무관 매칭용: 같은 이름·성별이 어떤 round_type 으로든 이미 있으면 재사용
+                //    (재업로드 시 인원 변화로 round_type 만 달라져도 새 종목이 만들어지는 문제 방지)
+                const ngKey = `${_normEvtName(e.name)}|${e.gender}`;
+                if (!eventByNameGender.has(ngKey)) eventByNameGender.set(ngKey, e.id);
             }
 
             const neededIndividual = new Map();
@@ -4613,13 +4662,20 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
             for (const [key, info] of neededIndividual) {
                 const ck = `${info.name}|${info.category}|${info.gender}`;
                 if (!eventCache.has(ck)) {
-                    // 재업로드 안전장치: 같은 이름·성별의 종목이 이미 DB에 있는지 normalized 키로 한번 더 확인
-                    // (예: '10,000m' vs '10000m', '10000mW' vs '10,000mW')
+                    // ⭐ 재업로드 안전장치 1: 같은 이름·성별의 종목이 이미 어떤 round_type 으로든 DB에 있는지 확인
+                    //    (인원 변동으로 final ↔ preliminary 가 달라지더라도 기존 종목 재사용 — 두번 다시 중복 생성 금지)
                     const normKey = `${_normEvtName(info.name)}|${info.gender}`;
+                    if (eventByNameGender.has(normKey)) {
+                        const existingId = eventByNameGender.get(normKey);
+                        eventCache.set(ck, existingId);
+                        continue;  // 새로 만들지 않음 — 기존 종목 재사용
+                    }
+                    // 재업로드 안전장치 2: normalized 키로 한번 더 확인 ('10,000m' vs '10000m')
                     if (eventNormCache.has(normKey)) {
                         const existingId = eventNormCache.get(normKey);
                         eventCache.set(ck, existingId);
-                        continue;  // 새로 만들지 않음 — 기존 종목 재사용
+                        eventByNameGender.set(normKey, existingId);
+                        continue;
                     }
                     // Field, combined, road events are always 'final'
                     // Only track short-distance events can have preliminary rounds
@@ -4627,10 +4683,24 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     const ALWAYS_FINAL_EVENTS = ['5000m','5000mW','10,000m','10,000mW','10000m','3000mSC','3000m장애물','마라톤','하프마라톤','20KmW','35kmW','10K','5K'];
                     const isFinalOnly = ALWAYS_FINAL_CATEGORIES.includes(info.category) || ALWAYS_FINAL_EVENTS.some(e => info.name === e || info.name.startsWith(e + ' '));
                     const rt = (!isFinalOnly && info.athletes.length > heatSize) ? 'preliminary' : 'final';
-                    const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)', competition_id, info.name, info.category, info.gender, rt, 'heats_generated');
-                    eventCache.set(ck, r.lastInsertRowid);
-                    eventNormCache.set(normKey, r.lastInsertRowid);
-                    stats.events++;
+                    try {
+                        const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)', competition_id, info.name, info.category, info.gender, rt, 'heats_generated');
+                        eventCache.set(ck, r.lastInsertRowid);
+                        eventNormCache.set(normKey, r.lastInsertRowid);
+                        eventByNameGender.set(normKey, r.lastInsertRowid);
+                        stats.events++;
+                        createdEventNames.push(`${info.name} (${info.gender}, ${rt})`);
+                    } catch (insErr) {
+                        // ⭐ UNIQUE 인덱스 위반 → 동시 업로드 등으로 이미 만들어진 경우, 다시 조회해서 재사용
+                        const exist = await db.get('SELECT id FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL', competition_id, info.name, info.gender);
+                        if (exist) {
+                            eventCache.set(ck, exist.id);
+                            eventNormCache.set(normKey, exist.id);
+                            eventByNameGender.set(normKey, exist.id);
+                        } else {
+                            throw insErr;
+                        }
+                    }
                 }
             }
             for (const [key, teamMap] of relayParticipation) {
@@ -4638,15 +4708,35 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 const ck = `${relayName}|relay|${gender}`;
                 if (!eventCache.has(ck)) {
                     const normKey = `${_normEvtName(relayName)}|${gender}`;
-                    if (eventNormCache.has(normKey)) {
-                        const existingId = eventNormCache.get(normKey);
+                    // ⭐ 재업로드 안전장치: round_type 무관 재사용
+                    if (eventByNameGender.has(normKey)) {
+                        const existingId = eventByNameGender.get(normKey);
                         eventCache.set(ck, existingId);
                         continue;
                     }
-                    const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)', competition_id, relayName, 'relay', gender, 'final', 'heats_generated');
-                    eventCache.set(ck, r.lastInsertRowid);
-                    eventNormCache.set(normKey, r.lastInsertRowid);
-                    stats.events++;
+                    if (eventNormCache.has(normKey)) {
+                        const existingId = eventNormCache.get(normKey);
+                        eventCache.set(ck, existingId);
+                        eventByNameGender.set(normKey, existingId);
+                        continue;
+                    }
+                    try {
+                        const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)', competition_id, relayName, 'relay', gender, 'final', 'heats_generated');
+                        eventCache.set(ck, r.lastInsertRowid);
+                        eventNormCache.set(normKey, r.lastInsertRowid);
+                        eventByNameGender.set(normKey, r.lastInsertRowid);
+                        stats.events++;
+                        createdEventNames.push(`${relayName} (${gender}, final, 계주)`);
+                    } catch (insErr) {
+                        const exist = await db.get('SELECT id FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL', competition_id, relayName, gender);
+                        if (exist) {
+                            eventCache.set(ck, exist.id);
+                            eventNormCache.set(normKey, exist.id);
+                            eventByNameGender.set(normKey, exist.id);
+                        } else {
+                            throw insErr;
+                        }
+                    }
                 }
             }
 
@@ -4915,8 +5005,9 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
             }
 
         })();
-        opLog(`연맹 명단 업로드: 선수 ${stats.athletes}명, 종목 ${stats.events}개`, 'import', 'admin', competition_id);
-        res.json({ success: true, message: '업로드 완료', stats });
+        opLog(`연맹 명단 업로드: 선수 ${stats.athletes}명, 종목 ${stats.events}개${createdEventNames.length ? ` (신규: ${createdEventNames.slice(0, 5).join(', ')}${createdEventNames.length > 5 ? ` 외 ${createdEventNames.length - 5}개` : ''})` : ''}`, 'import', 'admin', competition_id);
+        // ⭐ created_event_names: 재업로드 시 0개면 정상. 누락된 종목이 새로 만들어졌다면 여기서 확인 가능
+        res.json({ success: true, message: '업로드 완료', stats, created_event_names: createdEventNames });
     } catch (err) { console.error(err); res.status(500).json({ error: '가져오기 오류: ' + err.message }); }
 });
 
