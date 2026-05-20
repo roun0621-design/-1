@@ -733,11 +733,15 @@ if (db.isAsync) {
                 ['F_GEN','여자일반부','F','GEN',150],['F_OPEN','여자공개부','F','OPEN',160],
                 ['MIXED','통합부','X','MIXED',900],
             ];
+            let seedOk = 0, seedFail = 0, firstErr = null;
             for (const r of seedRows) {
                 try {
                     await db.run(`INSERT INTO division_master (code,label_ko,gender,school_level,sort_order) VALUES (?,?,?,?,?) ON CONFLICT (code) DO NOTHING`, ...r);
-                } catch(e) {}
+                    seedOk++;
+                } catch(e) { seedFail++; if (!firstErr) firstErr = e.message; }
             }
+            const dmCnt = await db.get('SELECT COUNT(*)::int AS c FROM division_master').catch(() => ({ c: -1 }));
+            console.log(`[DB Migration v4 PG] division_master seed: ${seedOk} ok, ${seedFail} fail, total rows=${dmCnt.c}` + (firstErr ? ` (first error: ${firstErr})` : ''));
             // Indexes
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_lookup ON event_record(event_name, gender, record_type)`); } catch(e) {}
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_division ON event_record(division_code, event_name, gender)`); } catch(e) {}
