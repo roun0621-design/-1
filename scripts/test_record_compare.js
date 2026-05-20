@@ -1,7 +1,8 @@
 // Phase C1 unit tests for lib/recordCompare.js (pure functions only)
 const {
     normalizeEventName, parseRecordValue, isBetter,
-    getCompareDirection, formatValueForDisplay
+    getCompareDirection, formatValueForDisplay,
+    isWindAffectedEvent, WIND_LIMIT
 } = require('../lib/recordCompare');
 
 let pass = 0, fail = 0;
@@ -56,6 +57,22 @@ assert('필드 8.215 → JS toFixed 결과', eq(formatValueForDisplay(8.215, 'hi
 assert('트랙 10.07 → "10.07"', eq(formatValueForDisplay(10.07, 'lower'), '10.07'));
 assert('트랙 125.12 → "2:05.12"', eq(formatValueForDisplay(125.12, 'lower'), '2:05.12'));
 assert('null → ""', eq(formatValueForDisplay(null, 'lower'), ''));
+
+console.log('\n▶ isWindAffectedEvent (풍속 규제 대상 종목)');
+assert('100m → true',       isWindAffectedEvent('100m') === true);
+assert('200m → true',       isWindAffectedEvent('200m') === true);
+assert('100mH → true',      isWindAffectedEvent('100mH') === true);
+assert('110mH → true',      isWindAffectedEvent('110mH') === true);
+assert('멀리뛰기 → true',    isWindAffectedEvent('멀리뛰기') === true);
+assert('세단뛰기 → true',    isWindAffectedEvent('세단뛰기') === true);
+assert('400m → false',      isWindAffectedEvent('400m') === false);
+assert('800m → false',      isWindAffectedEvent('800m') === false);
+assert('400mH → false',     isWindAffectedEvent('400mH') === false);
+assert('높이뛰기 → false',  isWindAffectedEvent('높이뛰기') === false);
+assert('포환던지기 → false', isWindAffectedEvent('포환던지기') === false);
+assert('4x100mR → false',   isWindAffectedEvent('4x100mR') === false);
+assert('빈 입력 → false',   isWindAffectedEvent('') === false);
+assert('WIND_LIMIT = 2.0',  WIND_LIMIT === 2.0);
 
 console.log('\n═══════════════════════════════════════════');
 console.log(`  결과: ${pass} pass / ${fail} fail`);

@@ -773,6 +773,49 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Phase C: 기록 시스템 운영 가이드 -->
+                <div class="admin-card" style="border-left:4px solid #e67e22;">
+                    <h4 style="display:flex;align-items:center;gap:8px;">🏆 기록 관리 시스템 운영 가이드 <span class="t-sm t-muted">NR / DR / CR · 자동 감지 워크플로</span></h4>
+                    <p class="t-help-lg">신기록 자동 감지 시스템의 동작 원리와 운영 규칙입니다. 관리자/운영자가 숙지해야 할 내용입니다.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;">
+                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#fffaf3;">
+                            <h5 style="margin:0 0 6px;color:#c0392b;font-size:13px;">기록 종류</h5>
+                            <ul style="font-size:12px;color:var(--text);margin:0;padding-left:18px;line-height:1.7;">
+                                <li><strong style="color:#c0392b;">NR (National Record)</strong> — 한국기록</li>
+                                <li><strong style="color:#2980b9;">DR (Division Record)</strong> — 부별기록 (13개 부: 초/중/고/대/일반/공개 × 남녀 + 혼성)</li>
+                                <li><strong style="color:#27ae60;">CR (Competition Record)</strong> — 대회기록 (시리즈별, 예: KTFL/광주올림픽시리즈 등)</li>
+                            </ul>
+                        </div>
+                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#f3faff;">
+                            <h5 style="margin:0 0 6px;color:#2980b9;font-size:13px;">자동 감지 흐름</h5>
+                            <ol style="font-size:12px;color:var(--text);margin:0;padding-left:18px;line-height:1.7;">
+                                <li>경기 결과 입력 시 NR/DR/CR 동시 비교</li>
+                                <li>갱신 후보를 <strong>승인 대기 큐</strong>로 보냄</li>
+                                <li>관리자가 검토 후 <strong>승인 / 거부</strong></li>
+                                <li>승인 시 자동으로 공식 기록 갱신 + 공개 페이지 배너 표시</li>
+                            </ol>
+                        </div>
+                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#fafafe;">
+                            <h5 style="margin:0 0 6px;color:#6366f1;font-size:13px;">자동 제외 규정</h5>
+                            <ul style="font-size:12px;color:var(--text);margin:0;padding-left:18px;line-height:1.7;">
+                                <li><strong>풍속 +2.0 m/s 초과</strong> — 100m / 200m / 100mH / 110mH / 멀리뛰기 / 세단뛰기에서 자동 <strong style="color:#7f8c8d;">참고기록</strong> 처리 (신기록 불인정, 토스트 안내)</li>
+                                <li><strong>DQ / DNS / DNF / NM</strong> — 비유효 상태는 비교 대상에서 제외</li>
+                                <li><strong>혼성종목(combined)</strong> — 자체 점수체계로 별도 관리</li>
+                                <li><strong>예선/준결승</strong> — 결승 race만 비교 대상</li>
+                            </ul>
+                        </div>
+                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#f4faf3;">
+                            <h5 style="margin:0 0 6px;color:#27ae60;font-size:13px;">운영 권장 사항</h5>
+                            <ul style="font-size:12px;color:var(--text);margin:0;padding-left:18px;line-height:1.7;">
+                                <li>대회 생성 시 <strong>시리즈 연결</strong>해야 CR 자동 감지 작동</li>
+                                <li>승인 큐는 기록 관리 탭 상단에 자동 표시 (pending 0건이면 숨김)</li>
+                                <li>풍속 측정값은 <strong>m/s 단위, 소수 1자리</strong>로 입력</li>
+                                <li>의심 케이스는 <strong>거부 후 사유 메모</strong>로 기록 (감사 추적)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- TAB: External API (외부 API 키 관리) -->
@@ -1720,6 +1763,84 @@ POST /api/external/event-result-link/batch<br>
             const t = document.createElement('div'); t.className = 'toast ' + type; t.textContent = msg;
             document.body.appendChild(t); setTimeout(() => t.remove(), 3000);
         }
+
+        // ─── Phase C: 신기록 감지 SSE 구독 ────────────────────────
+        // /api/sse에서 record_break_detected / record_break_resolved 이벤트를 받아
+        // 운영자에게 토스트로 알림 (페이지 어디에 있든 표시)
+        (function setupRecordBreakSSE() {
+            let es = null;
+            let reconnectDelay = 2000;
+            function connect() {
+                try {
+                    es = new EventSource('/api/sse');
+                    es.addEventListener('record_break_detected', (ev) => {
+                        try {
+                            const d = JSON.parse(ev.data);
+                            const list = d.detected || [];
+                            if (list.length === 0) return;
+                            const types = list.map(x => x.record_type === 'national' ? 'NR'
+                                                       : x.record_type === 'division' ? 'DR'
+                                                       : 'CR').join('/');
+                            // payload에 종목/선수/값 포함 (Phase C 확장)
+                            const eventName = d.event_name || '';
+                            const athleteName = d.athlete_name || '';
+                            const team = d.athlete_team || '';
+                            const valStr = d.value != null ? String(d.value) : '';
+                            const banner = document.createElement('div');
+                            banner.className = 'toast';
+                            banner.style.cssText = 'background:linear-gradient(90deg,#e67e22,#d35400);color:#fff;font-weight:700;cursor:pointer;border-left:5px solid #fff3;padding:14px 18px;font-size:14px;box-shadow:0 6px 20px rgba(230,126,34,.4);max-width:380px;';
+                            const subtitle = (eventName || athleteName)
+                                ? `<div style="font-size:12px;margin-top:4px;opacity:.95;font-weight:500;">${eventName} · ${athleteName}${team ? ' ('+team+')' : ''} <strong>${valStr}</strong></div>`
+                                : '';
+                            banner.innerHTML = `🏆 <strong>${types} 기록 갱신 후보 ${list.length}건 감지</strong>${subtitle}<div style="font-size:11px;margin-top:4px;opacity:.85;">클릭 → 기록 관리 탭의 "승인 대기 큐"에서 검토</div>`;
+                            banner.onclick = () => {
+                                if (typeof switchTab === 'function') switchTab('records');
+                                banner.remove();
+                            };
+                            document.body.appendChild(banner);
+                            setTimeout(() => banner.remove(), 8000);
+                            // 기록 관리 탭이 열려있으면 큐도 새로고침
+                            if (typeof loadRecordBreaks === 'function') {
+                                try { loadRecordBreaks(); } catch(e) {}
+                            }
+                        } catch(e) { /* ignore */ }
+                    });
+                    // 풍속 초과로 인한 참고기록 안내 (신기록 불인정)
+                    es.addEventListener('record_break_wind_skipped', (ev) => {
+                        try {
+                            const d = JSON.parse(ev.data);
+                            const banner = document.createElement('div');
+                            banner.className = 'toast';
+                            banner.style.cssText = 'background:linear-gradient(90deg,#7f8c8d,#95a5a6);color:#fff;font-weight:600;border-left:5px solid #fff3;padding:12px 16px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.25);max-width:380px;';
+                            const wind = (typeof d.wind === 'number') ? `+${d.wind.toFixed(1)}m/s` : '';
+                            banner.innerHTML = `💨 <strong>참고기록 (풍속 초과)</strong><div style="font-size:11px;margin-top:3px;opacity:.95;">${d.event_name || ''} · ${d.athlete_name || ''} <strong>${d.value || ''}</strong> · 풍속 ${wind}<br>육상 규정 +2.0 m/s 초과 — 신기록 불인정</div>`;
+                            document.body.appendChild(banner);
+                            setTimeout(() => banner.remove(), 6000);
+                        } catch(e) { /* ignore */ }
+                    });
+                    es.addEventListener('record_break_resolved', (ev) => {
+                        // 다른 관리자가 승인/거부한 경우 큐 새로고침
+                        if (typeof loadRecordBreaks === 'function') {
+                            try { loadRecordBreaks(); } catch(e) {}
+                        }
+                    });
+                    es.onerror = () => {
+                        try { es.close(); } catch(e) {}
+                        setTimeout(connect, reconnectDelay);
+                        reconnectDelay = Math.min(reconnectDelay * 1.5, 30000);
+                    };
+                    es.onopen = () => { reconnectDelay = 2000; };
+                } catch(e) {
+                    setTimeout(connect, reconnectDelay);
+                }
+            }
+            // DOM ready 후 시작
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', connect);
+            } else {
+                connect();
+            }
+        })();
 
         // ---- OVERVIEW ----
         async function loadOverview() {

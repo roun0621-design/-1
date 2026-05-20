@@ -168,6 +168,28 @@ async function main() {
     const retDQ = await detectRecordBreaks(db, { result: r3, heat, event, athlete, competition, eventEntry });
     log('DQ는 skip', retDQ.skipped && retDQ.skipped.includes('status-code'), retDQ.skipped);
 
+    // === 풍속 검증 ===
+    // 100m은 풍속 +2.0 m/s 초과 시 참고기록 → 신기록 감지 skip
+    await db.run("UPDATE result SET status_code='', time_seconds=?, wind=? WHERE id=?", 9.80, 2.5, r1.id);
+    const rWind = await db.get('SELECT * FROM result WHERE id=?', r1.id);
+    const retWind = await detectRecordBreaks(db, { result: rWind, heat, event, athlete, competition, eventEntry });
+    log('풍속 +2.5 (한계 초과) → skip', retWind.skipped && retWind.skipped.includes('wind-over-limit'), retWind.skipped);
+
+    // 풍속 +2.0 (한계 정확히) → 통과 (초과만 skip)
+    await db.run("UPDATE result SET wind=? WHERE id=?", 2.0, r1.id);
+    const rWindOK = await db.get('SELECT * FROM result WHERE id=?', r1.id);
+    const retWindOK = await detectRecordBreaks(db, { result: rWindOK, heat, event, athlete, competition, eventEntry });
+    log('풍속 +2.0 정확 (한계 동일) → skip 안 함', !retWindOK.skipped || !retWindOK.skipped.startsWith('wind-over'), retWindOK.skipped);
+
+    // 풍속 null (측정 없음) → 통과 (skip 안 함)
+    await db.run("UPDATE result SET wind=NULL WHERE id=?", r1.id);
+    const rWindNull = await db.get('SELECT * FROM result WHERE id=?', r1.id);
+    const retWindNull = await detectRecordBreaks(db, { result: rWindNull, heat, event, athlete, competition, eventEntry });
+    log('풍속 null (미측정) → skip 안 함', !retWindNull.skipped || !retWindNull.skipped.startsWith('wind-over'), retWindNull.skipped);
+
+    // 후속 테스트에 영향 주지 않도록 복구
+    await db.run("UPDATE result SET status_code='', time_seconds=?, wind=NULL WHERE id=?", 9.95, r1.id);
+
     // === 승인 로직 시뮬레이션 (server.js의 approve 라우트와 동일 패턴) ===
     if (nrLog) {
         const recordYear = String(new Date(nrLog.detected_at).getFullYear());

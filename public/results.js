@@ -21,6 +21,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     allEvents = events;
     renderResultsMatrix();
     renderAuditLog();
+    // Phase C: 신기록 배너 로드 (실패해도 전체 페이지 영향 X)
+    try { loadRecordBreaksBanner(); } catch(e) {}
 
     // If event_id in URL, auto-open
     const urlEventId = getParam('event_id');
@@ -48,7 +50,61 @@ document.addEventListener('DOMContentLoaded', async () => {
         allEvents = await API.getAllEvents(getCompetitionId());
         renderResultsMatrix();
     });
+    // Phase C: 신기록 승인/거부 시 배너 새로고침
+    onSSE('record_break_resolved', () => { try { loadRecordBreaksBanner(); } catch(e) {} });
 });
+
+// ============================================================
+// Phase C: 신기록 배너 (최근 승인된 NR/DR/CR)
+// ============================================================
+async function loadRecordBreaksBanner() {
+    const el = document.getElementById('record-breaks-banner');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/record-breaks/recent?limit=5&competition_id=' + encodeURIComponent(getCompetitionId()));
+        if (!res.ok) { el.style.display = 'none'; return; }
+        const data = await res.json();
+        const rows = data.rows || [];
+        if (rows.length === 0) { el.style.display = 'none'; return; }
+        renderRecordBreaksBanner(rows, el);
+    } catch (e) {
+        el.style.display = 'none';
+    }
+}
+
+function renderRecordBreaksBanner(rows, el) {
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const cards = rows.map(r => {
+        const rt = r.record_type;
+        const color = rt === 'national' ? '#c0392b' : rt === 'division' ? '#2980b9' : '#27ae60';
+        const label = rt === 'national' ? 'NR' : rt === 'division' ? 'DR' : 'CR';
+        const ctx = rt === 'division' ? (r.division_label || r.division_code || '')
+                  : rt === 'competition' ? (r.series_name || '시리즈')
+                  : '한국';
+        const gender = r.gender === 'M' ? '남' : r.gender === 'F' ? '여' : '혼성';
+        return `
+            <div style="flex:0 0 auto;min-width:240px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid ${color};border-radius:8px;padding:10px 14px;">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                    <span style="background:${color};color:#fff;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700;">${label}</span>
+                    <span style="font-size:11px;color:#6b7280;">${gender} · ${esc(ctx)}</span>
+                </div>
+                <div style="font-weight:700;font-size:14px;color:#1f2937;">${esc(r.event_name)} <span style="color:${color};font-family:var(--font-mono,monospace);">${esc(r.new_value)}</span></div>
+                <div style="font-size:12px;color:#4b5563;margin-top:2px;">${esc(r.athlete_name || '')}${r.athlete_team ? ' · ' + esc(r.athlete_team) : ''}</div>
+            </div>
+        `;
+    }).join('');
+    el.innerHTML = `
+        <div style="background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #f59e0b;border-radius:10px;padding:12px 16px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span style="font-size:18px;">🏆</span>
+                <strong style="font-size:14px;color:#92400e;">최근 갱신 기록</strong>
+                <span style="font-size:11px;color:#92400e;opacity:.8;">· 이 대회에서 인정된 NR/DR/CR</span>
+            </div>
+            <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;">${cards}</div>
+        </div>
+    `;
+    el.style.display = 'block';
+}
 
 // ============================================================
 // Side-by-side Matrix
@@ -480,7 +536,44 @@ async function loadResultsData() {
             }
         }
     }
-    document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date().toLocaleDateString('ko-KR')}</p>${windInfoHtml}${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
+    // Phase C: 신기록 배너 (해당 종목/성별의 NR/DR/CR 미리 보기)
+    let recordsBannerHtml = '';
+    try {
+        const normName = normalizeEventNameClient(rSelectedEvent.name);
+        const recs = await API.lookupEventRecords(
+            normName, rSelectedEvent.gender,
+            rSelectedEvent.division || null,
+            compInfo.series_id || null
+        ).catch(() => null);
+        if (recs && (recs.national || recs.division || recs.competition)) {
+            const chip = (label, color, rec) => rec
+                ? `<span style="display:inline-flex;align-items:center;gap:4px;background:${color}15;border:1px solid ${color}55;color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;font-family:var(--font-mono);">
+                       <strong>${label}</strong> ${(rec.record_value||'').toString()}
+                       ${rec.holder_name ? `<span style="color:var(--text-muted);font-weight:400;">${rec.holder_name}</span>` : ''}
+                       ${rec.record_year ? `<span style="color:var(--text-muted);font-weight:400;">${rec.record_year}</span>` : ''}
+                   </span>` : '';
+            const parts = [
+                chip('NR', '#c0392b', recs.national),
+                chip('DR', '#2980b9', recs.division),
+                chip('CR', '#27ae60', recs.competition)
+            ].filter(Boolean);
+            if (parts.length > 0) {
+                recordsBannerHtml = `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;">
+                    <span style="color:var(--text-muted);">🏆 기존 기록:</span> ${parts.join('')}
+                </div>`;
+            }
+            // 캐시 (행 렌더링 시 사용)
+            window._currentEventRecords = recs;
+            window._currentEventDirection = recordDirectionForCategoryClient(rSelectedEvent.category);
+        } else {
+            window._currentEventRecords = null;
+            window._currentEventDirection = null;
+        }
+    } catch(e) {
+        window._currentEventRecords = null;
+        window._currentEventDirection = null;
+    }
+    document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date().toLocaleDateString('ko-KR')}</p>${recordsBannerHtml}${windInfoHtml}${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
 
     const allArea = document.getElementById('results-all-area');
     const tableEl = document.getElementById('results-table');
@@ -715,6 +808,15 @@ async function renderTrackResults(entries) {
         // WA: wind > +2.0 → append 'w' to performance (valid but not record-eligible)
         const isWA = isWindOverLimit && !r.status_code && r.time_seconds != null;
         const wMark = isWA ? '<span class="wind-aided-mark">w</span>' : '';
+        // Phase C: 신기록 배지 (풍속 초과 시엔 신기록 인정 안 됨 → 배지 미표시)
+        let recordBadges = '';
+        if (!r.status_code && !isWA && r.time_seconds != null && window._currentEventRecords && window._currentEventDirection) {
+            const broken = detectBrokenRecordsClient(r.time_seconds, window._currentEventRecords, window._currentEventDirection);
+            recordBadges = broken.map(lbl => {
+                const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신">🏆${lbl}</span>`;
+            }).join('');
+        }
         // 비고: status_code(DNF/DQ 등), Q/q, 풍속 초과 시 참고기록
         let remarkText = '';
         if (r.status_code) remarkText = r.status_code;
@@ -728,7 +830,7 @@ async function renderTrackResults(entries) {
         return `<tr>
             <td>${medal}</td><td>${r.lane_number || '—'}</td><td><strong>${bib(r.bib_number)}</strong></td>
             <td style="text-align:left;">${r.name}</td><td style="font-size:12px;">${r.team || ''}</td>
-            <td style="font-family:var(--font-mono);font-weight:600;">${display}${wMark}</td>
+            <td style="font-family:var(--font-mono);font-weight:600;">${display}${wMark}${recordBadges}</td>
             <td style="${remarkStyle}">${remarkText}</td>
         </tr>`;
     }).join('');
@@ -786,6 +888,15 @@ async function renderUnifiedTrackResults() {
         const heatW = heatWindMap[r.heat_id];
         const isWindAided = needsWind && heatW != null && heatW > 2.0 && !r.status_code && r.time_seconds != null;
         const wMark = isWindAided ? '<span class="wind-aided-mark">w</span>' : '';
+        // Phase C: 신기록 배지 (풍속 초과 시엔 인정 안 됨)
+        let recordBadges = '';
+        if (!r.status_code && !isWindAided && r.time_seconds != null && window._currentEventRecords && window._currentEventDirection) {
+            const broken = detectBrokenRecordsClient(r.time_seconds, window._currentEventRecords, window._currentEventDirection);
+            recordBadges = broken.map(lbl => {
+                const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신">🏆${lbl}</span>`;
+            }).join('');
+        }
         const windCell = needsWind ? `<td style="font-size:11px;font-family:var(--font-mono);${heatW != null && heatW > 2.0 ? 'font-weight:700;' : ''}">${heatW != null ? formatWind(heatW) : ''}</td>` : '';
         // 비고: status_code(DNF/DQ 등), 풍속 초과 시 참고기록
         let allRemarkText = '';
@@ -798,7 +909,7 @@ async function renderUnifiedTrackResults() {
         return `<tr>
             <td>${medal}</td><td style="font-size:11px;color:var(--text-muted);">${r.heat_number}조</td><td>${r.lane_number || '—'}</td><td><strong>${bib(r.bib_number)}</strong></td>
             <td style="text-align:left;">${r.name}</td><td style="font-size:12px;">${r.team || ''}</td>
-            <td style="font-family:var(--font-mono);font-weight:600;">${display}${wMark}</td>${windCell}
+            <td style="font-family:var(--font-mono);font-weight:600;">${display}${wMark}${recordBadges}</td>${windCell}
             <td style="${allRemarkStyle}">${allRemarkText}</td>
         </tr>`;
     }).join('');
@@ -891,6 +1002,15 @@ async function renderFieldDistanceResults(entries) {
         const bestWindOver = needsWind && r.bestWind != null && parseFloat(r.bestWind) > 2.0 && r.best != null;
         const bestWMark = bestWindOver ? '<span class="wind-aided-mark">w</span>' : '';
         const bestColor = bestWindOver ? '' : 'color:var(--green);';
+        // Phase C: 신기록 배지 (풍속 초과 시엔 인정 안 됨)
+        let recordBadges = '';
+        if (!r.status_code && !bestWindOver && r.best != null && window._currentEventRecords && window._currentEventDirection) {
+            const broken = detectBrokenRecordsClient(r.best, window._currentEventRecords, window._currentEventDirection);
+            recordBadges = broken.map(lbl => {
+                const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신">🏆${lbl}</span>`;
+            }).join('');
+        }
         // 비고: status_code(DNF/DQ/NM 등), 풍속 초과 시 참고기록
         let remark = '';
         if (r.status_code) remark = r.status_code;
@@ -903,7 +1023,7 @@ async function renderFieldDistanceResults(entries) {
             return `<tr class="field-row1">
                 <td rowspan="2">${medal}</td><td rowspan="2">${r.lane_number || '—'}</td>
                 <td style="text-align:left;"><strong>${r.name}</strong></td><td rowspan="2"><strong>${bib(r.bib_number)}</strong></td>
-                ${distCells}<td rowspan="2" class="best-cell" style="font-weight:700;font-family:var(--font-mono);${bestColor}">${bestDisp}${bestWMark}<div class="best-wind" style="color:#555;font-weight:400;">${bestWindDisp}</div></td>
+                ${distCells}<td rowspan="2" class="best-cell" style="font-weight:700;font-family:var(--font-mono);${bestColor}">${bestDisp}${bestWMark}${recordBadges}<div class="best-wind" style="color:#555;font-weight:400;">${bestWindDisp}</div></td>
                 <td rowspan="2" style="${remarkStyle}">${remark}</td>
             </tr><tr class="field-row2">
                 <td class="team-cell" style="font-size:11px;text-align:left;color:#666;">${r.team || ''}</td>${windCells}
@@ -912,7 +1032,7 @@ async function renderFieldDistanceResults(entries) {
             return `<tr>
                 <td>${medal}</td><td>${r.lane_number || '—'}</td>
                 <td style="text-align:left;"><strong>${r.name}</strong></td><td style="text-align:left;font-size:11px;color:#666;">${r.team || ''}</td><td><strong>${bib(r.bib_number)}</strong></td>
-                ${distCells}<td class="best-cell" style="font-weight:700;font-family:var(--font-mono);color:var(--green);">${bestDisp}</td>
+                ${distCells}<td class="best-cell" style="font-weight:700;font-family:var(--font-mono);color:var(--green);">${bestDisp}${recordBadges}</td>
                 <td style="${remarkStyle}">${remark}</td>
             </tr>`;
         }
@@ -960,9 +1080,18 @@ async function renderFieldHeightResults(entries) {
         const medal = r.best == null ? '' : getMedal(r.rank, rSelectedEvent?.round_type);
         let c = ''; hts.forEach(h2 => { const d = r.hd[h2] || {}; let m = ''; for (let i = 1; i <= 3; i++) { if (d[i]) { const mark = d[i] === 'PASS' ? '-' : d[i]; const cls = d[i] === 'O' ? 'mark-O' : d[i] === 'X' ? 'mark-X' : 'mark-PASS'; m += `<span class="height-mark ${cls}">${mark}</span>`; } } c += `<td style="font-size:11px;">${m}</td>`; });
         const bestDisp = r.best != null ? formatHeight(r.best) : '';
+        // Phase C: 신기록 배지 (높이뛰기는 풍속 영향 없음)
+        let recordBadges = '';
+        if (!r.isNM && r.best != null && window._currentEventRecords && window._currentEventDirection) {
+            const broken = detectBrokenRecordsClient(r.best, window._currentEventRecords, window._currentEventDirection);
+            recordBadges = broken.map(lbl => {
+                const cc = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
+                return `<span style="display:inline-block;background:${cc};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신">🏆${lbl}</span>`;
+            }).join('');
+        }
         const rmk = r.isNM ? 'NM' : '';
         const rmkStyle = r.isNM ? 'color:var(--danger);font-weight:600;font-size:11px;' : 'font-size:11px;';
-        return `<tr><td>${medal}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td><td style="font-size:12px;">${r.team || ''}</td>${c}<td style="font-weight:700;">${bestDisp}</td><td style="${rmkStyle}">${rmk}</td></tr>`;
+        return `<tr><td>${medal}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td><td style="font-size:12px;">${r.team || ''}</td>${c}<td style="font-weight:700;">${bestDisp}${recordBadges}</td><td style="${rmkStyle}">${rmk}</td></tr>`;
     }).join('');
 }
 

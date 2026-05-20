@@ -1810,13 +1810,24 @@ app.delete('/api/competitions/:id', async (req, res) => {
 // Competition info (public — for viewer)
 app.get('/api/competition-info', async (req, res) => {
     const compId = req.query.competition_id;
+    function pick(c) {
+        return {
+            id: c.id,
+            name: c.name,
+            dates: `${c.start_date} ~ ${c.end_date}`,
+            venue: c.venue,
+            video_url: c.video_url || '',
+            federation: c.federation || '',
+            series_id: c.series_id || null   // Phase C: CR 매칭용
+        };
+    }
     if (compId) {
         const c = await db.get('SELECT * FROM competition WHERE id=?', compId);
-        if (c) return res.json({ name: c.name, dates: `${c.start_date} ~ ${c.end_date}`, venue: c.venue, video_url: c.video_url || '', federation: c.federation || '' });
+        if (c) return res.json(pick(c));
     }
     const c = await db.get('SELECT * FROM competition ORDER BY start_date DESC LIMIT 1');
-    if (c) return res.json({ name: c.name, dates: `${c.start_date} ~ ${c.end_date}`, venue: c.venue, video_url: c.video_url || '', federation: c.federation || '' });
-    res.json({ name: '', dates: '', venue: '', video_url: '', federation: '' });
+    if (c) return res.json(pick(c));
+    res.json({ id: null, name: '', dates: '', venue: '', video_url: '', federation: '', series_id: null });
 });
 
 // ============================================================
@@ -2192,12 +2203,27 @@ async function _runRecordCompareHook(result, heatRow) {
         const ret = await detectRecordBreaks(db, {
             result, heat: heatRow, event, athlete, competition, eventEntry
         });
+        // 풍속 초과로 인한 참고기록 — opLog만 남기고 별도 SSE 발행
+        if (ret && ret.skipped && ret.skipped.startsWith('wind-over-limit')) {
+            const wind = (typeof result.wind === 'number') ? result.wind : null;
+            const val = result.time_seconds || result.distance_meters;
+            opLog(`💨 풍속 초과 참고기록: ${event.name} (${athlete?.name || '선수'} ${val}, 풍속 +${wind?.toFixed(1)}m/s) — 신기록 불인정`, 'record', 'system', competition.id);
+            broadcastSSE('record_break_wind_skipped', {
+                competition_id: competition.id, event_id: event.id,
+                event_name: event.name, athlete_name: athlete?.name || '',
+                value: val, wind: wind
+            });
+        }
         if (ret && ret.detected && ret.detected.length > 0) {
             for (const d of ret.detected) {
                 opLog(`🏆 ${d.record_type.toUpperCase()} 기록 갱신 감지: ${event.name} (${athlete?.name || '선수'} ${result.time_seconds || result.distance_meters}) — 승인 대기`, 'record', 'system', competition.id);
             }
             broadcastSSE('record_break_detected', {
                 competition_id: competition.id, event_id: event.id,
+                event_name: event.name,
+                athlete_name: athlete?.name || '',
+                athlete_team: athlete?.team || '',
+                value: result.time_seconds || result.distance_meters,
                 detected: ret.detected
             });
         }
@@ -7466,6 +7492,49 @@ async function _bundlePost(req, res) {
 // Canonical bundle URLs (preferred)
 app.get('/api/event-record-bundle/:eventId', _bundleGet);
 app.post('/api/event-record-bundle', _bundlePost);
+
+// Phase C: 종목 1건에 대한 NR/DR/CR 정확 매칭 조회 (공개 페이지용)
+//   ⚠️ 이 라우트는 /api/event-records/:eventId 보다 먼저 정의되어야 함 (Express 매칭 순서)
+//   GET /api/event-records/lookup?event_name=100m&gender=M&division_code=M_OPEN&series_id=3
+//   → { national: {...}|null, division: {...}|null, competition: {...}|null }
+//   approved=1 만 반환
+app.get('/api/event-records/lookup', async (req, res) => {
+    try {
+        const eventName = (req.query.event_name || '').trim();
+        const gender = (req.query.gender || '').trim();
+        if (!eventName || !gender) return res.status(400).json({ error: 'event_name, gender 필수' });
+        const divCode = req.query.division_code ? String(req.query.division_code).trim() : null;
+        const seriesId = req.query.series_id ? parseInt(req.query.series_id, 10) : null;
+        const out = { national: null, division: null, competition: null };
+        out.national = await db.get(
+            `SELECT * FROM event_record WHERE record_type='national' AND event_name=? AND gender=?
+             AND division_code IS NULL AND series_id IS NULL AND approved=1
+             ORDER BY id DESC LIMIT 1`,
+            eventName, gender
+        ) || null;
+        if (divCode) {
+            out.division = await db.get(
+                `SELECT * FROM event_record WHERE record_type='division' AND event_name=? AND gender=?
+                 AND division_code=? AND series_id IS NULL AND approved=1
+                 ORDER BY id DESC LIMIT 1`,
+                eventName, gender, divCode
+            ) || null;
+        }
+        if (seriesId) {
+            out.competition = await db.get(
+                `SELECT * FROM event_record WHERE record_type='competition' AND event_name=? AND gender=?
+                 AND division_code IS NULL AND series_id=? AND approved=1
+                 ORDER BY id DESC LIMIT 1`,
+                eventName, gender, seriesId
+            ) || null;
+        }
+        res.json(out);
+    } catch (err) {
+        console.error('[event-records/lookup]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Backward-compat aliases (deprecated — remove after one release cycle)
 app.get('/api/event-records/:eventId', _bundleGet);
 app.post('/api/event-records', _bundlePost);
@@ -9849,6 +9918,40 @@ app.get('/api/record-breaks', async (req, res) => {
         res.json({ rows, counts: counts || { pending: 0, approved: 0, rejected: 0 } });
     } catch (err) {
         console.error('[GET /api/record-breaks]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/record-breaks/recent — 공개 페이지용 (인증 불필요, 승인된 신기록 최근 N건)
+//   ?competition_id=&limit=5  default limit=5, 최대 20
+//   종합기록지/실시간 보드 상단 배너에 표시할 용도
+//   ⚠️ :id 라우트보다 먼저 정의되어야 함 (Express 매칭 순서)
+app.get('/api/record-breaks/recent', async (req, res) => {
+    try {
+        const cId = req.query.competition_id ? parseInt(req.query.competition_id, 10) : null;
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 5, 1), 20);
+        const where = ["rbl.status='approved'"];
+        const params = [];
+        if (cId) { where.push('rbl.competition_id=?'); params.push(cId); }
+        const sql = `SELECT rbl.id, rbl.competition_id, rbl.event_id, rbl.record_type,
+                            rbl.event_name, rbl.gender, rbl.division_code, rbl.series_id,
+                            rbl.previous_value, rbl.new_value, rbl.new_value_num,
+                            rbl.athlete_name, rbl.athlete_team, rbl.bib_number,
+                            rbl.detected_at, rbl.reviewed_at,
+                            c.name AS competition_name,
+                            dm.label_ko AS division_label,
+                            cs.name AS series_name
+                     FROM record_breaking_log rbl
+                     LEFT JOIN competition c ON c.id = rbl.competition_id
+                     LEFT JOIN division_master dm ON dm.code = rbl.division_code
+                     LEFT JOIN competition_series cs ON cs.id = rbl.series_id
+                     WHERE ${where.join(' AND ')}
+                     ORDER BY rbl.reviewed_at DESC, rbl.id DESC
+                     LIMIT ${limit}`;
+        const rows = await db.all(sql, ...params);
+        res.json({ rows });
+    } catch (err) {
+        console.error('[GET /api/record-breaks/recent]', err);
         res.status(500).json({ error: err.message });
     }
 });

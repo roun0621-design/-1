@@ -217,6 +217,60 @@ function fmtRoundShort(r) { return { preliminary: '예선', semifinal: '준결',
 function fmtSt(s) { return { registered: '미확인', checked_in: '출석', no_show: '결석' }[s] || s; }
 
 // ============================================================
+// Phase C: 신기록 비교 헬퍼 (브라우저용)
+// 서버 lib/recordCompare.js와 동일 로직을 클라이언트에 인라인
+// ============================================================
+function normalizeEventNameClient(name) {
+    if (!name) return '';
+    let s = String(name).trim();
+    s = s.replace(/\s*(예선|준결승|결승|preliminary|semifinal|final)\s*/gi, ' ').trim();
+    s = s.replace(/^(남자|여자|남|여|M|F)\s+/i, '').trim();
+    s = s.replace(/미터\s*허들/g, 'mH')
+         .replace(/미터\s*장애물/g, 'mSC')
+         .replace(/미터\s*경보/g, 'mW')
+         .replace(/미터/g, 'm');
+    s = s.replace(/×/g, 'x').replace(/X/g, 'x');
+    s = s.replace(/(\d+)\s*x\s*(\d+)\s*m(?:\s*릴레이|\s*계주|\s*R)?/gi, '$1x$2mR');
+    s = s.replace(/\s+/g, ' ').trim();
+    return s;
+}
+function parseRecordValueClient(v) {
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    const s = String(v).trim().replace(/m$/i, '').replace(/\s+/g, '');
+    if (s.includes(':')) {
+        const parts = s.split(':').map(parseFloat);
+        if (parts.some(isNaN)) return null;
+        if (parts.length === 2) return parts[0] * 60 + parts[1];
+        if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+        return null;
+    }
+    const n = parseFloat(s);
+    return isNaN(n) ? null : n;
+}
+// 결과 행이 NR/DR/CR을 동률/경신했는지 — direction = 'lower' or 'higher'
+// 반환: ['NR','DR','CR'] 배열 (해당되는 것만)
+function detectBrokenRecordsClient(newVal, records, direction) {
+    const broken = [];
+    if (newVal == null || !isFinite(newVal)) return broken;
+    const keys = [['national','NR'], ['division','DR'], ['competition','CR']];
+    for (const [k, label] of keys) {
+        const rec = records ? records[k] : null;
+        if (!rec) continue;
+        const oldVal = parseRecordValueClient(rec.record_value);
+        if (oldVal == null) continue;
+        if (direction === 'lower' && newVal < oldVal) broken.push(label);
+        else if (direction === 'higher' && newVal > oldVal) broken.push(label);
+    }
+    return broken;
+}
+function recordDirectionForCategoryClient(category) {
+    if (category === 'field_distance' || category === 'field_height') return 'higher';
+    if (category === 'track' || category === 'road' || category === 'relay') return 'lower';
+    return null;
+}
+
+// ============================================================
 // Competition context (localStorage = 전역 동기화)
 // ============================================================
 function getCompetitionId() {
@@ -418,6 +472,13 @@ const API = {
     getHeatEntriesCheckedIn: hid => api('GET', `/api/heats/${hid}/entries?status=checked_in`),
     getResults: hid => api('GET', `/api/results?heat_id=${hid}`),
     upsertResult: body => api('POST', '/api/results/upsert', body),
+    // Phase C: 신기록 lookup (NR/DR/CR 정확 매칭, approved만)
+    lookupEventRecords: (eventName, gender, divisionCode, seriesId) => {
+        const p = new URLSearchParams({ event_name: eventName, gender });
+        if (divisionCode) p.set('division_code', divisionCode);
+        if (seriesId) p.set('series_id', String(seriesId));
+        return api('GET', '/api/event-records/lookup?' + p.toString());
+    },
     deleteResult: body => api('DELETE', '/api/results', body),
     resetSubEvent: eventId => api('POST', '/api/results/reset-sub-event', { event_id: eventId }),
     updateEntryStatus: (id, st) => api('PATCH', `/api/event-entries/${id}/status`, { status: st }),

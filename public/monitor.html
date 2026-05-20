@@ -177,6 +177,9 @@
     <!-- Competition selector tabs -->
     <div class="mon-comp-bar" id="comp-bar" style="display:none;"></div>
 
+    <!-- Phase C: 신기록 배너 (선택된 대회 기준) -->
+    <div id="record-breaks-banner" style="display:none;margin:8px 16px;"></div>
+
     <!-- Gender tabs -->
     <div class="mon-gender-tabs" id="gender-tabs">
         <button class="active" data-g="ALL" onclick="setGender('ALL',this)">전체</button>
@@ -452,6 +455,55 @@
         } catch(e) {
             document.getElementById('refresh-bar').textContent = '데이터 로드 실패';
         }
+        // Phase C: 신기록 배너도 함께 갱신 (별도 try 블록)
+        try { loadRecordBreaksBanner(); } catch(e) {}
+    }
+
+    // ============================================================
+    // Phase C: 신기록 배너 (선택된 대회의 승인된 NR/DR/CR)
+    // ============================================================
+    async function loadRecordBreaksBanner() {
+        const el = document.getElementById('record-breaks-banner');
+        if (!el || !compId) return;
+        try {
+            const res = await fetch(`/api/record-breaks/recent?limit=5&competition_id=${compId}`);
+            if (!res.ok) { el.style.display = 'none'; return; }
+            const data = await res.json();
+            const rows = data.rows || [];
+            if (rows.length === 0) { el.style.display = 'none'; return; }
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            const cards = rows.map(r => {
+                const rt = r.record_type;
+                const color = rt === 'national' ? '#c0392b' : rt === 'division' ? '#2980b9' : '#27ae60';
+                const label = rt === 'national' ? 'NR' : rt === 'division' ? 'DR' : 'CR';
+                const ctx = rt === 'division' ? (r.division_label || r.division_code || '')
+                          : rt === 'competition' ? (r.series_name || '시리즈')
+                          : '한국';
+                const gender = r.gender === 'M' ? '남' : r.gender === 'F' ? '여' : '혼성';
+                return `
+                    <div style="flex:0 0 auto;min-width:220px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid ${color};border-radius:8px;padding:9px 12px;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                            <span style="background:${color};color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;">${label}</span>
+                            <span style="font-size:10px;color:#6b7280;">${gender} · ${esc(ctx)}</span>
+                        </div>
+                        <div style="font-weight:700;font-size:13px;color:#1f2937;">${esc(r.event_name)} <span style="color:${color};font-family:monospace;">${esc(r.new_value)}</span></div>
+                        <div style="font-size:11px;color:#4b5563;margin-top:2px;">${esc(r.athlete_name || '')}${r.athlete_team ? ' · ' + esc(r.athlete_team) : ''}</div>
+                    </div>
+                `;
+            }).join('');
+            el.innerHTML = `
+                <div style="background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #f59e0b;border-radius:10px;padding:10px 14px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                        <span style="font-size:16px;">🏆</span>
+                        <strong style="font-size:13px;color:#92400e;">최근 갱신 기록</strong>
+                    </div>
+                    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;">${cards}</div>
+                </div>
+            `;
+            el.style.display = 'block';
+        } catch(e) {
+            el.style.display = 'none';
+        }
     }
 
     // ============================================================
@@ -463,6 +515,8 @@
     onSSE('event_completed', () => loadData());
     onSSE('event_reverted', () => loadData());
     onSSE('event_status_changed', () => loadData());
+    // Phase C: 신기록 승인/거부 시 배너 새로고침
+    onSSE('record_break_resolved', () => { try { loadRecordBreaksBanner(); } catch(e) {} });
     // Refresh on SSE reconnect (stale data)
     onSSEReconnect(() => loadData());
 
