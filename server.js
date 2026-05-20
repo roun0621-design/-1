@@ -1663,12 +1663,17 @@ app.get('/api/competitions/:id', async (req, res) => {
     res.json(c);
 });
 app.post('/api/competitions', async (req, res) => {
-    const { admin_key, name, start_date, end_date, venue, federation, mode } = req.body;
+    const { admin_key, name, start_date, end_date, venue, federation, mode, division_type, video_url } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!name || !start_date || !end_date) return res.status(400).json({ error: '대회명, 시작일, 종료일은 필수입니다.' });
     const compMode = (mode === 'display') ? 'display' : 'operation';
+    const allowedDivisions = ['','pro','univ','high','middle','general'];
+    const divType = allowedDivisions.includes(division_type) ? division_type : '';
     try {
-        const info = await db.run('INSERT INTO competition (name,start_date,end_date,venue,federation,mode) VALUES (?,?,?,?,?,?)', name, start_date, end_date, venue || '', federation || '', compMode);
+        const info = await db.run(
+            'INSERT INTO competition (name,start_date,end_date,venue,federation,mode,division_type,video_url) VALUES (?,?,?,?,?,?,?,?)',
+            name, start_date, end_date, venue || '', federation || '', compMode, divType, video_url || ''
+        );
         const comp = await db.get('SELECT * FROM competition WHERE id=?', info.lastInsertRowid);
         opLog(`대회 생성: ${name} (${compMode === 'display' ? '노출용' : '운영용'})`, 'admin', 'admin', comp.id);
         res.json(comp);

@@ -63,7 +63,7 @@
         .home-actions { display: flex; gap: 10px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
         .add-comp-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000; align-items: center; justify-content: center; }
         .add-comp-modal.show { display: flex; }
-        .add-comp-form { background: var(--white); border-radius: var(--radius); padding: 24px; width: 420px; max-width: 90vw; }
+        .add-comp-form { background: var(--white); border-radius: var(--radius); padding: 24px; width: 520px; max-width: 92vw; max-height: 92vh; overflow-y: auto; }
         .add-comp-form h3 { margin: 0 0 16px; font-size: 18px; }
         .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
         .form-group label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
@@ -347,13 +347,43 @@
                 <label>장소</label>
                 <input id="new-comp-venue" placeholder="예: 잠실 올림픽주경기장">
             </div>
-            <div class="form-group">
-                <label>연맹</label>
-                <select id="new-comp-federation" style="padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
-                    <option value="">없음 (미지정)</option>
-                    <!-- Dynamically populated from federation_list -->
-                </select>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>연맹</label>
+                    <select id="new-comp-federation" style="padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
+                        <option value="">없음 (미지정)</option>
+                        <!-- Dynamically populated from federation_list -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>운영 모드</label>
+                    <select id="new-comp-mode" style="padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
+                        <option value="operation">운영용</option>
+                        <option value="display">노출용</option>
+                    </select>
+                </div>
             </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>부 구분</label>
+                    <select id="new-comp-division" style="padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
+                        <option value="">없음 (미지정)</option>
+                        <option value="pro">실업부</option>
+                        <option value="univ">대학부</option>
+                        <option value="high">고등부</option>
+                        <option value="middle">중등부</option>
+                        <option value="general">일반부</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>대표 영상 URL</label>
+                    <input id="new-comp-video" placeholder="https://youtube.com/watch?v=...">
+                </div>
+            </div>
+            <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;line-height:1.6;">
+                ※ <strong>운영용</strong>: 실제 대회 운영 데이터 입력용 · <strong>노출용</strong>: 외부 결과/영상만 보여주는 홍보용<br>
+                ※ 생성 후 <strong>관리 → 대회 설정</strong>에서 더 자세하게 수정할 수 있습니다.
+            </p>
             <div class="modal-actions">
                 <button class="btn btn-ghost" onclick="closeAddComp()">취소</button>
                 <button class="btn btn-primary" onclick="createComp()">생성</button>
@@ -851,8 +881,15 @@
             const end = document.getElementById('new-comp-end').value;
             const venue = document.getElementById('new-comp-venue').value.trim();
             const federation = document.getElementById('new-comp-federation').value;
+            const mode = document.getElementById('new-comp-mode').value;
+            const division_type = document.getElementById('new-comp-division').value;
+            const video_url = document.getElementById('new-comp-video').value.trim();
             if (!name || !start || !end) { alert('대회명, 시작일, 종료일은 필수입니다.'); return; }
-            try { await API.createCompetition({ name, start_date: start, end_date: end, venue, federation }, currentKey); closeAddComp(); await loadCompetitions(); } catch (e) { alert(e.error || '생성 실패'); }
+            try {
+                await API.createCompetition({ name, start_date: start, end_date: end, venue, federation, mode, division_type, video_url }, currentKey);
+                closeAddComp();
+                await loadCompetitions();
+            } catch (e) { alert(e.error || '생성 실패'); }
         }
         document.getElementById('add-comp-modal').addEventListener('click', e => { if (e.target === document.getElementById('add-comp-modal')) closeAddComp(); });
 

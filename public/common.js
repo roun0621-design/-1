@@ -814,34 +814,50 @@ function renderPageNav(currentPage) {
     // ── Build mobile menu (once) ──
     _buildMobileMenu(pages, currentPage, role);
 
-    // ── Hide callroom link if competition period has ended ──
-    _hideCallroomIfCompleted(nav);
+    // ── Conditional nav-link visibility (callroom 종료, 노출관리 mode별) ──
+    _adjustNavLinkVisibility(nav);
 }
 
 // ============================================================
-// Hide callroom link when competition period has ended
+// Conditional nav-link visibility based on the currently selected competition
+//   • callroom        : 대회 종료(status=completed 또는 end_date 경과) 시 숨김
+//   • display-manage  : mode='display'(노출용) 대회일 때만 노출. operation 또는 미선택 시 숨김.
+//
+// 두 가지를 하나의 fetch 결과로 함께 처리해 추가 네트워크 비용 없음.
+// 정책: 대회 미선택(viewer 진입 등) 시 callroom은 노출 유지(viewer 자체가 의미있을 수 있음),
+//       display-manage는 안전하게 숨김(노출용 대회 컨텍스트가 없으면 의미 없음).
 // ============================================================
-async function _hideCallroomIfCompleted(nav) {
+async function _adjustNavLinkVisibility(nav) {
+    const hideLink = (key) => {
+        if (nav) {
+            const a = nav.querySelector(`a[data-page-key="${key}"]`);
+            if (a) a.style.display = 'none';
+        }
+        const mobileMenu = document.getElementById('mobile-menu');
+        if (mobileMenu) {
+            mobileMenu.querySelectorAll(`a[data-page-key="${key}"]`).forEach(l => l.style.display = 'none');
+        }
+    };
+
+    const compId = getCompetitionId();
+    if (!compId) {
+        // 대회 미선택: display-manage는 의미 없으므로 숨김. callroom은 그대로.
+        hideLink('display-manage');
+        return;
+    }
     try {
-        const compId = getCompetitionId();
-        if (!compId) return;
         const comp = await API.getCompetition(compId);
-        if (!comp) return;
-        // Check if competition status is completed OR end_date has passed
+        if (!comp) {
+            hideLink('display-manage');
+            return;
+        }
+        // (1) callroom: 종료된 대회면 숨김
         const today = new Date().toISOString().slice(0, 10);
         const isEnded = comp.status === 'completed' || (comp.end_date && comp.end_date < today);
-        if (isEnded) {
-            // Hide callroom links in nav and mobile menu
-            if (nav) {
-                const crLink = nav.querySelector('a[data-page-key="callroom"]');
-                if (crLink) crLink.style.display = 'none';
-            }
-            const mobileMenu = document.getElementById('mobile-menu');
-            if (mobileMenu) {
-                const mmLinks = mobileMenu.querySelectorAll('a[data-page-key="callroom"]');
-                mmLinks.forEach(l => l.style.display = 'none');
-            }
-        }
+        if (isEnded) hideLink('callroom');
+
+        // (2) display-manage: 노출용 대회에서만 노출
+        if (comp.mode !== 'display') hideLink('display-manage');
     } catch(e) { /* silently ignore */ }
 }
 
