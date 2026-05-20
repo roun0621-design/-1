@@ -13,7 +13,12 @@ CREATE TABLE IF NOT EXISTS competition (
     end_date TEXT NOT NULL,
     venue TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'upcoming' CHECK(status IN ('upcoming','active','completed')),
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    video_url TEXT DEFAULT '',
+    federation TEXT DEFAULT '',
+    division_type TEXT DEFAULT '',
+    mode TEXT NOT NULL DEFAULT 'operation',         -- 'operation' | 'display'
+    series_id INTEGER REFERENCES competition_series(id)
 );
 
 -- Events (종목) — linked to competition
@@ -27,7 +32,11 @@ CREATE TABLE IF NOT EXISTS event (
     round_type TEXT NOT NULL DEFAULT 'final' CHECK(round_type IN ('preliminary','semifinal','final')),
     round_status TEXT NOT NULL DEFAULT 'created',
     parent_event_id INTEGER REFERENCES event(id),
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    video_url TEXT DEFAULT '',
+    callroom_event_memo TEXT DEFAULT '',
+    division TEXT NOT NULL DEFAULT '',
+    result_url TEXT DEFAULT ''
 );
 
 -- Athletes (선수) — linked to competition
@@ -187,19 +196,119 @@ CREATE TABLE IF NOT EXISTS pacing_segment (
     UNIQUE(pacing_color_id, segment_order)
 );
 
--- Event Records (종목별 기록 관리: 한국기록/부별기록/대회기록)
+-- ============================================================
+-- Records Management v4 (NR/DR/CR 통합 모델)
+-- ============================================================
+
+-- Division Master (부별 마스터)
+-- 13 codes: 성별 6 학교급(초/중/고/대/일반/공개) × 2 + MIXED(혼성)
+CREATE TABLE IF NOT EXISTS division_master (
+    code TEXT PRIMARY KEY,                          -- M_OPEN / F_HIGH / MIXED 등
+    label_ko TEXT NOT NULL,                         -- 남자일반부, 여자고등부, 통합부
+    gender TEXT NOT NULL CHECK(gender IN ('M','F','X')),
+    school_level TEXT NOT NULL CHECK(school_level IN ('OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED')),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Competition Series (대회 시리즈 = 회차 묶음)
+-- 예: "전국실업단대항육상경기대회" 한 묶음 → 매년 1회 개최되는 시리즈
+CREATE TABLE IF NOT EXISTS competition_series (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,                      -- 시리즈명
+    federation TEXT NOT NULL DEFAULT '',            -- 주관 연맹 (KAAF, KTFL, etc.)
+    description TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Event Records (NR/DR/CR 통합)
+-- NR (national): division_code NULL, series_id NULL
+-- DR (division): division_code 필수, series_id NULL
+-- CR (competition): division_code NULL, series_id 필수
+-- (구 스키마 마이그레이션은 server.js boot 단계에서 수행)
 CREATE TABLE IF NOT EXISTS event_record (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    gender TEXT NOT NULL CHECK(gender IN ('M','F')),
-    event_name TEXT NOT NULL,
     record_type TEXT NOT NULL CHECK(record_type IN ('national','division','competition')),
-    record_value TEXT NOT NULL DEFAULT '',
+    event_name TEXT NOT NULL,                       -- 정규화된 종목명
+    gender TEXT NOT NULL CHECK(gender IN ('M','F','X')),
+    division_code TEXT REFERENCES division_master(code),  -- DR일 때만 필수
+    series_id INTEGER REFERENCES competition_series(id),  -- CR일 때만 필수
+    record_value TEXT NOT NULL DEFAULT '',          -- "10.21" or "11:23.45" 등 원본 문자열
+    record_value_num REAL,                          -- 비교용 숫자(초·미터·점수)
     holder_name TEXT NOT NULL DEFAULT '',
     holder_team TEXT NOT NULL DEFAULT '',
     record_year TEXT NOT NULL DEFAULT '',
+    record_date TEXT NOT NULL DEFAULT '',
+    venue TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    approved INTEGER NOT NULL DEFAULT 1,            -- 시드 데이터는 즉시 승인
+    approved_at TEXT,
+    approved_by TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(gender, event_name, record_type)
+    UNIQUE(record_type, event_name, gender, division_code, series_id)
+);
+
+-- Record Breaking Log (기록 갱신 이력 + 승인 큐)
+-- 결과 저장 시 기존 record 대비 신기록 가능성 발견되면 pending으로 적재
+-- 관리자가 승인하면 event_record가 갱신됨
+CREATE TABLE IF NOT EXISTS record_breaking_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    competition_id INTEGER NOT NULL REFERENCES competition(id),
+    event_id INTEGER REFERENCES event(id),
+    event_entry_id INTEGER REFERENCES event_entry(id),
+    record_type TEXT NOT NULL CHECK(record_type IN ('national','division','competition')),
+    event_name TEXT NOT NULL,
+    gender TEXT NOT NULL,
+    division_code TEXT,
+    series_id INTEGER,
+    previous_record_id INTEGER REFERENCES event_record(id),
+    previous_value TEXT NOT NULL DEFAULT '',
+    new_value TEXT NOT NULL DEFAULT '',
+    new_value_num REAL,
+    athlete_name TEXT NOT NULL DEFAULT '',
+    athlete_team TEXT NOT NULL DEFAULT '',
+    bib_number TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+    detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+    reviewed_at TEXT,
+    reviewed_by TEXT,
+    review_note TEXT NOT NULL DEFAULT ''
+);
+
+-- ============================================================
+-- Division Master 시드 (13개)
+-- ============================================================
+INSERT OR IGNORE INTO division_master (code, label_ko, gender, school_level, sort_order) VALUES
+    ('M_ELEM',  '남자초등부', 'M', 'ELEM',  10),
+    ('M_MID',   '남자중학부', 'M', 'MID',   20),
+    ('M_HIGH',  '남자고등부', 'M', 'HIGH',  30),
+    ('M_UNIV',  '남자대학부', 'M', 'UNIV',  40),
+    ('M_GEN',   '남자일반부', 'M', 'GEN',   50),
+    ('M_OPEN',  '남자공개부', 'M', 'OPEN',  60),
+    ('F_ELEM',  '여자초등부', 'F', 'ELEM', 110),
+    ('F_MID',   '여자중학부', 'F', 'MID',  120),
+    ('F_HIGH',  '여자고등부', 'F', 'HIGH', 130),
+    ('F_UNIV',  '여자대학부', 'F', 'UNIV', 140),
+    ('F_GEN',   '여자일반부', 'F', 'GEN',  150),
+    ('F_OPEN',  '여자공개부', 'F', 'OPEN', 160),
+    ('MIXED',   '통합부',     'X', 'MIXED', 900);
+
+-- ============================================================
+-- competition / event parity (PG에는 있지만 SQLite schema.sql에는 누락됐던 컬럼들)
+-- 기존 DB에는 ALTER로 추가되므로 schema.sql만 갱신
+-- ============================================================
+-- competition.federation, division_type, mode, video_url, series_id
+-- event.video_url, callroom_event_memo, division, result_url
+-- (실제 ALTER는 server.js boot 마이그레이션에서 수행)
+
+-- Event Records (legacy JSON bundle, 호환용 — Phase D에서 제거 예정)
+CREATE TABLE IF NOT EXISTS event_records (
+    event_id INTEGER PRIMARY KEY,
+    records TEXT DEFAULT '{}'
 );
 
 -- Operation Keys (심판별 운영키)

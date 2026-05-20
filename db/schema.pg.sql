@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS "competition" (
     "federation" TEXT DEFAULT '',
     "division_type" TEXT DEFAULT '',
     "mode" TEXT NOT NULL DEFAULT 'operation',
+    "series_id" BIGINT,
     CHECK (status IN ('upcoming','active','completed'))
 );
 
@@ -138,22 +139,111 @@ CREATE TABLE IF NOT EXISTS "event_link" (
     UNIQUE ("event_id_a", "event_id_b")
 );
 
--- Table: event_record
+-- ============================================================
+-- Records Management v4 (NR/DR/CR 통합 모델) — PostgreSQL
+-- ============================================================
+
+-- Table: division_master (부별 마스터, 13개)
+CREATE TABLE IF NOT EXISTS "division_master" (
+    "code" TEXT PRIMARY KEY,
+    "label_ko" TEXT NOT NULL,
+    "gender" TEXT NOT NULL,
+    "school_level" TEXT NOT NULL,
+    "sort_order" BIGINT NOT NULL DEFAULT 0,
+    "active" BIGINT NOT NULL DEFAULT 1,
+    "created_at" TEXT NOT NULL DEFAULT NOW(),
+    CHECK (gender IN ('M','F','X')),
+    CHECK (school_level IN ('OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED'))
+);
+
+-- Table: competition_series (대회 시리즈 = 회차 묶음)
+CREATE TABLE IF NOT EXISTS "competition_series" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "name" TEXT NOT NULL UNIQUE,
+    "federation" TEXT NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL DEFAULT '',
+    "active" BIGINT NOT NULL DEFAULT 1,
+    "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "updated_at" TEXT NOT NULL DEFAULT NOW()
+);
+
+-- Table: event_record (NR/DR/CR 통합)
+-- 기존 테이블은 boot 마이그레이션에서 drop 후 재생성
 CREATE TABLE IF NOT EXISTS "event_record" (
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    "gender" TEXT NOT NULL,
-    "event_name" TEXT NOT NULL,
     "record_type" TEXT NOT NULL,
+    "event_name" TEXT NOT NULL,
+    "gender" TEXT NOT NULL,
+    "division_code" TEXT,
+    "series_id" BIGINT,
     "record_value" TEXT NOT NULL DEFAULT '',
+    "record_value_num" DOUBLE PRECISION,
     "holder_name" TEXT NOT NULL DEFAULT '',
     "holder_team" TEXT NOT NULL DEFAULT '',
     "record_year" TEXT NOT NULL DEFAULT '',
+    "record_date" TEXT NOT NULL DEFAULT '',
+    "venue" TEXT NOT NULL DEFAULT '',
+    "note" TEXT NOT NULL DEFAULT '',
+    "approved" BIGINT NOT NULL DEFAULT 1,
+    "approved_at" TEXT,
+    "approved_by" TEXT,
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "updated_at" TEXT NOT NULL DEFAULT NOW(),
-    CHECK (gender IN ('M','F')),
-    CHECK (record_type IN ('national','division','competition')),
-    UNIQUE ("gender", "event_name", "record_type")
+    CHECK (gender IN ('M','F','X')),
+    CHECK (record_type IN ('national','division','competition'))
 );
+-- UNIQUE constraint on nullable columns: SQLite treats NULLs as distinct (OK),
+-- PostgreSQL treats NULLs as distinct by default too. Add as separate constraint:
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'event_record_unique_v4') THEN
+        ALTER TABLE "event_record" ADD CONSTRAINT event_record_unique_v4
+            UNIQUE ("record_type", "event_name", "gender", "division_code", "series_id");
+    END IF;
+END $$;
+
+-- Table: record_breaking_log (기록 갱신 이력 + 승인 큐)
+CREATE TABLE IF NOT EXISTS "record_breaking_log" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "competition_id" BIGINT NOT NULL,
+    "event_id" BIGINT,
+    "event_entry_id" BIGINT,
+    "record_type" TEXT NOT NULL,
+    "event_name" TEXT NOT NULL,
+    "gender" TEXT NOT NULL,
+    "division_code" TEXT,
+    "series_id" BIGINT,
+    "previous_record_id" BIGINT,
+    "previous_value" TEXT NOT NULL DEFAULT '',
+    "new_value" TEXT NOT NULL DEFAULT '',
+    "new_value_num" DOUBLE PRECISION,
+    "athlete_name" TEXT NOT NULL DEFAULT '',
+    "athlete_team" TEXT NOT NULL DEFAULT '',
+    "bib_number" TEXT NOT NULL DEFAULT '',
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "detected_at" TEXT NOT NULL DEFAULT NOW(),
+    "reviewed_at" TEXT,
+    "reviewed_by" TEXT,
+    "review_note" TEXT NOT NULL DEFAULT '',
+    CHECK (status IN ('pending','approved','rejected')),
+    CHECK (record_type IN ('national','division','competition'))
+);
+
+-- Division Master seed (13 rows)
+INSERT INTO "division_master" (code, label_ko, gender, school_level, sort_order) VALUES
+    ('M_ELEM',  '남자초등부', 'M', 'ELEM',  10),
+    ('M_MID',   '남자중학부', 'M', 'MID',   20),
+    ('M_HIGH',  '남자고등부', 'M', 'HIGH',  30),
+    ('M_UNIV',  '남자대학부', 'M', 'UNIV',  40),
+    ('M_GEN',   '남자일반부', 'M', 'GEN',   50),
+    ('M_OPEN',  '남자공개부', 'M', 'OPEN',  60),
+    ('F_ELEM',  '여자초등부', 'F', 'ELEM', 110),
+    ('F_MID',   '여자중학부', 'F', 'MID',  120),
+    ('F_HIGH',  '여자고등부', 'F', 'HIGH', 130),
+    ('F_UNIV',  '여자대학부', 'F', 'UNIV', 140),
+    ('F_GEN',   '여자일반부', 'F', 'GEN',  150),
+    ('F_OPEN',  '여자공개부', 'F', 'OPEN', 160),
+    ('MIXED',   '통합부',     'X', 'MIXED', 900)
+ON CONFLICT (code) DO NOTHING;
 
 -- Table: event_records
 CREATE TABLE IF NOT EXISTS "event_records" (

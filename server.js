@@ -527,7 +527,229 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS external_api_log (
 )`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_extlog_keyid ON external_api_log(api_key_id, created_at)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_extlog_created ON external_api_log(created_at)`); } catch(e) {}
+
+// ─── Records Management v4 (NR/DR/CR 통합 모델) — SQLite 마이그레이션 ───
+// division_master, competition_series, record_breaking_log: 새 테이블 (멱등 CREATE)
+// event_record: 스키마 전체 교체 (구 데이터 0건 가정, 백업 후 drop)
+try { db.exec(`CREATE TABLE IF NOT EXISTS division_master (
+    code TEXT PRIMARY KEY,
+    label_ko TEXT NOT NULL,
+    gender TEXT NOT NULL CHECK(gender IN ('M','F','X')),
+    school_level TEXT NOT NULL CHECK(school_level IN ('OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED')),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) {}
+try { db.exec(`CREATE TABLE IF NOT EXISTS competition_series (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    federation TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) {}
+// event_record 스키마 전환: 구 스키마(division_code 컬럼 없음) 감지 시 백업 후 재생성
+try {
+    const cols = db.raw.prepare("PRAGMA table_info(event_record)").all();
+    const hasNew = cols.some(c => c.name === 'division_code');
+    if (cols.length > 0 && !hasNew) {
+        const cnt = db.raw.prepare('SELECT COUNT(*) AS c FROM event_record').get();
+        if (cnt && cnt.c > 0) {
+            db.exec(`CREATE TABLE IF NOT EXISTS event_record_legacy_backup AS SELECT * FROM event_record`);
+            console.log(`[DB Migration v4] event_record 구 데이터 ${cnt.c}건 → event_record_legacy_backup 으로 백업`);
+        }
+        db.exec(`DROP TABLE event_record`);
+        console.log('[DB Migration v4] event_record 구 스키마 drop, 신 스키마로 재생성');
+    }
+} catch(e) {}
+try { db.exec(`CREATE TABLE IF NOT EXISTS event_record (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    record_type TEXT NOT NULL CHECK(record_type IN ('national','division','competition')),
+    event_name TEXT NOT NULL,
+    gender TEXT NOT NULL CHECK(gender IN ('M','F','X')),
+    division_code TEXT REFERENCES division_master(code),
+    series_id INTEGER REFERENCES competition_series(id),
+    record_value TEXT NOT NULL DEFAULT '',
+    record_value_num REAL,
+    holder_name TEXT NOT NULL DEFAULT '',
+    holder_team TEXT NOT NULL DEFAULT '',
+    record_year TEXT NOT NULL DEFAULT '',
+    record_date TEXT NOT NULL DEFAULT '',
+    venue TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    approved INTEGER NOT NULL DEFAULT 1,
+    approved_at TEXT,
+    approved_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(record_type, event_name, gender, division_code, series_id)
+)`); } catch(e) {}
+try { db.exec(`CREATE TABLE IF NOT EXISTS record_breaking_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    competition_id INTEGER NOT NULL REFERENCES competition(id),
+    event_id INTEGER REFERENCES event(id),
+    event_entry_id INTEGER REFERENCES event_entry(id),
+    record_type TEXT NOT NULL CHECK(record_type IN ('national','division','competition')),
+    event_name TEXT NOT NULL,
+    gender TEXT NOT NULL,
+    division_code TEXT,
+    series_id INTEGER,
+    previous_record_id INTEGER REFERENCES event_record(id),
+    previous_value TEXT NOT NULL DEFAULT '',
+    new_value TEXT NOT NULL DEFAULT '',
+    new_value_num REAL,
+    athlete_name TEXT NOT NULL DEFAULT '',
+    athlete_team TEXT NOT NULL DEFAULT '',
+    bib_number TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+    detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+    reviewed_at TEXT,
+    reviewed_by TEXT,
+    review_note TEXT NOT NULL DEFAULT ''
+)`); } catch(e) {}
+// competition.series_id: 대회 ↔ 시리즈 연결
+try { db.exec(`ALTER TABLE competition ADD COLUMN series_id INTEGER REFERENCES competition_series(id)`); } catch(e) {}
+// division_master 시드 13행 (멱등)
+try {
+    const seedRows = [
+        ['M_ELEM','남자초등부','M','ELEM',10],
+        ['M_MID','남자중학부','M','MID',20],
+        ['M_HIGH','남자고등부','M','HIGH',30],
+        ['M_UNIV','남자대학부','M','UNIV',40],
+        ['M_GEN','남자일반부','M','GEN',50],
+        ['M_OPEN','남자공개부','M','OPEN',60],
+        ['F_ELEM','여자초등부','F','ELEM',110],
+        ['F_MID','여자중학부','F','MID',120],
+        ['F_HIGH','여자고등부','F','HIGH',130],
+        ['F_UNIV','여자대학부','F','UNIV',140],
+        ['F_GEN','여자일반부','F','GEN',150],
+        ['F_OPEN','여자공개부','F','OPEN',160],
+        ['MIXED','통합부','X','MIXED',900],
+    ];
+    const ins = db.raw.prepare(`INSERT OR IGNORE INTO division_master (code,label_ko,gender,school_level,sort_order) VALUES (?,?,?,?,?)`);
+    const tx = db.raw.transaction(() => { for (const r of seedRows) ins.run(...r); });
+    tx();
+} catch(e) { console.error('[DB Migration v4] division_master seed error:', e.message); }
+// Indexes for record-related queries
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_record_lookup ON event_record(event_name, gender, record_type)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_record_division ON event_record(division_code, event_name, gender)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_record_series ON event_record(series_id, event_name, gender)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_record_breaking_status ON record_breaking_log(status, detected_at)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_record_breaking_comp ON record_breaking_log(competition_id, status)`); } catch(e) {}
+
 } // end if (!db.isAsync) — SQLite-only 부트 마이그레이션 블록 종료
+
+// ─── Records Management v4 — PostgreSQL 마이그레이션 (비동기, idempotent) ───
+// PG 모드에서는 schema.pg.sql 을 운영자가 한 번 실행하지만, 새 테이블/컬럼이
+// 누락된 기존 DB에 대비해 boot 시 멱등 마이그레이션을 시도한다.
+if (db.isAsync) {
+    (async () => {
+        try {
+            await db.run(`CREATE TABLE IF NOT EXISTS division_master (
+                code TEXT PRIMARY KEY,
+                label_ko TEXT NOT NULL,
+                gender TEXT NOT NULL CHECK(gender IN ('M','F','X')),
+                school_level TEXT NOT NULL CHECK(school_level IN ('OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED')),
+                sort_order BIGINT NOT NULL DEFAULT 0,
+                active BIGINT NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT NOW()
+            )`);
+            await db.run(`CREATE TABLE IF NOT EXISTS competition_series (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                federation TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                active BIGINT NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT NOW(),
+                updated_at TEXT NOT NULL DEFAULT NOW()
+            )`);
+            // event_record 스키마 전환 (구 스키마 감지: division_code 컬럼 없음)
+            const hasNew = await db.get(`SELECT 1 FROM information_schema.columns
+                WHERE table_schema = current_schema() AND table_name = 'event_record' AND column_name = 'division_code'`);
+            if (!hasNew) {
+                const cnt = await db.get(`SELECT COUNT(*)::int AS c FROM event_record`).catch(() => null);
+                if (cnt && cnt.c > 0) {
+                    await db.run(`CREATE TABLE IF NOT EXISTS event_record_legacy_backup AS SELECT * FROM event_record`);
+                    console.log(`[DB Migration v4 PG] event_record 구 데이터 ${cnt.c}건 → event_record_legacy_backup 으로 백업`);
+                }
+                await db.run(`DROP TABLE IF EXISTS event_record CASCADE`);
+                console.log('[DB Migration v4 PG] event_record 구 스키마 drop');
+            }
+            await db.run(`CREATE TABLE IF NOT EXISTS event_record (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                record_type TEXT NOT NULL CHECK(record_type IN ('national','division','competition')),
+                event_name TEXT NOT NULL,
+                gender TEXT NOT NULL CHECK(gender IN ('M','F','X')),
+                division_code TEXT,
+                series_id BIGINT,
+                record_value TEXT NOT NULL DEFAULT '',
+                record_value_num DOUBLE PRECISION,
+                holder_name TEXT NOT NULL DEFAULT '',
+                holder_team TEXT NOT NULL DEFAULT '',
+                record_year TEXT NOT NULL DEFAULT '',
+                record_date TEXT NOT NULL DEFAULT '',
+                venue TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                approved BIGINT NOT NULL DEFAULT 1,
+                approved_at TEXT,
+                approved_by TEXT,
+                created_at TEXT NOT NULL DEFAULT NOW(),
+                updated_at TEXT NOT NULL DEFAULT NOW(),
+                CONSTRAINT event_record_unique_v4 UNIQUE (record_type, event_name, gender, division_code, series_id)
+            )`);
+            await db.run(`CREATE TABLE IF NOT EXISTS record_breaking_log (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                competition_id BIGINT NOT NULL,
+                event_id BIGINT,
+                event_entry_id BIGINT,
+                record_type TEXT NOT NULL CHECK(record_type IN ('national','division','competition')),
+                event_name TEXT NOT NULL,
+                gender TEXT NOT NULL,
+                division_code TEXT,
+                series_id BIGINT,
+                previous_record_id BIGINT,
+                previous_value TEXT NOT NULL DEFAULT '',
+                new_value TEXT NOT NULL DEFAULT '',
+                new_value_num DOUBLE PRECISION,
+                athlete_name TEXT NOT NULL DEFAULT '',
+                athlete_team TEXT NOT NULL DEFAULT '',
+                bib_number TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+                detected_at TEXT NOT NULL DEFAULT NOW(),
+                reviewed_at TEXT,
+                reviewed_by TEXT,
+                review_note TEXT NOT NULL DEFAULT ''
+            )`);
+            // competition.series_id 추가 (멱등)
+            try { await db.run(`ALTER TABLE competition ADD COLUMN IF NOT EXISTS series_id BIGINT`); } catch(e) {}
+            // Seed division_master (13 rows, idempotent)
+            const seedRows = [
+                ['M_ELEM','남자초등부','M','ELEM',10],['M_MID','남자중학부','M','MID',20],
+                ['M_HIGH','남자고등부','M','HIGH',30],['M_UNIV','남자대학부','M','UNIV',40],
+                ['M_GEN','남자일반부','M','GEN',50],['M_OPEN','남자공개부','M','OPEN',60],
+                ['F_ELEM','여자초등부','F','ELEM',110],['F_MID','여자중학부','F','MID',120],
+                ['F_HIGH','여자고등부','F','HIGH',130],['F_UNIV','여자대학부','F','UNIV',140],
+                ['F_GEN','여자일반부','F','GEN',150],['F_OPEN','여자공개부','F','OPEN',160],
+                ['MIXED','통합부','X','MIXED',900],
+            ];
+            for (const r of seedRows) {
+                try {
+                    await db.run(`INSERT INTO division_master (code,label_ko,gender,school_level,sort_order) VALUES (?,?,?,?,?) ON CONFLICT (code) DO NOTHING`, ...r);
+                } catch(e) {}
+            }
+            // Indexes
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_lookup ON event_record(event_name, gender, record_type)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_division ON event_record(division_code, event_name, gender)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_series ON event_record(series_id, event_name, gender)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_record_breaking_status ON record_breaking_log(status, detected_at)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_record_breaking_comp ON record_breaking_log(competition_id, status)`); } catch(e) {}
+            console.log('[DB Migration v4 PG] records management tables ready');
+        } catch (e) {
+            console.error('[DB Migration v4 PG] error:', e.message);
+        }
+    })();
+}
 
 // ─── system_config 메모리 캐시 (Phase 2-G-2-extra-3b-1) ───────────────
 // 목적: getConfigKey/setConfigKey 를 sync 유지하되 DB query는 제거.
