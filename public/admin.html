@@ -5525,6 +5525,17 @@ POST /api/external/event-result-link/batch<br>
                         _jgEventCache[cid] = await api('GET', `/api/events?competition_id=${cid}`);
                     }
                 }
+                // 이미 합동된 종목 (이 대회의 다른 합동 그룹) — event_id → 그룹 이름 Map
+                // Step 3에서 종목 카드에 "🔗 이미 합동" 뱃지를 표시하기 위해 사용
+                const linkedEventMap = new Map();  // event_id → group_name
+                try {
+                    const existingGroups = await api('GET', `/api/joint-groups?competition_id=${CID()}`);
+                    (existingGroups || []).forEach(g => {
+                        (g.members || []).forEach(m => {
+                            if (m.event_id) linkedEventMap.set(m.event_id, g.name);
+                        });
+                    });
+                } catch(e) { /* ignore — 그룹 목록 못 가져와도 매칭은 계속 */ }
                 // Group events by name+gender+round_type — and DEDUPE per competition
                 // (대회 내에서 같은 종목이 중복 등록된 경우 — 조편성 재업로드 등 — 하나로 합침)
                 const allEvts = {};
@@ -5566,22 +5577,36 @@ POST /api/external/event-result-link/batch<br>
                     const ids = g.events.map(e => e.id).join(',');
                     // 중복 경고 계산: 같은 대회에 동일 종목이 2번 이상 등록된 경우
                     const dupCompCount = Object.values(g._dupIds || {}).filter(arr => arr.length > 1).length;
+                    // 이 그룹의 event 중 이미 다른 합동 그룹에 속한 종목이 몇 개인지
+                    const linkedEvents = g.events.filter(e => linkedEventMap.has(e.id));
+                    const allLinked = linkedEvents.length === g.events.length && linkedEvents.length > 0;
+                    const anyLinked = linkedEvents.length > 0;
                     const memberRows = g.events.map(e => {
                         const c = fedColors[e.federation] || '#6b6b6b';
                         const extraDup = (g._dupIds[String(e.competition_id)] || []).length;
                         const dupMark = extraDup > 1 ? `<span style="background:#fee2e2;color:#991b1b;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;margin-left:2px;" title="이 대회에 동일 종목이 ${extraDup}회 중복 등록되어 있습니다. 합동 그룹에는 자동으로 1개만 추가됩니다.">중복 ${extraDup}</span>` : '';
+                        const linkedGroupName = linkedEventMap.get(e.id);
+                        const linkedMark = linkedGroupName ? `<span style="background:#dbeafe;color:#1e40af;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;margin-left:2px;" title="이미 합동 그룹 '${escapeHtml(linkedGroupName)}' 에 속해있습니다">🔗 ${escapeHtml(linkedGroupName)}</span>` : '';
                         return `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#6b7280;margin-right:8px;">
                             <span style="background:${c};color:#fff;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;">${escapeHtml(e.federation || 'N/A')}</span>
-                            ${escapeHtml(e.comp_name || '')}${dupMark}
+                            ${escapeHtml(e.comp_name || '')}${dupMark}${linkedMark}
                         </span>`;
                     }).join('');
-                    const countLabel = `${g.events.length}개 대회`; // events는 이미 dedupe됨
-                    return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                    const countLabel = `${g.events.length}개 대회`;
+                    // 이미 합동 종목이 섞여 있으면 행을 흐리게 + 헤더에 경고 뱃지
+                    const rowStyle = allLinked
+                        ? 'opacity:0.55;background:#fafbfc;'
+                        : (anyLinked ? 'background:#fefce8;' : '');
+                    const headerWarn = anyLinked
+                        ? `<span style="background:${allLinked?'#fee2e2':'#fef3c7'};color:${allLinked?'#991b1b':'#92400e'};padding:1px 6px;border-radius:8px;font-size:9px;font-weight:600;" title="${allLinked?'모든 종목이 이미 합동됨':'일부 종목이 이미 다른 그룹에 합동됨'}">${allLinked?'⚠️ 이미 합동':'⚠️ 일부 합동됨'}</span>`
+                        : '';
+                    return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;${rowStyle}" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='${allLinked?'#fafbfc':anyLinked?'#fefce8':''}'">
                         <input type="checkbox" class="jg-evt-cb" data-event-ids="${ids}" data-event-name="${escapeHtml(g.name)}" onchange="jgUpdateSummary()" style="margin-top:2px;">
                         <div style="flex:1;min-width:0;">
-                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
                                 <span style="background:${g.category==='field'?'#fef3c7':g.category==='track'?'#dbeafe':g.category==='relay'?'#fce7f3':'#f3f4f6'};color:#374151;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:600;">${_jgCatLabel(g.category)}</span>
                                 <span style="font-weight:600;font-size:13px;color:#111827;">${_jgGL(g.gender)} ${_jgRL(g.round_type)} ${escapeHtml(g.name)}</span>
+                                ${headerWarn}
                                 <span style="font-size:10px;color:#9ca3af;margin-left:auto;">${countLabel}</span>
                             </div>
                             <div style="font-size:10px;line-height:1.4;">${memberRows}</div>
@@ -5687,36 +5712,88 @@ POST /api/external/event-result-link/batch<br>
             let safeCount = 0;
             let riskyCount = 0;
             let html = '';
-            r.duplicate_groups.forEach(grp => {
+            r.duplicate_groups.forEach((grp, gIdx) => {
+                const keepHasJoint = grp.keep.joint_member_count > 0;
                 html += `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fafafa;">
                     <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
                         <strong>${gL(grp.gender)} ${rL(grp.round_type)} ${escapeHtml(grp.name)}</strong>
                         <span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600;">중복 ${grp.duplicates.length + 1}개</span>
                     </div>
                     <div style="font-size:11px;line-height:1.6;">
-                        <div style="padding:4px 8px;background:#dcfce7;border-radius:4px;margin-bottom:4px;">
+                        <div style="padding:4px 8px;background:#dcfce7;border-radius:4px;margin-bottom:4px;${keepHasJoint ? 'border-left:3px solid #2563eb;' : ''}">
                             <strong style="color:#15803d;">✓ 보존:</strong> ID ${grp.keep.id} ·
-                            조 ${grp.keep.heat_count} / 엔트리 ${grp.keep.entry_count} / 기록 ${grp.keep.result_count}${grp.keep.joint_member_count > 0 ? ' · 🔗 합동 ' + grp.keep.joint_member_count : ''}
+                            조 ${grp.keep.heat_count} / 엔트리 ${grp.keep.entry_count} / 기록 ${grp.keep.result_count}
+                            ${keepHasJoint ? `<span style="color:#1e40af;font-weight:600;"> · 🔗 합동 ${grp.keep.joint_member_count}개</span>` : ''}
                         </div>`;
-                grp.duplicates.forEach(dup => {
+                grp.duplicates.forEach((dup, dIdx) => {
                     const isEmpty = dup.heat_count === 0 && dup.entry_count === 0 && dup.result_count === 0;
                     if (isEmpty) safeCount++; else riskyCount++;
+                    const hasJoint = dup.joint_member_count > 0;
                     const bg = isEmpty ? '#fef3c7' : '#fee2e2';
+                    const borderL = hasJoint ? 'border-left:3px solid #dc2626;' : '';
                     const label = isEmpty ? '🗑 빈 종목 (안전 삭제 가능)' : '⚠ 데이터 있음 (수동 검토 필요)';
                     const labelColor = isEmpty ? '#92400e' : '#991b1b';
-                    html += `<div style="padding:4px 8px;background:${bg};border-radius:4px;margin-bottom:4px;">
-                        <strong style="color:${labelColor};">${label}:</strong> ID ${dup.id} ·
-                        조 ${dup.heat_count} / 엔트리 ${dup.entry_count} / 기록 ${dup.result_count}${dup.joint_member_count > 0 ? ' · 🔗 합동 ' + dup.joint_member_count : ''}
+                    html += `<div style="padding:4px 8px;background:${bg};border-radius:4px;margin-bottom:4px;${borderL}display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                        <div style="flex:1;">
+                            <strong style="color:${labelColor};">${label}:</strong> ID ${dup.id} ·
+                            조 ${dup.heat_count} / 엔트리 ${dup.entry_count} / 기록 ${dup.result_count}
+                            ${hasJoint ? `<span style="color:#dc2626;font-weight:600;"> · ⚠️ 합동 ${dup.joint_member_count}개 (병합 시 keep 으로 이전)</span>` : ''}
+                        </div>
+                        ${!isEmpty ? `<button class="btn btn-sm" onclick="jgShowMergeModal(${grp.keep.id}, ${dup.id})" style="font-size:11px;padding:3px 8px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;white-space:nowrap;">🔀 보존 종목으로 병합</button>` : ''}
                     </div>`;
                 });
                 html += `</div></div>`;
             });
             content.innerHTML = html;
-            document.getElementById('jg-dup-summary').textContent = `중복 그룹 ${r.duplicate_groups.length}개 · 안전 삭제 ${safeCount}개 · 수동 검토 필요 ${riskyCount}개`;
+            document.getElementById('jg-dup-summary').textContent = `중복 그룹 ${r.duplicate_groups.length}개 · 안전 삭제 ${safeCount}개 · 병합 가능 ${riskyCount}개`;
             if (safeCount > 0) {
                 const btn = document.getElementById('jg-dup-cleanbtn');
                 btn.textContent = `🗑 빈 중복 종목 ${safeCount}개 삭제`;
                 btn.style.display = '';
+            }
+        }
+
+        // ─── 머지(병합) — 데이터 있는 중복 종목을 보존 종목으로 안전하게 합치기 ──────────
+        async function jgShowMergeModal(keepId, dupId) {
+            // dry-run 으로 어떤 일이 일어날지 미리 보여줌
+            let preview;
+            try {
+                preview = await api('POST', '/api/admin/event-duplicates/merge', {
+                    admin_key: AK(),
+                    keep_id: keepId,
+                    dup_id: dupId,
+                    dry_run: true,
+                });
+            } catch(e) {
+                alert('병합 미리보기 실패: ' + (e.error || e.message));
+                return;
+            }
+            const s = preview.summary;
+            const msg = `다음과 같이 병합합니다:\n\n` +
+                `📍 종목: ${s.keep_event.name} (${s.keep_event.gender}, ${s.keep_event.round_type})\n` +
+                `   보존(keep) ID ${s.keep_id}  ←  병합(dup) ID ${s.dup_id}\n\n` +
+                `🏃 엔트리:\n` +
+                `   · ${s.entries.will_move}명을 dup → keep 으로 이전\n` +
+                `   · ${s.entries.will_delete}명은 keep 에 이미 있어 dup 측 삭제\n\n` +
+                `🗂 조(heat):\n` +
+                `   · ${s.heats.will_move}개 조를 keep 으로 이전 (번호 ${s.heats.renumber_from} 부터 재번호)\n\n` +
+                `🔗 합동 그룹:\n` +
+                `   · ${s.joint_members.will_move}개 합동 멤버십 이전\n` +
+                `   · ${s.joint_members.will_delete}개는 keep 에 이미 있어 dup 측 삭제\n\n` +
+                `완료 후 dup 종목(ID ${s.dup_id})은 삭제됩니다.\n시간표·event_link 의 dup 참조도 keep 으로 이전됩니다.\n\n계속하시겠습니까?`;
+            if (!confirm(msg)) return;
+            try {
+                const r = await api('POST', '/api/admin/event-duplicates/merge', {
+                    admin_key: AK(),
+                    keep_id: keepId,
+                    dup_id: dupId,
+                    dry_run: false,
+                });
+                toast(`병합 완료: 엔트리 ${r.summary.entries.will_move}개 이전, ${r.summary.entries.will_delete}개 정리, 조 ${r.summary.heats.will_move}개 재번호`);
+                jgShowDupModal();  // 진단 모달 새로고침
+                jgLoadGroups();    // 합동 그룹 목록도 새로고침
+            } catch(e) {
+                alert('병합 실패: ' + (e.error || e.message));
             }
         }
         async function jgRunCleanup() {
