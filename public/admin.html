@@ -302,7 +302,7 @@
             <div id="tab-judges" class="admin-tab-panel">
                 <div class="admin-card">
                     <h4 style="display:flex;align-items:center;gap:8px;"><span class="css-icon css-icon-judge" data-icon="J"></span> 심판별 운영키 관리</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">심판별로 고유한 운영키를 생성하면, 로그에 심판 이름이 자동으로 표시됩니다.</p>
+                    <p class="t-help-lg">심판별로 고유한 운영키를 생성하면, 로그에 심판 이름이 자동으로 표시됩니다.</p>
                     <div class="admin-form-row" style="margin-bottom:12px;">
                         <div class="admin-form-group"><label>심판명 *</label><input id="new-judge-name" placeholder="예: 김심판"></div>
                         <div class="admin-form-group"><label>운영키 (4자 이상) *</label><input id="new-judge-key" placeholder="예: kim2026"></div>
@@ -336,7 +336,7 @@
                 <!-- Step 1: Federation Roster -->
                 <div class="admin-card">
                     <h4>1단계: 연맹 명단 업로드</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">연맹 엑셀 파일을 업로드하면 <strong>선수 + 종목 + 출전배정</strong>이 한번에 자동 등록됩니다.</p>
+                    <p class="t-help">연맹 엑셀 파일을 업로드하면 <strong>선수 + 종목 + 출전배정</strong>이 한번에 자동 등록됩니다.</p>
                     <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
                         <strong>엑셀 양식 (열 순서 고정):</strong><br>
                         A열: <code>팀명 *</code> | B열: <code>선수명 *</code> | C열: <code>성별(남/여) *</code> | D열: <code>생년월일</code> | E열: <code>종목1</code> | F열: <code>종목2</code><br>
@@ -348,7 +348,7 @@
                     </div>
                     <div style="display:flex;flex-direction:column;gap:12px;">
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                            <input type="file" id="fed-file" accept=".xlsx,.xls" style="font-size:13px;">
+                            <input type="file" id="fed-file" accept=".xlsx,.xls" class="t-lg">
                             <button class="btn btn-outline" onclick="previewFederation()">미리보기</button>
                             <button class="btn btn-primary" onclick="importFederation()" id="fed-import-btn" disabled>가져오기 실행</button>
                         </div>
@@ -368,7 +368,7 @@
                 <!-- Step 2: Heat Assignment Upload (조편성) -->
                 <div class="admin-card" style="border-left:4px solid #ef4444;">
                     <h4 style="color:#ef4444;">2단계: 조편성 업로드</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+                    <p class="t-help">
                         조편성 엑셀 파일을 업로드하면 <strong>해당 종목의 조/레인/배번</strong>이 배정됩니다.<br>
                         <span style="color:#ef4444;">파일에 포함된 종목만 변경되며, 포함되지 않은 종목은 영향 없습니다.</span>
                     </p>
@@ -381,7 +381,7 @@
                     </div>
                     <div style="display:flex;flex-direction:column;gap:12px;">
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                            <input type="file" id="ha-file" accept=".xlsx,.xls" style="font-size:13px;">
+                            <input type="file" id="ha-file" accept=".xlsx,.xls" class="t-lg">
                             <button class="btn btn-outline" onclick="previewHeatAssignment()">미리보기</button>
                         </div>
                         <div id="ha-preview" style="display:none;"></div>
@@ -392,7 +392,7 @@
                 <!-- Athlete Upload -->
                 <div class="admin-card">
                     <h4>선수 명단 엑셀 업로드 (별도)</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">종목 배정 없이 선수만 등록합니다. <strong style="color:#f59e0b;">종목 배정은 소집실 → 선수 추가 또는 관리탭에서 별도 진행하세요.</strong></p>
+                    <p class="t-help">종목 배정 없이 선수만 등록합니다. <strong style="color:#f59e0b;">종목 배정은 소집실 → 선수 추가 또는 관리탭에서 별도 진행하세요.</strong></p>
                     <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
                         <strong>엑셀 양식 (열 순서 고정):</strong><br>
                         A열: <code>배번(BIB)</code> — 비워둘 수 있음 | B열: <code>선수명 *</code> | C열: <code>소속</code> | D열: <code>성별(남/여) *</code> | E열: <code>바코드</code>(선택)<br>
@@ -400,7 +400,7 @@
                         <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터</span>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-                        <input type="file" id="ath-upload-file" accept=".xlsx,.xls" style="font-size:13px;">
+                        <input type="file" id="ath-upload-file" accept=".xlsx,.xls" class="t-lg">
                         <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
                             <input type="checkbox" id="ath-upload-clear"> 기존 선수 초기화
                         </label>
@@ -412,7 +412,7 @@
                 <!-- BIB Number Bulk Update -->
                 <div class="admin-card" style="border-left:4px solid #b79f58;">
                     <h4 style="color:#b79f58;">3단계: BIB 번호 일괄 수정</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+                    <p class="t-help">
                         엑셀 파일에서 배번을 읽어 기존 선수와 <b>이름+소속+성별</b>로 매칭하여 <b>BIB만</b> 업데이트합니다.<br>
                         <span style="color:#22c55e;">기존 기록(결과, 조편성 등)에 영향 없음 — BIB은 표시용 필드입니다.</span>
                     </p>
@@ -423,17 +423,17 @@
                         <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터 | 성별 열 없어도 이름+소속으로 매칭 가능</span>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-                        <input type="file" id="bib-update-file" accept=".xlsx,.xls,.csv" style="font-size:13px;">
+                        <input type="file" id="bib-update-file" accept=".xlsx,.xls,.csv" class="t-lg">
                         <button class="btn btn-outline" onclick="previewBibUpdate()">미리보기</button>
                         <button class="btn" onclick="applyBibUpdate()" style="background:#b79f58;color:#262324;">적용</button>
                     </div>
-                    <div id="bib-update-result" style="font-size:12px;"></div>
+                    <div id="bib-update-result" class="t-md"></div>
                 </div>
 
                 <!-- Event Upload -->
                 <div class="admin-card">
                     <h4>종목 리스트 엑셀 업로드</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">종목만 일괄 등록합니다. (혼성경기는 세부 종목 자동 생성)</p>
+                    <p class="t-help">종목만 일괄 등록합니다. (혼성경기는 세부 종목 자동 생성)</p>
                     <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
                         <strong>엑셀 양식 (열 순서 고정):</strong><br>
                         A열: <code>종목명 *</code> | B열: <code>카테고리</code> | C열: <code>성별</code> | D열: <code>라운드</code><br>
@@ -442,7 +442,7 @@
                         <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터. 카테고리/성별/라운드 미입력 시 기본값: track/남/결승</span>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-                        <input type="file" id="evt-upload-file" accept=".xlsx,.xls" style="font-size:13px;">
+                        <input type="file" id="evt-upload-file" accept=".xlsx,.xls" class="t-lg">
                         <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
                             <input type="checkbox" id="evt-upload-clear"> 기존 종목 초기화
                         </label>
@@ -454,7 +454,7 @@
                 <!-- Timetable Upload (moved from Competition Settings) -->
                 <div class="admin-card" style="border-left:4px solid #6b6b6b;">
                     <h4 style="color:#6b6b6b;">시간표 업로드</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+                    <p class="t-help-lg">
                         엑셀 파일로 경기 시간표를 업로드합니다. 시트별로 일차가 구분됩니다.<br>
                         <strong>필수 열(A~F):</strong> 구분, 시간, 종목, 부별, 라운드, 비고 &nbsp;|&nbsp;
                         <strong>시트명:</strong> 1일차, 2일차, 3일차...<br>
@@ -487,8 +487,8 @@
             <!-- TAB: Scoreboard (전광판) -->
             <div id="tab-scoreboard" class="admin-tab-panel">
                 <div class="admin-card" style="border-left:4px solid #8a7640;">
-                    <h4 style="color:#8a7640;">스코어보드 연동 (.lif 파일 가져오기) <span style="font-size:11px;color:var(--text-muted);font-weight:400;">Scoreboard Import</span></h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+                    <h4 style="color:#8a7640;">스코어보드 연동 (.lif 파일 가져오기) <span class="t-sm t-muted">Scoreboard Import</span></h4>
+                    <p class="t-help-lg">
                         스코어보드 시스템에서 내보낸 .lif 결과 파일을 업로드하면 자동으로 종목/조를 매칭하고 기록을 입력합니다.
                         <br>조편성 업로드 시 자동 생성된 <strong>스코어보드 키</strong>와 .lif 파일의 종목명을 대조합니다.
                     </p>
@@ -511,7 +511,7 @@
                     <div id="sb-import-result" style="display:none;margin-top:16px;"></div>
                 </div>
                 <div class="admin-card" id="sb-keys-area" style="display:none;">
-                    <h4 style="display:flex;align-items:center;gap:8px;">등록된 스코어보드 키 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">현재 대회 기준</span></h4>
+                    <h4 style="display:flex;align-items:center;gap:8px;">등록된 스코어보드 키 <span class="t-sm t-muted">현재 대회 기준</span></h4>
                     <div id="sb-keys-list" style="max-height:400px;overflow-y:auto;font-size:12px;"></div>
                 </div>
 
@@ -519,9 +519,9 @@
                 <div class="admin-card" style="border-left:4px solid #6b5520;">
                     <h4 style="display:flex;align-items:center;gap:8px;color:#6b5520;">
                         <span class="css-icon css-icon-link" data-icon="G"></span> 합동 종목 관리
-                        <span style="font-size:11px;color:var(--text-muted);font-weight:400;">다중 대회 연결 (소집·기록·전광판)</span>
+                        <span class="t-sm t-muted">다중 대회 연결 (소집·기록·전광판)</span>
                     </h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+                    <p class="t-help-lg">
                         여러 대회(실업·대학·고등)의 같은 종목을 그룹으로 묶으면 <strong>소집실·기록 입력·전광판</strong>에서 통합 표시됩니다.<br>
                         LIF 파일은 합동 스코어보드 키로 매칭되어 각 대회별 기록에 자동 분배됩니다.
                     </p>
@@ -530,12 +530,12 @@
                         <button class="btn btn-sm btn-outline" onclick="jgAutoCreate()">자동 그룹 생성</button>
                         <button class="btn btn-sm btn-outline" onclick="jgLoadGroups()">새로고침</button>
                     </div>
-                    <div id="jg-groups-list" style="font-size:12px;"></div>
+                    <div id="jg-groups-list" class="t-md"></div>
                 </div>
                 <!-- Legacy 1:1 links (hidden, kept for backward compat) -->
                 <div class="admin-card" style="margin-top:8px;display:none;">
-                    <h4 style="font-size:13px;">레거시 1:1 연결 (구버전)</h4>
-                    <div id="jl-links-list" style="font-size:12px;"></div>
+                    <h4 class="t-lg">레거시 1:1 연결 (구버전)</h4>
+                    <div id="jl-links-list" class="t-md"></div>
                     <select id="jl-target-comp" style="display:none;"><option value=""></option></select>
                     <div id="jl-manual-area" style="display:none;"><select id="jl-evt-a"></select><select id="jl-evt-b"></select></div>
                 </div>
@@ -590,7 +590,7 @@
                 <!-- 심판장·로고 설정 (독립 섹션) -->
                 <div class="admin-card" style="border-left:4px solid var(--gold);">
                     <h4 style="display:flex;align-items:center;gap:8px;">🏷️ 심판장 이름 · 로고 설정</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">종합기록지·세부기록지에 표시되는 심판장 이름과 로고를 설정합니다. 변경 후 <strong>저장</strong> 버튼을 눌러야 반영됩니다.</p>
+                    <p class="t-help-lg">종합기록지·세부기록지에 표시되는 심판장 이름과 로고를 설정합니다. 변경 후 <strong>저장</strong> 버튼을 눌러야 반영됩니다.</p>
                     <div class="admin-form-row" style="align-items:flex-end;">
                         <div class="admin-form-group" style="flex:1;min-width:180px;">
                             <label style="font-weight:700;">심판장 이름</label>
@@ -629,7 +629,7 @@
 
                 <div class="admin-card">
                     <h4>데이터 백업</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">현재 선택된 대회의 전체 데이터(선수, 종목, 기록, 조편성)를 백업합니다.</p>
+                    <p class="t-help-lg">현재 선택된 대회의 전체 데이터(선수, 종목, 기록, 조편성)를 백업합니다.</p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                         <button class="btn btn-outline" onclick="downloadBackup('json')">JSON 백업</button>
                         <button class="btn btn-outline" onclick="downloadBackup('xlsx')">Excel (XLSX) 백업</button>
@@ -641,7 +641,7 @@
                 <!-- Federation Management (moved from settings) -->
                 <div class="admin-card">
                     <h4>연맹 관리</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">대회에 배정할 수 있는 연맹 목록을 관리합니다.</p>
+                    <p class="t-help-lg">대회에 배정할 수 있는 연맹 목록을 관리합니다.</p>
                     <div class="admin-form-row" style="margin-bottom:8px;align-items:flex-end;">
                         <div class="admin-form-group"><label>코드 *</label><input id="new-fed-code" placeholder="예: KTFL" style="text-transform:uppercase;width:100px;"></div>
                         <div class="admin-form-group" style="flex:1;"><label>명칭</label><input id="new-fed-name" placeholder="예: 한국실업육상연맹"></div>
@@ -658,12 +658,12 @@
                 </div>
                 <div class="danger-zone">
                     <h4>대회 데이터 초기화</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">이 대회의 모든 선수, 종목, 기록을 삭제합니다.</p>
+                    <p class="t-help-lg">이 대회의 모든 선수, 종목, 기록을 삭제합니다.</p>
                     <button class="btn btn-danger" onclick="resetCompDB()">대회 데이터 초기화</button>
                 </div>
                 <div class="danger-zone" style="margin-top:12px;">
                     <h4>대회 삭제</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">이 대회를 완전히 삭제합니다. 관련된 모든 데이터(선수, 종목, 기록, 조편성, 로그)가 영구 삭제되며 복구할 수 없습니다.</p>
+                    <p class="t-help-lg">이 대회를 완전히 삭제합니다. 관련된 모든 데이터(선수, 종목, 기록, 조편성, 로그)가 영구 삭제되며 복구할 수 없습니다.</p>
                     <button class="btn btn-danger" onclick="deleteCompetition()">대회 완전 삭제</button>
                 </div>
             </div>
@@ -672,7 +672,7 @@
             <div id="tab-settings" class="admin-tab-panel">
                 <div class="admin-card">
                     <h4>기본 접근 키 관리</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">기본 운영키와 관리자키를 변경할 수 있습니다.</p>
+                    <p class="t-help-lg">기본 운영키와 관리자키를 변경할 수 있습니다.</p>
                     <div id="current-keys"></div>
                     <div class="admin-form-row" style="margin-top:12px;">
                         <div class="admin-form-group"><label>새 운영키</label><input id="new-op-key" type="password" placeholder="비워두면 유지"></div>
@@ -683,7 +683,7 @@
                 <!-- Site Config: Install Guide & Manual Editor -->
                 <div class="admin-card">
                     <h4>홈 페이지 콘텐츠 관리</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">홈 화면의 앱 설치 안내, 운영 매뉴얼 내용을 편집합니다. HTML 태그를 사용할 수 있습니다. 비워두면 기본 내용이 표시됩니다.</p>
+                    <p class="t-help-lg">홈 화면의 앱 설치 안내, 운영 매뉴얼 내용을 편집합니다. HTML 태그를 사용할 수 있습니다. 비워두면 기본 내용이 표시됩니다.</p>
                     <div style="margin-bottom:16px;">
                         <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">Android 설치 안내 (HTML)</label>
                         <textarea id="sc-install-android" rows="6" style="width:100%;padding:10px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:12px;font-family:monospace;resize:vertical;" placeholder="기본 안내 사용 (비워두기)"></textarea>
@@ -704,8 +704,8 @@
 
                 <!-- Home Popup CMS -->
                 <div class="admin-card" style="border-left:4px solid #6366f1;">
-                    <h4 style="display:flex;align-items:center;gap:8px;">홈 팝업 관리 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">홈 화면 자동 팝업 설정</span></h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">홈 진입 시 자동으로 표시되는 팝업을 관리합니다. 일반 유저용 / 관리자용 각각 설정 가능합니다.</p>
+                    <h4 style="display:flex;align-items:center;gap:8px;">홈 팝업 관리 <span class="t-sm t-muted">홈 화면 자동 팝업 설정</span></h4>
+                    <p class="t-help-lg">홈 진입 시 자동으로 표시되는 팝업을 관리합니다. 일반 유저용 / 관리자용 각각 설정 가능합니다.</p>
                     <div style="display:flex;gap:8px;margin-bottom:16px;">
                         <button class="btn btn-sm btn-primary" onclick="openPopupEditor('public')">+ 일반 유저 팝업</button>
                         <button class="btn btn-sm btn-outline" onclick="openPopupEditor('admin')">+ 관리자 팝업</button>
@@ -773,7 +773,7 @@
             <!-- TAB: External API (외부 API 키 관리) -->
             <div id="tab-extapi" class="admin-tab-panel">
                 <div class="admin-card" style="border-left:4px solid #6366f1;">
-                    <h4 style="display:flex;align-items:center;gap:8px;margin:0;">외부 API 키 관리 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">External Result-Link API</span></h4>
+                    <h4 style="display:flex;align-items:center;gap:8px;margin:0;">외부 API 키 관리 <span class="t-sm t-muted">External Result-Link API</span></h4>
                     <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;line-height:1.5;">
                         외부 시스템(예: OpenClaw on Mac mini)이 노출용(display) 대회 종목에 결과/영상 링크를 자동 등록할 때 사용하는 API 키를 발급/회수합니다.<br>
                         키는 <b>발급 시 1회만 표시</b>되며, 이후에는 prefix만 확인 가능합니다. 안전한 곳에 보관하세요.
@@ -893,7 +893,7 @@ POST /api/external/event-result-link/batch<br>
                 <!-- Notice area -->
                 <div class="admin-card" style="border-left:4px solid #b79f58;">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <h4 style="display:flex;align-items:center;gap:8px;margin:0;">페이싱 라이트 관리 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">WaveLight / Pacing Light Configuration</span></h4>
+                        <h4 style="display:flex;align-items:center;gap:8px;margin:0;">페이싱 라이트 관리 <span class="t-sm t-muted">WaveLight / Pacing Light Configuration</span></h4>
                         <button id="pacing-zoom-btn" class="btn btn-sm btn-outline" onclick="togglePacingZoom()" style="font-size:13px;padding:6px 14px;white-space:nowrap;">크게 보기</button>
                     </div>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:0;margin-top:6px;">종목별 페이스 컬러를 설정하면 대시보드에 W/L Target 버튼이 노출됩니다. 구간별 랩타임을 입력하면 누적 시간이 자동 계산됩니다.</p>
@@ -902,18 +902,18 @@ POST /api/external/event-result-link/batch<br>
                 <!-- Event selector + config list -->
                 <div class="admin-card">
                     <div style="margin-bottom:14px;">
-                        <label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">① 성별 선택</label>
+                        <label class="t-label">① 성별 선택</label>
                         <div style="display:flex;gap:6px;">
                             <button class="btn btn-sm" id="pacing-gender-M" onclick="switchPacingGender('M')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;">♂ 남자</button>
                             <button class="btn btn-sm btn-outline" id="pacing-gender-F" onclick="switchPacingGender('F')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;">♀ 여자</button>
                         </div>
                     </div>
                     <div style="margin-bottom:14px;">
-                        <label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">② 종목 선택 (트랙 800m 이상 + 혼성경기)</label>
+                        <label class="t-label">② 종목 선택 (트랙 800m 이상 + 혼성경기)</label>
                         <div id="pacing-event-btns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
                     </div>
                     <input type="hidden" id="pacing-event-select" value="">
-                    <div id="pacing-configs-list" style="font-size:12px;color:var(--text-muted);">설정된 페이싱 종목이 없습니다.</div>
+                    <div id="pacing-configs-list" class="t-md t-muted">설정된 페이싱 종목이 없습니다.</div>
                 </div>
 
                 <!-- Pacing Editor (visible when an event is selected) -->
@@ -939,7 +939,7 @@ POST /api/external/event-result-link/batch<br>
 
                     <!-- Seconds conversion tool -->
                     <div class="admin-card" style="border-left:4px solid #6b6b6b;">
-                        <h4 style="display:flex;align-items:center;gap:6px;margin-bottom:10px;"><span class="css-icon css-icon-sm css-icon-timer" data-icon="T"></span> 시간 → 초 변환기 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">WaveLight 시스템 입력용</span></h4>
+                        <h4 style="display:flex;align-items:center;gap:6px;margin-bottom:10px;"><span class="css-icon css-icon-sm css-icon-timer" data-icon="T"></span> 시간 → 초 변환기 <span class="t-sm t-muted">WaveLight 시스템 입력용</span></h4>
                         <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
                             <div class="admin-form-group">
                                 <label>분</label>
@@ -988,11 +988,11 @@ POST /api/external/event-result-link/batch<br>
                     <input id="jg-create-name" placeholder="예: 남자 100m 합동">
                 </div>
                 <div>
-                    <label style="font-size:12px;font-weight:600;">연결할 대회 선택 (최소 2개)</label>
+                    <label class="t-md t-bold">연결할 대회 선택 (최소 2개)</label>
                     <div id="jg-comp-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;"></div>
                 </div>
                 <div>
-                    <label style="font-size:12px;font-weight:600;">종목 선택 (다중 선택 가능)</label>
+                    <label class="t-md t-bold">종목 선택 (다중 선택 가능)</label>
                     <div id="jg-event-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--gray);border-radius:8px;padding:8px;margin-top:6px;"></div>
                 </div>
             </div>
@@ -1049,7 +1049,7 @@ POST /api/external/event-result-link/batch<br>
                             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;">
                                 <button class="btn btn-sm btn-pdf" onclick="downloadFullRecordPdf('M')">남자 PDF</button>
                                 <button class="btn btn-sm btn-pdf" onclick="downloadFullRecordPdf('F')">여자 PDF</button>
-                                <span style="font-size:10px;color:var(--text-muted);">인쇄용</span>
+                                <span class="t-xs t-muted">인쇄용</span>
                             </div>
                         </div>
                         <div style="flex:1;min-width:200px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
@@ -1115,7 +1115,7 @@ POST /api/external/event-result-link/batch<br>
                                     <input type="file" id="doc-comp-logo-left-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('comprehensive','left','doc-comp-logo-left-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-comp-logo-left-del" onclick="deleteDocLogo('comprehensive','left')">삭제</button>
-                                    <span id="doc-comp-logo-left-status" style="font-size:11px;color:var(--text-muted);"></span>
+                                    <span id="doc-comp-logo-left-status" class="t-sm t-muted"></span>
                                 </div>
                                 <input type="hidden" id="doc-comp-logo-left" value="">
                             </div>
@@ -1125,7 +1125,7 @@ POST /api/external/event-result-link/batch<br>
                                     <input type="file" id="doc-comp-logo-right-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('comprehensive','right','doc-comp-logo-right-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-comp-logo-right-del" onclick="deleteDocLogo('comprehensive','right')">삭제</button>
-                                    <span id="doc-comp-logo-right-status" style="font-size:11px;color:var(--text-muted);"></span>
+                                    <span id="doc-comp-logo-right-status" class="t-sm t-muted"></span>
                                 </div>
                                 <input type="hidden" id="doc-comp-logo-right" value="">
                             </div>
@@ -1142,29 +1142,29 @@ POST /api/external/event-result-link/batch<br>
                             </div>
                         </div>
                         <div style="margin-top:8px;">
-                            <label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">표시 컬럼</label>
+                            <label class="t-label">표시 컬럼</label>
                             <div style="display:flex;gap:14px;flex-wrap:wrap;">
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-show-rank" checked> 순위</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-show-name" checked> 이름</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-show-team" checked> 소속</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-show-record" checked> 기록</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-show-wind"> 풍속</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-show-bib"> 배번</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-show-remark"> 비고</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-show-rank" checked> 순위</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-show-name" checked> 이름</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-show-team" checked> 소속</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-show-record" checked> 기록</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-show-wind"> 풍속</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-show-bib"> 배번</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-show-remark"> 비고</label>
                             </div>
                         </div>
                         <div style="margin-top:8px;">
-                            <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-show-header" checked> 대회명 헤더 표시</label>
+                            <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-show-header" checked> 대회명 헤더 표시</label>
                             <label style="font-size:12px;display:flex;align-items:center;gap:4px;margin-top:4px;"><input type="checkbox" id="doc-comp-show-signature" checked> 하단 서명란 포함</label>
                         </div>
                         <div style="margin-top:8px;">
-                            <label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">출력 종목 필터</label>
+                            <label class="t-label">출력 종목 필터</label>
                             <div style="display:flex;gap:14px;flex-wrap:wrap;">
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-cat-track" checked> 트랙</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-cat-field" checked> 필드</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-cat-relay" checked> 릴레이</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-cat-road" checked> 도로</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-comp-cat-combined" checked> 혼성경기</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-cat-track" checked> 트랙</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-cat-field" checked> 필드</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-cat-relay" checked> 릴레이</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-cat-road" checked> 도로</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-comp-cat-combined" checked> 혼성경기</label>
                             </div>
                         </div>
                         <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -1205,7 +1205,7 @@ POST /api/external/event-result-link/batch<br>
                                     <input type="file" id="doc-sl-logo-left-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('start_list','left','doc-sl-logo-left-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-sl-logo-left-del" onclick="deleteDocLogo('start_list','left')">삭제</button>
-                                    <span id="doc-sl-logo-left-status" style="font-size:11px;color:var(--text-muted);"></span>
+                                    <span id="doc-sl-logo-left-status" class="t-sm t-muted"></span>
                                 </div>
                                 <input type="hidden" id="doc-sl-logo-left" value="">
                             </div>
@@ -1215,25 +1215,25 @@ POST /api/external/event-result-link/batch<br>
                                     <input type="file" id="doc-sl-logo-right-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('start_list','right','doc-sl-logo-right-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-sl-logo-right-del" onclick="deleteDocLogo('start_list','right')">삭제</button>
-                                    <span id="doc-sl-logo-right-status" style="font-size:11px;color:var(--text-muted);"></span>
+                                    <span id="doc-sl-logo-right-status" class="t-sm t-muted"></span>
                                 </div>
                                 <input type="hidden" id="doc-sl-logo-right" value="">
                             </div>
                         </div>
                         <div style="margin-top:8px;">
-                            <label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">표시 컬럼</label>
+                            <label class="t-label">표시 컬럼</label>
                             <div style="display:flex;gap:14px;flex-wrap:wrap;">
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-sl-show-lane" checked> 레인</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-sl-show-bib" checked> 배번</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-sl-show-name" checked> 이름</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-sl-show-team" checked> 소속</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-sl-show-status" checked> 출석 상태</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-sl-show-pb"> 개인기록(PB)</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-sl-show-dob"> 생년월일</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-sl-show-lane" checked> 레인</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-sl-show-bib" checked> 배번</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-sl-show-name" checked> 이름</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-sl-show-team" checked> 소속</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-sl-show-status" checked> 출석 상태</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-sl-show-pb"> 개인기록(PB)</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-sl-show-dob"> 생년월일</label>
                             </div>
                         </div>
                         <div style="margin-top:8px;">
-                            <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-sl-show-header" checked> 대회명/종목 헤더 표시</label>
+                            <label class="t-checkbox-row"><input type="checkbox" id="doc-sl-show-header" checked> 대회명/종목 헤더 표시</label>
                         </div>
                         <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                             <select id="doc-sl-preview-event" style="font-size:12px;padding:4px 8px;border:1px solid var(--gray);border-radius:6px;min-width:180px;">
@@ -1271,7 +1271,7 @@ POST /api/external/event-result-link/batch<br>
                                     <input type="file" id="doc-rs-logo-left-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('result_sheet','left','doc-rs-logo-left-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-rs-logo-left-del" onclick="deleteDocLogo('result_sheet','left')">삭제</button>
-                                    <span id="doc-rs-logo-left-status" style="font-size:11px;color:var(--text-muted);"></span>
+                                    <span id="doc-rs-logo-left-status" class="t-sm t-muted"></span>
                                 </div>
                                 <input type="hidden" id="doc-rs-logo-left" value="">
                             </div>
@@ -1281,7 +1281,7 @@ POST /api/external/event-result-link/batch<br>
                                     <input type="file" id="doc-rs-logo-right-file" accept="image/*" style="font-size:11px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('result_sheet','right','doc-rs-logo-right-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-rs-logo-right-del" onclick="deleteDocLogo('result_sheet','right')">삭제</button>
-                                    <span id="doc-rs-logo-right-status" style="font-size:11px;color:var(--text-muted);"></span>
+                                    <span id="doc-rs-logo-right-status" class="t-sm t-muted"></span>
                                 </div>
                                 <input type="hidden" id="doc-rs-logo-right" value="">
                             </div>
@@ -1302,20 +1302,20 @@ POST /api/external/event-result-link/batch<br>
                             </div>
                         </div>
                         <div style="margin-top:8px;">
-                            <label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">표시 컬럼</label>
+                            <label class="t-label">표시 컬럼</label>
                             <div style="display:flex;gap:14px;flex-wrap:wrap;">
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-rs-show-rank" checked> 순위</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-rs-show-lane" checked> 레인</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-rs-show-bib" checked> 배번</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-rs-show-name" checked> 이름</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-rs-show-team" checked> 소속</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-rs-show-record" checked> 기록</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-rs-show-remark" checked> 비고</label>
-                                <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-rs-show-wind"> 풍속(개별)</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-rs-show-rank" checked> 순위</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-rs-show-lane" checked> 레인</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-rs-show-bib" checked> 배번</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-rs-show-name" checked> 이름</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-rs-show-team" checked> 소속</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-rs-show-record" checked> 기록</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-rs-show-remark" checked> 비고</label>
+                                <label class="t-checkbox-row"><input type="checkbox" id="doc-rs-show-wind"> 풍속(개별)</label>
                             </div>
                         </div>
                         <div style="margin-top:8px;">
-                            <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="doc-rs-show-signature" checked> 하단 심판 서명란 포함</label>
+                            <label class="t-checkbox-row"><input type="checkbox" id="doc-rs-show-signature" checked> 하단 심판 서명란 포함</label>
                             <label style="font-size:12px;display:flex;align-items:center;gap:4px;margin-top:4px;"><input type="checkbox" id="doc-rs-show-header" checked> 대회명/종목 헤더 표시</label>
                         </div>
                         <!-- NR/DR/CR Records Table Toggle + Input (Per-Event) -->
@@ -1345,53 +1345,53 @@ POST /api/external/event-result-link/batch<br>
                                     <tbody>
                                         <tr>
                                             <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-nr-label" value="한국기록(NR)" style="width:100%;font-size:11px;border:none;background:transparent;">
+                                                <input type="text" id="doc-rs-nr-label" value="한국기록(NR)" class="t-input-bare">
                                             </td>
                                             <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-nr-record" placeholder="예: 10.07" style="width:100%;font-size:11px;border:none;background:transparent;">
+                                                <input type="text" id="doc-rs-nr-record" placeholder="예: 10.07" class="t-input-bare">
                                             </td>
                                             <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-nr-athlete" placeholder="예: 홍길동" style="width:100%;font-size:11px;border:none;background:transparent;">
+                                                <input type="text" id="doc-rs-nr-athlete" placeholder="예: 홍길동" class="t-input-bare">
                                             </td>
                                             <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-nr-team" placeholder="예: 서울시청" style="width:100%;font-size:11px;border:none;background:transparent;">
+                                                <input type="text" id="doc-rs-nr-team" placeholder="예: 서울시청" class="t-input-bare">
                                             </td>
                                             <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-nr-year" placeholder="예: 2024" style="width:100%;font-size:11px;border:none;background:transparent;">
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-dr-label" value="부별기록(DR)" style="width:100%;font-size:11px;border:none;background:transparent;">
-                                            </td>
-                                            <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-dr-record" placeholder="" style="width:100%;font-size:11px;border:none;background:transparent;">
-                                            </td>
-                                            <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-dr-athlete" placeholder="" style="width:100%;font-size:11px;border:none;background:transparent;">
-                                            </td>
-                                            <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-dr-team" placeholder="" style="width:100%;font-size:11px;border:none;background:transparent;">
-                                            </td>
-                                            <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-dr-year" placeholder="" style="width:100%;font-size:11px;border:none;background:transparent;">
+                                                <input type="text" id="doc-rs-nr-year" placeholder="예: 2024" class="t-input-bare">
                                             </td>
                                         </tr>
                                         <tr>
                                             <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-cr-label" value="대회기록(CR)" style="width:100%;font-size:11px;border:none;background:transparent;">
+                                                <input type="text" id="doc-rs-dr-label" value="부별기록(DR)" class="t-input-bare">
                                             </td>
                                             <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-cr-record" placeholder="" style="width:100%;font-size:11px;border:none;background:transparent;">
+                                                <input type="text" id="doc-rs-dr-record" placeholder="" class="t-input-bare">
                                             </td>
                                             <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-cr-athlete" placeholder="" style="width:100%;font-size:11px;border:none;background:transparent;">
+                                                <input type="text" id="doc-rs-dr-athlete" placeholder="" class="t-input-bare">
                                             </td>
                                             <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-cr-team" placeholder="" style="width:100%;font-size:11px;border:none;background:transparent;">
+                                                <input type="text" id="doc-rs-dr-team" placeholder="" class="t-input-bare">
                                             </td>
                                             <td style="padding:3px 4px;border:1px solid #ddd;">
-                                                <input type="text" id="doc-rs-cr-year" placeholder="" style="width:100%;font-size:11px;border:none;background:transparent;">
+                                                <input type="text" id="doc-rs-dr-year" placeholder="" class="t-input-bare">
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:3px 4px;border:1px solid #ddd;">
+                                                <input type="text" id="doc-rs-cr-label" value="대회기록(CR)" class="t-input-bare">
+                                            </td>
+                                            <td style="padding:3px 4px;border:1px solid #ddd;">
+                                                <input type="text" id="doc-rs-cr-record" placeholder="" class="t-input-bare">
+                                            </td>
+                                            <td style="padding:3px 4px;border:1px solid #ddd;">
+                                                <input type="text" id="doc-rs-cr-athlete" placeholder="" class="t-input-bare">
+                                            </td>
+                                            <td style="padding:3px 4px;border:1px solid #ddd;">
+                                                <input type="text" id="doc-rs-cr-team" placeholder="" class="t-input-bare">
+                                            </td>
+                                            <td style="padding:3px 4px;border:1px solid #ddd;">
+                                                <input type="text" id="doc-rs-cr-year" placeholder="" class="t-input-bare">
                                             </td>
                                         </tr>
                                     </tbody>
@@ -1727,7 +1727,7 @@ POST /api/external/event-result-link/batch<br>
                 <div>
                     <h4 style="font-size:14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
                         출전 종목
-                        <span id="ath-entry-count" style="font-size:11px;color:var(--text-muted);font-weight:400;"></span>
+                        <span id="ath-entry-count" class="t-sm t-muted"></span>
                     </h4>
                     <div id="ath-entries-list">${entriesHtml}</div>
                     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gray);">
@@ -2309,9 +2309,9 @@ POST /api/external/event-result-link/batch<br>
                 const k = await api('GET', '/api/admin/current-keys?key=' + encodeURIComponent(AK()));
                 document.getElementById('current-keys').innerHTML = `
                     <div style="display:flex;gap:20px;flex-wrap:wrap;">
-                        <div><span style="font-size:12px;color:var(--text-muted);">현재 운영키:</span> <span class="key-display">${k.operation}</span></div>
-                        <div><span style="font-size:12px;color:var(--text-muted);">관리자 ID:</span> <span class="key-display">${k.admin_id}</span></div>
-                        <div><span style="font-size:12px;color:var(--text-muted);">관리자 비밀번호:</span> <span style="color:var(--green);font-size:12px;">●●●●●● (암호화됨)</span></div>
+                        <div><span class="t-md t-muted">현재 운영키:</span> <span class="key-display">${k.operation}</span></div>
+                        <div><span class="t-md t-muted">관리자 ID:</span> <span class="key-display">${k.admin_id}</span></div>
+                        <div><span class="t-md t-muted">관리자 비밀번호:</span> <span style="color:var(--green);font-size:12px;">●●●●●● (암호화됨)</span></div>
                     </div>`;
             } catch (e) {}
         }
@@ -2322,10 +2322,10 @@ POST /api/external/event-result-link/batch<br>
                 document.getElementById('judge-keys-tbody').innerHTML = keys.map(k => `<tr>
                     <td>${k.id}</td>
                     <td style="font-weight:600;">${k.judge_name}</td>
-                    <td><span class="key-display" style="font-size:12px;">${k.key_value}</span></td>
+                    <td><span class="key-display t-md">${k.key_value}</span></td>
                     <td><span style="color:${k.can_manage ? 'var(--blue)' : 'var(--text-muted)'};font-weight:600;cursor:pointer;" onclick="toggleJudgeManage(${k.id},${k.can_manage ? 0 : 1})" title="클릭하여 권한 변경">${k.can_manage ? '관리자' : '운영'}</span></td>
                     <td><span style="color:${k.active ? 'var(--green)' : 'var(--danger)'};font-weight:600;">${k.active ? '활성' : '비활성'}</span></td>
-                    <td style="font-size:10px;color:var(--text-muted);">${(k.created_at||'').slice(0,10)}</td>
+                    <td class="t-xs t-muted">${(k.created_at||'').slice(0,10)}</td>
                     <td>
                         <button class="btn btn-xs ${k.active ? 'btn-outline' : 'btn-primary'}" onclick="toggleJudgeKey(${k.id},${k.active ? 0 : 1})">${k.active ? '비활성' : '활성'}</button>
                         <button class="btn btn-xs btn-danger" onclick="deleteJudgeKey(${k.id},'${k.judge_name}')">삭제</button>
@@ -2383,14 +2383,14 @@ POST /api/external/event-result-link/batch<br>
         function renderFederationList() {
             const wrap = document.getElementById('federation-list');
             if (!wrap) return;
-            if (!_federations.length) { wrap.innerHTML = '<span style="font-size:12px;color:var(--text-muted);">등록된 연맹이 없습니다.</span>'; return; }
+            if (!_federations.length) { wrap.innerHTML = '<span class="t-md t-muted">등록된 연맹이 없습니다.</span>'; return; }
             wrap.innerHTML = _federations.map((f, idx) => `
                 <div class="pacing-config-item" style="cursor:default;justify-content:space-between;flex-wrap:wrap;" data-fed-id="${f.id}">
                     <div style="display:flex;align-items:center;gap:10px;">
                         <span style="color:#bbb;font-size:12px;min-width:20px;">${idx+1}</span>
                         <span style="background:${f.badge_bg};color:${f.badge_color};padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;">${f.code}</span>
-                        <span style="font-size:13px;">${f.name || ''}</span>
-                        ${f.gender_label_m ? `<span style="font-size:10px;color:var(--text-muted);">${f.gender_label_m} / ${f.gender_label_f || '-'}</span>` : ''}
+                        <span class="t-lg">${f.name || ''}</span>
+                        ${f.gender_label_m ? `<span class="t-xs t-muted">${f.gender_label_m} / ${f.gender_label_f || '-'}</span>` : ''}
                     </div>
                     <div style="display:flex;align-items:center;gap:4px;">
                         ${idx > 0 ? `<button class="btn btn-xs btn-ghost" onclick="moveFed(${f.id},-1)" title="위로">↑</button>` : ''}
@@ -2431,13 +2431,13 @@ POST /api/external/event-result-link/batch<br>
             if (!f) return;
             // Build edit form in a modal-style prompt
             const html = `<div style="display:flex;flex-direction:column;gap:8px;min-width:300px;">
-                <label style="font-size:12px;font-weight:600;">연맹 명칭</label>
+                <label class="t-md t-bold">연맹 명칭</label>
                 <input id="_ef_name" value="${f.name || ''}" style="padding:6px 10px;border:1.5px solid var(--gray);border-radius:var(--radius);">
-                <label style="font-size:12px;font-weight:600;">스코어보드 남자 명칭</label>
+                <label class="t-md t-bold">스코어보드 남자 명칭</label>
                 <input id="_ef_lm" value="${f.gender_label_m || ''}" placeholder="예: 남자실업부" style="padding:6px 10px;border:1.5px solid var(--gray);border-radius:var(--radius);">
-                <label style="font-size:12px;font-weight:600;">스코어보드 여자 명칭</label>
+                <label class="t-md t-bold">스코어보드 여자 명칭</label>
                 <input id="_ef_lf" value="${f.gender_label_f || ''}" placeholder="예: 여자실업부" style="padding:6px 10px;border:1.5px solid var(--gray);border-radius:var(--radius);">
-                <label style="font-size:12px;font-weight:600;">스코어보드 혼성 명칭</label>
+                <label class="t-md t-bold">스코어보드 혼성 명칭</label>
                 <input id="_ef_lx" value="${f.gender_label_x || ''}" placeholder="예: 혼성실업부" style="padding:6px 10px;border:1.5px solid var(--gray);border-radius:var(--radius);">
             </div>`;
             let overlay = document.createElement('div');
@@ -2514,11 +2514,11 @@ POST /api/external/event-result-link/batch<br>
         function renderHomePopupsList() {
             const wrap = document.getElementById('home-popups-list');
             if (!wrap) return;
-            if (!_homePopups.length) { wrap.innerHTML = '<span style="font-size:12px;color:var(--text-muted);">등록된 팝업이 없습니다. 위 버튼으로 추가하세요.</span>'; return; }
+            if (!_homePopups.length) { wrap.innerHTML = '<span class="t-md t-muted">등록된 팝업이 없습니다. 위 버튼으로 추가하세요.</span>'; return; }
             wrap.innerHTML = _homePopups.map((p, i) => {
                 const typeLabel = p.popup_type === 'admin' ? '● 관리자용' : '○ 일반 유저용';
                 const activeLabel = p.is_active ? '<span style="color:#b79f58;font-size:11px;">● ON</span>' : '<span style="color:#999;font-size:11px;">○ OFF</span>';
-                const period = (p.show_from || p.show_until) ? `<span style="font-size:10px;color:var(--text-muted);">${p.show_from||'시작없음'} ~ ${p.show_until||'종료없음'}</span>` : '';
+                const period = (p.show_from || p.show_until) ? `<span class="t-xs t-muted">${p.show_from||'시작없음'} ~ ${p.show_until||'종료없음'}</span>` : '';
                 const orderLabel = `<span style="font-size:10px;color:var(--text-muted);font-weight:600;min-width:20px;text-align:center;">#${i+1}</span>`;
                 return `<div class="pacing-config-item" style="cursor:default;justify-content:space-between;">
                     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
@@ -2531,7 +2531,7 @@ POST /api/external/event-result-link/batch<br>
                         ${activeLabel}
                         <span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.title || '(제목 없음)'}</span>
                         ${period}
-                        <span style="font-size:10px;color:var(--text-muted);">${(p.sections||[]).length}개 섹션</span>
+                        <span class="t-xs t-muted">${(p.sections||[]).length}개 섹션</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
                         <button class="btn btn-xs btn-ghost" onclick="editPopup(${p.id})">수정 수정</button>
@@ -2599,7 +2599,7 @@ POST /api/external/event-result-link/batch<br>
         }
         function renderPopupSections() {
             const wrap = document.getElementById('pe-sections');
-            if (!_popupSections.length) { wrap.innerHTML = '<span style="font-size:12px;color:var(--text-muted);">섹션이 없습니다. + 섹션 추가를 눌러 추가하세요.</span>'; return; }
+            if (!_popupSections.length) { wrap.innerHTML = '<span class="t-md t-muted">섹션이 없습니다. + 섹션 추가를 눌러 추가하세요.</span>'; return; }
             wrap.innerHTML = _popupSections.map((s, i) => `
                 <div style="border:1px solid var(--gray);border-radius:8px;padding:10px;position:relative;background:#fff;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -2611,11 +2611,11 @@ POST /api/external/event-result-link/batch<br>
                             <button class="btn btn-xs btn-danger" onclick="removeSection(${i})" style="padding:2px 6px;font-size:10px;">✕</button>
                         </div>
                     </div>
-                    <div class="admin-form-group" style="margin-bottom:6px;"><label style="font-size:11px;">제목</label><input value="${(s.title||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].title=this.value" style="width:100%;"></div>
-                    <div class="admin-form-group" style="margin-bottom:6px;"><label style="font-size:11px;">내용 (HTML 가능, • 으로 줄바꿈)</label><textarea rows="3" onchange="_popupSections[${i}].content=this.value" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:4px;font-size:11px;resize:vertical;">${(s.content||'').replace(/</g,'&lt;')}</textarea></div>
+                    <div class="admin-form-group" style="margin-bottom:6px;"><label class="t-sm">제목</label><input value="${(s.title||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].title=this.value" style="width:100%;"></div>
+                    <div class="admin-form-group" style="margin-bottom:6px;"><label class="t-sm">내용 (HTML 가능, • 으로 줄바꿈)</label><textarea rows="3" onchange="_popupSections[${i}].content=this.value" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:4px;font-size:11px;resize:vertical;">${(s.content||'').replace(/</g,'&lt;')}</textarea></div>
                     <div class="admin-form-row" style="gap:6px;">
-                        <div class="admin-form-group" style="flex:1;"><label style="font-size:11px;">링크 버튼 텍스트</label><input value="${(s.link_btn_text||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].link_btn_text=this.value" placeholder="비워두면 표시 안함"></div>
-                        <div class="admin-form-group" style="flex:1;"><label style="font-size:11px;">링크 URL</label><input value="${(s.link_btn_url||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].link_btn_url=this.value" placeholder="/dashboard.html?comp=1"></div>
+                        <div class="admin-form-group" style="flex:1;"><label class="t-sm">링크 버튼 텍스트</label><input value="${(s.link_btn_text||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].link_btn_text=this.value" placeholder="비워두면 표시 안함"></div>
+                        <div class="admin-form-group" style="flex:1;"><label class="t-sm">링크 URL</label><input value="${(s.link_btn_url||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].link_btn_url=this.value" placeholder="/dashboard.html?comp=1"></div>
                     </div>
                 </div>
             `).join('');
@@ -3458,7 +3458,7 @@ POST /api/external/event-result-link/batch<br>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <h4 style="font-size:14px;display:flex;align-items:center;gap:6px;">
                             <span class="css-icon css-icon-medal" data-icon="S"></span> 세부종목 관리
-                            <span id="em-sub-count" style="font-size:11px;color:var(--text-muted);font-weight:400;"></span>
+                            <span id="em-sub-count" class="t-sm t-muted"></span>
                         </h4>
                         <div style="display:flex;gap:6px;">
                             <button class="btn btn-xs btn-outline" onclick="emSyncSubAthletes()" title="상위 종목의 선수를 모든 세부종목에 동기화합니다">동기화</button>
@@ -3467,9 +3467,9 @@ POST /api/external/event-result-link/batch<br>
                     </div>
                     <div id="em-sub-add-form" style="display:none;margin-bottom:10px;padding:10px;background:var(--bg);border-radius:var(--radius);">
                         <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
-                            <div><label style="font-size:11px;color:var(--text-muted);">종목명</label>
+                            <div><label class="t-sm t-muted">종목명</label>
                                 <input id="em-sub-name" placeholder="예: 100m" style="padding:4px 8px;border:1px solid var(--gray);border-radius:4px;font-size:12px;width:120px;"></div>
-                            <div><label style="font-size:11px;color:var(--text-muted);">카테고리</label>
+                            <div><label class="t-sm t-muted">카테고리</label>
                                 <select id="em-sub-category" style="padding:4px 8px;border:1px solid var(--gray);border-radius:4px;font-size:12px;">
                                     <option value="track">Track</option><option value="field_distance">Field 거리</option><option value="field_height">Field 높이</option></select></div>
                             <button class="btn btn-xs btn-primary" onclick="emAddSubEvent()">추가</button>
@@ -3484,7 +3484,7 @@ POST /api/external/event-result-link/batch<br>
                     <h4 style="font-size:14px;margin-bottom:8px;">조편성 관리</h4>
                     <button class="btn btn-sm btn-primary" onclick="showEmAddAthleteModal()" title="이 종목에 선수를 추가합니다">+ 선수 추가</button>
                 </div>
-                <div id="em-heat-summary" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;"></div>
+                <div id="em-heat-summary" class="t-help"></div>
                 <div id="em-heat-tabs" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center;"></div>
                 <div id="em-heat-entries" style="overflow-y:auto;"></div>
                 <div id="em-batch-controls" style="display:none;margin-top:10px;padding:10px;background:var(--bg);border-radius:var(--radius);font-size:12px;">
@@ -3728,7 +3728,7 @@ POST /api/external/event-result-link/batch<br>
                     const escapedName = (e.name || '').replace(/'/g, "\\'");
                     html += `<tr>
                         <td style="text-align:center;"><input type="number" value="${e.lane_number || ''}" min="0" max="99" placeholder="—" data-heat-id="${heatId}" data-entry-id="${e.event_entry_id}" onchange="emSaveLane(this)" style="width:42px;padding:3px 4px;border:1px solid var(--gray);border-radius:4px;text-align:center;font-size:12px;font-weight:700;"></td>
-                        <td style="text-align:left;font-weight:600;cursor:pointer;color:var(--blue);text-decoration:underline;" onclick="openRelayMemberModal(${e.event_entry_id},'${escapedName}',${_emEventId})">${e.name} <span style="font-size:10px;color:var(--text-muted);">(${members.length}명) 수정</span></td>
+                        <td style="text-align:left;font-weight:600;cursor:pointer;color:var(--blue);text-decoration:underline;" onclick="openRelayMemberModal(${e.event_entry_id},'${escapedName}',${_emEventId})">${e.name} <span class="t-xs t-muted">(${members.length}명) 수정</span></td>
                         <td style="text-align:center;">${members.length}</td>
                         ${legCells}
                         <td><button class="btn btn-xs btn-danger" onclick="emRemoveEntry(${heatId},${e.event_entry_id},'${escapedName}')" title="이 조에서 제거">&times;</button></td>
@@ -3736,7 +3736,7 @@ POST /api/external/event-result-link/batch<br>
                 });
                 html += '</tbody></table>';
                 html += `<div style="display:flex;justify-content:space-between;margin-top:6px;align-items:center;">
-                    <span style="font-size:12px;color:var(--text-muted);">${entries.length}팀 배정</span>
+                    <span class="t-md t-muted">${entries.length}팀 배정</span>
                     <button class="btn btn-xs btn-danger" onclick="emDeleteHeat(${heatId})">이 조 삭제</button>
                 </div>`;
                 area.innerHTML = html;
@@ -3754,8 +3754,8 @@ POST /api/external/event-result-link/batch<br>
                     <td style="text-align:center;"><input type="number" value="${e.lane_number || ''}" min="0" max="99" placeholder="—" data-heat-id="${heatId}" data-entry-id="${e.event_entry_id}" onchange="emSaveLane(this)" style="width:42px;padding:3px 4px;border:1px solid var(--gray);border-radius:4px;text-align:center;font-size:12px;font-weight:700;"></td>
                     <td><strong>${bib(e.bib_number)}</strong></td>
                     <td>${e.name}</td>
-                    <td style="font-size:11px;">${e.team || ''}</td>
-                    <td style="font-size:11px;">${stLabel}</td>
+                    <td class="t-sm">${e.team || ''}</td>
+                    <td class="t-sm">${stLabel}</td>
                     <td>
                         <select class="heat-move-select" style="font-size:10px;padding:2px 4px;" onchange="setEntryGroup(${e.heat_entry_id || 0},${e.event_entry_id},this.value)">
                             <option value="">—</option>
@@ -3769,7 +3769,7 @@ POST /api/external/event-result-link/batch<br>
             });
             html += '</tbody></table>';
             html += `<div style="display:flex;justify-content:space-between;margin-top:6px;align-items:center;">
-                <span style="font-size:12px;color:var(--text-muted);">${entries.length}명 배정</span>
+                <span class="t-md t-muted">${entries.length}명 배정</span>
                 <button class="btn btn-xs btn-danger" onclick="emDeleteHeat(${heatId})">이 조 삭제</button>
             </div>`;
             area.innerHTML = html;
@@ -3954,7 +3954,7 @@ POST /api/external/event-result-link/batch<br>
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;display:flex;align-items:center;justify-content:center;';
             overlay.innerHTML = `<div style="background:var(--white);border-radius:12px;padding:20px;width:560px;max-width:95vw;max-height:85vh;overflow-y:auto;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                    <h4 style="margin:0;font-size:15px;">${evt.name} ${gLabel} — 선수 추가 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(${available.length}명)</span></h4>
+                    <h4 style="margin:0;font-size:15px;">${evt.name} ${gLabel} — 선수 추가 <span class="t-sm t-muted">(${available.length}명)</span></h4>
                     <button class="btn btn-ghost btn-sm" onclick="document.getElementById('em-add-athlete-modal').remove()">닫기</button>
                 </div>
                 <input type="text" id="em-add-ath-search" placeholder="선수명 또는 BIB 검색..." style="width:100%;padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:13px;margin-bottom:12px;" oninput="filterEmAddAthletes()">
@@ -3969,12 +3969,12 @@ POST /api/external/event-result-link/batch<br>
         }
         function _renderEmAddAthList(list) {
             if (list.length === 0) return '<p style="color:var(--text-muted);text-align:center;padding:16px;">추가 가능한 선수가 없습니다.</p>';
-            return `<table class="heat-entries-table" style="font-size:12px;">
+            return `<table class="heat-entries-table t-md">
                 <thead><tr><th style="width:60px">BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th><th style="width:50px"></th></tr></thead>
                 <tbody>${list.map(a => `<tr id="em-add-row-${a.id}">
                     <td><strong>${bib(a.bib_number)}</strong></td>
                     <td>${a.name}</td>
-                    <td style="font-size:11px;">${a.team||''}</td>
+                    <td class="t-sm">${a.team||''}</td>
                     <td><button class="btn btn-xs btn-primary" onclick="doEmAddAthlete(${a.id})">추가</button></td>
                 </tr>`).join('')}</tbody>
             </table>`;
@@ -4209,7 +4209,7 @@ POST /api/external/event-result-link/batch<br>
             const gLabel = _pacingGender === 'M' ? '남' : '여';
             const wrap = document.getElementById('pacing-event-btns');
             const available = _pacingTrackEvents.filter(e => e.genders.has(_pacingGender));
-            if (!available.length) { wrap.innerHTML = '<span style="font-size:12px;color:var(--text-muted);">해당 성별의 트랙 종목(800m 이상) 또는 혼성 종목이 없습니다.</span>'; return; }
+            if (!available.length) { wrap.innerHTML = '<span class="t-md t-muted">해당 성별의 트랙 종목(800m 이상) 또는 혼성 종목이 없습니다.</span>'; return; }
             wrap.innerHTML = available.map(e => {
                 const key = `${e.name} (${gLabel})`;
                 const hasConfig = _pacingConfigs.some(c => c.event_name === key);
@@ -4594,7 +4594,7 @@ POST /api/external/event-result-link/batch<br>
 
         function _renderRelayAdminAddList(list, eeId, teamName, eventId) {
             if (list.length === 0) return '<p style="color:var(--text-muted);font-size:11px;text-align:center;">추가 가능한 선수가 없습니다.</p>';
-            return `<table class="crud-table" style="font-size:11px;">
+            return `<table class="crud-table t-sm">
                 <thead><tr><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th><th></th></tr></thead>
                 <tbody>${list.map(a => `<tr id="ra-add-${a.id}">
                     <td><strong>${bib(a.bib_number)}</strong></td>
@@ -4712,7 +4712,7 @@ POST /api/external/event-result-link/batch<br>
                         ${r.header.wind != null ? `<span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;${parseFloat(r.header.wind) > 2.0 ? 'background:#fef2f2;color:#ef4444;' : 'background:#f0fdf4;color:#b79f58;'}">WIND: ${r.header.wind > 0 ? '+' : ''}${r.header.wind}m/s</span>` : ''}
                     </div>`;
                 if (r.heatInfo) {
-                    html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+                    html += `<div class="t-help">
                         → ${r.heatInfo.event_name} ${r.heatInfo.round_type} ${r.heatInfo.heat_number}조 (Heat ID: ${r.heatInfo.heat_id})
                     </div>`;
                 }
@@ -4901,8 +4901,8 @@ POST /api/external/event-result-link/batch<br>
                     html += `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                             <div style="display:flex;align-items:center;gap:8px;">
-                                <strong style="font-size:13px;">${g.name}</strong>
-                                <span style="font-size:10px;color:var(--text-muted);">${genderLabel} | ${g.members.length}개 대회</span>
+                                <strong class="t-lg">${g.name}</strong>
+                                <span class="t-xs t-muted">${genderLabel} | ${g.members.length}개 대회</span>
                             </div>
                             <div style="display:flex;gap:4px;">
                                 <button class="btn btn-xs btn-outline" onclick="jgAddMember(${g.id})" title="종목 추가">+ 추가</button>
@@ -4910,7 +4910,7 @@ POST /api/external/event-result-link/batch<br>
                             </div>
                         </div>
                         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-                            <span style="font-size:10px;color:var(--text-muted);">스코어보드 키:</span>
+                            <span class="t-xs t-muted">스코어보드 키:</span>
                             <input value="${g.joint_scoreboard_key || ''}" onchange="jgUpdateKey(${g.id},this.value)"
                                 style="font-size:11px;font-family:monospace;padding:2px 6px;border:1px solid #e5e7eb;border-radius:4px;background:#f0fdf4;color:#166534;flex:1;max-width:350px;">
                         </div>
@@ -4984,7 +4984,7 @@ POST /api/external/event-result-link/batch<br>
                         <span style="font-weight:600;min-width:50px;">${gL(g.gender)} ${rL(g.round_type)}</span>
                         <span style="flex:1;">${g.name}</span>
                         <span style="display:flex;gap:2px;">${comps}</span>
-                        <span style="font-size:10px;color:var(--text-muted);">${g.events.length}개</span>
+                        <span class="t-xs t-muted">${g.events.length}개</span>
                     </label>`;
                 }).join('');
                 container.innerHTML = html;
@@ -5748,7 +5748,7 @@ POST /api/external/event-result-link/batch<br>
                     <button class="btn btn-sm btn-primary" onclick="saveEventRecord('${eventName}','${eid}')">저장</button>
                 </div>
                 <table style="width:100%;border-collapse:collapse;">
-                    <thead><tr style="font-size:11px;color:var(--text-muted);">
+                    <thead><tr class="t-sm t-muted">
                         <th style="text-align:left;padding:2px 4px;">구분</th>
                         <th style="text-align:left;padding:2px 4px;">기록</th>
                         <th style="text-align:left;padding:2px 4px;">보유자</th>
