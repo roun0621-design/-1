@@ -3097,6 +3097,8 @@ app.post('/api/events/:id/create-final', async (req, res) => {
     opLog(`${event.name} ${event.gender === 'M' ? '남자' : '여자'} 결승 라운드 생성 (${qualified.length}명 진출)`, 'round', 'system', event.competition_id);
     // SSE broadcast so dashboard/results pages pick up the new final event
     broadcastSSE('event_status_changed', { event_id: finalEventId, round_status: 'heats_generated' });
+    // 시간표 자동 재매칭 (결승 라운드가 새로 생겼으므로 시간표의 "결승" 행과 연결 가능)
+    try { await autoLinkTimetable(event.competition_id); } catch(autoErr) { console.warn('[autoLink after final] ', autoErr.message); }
     res.json({ success: true, final_event_id: finalEventId, count: qualified.length });
 });
 
@@ -3277,6 +3279,8 @@ app.post('/api/events/:id/create-semifinal', async (req, res) => {
     opLog(`${event.name} 준결승 생성 (${qualifiedIds.length}명, ${group_count}개 조)`, 'round', 'system', event.competition_id);
     // SSE broadcast so dashboard/results pages pick up the new semifinal event
     broadcastSSE('event_status_changed', { event_id: semiEventId, round_status: 'heats_generated' });
+    // 시간표 자동 재매칭 (준결승 라운드가 새로 생겼으므로 시간표의 "준결승" 행과 연결 가능)
+    try { await autoLinkTimetable(event.competition_id); } catch(autoErr) { console.warn('[autoLink after semifinal] ', autoErr.message); }
     res.json({ success: true, semi_event_id: semiEventId, count: qualifiedIds.length });
 });
 app.delete('/api/events/:id', async (req, res) => {
@@ -4224,6 +4228,8 @@ app.post('/api/admin/events', async (req, res) => {
         const info = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order,division,video_url,result_url) VALUES (?,?,?,?,?,?,?,?,?,?)', competition_id, name, category, gender, round_type || 'final', 'created', autoOrder, division || '', video_url || '', result_url || '');
         const evt = await db.get('SELECT * FROM event WHERE id=?', info.lastInsertRowid);
         await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,1)', evt.id);
+        // 시간표 자동 재매칭 (새 종목이 생겼으므로 시간표의 매칭되지 않은 행과 연결 가능)
+        try { await autoLinkTimetable(competition_id); } catch(autoErr) { console.warn('[autoLink after event create] ', autoErr.message); }
         res.json(evt);
     } catch (e) { res.status(400).json({ error: '추가 오류: ' + e.message }); }
 });
@@ -4233,6 +4239,10 @@ app.put('/api/admin/events/:id', async (req, res) => {
     const old = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
     await db.run('UPDATE event SET name=?,category=?,gender=?,round_type=?,sort_order=?,round_status=?,video_url=?,division=?,result_url=? WHERE id=?', name || old.name, category || old.category, gender || old.gender, round_type || old.round_type, sort_order ?? old.sort_order, round_status || old.round_status, video_url ?? old.video_url ?? '', division ?? old.division ?? '', result_url ?? old.result_url ?? '', old.id);
+    // 종목 이름/성별/라운드가 바뀌었을 가능성이 있으므로 시간표 재매칭 시도 (단 수동 매칭은 보호)
+    if (name !== old.name || gender !== old.gender || round_type !== old.round_type) {
+        try { await autoLinkTimetable(old.competition_id); } catch(autoErr) { console.warn('[autoLink after event update] ', autoErr.message); }
+    }
     res.json(await db.get('SELECT * FROM event WHERE id=?', old.id));
 });
 
@@ -8090,6 +8100,13 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
             const UPDATE_SQL = 'UPDATE timetable SET section=?, note=?, sort_order=? WHERE id=?';
             const DELETE_ONE_SQL = 'DELETE FROM timetable WHERE id=?';
 
+            // 수동 매칭 보호: event_name+round+category 가 같으면 (time/sort 만 바뀐 경우)
+            //                event_id 를 새 행에 이전시킴. 새로 INSERT 된 행도 LAST_INSERT_ROWID 로 회수.
+            const _ttNorm = s => (s || '').replace(/[,\s]+/g, '').toLowerCase().replace(/×/g, 'x').replace(/X/g, 'x');
+            const buildSoftKey = (r) => `${_ttNorm(r.event_name)}|${_ttNorm(r.category)}|${_ttNorm(r.round)}`;
+
+            const INSERT_RETURN_SQL = INSERT_SQL;  // last insert rowid 회수용 alias
+
             const tx = db.transaction(async () => {
                 for (const day of effectiveDays) {
                     const existingRows = await db.all('SELECT * FROM timetable WHERE competition_id=? AND day=?', parseInt(competition_id), day);
@@ -8103,14 +8120,22 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
 
                     const buildKey = (r) => `${r.time||''}|${(r.event_name||'').trim()}|${(r.category||'').trim()}|${(r.round||'').trim()}`;
                     const existingByKey = new Map();
+                    const existingBySoftKey = new Map();  // 약한 매칭: event_name+round+category 동일 → event_id 이전 후보
                     existingRows.forEach(r => {
                         const k = buildKey(r);
                         if (!existingByKey.has(k)) existingByKey.set(k, []);
                         existingByKey.get(k).push(r);
+                        const sk = buildSoftKey(r);
+                        if (!existingBySoftKey.has(sk)) existingBySoftKey.set(sk, []);
+                        existingBySoftKey.get(sk).push(r);
                     });
 
                     const newEntries = filteredEntries.filter(e => e.day === day);
                     const matchedIds = new Set();
+                    // event_id 가 이미 회수된 기존 행은 두 번 이전되지 않도록 추적
+                    const consumedEventIds = new Set();
+                    // 새로 INSERT 된 행에 event_id 를 옮겨붙이기 위해 등록
+                    const pendingEventIdInherit = [];  // { newRowId, eventId, eventIdsJson }
 
                     for (const e of newEntries) {
                         const k = buildKey(e);
@@ -8118,12 +8143,35 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
                         if (candidates && candidates.length > 0) {
                             const target = candidates.shift();
                             matchedIds.add(target.id);
+                            // 강한 매칭 → 단순 UPDATE (event_id 그대로 유지됨)
                             await db.run(UPDATE_SQL, e.section, e.note || target.note, e.sort_order, target.id);
                             mergeStats.updatedCount++;
+                            if (target.event_id) consumedEventIds.add(target.event_id);
                         } else {
-                            await db.run(INSERT_SQL, e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order);
+                            // 강한 매칭 실패 — INSERT 하지만, 약한 매칭으로 event_id 회수 시도
+                            const ins = await db.run(INSERT_RETURN_SQL, e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order);
                             mergeStats.addedCount++;
+                            const sk = buildSoftKey(e);
+                            const softCands = existingBySoftKey.get(sk);
+                            if (softCands && softCands.length > 0) {
+                                // 가장 가까운 기존 행 (event_id 가 있고 아직 회수 안 된 것) 선택
+                                const inheritFrom = softCands.find(r => r.event_id && !consumedEventIds.has(r.event_id));
+                                if (inheritFrom) {
+                                    pendingEventIdInherit.push({
+                                        newRowId: ins.lastInsertRowid,
+                                        eventId: inheritFrom.event_id,
+                                        eventIdsJson: inheritFrom.event_ids || null,
+                                    });
+                                    consumedEventIds.add(inheritFrom.event_id);
+                                }
+                            }
                         }
+                    }
+
+                    // 새 행에 event_id 이전 적용 (수동 매칭 보호)
+                    for (const inh of pendingEventIdInherit) {
+                        await db.run('UPDATE timetable SET event_id=?, event_ids=? WHERE id=?', inh.eventId, inh.eventIdsJson, inh.newRowId);
+                        mergeStats.preservedLinks = (mergeStats.preservedLinks || 0) + 1;
                     }
 
                     for (const r of existingRows) {
@@ -8390,32 +8438,57 @@ app.delete('/api/timetable/entry/:id', async (req, res) => {
 });
 
 // ---- Shared timetable auto-link function ----
-async function autoLinkTimetable(compId) {
+// options.force = true 면 이미 event_id 가 채워진 행도 다시 매칭 시도 (라운드 생성 직후 등)
+async function autoLinkTimetable(compId, options = {}) {
+    const force = options.force === true;
     const compEvents = await db.all('SELECT id, name, gender, category, round_type FROM event WHERE competition_id=? AND parent_event_id IS NULL', compId);
-    const ttRows = await db.all('SELECT id, event_name, category, round FROM timetable WHERE competition_id=? AND event_id IS NULL', compId);
+    // 중복 종목 처리: 같은 (normalized_name, gender, round_type) 그룹에서 데이터 많은 종목을 우선 선택할 수 있도록 enrich
+    // (heat/entry/result 수 합산 → 점수)
+    const evScoreMap = new Map();
+    for (const e of compEvents) {
+        const hc = (await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', e.id))?.c || 0;
+        const ec = (await db.get('SELECT COUNT(*) AS c FROM event_entry WHERE event_id=?', e.id))?.c || 0;
+        const rc = (await db.get('SELECT COUNT(*) AS c FROM result r JOIN heat h ON h.id=r.heat_id WHERE h.event_id=?', e.id))?.c || 0;
+        evScoreMap.set(e.id, hc * 1 + ec * 10 + rc * 100);  // 기록 > 엔트리 > 조 가중치
+    }
+
+    // force=true 면 모든 행, 아니면 NULL 행만
+    const ttRows = force
+        ? await db.all('SELECT id, event_name, category, round, event_id FROM timetable WHERE competition_id=?', compId)
+        : await db.all('SELECT id, event_name, category, round, event_id FROM timetable WHERE competition_id=? AND event_id IS NULL', compId);
 
     // Determine competition federation and division_type (for A6 filtering)
     const comp = await db.get('SELECT federation, division_type FROM competition WHERE id=?', compId);
     const federation = (comp && comp.federation) || '';
     const divisionType = (comp && comp.division_type) || '';
 
-    // Normalize: lowercase, remove all whitespace, unify × → x, X → x
-    function norm(s) { return (s || '').replace(/\s+/g, '').toLowerCase().replace(/×/g, 'x').replace(/X/g, 'x'); }
+    // Normalize: lowercase, remove all whitespace AND commas, unify × → x, X → x
+    // 쉼표 제거가 핵심 — '10,000m' vs '10000m' 매칭을 가능하게 함
+    function norm(s) { return (s || '').replace(/[,\s]+/g, '').toLowerCase().replace(/×/g, 'x').replace(/X/g, 'x'); }
 
-    // Extract division info from category: "대학(남)" → { divisions: ['대학'], genders: ['M'] }
-    // "대학/실업(여)" → { divisions: ['대학','실업'], genders: ['F'] }
-    // "대학(남)/실업(남,여)" → { divisions: ['대학','실업'], genders: ['M','F'] }
+    // Extract division info from category. 지원 포맷:
+    //   "대학(남)" → { divisions: ['대학'], genders: ['M'] }
+    //   "대학/실업(여)" → { divisions: ['대학','실업'], genders: ['F'] }
+    //   "대학(남)/실업(남,여)" → { divisions: ['대학','실업'], genders: ['M','F'] }
+    //   "남고" / "여대" / "남일" / "여중" → 줄임 표기: 첫글자 성별 + 다음글자 부서
+    //   "남자(아시아)" / "여자(아시아)" → 단순 성별
+    //   "대학부" / "고등부" / "일반부" / "남자" / "여자" → 부서 또는 성별만
+    //   "남" / "여" → 성별만
     function parseCategory(cat) {
         if (!cat) return { divisions: [], genders: [] };
         const genders = new Set();
         const divisions = new Set();
-        
+
+        const DIV_CHAR_MAP = { '초':'초등', '중':'중등', '고':'고등', '대':'대학', '일':'일반', '실':'실업' };
+
         // Split by "/" to handle "대학(남)/실업(남,여)"
         const parts = cat.split('/');
-        for (const part of parts) {
+        for (let part of parts) {
+            part = part.trim();
+
+            // 1) 표준 패턴: "대학(남)" / "실업(남,여)" 같은 (성별) 괄호
             const divMatch = part.match(/^(대학|실업|초등|중등|고등|일반)/);
             if (divMatch) divisions.add(divMatch[1]);
-            
             const genderMatch = part.match(/\(([남여혼성,]+)\)/);
             if (genderMatch) {
                 const inner = genderMatch[1];
@@ -8423,6 +8496,26 @@ async function autoLinkTimetable(compId) {
                 if (inner.includes('여')) genders.add('F');
                 if (inner.includes('혼성')) genders.add('X');
             }
+
+            // 2) 줄임 표기 패턴: "남고" / "여대" / "남일(U20포함)" 등
+            //    첫글자가 남/여, 둘째 글자가 부서 약자
+            const shortMatch = part.match(/^([남여])([초중고대일실])(?:[부]?)/);
+            if (shortMatch) {
+                genders.add(shortMatch[1] === '남' ? 'M' : 'F');
+                if (DIV_CHAR_MAP[shortMatch[2]]) divisions.add(DIV_CHAR_MAP[shortMatch[2]]);
+            }
+
+            // 3) 단순 성별: "남자" / "여자" / "남" / "여" (괄호 없는 경우만 처리해서 1) 의 (남) 와 혼동 방지)
+            //    하지만 part 가 짧고 부서 정보 없는 경우만
+            if (!divMatch && !shortMatch) {
+                if (/^남자?(\(|$)/.test(part)) genders.add('M');
+                if (/^여자?(\(|$)/.test(part)) genders.add('F');
+                if (/혼성|혼합/.test(part)) genders.add('X');
+            }
+
+            // 4) "대학부" / "고등부" 같은 부서만 표기
+            const divOnlyMatch = part.match(/^(대학|실업|초등|중등|고등|일반)부$/);
+            if (divOnlyMatch) divisions.add(divOnlyMatch[1]);
         }
         return { divisions: [...divisions], genders: [...genders] };
     }
@@ -8486,7 +8579,7 @@ async function autoLinkTimetable(compId) {
         // A7: Find ALL matching events (for multi-gender entries like "경보 남녀 동시출발")
         const matches = compEvents.filter(ev => {
             if (ev.round_type !== ttRound) return false;
-            // Name match (normalized: spaces removed, ×→x, case insensitive)
+            // Name match (normalized: spaces+commas removed, ×→x, case insensitive)
             const nameOk = norm(ev.name) === ttNorm;
             if (!nameOk) return false;
             // Gender match
@@ -8497,12 +8590,30 @@ async function autoLinkTimetable(compId) {
         });
 
         if (matches.length > 0) {
-            // Primary link: first match (for backward compatibility with event_id)
-            const primaryId = matches[0].id;
-            const allIds = matches.map(m => m.id);
+            // 중복 종목 robustness: gender 별로 그룹화한 뒤 각 그룹에서 데이터 가장 많은 event 를 대표로 선택.
+            // 예) '경보 남녀 동시출발' → M/F 각 1개씩 대표 선택. 같은 gender 안에 중복 종목이 있으면 score 높은 쪽.
+            const byGender = new Map();
+            for (const m of matches) {
+                if (!byGender.has(m.gender)) byGender.set(m.gender, []);
+                byGender.get(m.gender).push(m);
+            }
+            const representatives = [];
+            for (const [, list] of byGender) {
+                list.sort((a, b) => (evScoreMap.get(b.id) || 0) - (evScoreMap.get(a.id) || 0) || (a.id - b.id));
+                representatives.push(list[0]);
+            }
+            const primaryId = representatives[0].id;
+            const allIds = representatives.map(m => m.id);
             const eventIdsJson = allIds.length > 1 ? JSON.stringify(allIds) : null;
             await db.run('UPDATE timetable SET event_id=?, event_ids=? WHERE id=?', primaryId, eventIdsJson, tt.id);
             linked++;
+        } else if (force && tt.event_id !== null) {
+            // force 모드 + 이번 매칭 실패 → 기존 매칭이 stale 한 게 아닌 한 그대로 둠 (수동 매칭 보호)
+            // 단 event_id 가 가리키던 종목이 더 이상 존재하지 않으면 NULL 로 리셋
+            const stillExists = compEvents.some(e => e.id === tt.event_id);
+            if (!stillExists) {
+                await db.run('UPDATE timetable SET event_id=NULL, event_ids=NULL WHERE id=?', tt.id);
+            }
         }
     }
     return { linked, total: ttRows.length };
