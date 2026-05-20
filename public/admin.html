@@ -973,6 +973,43 @@ POST /api/external/event-result-link/batch<br>
                     <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;">한국기록(NR) · 부별기록(DR, 13부) · 대회기록(CR, 시리즈별)을 종목별로 관리합니다. 기록지/종합기록/실시간 보드 등에 자동 표시됩니다.</p>
                 </div>
 
+                <!-- 승인 대기 큐 (Phase C) -->
+                <div class="admin-card" id="record-breaks-card" style="border-left:4px solid #e67e22;display:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="record-breaks-toggle">
+                        <div>
+                            <h4 style="margin:0;">🏆 기록 갱신 승인 대기 <span id="rb-pending-badge" style="display:inline-block;background:#e67e22;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;margin-left:8px;">0</span></h4>
+                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">기록 입력 시 자동 감지된 NR/DR/CR 갱신 후보입니다. 검토 후 승인하면 기록이 갱신됩니다.</p>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <select id="rb-comp-filter" onchange="loadRecordBreaks()" style="padding:5px 8px;font-size:12px;border:1px solid var(--gray);border-radius:5px;">
+                                <option value="">전체 대회</option>
+                            </select>
+                            <select id="rb-status-filter" onchange="loadRecordBreaks()" style="padding:5px 8px;font-size:12px;border:1px solid var(--gray);border-radius:5px;">
+                                <option value="pending" selected>승인 대기</option>
+                                <option value="approved">승인됨</option>
+                                <option value="rejected">거부됨</option>
+                                <option value="all">전체</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline" onclick="loadRecordBreaks()" style="font-size:11px;">새로고침</button>
+                            <span id="record-breaks-collapse-icon" style="font-size:18px;color:var(--text-muted);">▼</span>
+                        </div>
+                    </div>
+                    <div id="record-breaks-list" style="margin-top:12px;display:none;"></div>
+                </div>
+
+                <!-- Reject 사유 입력 모달 -->
+                <div id="rb-reject-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2100;align-items:center;justify-content:center;">
+                    <div style="background:var(--white);border-radius:12px;padding:24px;width:440px;max-width:95vw;">
+                        <h3 style="margin:0 0 14px;font-size:16px;">기록 갱신 거부</h3>
+                        <input type="hidden" id="rb-reject-id">
+                        <label style="font-size:12px;">거부 사유<textarea id="rb-reject-note" rows="3" placeholder="예: 풍속 초과, 측정 오류, 재확인 필요" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;resize:vertical;"></textarea></label>
+                        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+                            <button class="btn btn-sm btn-outline" onclick="closeRbRejectModal()">취소</button>
+                            <button class="btn btn-sm btn-primary" onclick="confirmRecordBreakReject()" style="background:#c0392b;border-color:#c0392b;">거부</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 좌측: 종목 리스트 / 우측: 매트릭스 -->
                 <div class="admin-card" style="padding:0;">
                     <div style="display:flex;flex-wrap:wrap;gap:0;min-height:560px;">
@@ -5804,6 +5841,9 @@ POST /api/external/event-result-link/batch<br>
 
             // 종목이 이미 선택돼 있으면 매트릭스 재로드
             if (_recSelectedEvent) await loadEventMatrix(_recSelectedEvent);
+
+            // Phase C: 승인 대기 큐 로드
+            await loadRecordBreaks();
         }
 
         function renderRecordsEventList() {
@@ -6260,6 +6300,203 @@ POST /api/external/event-result-link/batch<br>
                 }
             } catch (err) {
                 toast('삭제 오류: ' + err.message, 'error');
+            }
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // Phase C: 기록 갱신 승인 대기 큐
+        // ──────────────────────────────────────────────────────────────
+        let _rbCollapsed = true;     // 기본 접힘 (배너만 보임)
+        let _rbCollapseInstalled = false;
+        let _rbLastRows = [];
+
+        async function loadRecordBreaks() {
+            try {
+                // 1) 대회 드롭다운 채우기 (한 번만)
+                const compSel = document.getElementById('rb-comp-filter');
+                if (compSel && compSel.options.length <= 1) {
+                    try {
+                        const cRes = await fetch('/api/competitions');
+                        const comps = await cRes.json();
+                        let html = '<option value="">전체 대회</option>';
+                        for (const c of (comps || [])) {
+                            html += `<option value="${c.id}">${_esc(c.name)}</option>`;
+                        }
+                        compSel.innerHTML = html;
+                    } catch(e) { /* ignore */ }
+                }
+
+                const status = document.getElementById('rb-status-filter')?.value || 'pending';
+                const compId = document.getElementById('rb-comp-filter')?.value || '';
+                const params = new URLSearchParams();
+                params.set('status', status);
+                if (compId) params.set('competition_id', compId);
+
+                const res = await fetch('/api/record-breaks?' + params.toString());
+                const data = await res.json();
+                _rbLastRows = data.rows || [];
+                const counts = data.counts || { pending: 0, approved: 0, rejected: 0 };
+
+                renderRecordBreaks(_rbLastRows, counts, status);
+                installRecordBreaksCollapse();
+            } catch (err) {
+                console.warn('loadRecordBreaks failed:', err);
+            }
+        }
+
+        function installRecordBreaksCollapse() {
+            if (_rbCollapseInstalled) return;
+            const toggle = document.getElementById('record-breaks-toggle');
+            if (!toggle) return;
+            toggle.addEventListener('click', (ev) => {
+                // 토글 영역 안의 select/button/option은 토글 금지
+                if (ev.target.closest('select, button, option, textarea')) return;
+                _rbCollapsed = !_rbCollapsed;
+                const list = document.getElementById('record-breaks-list');
+                const icon = document.getElementById('record-breaks-collapse-icon');
+                if (list) list.style.display = _rbCollapsed ? 'none' : 'block';
+                if (icon) icon.textContent = _rbCollapsed ? '▼' : '▲';
+            });
+            _rbCollapseInstalled = true;
+        }
+
+        function renderRecordBreaks(rows, counts, status) {
+            const card = document.getElementById('record-breaks-card');
+            const list = document.getElementById('record-breaks-list');
+            const badge = document.getElementById('rb-pending-badge');
+            if (!card || !list || !badge) return;
+
+            // pending이 0이고 status=pending인 경우 → 카드 자체를 숨김 (시각 노이즈 감소)
+            const pendingCount = counts.pending || 0;
+            if (pendingCount === 0 && status === 'pending' && rows.length === 0) {
+                card.style.display = 'none';
+                return;
+            }
+            card.style.display = 'block';
+            badge.textContent = String(pendingCount);
+            badge.style.background = pendingCount > 0 ? '#e67e22' : '#95a5a6';
+
+            if (rows.length === 0) {
+                list.innerHTML = `<p style="color:var(--text-muted);font-size:13px;padding:12px;margin:0;">해당 상태의 기록 갱신 후보가 없습니다.</p>`;
+                return;
+            }
+
+            // 행별 카드
+            let html = `<div style="display:flex;flex-direction:column;gap:8px;">`;
+            for (const r of rows) {
+                const rtColor = r.record_type === 'national' ? '#c0392b'
+                              : r.record_type === 'division' ? '#2980b9'
+                              : '#27ae60';
+                const rtLabel = r.record_type === 'national' ? 'NR'
+                              : r.record_type === 'division' ? 'DR'
+                              : 'CR';
+                const ctxLabel = r.record_type === 'division'
+                    ? (r.division_label || r.division_code || '')
+                    : r.record_type === 'competition'
+                        ? (r.series_name || `시리즈 #${r.series_id}`)
+                        : '한국';
+                const statusBadge = r.status === 'pending'
+                    ? `<span style="background:#e67e22;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;">승인 대기</span>`
+                    : r.status === 'approved'
+                        ? `<span style="background:#27ae60;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;">승인됨</span>`
+                        : `<span style="background:#95a5a6;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;">거부됨</span>`;
+                const prev = r.previous_value ? _esc(r.previous_value) : '<span style="color:var(--text-muted);">(기존 기록 없음)</span>';
+
+                html += `<div style="border:1px solid var(--gray);border-left:4px solid ${rtColor};border-radius:6px;padding:10px 12px;background:var(--white);">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                        <div style="flex:1;min-width:280px;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+                                <span style="background:${rtColor};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">${rtLabel}</span>
+                                <span style="font-weight:700;font-size:14px;">${_esc(r.event_name)}</span>
+                                <span style="font-size:11px;color:var(--text-muted);">· ${r.gender === 'M' ? '남자' : r.gender === 'F' ? '여자' : '혼성'} · ${_esc(ctxLabel)}</span>
+                                ${statusBadge}
+                            </div>
+                            <div style="font-size:13px;margin-bottom:4px;">
+                                <strong>${_esc(r.athlete_name || '선수')}</strong>
+                                ${r.athlete_team ? `<span style="color:var(--text-muted);"> · ${_esc(r.athlete_team)}</span>` : ''}
+                                ${r.bib_number ? `<span style="color:var(--text-muted);"> · #${_esc(r.bib_number)}</span>` : ''}
+                            </div>
+                            <div style="font-size:13px;font-family:var(--font-mono);">
+                                ${prev} <span style="color:var(--text-muted);">→</span>
+                                <strong style="color:${rtColor};font-size:15px;">${_esc(r.new_value)}</strong>
+                            </div>
+                            <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">
+                                대회: ${_esc(r.competition_name || '-')}
+                                · 감지: ${_esc(r.detected_at || '')}
+                                ${r.reviewed_by ? ` · 검토: ${_esc(r.reviewed_by)} (${_esc(r.reviewed_at || '')})` : ''}
+                                ${r.review_note ? `<br>메모: ${_esc(r.review_note)}` : ''}
+                            </div>
+                        </div>
+                        ${r.status === 'pending' ? `
+                        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+                            <button class="btn btn-sm btn-primary" onclick="approveRecordBreak(${r.id})" style="font-size:12px;padding:5px 12px;background:#27ae60;border-color:#27ae60;">✓ 승인</button>
+                            <button class="btn btn-sm btn-outline" onclick="openRbRejectModal(${r.id})" style="font-size:12px;padding:5px 12px;color:#c0392b;border-color:#c0392b;">✗ 거부</button>
+                        </div>` : ''}
+                    </div>
+                </div>`;
+            }
+            html += `</div>`;
+            list.innerHTML = html;
+
+            // pending이 있으면 자동 펼침 (사용자 가시성 ↑)
+            if (status === 'pending' && pendingCount > 0 && _rbCollapsed) {
+                _rbCollapsed = false;
+                list.style.display = 'block';
+                const icon = document.getElementById('record-breaks-collapse-icon');
+                if (icon) icon.textContent = '▲';
+            }
+        }
+
+        async function approveRecordBreak(id) {
+            if (!confirm('이 기록 갱신을 승인하시겠습니까?\n승인 시 종목별 기록(NR/DR/CR)이 즉시 갱신됩니다.')) return;
+            try {
+                const res = await fetch(`/api/record-breaks/${id}/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK() })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    toast('기록 갱신 승인 완료', 'success');
+                    await loadRecordBreaks();
+                    // 매트릭스도 새로고침 (현재 선택된 종목이 있다면)
+                    if (_recSelectedEvent) loadEventMatrix(_recSelectedEvent);
+                } else {
+                    toast(data.error || '승인 실패', 'error');
+                }
+            } catch (err) {
+                toast('승인 오류: ' + err.message, 'error');
+            }
+        }
+
+        function openRbRejectModal(id) {
+            document.getElementById('rb-reject-id').value = id;
+            document.getElementById('rb-reject-note').value = '';
+            document.getElementById('rb-reject-modal').style.display = 'flex';
+        }
+        function closeRbRejectModal() {
+            document.getElementById('rb-reject-modal').style.display = 'none';
+        }
+        async function confirmRecordBreakReject() {
+            const id = document.getElementById('rb-reject-id').value;
+            const note = document.getElementById('rb-reject-note').value.trim();
+            if (!id) return;
+            try {
+                const res = await fetch(`/api/record-breaks/${id}/reject`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK(), note })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    toast('거부 처리 완료');
+                    closeRbRejectModal();
+                    await loadRecordBreaks();
+                } else {
+                    toast(data.error || '거부 실패', 'error');
+                }
+            } catch (err) {
+                toast('거부 오류: ' + err.message, 'error');
             }
         }
 

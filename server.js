@@ -16,6 +16,7 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const { initDatabase, DB_PATH } = require('./db/init');
 const { getDb } = require('./lib/db');
+const { detectRecordBreaks } = require('./lib/recordCompare');
 const WebSocket = require('ws');
 const PDFDocument = require('pdfkit');
 const { createCanvas, registerFont } = require('canvas');
@@ -2156,17 +2157,54 @@ app.post('/api/results/upsert', async (req, res) => {
             await db.run("UPDATE result SET distance_meters=?,time_seconds=?,remark=?,status_code=?,wind=?,updated_at=datetime('now') WHERE id=?", updDist, updTime, updRemark, updSc, updWind, existing.id);
             const upd = await db.get('SELECT * FROM result WHERE id=?', existing.id);
             audit('result', existing.id, 'UPDATE', existing, upd, 'operator', null, req);
+            // Phase C1: 기록 갱신 감지 (best-effort, 실패해도 응답에 영향 없음)
+            await _runRecordCompareHook(upd, heat).catch(()=>{});
             broadcastSSE('result_update', { heat_id, event_entry_id });
             res.json(upd);
         } else {
             const info = await db.run('INSERT INTO result (heat_id,event_entry_id,attempt_number,distance_meters,time_seconds,remark,status_code,wind) VALUES (?,?,?,?,?,?,?,?)', heat_id, event_entry_id, attempt_number || null, distance_meters ?? null, time_seconds ?? null, remark || '', sc || '', wind ?? null);
             const ins = await db.get('SELECT * FROM result WHERE id=?', info.lastInsertRowid);
             audit('result', ins.id, 'INSERT', null, ins, 'operator', null, req);
+            // Phase C1: 기록 갱신 감지
+            await _runRecordCompareHook(ins, heat).catch(()=>{});
             broadcastSSE('result_update', { heat_id, event_entry_id });
             res.json(ins);
         }
     } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
+
+// Phase C1 헬퍼: result 저장 후 호출 — 모든 컨텍스트 로드 후 detectRecordBreaks 실행
+// best-effort: 실패해도 throw 안 함 (호출자가 .catch로 한 번 더 감싸도 무방)
+async function _runRecordCompareHook(result, heatRow) {
+    try {
+        if (!result || !heatRow) return;
+        const event = await db.get('SELECT * FROM event WHERE id=?', heatRow.event_id);
+        if (!event) return;
+        // combined의 부모/자식은 일단 스킵 (기록 비교 의미 모호)
+        if (event.category === 'combined' || event.parent_event_id) return;
+        const competition = await db.get('SELECT * FROM competition WHERE id=?', event.competition_id);
+        if (!competition) return;
+        const eventEntry = await db.get('SELECT * FROM event_entry WHERE id=?', result.event_entry_id);
+        let athlete = null;
+        if (eventEntry && eventEntry.athlete_id) {
+            athlete = await db.get('SELECT * FROM athlete WHERE id=?', eventEntry.athlete_id);
+        }
+        const ret = await detectRecordBreaks(db, {
+            result, heat: heatRow, event, athlete, competition, eventEntry
+        });
+        if (ret && ret.detected && ret.detected.length > 0) {
+            for (const d of ret.detected) {
+                opLog(`🏆 ${d.record_type.toUpperCase()} 기록 갱신 감지: ${event.name} (${athlete?.name || '선수'} ${result.time_seconds || result.distance_meters}) — 승인 대기`, 'record', 'system', competition.id);
+            }
+            broadcastSSE('record_break_detected', {
+                competition_id: competition.id, event_id: event.id,
+                detected: ret.detected
+            });
+        }
+    } catch (e) {
+        console.error('[recordCompareHook] failed (non-fatal):', e && e.message);
+    }
+}
 
 // Delete a single result by heat_id + event_entry_id + attempt_number (for clearing field entries)
 app.delete('/api/results', async (req, res) => {
@@ -9764,6 +9802,171 @@ app.delete('/api/records/:id', async (req, res) => {
         opLog(`기록 삭제: ${r.event_name} ${r.gender} ${r.record_type} ${r.division_code||''} ${r.series_id||''}`, 'admin', 'admin');
         res.json({ success: true });
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ============================================================
+// Phase C3/C4: Record Breaking Approval Queue API
+// ============================================================
+// GET /api/record-breaks?status=pending&competition_id=...&limit=100
+// - status: pending|approved|rejected|all (default pending)
+// - competition_id: 선택 (없으면 전체)
+app.get('/api/record-breaks', async (req, res) => {
+    try {
+        const status = req.query.status || 'pending';
+        const cId = req.query.competition_id ? parseInt(req.query.competition_id, 10) : null;
+        const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
+        const where = [];
+        const params = [];
+        if (status !== 'all') { where.push('rbl.status=?'); params.push(status); }
+        if (cId) { where.push('rbl.competition_id=?'); params.push(cId); }
+        const whereSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
+        // 시리즈명/부 라벨까지 JOIN으로 가져옴 (LEFT JOIN, NULL 안전)
+        const sql = `SELECT rbl.*,
+                            c.name AS competition_name,
+                            e.name AS event_real_name,
+                            dm.label_ko AS division_label,
+                            cs.name AS series_name
+                     FROM record_breaking_log rbl
+                     LEFT JOIN competition c ON c.id = rbl.competition_id
+                     LEFT JOIN event e ON e.id = rbl.event_id
+                     LEFT JOIN division_master dm ON dm.code = rbl.division_code
+                     LEFT JOIN competition_series cs ON cs.id = rbl.series_id
+                     ${whereSql}
+                     ORDER BY rbl.detected_at DESC, rbl.id DESC
+                     LIMIT ${limit}`;
+        const rows = await db.all(sql, ...params);
+        // 카운트도 함께
+        const counts = await db.get(`
+            SELECT
+                COUNT(CASE WHEN status='pending' THEN 1 END) AS pending,
+                COUNT(CASE WHEN status='approved' THEN 1 END) AS approved,
+                COUNT(CASE WHEN status='rejected' THEN 1 END) AS rejected
+            FROM record_breaking_log
+            ${cId ? 'WHERE competition_id=?' : ''}
+        `, ...(cId ? [cId] : []));
+        res.json({ rows, counts: counts || { pending: 0, approved: 0, rejected: 0 } });
+    } catch (err) {
+        console.error('[GET /api/record-breaks]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/record-breaks/:id — 단건 (확인용)
+app.get('/api/record-breaks/:id', async (req, res) => {
+    try {
+        const row = await db.get(`
+            SELECT rbl.*,
+                   c.name AS competition_name,
+                   e.name AS event_real_name,
+                   dm.label_ko AS division_label,
+                   cs.name AS series_name
+            FROM record_breaking_log rbl
+            LEFT JOIN competition c ON c.id = rbl.competition_id
+            LEFT JOIN event e ON e.id = rbl.event_id
+            LEFT JOIN division_master dm ON dm.code = rbl.division_code
+            LEFT JOIN competition_series cs ON cs.id = rbl.series_id
+            WHERE rbl.id=?
+        `, req.params.id);
+        if (!row) return res.status(404).json({ error: 'Not found' });
+        res.json(row);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/record-breaks/:id/approve — event_record UPSERT + status='approved'
+app.post('/api/record-breaks/:id/approve', async (req, res) => {
+    try {
+        const { admin_key, note } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        const rbl = await db.get('SELECT * FROM record_breaking_log WHERE id=?', req.params.id);
+        if (!rbl) return res.status(404).json({ error: 'Not found' });
+        if (rbl.status !== 'pending') return res.status(400).json({ error: `이미 처리됨: ${rbl.status}` });
+
+        // event_record UPSERT (NULL-aware) — recordCompare와 동일 패턴
+        const { record_type, event_name, gender, division_code, series_id, new_value, new_value_num,
+                athlete_name, athlete_team } = rbl;
+
+        // 수립년도: detected_at의 연도 사용
+        let recordYear = '';
+        try { recordYear = String(new Date(rbl.detected_at).getFullYear()); }
+        catch(e) { recordYear = String(new Date().getFullYear()); }
+
+        // 기존 event_record 찾기 (approved=1 무관, 단일 슬롯 의미)
+        let existing;
+        if (division_code == null && series_id == null) {
+            existing = await db.get(
+                `SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=?
+                 AND division_code IS NULL AND series_id IS NULL`,
+                record_type, event_name, gender
+            );
+        } else if (division_code != null && series_id == null) {
+            existing = await db.get(
+                `SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=?
+                 AND division_code=? AND series_id IS NULL`,
+                record_type, event_name, gender, division_code
+            );
+        } else if (division_code == null && series_id != null) {
+            existing = await db.get(
+                `SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=?
+                 AND division_code IS NULL AND series_id=?`,
+                record_type, event_name, gender, series_id
+            );
+        }
+
+        if (existing) {
+            await db.run(
+                `UPDATE event_record SET record_value=?, record_year=?, holder_name=?, holder_team=?, approved=1 WHERE id=?`,
+                new_value || (new_value_num != null ? String(new_value_num) : ''),
+                recordYear, athlete_name || '', athlete_team || '', existing.id
+            );
+        } else {
+            await db.run(
+                `INSERT INTO event_record (record_type, event_name, gender, division_code, series_id,
+                                           record_value, holder_name, holder_team, record_year, approved)
+                 VALUES (?,?,?,?,?,?,?,?,?,1)`,
+                record_type, event_name, gender, division_code, series_id,
+                new_value || (new_value_num != null ? String(new_value_num) : ''),
+                athlete_name || '', athlete_team || '', recordYear
+            );
+        }
+
+        // log 상태 갱신
+        const nowFn = db.isAsync ? 'NOW()' : "datetime('now')";
+        await db.run(
+            `UPDATE record_breaking_log SET status='approved', reviewed_at=${nowFn}, reviewed_by=?, review_note=? WHERE id=?`,
+            getJudgeName(admin_key) || 'admin', note || '', rbl.id
+        );
+
+        opLog(`🏆 기록 승인: ${event_name} ${record_type.toUpperCase()} (${athlete_name} ${new_value})`, 'admin', 'admin', rbl.competition_id);
+        broadcastSSE('record_break_resolved', { id: rbl.id, status: 'approved', competition_id: rbl.competition_id });
+        res.json({ success: true, status: 'approved' });
+    } catch (err) {
+        console.error('[approve record-break]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/record-breaks/:id/reject — status='rejected'만 갱신
+app.post('/api/record-breaks/:id/reject', async (req, res) => {
+    try {
+        const { admin_key, note } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        const rbl = await db.get('SELECT * FROM record_breaking_log WHERE id=?', req.params.id);
+        if (!rbl) return res.status(404).json({ error: 'Not found' });
+        if (rbl.status !== 'pending') return res.status(400).json({ error: `이미 처리됨: ${rbl.status}` });
+        const nowFn = db.isAsync ? 'NOW()' : "datetime('now')";
+        await db.run(
+            `UPDATE record_breaking_log SET status='rejected', reviewed_at=${nowFn}, reviewed_by=?, review_note=? WHERE id=?`,
+            getJudgeName(admin_key) || 'admin', note || '', rbl.id
+        );
+        opLog(`기록 거부: ${rbl.event_name} ${rbl.record_type.toUpperCase()} (${rbl.athlete_name} ${rbl.new_value})`, 'admin', 'admin', rbl.competition_id);
+        broadcastSSE('record_break_resolved', { id: rbl.id, status: 'rejected', competition_id: rbl.competition_id });
+        res.json({ success: true, status: 'rejected' });
+    } catch (err) {
+        console.error('[reject record-break]', err);
         res.status(500).json({ error: err.message });
     }
 });
