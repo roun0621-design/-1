@@ -7138,9 +7138,15 @@ app.post('/api/doc-logos/delete', async (req, res) => {
 });
 
 // ============================================================
-// Per-Event Records (NR/DR/CR)
+// Per-Event Records BUNDLE — single JSON blob per event (NR/DR/CR per event_id)
+// Backed by 'event_records' table (plural, JSON column).
+// Distinct from 'event_record' (singular, normalized) registry served by
+// /api/event-records?gender= / /api/event-records/:gender/:eventName / PUT
+// further down. The naming collision is historical; bundle routes now use
+// /api/event-record-bundle prefix with /api/event-records old aliases kept
+// for backward compatibility (UI has been migrated).
 // ============================================================
-app.get('/api/event-records/:eventId', async (req, res) => {
+async function _bundleGet(req, res) {
     const row = await db.get('SELECT * FROM event_records WHERE event_id=?', req.params.eventId);
     if (!row) return res.json({ event_id: parseInt(req.params.eventId), records: {} });
     try {
@@ -7148,16 +7154,21 @@ app.get('/api/event-records/:eventId', async (req, res) => {
     } catch(e) {
         res.json({ event_id: row.event_id, records: {} });
     }
-});
-
-app.post('/api/event-records', async (req, res) => {
+}
+async function _bundlePost(req, res) {
     const { admin_key, event_id, records } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!event_id || !records) return res.status(400).json({ error: 'event_id, records required' });
     await db.run('INSERT INTO event_records (event_id, records) VALUES (?, ?) ON CONFLICT(event_id) DO UPDATE SET records=excluded.records', event_id, JSON.stringify(records));
     opLog(`종목별 기록(NR/DR/CR) 저장 event_id=${event_id}`, 'admin', 'admin');
     res.json({ success: true });
-});
+}
+// Canonical bundle URLs (preferred)
+app.get('/api/event-record-bundle/:eventId', _bundleGet);
+app.post('/api/event-record-bundle', _bundlePost);
+// Backward-compat aliases (deprecated — remove after one release cycle)
+app.get('/api/event-records/:eventId', _bundleGet);
+app.post('/api/event-records', _bundlePost);
 
 // ============================================================
 // TIMETABLE (시간표) — Excel upload, parse, store, serve

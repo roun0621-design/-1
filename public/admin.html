@@ -5447,7 +5447,7 @@ POST /api/external/event-result-link/batch<br>
             }
             if (!eventId || !_selectedCompId) return;
             try {
-                const data = await api('GET', `/api/event-records/${eventId}`);
+                const data = await api('GET', `/api/event-record-bundle/${eventId}`);
                 if (data && data.records) {
                     for (const k of ['nr', 'dr', 'cr']) {
                         const r = data.records[k] || {};
@@ -5476,7 +5476,7 @@ POST /api/external/event-result-link/batch<br>
                 };
             }
             try {
-                await api('POST', '/api/event-records', {
+                await api('POST', '/api/event-record-bundle', {
                     admin_key: AK(),
                     event_id: parseInt(eventId),
                     records: records
