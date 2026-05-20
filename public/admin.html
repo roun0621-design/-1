@@ -517,19 +517,20 @@
 
                 <!-- 합동 종목 관리 (Joint Group Management — Multi-event) -->
                 <div class="admin-card" style="border-left:4px solid #6b5520;">
-                    <h4 style="display:flex;align-items:center;gap:8px;color:#6b5520;">
-                        <span class="css-icon css-icon-link" data-icon="G"></span> 합동 종목 관리
-                        <span class="t-sm t-muted">다중 대회 연결 (소집·기록·전광판)</span>
-                    </h4>
-                    <p class="t-help-lg">
-                        여러 대회(실업·대학·고등)의 같은 종목을 그룹으로 묶으면 <strong>소집실·기록 입력·전광판</strong>에서 통합 표시됩니다.<br>
-                        LIF 파일은 합동 스코어보드 키로 매칭되어 각 대회별 기록에 자동 분배됩니다.
-                    </p>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-                        <button class="btn btn-sm btn-primary" onclick="jgShowCreateModal()">+ 합동 그룹 추가</button>
-                        <button class="btn btn-sm btn-outline" onclick="jgAutoCreate()">자동 그룹 생성</button>
-                        <button class="btn btn-sm btn-outline" onclick="jgLoadGroups()">새로고침</button>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+                        <h4 style="display:flex;align-items:center;gap:8px;color:#6b5520;margin:0;">
+                            <span class="css-icon css-icon-link" data-icon="G"></span> 합동 종목 관리
+                            <span id="jg-count-badge" class="t-sm" style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-weight:600;">활성 0</span>
+                        </h4>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <button class="btn btn-sm btn-primary" onclick="jgShowCreateModal()">+ 합동 그룹 추가</button>
+                            <button class="btn btn-sm btn-ghost" onclick="jgLoadGroups()" title="새로고침">↻</button>
+                        </div>
                     </div>
+                    <p class="t-help-lg" style="margin:0 0 12px;">
+                        같은 시간·같은 장소에서 <strong>동시 진행</strong>되는 종목들을 묶어 하나의 스코어보드 키로 운영합니다.
+                        운영(소집·기록입력·전광판)은 통합, <strong>결과는 각 대회별로 분리</strong>되어 출력됩니다.
+                    </p>
                     <div id="jg-groups-list" class="t-md"></div>
                 </div>
                 <!-- Legacy 1:1 links (hidden, kept for backward compat) -->
@@ -1150,27 +1151,103 @@ POST /api/external/event-result-link/batch<br>
 
             <!-- (Scoreboard tab removed — LIF import moved to Upload tab, Joint Group moved to Upload tab) -->
 
-    <!-- Joint Group Create Modal -->
-    <div id="jg-create-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2100;align-items:center;justify-content:center;">
-        <div style="background:var(--white);border-radius:12px;padding:24px;width:700px;max-width:95vw;max-height:90vh;overflow-y:auto;">
-            <h3 style="margin:0 0 16px;font-size:16px;">합동 그룹 추가</h3>
-            <div class="admin-form-row" style="flex-direction:column;gap:10px;">
-                <div class="admin-form-group" style="width:100%;">
-                    <label>그룹명 (선택)</label>
-                    <input id="jg-create-name" placeholder="예: 남자 100m 합동">
+    <!-- Joint Group Create Modal (3-step wizard) -->
+    <div id="jg-create-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;align-items:center;justify-content:center;">
+        <div style="background:var(--white);border-radius:12px;padding:0;width:720px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
+            <!-- Header with step indicator -->
+            <div style="padding:18px 24px;border-bottom:1px solid #e5e7eb;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <h3 id="jg-modal-title" style="margin:0;font-size:16px;font-weight:700;">합동 그룹 추가</h3>
+                    <button class="btn btn-ghost" style="padding:4px 10px;font-size:18px;line-height:1;" onclick="jgCloseModal()" title="닫기">×</button>
                 </div>
-                <div>
-                    <label class="t-md t-bold">연결할 대회 선택 (최소 2개)</label>
-                    <div id="jg-comp-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;"></div>
-                </div>
-                <div>
-                    <label class="t-md t-bold">종목 선택 (다중 선택 가능)</label>
-                    <div id="jg-event-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--gray);border-radius:8px;padding:8px;margin-top:6px;"></div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#6b7280;">
+                    <span class="jg-step-dot" data-step="1" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#6b5520;color:#fff;font-weight:700;">1</span>
+                    <span class="jg-step-label" data-step="1" style="font-weight:600;color:#6b5520;">이름</span>
+                    <span style="flex:0 0 24px;height:1px;background:#e5e7eb;"></span>
+                    <span class="jg-step-dot" data-step="2" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-weight:700;">2</span>
+                    <span class="jg-step-label" data-step="2">대회 선택</span>
+                    <span style="flex:0 0 24px;height:1px;background:#e5e7eb;"></span>
+                    <span class="jg-step-dot" data-step="3" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-weight:700;">3</span>
+                    <span class="jg-step-label" data-step="3">종목 선택</span>
                 </div>
             </div>
-            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-                <button class="btn btn-ghost" onclick="document.getElementById('jg-create-modal').style.display='none'">취소</button>
-                <button class="btn btn-primary" onclick="jgCreateGroup()">그룹 생성</button>
+
+            <!-- Body -->
+            <div style="flex:1;overflow-y:auto;padding:20px 24px;">
+                <!-- Step 1: name -->
+                <div id="jg-step-1" class="jg-step-panel">
+                    <label class="t-md t-bold" style="display:block;margin-bottom:6px;">합동 그룹 이름 <span style="color:#dc2626;">*</span></label>
+                    <input id="jg-create-name" placeholder="예: 여자 장대 합동, 10000mW 합동" style="width:100%;padding:10px 12px;font-size:14px;border:1.5px solid var(--gray);border-radius:8px;">
+                    <p class="t-help" style="margin-top:8px;color:#6b7280;font-size:12px;line-height:1.5;">
+                        💡 합동 그룹의 이름을 짧고 명확하게 적어주세요. 메인 목록과 스코어보드 노출 시 식별에 사용됩니다.<br>
+                        예: <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px;">여자 장대 합동</code>, <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px;">10000mW 4-way 합동</code>
+                    </p>
+                </div>
+
+                <!-- Step 2: competitions -->
+                <div id="jg-step-2" class="jg-step-panel" style="display:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <label class="t-md t-bold">연결할 대회 (2개 이상 선택)</label>
+                        <label style="font-size:11px;color:#6b7280;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                            <input type="checkbox" id="jg-show-completed" onchange="jgRenderComps()"> 종료된 대회도 표시
+                        </label>
+                    </div>
+                    <div id="jg-comp-checkboxes" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px;"></div>
+                    <p class="t-help" style="margin-top:8px;color:#6b7280;font-size:12px;">기본적으로 진행중·예정 대회만 표시됩니다.</p>
+                </div>
+
+                <!-- Step 3: events -->
+                <div id="jg-step-3" class="jg-step-panel" style="display:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <label class="t-md t-bold">합동으로 묶을 종목</label>
+                        <div style="display:flex;gap:6px;">
+                            <input id="jg-event-search" placeholder="🔍 종목명 검색" oninput="jgRenderEvents()" style="font-size:12px;padding:4px 8px;border:1px solid #e5e7eb;border-radius:4px;">
+                            <select id="jg-cat-filter" onchange="jgRenderEvents()" style="font-size:12px;padding:4px 8px;border:1px solid #e5e7eb;border-radius:4px;">
+                                <option value="">전체</option>
+                                <option value="track">트랙</option>
+                                <option value="field">필드</option>
+                                <option value="relay">계주</option>
+                                <option value="road">도로</option>
+                                <option value="combined">혼성/혼합</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="jg-event-list" style="max-height:340px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;"></div>
+                    <p class="t-help" style="margin-top:8px;color:#6b7280;font-size:12px;">
+                        ⚠️ 체크박스는 <strong>기본 해제</strong>입니다. 합동으로 묶을 종목만 직접 선택하세요.<br>
+                        선택한 종목 각각이 별도 합동 그룹으로 생성됩니다.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="padding:14px 24px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#fafafa;">
+                <button id="jg-prev-btn" class="btn btn-ghost" onclick="jgPrevStep()" style="visibility:hidden;">← 이전</button>
+                <div id="jg-selection-summary" style="font-size:11px;color:#6b7280;flex:1;text-align:center;"></div>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn btn-ghost" onclick="jgCloseModal()">취소</button>
+                    <button id="jg-next-btn" class="btn btn-primary" onclick="jgNextStep()">다음 →</button>
+                    <button id="jg-submit-btn" class="btn btn-primary" onclick="jgCreateGroup()" style="display:none;">그룹 생성</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Joint Group: Add Member Modal -->
+    <div id="jg-addmem-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;align-items:center;justify-content:center;">
+        <div style="background:var(--white);border-radius:12px;padding:0;width:600px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+            <div style="padding:16px 22px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;font-size:15px;font-weight:700;">종목 추가 — <span id="jg-addmem-gname" style="color:#6b5520;"></span></h3>
+                <button class="btn btn-ghost" style="padding:2px 8px;font-size:18px;line-height:1;" onclick="document.getElementById('jg-addmem-modal').style.display='none'">×</button>
+            </div>
+            <div style="padding:14px 22px;flex:1;overflow-y:auto;">
+                <p class="t-help" style="color:#6b7280;margin-bottom:10px;font-size:12px;">이미 그룹에 속한 종목은 제외됩니다. 추가할 종목을 선택하세요.</p>
+                <input id="jg-addmem-search" placeholder="🔍 종목 검색" oninput="jgRenderAddMemberList()" style="width:100%;padding:6px 10px;font-size:12px;border:1px solid #e5e7eb;border-radius:4px;margin-bottom:8px;">
+                <div id="jg-addmem-list" style="border:1px solid #e5e7eb;border-radius:6px;max-height:340px;overflow-y:auto;"></div>
+            </div>
+            <div style="padding:12px 22px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:6px;background:#fafafa;">
+                <button class="btn btn-ghost" onclick="document.getElementById('jg-addmem-modal').style.display='none'">취소</button>
+                <button class="btn btn-primary" onclick="jgSubmitAddMembers()">추가</button>
             </div>
         </div>
     </div>
@@ -5192,145 +5269,289 @@ POST /api/external/event-result-link/batch<br>
 
         // ============================================================
         // JOINT GROUP MANAGEMENT — 합동 종목 그룹 관리 (다중 대회 N:N)
+        // 리뉴얼: 카드형 리스트 + 3-step 위저드 + 명시적 체크박스 (기본 해제)
         // ============================================================
-        let _jgAllComps = [];
+        let _jgAllComps = [];        // 전체 대회 목록 (모달용)
+        let _jgEventCache = {};      // { compId: events[] } 캐시
+        let _jgStep = 1;
+        let _jgCurrentGroupId = null; // for add-member modal
+
+        // ── Helpers
+        const _jgGL = g => g === 'M' ? '남' : g === 'F' ? '여' : g === 'X' ? '혼성' : '';
+        const _jgRL = r => ({preliminary:'예선', semifinal:'준결승', final:'결승'}[r] || r || '');
+        const _jgStatus = s => ({upcoming:'예정', active:'진행중', completed:'종료'}[s] || s || '');
+        const _jgCatLabel = c => ({track:'트랙', field:'필드', relay:'계주', road:'도로', combined:'혼성'}[c] || c || '');
+
+        // ── 메인: 합동 그룹 목록 카드 렌더링
         async function jgLoadGroups() {
+            const list = document.getElementById('jg-groups-list');
+            const badge = document.getElementById('jg-count-badge');
             try {
                 const groups = await api('GET', `/api/joint-groups?competition_id=${CID()}`);
-                const list = document.getElementById('jg-groups-list');
+                if (badge) badge.textContent = `활성 ${groups?.length || 0}`;
                 if (!groups || groups.length === 0) {
-                    list.innerHTML = '<div style="color:var(--text-muted);padding:12px;background:#f9fafb;border-radius:8px;font-size:12px;line-height:1.6;">' +
-                        '<strong>합동 종목을 사용하려면:</strong><br>' +
-                        '1. 상단 "합동 그룹 추가" 또는 "자동 그룹 생성" 클릭<br>' +
-                        '2. 연결할 대회들을 선택하고 종목을 다중 선택<br>' +
-                        '3. 생성된 그룹은 소집실·기록입력·전광판에서 통합 표시됩니다</div>';
+                    list.innerHTML = `
+                        <div style="padding:24px;background:#fafafa;border:1px dashed #d1d5db;border-radius:10px;text-align:center;">
+                            <div style="font-size:32px;margin-bottom:8px;opacity:0.5;">🔗</div>
+                            <div style="font-weight:600;color:#374151;margin-bottom:4px;">아직 합동 그룹이 없습니다</div>
+                            <div style="font-size:12px;color:#6b7280;line-height:1.6;">
+                                같은 시간·장소에서 동시에 진행되는 종목들을 묶어주세요.<br>
+                                <span style="color:#9a8548;">예) 여자 장대높이뛰기 (대학+실업), 10000mW (대학남+실업남+실업여)</span>
+                            </div>
+                            <button class="btn btn-sm btn-primary" style="margin-top:12px;" onclick="jgShowCreateModal()">+ 첫 합동 그룹 만들기</button>
+                        </div>`;
                     return;
                 }
+                // 카드 색상 팔레트
+                const fedColors = { KTFL:'#9a8548', KUAF:'#0891b2', KAAF:'#dc2626', KHSF:'#15803d', KMSF:'#7c3aed' };
+                const fallback = ['#6b6b6b', '#ea580c', '#8a7640', '#475569', '#be185d'];
                 let html = '';
-                const fedColors = ['#6b6b6b', '#dc2626', '#9a8548', '#ea580c', '#8a7640', '#0891b2'];
-                for (const g of groups) {
-                    const genderLabel = g.members[0] ? ({M:'남',F:'여',X:'혼'}[g.members[0].gender] || '') : '';
-                    html += `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <strong class="t-lg">${g.name}</strong>
-                                <span class="t-xs t-muted">${genderLabel} | ${g.members.length}개 대회</span>
+                groups.forEach((g, gi) => {
+                    const members = g.members || [];
+                    const first = members[0] || {};
+                    const genderLabel = _jgGL(first.gender);
+                    const roundLabel = _jgRL(first.round_type);
+                    const catLabel = _jgCatLabel(first.category);
+                    // 종료된 종목 여부 (member 정보에 round_status가 없으므로 일단 활성 처리)
+                    const isClosed = members.length > 0 && members.every(m => m.round_status === 'completed');
+                    const statusBadge = isClosed
+                        ? '<span style="background:#e5e7eb;color:#6b7280;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">종료</span>'
+                        : '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">● 활성</span>';
+
+                    html += `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:10px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.03);">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;">
+                            <div style="flex:1;min-width:0;">
+                                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+                                    <span style="font-size:16px;">🔗</span>
+                                    <strong style="font-size:15px;color:#111827;">${escapeHtml(g.name || '(이름 없음)')}</strong>
+                                    ${statusBadge}
+                                </div>
+                                <div style="font-size:11px;color:#6b7280;display:flex;gap:10px;flex-wrap:wrap;">
+                                    ${genderLabel ? `<span>${genderLabel} ${roundLabel}</span>` : ''}
+                                    ${catLabel ? `<span>· ${catLabel}</span>` : ''}
+                                    <span>· ${members.length}개 대회 묶임</span>
+                                </div>
                             </div>
-                            <div style="display:flex;gap:4px;">
-                                <button class="btn btn-xs btn-outline" onclick="jgAddMember(${g.id})" title="종목 추가">+ 추가</button>
-                                <button class="btn btn-xs btn-ghost" style="color:red;" onclick="jgDeleteGroup(${g.id},'${g.name.replace(/'/g,"\\'")}')" title="그룹 삭제">삭제</button>
+                            <div style="display:flex;gap:4px;flex-shrink:0;">
+                                <button class="btn btn-xs btn-outline" onclick="jgShowAddMemberModal(${g.id},'${escapeJs(g.name)}')" title="종목 추가">+ 종목</button>
+                                <button class="btn btn-xs btn-ghost" style="color:#dc2626;" onclick="jgDeleteGroup(${g.id},'${escapeJs(g.name)}')" title="합동 해제">🔓 해제</button>
                             </div>
                         </div>
-                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-                            <span class="t-xs t-muted">스코어보드 키:</span>
-                            <input value="${g.joint_scoreboard_key || ''}" onchange="jgUpdateKey(${g.id},this.value)"
-                                style="font-size:11px;font-family:monospace;padding:2px 6px;border:1px solid #e5e7eb;border-radius:4px;background:#f0fdf4;color:#166534;flex:1;max-width:350px;">
-                        </div>
-                        <div style="display:flex;flex-wrap:wrap;gap:4px;">`;
-                    g.members.forEach((m, idx) => {
-                        const color = fedColors[idx % fedColors.length];
-                        html += `<span style="display:inline-flex;align-items:center;gap:4px;background:${color}10;border:1px solid ${color}40;padding:2px 8px;border-radius:12px;font-size:11px;">
-                            <span style="background:${color};color:#fff;padding:0 4px;border-radius:3px;font-size:9px;font-weight:600;">${m.federation || m.comp_name}</span>
-                            ${m.event_name}
-                            <button onclick="jgRemoveMember(${g.id},${m.event_id})" style="background:none;border:none;color:#999;cursor:pointer;font-size:12px;padding:0 2px;" title="제거">&times;</button>
-                        </span>`;
+                        <div style="background:#fafafa;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+                            <div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">묶인 종목</div>
+                            <div style="display:flex;flex-direction:column;gap:4px;">`;
+                    members.forEach((m, idx) => {
+                        const fed = m.federation || '';
+                        const color = fedColors[fed] || fallback[idx % fallback.length];
+                        html += `<div style="display:flex;align-items:center;gap:6px;font-size:12px;">
+                            <span style="background:${color};color:#fff;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;min-width:48px;text-align:center;">${escapeHtml(fed || 'N/A')}</span>
+                            <span style="color:#6b7280;font-size:11px;">${escapeHtml(m.comp_name || '')}</span>
+                            <span style="color:#9ca3af;">·</span>
+                            <span style="font-weight:600;color:#111827;">${_jgGL(m.gender)} ${_jgRL(m.round_type)} ${escapeHtml(m.event_name)}</span>
+                            <button onclick="jgRemoveMember(${g.id},${m.event_id})" style="margin-left:auto;background:none;border:none;color:#d1d5db;cursor:pointer;font-size:14px;padding:0 4px;" title="이 종목 제거" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#d1d5db'">×</button>
+                        </div>`;
                     });
-                    html += `</div></div>`;
-                }
+                    html += `   </div>
+                        </div>
+                        <details style="font-size:11px;">
+                            <summary style="cursor:pointer;color:#6b7280;outline:none;">🔧 스코어보드 키 (고급)</summary>
+                            <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+                                <input value="${escapeHtml(g.joint_scoreboard_key || '')}" onchange="jgUpdateKey(${g.id},this.value)"
+                                    style="font-size:11px;font-family:monospace;padding:4px 8px;border:1px solid #e5e7eb;border-radius:4px;background:#f0fdf4;color:#166534;flex:1;">
+                                <span style="font-size:10px;color:#9ca3af;">LIF 파일·전광판 매칭 키</span>
+                            </div>
+                        </details>
+                    </div>`;
+                });
                 list.innerHTML = html;
             } catch(e) {
-                document.getElementById('jg-groups-list').innerHTML = `<div style="color:red;">오류: ${e.message}</div>`;
+                list.innerHTML = `<div style="color:#dc2626;padding:12px;background:#fef2f2;border-radius:8px;">오류: ${escapeHtml(e.message || String(e))}</div>`;
             }
         }
 
+        // ── 모달: 열기/닫기/단계 이동
         async function jgShowCreateModal() {
             const modal = document.getElementById('jg-create-modal');
             modal.style.display = 'flex';
-            modal.onclick = ev => { if (ev.target === modal) modal.style.display = 'none'; };
+            modal.onclick = ev => { if (ev.target === modal) jgCloseModal(); };
+            // Reset
+            _jgStep = 1;
             document.getElementById('jg-create-name').value = '';
-            // Load competitions as checkboxes
+            document.getElementById('jg-event-search').value = '';
+            document.getElementById('jg-cat-filter').value = '';
+            document.getElementById('jg-show-completed').checked = false;
+            _jgEventCache = {};
+            jgUpdateStepUI();
+            // Preload competitions
             try {
                 _jgAllComps = await api('GET', '/api/competitions');
-                const container = document.getElementById('jg-comp-checkboxes');
-                container.innerHTML = _jgAllComps.map(c =>
-                    `<label style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:#f9fafb;border-radius:6px;font-size:12px;cursor:pointer;">
-                        <input type="checkbox" class="jg-comp-cb" value="${c.id}" ${String(c.id) === String(CID()) ? 'checked' : ''} onchange="jgRefreshEventList()">
-                        ${c.name} ${c.federation ? '(' + c.federation + ')' : ''}
-                    </label>`
-                ).join('');
-                jgRefreshEventList();
-            } catch(e) {}
+                jgRenderComps();
+            } catch(e) {
+                document.getElementById('jg-comp-checkboxes').innerHTML = `<div style="color:#dc2626;padding:8px;">대회 목록 로드 실패: ${escapeHtml(e.message)}</div>`;
+            }
+        }
+        function jgCloseModal() {
+            document.getElementById('jg-create-modal').style.display = 'none';
+        }
+        function jgUpdateStepUI() {
+            // step panels
+            document.querySelectorAll('.jg-step-panel').forEach(p => p.style.display = 'none');
+            document.getElementById(`jg-step-${_jgStep}`).style.display = '';
+            // step dots
+            document.querySelectorAll('.jg-step-dot').forEach(el => {
+                const s = parseInt(el.dataset.step);
+                if (s < _jgStep) { el.style.background = '#15803d'; el.style.color = '#fff'; el.textContent = '✓'; }
+                else if (s === _jgStep) { el.style.background = '#6b5520'; el.style.color = '#fff'; el.textContent = s; }
+                else { el.style.background = '#e5e7eb'; el.style.color = '#6b7280'; el.textContent = s; }
+            });
+            document.querySelectorAll('.jg-step-label').forEach(el => {
+                const s = parseInt(el.dataset.step);
+                el.style.color = (s === _jgStep) ? '#6b5520' : '#6b7280';
+                el.style.fontWeight = (s === _jgStep) ? '600' : '400';
+            });
+            // buttons
+            document.getElementById('jg-prev-btn').style.visibility = (_jgStep === 1) ? 'hidden' : 'visible';
+            document.getElementById('jg-next-btn').style.display = (_jgStep === 3) ? 'none' : '';
+            document.getElementById('jg-submit-btn').style.display = (_jgStep === 3) ? '' : 'none';
+            jgUpdateSummary();
+        }
+        function jgNextStep() {
+            if (_jgStep === 1) {
+                const name = document.getElementById('jg-create-name').value.trim();
+                if (!name) return alert('그룹 이름을 입력하세요.');
+            }
+            if (_jgStep === 2) {
+                const checked = document.querySelectorAll('.jg-comp-cb:checked');
+                if (checked.length < 2) return alert('대회를 2개 이상 선택하세요.');
+            }
+            if (_jgStep < 3) { _jgStep++; jgUpdateStepUI(); if (_jgStep === 3) jgRenderEvents(); }
+        }
+        function jgPrevStep() {
+            if (_jgStep > 1) { _jgStep--; jgUpdateStepUI(); }
+        }
+        function jgUpdateSummary() {
+            const name = document.getElementById('jg-create-name').value.trim();
+            const compChecked = document.querySelectorAll('.jg-comp-cb:checked').length;
+            const evtChecked = document.querySelectorAll('.jg-evt-cb:checked').length;
+            const parts = [];
+            if (name) parts.push(`이름: "${name}"`);
+            if (compChecked) parts.push(`대회 ${compChecked}개`);
+            if (evtChecked) parts.push(`종목 ${evtChecked}개`);
+            document.getElementById('jg-selection-summary').textContent = parts.join(' · ');
         }
 
-        async function jgRefreshEventList() {
-            const checked = [...document.querySelectorAll('.jg-comp-cb:checked')].map(cb => cb.value);
-            const container = document.getElementById('jg-event-list');
-            if (checked.length === 0) {
-                container.innerHTML = '<div style="color:var(--text-muted);padding:8px;">대회를 선택하세요.</div>';
+        // ── 대회 체크박스 렌더링 (Step 2)
+        function jgRenderComps() {
+            const showCompleted = document.getElementById('jg-show-completed').checked;
+            const filtered = _jgAllComps.filter(c => showCompleted || c.status !== 'completed');
+            const container = document.getElementById('jg-comp-checkboxes');
+            if (filtered.length === 0) {
+                container.innerHTML = '<div style="color:#6b7280;padding:8px;font-size:12px;">표시할 대회가 없습니다.</div>';
                 return;
             }
+            container.innerHTML = filtered.map(c => {
+                const isCurrent = String(c.id) === String(CID());
+                const statusBadge = c.status === 'completed'
+                    ? '<span style="background:#e5e7eb;color:#6b7280;padding:1px 6px;border-radius:8px;font-size:9px;">종료</span>'
+                    : c.status === 'active'
+                    ? '<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:8px;font-size:9px;">진행중</span>'
+                    : '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;font-size:9px;">예정</span>';
+                return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:${isCurrent ? '#fffbeb' : '#fafafa'};border:1px solid ${isCurrent ? '#fbbf24' : '#e5e7eb'};border-radius:6px;font-size:13px;cursor:pointer;">
+                    <input type="checkbox" class="jg-comp-cb" value="${c.id}" onchange="jgUpdateSummary()">
+                    <span style="flex:1;">${escapeHtml(c.name)}</span>
+                    ${c.federation ? `<span style="background:#9a8548;color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">${escapeHtml(c.federation)}</span>` : ''}
+                    ${statusBadge}
+                    ${isCurrent ? '<span style="font-size:10px;color:#92400e;">현재</span>' : ''}
+                </label>`;
+            }).join('');
+        }
+
+        // ── 종목 리스트 렌더링 (Step 3) — 체크박스 기본 해제
+        async function jgRenderEvents() {
+            const checked = [...document.querySelectorAll('.jg-comp-cb:checked')].map(cb => cb.value);
+            const container = document.getElementById('jg-event-list');
+            if (checked.length < 2) {
+                container.innerHTML = '<div style="color:#6b7280;padding:12px;font-size:12px;">2개 이상의 대회를 선택해야 합니다.</div>';
+                return;
+            }
+            // Load events for each comp (with cache)
             try {
-                const allEvts = {};
                 for (const cid of checked) {
-                    const events = await api('GET', `/api/events?competition_id=${cid}`);
-                    const comp = _jgAllComps.find(c => String(c.id) === cid);
-                    (events || []).filter(e => !e.parent_event_id).forEach(e => {
+                    if (!_jgEventCache[cid]) {
+                        _jgEventCache[cid] = await api('GET', `/api/events?competition_id=${cid}`);
+                    }
+                }
+                // Group events by name+gender+round_type
+                const allEvts = {};
+                checked.forEach(cid => {
+                    const comp = _jgAllComps.find(c => String(c.id) === String(cid));
+                    (_jgEventCache[cid] || []).filter(e => !e.parent_event_id).forEach(e => {
                         const key = `${e.name}|${e.gender}|${e.round_type}`;
-                        if (!allEvts[key]) allEvts[key] = { name: e.name, gender: e.gender, round_type: e.round_type, events: [] };
+                        if (!allEvts[key]) allEvts[key] = { name: e.name, gender: e.gender, round_type: e.round_type, category: e.category, events: [] };
                         allEvts[key].events.push({ ...e, comp_name: comp?.name, federation: comp?.federation });
                     });
-                }
-                // Show only events that appear in 2+ competitions
-                const matchable = Object.values(allEvts).filter(g => g.events.length >= 2 || checked.length === 1);
+                });
+                let matchable = Object.values(allEvts).filter(g => g.events.length >= 2);
+                // Filters
+                const searchQ = (document.getElementById('jg-event-search').value || '').toLowerCase().trim();
+                const catF = document.getElementById('jg-cat-filter').value;
+                if (searchQ) matchable = matchable.filter(g => g.name.toLowerCase().includes(searchQ));
+                if (catF) matchable = matchable.filter(g => g.category === catF);
+
                 if (matchable.length === 0) {
-                    container.innerHTML = '<div style="color:var(--text-muted);padding:8px;">매칭 가능한 종목이 없습니다.</div>';
+                    container.innerHTML = '<div style="color:#6b7280;padding:12px;font-size:12px;">조건에 맞는 종목이 없습니다. (선택한 대회들에 공통으로 존재하는 종목만 표시됩니다)</div>';
                     return;
                 }
-                const gL = g => g === 'M' ? '남' : g === 'F' ? '여' : '혼';
-                const rL = r => ({preliminary:'예선',semifinal:'준결승',final:'결승'}[r] || r);
-                let html = matchable.map(g => {
+                // Sort by category then name
+                const catOrder = { track:1, field:2, relay:3, road:4, combined:5 };
+                matchable.sort((a,b) => (catOrder[a.category]||9) - (catOrder[b.category]||9) || a.name.localeCompare(b.name));
+
+                const fedColors = { KTFL:'#9a8548', KUAF:'#0891b2', KAAF:'#dc2626', KHSF:'#15803d', KMSF:'#7c3aed' };
+                container.innerHTML = matchable.map(g => {
                     const ids = g.events.map(e => e.id).join(',');
-                    const comps = g.events.map(e => `<span style="font-size:9px;background:#e5e7eb;padding:0 4px;border-radius:3px;">${e.federation || e.comp_name}</span>`).join(' ');
-                    return `<label style="display:flex;align-items:center;gap:8px;padding:6px;border-bottom:1px solid #f3f4f6;cursor:pointer;">
-                        <input type="checkbox" class="jg-evt-cb" data-event-ids="${ids}" ${g.events.length >= 2 ? 'checked' : ''}>
-                        <span style="font-weight:600;min-width:50px;">${gL(g.gender)} ${rL(g.round_type)}</span>
-                        <span style="flex:1;">${g.name}</span>
-                        <span style="display:flex;gap:2px;">${comps}</span>
-                        <span class="t-xs t-muted">${g.events.length}개</span>
+                    const memberRows = g.events.map(e => {
+                        const c = fedColors[e.federation] || '#6b6b6b';
+                        return `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#6b7280;margin-right:8px;">
+                            <span style="background:${c};color:#fff;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;">${escapeHtml(e.federation || 'N/A')}</span>
+                            ${escapeHtml(e.comp_name || '')}
+                        </span>`;
+                    }).join('');
+                    return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                        <input type="checkbox" class="jg-evt-cb" data-event-ids="${ids}" data-event-name="${escapeHtml(g.name)}" onchange="jgUpdateSummary()" style="margin-top:2px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                                <span style="background:${g.category==='field'?'#fef3c7':g.category==='track'?'#dbeafe':g.category==='relay'?'#fce7f3':'#f3f4f6'};color:#374151;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:600;">${_jgCatLabel(g.category)}</span>
+                                <span style="font-weight:600;font-size:13px;color:#111827;">${_jgGL(g.gender)} ${_jgRL(g.round_type)} ${escapeHtml(g.name)}</span>
+                                <span style="font-size:10px;color:#9ca3af;margin-left:auto;">${g.events.length}개 대회 일치</span>
+                            </div>
+                            <div style="font-size:10px;line-height:1.4;">${memberRows}</div>
+                        </div>
                     </label>`;
                 }).join('');
-                container.innerHTML = html;
             } catch(e) {
-                container.innerHTML = `<div style="color:red;">오류: ${e.message}</div>`;
+                container.innerHTML = `<div style="color:#dc2626;padding:8px;">오류: ${escapeHtml(e.message)}</div>`;
             }
         }
 
+        // ── 그룹 생성
         async function jgCreateGroup() {
             const checked = [...document.querySelectorAll('.jg-evt-cb:checked')];
-            if (checked.length === 0) return alert('종목을 선택하세요.');
-            const name = document.getElementById('jg-create-name').value.trim();
+            if (checked.length === 0) return alert('합동으로 묶을 종목을 선택하세요.');
+            const baseName = document.getElementById('jg-create-name').value.trim();
+            if (!baseName) return alert('그룹 이름을 입력하세요.');
+            const useSuffix = checked.length > 1;
             let createdCount = 0;
             try {
                 for (const cb of checked) {
                     const eventIds = cb.dataset.eventIds.split(',').map(Number);
+                    const evtName = cb.dataset.eventName || '';
                     if (eventIds.length < 2) continue;
-                    await api('POST', '/api/joint-groups', { admin_key: AK(), name: name || '', event_ids: eventIds });
+                    const groupName = useSuffix ? `${baseName} — ${evtName}` : baseName;
+                    await api('POST', '/api/joint-groups', { admin_key: AK(), name: groupName, event_ids: eventIds });
                     createdCount++;
                 }
-                document.getElementById('jg-create-modal').style.display = 'none';
+                jgCloseModal();
                 toast(`${createdCount}개 합동 그룹 생성 완료`);
-                jgLoadGroups();
-            } catch(e) { alert('오류: ' + (e.error || e.message)); }
-        }
-
-        async function jgAutoCreate() {
-            const comps = await api('GET', '/api/competitions');
-            if (comps.length < 2) return alert('대회가 2개 이상 필요합니다.');
-            const compIds = comps.map(c => c.id);
-            if (!confirm(`전체 ${comps.length}개 대회 간 같은 종목을 자동 그룹화합니까?`)) return;
-            try {
-                const resp = await api('POST', '/api/joint-groups/auto-create', { admin_key: AK(), competition_ids: compIds });
-                alert(`자동 그룹 생성 완료: ${resp.created}개 그룹`);
                 jgLoadGroups();
             } catch(e) { alert('오류: ' + (e.error || e.message)); }
         }
@@ -5343,16 +5564,16 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function jgDeleteGroup(groupId, name) {
-            if (!confirm(`합동 그룹 "${name}"을(를) 삭제하시겠습니까?`)) return;
+            if (!confirm(`합동 그룹 "${name}"을(를) 해제하시겠습니까?\n(각 대회의 종목·기록은 그대로 유지됩니다)`)) return;
             try {
                 await api('DELETE', `/api/joint-groups/${groupId}`, { admin_key: AK() });
-                toast('그룹 삭제 완료');
+                toast('합동 해제 완료');
                 jgLoadGroups();
-            } catch(e) { toast('삭제 실패: ' + (e.error || e.message), 'error'); }
+            } catch(e) { toast('해제 실패: ' + (e.error || e.message), 'error'); }
         }
 
         async function jgRemoveMember(groupId, eventId) {
-            if (!confirm('이 종목을 그룹에서 제거하시겠습니까?')) return;
+            if (!confirm('이 종목을 합동 그룹에서 제거하시겠습니까?')) return;
             try {
                 await api('DELETE', `/api/joint-groups/${groupId}/members/${eventId}`, { admin_key: AK() });
                 toast('제거 완료');
@@ -5360,20 +5581,83 @@ POST /api/external/event-result-link/batch<br>
             } catch(e) { toast('제거 실패', 'error'); }
         }
 
-        async function jgAddMember(groupId) {
-            const eid = prompt('추가할 종목 ID를 입력하세요:');
-            if (!eid) return;
+        // ── 종목 추가 모달 (prompt() 대체)
+        let _jgAddMemEvents = [];
+        let _jgAddMemExisting = new Set();
+        async function jgShowAddMemberModal(groupId, groupName) {
+            _jgCurrentGroupId = groupId;
+            document.getElementById('jg-addmem-gname').textContent = groupName;
+            document.getElementById('jg-addmem-search').value = '';
+            const modal = document.getElementById('jg-addmem-modal');
+            modal.style.display = 'flex';
+            modal.onclick = ev => { if (ev.target === modal) modal.style.display = 'none'; };
+
+            // Fetch existing group members and all events from all comps
             try {
-                await api('POST', `/api/joint-groups/${groupId}/members`, { admin_key: AK(), event_ids: [parseInt(eid)] });
-                toast('종목 추가 완료');
+                const groups = await api('GET', `/api/joint-groups?competition_id=${CID()}`);
+                const g = (groups || []).find(x => x.id === groupId);
+                _jgAddMemExisting = new Set((g?.members || []).map(m => m.event_id));
+
+                if (_jgAllComps.length === 0) _jgAllComps = await api('GET', '/api/competitions');
+                _jgAddMemEvents = [];
+                for (const c of _jgAllComps) {
+                    if (c.status === 'completed') continue;
+                    const evts = await api('GET', `/api/events?competition_id=${c.id}`);
+                    (evts || []).filter(e => !e.parent_event_id && !_jgAddMemExisting.has(e.id)).forEach(e => {
+                        _jgAddMemEvents.push({ ...e, comp_name: c.name, federation: c.federation });
+                    });
+                }
+                jgRenderAddMemberList();
+            } catch(e) {
+                document.getElementById('jg-addmem-list').innerHTML = `<div style="color:#dc2626;padding:8px;">오류: ${escapeHtml(e.message)}</div>`;
+            }
+        }
+        function jgRenderAddMemberList() {
+            const q = (document.getElementById('jg-addmem-search').value || '').toLowerCase().trim();
+            const list = document.getElementById('jg-addmem-list');
+            const fedColors = { KTFL:'#9a8548', KUAF:'#0891b2', KAAF:'#dc2626', KHSF:'#15803d', KMSF:'#7c3aed' };
+            const filtered = _jgAddMemEvents.filter(e =>
+                !q || (e.name||'').toLowerCase().includes(q) || (e.comp_name||'').toLowerCase().includes(q)
+            ).sort((a,b) => (a.federation||'').localeCompare(b.federation||'') || a.name.localeCompare(b.name));
+            if (filtered.length === 0) {
+                list.innerHTML = '<div style="color:#6b7280;padding:10px;font-size:12px;">추가 가능한 종목이 없습니다.</div>';
+                return;
+            }
+            list.innerHTML = filtered.map(e => {
+                const c = fedColors[e.federation] || '#6b6b6b';
+                return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:12px;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                    <input type="checkbox" class="jg-addmem-cb" value="${e.id}">
+                    <span style="background:${c};color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;min-width:42px;text-align:center;">${escapeHtml(e.federation || 'N/A')}</span>
+                    <span style="color:#6b7280;font-size:11px;flex-shrink:0;">${escapeHtml(e.comp_name)}</span>
+                    <span style="font-weight:600;flex:1;">${_jgGL(e.gender)} ${_jgRL(e.round_type)} ${escapeHtml(e.name)}</span>
+                </label>`;
+            }).join('');
+        }
+        async function jgSubmitAddMembers() {
+            const ids = [...document.querySelectorAll('.jg-addmem-cb:checked')].map(cb => parseInt(cb.value));
+            if (ids.length === 0) return alert('추가할 종목을 선택하세요.');
+            try {
+                await api('POST', `/api/joint-groups/${_jgCurrentGroupId}/members`, { admin_key: AK(), event_ids: ids });
+                document.getElementById('jg-addmem-modal').style.display = 'none';
+                toast(`${ids.length}개 종목 추가 완료`);
                 jgLoadGroups();
-            } catch(e) { toast('추가 실패: ' + (e.error || e.message), 'error'); }
+            } catch(e) { alert('추가 실패: ' + (e.error || e.message)); }
+        }
+
+        // ── Helpers: HTML escape
+        function escapeHtml(s) {
+            if (s == null) return '';
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+        function escapeJs(s) {
+            return String(s == null ? '' : s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
         }
 
         // Legacy: keep old functions as stubs for backward compat
         function jlLoadComps() {}
         function jlLoadLinks() {}
         function jlLoadManualSelectors() {}
+        function jgAutoCreate() { /* removed: user wants manual selection only */ }
 
         // Load joint groups when scoreboard tab is activated
         document.querySelector('[data-tab="scoreboard"]')?.addEventListener('click', () => {
