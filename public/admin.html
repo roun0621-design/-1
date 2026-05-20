@@ -579,6 +579,11 @@
                                 <option value="general">일반부</option>
                             </select>
                         </div>
+                        <div class="admin-form-group"><label>대회 시리즈 (CR 연결)</label>
+                            <select id="comp-edit-series">
+                                <option value="">없음</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="admin-form-row">
                         <div class="admin-form-group" style="flex:1;"><label>대표 영상 URL (YouTube)</label><input id="comp-edit-video" placeholder="https://youtube.com/watch?v=..."></div>
@@ -961,18 +966,86 @@ POST /api/external/event-result-link/batch<br>
                 </div>
             </div>
 
-            <!-- TAB: Records Management (종목별 기록 관리) -->
+            <!-- TAB: Records Management (종목별 기록 관리) — v4 매트릭스 UI -->
             <div id="tab-records" class="admin-tab-panel">
                 <div class="admin-card" style="border-left:4px solid #b79f58;">
-                    <h4 style="margin:0;">종목별 기록 관리</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;">한국기록, 부별기록, 대회기록을 종목별로 관리합니다. 엑셀 기록지의 기록비교표에 자동 삽입됩니다.</p>
+                    <h4 style="margin:0;">종목별 기록 관리 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(NR · DR · CR)</span></h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;">한국기록(NR) · 부별기록(DR, 13부) · 대회기록(CR, 시리즈별)을 종목별로 관리합니다. 기록지/종합기록/실시간 보드 등에 자동 표시됩니다.</p>
                 </div>
-                <div class="admin-card">
-                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
-                        <button class="btn btn-sm" id="rec-gender-M" onclick="switchRecGender('M')" style="font-weight:700;">남자</button>
-                        <button class="btn btn-sm btn-outline" id="rec-gender-F" onclick="switchRecGender('F')">여자</button>
+
+                <!-- 좌측: 종목 리스트 / 우측: 매트릭스 -->
+                <div class="admin-card" style="padding:0;">
+                    <div style="display:flex;flex-wrap:wrap;gap:0;min-height:560px;">
+                        <!-- LEFT: 종목 리스트 -->
+                        <div style="flex:0 0 240px;border-right:1px solid var(--gray);padding:14px;background:var(--bg);">
+                            <div style="display:flex;gap:6px;margin-bottom:12px;">
+                                <button class="btn btn-sm" id="rec-gender-M" onclick="switchRecGender('M')" style="font-weight:700;flex:1;">남자</button>
+                                <button class="btn btn-sm btn-outline" id="rec-gender-F" onclick="switchRecGender('F')" style="flex:1;">여자</button>
+                            </div>
+                            <div id="records-event-list" style="max-height:520px;overflow-y:auto;font-size:12px;"></div>
+                        </div>
+                        <!-- RIGHT: 매트릭스 뷰 -->
+                        <div style="flex:1;min-width:520px;padding:14px;">
+                            <div id="records-matrix-area">
+                                <p style="color:var(--text-muted);font-size:13px;text-align:center;padding:60px 0;">← 왼쪽에서 종목을 선택하세요.</p>
+                            </div>
+                        </div>
                     </div>
-                    <div id="records-container"></div>
+                </div>
+
+                <!-- 대회 시리즈 마스터 -->
+                <div class="admin-card" style="border-left:4px solid #2980b9;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <div>
+                            <h4 style="margin:0;">대회 시리즈 마스터 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(CR 기준)</span></h4>
+                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회기록(CR)을 그룹화하는 시리즈입니다. 대회 설정에서 시리즈를 연결하면 해당 대회 기록을 가져옵니다.</p>
+                        </div>
+                        <button class="btn btn-sm btn-primary" onclick="openSeriesModal()">+ 시리즈 추가</button>
+                    </div>
+                    <div id="series-list" style="font-size:13px;"></div>
+                </div>
+            </div>
+
+            <!-- Series Create/Edit Modal -->
+            <div id="series-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2100;align-items:center;justify-content:center;">
+                <div style="background:var(--white);border-radius:12px;padding:24px;width:480px;max-width:95vw;">
+                    <h3 style="margin:0 0 14px;font-size:16px;" id="series-modal-title">대회 시리즈 추가</h3>
+                    <input type="hidden" id="series-id-input">
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <label style="font-size:12px;">시리즈명 *<input type="text" id="series-name-input" placeholder="예: 전국체전, KAAF 그랑프리" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;"></label>
+                        <label style="font-size:12px;">설명<textarea id="series-desc-input" rows="3" placeholder="시리즈에 대한 간단한 설명" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;resize:vertical;"></textarea></label>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+                        <button class="btn btn-sm btn-outline" onclick="closeSeriesModal()">취소</button>
+                        <button class="btn btn-sm btn-primary" onclick="saveSeries()">저장</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Record Cell Edit Modal -->
+            <div id="rec-cell-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2100;align-items:center;justify-content:center;">
+                <div style="background:var(--white);border-radius:12px;padding:24px;width:520px;max-width:95vw;">
+                    <h3 style="margin:0 0 4px;font-size:16px;" id="rec-cell-title">기록 편집</h3>
+                    <p style="margin:0 0 14px;font-size:12px;color:var(--text-muted);" id="rec-cell-subtitle"></p>
+                    <input type="hidden" id="rec-cell-id">
+                    <input type="hidden" id="rec-cell-record-type">
+                    <input type="hidden" id="rec-cell-event-name">
+                    <input type="hidden" id="rec-cell-gender">
+                    <input type="hidden" id="rec-cell-division-code">
+                    <input type="hidden" id="rec-cell-series-id">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <label style="font-size:12px;">기록 *<input type="text" id="rec-cell-value" placeholder="예: 10.34 / 8.21m / 2:05.12" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;font-family:var(--font-mono);"></label>
+                        <label style="font-size:12px;">수립년도<input type="text" id="rec-cell-year" placeholder="2024" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;"></label>
+                        <label style="font-size:12px;">보유자<input type="text" id="rec-cell-holder-name" placeholder="홍길동" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;"></label>
+                        <label style="font-size:12px;">소속<input type="text" id="rec-cell-holder-team" placeholder="소속팀" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;"></label>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">
+                        <button class="btn btn-sm btn-outline" id="rec-cell-delete-btn" onclick="deleteRecordCell()" style="color:#c0392b;border-color:#c0392b;display:none;">삭제</button>
+                        <div style="margin-left:auto;display:flex;gap:8px;">
+                            <button class="btn btn-sm btn-outline" onclick="closeRecCellModal()">취소</button>
+                            <button class="btn btn-sm btn-primary" onclick="saveRecordCell()">저장</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -2273,10 +2346,31 @@ POST /api/external/event-result-link/batch<br>
                 // Set division_type
                 const divSelect = document.getElementById('comp-edit-division');
                 if (divSelect) divSelect.value = c.division_type || '';
+                // 시리즈 드롭다운 채우기 (선택된 대회의 series_id 반영)
+                await refreshCompSeriesSelect(c.series_id);
             } catch (e) {}
+        }
+        // 시리즈 마스터 변경 시 또는 대회 변경 시 시리즈 드롭다운 새로고침
+        async function refreshCompSeriesSelect(selectedId) {
+            const sel = document.getElementById('comp-edit-series');
+            if (!sel) return;
+            try {
+                const res = await fetch('/api/competition-series');
+                const list = await res.json();
+                let html = '<option value="">없음</option>';
+                for (const s of (list || [])) {
+                    if (!s.active && s.id !== selectedId) continue; // 비활성은 현재 연결된 경우만 표시
+                    html += `<option value="${s.id}" ${String(s.id)==String(selectedId)?'selected':''}>${_esc(s.name)}${!s.active?' (비활성)':''}</option>`;
+                }
+                sel.innerHTML = html;
+                if (selectedId) sel.value = String(selectedId);
+            } catch (e) {
+                sel.innerHTML = '<option value="">없음</option>';
+            }
         }
         async function saveCompSettings() {
             try {
+                const sIdRaw = document.getElementById('comp-edit-series')?.value || '';
                 await API.updateCompetition(_selectedCompId, {
                     name: document.getElementById('comp-edit-name').value,
                     start_date: document.getElementById('comp-edit-start').value,
@@ -2287,6 +2381,7 @@ POST /api/external/event-result-link/batch<br>
                     federation: document.getElementById('comp-edit-federation').value,
                     division_type: document.getElementById('comp-edit-division').value,
                     mode: document.getElementById('comp-edit-mode').value,
+                    series_id: sIdRaw === '' ? null : parseInt(sIdRaw, 10),
                 }, AK());
                 toast('대회 정보 저장 완료');
                 await loadCompetitionSelector();
@@ -5660,24 +5755,15 @@ POST /api/external/event-result-link/batch<br>
         }
 
         // ============================================================
-        // RECORDS MANAGEMENT TAB — 종목별 기록 관리
+        // RECORDS MANAGEMENT TAB — 종목별 기록 관리 (v4 매트릭스 UI)
         // ============================================================
         let _recGender = 'M';
-        const MEN_EVENTS = [
-            '100m','200m','400m','800m','1500m','5000m','10000m',
-            '110mH','400mH','3000mSC','10000mW',
-            '높이뛰기','장대높이뛰기','멀리뛰기','세단뛰기',
-            '포환던지기','원반던지기','해머던지기','창던지기',
-            '10종경기','4x100mR','4x400mR','MIXED 4x400mR','4x800mR','4x1500mR'
-        ];
-        const WOMEN_EVENTS = [
-            '100m','200m','400m','800m','1500m','5000m','10000m',
-            '100mH','400mH','3000mSC','10000mW',
-            '높이뛰기','장대높이뛰기','멀리뛰기','세단뛰기',
-            '포환던지기','원반던지기','해머던지기','창던지기',
-            '7종경기','4x100mR','4x400mR','MIXED 4x400mR','4x800mR','4x1500mR'
-        ];
-        const REC_TYPE_LABELS = { national: '한국기록', division: '부별기록', competition: '대회기록' };
+        let _recSelectedEvent = null;
+        let _recDivisions = [];     // [{code, label_ko, gender, school_level, sort_order, active}]
+        let _recSeries = [];        // [{id, name, description, comp_count, record_count, active}]
+        const REC_TYPE_LABELS = { national: '한국기록 (NR)', division: '부별기록 (DR)', competition: '대회기록 (CR)' };
+        const REC_TYPE_SHORT = { national: 'NR', division: 'DR', competition: 'CR' };
+        const REC_TYPE_COLOR = { national: '#c0392b', division: '#2980b9', competition: '#27ae60' };
         const EVENT_GROUPS = [
             { label: '트랙 (단거리)', events: ['100m','200m','400m'] },
             { label: '트랙 (중장거리)', events: ['800m','1500m','5000m','10000m'] },
@@ -5690,97 +5776,405 @@ POST /api/external/event-result-link/batch<br>
 
         function switchRecGender(g) {
             _recGender = g;
+            _recSelectedEvent = null;
             document.getElementById('rec-gender-M').className = g === 'M' ? 'btn btn-sm' : 'btn btn-sm btn-outline';
             document.getElementById('rec-gender-F').className = g === 'F' ? 'btn btn-sm' : 'btn btn-sm btn-outline';
-            loadRecordsTab();
+            renderRecordsEventList();
+            document.getElementById('records-matrix-area').innerHTML =
+                '<p style="color:var(--text-muted);font-size:13px;text-align:center;padding:60px 0;">← 왼쪽에서 종목을 선택하세요.</p>';
         }
 
         async function loadRecordsTab() {
-            const container = document.getElementById('records-container');
-            container.innerHTML = '<p style="color:var(--text-muted);">로딩 중...</p>';
+            // 1) 부별 마스터 + 시리즈 마스터 로드 (한 번만)
             try {
-                const res = await fetch(`/api/event-records?gender=${_recGender}`);
-                const rows = await res.json();
-                // Build lookup: event_name -> { national: {...}, division: {...}, competition: {...} }
-                const recMap = {};
-                for (const r of rows) {
-                    if (!recMap[r.event_name]) recMap[r.event_name] = {};
-                    recMap[r.event_name][r.record_type] = r;
+                if (_recDivisions.length === 0) {
+                    const dRes = await fetch('/api/divisions');
+                    _recDivisions = await dRes.json();
                 }
+            } catch(e) { console.warn('divisions load fail', e); _recDivisions = []; }
+            try {
+                const sRes = await fetch('/api/competition-series');
+                _recSeries = await sRes.json();
+            } catch(e) { console.warn('series load fail', e); _recSeries = []; }
 
-                let html = '';
-                for (const group of EVENT_GROUPS) {
-                    const evts = group[`events_${_recGender.toLowerCase()}`] || group.events || [];
-                    if (evts.length === 0) continue;
-                    html += `<div style="margin-bottom:24px;">
-                        <h4 style="font-size:13px;color:var(--text-muted);margin:0 0 12px;border-bottom:1px solid var(--gray);padding-bottom:6px;">${group.label}</h4>`;
-                    for (const evtName of evts) {
-                        const recs = recMap[evtName] || {};
-                        html += buildRecordCard(evtName, recs);
-                    }
-                    html += '</div>';
+            renderRecordsEventList();
+            renderSeriesList();
+
+            // 종목이 이미 선택돼 있으면 매트릭스 재로드
+            if (_recSelectedEvent) await loadEventMatrix(_recSelectedEvent);
+        }
+
+        function renderRecordsEventList() {
+            const el = document.getElementById('records-event-list');
+            if (!el) return;
+            let html = '';
+            for (const group of EVENT_GROUPS) {
+                const evts = group[`events_${_recGender.toLowerCase()}`] || group.events || [];
+                if (evts.length === 0) continue;
+                html += `<div style="margin-bottom:12px;">
+                    <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px;letter-spacing:0.5px;">${group.label}</div>`;
+                for (const evtName of evts) {
+                    const active = _recSelectedEvent === evtName;
+                    html += `<div onclick="selectRecordEvent('${evtName.replace(/'/g,"\\'")}')"
+                        style="padding:6px 10px;margin:2px 0;border-radius:5px;cursor:pointer;
+                               background:${active?'var(--primary, #b79f58)':'transparent'};
+                               color:${active?'#fff':'var(--text)'};
+                               font-weight:${active?'700':'500'};
+                               border:1px solid ${active?'var(--primary, #b79f58)':'transparent'};
+                               transition:background .15s;"
+                        onmouseover="if(!this.style.background.includes('rgb(183'))this.style.background='var(--bg-hover, #f5f3ed)';"
+                        onmouseout="if(!${active})this.style.background='transparent';">
+                        ${evtName}
+                    </div>`;
                 }
-                container.innerHTML = html;
+                html += '</div>';
+            }
+            el.innerHTML = html;
+        }
+
+        async function selectRecordEvent(eventName) {
+            _recSelectedEvent = eventName;
+            renderRecordsEventList();
+            await loadEventMatrix(eventName);
+        }
+
+        async function loadEventMatrix(eventName) {
+            const area = document.getElementById('records-matrix-area');
+            area.innerHTML = '<p style="color:var(--text-muted);font-size:13px;text-align:center;padding:30px 0;">로딩 중...</p>';
+            try {
+                const url = `/api/records/matrix?event_name=${encodeURIComponent(eventName)}&gender=${_recGender}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                renderEventMatrix(eventName, data);
             } catch (err) {
-                container.innerHTML = `<p style="color:red;">오류: ${err.message}</p>`;
+                area.innerHTML = `<p style="color:#c0392b;font-size:13px;">매트릭스 로드 실패: ${_esc(err.message)}</p>`;
             }
         }
 
-        function buildRecordCard(eventName, recs) {
-            const eid = eventName.replace(/[^a-zA-Z0-9가-힣]/g, '_');
-            const types = ['national', 'division', 'competition'];
-            let rows = '';
-            for (const rt of types) {
-                const r = recs[rt] || {};
-                rows += `
-                    <tr>
-                        <td style="font-weight:600;font-size:12px;white-space:nowrap;width:70px;color:${rt==='national'?'#c0392b':rt==='division'?'#2980b9':'#27ae60'};">${REC_TYPE_LABELS[rt]}</td>
-                        <td><input type="text" id="rec_${eid}_${rt}_val" value="${r.record_value||''}" placeholder="기록" style="width:90px;font-size:12px;padding:4px 6px;font-family:var(--font-mono);"></td>
-                        <td><input type="text" id="rec_${eid}_${rt}_name" value="${r.holder_name||''}" placeholder="보유자" style="width:80px;font-size:12px;padding:4px 6px;"></td>
-                        <td><input type="text" id="rec_${eid}_${rt}_team" value="${r.holder_team||''}" placeholder="소속" style="width:110px;font-size:12px;padding:4px 6px;"></td>
-                        <td><input type="text" id="rec_${eid}_${rt}_year" value="${r.record_year||''}" placeholder="수립년도" style="width:70px;font-size:12px;padding:4px 6px;"></td>
-                    </tr>`;
+        function _recCell(rec, onClickArgs) {
+            // rec: null 또는 {record_value, holder_name, holder_team, record_year, ...}
+            if (!rec || !rec.record_value) {
+                return `<td onclick="openRecCellModal(${onClickArgs})"
+                    style="padding:8px;text-align:center;cursor:pointer;color:var(--text-muted);font-size:11px;border:1px dashed var(--gray);">
+                    + 입력
+                </td>`;
             }
-            return `
-            <div style="background:var(--bg);border:1px solid var(--gray);border-radius:8px;padding:12px 14px;margin-bottom:10px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <span style="font-size:14px;font-weight:700;">${eventName}</span>
-                    <button class="btn btn-sm btn-primary" onclick="saveEventRecord('${eventName}','${eid}')">저장</button>
+            const yr = rec.record_year ? `<span style="font-size:10px;color:var(--text-muted);"> (${_esc(rec.record_year)})</span>` : '';
+            const holder = rec.holder_name ? `<div style="font-size:11px;color:var(--text-muted);">${_esc(rec.holder_name)}${rec.holder_team ? ' · ' + _esc(rec.holder_team) : ''}</div>` : '';
+            return `<td onclick="openRecCellModal(${onClickArgs})"
+                style="padding:6px 8px;cursor:pointer;border:1px solid var(--gray);background:var(--bg);">
+                <div style="font-family:var(--font-mono);font-weight:700;font-size:13px;">${_esc(rec.record_value)}${yr}</div>
+                ${holder}
+            </td>`;
+        }
+
+        function renderEventMatrix(eventName, data) {
+            const area = document.getElementById('records-matrix-area');
+            const genderLabel = _recGender === 'M' ? '남자' : '여자';
+
+            // Helper: build clickable cell args (record_type, division_code, series_id)
+            const argsFor = (rt, dCode, sId) => {
+                const eN = JSON.stringify(eventName);
+                const g  = JSON.stringify(_recGender);
+                const dc = dCode === null ? 'null' : JSON.stringify(dCode);
+                const si = sId === null ? 'null' : sId;
+                return `${JSON.stringify(rt)}, ${eN}, ${g}, ${dc}, ${si}`;
+            };
+
+            let html = `<div style="margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                    <h3 style="margin:0;font-size:18px;">${_esc(eventName)} <span style="font-size:13px;color:var(--text-muted);font-weight:400;">· ${genderLabel}</span></h3>
+                    <span style="font-size:11px;color:var(--text-muted);">셀을 클릭하면 편집 모달이 열립니다.</span>
                 </div>
-                <table style="width:100%;border-collapse:collapse;">
-                    <thead><tr class="t-sm t-muted">
-                        <th style="text-align:left;padding:2px 4px;">구분</th>
-                        <th style="text-align:left;padding:2px 4px;">기록</th>
-                        <th style="text-align:left;padding:2px 4px;">보유자</th>
-                        <th style="text-align:left;padding:2px 4px;">소속</th>
-                        <th style="text-align:left;padding:2px 4px;">수립년도</th>
-                    </tr></thead>
-                    <tbody>${rows}</tbody>
+            </div>`;
+
+            // ── 한국기록 (NR) ── 단일 셀
+            html += `<div style="margin-bottom:16px;">
+                <h4 style="margin:0 0 6px;font-size:13px;color:${REC_TYPE_COLOR.national};">한국기록 (NR)</h4>
+                <table style="border-collapse:collapse;width:100%;max-width:520px;">
+                    <tbody><tr>${_recCell(data.national, argsFor('national', null, null))}</tr></tbody>
                 </table>
             </div>`;
+
+            // ── 부별기록 (DR) ── 13개 부별 셀
+            const divs = (_recDivisions && _recDivisions.length) ? _recDivisions : [];
+            // 성별 필터: 현재 성별 + MIXED('X')
+            const myDivs = divs.filter(d => d.gender === _recGender || d.gender === 'X' || d.code === 'MIXED');
+            if (myDivs.length > 0) {
+                html += `<div style="margin-bottom:16px;">
+                    <h4 style="margin:0 0 6px;font-size:13px;color:${REC_TYPE_COLOR.division};">부별기록 (DR)</h4>
+                    <table style="border-collapse:collapse;width:100%;">
+                        <thead><tr>`;
+                for (const d of myDivs) {
+                    // label_ko: "남자일반부" → "일반" (성별 prefix는 컬럼 모음 안에서 중복이므로 생략)
+                    const lbl = (d.label_ko || d.code).replace(/^(남자|여자)/, '').replace(/부$/, '') || d.code;
+                    html += `<th style="padding:5px;font-size:11px;background:var(--bg);border:1px solid var(--gray);font-weight:600;" title="${_esc(d.label_ko || d.code)}">${_esc(lbl)}</th>`;
+                }
+                html += `</tr></thead><tbody><tr>`;
+                for (const d of myDivs) {
+                    const rec = (data.divisions && data.divisions[d.code]) || null;
+                    html += _recCell(rec, argsFor('division', d.code, null));
+                }
+                html += `</tr></tbody></table>
+                </div>`;
+            }
+
+            // ── 대회기록 (CR) ── 시리즈별
+            const activeSeries = (_recSeries || []).filter(s => s.active !== 0);
+            if (activeSeries.length > 0) {
+                // Build map for quick lookup
+                const crMap = {};
+                for (const c of (data.competitions || [])) crMap[c.series_id] = c.record;
+
+                html += `<div style="margin-bottom:16px;">
+                    <h4 style="margin:0 0 6px;font-size:13px;color:${REC_TYPE_COLOR.competition};">대회기록 (CR)</h4>
+                    <table style="border-collapse:collapse;width:100%;">
+                        <thead><tr>`;
+                for (const s of activeSeries) {
+                    html += `<th style="padding:5px;font-size:11px;background:var(--bg);border:1px solid var(--gray);font-weight:600;">${_esc(s.name)}</th>`;
+                }
+                html += `</tr></thead><tbody><tr>`;
+                for (const s of activeSeries) {
+                    const rec = crMap[s.id] || null;
+                    html += _recCell(rec, argsFor('competition', null, s.id));
+                }
+                html += `</tr></tbody></table>
+                </div>`;
+            } else {
+                html += `<div style="margin-bottom:16px;">
+                    <h4 style="margin:0 0 6px;font-size:13px;color:${REC_TYPE_COLOR.competition};">대회기록 (CR)</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin:0;">시리즈가 등록되지 않았습니다. 아래에서 시리즈를 추가하세요.</p>
+                </div>`;
+            }
+
+            area.innerHTML = html;
         }
 
-        async function saveEventRecord(eventName, eid) {
-            const records = {};
-            for (const rt of ['national', 'division', 'competition']) {
-                records[rt] = {
-                    record_value: document.getElementById(`rec_${eid}_${rt}_val`).value.trim(),
-                    holder_name: document.getElementById(`rec_${eid}_${rt}_name`).value.trim(),
-                    holder_team: document.getElementById(`rec_${eid}_${rt}_team`).value.trim(),
-                    record_year: document.getElementById(`rec_${eid}_${rt}_year`).value.trim()
-                };
-            }
+        // ──────────────────────────────────────────────────────────────
+        // Record Cell Edit Modal
+        // ──────────────────────────────────────────────────────────────
+        function openRecCellModal(record_type, event_name, gender, division_code, series_id) {
+            document.getElementById('rec-cell-record-type').value = record_type;
+            document.getElementById('rec-cell-event-name').value = event_name;
+            document.getElementById('rec-cell-gender').value = gender;
+            document.getElementById('rec-cell-division-code').value = division_code === null ? '' : division_code;
+            document.getElementById('rec-cell-series-id').value = series_id === null ? '' : series_id;
+
+            // Look up existing record from current matrix data to prefill
+            // (간단하게: 빈 상태로 시작하고, 사용자가 입력 — 추후 enhance)
+            let existing = null;
             try {
-                const res = await fetch('/api/event-records/batch', {
+                // Grep DOM via area is fragile; just fetch fresh
+            } catch(e) {}
+
+            // 기존 값 채우려고 별도 GET
+            const params = new URLSearchParams({ event_name, gender, record_type });
+            if (division_code !== null && division_code !== '') params.set('division_code', division_code);
+            if (series_id !== null && series_id !== '') params.set('series_id', series_id);
+            fetch('/api/records?' + params.toString())
+                .then(r => r.json())
+                .then(rows => {
+                    let row = null;
+                    for (const r of (rows || [])) {
+                        // 정확히 매칭되는 행만 (NULL 비교 포함)
+                        const dcMatch = (division_code === null || division_code === '') ? (r.division_code == null) : (r.division_code === division_code);
+                        const siMatch = (series_id === null || series_id === '') ? (r.series_id == null) : (r.series_id == series_id);
+                        if (dcMatch && siMatch) { row = r; break; }
+                    }
+                    document.getElementById('rec-cell-id').value = row ? row.id : '';
+                    document.getElementById('rec-cell-value').value = row ? (row.record_value || '') : '';
+                    document.getElementById('rec-cell-year').value = row ? (row.record_year || '') : '';
+                    document.getElementById('rec-cell-holder-name').value = row ? (row.holder_name || '') : '';
+                    document.getElementById('rec-cell-holder-team').value = row ? (row.holder_team || '') : '';
+                    document.getElementById('rec-cell-delete-btn').style.display = row ? 'inline-block' : 'none';
+                })
+                .catch(() => {
+                    document.getElementById('rec-cell-id').value = '';
+                    document.getElementById('rec-cell-value').value = '';
+                    document.getElementById('rec-cell-year').value = '';
+                    document.getElementById('rec-cell-holder-name').value = '';
+                    document.getElementById('rec-cell-holder-team').value = '';
+                    document.getElementById('rec-cell-delete-btn').style.display = 'none';
+                });
+
+            // 타이틀
+            const rtLabel = REC_TYPE_LABELS[record_type];
+            let sub = `${event_name} · ${gender === 'M' ? '남자' : '여자'}`;
+            if (record_type === 'division' && division_code) {
+                const d = _recDivisions.find(x => x.code === division_code);
+                sub += ` · ${d ? (d.label_ko || d.code) : division_code}`;
+            }
+            if (record_type === 'competition' && series_id) {
+                const s = _recSeries.find(x => x.id == series_id);
+                sub += ` · ${s ? s.name : ('시리즈 #' + series_id)}`;
+            }
+            document.getElementById('rec-cell-title').textContent = rtLabel + ' 편집';
+            document.getElementById('rec-cell-subtitle').textContent = sub;
+            const m = document.getElementById('rec-cell-modal');
+            m.style.display = 'flex';
+        }
+        function closeRecCellModal() {
+            document.getElementById('rec-cell-modal').style.display = 'none';
+        }
+        async function saveRecordCell() {
+            const record_type = document.getElementById('rec-cell-record-type').value;
+            const event_name  = document.getElementById('rec-cell-event-name').value;
+            const gender      = document.getElementById('rec-cell-gender').value;
+            const dc = document.getElementById('rec-cell-division-code').value;
+            const si = document.getElementById('rec-cell-series-id').value;
+            const record_value = document.getElementById('rec-cell-value').value.trim();
+            const record_year  = document.getElementById('rec-cell-year').value.trim();
+            const holder_name  = document.getElementById('rec-cell-holder-name').value.trim();
+            const holder_team  = document.getElementById('rec-cell-holder-team').value.trim();
+            if (!record_value) { toast('기록 값을 입력하세요.', 'error'); return; }
+            const body = {
+                admin_key: AK(),
+                record_type, event_name, gender,
+                division_code: dc === '' ? null : dc,
+                series_id: si === '' ? null : parseInt(si, 10),
+                record_value, record_year, holder_name, holder_team,
+                approved: 1
+            };
+            try {
+                const res = await fetch('/api/records', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ admin_key: AK(), gender: _recGender, event_name: eventName, records })
+                    body: JSON.stringify(body)
                 });
                 const data = await res.json();
-                if (data.success) toast(`${eventName} 저장 완료`);
-                else toast(data.error || '저장 실패', 'error');
+                if (res.ok && (data.success || data.id)) {
+                    toast('저장 완료');
+                    closeRecCellModal();
+                    if (_recSelectedEvent) loadEventMatrix(_recSelectedEvent);
+                } else {
+                    toast(data.error || '저장 실패', 'error');
+                }
             } catch (err) {
                 toast('저장 오류: ' + err.message, 'error');
+            }
+        }
+        async function deleteRecordCell() {
+            const id = document.getElementById('rec-cell-id').value;
+            if (!id) return;
+            if (!confirm('이 기록을 삭제하시겠습니까?')) return;
+            try {
+                const res = await fetch('/api/records/' + id, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK() })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    toast('삭제 완료');
+                    closeRecCellModal();
+                    if (_recSelectedEvent) loadEventMatrix(_recSelectedEvent);
+                } else {
+                    toast(data.error || '삭제 실패', 'error');
+                }
+            } catch (err) {
+                toast('삭제 오류: ' + err.message, 'error');
+            }
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // Competition Series Master
+        // ──────────────────────────────────────────────────────────────
+        function renderSeriesList() {
+            const el = document.getElementById('series-list');
+            if (!el) return;
+            if (!_recSeries || _recSeries.length === 0) {
+                el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);margin:0;">등록된 시리즈가 없습니다. "+ 시리즈 추가"를 눌러주세요.</p>';
+                return;
+            }
+            let html = `<table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="background:var(--bg);">
+                    <th style="text-align:left;padding:8px;font-size:12px;border-bottom:1px solid var(--gray);">시리즈명</th>
+                    <th style="text-align:left;padding:8px;font-size:12px;border-bottom:1px solid var(--gray);">설명</th>
+                    <th style="text-align:center;padding:8px;font-size:12px;border-bottom:1px solid var(--gray);width:80px;">연결 대회</th>
+                    <th style="text-align:center;padding:8px;font-size:12px;border-bottom:1px solid var(--gray);width:80px;">CR 기록</th>
+                    <th style="text-align:center;padding:8px;font-size:12px;border-bottom:1px solid var(--gray);width:80px;">상태</th>
+                    <th style="text-align:center;padding:8px;font-size:12px;border-bottom:1px solid var(--gray);width:140px;">작업</th>
+                </tr></thead><tbody>`;
+            for (const s of _recSeries) {
+                html += `<tr>
+                    <td style="padding:8px;font-weight:600;border-bottom:1px solid var(--gray);">${_esc(s.name)}</td>
+                    <td style="padding:8px;color:var(--text-muted);font-size:12px;border-bottom:1px solid var(--gray);">${_esc(s.description || '-')}</td>
+                    <td style="padding:8px;text-align:center;border-bottom:1px solid var(--gray);">${s.comp_count || 0}</td>
+                    <td style="padding:8px;text-align:center;border-bottom:1px solid var(--gray);">${s.record_count || 0}</td>
+                    <td style="padding:8px;text-align:center;border-bottom:1px solid var(--gray);">
+                        ${s.active ? '<span style="color:#27ae60;font-size:11px;">활성</span>' : '<span style="color:#95a5a6;font-size:11px;">비활성</span>'}
+                    </td>
+                    <td style="padding:8px;text-align:center;border-bottom:1px solid var(--gray);">
+                        <button class="btn btn-sm btn-outline" onclick="openSeriesModal(${s.id})" style="font-size:11px;padding:3px 8px;">편집</button>
+                        <button class="btn btn-sm btn-outline" onclick="deleteSeries(${s.id})" style="font-size:11px;padding:3px 8px;color:#c0392b;border-color:#c0392b;">삭제</button>
+                    </td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            el.innerHTML = html;
+        }
+
+        function openSeriesModal(id) {
+            document.getElementById('series-modal-title').textContent = id ? '대회 시리즈 편집' : '대회 시리즈 추가';
+            document.getElementById('series-id-input').value = id || '';
+            if (id) {
+                const s = _recSeries.find(x => x.id === id);
+                document.getElementById('series-name-input').value = s ? s.name : '';
+                document.getElementById('series-desc-input').value = s ? (s.description || '') : '';
+            } else {
+                document.getElementById('series-name-input').value = '';
+                document.getElementById('series-desc-input').value = '';
+            }
+            document.getElementById('series-modal').style.display = 'flex';
+        }
+        function closeSeriesModal() {
+            document.getElementById('series-modal').style.display = 'none';
+        }
+        async function saveSeries() {
+            const id   = document.getElementById('series-id-input').value;
+            const name = document.getElementById('series-name-input').value.trim();
+            const desc = document.getElementById('series-desc-input').value.trim();
+            if (!name) { toast('시리즈명을 입력하세요.', 'error'); return; }
+            const url = id ? '/api/competition-series/' + id : '/api/competition-series';
+            const method = id ? 'PUT' : 'POST';
+            try {
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK(), name, description: desc })
+                });
+                const data = await res.json();
+                if (res.ok && (data.success || data.id)) {
+                    toast(id ? '시리즈 수정 완료' : '시리즈 추가 완료');
+                    closeSeriesModal();
+                    await loadRecordsTab();
+                    // 대회 설정 시리즈 드롭다운 새로고침
+                    if (typeof refreshCompSeriesSelect === 'function') refreshCompSeriesSelect();
+                } else {
+                    toast(data.error || '저장 실패', 'error');
+                }
+            } catch (err) {
+                toast('저장 오류: ' + err.message, 'error');
+            }
+        }
+        async function deleteSeries(id) {
+            if (!confirm('이 시리즈를 비활성화하시겠습니까? (연결된 대회/기록은 유지)')) return;
+            try {
+                const res = await fetch('/api/competition-series/' + id, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK() })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    toast('시리즈가 비활성화되었습니다.');
+                    await loadRecordsTab();
+                    if (typeof refreshCompSeriesSelect === 'function') refreshCompSeriesSelect();
+                } else {
+                    toast(data.error || '삭제 실패', 'error');
+                }
+            } catch (err) {
+                toast('삭제 오류: ' + err.message, 'error');
             }
         }
 
@@ -5984,6 +6378,15 @@ POST /api/external/event-result-link/batch<br>
         }
 
         // Wire up the log filter dropdown
+        document.addEventListener('DOMContentLoaded', () => {
+            const filt = document.getElementById('ext-log-filter');
+            if (filt) filt.addEventListener('change', extLoadLogs);
+        });
+
+    </script>
+</body>
+</html>
+// Wire up the log filter dropdown
         document.addEventListener('DOMContentLoaded', () => {
             const filt = document.getElementById('ext-log-filter');
             if (filt) filt.addEventListener('change', extLoadLogs);

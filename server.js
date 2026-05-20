@@ -1663,29 +1663,60 @@ app.get('/api/competitions/:id', async (req, res) => {
     res.json(c);
 });
 app.post('/api/competitions', async (req, res) => {
-    const { admin_key, name, start_date, end_date, venue, federation, mode, division_type, video_url } = req.body;
+    const { admin_key, name, start_date, end_date, venue, federation, mode, division_type, video_url, series_id } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!name || !start_date || !end_date) return res.status(400).json({ error: '대회명, 시작일, 종료일은 필수입니다.' });
     const compMode = (mode === 'display') ? 'display' : 'operation';
     const allowedDivisions = ['','pro','univ','high','middle','general'];
     const divType = allowedDivisions.includes(division_type) ? division_type : '';
+    // series_id: 빈 문자열/0/null/undefined → NULL, 그 외 정수면 사용
+    let sId = null;
+    if (series_id !== undefined && series_id !== null && series_id !== '' && series_id !== 0) {
+        const parsed = parseInt(series_id, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+            // 실존 시리즈 검증 (선택사항이지만 데이터 정합성을 위해)
+            try {
+                const s = await db.get('SELECT id FROM competition_series WHERE id=? AND active=1', parsed);
+                if (s) sId = parsed;
+            } catch(e) {}
+        }
+    }
     try {
         const info = await db.run(
-            'INSERT INTO competition (name,start_date,end_date,venue,federation,mode,division_type,video_url) VALUES (?,?,?,?,?,?,?,?)',
-            name, start_date, end_date, venue || '', federation || '', compMode, divType, video_url || ''
+            'INSERT INTO competition (name,start_date,end_date,venue,federation,mode,division_type,video_url,series_id) VALUES (?,?,?,?,?,?,?,?,?)',
+            name, start_date, end_date, venue || '', federation || '', compMode, divType, video_url || '', sId
         );
         const comp = await db.get('SELECT * FROM competition WHERE id=?', info.lastInsertRowid);
-        opLog(`대회 생성: ${name} (${compMode === 'display' ? '노출용' : '운영용'})`, 'admin', 'admin', comp.id);
+        opLog(`대회 생성: ${name} (${compMode === 'display' ? '노출용' : '운영용'})${sId ? ' [시리즈 연결]' : ''}`, 'admin', 'admin', comp.id);
         res.json(comp);
     } catch (e) { res.status(400).json({ error: '대회 생성 실패: ' + e.message }); }
 });
 app.put('/api/competitions/:id', async (req, res) => {
-    const { admin_key, name, start_date, end_date, venue, status, video_url, federation, division_type, mode } = req.body;
+    const { admin_key, name, start_date, end_date, venue, status, video_url, federation, division_type, mode, series_id } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const old = await db.get('SELECT * FROM competition WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
     const compMode = mode ? ((mode === 'display') ? 'display' : 'operation') : old.mode;
-    await db.run('UPDATE competition SET name=?,start_date=?,end_date=?,venue=?,status=?,video_url=?,federation=?,division_type=?,mode=? WHERE id=?', name||old.name, start_date||old.start_date, end_date||old.end_date, venue??old.venue, status||old.status, video_url??old.video_url??'', federation??old.federation??'', division_type??old.division_type??'', compMode||'operation', old.id);
+    // series_id 처리: undefined → 기존값 유지, null/''/0 → NULL로 해제, 정수 → 검증 후 설정
+    let sId = old.series_id ?? null;
+    if (series_id !== undefined) {
+        if (series_id === null || series_id === '' || series_id === 0) {
+            sId = null;
+        } else {
+            const parsed = parseInt(series_id, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+                try {
+                    const s = await db.get('SELECT id FROM competition_series WHERE id=? AND active=1', parsed);
+                    sId = s ? parsed : sId;
+                } catch(e) {}
+            }
+        }
+    }
+    await db.run('UPDATE competition SET name=?,start_date=?,end_date=?,venue=?,status=?,video_url=?,federation=?,division_type=?,mode=?,series_id=? WHERE id=?',
+        name||old.name, start_date||old.start_date, end_date||old.end_date,
+        venue??old.venue, status||old.status, video_url??old.video_url??'',
+        federation??old.federation??'', division_type??old.division_type??'',
+        compMode||'operation', sId, old.id);
     res.json(await db.get('SELECT * FROM competition WHERE id=?', old.id));
 });
 app.delete('/api/competitions/:id', async (req, res) => {
@@ -9453,22 +9484,71 @@ app.get('/api/event-records/:gender/:eventName', async (req, res) => {
     }
 });
 
-// PUT (upsert) event record
+// PUT (upsert) event record — 백워드 호환 (구 UI 호출용)
+// v4 스키마: UNIQUE(record_type, event_name, gender, division_code, series_id)
+// 구 UI는 division_code/series_id 없이 호출하므로 NULL로 처리 → NR(national)만 의미 있음.
+// DR/CR도 division_code/series_id NULL인 슬롯 하나만 차지하게 됨 (구 호환).
+// 새 UI는 /api/records (신 API) 를 사용해야 함.
 app.put('/api/event-records', async (req, res) => {
     try {
         const { admin_key, gender, event_name, record_type, record_value, holder_name, holder_team, record_year } = req.body;
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
         if (!gender || !event_name || !record_type) return res.status(400).json({ error: 'gender, event_name, record_type 필수' });
-        if (!['M','F'].includes(gender)) return res.status(400).json({ error: 'gender는 M 또는 F' });
+        if (!['M','F','X'].includes(gender)) return res.status(400).json({ error: 'gender는 M/F/X' });
         if (!['national','division','competition'].includes(record_type)) return res.status(400).json({ error: 'record_type는 national/division/competition' });
 
-        await db.run(`INSERT INTO event_record (gender, event_name, record_type, record_value, holder_name, holder_team, record_year, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            ON CONFLICT(gender, event_name, record_type) DO UPDATE SET
-                record_value=excluded.record_value, holder_name=excluded.holder_name,
-                holder_team=excluded.holder_team, record_year=excluded.record_year,
-                updated_at=datetime('now')
-        `, gender, event_name, record_type, record_value || '', holder_name || '', holder_team || '', record_year || '');
+        // v4 UNIQUE: (record_type, event_name, gender, division_code, series_id)
+        // SQLite/PG 모두 NULL은 distinct로 취급하므로 ON CONFLICT 사용 불가 → 수동 UPSERT
+        const existing = await db.get(
+            `SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=? AND division_code IS NULL AND series_id IS NULL`,
+            record_type, event_name, gender
+        );
+        if (existing) {
+            await db.run(
+                `UPDATE event_record SET record_value=?, holder_name=?, holder_team=?, record_year=?, updated_at=` + (db.isAsync ? 'NOW()' : `datetime('now')`) + ` WHERE id=?`,
+                record_value || '', holder_name || '', holder_team || '', record_year || '', existing.id
+            );
+        } else {
+            await db.run(
+                `INSERT INTO event_record (record_type, event_name, gender, division_code, series_id, record_value, holder_name, holder_team, record_year, approved) VALUES (?,?,?,NULL,NULL,?,?,?,?,1)`,
+                record_type, event_name, gender, record_value || '', holder_name || '', holder_team || '', record_year || ''
+            );
+        }
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT batch upsert for a single event (all 3 record types at once) — 백워드 호환
+app.put('/api/event-records/batch', async (req, res) => {
+    try {
+        const { admin_key, gender, event_name, records } = req.body;
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        if (!gender || !event_name || !records) return res.status(400).json({ error: 'gender, event_name, records 필수' });
+
+        const nowExpr = db.isAsync ? 'NOW()' : `datetime('now')`;
+        await db.transaction(async () => {
+            for (const rt of ['national', 'division', 'competition']) {
+                const r = records[rt];
+                if (!r) continue;
+                const existing = await db.get(
+                    `SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=? AND division_code IS NULL AND series_id IS NULL`,
+                    rt, event_name, gender
+                );
+                if (existing) {
+                    await db.run(
+                        `UPDATE event_record SET record_value=?, holder_name=?, holder_team=?, record_year=?, updated_at=${nowExpr} WHERE id=?`,
+                        r.record_value || '', r.holder_name || '', r.holder_team || '', r.record_year || '', existing.id
+                    );
+                } else {
+                    await db.run(
+                        `INSERT INTO event_record (record_type, event_name, gender, division_code, series_id, record_value, holder_name, holder_team, record_year, approved) VALUES (?,?,?,NULL,NULL,?,?,?,?,1)`,
+                        rt, event_name, gender, r.record_value || '', r.holder_name || '', r.holder_team || '', r.record_year || ''
+                    );
+                }
+            }
+        })();
 
         res.json({ success: true });
     } catch (err) {
@@ -9476,28 +9556,212 @@ app.put('/api/event-records', async (req, res) => {
     }
 });
 
-// PUT batch upsert for a single event (all 3 record types at once)
-app.put('/api/event-records/batch', async (req, res) => {
+// ============================================================
+// RECORDS MANAGEMENT v4 — NR/DR/CR 통합 신 API (Phase B-2)
+// ============================================================
+
+// GET divisions master
+app.get('/api/divisions', async (req, res) => {
     try {
-        const { admin_key, gender, event_name, records } = req.body;
+        const rows = await db.all('SELECT code, label_ko, gender, school_level, sort_order FROM division_master WHERE active=1 ORDER BY sort_order, code');
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Competition Series CRUD ───
+app.get('/api/competition-series', async (req, res) => {
+    try {
+        const rows = await db.all(`
+            SELECT s.*,
+                (SELECT COUNT(*) FROM competition c WHERE c.series_id = s.id) AS comp_count,
+                (SELECT COUNT(*) FROM event_record er WHERE er.series_id = s.id) AS record_count
+            FROM competition_series s
+            WHERE s.active = 1
+            ORDER BY s.name
+        `);
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/competition-series', async (req, res) => {
+    try {
+        const { admin_key, name, federation, description } = req.body;
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-        if (!gender || !event_name || !records) return res.status(400).json({ error: 'gender, event_name, records 필수' });
+        if (!name || !name.trim()) return res.status(400).json({ error: '시리즈명 필수' });
+        try {
+            const info = await db.run(
+                'INSERT INTO competition_series (name, federation, description) VALUES (?, ?, ?)',
+                name.trim(), (federation || '').trim(), (description || '').trim()
+            );
+            const row = await db.get('SELECT * FROM competition_series WHERE id=?', info.lastInsertRowid);
+            opLog(`대회 시리즈 생성: ${name}`, 'admin', 'admin');
+            res.json(row);
+        } catch (e) {
+            if (/UNIQUE|duplicate/i.test(e.message)) return res.status(400).json({ error: '같은 이름의 시리즈가 이미 존재합니다.' });
+            throw e;
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
-        await db.transaction(async () => {
-            for (const rt of ['national', 'division', 'competition']) {
-                const r = records[rt];
-                if (r) {
-                    await db.run(`INSERT INTO event_record (gender, event_name, record_type, record_value, holder_name, holder_team, record_year, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-                        ON CONFLICT(gender, event_name, record_type) DO UPDATE SET
-                            record_value=excluded.record_value, holder_name=excluded.holder_name,
-                            holder_team=excluded.holder_team, record_year=excluded.record_year,
-                            updated_at=datetime('now')
-                    `, gender, event_name, rt, r.record_value || '', r.holder_name || '', r.holder_team || '', r.record_year || '');
-                }
+app.put('/api/competition-series/:id', async (req, res) => {
+    try {
+        const { admin_key, name, federation, description } = req.body;
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        const old = await db.get('SELECT * FROM competition_series WHERE id=?', req.params.id);
+        if (!old) return res.status(404).json({ error: 'Not found' });
+        const nowExpr = db.isAsync ? 'NOW()' : `datetime('now')`;
+        await db.run(
+            `UPDATE competition_series SET name=?, federation=?, description=?, updated_at=${nowExpr} WHERE id=?`,
+            (name ?? old.name).trim(), (federation ?? old.federation ?? '').trim(), (description ?? old.description ?? '').trim(),
+            req.params.id
+        );
+        res.json(await db.get('SELECT * FROM competition_series WHERE id=?', req.params.id));
+    } catch (err) {
+        if (/UNIQUE|duplicate/i.test(err.message)) return res.status(400).json({ error: '같은 이름의 시리즈가 이미 존재합니다.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/competition-series/:id', async (req, res) => {
+    try {
+        const { admin_key } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        const series = await db.get('SELECT * FROM competition_series WHERE id=?', req.params.id);
+        if (!series) return res.status(404).json({ error: 'Not found' });
+        // Soft delete: 연결된 대회/기록이 있어도 cascade 안 함. active=0 처리.
+        const linkedComps = await db.get('SELECT COUNT(*)::int AS c FROM competition WHERE series_id=?', req.params.id).catch(async () => await db.get('SELECT COUNT(*) AS c FROM competition WHERE series_id=?', req.params.id));
+        const linkedRecs = await db.get('SELECT COUNT(*)::int AS c FROM event_record WHERE series_id=?', req.params.id).catch(async () => await db.get('SELECT COUNT(*) AS c FROM event_record WHERE series_id=?', req.params.id));
+        await db.run('UPDATE competition_series SET active=0 WHERE id=?', req.params.id);
+        opLog(`대회 시리즈 비활성화: ${series.name} (연결 대회 ${linkedComps?.c||0}개, 기록 ${linkedRecs?.c||0}개 유지)`, 'admin', 'admin');
+        res.json({ success: true, linked_competitions: linkedComps?.c || 0, linked_records: linkedRecs?.c || 0 });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Records v4 (NR/DR/CR 통합) ───
+// GET records — query params로 필터: ?event_name=&gender=&record_type=&division_code=&series_id=
+app.get('/api/records', async (req, res) => {
+    try {
+        const { event_name, gender, record_type, division_code, series_id } = req.query;
+        const where = [];
+        const params = [];
+        if (event_name) { where.push('event_name=?'); params.push(event_name); }
+        if (gender)     { where.push('gender=?');     params.push(gender); }
+        if (record_type){ where.push('record_type=?');params.push(record_type); }
+        if (division_code){ where.push('division_code=?'); params.push(division_code); }
+        if (series_id)  { where.push('series_id=?');  params.push(parseInt(series_id, 10)); }
+        const sql = 'SELECT * FROM event_record' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY event_name, gender, record_type, division_code, series_id';
+        const rows = await db.all(sql, ...params);
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET matrix — 특정 종목+성별의 NR/DR(13개)/CR(시리즈별) 한 번에 묶어 반환
+// 응답 형태: { event_name, gender, national: {...|null}, divisions: { M_OPEN:{...|null}, ... }, competitions: [{series_id, series_name, ...}] }
+app.get('/api/records/matrix', async (req, res) => {
+    try {
+        const { event_name, gender } = req.query;
+        if (!event_name || !gender) return res.status(400).json({ error: 'event_name, gender 필수' });
+        const rows = await db.all(
+            'SELECT * FROM event_record WHERE event_name=? AND gender=?',
+            event_name, gender
+        );
+        const divisions = await db.all('SELECT code FROM division_master WHERE active=1 ORDER BY sort_order');
+        const seriesAll = await db.all('SELECT id, name, federation FROM competition_series WHERE active=1 ORDER BY name');
+
+        const result = {
+            event_name,
+            gender,
+            national: null,
+            divisions: {},   // code -> record | null
+            competitions: [] // [{series_id, series_name, record}]
+        };
+        for (const d of divisions) result.divisions[d.code] = null;
+        const seriesMap = {};
+        for (const s of seriesAll) seriesMap[s.id] = { series_id: s.id, series_name: s.name, federation: s.federation, record: null };
+
+        for (const r of rows) {
+            if (r.record_type === 'national' && r.division_code == null && r.series_id == null) {
+                result.national = r;
+            } else if (r.record_type === 'division' && r.division_code) {
+                result.divisions[r.division_code] = r;
+            } else if (r.record_type === 'competition' && r.series_id != null) {
+                if (seriesMap[r.series_id]) seriesMap[r.series_id].record = r;
             }
-        })();
+        }
+        result.competitions = Object.values(seriesMap);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
+// PUT/POST records — upsert
+// body: { admin_key, record_type, event_name, gender, division_code?, series_id?,
+//         record_value, holder_name?, holder_team?, record_year?, record_date?, venue?, note? }
+app.put('/api/records', async (req, res) => {
+    try {
+        const { admin_key, record_type, event_name, gender, division_code, series_id,
+                record_value, holder_name, holder_team, record_year, record_date, venue, note } = req.body;
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        if (!record_type || !event_name || !gender) return res.status(400).json({ error: 'record_type, event_name, gender 필수' });
+        if (!['national','division','competition'].includes(record_type)) return res.status(400).json({ error: 'record_type는 national/division/competition' });
+        if (!['M','F','X'].includes(gender)) return res.status(400).json({ error: 'gender는 M/F/X' });
+        // Consistency checks
+        if (record_type === 'national'    && (division_code || series_id))  return res.status(400).json({ error: 'NR은 division_code/series_id 없어야 합니다.' });
+        if (record_type === 'division'    && !division_code)                return res.status(400).json({ error: 'DR은 division_code 필수' });
+        if (record_type === 'competition' && !series_id)                    return res.status(400).json({ error: 'CR은 series_id 필수' });
+
+        const dCode = division_code || null;
+        const sId   = series_id ? parseInt(series_id, 10) : null;
+        const nowExpr = db.isAsync ? 'NOW()' : `datetime('now')`;
+
+        // 수동 UPSERT (NULL 컬럼이 UNIQUE에 포함되어 있어 ON CONFLICT가 불안정)
+        let existing;
+        if (dCode == null && sId == null) {
+            existing = await db.get('SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=? AND division_code IS NULL AND series_id IS NULL', record_type, event_name, gender);
+        } else if (dCode != null && sId == null) {
+            existing = await db.get('SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=? AND division_code=? AND series_id IS NULL', record_type, event_name, gender, dCode);
+        } else if (dCode == null && sId != null) {
+            existing = await db.get('SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=? AND division_code IS NULL AND series_id=?', record_type, event_name, gender, sId);
+        }
+
+        if (existing) {
+            await db.run(
+                `UPDATE event_record SET record_value=?, holder_name=?, holder_team=?, record_year=?, record_date=?, venue=?, note=?, approved=1, updated_at=${nowExpr} WHERE id=?`,
+                record_value || '', holder_name || '', holder_team || '', record_year || '', record_date || '', venue || '', note || '', existing.id
+            );
+            res.json({ success: true, id: existing.id, mode: 'updated' });
+        } else {
+            const info = await db.run(
+                `INSERT INTO event_record (record_type, event_name, gender, division_code, series_id, record_value, holder_name, holder_team, record_year, record_date, venue, note, approved) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)`,
+                record_type, event_name, gender, dCode, sId,
+                record_value || '', holder_name || '', holder_team || '', record_year || '', record_date || '', venue || '', note || ''
+            );
+            res.json({ success: true, id: info.lastInsertRowid, mode: 'inserted' });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/records/:id', async (req, res) => {
+    try {
+        const { admin_key } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        const r = await db.get('SELECT * FROM event_record WHERE id=?', req.params.id);
+        if (!r) return res.status(404).json({ error: 'Not found' });
+        await db.run('DELETE FROM event_record WHERE id=?', req.params.id);
+        opLog(`기록 삭제: ${r.event_name} ${r.gender} ${r.record_type} ${r.division_code||''} ${r.series_id||''}`, 'admin', 'admin');
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
