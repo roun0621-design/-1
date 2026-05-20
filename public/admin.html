@@ -5785,6 +5785,8 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function loadRecordsTab() {
+            // 0) 위임 이벤트 리스너 설치 (멱등 — 한 번만)
+            installRecordsDelegation();
             // 1) 부별 마스터 + 시리즈 마스터 로드 (한 번만)
             try {
                 if (_recDivisions.length === 0) {
@@ -5812,19 +5814,17 @@ POST /api/external/event-result-link/batch<br>
                 const evts = group[`events_${_recGender.toLowerCase()}`] || group.events || [];
                 if (evts.length === 0) continue;
                 html += `<div style="margin-bottom:12px;">
-                    <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px;letter-spacing:0.5px;">${group.label}</div>`;
+                    <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px;letter-spacing:0.5px;">${_esc(group.label)}</div>`;
                 for (const evtName of evts) {
                     const active = _recSelectedEvent === evtName;
-                    html += `<div onclick="selectRecordEvent('${evtName.replace(/'/g,"\\'")}')"
+                    html += `<div class="rec-evt-item" data-evt="${_esc(evtName)}"
                         style="padding:6px 10px;margin:2px 0;border-radius:5px;cursor:pointer;
                                background:${active?'var(--primary, #b79f58)':'transparent'};
                                color:${active?'#fff':'var(--text)'};
                                font-weight:${active?'700':'500'};
                                border:1px solid ${active?'var(--primary, #b79f58)':'transparent'};
-                               transition:background .15s;"
-                        onmouseover="if(!this.style.background.includes('rgb(183'))this.style.background='var(--bg-hover, #f5f3ed)';"
-                        onmouseout="if(!${active})this.style.background='transparent';">
-                        ${evtName}
+                               transition:background .15s;">
+                        ${_esc(evtName)}
                     </div>`;
                 }
                 html += '</div>';
@@ -5836,6 +5836,53 @@ POST /api/external/event-result-link/batch<br>
             _recSelectedEvent = eventName;
             renderRecordsEventList();
             await loadEventMatrix(eventName);
+        }
+
+        // 위임 이벤트 리스너 — 기록 관리 탭 전체에 단 1회만 설치
+        let _recDelegationInstalled = false;
+        function installRecordsDelegation() {
+            if (_recDelegationInstalled) return;
+            const tabEl = document.getElementById('tab-records');
+            if (!tabEl) return;
+            tabEl.addEventListener('click', (ev) => {
+                // 1) 종목 리스트 항목 클릭
+                const evtItem = ev.target.closest('.rec-evt-item');
+                if (evtItem && tabEl.contains(evtItem)) {
+                    const en = evtItem.getAttribute('data-evt');
+                    if (en) selectRecordEvent(en);
+                    return;
+                }
+                // 2) 기록 셀 클릭 (NR/DR/CR 모두)
+                const cell = ev.target.closest('.rec-cell');
+                if (cell && tabEl.contains(cell)) {
+                    const event_name    = cell.getAttribute('data-event');
+                    const gender        = cell.getAttribute('data-gender');
+                    const record_type   = cell.getAttribute('data-rt');
+                    const dc            = cell.getAttribute('data-dc');
+                    const si            = cell.getAttribute('data-si');
+                    openRecCellModal(
+                        record_type,
+                        event_name,
+                        gender,
+                        (dc === null || dc === '') ? null : dc,
+                        (si === null || si === '') ? null : parseInt(si, 10)
+                    );
+                    return;
+                }
+                // 3) "+ 새 시리즈" 버튼 (매트릭스 영역 안)
+                if (ev.target.closest('[data-series-new]')) {
+                    openSeriesModal();
+                    return;
+                }
+                // 4) 시리즈 카드의 "편집" 버튼
+                const sEdit = ev.target.closest('[data-series-edit]');
+                if (sEdit) {
+                    const sid = parseInt(sEdit.getAttribute('data-series-edit'), 10);
+                    if (!isNaN(sid)) openSeriesModal(sid);
+                    return;
+                }
+            });
+            _recDelegationInstalled = true;
         }
 
         async function loadEventMatrix(eventName) {
@@ -5851,18 +5898,55 @@ POST /api/external/event-result-link/batch<br>
             }
         }
 
-        function _recCell(rec, onClickArgs) {
-            // rec: null 또는 {record_value, holder_name, holder_team, record_year, ...}
-            if (!rec || !rec.record_value) {
-                return `<td onclick="openRecCellModal(${onClickArgs})"
+        // 셀 생성 헬퍼 — data-속성 방식 (한글/공백/따옴표 안전)
+        // kind: 'td' (테이블 셀) | 'block' (블록 div)
+        function _recCell(rec, eventName, gender, record_type, division_code, series_id, kind) {
+            const dcAttr = (division_code === null || division_code === undefined) ? '' : ` data-dc="${_esc(division_code)}"`;
+            const siAttr = (series_id === null || series_id === undefined) ? '' : ` data-si="${_esc(series_id)}"`;
+            const commonAttrs =
+                `class="rec-cell"` +
+                ` data-event="${_esc(eventName)}"` +
+                ` data-gender="${_esc(gender)}"` +
+                ` data-rt="${_esc(record_type)}"` +
+                dcAttr + siAttr;
+            const empty = !rec || !rec.record_value;
+
+            if (kind === 'block') {
+                // 시리즈 카드 안에서 사용하는 큰 블록 셀
+                if (empty) {
+                    return `<div ${commonAttrs}
+                        style="padding:14px;text-align:center;cursor:pointer;color:var(--text-muted);font-size:12px;
+                               border:1.5px dashed var(--gray);border-radius:6px;background:var(--white);
+                               transition:background .15s,border-color .15s;"
+                        onmouseover="this.style.background='#fafaf6';this.style.borderColor='#b79f58';"
+                        onmouseout="this.style.background='var(--white)';this.style.borderColor='var(--gray)';">
+                        + 이 시리즈의 기록 입력
+                    </div>`;
+                }
+                const yr = rec.record_year ? ` <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(${_esc(rec.record_year)})</span>` : '';
+                const holder = rec.holder_name
+                    ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${_esc(rec.holder_name)}${rec.holder_team ? ' · ' + _esc(rec.holder_team) : ''}</div>`
+                    : '';
+                return `<div ${commonAttrs}
+                    style="padding:12px 14px;cursor:pointer;border:1px solid var(--gray);border-radius:6px;background:var(--white);"
+                    title="클릭하여 편집">
+                    <div style="font-family:var(--font-mono);font-weight:700;font-size:18px;color:#222;">${_esc(rec.record_value)}${yr}</div>
+                    ${holder}
+                </div>`;
+            }
+
+            // 기본: td (NR/DR 표용)
+            if (empty) {
+                return `<td ${commonAttrs}
                     style="padding:8px;text-align:center;cursor:pointer;color:var(--text-muted);font-size:11px;border:1px dashed var(--gray);">
                     + 입력
                 </td>`;
             }
             const yr = rec.record_year ? `<span style="font-size:10px;color:var(--text-muted);"> (${_esc(rec.record_year)})</span>` : '';
             const holder = rec.holder_name ? `<div style="font-size:11px;color:var(--text-muted);">${_esc(rec.holder_name)}${rec.holder_team ? ' · ' + _esc(rec.holder_team) : ''}</div>` : '';
-            return `<td onclick="openRecCellModal(${onClickArgs})"
-                style="padding:6px 8px;cursor:pointer;border:1px solid var(--gray);background:var(--bg);">
+            return `<td ${commonAttrs}
+                style="padding:6px 8px;cursor:pointer;border:1px solid var(--gray);background:var(--bg);"
+                title="클릭하여 편집">
                 <div style="font-family:var(--font-mono);font-weight:700;font-size:13px;">${_esc(rec.record_value)}${yr}</div>
                 ${holder}
             </td>`;
@@ -5872,15 +5956,6 @@ POST /api/external/event-result-link/batch<br>
             const area = document.getElementById('records-matrix-area');
             const genderLabel = _recGender === 'M' ? '남자' : '여자';
 
-            // Helper: build clickable cell args (record_type, division_code, series_id)
-            const argsFor = (rt, dCode, sId) => {
-                const eN = JSON.stringify(eventName);
-                const g  = JSON.stringify(_recGender);
-                const dc = dCode === null ? 'null' : JSON.stringify(dCode);
-                const si = sId === null ? 'null' : sId;
-                return `${JSON.stringify(rt)}, ${eN}, ${g}, ${dc}, ${si}`;
-            };
-
             let html = `<div style="margin-bottom:14px;">
                 <div style="display:flex;justify-content:space-between;align-items:baseline;">
                     <h3 style="margin:0;font-size:18px;">${_esc(eventName)} <span style="font-size:13px;color:var(--text-muted);font-weight:400;">· ${genderLabel}</span></h3>
@@ -5889,63 +5964,73 @@ POST /api/external/event-result-link/batch<br>
             </div>`;
 
             // ── 한국기록 (NR) ── 단일 셀
-            html += `<div style="margin-bottom:16px;">
+            html += `<div style="margin-bottom:18px;">
                 <h4 style="margin:0 0 6px;font-size:13px;color:${REC_TYPE_COLOR.national};">한국기록 (NR)</h4>
                 <table style="border-collapse:collapse;width:100%;max-width:520px;">
-                    <tbody><tr>${_recCell(data.national, argsFor('national', null, null))}</tr></tbody>
+                    <tbody><tr>${_recCell(data.national, eventName, _recGender, 'national', null, null, 'td')}</tr></tbody>
                 </table>
             </div>`;
 
             // ── 부별기록 (DR) ── 13개 부별 셀
             const divs = (_recDivisions && _recDivisions.length) ? _recDivisions : [];
-            // 성별 필터: 현재 성별 + MIXED('X')
             const myDivs = divs.filter(d => d.gender === _recGender || d.gender === 'X' || d.code === 'MIXED');
             if (myDivs.length > 0) {
-                html += `<div style="margin-bottom:16px;">
+                html += `<div style="margin-bottom:18px;">
                     <h4 style="margin:0 0 6px;font-size:13px;color:${REC_TYPE_COLOR.division};">부별기록 (DR)</h4>
-                    <table style="border-collapse:collapse;width:100%;">
+                    <div style="overflow-x:auto;">
+                    <table style="border-collapse:collapse;width:100%;min-width:600px;">
                         <thead><tr>`;
                 for (const d of myDivs) {
-                    // label_ko: "남자일반부" → "일반" (성별 prefix는 컬럼 모음 안에서 중복이므로 생략)
                     const lbl = (d.label_ko || d.code).replace(/^(남자|여자)/, '').replace(/부$/, '') || d.code;
                     html += `<th style="padding:5px;font-size:11px;background:var(--bg);border:1px solid var(--gray);font-weight:600;" title="${_esc(d.label_ko || d.code)}">${_esc(lbl)}</th>`;
                 }
                 html += `</tr></thead><tbody><tr>`;
                 for (const d of myDivs) {
                     const rec = (data.divisions && data.divisions[d.code]) || null;
-                    html += _recCell(rec, argsFor('division', d.code, null));
+                    html += _recCell(rec, eventName, _recGender, 'division', d.code, null, 'td');
                 }
                 html += `</tr></tbody></table>
+                    </div>
                 </div>`;
             }
 
-            // ── 대회기록 (CR) ── 시리즈별
+            // ── 대회기록 (CR) ── A안: 시리즈별 카드 그룹
             const activeSeries = (_recSeries || []).filter(s => s.active !== 0);
-            if (activeSeries.length > 0) {
-                // Build map for quick lookup
-                const crMap = {};
-                for (const c of (data.competitions || [])) crMap[c.series_id] = c.record;
+            const crMap = {};
+            for (const c of (data.competitions || [])) crMap[c.series_id] = c.record;
 
-                html += `<div style="margin-bottom:16px;">
-                    <h4 style="margin:0 0 6px;font-size:13px;color:${REC_TYPE_COLOR.competition};">대회기록 (CR)</h4>
-                    <table style="border-collapse:collapse;width:100%;">
-                        <thead><tr>`;
-                for (const s of activeSeries) {
-                    html += `<th style="padding:5px;font-size:11px;background:var(--bg);border:1px solid var(--gray);font-weight:600;">${_esc(s.name)}</th>`;
-                }
-                html += `</tr></thead><tbody><tr>`;
-                for (const s of activeSeries) {
-                    const rec = crMap[s.id] || null;
-                    html += _recCell(rec, argsFor('competition', null, s.id));
-                }
-                html += `</tr></tbody></table>
+            html += `<div style="margin-bottom:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+                    <h4 style="margin:0;font-size:13px;color:${REC_TYPE_COLOR.competition};">대회기록 (CR) <span style="font-size:11px;color:var(--text-muted);font-weight:400;">· 시리즈별</span></h4>
+                    <button class="btn btn-sm btn-outline" data-series-new style="font-size:11px;padding:3px 10px;">+ 새 시리즈</button>
+                </div>`;
+
+            if (activeSeries.length === 0) {
+                html += `<div style="padding:24px;text-align:center;border:1px dashed var(--gray);border-radius:8px;background:var(--bg);color:var(--text-muted);font-size:12px;">
+                    등록된 시리즈가 없습니다. 위 <strong>"+ 새 시리즈"</strong> 또는 하단 시리즈 마스터에서 추가하세요.
                 </div>`;
             } else {
-                html += `<div style="margin-bottom:16px;">
-                    <h4 style="margin:0 0 6px;font-size:13px;color:${REC_TYPE_COLOR.competition};">대회기록 (CR)</h4>
-                    <p style="font-size:12px;color:var(--text-muted);margin:0;">시리즈가 등록되지 않았습니다. 아래에서 시리즈를 추가하세요.</p>
-                </div>`;
+                html += `<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:12px;">`;
+                for (const s of activeSeries) {
+                    const rec = crMap[s.id] || null;
+                    const filled = !!(rec && rec.record_value);
+                    html += `<div style="border:1px solid ${filled ? REC_TYPE_COLOR.competition : 'var(--gray)'};
+                                          border-left:4px solid ${REC_TYPE_COLOR.competition};
+                                          border-radius:8px;padding:12px;background:var(--bg);">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;">
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-weight:700;font-size:13px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${_esc(s.name)}">📋 ${_esc(s.name)}</div>
+                                ${s.description ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${_esc(s.description)}">${_esc(s.description)}</div>` : ''}
+                                <div style="font-size:10px;color:var(--text-muted);margin-top:3px;">연결 대회 ${s.comp_count || 0} · 총 CR ${s.record_count || 0}</div>
+                            </div>
+                            <button class="btn btn-sm btn-outline" data-series-edit="${s.id}" style="font-size:10px;padding:2px 8px;flex-shrink:0;">편집</button>
+                        </div>
+                        ${_recCell(rec, eventName, _recGender, 'competition', null, s.id, 'block')}
+                    </div>`;
+                }
+                html += `</div>`;
             }
+            html += `</div>`;
 
             area.innerHTML = html;
         }
