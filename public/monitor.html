@@ -472,6 +472,19 @@
             const rows = data.rows || [];
             if (rows.length === 0) { el.style.display = 'none'; return; }
             const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            const isWindAffected = (name) => {
+                if (!name) return false;
+                const n = String(name).trim().toLowerCase();
+                if (/^100m$|^200m$/.test(n)) return true;
+                if (/^100mh$|^110mh$/.test(n)) return true;
+                if (n === '멀리뛰기' || n === '세단뛰기' || n === 'long jump' || n === 'triple jump') return true;
+                return false;
+            };
+            const fmtWind = (w) => {
+                if (w == null || !isFinite(w)) return '';
+                const sign = w >= 0 ? '+' : '';
+                return `${sign}${Number(w).toFixed(1)} m/s`;
+            };
             const cards = rows.map(r => {
                 const rt = r.record_type;
                 const color = rt === 'national' ? '#c0392b' : rt === 'division' ? '#2980b9' : '#27ae60';
@@ -480,13 +493,22 @@
                           : rt === 'competition' ? (r.series_name || '시리즈')
                           : '한국';
                 const gender = r.gender === 'M' ? '남' : r.gender === 'F' ? '여' : '혼성';
+                let windHtml = '';
+                if (isWindAffected(r.event_name)) {
+                    if (r.wind != null && isFinite(r.wind)) {
+                        const wColor = r.wind > 2.0 ? '#dc2626' : '#059669';
+                        windHtml = `<span style="display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;background:#f3f4f6;color:${wColor};font-size:9px;font-weight:600;font-family:monospace;">💨 ${fmtWind(r.wind)}</span>`;
+                    } else {
+                        windHtml = `<span style="display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;background:#f9fafb;color:#9ca3af;font-size:9px;">💨 무측정</span>`;
+                    }
+                }
                 return `
                     <div style="flex:0 0 auto;min-width:220px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid ${color};border-radius:8px;padding:9px 12px;">
                         <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
                             <span style="background:${color};color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;">${label}</span>
                             <span style="font-size:10px;color:#6b7280;">${gender} · ${esc(ctx)}</span>
                         </div>
-                        <div style="font-weight:700;font-size:13px;color:#1f2937;">${esc(r.event_name)} <span style="color:${color};font-family:monospace;">${esc(r.new_value)}</span></div>
+                        <div style="font-weight:700;font-size:13px;color:#1f2937;">${esc(r.event_name)} <span style="color:${color};font-family:monospace;">${esc(r.new_value)}</span>${windHtml}</div>
                         <div style="font-size:11px;color:#4b5563;margin-top:2px;">${esc(r.athlete_name || '')}${r.athlete_team ? ' · ' + esc(r.athlete_team) : ''}</div>
                     </div>
                 `;

@@ -685,6 +685,25 @@
                         <button class="btn btn-primary" onclick="changeKeys()">키 변경</button>
                     </div>
                 </div>
+
+                <!-- 기록위원 전용 키 (Phase C 확장) -->
+                <div class="admin-card" style="border-left:4px solid #c0392b;">
+                    <h4 style="display:flex;align-items:center;gap:8px;">🏆 기록위원 전용 키 <span class="t-sm t-muted">신기록 승인/거부 전담</span></h4>
+                    <p class="t-help-lg">
+                        기록위원 키를 별도로 설정하면, 관리자 권한 없이도 NR/DR/CR 승인·거부만 가능한 전용 역할이 활성화됩니다.
+                        <br>· 빈 값으로 저장하면 비활성 (관리자만 승인 가능)
+                        <br>· 4자 이상 임의 문자열 (admin/operation과 별개)
+                        <br>· 승인 시 reviewed_by에 "기록위원"으로 기록됨
+                    </p>
+                    <div id="record-officer-status" style="margin-bottom:10px;"></div>
+                    <div class="admin-form-row">
+                        <div class="admin-form-group" style="flex:1;">
+                            <label>새 기록위원 키 (4자 이상, 비활성하려면 'off' 입력)</label>
+                            <input id="new-record-officer-key" type="password" placeholder="비워두면 변경 없음">
+                        </div>
+                        <button class="btn btn-primary" onclick="changeRecordOfficerKey()">기록위원 키 저장</button>
+                    </div>
+                </div>
                 <!-- Site Config: Install Guide & Manual Editor -->
                 <div class="admin-card">
                     <h4>홈 페이지 콘텐츠 관리</h4>
@@ -2566,7 +2585,47 @@ POST /api/external/event-result-link/batch<br>
                         <div><span class="t-md t-muted">관리자 ID:</span> <span class="key-display">${k.admin_id}</span></div>
                         <div><span class="t-md t-muted">관리자 비밀번호:</span> <span style="color:var(--green);font-size:12px;">●●●●●● (암호화됨)</span></div>
                     </div>`;
+                // 기록위원 키 상태
+                const roEl = document.getElementById('record-officer-status');
+                if (roEl) {
+                    if (k.record_officer_active && k.record_officer_key) {
+                        roEl.innerHTML = `
+                            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                <span style="background:#c0392b;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">활성</span>
+                                <span class="t-md t-muted">현재 기록위원 키:</span>
+                                <span class="key-display">${k.record_officer_key}</span>
+                            </div>`;
+                    } else {
+                        roEl.innerHTML = `
+                            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                <span style="background:#9ca3af;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">비활성</span>
+                                <span class="t-md t-muted">기록위원 전용 키가 설정되어 있지 않습니다 (관리자만 승인 가능)</span>
+                            </div>`;
+                    }
+                }
             } catch (e) {}
+        }
+        // 기록위원 키 변경 (Phase C 확장)
+        async function changeRecordOfficerKey() {
+            const inp = document.getElementById('new-record-officer-key');
+            const raw = (inp.value || '').trim();
+            if (raw === '') { toast('변경할 키를 입력하세요 (비활성하려면 off 입력)', 'error'); return; }
+            // 'off' → 빈 문자열로 전송하여 비활성
+            const payload = raw.toLowerCase() === 'off' ? '' : raw;
+            if (payload !== '' && payload.length < 4) { toast('키는 최소 4자 이상이어야 합니다', 'error'); return; }
+            try {
+                const ret = await api('POST', '/api/admin/change-keys', {
+                    admin_key: AK(),
+                    new_record_officer_key: payload,
+                });
+                inp.value = '';
+                if (payload === '') {
+                    toast('기록위원 키 비활성화 완료');
+                } else {
+                    toast('기록위원 키 변경 완료');
+                }
+                loadSystemSettings();
+            } catch (e) { toast(e.error || '기록위원 키 변경 실패', 'error'); }
         }
         // Load judge keys — used by both judges tab and settings tab
         async function loadJudgeKeys() {

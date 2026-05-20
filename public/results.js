@@ -74,6 +74,21 @@ async function loadRecordBreaksBanner() {
 
 function renderRecordBreaksBanner(rows, el) {
     const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    // 풍속 규제 대상 종목 판별 (lib/recordCompare.js의 isWindAffectedEvent와 동기)
+    const isWindAffected = (name) => {
+        if (!name) return false;
+        const n = String(name).trim().toLowerCase();
+        // 100m / 200m (단 100mH/200mH 같은 허들은 별도)
+        if (/^100m$|^200m$/.test(n)) return true;
+        if (/^100mh$|^110mh$/.test(n)) return true;
+        if (n === '멀리뛰기' || n === '세단뛰기' || n === 'long jump' || n === 'triple jump') return true;
+        return false;
+    };
+    const fmtWind = (w) => {
+        if (w == null || !isFinite(w)) return '';
+        const sign = w >= 0 ? '+' : '';
+        return `${sign}${Number(w).toFixed(1)} m/s`;
+    };
     const cards = rows.map(r => {
         const rt = r.record_type;
         const color = rt === 'national' ? '#c0392b' : rt === 'division' ? '#2980b9' : '#27ae60';
@@ -82,13 +97,23 @@ function renderRecordBreaksBanner(rows, el) {
                   : rt === 'competition' ? (r.series_name || '시리즈')
                   : '한국';
         const gender = r.gender === 'M' ? '남' : r.gender === 'F' ? '여' : '혼성';
+        // 풍속: 풍속 규제 대상 종목에만 표시
+        let windHtml = '';
+        if (isWindAffected(r.event_name)) {
+            if (r.wind != null && isFinite(r.wind)) {
+                const wColor = r.wind > 2.0 ? '#dc2626' : '#059669';
+                windHtml = `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;background:#f3f4f6;color:${wColor};font-size:10px;font-weight:600;font-family:var(--font-mono,monospace);">💨 ${fmtWind(r.wind)}</span>`;
+            } else {
+                windHtml = `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;background:#f9fafb;color:#9ca3af;font-size:10px;">💨 무측정</span>`;
+            }
+        }
         return `
             <div style="flex:0 0 auto;min-width:240px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid ${color};border-radius:8px;padding:10px 14px;">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
                     <span style="background:${color};color:#fff;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700;">${label}</span>
                     <span style="font-size:11px;color:#6b7280;">${gender} · ${esc(ctx)}</span>
                 </div>
-                <div style="font-weight:700;font-size:14px;color:#1f2937;">${esc(r.event_name)} <span style="color:${color};font-family:var(--font-mono,monospace);">${esc(r.new_value)}</span></div>
+                <div style="font-weight:700;font-size:14px;color:#1f2937;">${esc(r.event_name)} <span style="color:${color};font-family:var(--font-mono,monospace);">${esc(r.new_value)}</span>${windHtml}</div>
                 <div style="font-size:12px;color:#4b5563;margin-top:2px;">${esc(r.athlete_name || '')}${r.athlete_team ? ' · ' + esc(r.athlete_team) : ''}</div>
             </div>
         `;

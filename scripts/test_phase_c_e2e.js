@@ -42,6 +42,8 @@ async function main() {
     try { db.exec(`ALTER TABLE result ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
     // competition 테이블에 series_id (Phase B) 추가
     try { db.exec(`ALTER TABLE competition ADD COLUMN series_id INTEGER REFERENCES competition_series(id)`); } catch(e) {}
+    // record_breaking_log에 wind 컬럼 (Phase C 후속)
+    try { db.exec(`ALTER TABLE record_breaking_log ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 
     // Schema 자동 로드 외에 boot 마이그레이션 블록(server.js 안)이 division_master/competition_series 시드를 보장.
     // 여기서는 server.js 부팅을 안 하니, 시드를 직접 적용:
@@ -180,6 +182,13 @@ async function main() {
     const rWindOK = await db.get('SELECT * FROM result WHERE id=?', r1.id);
     const retWindOK = await detectRecordBreaks(db, { result: rWindOK, heat, event, athlete, competition, eventEntry });
     log('풍속 +2.0 정확 (한계 동일) → skip 안 함', !retWindOK.skipped || !retWindOK.skipped.startsWith('wind-over'), retWindOK.skipped);
+
+    // 풍속 +2.0 저장 검증: record_breaking_log.wind 컬럼에 값이 저장되어야 함
+    const windRow = await db.get(
+        "SELECT wind FROM record_breaking_log WHERE competition_id=? AND record_type='national' AND event_name='100m' AND status='pending'",
+        compId
+    );
+    log('record_breaking_log.wind = 2.0 저장됨', windRow && Math.abs(windRow.wind - 2.0) < 0.01, windRow && windRow.wind);
 
     // 풍속 null (측정 없음) → 통과 (skip 안 함)
     await db.run("UPDATE result SET wind=NULL WHERE id=?", r1.id);

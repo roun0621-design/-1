@@ -16,7 +16,7 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const { initDatabase, DB_PATH } = require('./db/init');
 const { getDb } = require('./lib/db');
-const { detectRecordBreaks } = require('./lib/recordCompare');
+const { detectRecordBreaks, detectCombinedRecordBreaks } = require('./lib/recordCompare');
 const WebSocket = require('ws');
 const PDFDocument = require('pdfkit');
 const { createCanvas, registerFont } = require('canvas');
@@ -189,6 +189,8 @@ try { db.exec(`ALTER TABLE result ADD COLUMN status_code TEXT DEFAULT ''`); } ca
 // Add wind columns (migration)
 try { db.exec(`ALTER TABLE result ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE heat ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
+// Phase C 후속: record_breaking_log에 풍속 컬럼 추가 (NR/DR/CR 감지 시점의 풍속 보존)
+try { db.exec(`ALTER TABLE record_breaking_log ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 // Migrate existing numeric wind values to "N.N m/s" text format for scoreboard compatibility
 // (SQLite 부팅 전용 마이그레이션 — PG 백엔드에서는 별도 마이그레이션 스크립트로 처리)
 if (!db.isAsync) {
@@ -815,12 +817,20 @@ if (!db.isAsync) {
 if (!db.isAsync && !db.raw.prepare("SELECT 1 FROM system_config WHERE key='operation_key'").get()) {
     setConfigKey('operation_key', process.env.OPERATION_KEY || '1234');
 }
+// 기록위원 전용 키 (Phase C 확장): 신기록 승인/거부만 전담하는 운영 역할.
+// - 빈 문자열이면 비활성 (admin만 승인 가능)
+// - 설정 시 4자 이상 임의 문자열. admin/operation과 별개.
+if (!db.isAsync && !db.raw.prepare("SELECT 1 FROM system_config WHERE key='record_officer_key'").get()) {
+    setConfigKey('record_officer_key', process.env.RECORD_OFFICER_KEY || '');
+}
 
 const ACCESS_KEYS = {
     get operation() { return getConfigKey('operation_key', '1234'); },
     set operation(v) { setConfigKey('operation_key', v); },
     get adminHash() { return getConfigKey('admin_pw', ''); },
     set admin(v) { setConfigKey('admin_pw', bcrypt.hashSync(v, 10)); },
+    get recordOfficer() { return getConfigKey('record_officer_key', ''); },
+    set recordOfficer(v) { setConfigKey('record_officer_key', v || ''); },
 };
 const ADMIN_ID = () => getConfigKey('admin_id', 'admin');
 
@@ -877,14 +887,29 @@ function isAdminOrManager(key) {
     const r = _opKeyCache.get(key);
     return !!(r && r.can_manage);
 }
+// Phase C 확장: 기록위원 전용 키 — 신기록 승인/거부 권한.
+//   ACCESS_KEYS.recordOfficer 가 비어있으면 항상 false (비활성).
+function isRecordOfficerKey(key) {
+    if (!key) return false;
+    const stored = ACCESS_KEYS.recordOfficer;
+    if (!stored) return false; // 비활성 상태
+    return key === stored;
+}
+// 신기록 관련 운영 권한: 관리자 OR 기록위원
+function isRecordOfficerOrAdmin(key) {
+    if (isAdminKey(key)) return true;
+    return isRecordOfficerKey(key);
+}
 function getJudgeName(key) {
     if (isAdminKey(key)) return '관리자';
+    if (isRecordOfficerKey(key)) return '기록위원';
     if (key === ACCESS_KEYS.operation) return '운영(기본키)';
     const r = _opKeyCache.get(key);
     return r ? r.judge_name : 'unknown';
 }
 function getKeyRole(key) {
     if (isAdminKey(key)) return 'admin';
+    if (isRecordOfficerKey(key)) return 'record_officer';
     const r = _opKeyCache.get(key);
     if (r) return r.can_manage ? 'admin' : 'operation';
     if (key === ACCESS_KEYS.operation) return 'operation';
@@ -2191,8 +2216,15 @@ async function _runRecordCompareHook(result, heatRow) {
         if (!result || !heatRow) return;
         const event = await db.get('SELECT * FROM event WHERE id=?', heatRow.event_id);
         if (!event) return;
-        // combined의 부모/자식은 일단 스킵 (기록 비교 의미 모호)
-        if (event.category === 'combined' || event.parent_event_id) return;
+        // combined 부모: 단일 result 경로로는 처리 안 함 (combined_score sync 경로에서 처리)
+        if (event.category === 'combined') return;
+        // sub-event(parent_event_id 존재): 일반 NR/DR/CR은 비교 안 하지만,
+        // 부모 combined의 신기록 감지는 별도로 호출
+        if (event.parent_event_id) {
+            // best-effort: combined hook 호출
+            _runCombinedRecordCompareHook(event.parent_event_id, result.event_entry_id).catch(()=>{});
+            return;
+        }
         const competition = await db.get('SELECT * FROM competition WHERE id=?', event.competition_id);
         if (!competition) return;
         const eventEntry = await db.get('SELECT * FROM event_entry WHERE id=?', result.event_entry_id);
@@ -2229,6 +2261,53 @@ async function _runRecordCompareHook(result, heatRow) {
         }
     } catch (e) {
         console.error('[recordCompareHook] failed (non-fatal):', e && e.message);
+    }
+}
+
+// Phase C 확장 Task 3: combined 종목 신기록 감지 헬퍼
+// sub-event result 저장 후, OR combined-scores/save 후에 호출.
+// best-effort: 실패해도 throw 안 함.
+async function _runCombinedRecordCompareHook(parentEventId, subEventEntryId) {
+    try {
+        if (!parentEventId) return;
+        const parent_event = await db.get('SELECT * FROM event WHERE id=?', parentEventId);
+        if (!parent_event || parent_event.category !== 'combined') return;
+        const competition = await db.get('SELECT * FROM competition WHERE id=?', parent_event.competition_id);
+        if (!competition) return;
+
+        // sub-event entry → athlete_id → 부모 event_entry
+        let athleteId = null;
+        if (subEventEntryId) {
+            const subEntry = await db.get('SELECT athlete_id FROM event_entry WHERE id=?', subEventEntryId);
+            if (subEntry) athleteId = subEntry.athlete_id;
+        }
+        if (!athleteId) return;
+        const parentEntry = await db.get(
+            'SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?',
+            parent_event.id, athleteId
+        );
+        if (!parentEntry) return;
+        const athlete = await db.get('SELECT * FROM athlete WHERE id=?', athleteId);
+
+        const ret = await detectCombinedRecordBreaks(db, {
+            parent_event, athlete, competition, eventEntry: parentEntry
+        });
+        if (ret && ret.detected && ret.detected.length > 0) {
+            for (const d of ret.detected) {
+                opLog(`🏆 ${d.record_type.toUpperCase()} 기록 갱신 감지(혼성): ${parent_event.name} (${athlete?.name || '선수'} 합계 점수) — 승인 대기`, 'record', 'system', competition.id);
+            }
+            broadcastSSE('record_break_detected', {
+                competition_id: competition.id, event_id: parent_event.id,
+                event_name: parent_event.name,
+                athlete_name: athlete?.name || '',
+                athlete_team: athlete?.team || '',
+                value: null,
+                detected: ret.detected,
+                combined: true,
+            });
+        }
+    } catch (e) {
+        console.error('[combinedRecordCompareHook] failed (non-fatal):', e && e.message);
     }
 }
 
@@ -2517,6 +2596,17 @@ app.post('/api/combined-scores/save', async (req, res) => {
             res.json(await db.get('SELECT * FROM combined_score WHERE id=?', info.lastInsertRowid));
         }
         broadcastSSE('combined_update', { event_entry_id, sub_event_order });
+        // Phase C 확장 Task 3: combined 신기록 감지 (직접 입력 경로)
+        // sub_event_entry → parent_event 유추 후 hook 호출
+        try {
+            const subEntry = await db.get(
+                'SELECT ee.id AS sub_entry_id, e.parent_event_id FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.id=?',
+                event_entry_id
+            );
+            if (subEntry && subEntry.parent_event_id) {
+                _runCombinedRecordCompareHook(subEntry.parent_event_id, subEntry.sub_entry_id).catch(()=>{});
+            }
+        } catch(e) {}
     } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 app.get('/api/combined-sub-events', async (req, res) => {
@@ -3714,16 +3804,34 @@ app.get('/api/public/callroom-summary', async (req, res) => {
 // ADMIN: KEY MANAGEMENT (supports multi-key with judge names)
 // ============================================================
 app.post('/api/admin/change-keys', (req, res) => {
-    const { admin_key, new_operation_key, new_admin_key, new_admin_id } = req.body;
+    const { admin_key, new_operation_key, new_admin_key, new_admin_id, new_record_officer_key } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (new_operation_key && new_operation_key.length >= 4) ACCESS_KEYS.operation = new_operation_key;
     if (new_admin_key && new_admin_key.length >= 4) ACCESS_KEYS.admin = new_admin_key;  // setter hashes automatically
     if (new_admin_id && new_admin_id.trim()) setConfigKey('admin_id', new_admin_id.trim());
-    res.json({ success: true, operation_key: ACCESS_KEYS.operation, admin_id: ADMIN_ID() });
+    // Phase C 확장: 기록위원 키. 빈 문자열 명시 시 비활성, 4자 이상이면 설정
+    if (typeof new_record_officer_key === 'string') {
+        const trimmed = new_record_officer_key.trim();
+        if (trimmed === '' || trimmed.length >= 4) {
+            ACCESS_KEYS.recordOfficer = trimmed;
+        }
+    }
+    res.json({
+        success: true,
+        operation_key: ACCESS_KEYS.operation,
+        admin_id: ADMIN_ID(),
+        record_officer_key: ACCESS_KEYS.recordOfficer,
+        record_officer_active: !!ACCESS_KEYS.recordOfficer,
+    });
 });
 app.get('/api/admin/current-keys', (req, res) => {
     if (!isAdminKey(req.query.key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    res.json({ operation: ACCESS_KEYS.operation, admin_id: ADMIN_ID() });
+    res.json({
+        operation: ACCESS_KEYS.operation,
+        admin_id: ADMIN_ID(),
+        record_officer_key: ACCESS_KEYS.recordOfficer,
+        record_officer_active: !!ACCESS_KEYS.recordOfficer,
+    });
 });
 // Public endpoint: get registered judge/operator names (for callroom completion dropdown)
 app.get('/api/registered-judges', async (req, res) => {
@@ -9937,6 +10045,7 @@ app.get('/api/record-breaks/recent', async (req, res) => {
                             rbl.event_name, rbl.gender, rbl.division_code, rbl.series_id,
                             rbl.previous_value, rbl.new_value, rbl.new_value_num,
                             rbl.athlete_name, rbl.athlete_team, rbl.bib_number,
+                            rbl.wind,
                             rbl.detected_at, rbl.reviewed_at,
                             c.name AS competition_name,
                             dm.label_ko AS division_label,
@@ -9980,10 +10089,11 @@ app.get('/api/record-breaks/:id', async (req, res) => {
 });
 
 // POST /api/record-breaks/:id/approve — event_record UPSERT + status='approved'
+//   Phase C 확장: 관리자 OR 기록위원(record_officer_key) 둘 다 허용
 app.post('/api/record-breaks/:id/approve', async (req, res) => {
     try {
         const { admin_key, note } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        if (!isRecordOfficerOrAdmin(admin_key)) return res.status(403).json({ error: '관리자 또는 기록위원 키가 필요합니다.' });
         const rbl = await db.get('SELECT * FROM record_breaking_log WHERE id=?', req.params.id);
         if (!rbl) return res.status(404).json({ error: 'Not found' });
         if (rbl.status !== 'pending') return res.status(400).json({ error: `이미 처리됨: ${rbl.status}` });
@@ -10043,7 +10153,8 @@ app.post('/api/record-breaks/:id/approve', async (req, res) => {
             getJudgeName(admin_key) || 'admin', note || '', rbl.id
         );
 
-        opLog(`🏆 기록 승인: ${event_name} ${record_type.toUpperCase()} (${athlete_name} ${new_value})`, 'admin', 'admin', rbl.competition_id);
+        const reviewerRole = isAdminKey(admin_key) ? 'admin' : 'record_officer';
+        opLog(`🏆 기록 승인: ${event_name} ${record_type.toUpperCase()} (${athlete_name} ${new_value})`, getJudgeName(admin_key) || reviewerRole, reviewerRole, rbl.competition_id);
         broadcastSSE('record_break_resolved', { id: rbl.id, status: 'approved', competition_id: rbl.competition_id });
         res.json({ success: true, status: 'approved' });
     } catch (err) {
@@ -10053,10 +10164,11 @@ app.post('/api/record-breaks/:id/approve', async (req, res) => {
 });
 
 // POST /api/record-breaks/:id/reject — status='rejected'만 갱신
+//   Phase C 확장: 관리자 OR 기록위원(record_officer_key) 둘 다 허용
 app.post('/api/record-breaks/:id/reject', async (req, res) => {
     try {
         const { admin_key, note } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        if (!isRecordOfficerOrAdmin(admin_key)) return res.status(403).json({ error: '관리자 또는 기록위원 키가 필요합니다.' });
         const rbl = await db.get('SELECT * FROM record_breaking_log WHERE id=?', req.params.id);
         if (!rbl) return res.status(404).json({ error: 'Not found' });
         if (rbl.status !== 'pending') return res.status(400).json({ error: `이미 처리됨: ${rbl.status}` });
@@ -10065,7 +10177,8 @@ app.post('/api/record-breaks/:id/reject', async (req, res) => {
             `UPDATE record_breaking_log SET status='rejected', reviewed_at=${nowFn}, reviewed_by=?, review_note=? WHERE id=?`,
             getJudgeName(admin_key) || 'admin', note || '', rbl.id
         );
-        opLog(`기록 거부: ${rbl.event_name} ${rbl.record_type.toUpperCase()} (${rbl.athlete_name} ${rbl.new_value})`, 'admin', 'admin', rbl.competition_id);
+        const reviewerRole2 = isAdminKey(admin_key) ? 'admin' : 'record_officer';
+        opLog(`기록 거부: ${rbl.event_name} ${rbl.record_type.toUpperCase()} (${rbl.athlete_name} ${rbl.new_value})`, getJudgeName(admin_key) || reviewerRole2, reviewerRole2, rbl.competition_id);
         broadcastSSE('record_break_resolved', { id: rbl.id, status: 'rejected', competition_id: rbl.competition_id });
         res.json({ success: true, status: 'rejected' });
     } catch (err) {
