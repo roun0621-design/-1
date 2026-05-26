@@ -8374,10 +8374,10 @@ app.post('/api/timetable/upload', upload.single('file'), async (req, res) => {
                 const rawTime = row['시간'] !== undefined ? row['시간'] : (row['time'] !== undefined ? row['time'] : row['Time']);
                 // FIX: Excel 시간 셀이 분수(0.4166…)로 들어오는 경우 HH:MM 으로 변환
                 const time = excelTimeToHHMM(rawTime);
-                const eventName = (row['종목'] || row['event'] || row['Event'] || row['event_name'] || '').toString().trim();
-                const category = (row['부별'] || row['종별'] || row['category'] || row['Category'] || '').toString().trim();
-                const round = (row['라운드'] || row['round'] || row['Round'] || '').toString().trim();
-                const note = (row['비고'] || row['note'] || row['Note'] || '').toString().trim();
+                const eventName = cleanTimetableEventName(row['종목'] || row['event'] || row['Event'] || row['event_name'] || '');
+                const category = (row['부별'] || row['종별'] || row['category'] || row['Category'] || '').toString().replace(/[\u00A0\s]+/g, ' ').trim();
+                const round = (row['라운드'] || row['round'] || row['Round'] || '').toString().replace(/[\u00A0\s]+/g, ' ').trim();
+                const note = (row['비고'] || row['note'] || row['Note'] || '').toString().replace(/[\u00A0\s]+/g, ' ').trim();
 
                 if (!time || !eventName) return; // skip empty rows
 
@@ -12448,7 +12448,12 @@ function normalizeDivisionLabel(div) {
 // --- Helper: Excel time fraction → HH:MM string ---
 function excelTimeToHHMM(val) {
     if (typeof val === 'string') {
-        if (/^\d{1,2}:\d{2}/.test(val)) return val.substring(0, 5);
+        if (/^\d{1,2}:\d{2}/.test(val)) {
+            // Normalize "7:00" → "07:00"
+            const m = val.match(/^(\d{1,2}):(\d{2})/);
+            if (m) return String(m[1]).padStart(2, '0') + ':' + m[2];
+            return val.substring(0, 5);
+        }
         return val;
     }
     if (typeof val === 'number') {
@@ -12458,6 +12463,26 @@ function excelTimeToHHMM(val) {
         return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
     }
     return '';
+}
+
+// Clean up event_name string from timetable Excel cells:
+// - Strip leading/trailing whitespace
+// - Replace newlines/tabs/multi-space with single space
+// - Remove space immediately before "(" so e.g. "4×400mR\n(Mixed)" → "4×400mR(Mixed)"
+// - Unify full-width × → x (do NOT lowercase x; keep DB-style "X" vs "x" as-is and let matcher norm)
+function cleanTimetableEventName(raw) {
+    if (raw === null || raw === undefined) return '';
+    let s = String(raw);
+    // 1) Replace all whitespace (incl. \r, \n, \t, nbsp) with single space
+    s = s.replace(/[\u00A0\s]+/g, ' ').trim();
+    // 2) Remove space immediately before "(" to fix "4×400mR (Mixed)" → "4×400mR(Mixed)"
+    s = s.replace(/\s+\(/g, '(');
+    // 3) Common typo correction: "4600mR" → "4x600mR" (missing 'x' between 4 and digits)
+    //    Only fix when looks like "<digit><3+digits>mR" but starts with 4 and length implies missing x
+    //    Conservative: 4xxxmR(Mixed) where xxx is 3 digits (i.e. 4600 → really 4×600)
+    //    Skip 4x100/400/200/etc. (already correct)
+    s = s.replace(/^4(\d{3,4}m[Rr])/, (m, rest) => '4x' + rest);
+    return s;
 }
 
 // --- Helper: determine event category from name ---
@@ -12540,9 +12565,9 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
             const rawDate = colIdx.date >= 0 ? String(row[colIdx.date] || '').trim() : '';
             const rawSection = colIdx.section >= 0 ? String(row[colIdx.section] || '').trim() : '';
             const rawTime = row[colIdx.time];
-            const rawEvent = String(row[colIdx.event] || '').trim();
-            const rawJongbyul = colIdx.jongbyul >= 0 ? String(row[colIdx.jongbyul] || '').trim() : '';
-            const rawRound = colIdx.round >= 0 ? String(row[colIdx.round] || '').trim() : '';
+            const rawEvent = cleanTimetableEventName(row[colIdx.event] || '');
+            const rawJongbyul = colIdx.jongbyul >= 0 ? String(row[colIdx.jongbyul] || '').replace(/[\u00A0\s]+/g, ' ').trim() : '';
+            const rawRound = colIdx.round >= 0 ? String(row[colIdx.round] || '').replace(/[\u00A0\s]+/g, ' ').trim() : '';
 
             if (!rawEvent && !rawTime) continue;
 
