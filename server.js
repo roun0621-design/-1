@@ -2314,6 +2314,66 @@ async function _runRecordCompareHook(result, heatRow) {
 // Phase C 확장 Task 3: combined 종목 신기록 감지 헬퍼
 // sub-event result 저장 후, OR combined-scores/save 후에 호출.
 // best-effort: 실패해도 throw 안 함.
+// 🛠️ 단일 athlete 의 combined_score 를 모든 sub-event 에 대해 다시 계산하여 UPSERT.
+// /api/results/upsert 에서 자동으로 호출 → frontend sync 누락에 대비한 server-side 보장 경로.
+async function _syncCombinedScoresForAthlete(parent_event, parentEntry, athleteId) {
+    if (!parent_event || !parentEntry || !athleteId) return;
+    const waKeys = parent_event.gender === 'M' ? DECATHLON_KEYS : HEPTATHLON_KEYS;
+    const expectedCount = waKeys.length;
+    const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', parent_event.id);
+    const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points)
+        VALUES (?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name`;
+
+    for (let idx = 0; idx < subEvents.length && idx < expectedCount; idx++) {
+        const subEvt = subEvents[idx];
+        const subOrder = idx + 1;
+        const subHeats = await db.all('SELECT id FROM heat WHERE event_id=?', subEvt.id);
+        if (!subHeats || subHeats.length === 0) continue;
+        const subHeatIds = subHeats.map(h => h.id);
+        const heatPh = subHeatIds.map(() => '?').join(',');
+        const subEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', subEvt.id, athleteId);
+        if (!subEntry) continue;
+        let bestRecord = null;
+        let hasAttempts = false;
+        if (subEvt.category === 'track') {
+            const r = await db.get(`SELECT MIN(time_seconds) AS best FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND time_seconds > 0`, ...subHeatIds, subEntry.id);
+            if (r && r.best) bestRecord = r.best;
+            const cnt = await db.get(`SELECT COUNT(*) AS c FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=?`, ...subHeatIds, subEntry.id);
+            if (cnt && cnt.c > 0) hasAttempts = true;
+        } else if (subEvt.category === 'field_distance') {
+            const r = await db.get(`SELECT MAX(distance_meters) AS best FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND distance_meters > 0`, ...subHeatIds, subEntry.id);
+            if (r && r.best) bestRecord = r.best;
+            const cnt = await db.get(`SELECT COUNT(*) AS c FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND attempt_number IS NOT NULL`, ...subHeatIds, subEntry.id);
+            if (cnt && cnt.c > 0) hasAttempts = true;
+        } else if (subEvt.category === 'field_height') {
+            const r = await db.get(`SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND result_mark='O'`, ...subHeatIds, subEntry.id);
+            if (r && r.best) bestRecord = r.best;
+            const cnt = await db.get(`SELECT COUNT(*) AS c FROM height_attempt WHERE heat_id IN (${heatPh}) AND event_entry_id=?`, ...subHeatIds, subEntry.id);
+            if (cnt && cnt.c > 0) hasAttempts = true;
+        }
+        if (bestRecord != null) {
+            const waKey = waKeys[subOrder - 1];
+            // Sanity check
+            let valid = true;
+            if (waKey === 'M_long_jump' || waKey === 'F_long_jump') { if (bestRecord > 12) valid = false; }
+            else if (waKey === 'M_high_jump' || waKey === 'F_high_jump') { if (bestRecord > 3) valid = false; }
+            else if (waKey === 'M_pole_vault') { if (bestRecord > 7) valid = false; }
+            else if (waKey === 'M_shot_put' || waKey === 'F_shot_put') { if (bestRecord > 25) valid = false; }
+            if (!valid) {
+                await db.run('DELETE FROM combined_score WHERE event_entry_id=? AND sub_event_order=?', parentEntry.id, subOrder);
+                continue;
+            }
+            const waPoints = waKey ? calcWAPoints(waKey, bestRecord) : 0;
+            await db.run(UPSERT_SQL, parentEntry.id, subEvt.name, subOrder, bestRecord, waPoints);
+        } else if (hasAttempts) {
+            await db.run(UPSERT_SQL, parentEntry.id, subEvt.name, subOrder, 0, 0);
+        } else {
+            await db.run('DELETE FROM combined_score WHERE event_entry_id=? AND sub_event_order=?', parentEntry.id, subOrder);
+        }
+    }
+    broadcastSSE('combined_update', { event_id: parent_event.id });
+}
+
 async function _runCombinedRecordCompareHook(parentEventId, subEventEntryId) {
     try {
         if (!parentEventId) return;
@@ -2335,6 +2395,14 @@ async function _runCombinedRecordCompareHook(parentEventId, subEventEntryId) {
         );
         if (!parentEntry) return;
         const athlete = await db.get('SELECT * FROM athlete WHERE id=?', athleteId);
+
+        // 🛠️ FIX: sub-event 기록 저장 시 server-side 에서도 combined_score 를 자동 sync.
+        // 과거에는 frontend (record.js) 가 syncCombinedFromSubEvent 를 호출했으나,
+        // 외부 도구(엑셀 업로드/API 직접 호출/관리자 수동 입력)로 result 만 저장된 경우
+        // sync 가 실행되지 않아 종합 순위에 "—" 표시되는 버그 발생. server 에서 보장.
+        await _syncCombinedScoresForAthlete(parent_event, parentEntry, athleteId).catch(err => {
+            console.error('[autoSync] failed:', err && err.message);
+        });
 
         const ret = await detectCombinedRecordBreaks(db, {
             parent_event, athlete, competition, eventEntry: parentEntry
@@ -2738,30 +2806,35 @@ app.post('/api/combined-scores/sync', async (req, res) => {
             const subEvt = subEvents[idx];
             const subOrder = idx + 1;
             if (subOrder > expectedCount) break; // Guard: ignore extra sub-events beyond decathlon/heptathlon size
-            const subHeat = await db.get('SELECT id FROM heat WHERE event_id=? LIMIT 1', subEvt.id);
-            if (!subHeat) continue;
+            // 🛠️ FIX: sub-event 에 heat 가 여러 개 있을 수 있음 (예: 멀리뛰기를 그룹별로 분할 진행한 경우).
+            // 과거 'LIMIT 1' 로 첫 heat 만 보면, 사용자가 다른 heat 에 기록을 저장한 경우 sync 가 건너뛰어
+            // 종합 순위에 "—" 로 표시되는 버그 발생. 모든 heat 의 result 를 합산하여 best 를 구함.
+            const subHeats = await db.all('SELECT id FROM heat WHERE event_id=?', subEvt.id);
+            if (!subHeats || subHeats.length === 0) continue;
+            const subHeatIds = subHeats.map(h => h.id);
+            const heatPh = subHeatIds.map(() => '?').join(',');
             for (const pe of parentEntries) {
                 const subEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', subEvt.id, pe.athlete_id);
                 if (!subEntry) continue;
                 let bestRecord = null;
                 let hasAttempts = false;
                 if (subEvt.category === 'track') {
-                    const r = await db.get('SELECT MIN(time_seconds) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds > 0', subHeat.id, subEntry.id);
+                    const r = await db.get(`SELECT MIN(time_seconds) AS best FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND time_seconds > 0`, ...subHeatIds, subEntry.id);
                     if (r && r.best) bestRecord = r.best;
                     // Check if athlete has any result rows (including DNS/DNF/NM)
-                    const cnt = await db.get('SELECT COUNT(*) AS c FROM result WHERE heat_id=? AND event_entry_id=?', subHeat.id, subEntry.id);
+                    const cnt = await db.get(`SELECT COUNT(*) AS c FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=?`, ...subHeatIds, subEntry.id);
                     if (cnt && cnt.c > 0) hasAttempts = true;
                 } else if (subEvt.category === 'field_distance') {
-                    const r = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters > 0', subHeat.id, subEntry.id);
+                    const r = await db.get(`SELECT MAX(distance_meters) AS best FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND distance_meters > 0`, ...subHeatIds, subEntry.id);
                     if (r && r.best) bestRecord = r.best;
                     // NM check: has attempts but all fouls (distance=0)
-                    const cnt = await db.get('SELECT COUNT(*) AS c FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NOT NULL', subHeat.id, subEntry.id);
+                    const cnt = await db.get(`SELECT COUNT(*) AS c FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND attempt_number IS NOT NULL`, ...subHeatIds, subEntry.id);
                     if (cnt && cnt.c > 0) hasAttempts = true;
                 } else if (subEvt.category === 'field_height') {
-                    const r = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", subHeat.id, subEntry.id);
+                    const r = await db.get(`SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND result_mark='O'`, ...subHeatIds, subEntry.id);
                     if (r && r.best) bestRecord = r.best;
                     // NM check: has height attempts but no clearance (all X or PASS)
-                    const cnt = await db.get('SELECT COUNT(*) AS c FROM height_attempt WHERE heat_id=? AND event_entry_id=?', subHeat.id, subEntry.id);
+                    const cnt = await db.get(`SELECT COUNT(*) AS c FROM height_attempt WHERE heat_id IN (${heatPh}) AND event_entry_id=?`, ...subHeatIds, subEntry.id);
                     if (cnt && cnt.c > 0) hasAttempts = true;
                 }
                 if (bestRecord != null) {
@@ -2834,27 +2907,30 @@ app.post('/api/combined-scores/repair', async (req, res) => {
             for (let idx = 0; idx < subEvents.length && idx < expectedCount; idx++) {
                 const subEvt = subEvents[idx];
                 const subOrder = idx + 1;
-                const subHeat = await db.get('SELECT id FROM heat WHERE event_id=? LIMIT 1', subEvt.id);
-                if (!subHeat) continue;
+                // 🛠️ FIX: 모든 heat 합산 (sync 엔드포인트와 동일 로직)
+                const subHeats = await db.all('SELECT id FROM heat WHERE event_id=?', subEvt.id);
+                if (!subHeats || subHeats.length === 0) continue;
+                const subHeatIds = subHeats.map(h => h.id);
+                const heatPh = subHeatIds.map(() => '?').join(',');
                 for (const pe of parentEntries) {
                     const subEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', subEvt.id, pe.athlete_id);
                     if (!subEntry) continue;
                     let bestRecord = null;
                     let hasAttempts = false;
                     if (subEvt.category === 'track') {
-                        const r = await db.get('SELECT MIN(time_seconds) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds > 0', subHeat.id, subEntry.id);
+                        const r = await db.get(`SELECT MIN(time_seconds) AS best FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND time_seconds > 0`, ...subHeatIds, subEntry.id);
                         if (r && r.best) bestRecord = r.best;
-                        const cnt = await db.get('SELECT COUNT(*) AS c FROM result WHERE heat_id=? AND event_entry_id=?', subHeat.id, subEntry.id);
+                        const cnt = await db.get(`SELECT COUNT(*) AS c FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=?`, ...subHeatIds, subEntry.id);
                         if (cnt && cnt.c > 0) hasAttempts = true;
                     } else if (subEvt.category === 'field_distance') {
-                        const r = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters > 0', subHeat.id, subEntry.id);
+                        const r = await db.get(`SELECT MAX(distance_meters) AS best FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND distance_meters > 0`, ...subHeatIds, subEntry.id);
                         if (r && r.best) bestRecord = r.best;
-                        const cnt = await db.get('SELECT COUNT(*) AS c FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NOT NULL', subHeat.id, subEntry.id);
+                        const cnt = await db.get(`SELECT COUNT(*) AS c FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND attempt_number IS NOT NULL`, ...subHeatIds, subEntry.id);
                         if (cnt && cnt.c > 0) hasAttempts = true;
                     } else if (subEvt.category === 'field_height') {
-                        const r = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", subHeat.id, subEntry.id);
+                        const r = await db.get(`SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND result_mark='O'`, ...subHeatIds, subEntry.id);
                         if (r && r.best) bestRecord = r.best;
-                        const cnt = await db.get('SELECT COUNT(*) AS c FROM height_attempt WHERE heat_id=? AND event_entry_id=?', subHeat.id, subEntry.id);
+                        const cnt = await db.get(`SELECT COUNT(*) AS c FROM height_attempt WHERE heat_id IN (${heatPh}) AND event_entry_id=?`, ...subHeatIds, subEntry.id);
                         if (cnt && cnt.c > 0) hasAttempts = true;
                     }
                     if (bestRecord != null) {
@@ -2875,6 +2951,125 @@ app.post('/api/combined-scores/repair', async (req, res) => {
     } catch (err) {
         console.error('[combined-scores/repair]', err);
         res.status(500).json({ error: 'Repair failed: ' + (err.message || err) });
+    }
+});
+
+// 🔍 진단 엔드포인트: 종합경기에서 특정 sub-event 점수가 누락된 원인을 즉시 추적.
+// 사용 예: GET /api/combined-scores/diag?parent_event_id=46&sub_order=2
+// (sub_order: 1-based, 10종 멀리뛰기=2, 7종 멀리뛰기=5 등)
+// 반환: 모든 부모 entry × sub entry × heat × result 매핑 상태 + 누락 사유.
+app.get('/api/combined-scores/diag', async (req, res) => {
+    try {
+        const parent_event_id = +req.query.parent_event_id;
+        const sub_order = req.query.sub_order ? +req.query.sub_order : null;
+        if (!parent_event_id) return res.status(400).json({ error: 'parent_event_id required' });
+        const parentEvent = await db.get('SELECT * FROM event WHERE id=?', parent_event_id);
+        if (!parentEvent) return res.status(404).json({ error: 'Parent event not found' });
+        if (parentEvent.category !== 'combined') return res.status(400).json({ error: 'Not a combined event' });
+
+        const waKeys = parentEvent.gender === 'M' ? DECATHLON_KEYS : HEPTATHLON_KEYS;
+        const expectedCount = waKeys.length;
+        const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', parent_event_id);
+        const parentEntries = await db.all(`
+            SELECT ee.id AS event_entry_id, ee.athlete_id, a.bib_number, a.name
+            FROM event_entry ee JOIN athlete a ON a.id = ee.athlete_id
+            WHERE ee.event_id=?
+            ORDER BY a.bib_number
+        `, parent_event_id);
+
+        const targetIndices = sub_order ? [sub_order - 1] : subEvents.map((_, i) => i);
+        const report = [];
+
+        for (const idx of targetIndices) {
+            if (idx < 0 || idx >= subEvents.length) continue;
+            const subEvt = subEvents[idx];
+            const subOrder = idx + 1;
+            const waKey = waKeys[idx] || null;
+            const subHeats = await db.all('SELECT id, heat_number FROM heat WHERE event_id=?', subEvt.id);
+            const subHeatIds = subHeats.map(h => h.id);
+            const heatPh = subHeatIds.length ? subHeatIds.map(() => '?').join(',') : null;
+
+            const subInfo = {
+                sub_order: subOrder,
+                sub_event_id: subEvt.id,
+                sub_event_name: subEvt.name,
+                category: subEvt.category,
+                sort_order: subEvt.sort_order,
+                wa_key: waKey,
+                heats: subHeats,
+                athletes: []
+            };
+
+            for (const pe of parentEntries) {
+                const subEntry = await db.get('SELECT id, status FROM event_entry WHERE event_id=? AND athlete_id=?', subEvt.id, pe.athlete_id);
+                const row = {
+                    bib: pe.bib_number,
+                    name: pe.name,
+                    athlete_id: pe.athlete_id,
+                    parent_entry_id: pe.event_entry_id,
+                    sub_entry_id: subEntry ? subEntry.id : null,
+                    sub_entry_status: subEntry ? subEntry.status : null,
+                    result_count: 0,
+                    best_record: null,
+                    has_attempts: false,
+                    combined_score_row: null,
+                    skip_reason: null
+                };
+                if (!subEntry) {
+                    row.skip_reason = 'sub-event 에 event_entry 가 없음 (소집/엔트리 누락)';
+                } else if (!heatPh) {
+                    row.skip_reason = 'sub-event 에 heat 가 없음';
+                } else {
+                    if (subEvt.category === 'track') {
+                        const r = await db.get(`SELECT MIN(time_seconds) AS best, COUNT(*) AS cnt FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=?`, ...subHeatIds, subEntry.id);
+                        const valid = await db.get(`SELECT MIN(time_seconds) AS best FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND time_seconds > 0`, ...subHeatIds, subEntry.id);
+                        row.result_count = r ? r.cnt : 0;
+                        row.best_record = valid ? valid.best : null;
+                        row.has_attempts = row.result_count > 0;
+                    } else if (subEvt.category === 'field_distance') {
+                        const r = await db.get(`SELECT COUNT(*) AS cnt FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND attempt_number IS NOT NULL`, ...subHeatIds, subEntry.id);
+                        const valid = await db.get(`SELECT MAX(distance_meters) AS best FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND distance_meters > 0`, ...subHeatIds, subEntry.id);
+                        row.result_count = r ? r.cnt : 0;
+                        row.best_record = valid ? valid.best : null;
+                        row.has_attempts = row.result_count > 0;
+                    } else if (subEvt.category === 'field_height') {
+                        const r = await db.get(`SELECT COUNT(*) AS cnt FROM height_attempt WHERE heat_id IN (${heatPh}) AND event_entry_id=?`, ...subHeatIds, subEntry.id);
+                        const valid = await db.get(`SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND result_mark='O'`, ...subHeatIds, subEntry.id);
+                        row.result_count = r ? r.cnt : 0;
+                        row.best_record = valid ? valid.best : null;
+                        row.has_attempts = row.result_count > 0;
+                    }
+                    // sanity check
+                    if (row.best_record != null && waKey) {
+                        let plausible = true;
+                        if ((waKey === 'M_long_jump' || waKey === 'F_long_jump') && row.best_record > 12) plausible = false;
+                        else if ((waKey === 'M_high_jump' || waKey === 'F_high_jump') && row.best_record > 3) plausible = false;
+                        else if (waKey === 'M_pole_vault' && row.best_record > 7) plausible = false;
+                        else if ((waKey === 'M_shot_put' || waKey === 'F_shot_put') && row.best_record > 25) plausible = false;
+                        if (!plausible) row.skip_reason = `raw_record=${row.best_record} 가 ${waKey} 한계 초과 — sub-event 매핑 오류 가능`;
+                    }
+                }
+                // combined_score 조회 (부모 entry 기준)
+                const cs = await db.get('SELECT * FROM combined_score WHERE event_entry_id=? AND sub_event_order=?', pe.event_entry_id, subOrder);
+                row.combined_score_row = cs || null;
+                if (!cs && row.best_record != null && !row.skip_reason) {
+                    row.skip_reason = 'best_record 는 존재하나 combined_score row 없음 → sync 미실행 또는 sync 직후 다른 경로에서 삭제됨';
+                }
+                subInfo.athletes.push(row);
+            }
+            report.push(subInfo);
+        }
+
+        res.json({
+            parent_event: { id: parentEvent.id, name: parentEvent.name, gender: parentEvent.gender, category: parentEvent.category },
+            sub_event_count: subEvents.length,
+            expected_count: expectedCount,
+            parent_entries_count: parentEntries.length,
+            report
+        });
+    } catch (err) {
+        console.error('[combined-scores/diag]', err);
+        res.status(500).json({ error: 'Diag failed: ' + (err.message || err) });
     }
 });
 
