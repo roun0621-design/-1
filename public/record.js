@@ -2962,6 +2962,9 @@ function _cSubFieldRender(area) {
     if (!area) area = document.getElementById('combined-sub-area');
     if (!area) return;
     const { entries, results, heatId, parentId, needsWind } = _cSubFieldData;
+    // WA Rules: Combined events (10종/7종) field sub-events have only 3 attempts (no 4th-6th, no finals).
+    // This function is invoked ONLY for combined sub-events (see _renderSubEvent caller).
+    const MAX_ATTEMPTS = 3;
 
     const rows = entries.map(e => {
         const er = results.filter(r => r.event_entry_id === e.event_entry_id);
@@ -2981,11 +2984,11 @@ function _cSubFieldRender(area) {
         // WA: later attempt is the official record for same distance
         let bestWind = null;
         if (best != null) {
-            for (let i = 6; i >= 1; i--) { if (att[i] === best) { bestWind = attWind[i]; break; } }
+            for (let i = MAX_ATTEMPTS; i >= 1; i--) { if (att[i] === best) { bestWind = attWind[i]; break; } }
         }
         // Build sorted valid distances (descending) for WA tie-breaking
         const sortedValid = [];
-        for (let i = 1; i <= 6; i++) { if (att[i] != null && att[i] > 0) sortedValid.push(att[i]); }
+        for (let i = 1; i <= MAX_ATTEMPTS; i++) { if (att[i] != null && att[i] > 0) sortedValid.push(att[i]); }
         sortedValid.sort((a, b) => b - a);
         return { ...e, attempts: att, attWind, best, bestWind, status_code, _isNoShow: isDNS, sortedValid };
     });
@@ -3030,21 +3033,19 @@ function _cSubFieldRender(area) {
                     <thead>
                         ${needsWind ? `<tr><th rowspan="2">RANK</th><th style="text-align:left;">NAME / BIB</th>
                             <th class="att-col-first att-col-odd" colspan="1">1</th><th class="att-col-even" colspan="1">2</th><th class="att-col-odd" colspan="1">3</th>
-                            <th class="att-col-even" colspan="1">4</th><th class="att-col-odd" colspan="1">5</th><th class="att-col-even" colspan="1">6</th>
                             <th class="att-col-best" rowspan="2">BEST</th><th rowspan="2" style="width:65px;" title="DNS/NM">상태</th>
                         </tr>
                         <tr><th style="text-align:left;">소속</th>
                             <th class="wind-header att-col-first att-col-odd">풍속</th><th class="wind-header att-col-even">풍속</th><th class="wind-header att-col-odd">풍속</th>
-                            <th class="wind-header att-col-even">풍속</th><th class="wind-header att-col-odd">풍속</th><th class="wind-header att-col-even">풍속</th>
                         </tr>` : `<tr><th>RANK</th><th>NAME / BIB</th>
-                            <th class="att-col-first att-col-odd">1</th><th class="att-col-even">2</th><th class="att-col-odd">3</th><th class="att-col-even">4</th><th class="att-col-odd">5</th><th class="att-col-even">6</th>
+                            <th class="att-col-first att-col-odd">1</th><th class="att-col-even">2</th><th class="att-col-odd">3</th>
                             <th class="att-col-best">BEST</th><th style="width:65px;" title="DNS/NM">상태</th>
                         </tr>`}
                     </thead>
                     <tbody>${sorted.map((r, rowIdx) => {
                         const isDisabled = !!r.status_code;
                         let distCells = '';
-                        for (let i = 1; i <= 6; i++) {
+                        for (let i = 1; i <= MAX_ATTEMPTS; i++) {
                             const attCls = (i === 1 ? 'att-col-first ' : '') + (i % 2 === 1 ? 'att-col-odd' : 'att-col-even');
                             const v = r.attempts[i];
                             const hasVal = v !== undefined && v !== null;
@@ -3073,7 +3074,7 @@ function _cSubFieldRender(area) {
                         // Wind row cells (if needed)
                         let windCells = '';
                         if (needsWind) {
-                            for (let i = 1; i <= 6; i++) {
+                            for (let i = 1; i <= MAX_ATTEMPTS; i++) {
                                 const wAttCls = (i === 1 ? 'att-col-first ' : '') + (i % 2 === 1 ? 'att-col-odd' : 'att-col-even');
                                 if (isDisabled) {
                                     windCells += `<td class="wind-cell ${wAttCls}" style="opacity:0.3;">—</td>`;
