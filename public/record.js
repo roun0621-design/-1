@@ -4108,34 +4108,12 @@ async function approveSemifinalQualification() {
 // COMPLETE UI BUILDER — unified for all event types
 // ============================================================
 function _buildCompleteUI(evt) {
-    const dlBtn = `<button class="btn btn-outline btn-sm" onclick="downloadResultImage(${evt.id})" title="1080x1350 결과 이미지 다운로드" style="margin-left:auto;">결과 이미지</button>`;
+    // NOTE: 한글 깨짐 이슈로 "결과 이미지" 다운로드 버튼은 제거함 (PDF 결과지로 대체)
     if (evt.round_status === 'completed') {
         return `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:12px;">✓ 경기 완료됨</div>
-                <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>
-                ${dlBtn}`;
+                <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`;
     }
-    return `<button class="btn btn-success btn-sm" onclick="completeRound()" title="모든 기록이 저장된 후 경기를 최종 완료 처리합니다">경기 완료</button>
-            ${dlBtn}`;
-}
-
-async function downloadResultImage(eventId) {
-    try {
-        showToast('이미지 생성 중...', 'info', 2000);
-        const resp = await fetch('/api/result-image/' + eventId);
-        if (!resp.ok) throw new Error('이미지 생성 실패');
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'result_' + eventId + '.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showToast('✓ 이미지 다운로드 완료', 'success', 2000);
-    } catch(e) {
-        showToast('이미지 다운로드 실패: ' + e.message, 'error', 3000);
-    }
+    return `<button class="btn btn-success btn-sm" onclick="completeRound()" title="모든 기록이 저장된 후 경기를 최종 완료 처리합니다">경기 완료</button>`;
 }
 
 // ============================================================

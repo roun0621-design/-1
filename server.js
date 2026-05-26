@@ -11289,7 +11289,14 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
 app.get('/api/documents/:compId', async (req, res) => {
     const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
-    const events = await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id", comp.id);
+    // 부모 종목 + 혼성 세부종목 모두 포함. 정렬은 부모 → 세부 순으로 유지.
+    const parentEvents = await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id", comp.id);
+    const subEvents = await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NOT NULL ORDER BY parent_event_id, sort_order, id", comp.id);
+    const subsByParent = {};
+    for (const s of subEvents) {
+        if (!subsByParent[s.parent_event_id]) subsByParent[s.parent_event_id] = [];
+        subsByParent[s.parent_event_id].push(s);
+    }
     const docs = [];
     docs.push({ type: 'comprehensive-excel', label: '종합기록지 (남자)', url: `/api/documents/comprehensive/${comp.id}/excel?gender=M` });
     docs.push({ type: 'comprehensive-excel', label: '종합기록지 (여자)', url: `/api/documents/comprehensive/${comp.id}/excel?gender=F` });
@@ -11298,12 +11305,35 @@ app.get('/api/documents/:compId', async (req, res) => {
     docs.push({ type: 'full-record-pdf', label: '연맹 종합기록지 PDF (남자)', url: `/api/documents/full-record/${comp.id}/pdf?gender=M` });
     docs.push({ type: 'full-record-pdf', label: '연맹 종합기록지 PDF (여자)', url: `/api/documents/full-record/${comp.id}/pdf?gender=F` });
     const roundLabelMap = { preliminary: '예선', semifinal: '준결승', final: '결승' };
-    for (const evt of events) {
+    const pushDocsForEvent = (evt, opts = {}) => {
         const gK = evt.gender === 'M' ? '남' : evt.gender === 'F' ? '여' : '혼';
         const roundK = roundLabelMap[evt.round_type] || evt.round_type || '';
         const roundSuffix = roundK ? ` (${roundK})` : '';
-        docs.push({ type: 'start-list', label: `Start List: ${gK} ${evt.name}${roundSuffix}`, url: `/api/documents/start-list/${evt.id}`, event_id: evt.id, gender: evt.gender, event_name: evt.name, round: evt.round_type, category: evt.category });
-        docs.push({ type: 'result-sheet', label: `Results: ${gK} ${evt.name}${roundSuffix}`, url: `/api/documents/result-sheet/${evt.id}`, event_id: evt.id, gender: evt.gender, event_name: evt.name, round: evt.round_type, category: evt.category });
+        // 혼성 부모는 "종합" 표시. 혼성 세부종목은 부모 prefix가 이름에 이미 포함됨 ([10종] 100m 등).
+        const isCombinedParent = evt.category === 'combined' && !evt.parent_event_id;
+        const labelExtra = isCombinedParent ? ' — 종합' : '';
+        docs.push({
+            type: 'start-list',
+            label: `Start List: ${gK} ${evt.name}${labelExtra}${roundSuffix}`,
+            url: `/api/documents/start-list/${evt.id}`,
+            event_id: evt.id, gender: evt.gender,
+            event_name: evt.name, round: evt.round_type, category: evt.category,
+            parent_event_id: evt.parent_event_id || null
+        });
+        docs.push({
+            type: 'result-sheet',
+            label: `Results: ${gK} ${evt.name}${labelExtra}${roundSuffix}`,
+            url: `/api/documents/result-sheet/${evt.id}`,
+            event_id: evt.id, gender: evt.gender,
+            event_name: evt.name, round: evt.round_type, category: evt.category,
+            parent_event_id: evt.parent_event_id || null
+        });
+    };
+    for (const evt of parentEvents) {
+        pushDocsForEvent(evt);
+        // 혼성 종목이면 바로 아래에 세부종목 문서들 추가
+        const subs = subsByParent[evt.id] || [];
+        for (const sub of subs) pushDocsForEvent(sub);
     }
     res.json(docs);
 });

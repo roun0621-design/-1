@@ -6348,15 +6348,44 @@ POST /api/external/event-result-link/batch<br>
             // Populate event selectors for preview AND records
             try {
                 const events = await api('GET', `/api/events?competition_id=${_selectedCompId}`);
-                const mainEvents = (events || []).filter(e => !e.parent_event_id);
+                const allEvents = events || [];
+                const mainEvents = allEvents.filter(e => !e.parent_event_id);
+                // Build child-event map (combined 부모 → 세부종목 배열) for sub-event preview support
+                const childMap = {};
+                for (const ev of allEvents) {
+                    if (ev.parent_event_id) {
+                        if (!childMap[ev.parent_event_id]) childMap[ev.parent_event_id] = [];
+                        childMap[ev.parent_event_id].push(ev);
+                    }
+                }
+                // Sort each child group by sort_order, id
+                for (const pid of Object.keys(childMap)) {
+                    childMap[pid].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || (a.id - b.id));
+                }
+                const roundLbl = (rt) => rt === 'final' ? '결승' : rt === 'preliminary' ? '예선' : '준결승';
                 for (const selId of ['doc-sl-preview-event', 'doc-rs-preview-event', 'doc-rs-records-event']) {
                     const sel = document.getElementById(selId);
                     if (!sel) continue;
                     const prev = sel.value;
                     sel.innerHTML = '<option value="">-- 종목 선택 --</option>';
+                    // doc-rs-records-event 는 NR/DR/CR 기록 설정용이므로 부모만 노출 (세부종목 신기록은 부모 종목 단위로 관리)
+                    // doc-sl-preview-event / doc-rs-preview-event 는 종합 + 세부종목 모두 출력 가능하도록 노출
+                    const includeSubs = (selId !== 'doc-rs-records-event');
                     for (const ev of mainEvents) {
                         const gK = ev.gender === 'M' ? '남' : ev.gender === 'F' ? '여' : '혼';
-                        sel.innerHTML += `<option value="${ev.id}">${gK} ${ev.name} (${ev.round_type === 'final' ? '결승' : ev.round_type === 'preliminary' ? '예선' : '준결승'})</option>`;
+                        const isCombinedParent = ev.category === 'combined';
+                        if (isCombinedParent && includeSubs) {
+                            // 혼성 부모: 종합 옵션 표시 (혼성 종합 결과지 = 총점 순위표)
+                            sel.innerHTML += `<option value="${ev.id}">${gK} ${ev.name} — 종합 (${roundLbl(ev.round_type)})</option>`;
+                            // 세부종목 옵션들 (들여쓰기로 시각 구분)
+                            const subs = childMap[ev.id] || [];
+                            for (const sub of subs) {
+                                // [10종] 100m 같은 prefix가 이미 있으므로 그대로 사용. 추가로 부모 표시 위해 들여쓰기.
+                                sel.innerHTML += `<option value="${sub.id}">　└ ${gK} ${sub.name} (${roundLbl(sub.round_type)})</option>`;
+                            }
+                        } else {
+                            sel.innerHTML += `<option value="${ev.id}">${gK} ${ev.name} (${roundLbl(ev.round_type)})</option>`;
+                        }
                     }
                     if (prev) sel.value = prev;
                 }
