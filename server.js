@@ -78,19 +78,54 @@ function cleanOldBackups() {
     } catch (e) {}
 }
 
-// 매일 새벽 3시 자동 백업 (KST = UTC+9 → UTC 18시)
+// ─── 자동 백업 스케줄러 ──────────────────────────────────────────
+// 기존엔 node-cron 만 사용 → "missed execution" 으로 daily 백업이 한 건도 안 쌓이는 문제 발생.
+// 해결: setInterval 기반의 견고한 watchdog 으로 보강.
+//   - 매 5분마다 백업 디렉토리를 검사해서
+//     * 마지막 hourly 백업 후 ≥ 60분 경과 → hourly 백업 (활성 대회 무관, 무조건 실행)
+//     * 마지막 daily 백업 후 ≥ 24시간 경과 → daily 백업
+//   - cron 도 그대로 유지해서 정시 트리거 유지, 단 cron 이 놓쳐도 watchdog 이 복구.
+// 백업은 단순 파일 복사라 빠르고 블로킹 위험 없음.
+function _lastBackupAgeMs(tag) {
+    try {
+        const files = fs.readdirSync(BACKUP_DIR)
+            .filter(f => f.startsWith(`backup_${tag}_`) && f.endsWith('.db'))
+            .map(f => ({ f, m: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs }))
+            .sort((a, b) => b.m - a.m);
+        if (files.length === 0) return Infinity;
+        return Date.now() - files[0].m;
+    } catch(e) { return Infinity; }
+}
+
+// 매일 새벽 3시 (KST = UTC+9 → UTC 18시) 정시 daily 백업
 cron.schedule('0 18 * * *', () => performBackup('daily'));
 
-// 대회 진행 중 30분마다 백업 (활성 대회가 있을 때만)
-cron.schedule('*/30 * * * *', async () => {
-    try {
-        const active = await db.get("SELECT COUNT(*) as c FROM competition WHERE status IN ('in_progress','active')");
-        if (active && active.c > 0) performBackup('live');
-    } catch(e) {}
-});
+// 매 시각 정시 hourly 백업
+cron.schedule('0 * * * *', () => performBackup('hourly'));
 
-// 서버 시작 시 1회 백업
-setTimeout(() => performBackup('startup'), 5000);
+// 5분마다 watchdog — cron 이 놓친 백업을 자동 복구
+setInterval(() => {
+    try {
+        // daily: 마지막 daily 백업 후 24시간 이상 지났으면 즉시 실행
+        if (_lastBackupAgeMs('daily') >= 24 * 60 * 60 * 1000) {
+            console.log('[Backup Watchdog] daily 백업 누락 감지 → 즉시 실행');
+            performBackup('daily');
+        }
+        // hourly: 마지막 hourly 백업 후 65분 이상 지났으면 즉시 실행 (정시 +5분 grace)
+        if (_lastBackupAgeMs('hourly') >= 65 * 60 * 1000) {
+            console.log('[Backup Watchdog] hourly 백업 누락 감지 → 즉시 실행');
+            performBackup('hourly');
+        }
+    } catch(e) { console.error('[Backup Watchdog] 오류:', e.message); }
+}, 5 * 60 * 1000);
+
+// 서버 시작 시 1회 백업 + 시작 직후 hourly/daily 가 비어있으면 즉시 생성
+setTimeout(() => {
+    performBackup('startup');
+    // 시작 시점에 daily/hourly 가 너무 오래된 상태면 즉시 부트스트랩
+    if (_lastBackupAgeMs('daily') >= 24 * 60 * 60 * 1000) performBackup('daily');
+    if (_lastBackupAgeMs('hourly') >= 60 * 60 * 1000) performBackup('hourly');
+}, 5000);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -4856,6 +4891,69 @@ app.get('/api/admin/backup', async (req, res) => {
     // Default JSON
     res.setHeader('Content-Disposition', `attachment; filename="pace-rise-backup-${new Date().toISOString().slice(0,10)}.json"`);
     res.json(backup);
+});
+
+// ─── 파일 백업 (.db dump) 상태 조회 & 수동 트리거 ───────────────────────────
+// performBackup() 로 만들어진 backups/*.db 들의 현황을 조회/관리.
+// daily/hourly/startup/live/manual 태그별 통계, 최근 백업 목록, 다음 예정 시각 등.
+
+app.get('/api/admin/db-backup/status', (req, res) => {
+    if (!isOperationKey(req.query.key)) return res.status(403).json({ error: '운영키가 필요합니다.' });
+    try {
+        const files = fs.readdirSync(BACKUP_DIR)
+            .filter(f => f.startsWith('backup_') && f.endsWith('.db'))
+            .map(f => {
+                const fpath = path.join(BACKUP_DIR, f);
+                const st = fs.statSync(fpath);
+                const m = f.match(/^backup_([^_]+)_(.+)\.db$/);
+                return {
+                    name: f, tag: m ? m[1] : 'unknown',
+                    size: st.size, mtime: st.mtime,
+                    ageMs: Date.now() - st.mtimeMs
+                };
+            })
+            .sort((a, b) => b.mtime - a.mtime);
+
+        const tagStats = {};
+        for (const f of files) {
+            if (!tagStats[f.tag]) tagStats[f.tag] = { count: 0, totalSize: 0, latest: null };
+            tagStats[f.tag].count++;
+            tagStats[f.tag].totalSize += f.size;
+            if (!tagStats[f.tag].latest || f.mtime > new Date(tagStats[f.tag].latest)) {
+                tagStats[f.tag].latest = f.mtime;
+            }
+        }
+
+        res.json({
+            total_count: files.length,
+            total_size_bytes: files.reduce((s, f) => s + f.size, 0),
+            backup_dir: BACKUP_DIR,
+            max_retention_days: BACKUP_MAX_DAYS,
+            by_tag: tagStats,
+            recent_10: files.slice(0, 10).map(f => ({
+                name: f.name, tag: f.tag,
+                size_kb: Math.round(f.size / 1024),
+                mtime: f.mtime,
+                age_minutes: Math.round(f.ageMs / 60000)
+            })),
+            health: {
+                daily_age_hours: tagStats.daily ? Math.round((Date.now() - new Date(tagStats.daily.latest)) / 3600000) : null,
+                hourly_age_minutes: tagStats.hourly ? Math.round((Date.now() - new Date(tagStats.hourly.latest)) / 60000) : null,
+                daily_ok: tagStats.daily && (Date.now() - new Date(tagStats.daily.latest)) < 25 * 60 * 60 * 1000,
+                hourly_ok: tagStats.hourly && (Date.now() - new Date(tagStats.hourly.latest)) < 70 * 60 * 1000
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ error: '백업 상태 조회 실패: ' + e.message });
+    }
+});
+
+app.post('/api/admin/db-backup/trigger', (req, res) => {
+    if (!isOperationKey(req.body.admin_key)) return res.status(403).json({ error: '운영키가 필요합니다.' });
+    const tag = (req.body.tag || 'manual').replace(/[^a-z0-9]/gi, '').slice(0, 20) || 'manual';
+    const file = performBackup(tag);
+    if (!file) return res.status(500).json({ error: '백업 생성 실패' });
+    res.json({ success: true, file: path.basename(file), tag });
 });
 
 // ============================================================
