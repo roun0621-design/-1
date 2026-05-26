@@ -9383,6 +9383,14 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
             return n;
         });
 
+        // Helper: parse wind value — handles both numeric (real) and text ("0.5 m/s") storage
+        const parseWindValue = (w) => {
+            if (w == null) return null;
+            if (typeof w === 'number') return isFinite(w) ? w : null;
+            const m = String(w).match(/-?\d+(?:\.\d+)?/);
+            return m ? parseFloat(m[0]) : null;
+        };
+
         // Gather all combined_scores and sub-event results for each athlete
         const athleteData = await Promise.all(entries.map(async e => {
             const scores = await db.all('SELECT * FROM combined_score WHERE event_entry_id=? ORDER BY sub_event_order', e.event_entry_id);
@@ -9392,33 +9400,51 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 const se = subEvents[i];
                 const sc = scores.find(s => s.sub_event_order === i + 1) || null;
                 let rawRecord = null; let wind = null; let points = 0;
+                const isWindAffected = se.category === 'track' || se.category === 'field_distance';
                 if (sc) {
                     rawRecord = sc.raw_record;
                     points = sc.wa_points || 0;
                     totalPoints += points;
-                } else {
-                    // Try to get from sub-event's result table
-                    const subHeat = await db.get('SELECT id FROM heat WHERE event_id=?', se.id);
-                    if (subHeat) {
-                        const subEE = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', se.id, e.athlete_id);
-                        if (subEE) {
-                            const subRes = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? ORDER BY attempt_number LIMIT 1', subHeat.id, subEE.id);
-                            if (subRes) {
-                                const isST = se.category === 'track' || se.category === 'road' || se.category === 'relay';
-                                rawRecord = isST ? subRes.time_seconds : subRes.distance_meters;
-                                wind = subRes.wind;
-                            }
-                            // For field_height, get best cleared height
-                            if (se.category === 'field_height') {
-                                const best = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", subHeat.id, subEE.id);
-                                if (best && best.best) rawRecord = best.best;
-                            }
-                            // For field_distance, get best attempt
-                            if (se.category === 'field_distance' && !rawRecord) {
-                                const bestD = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters IS NOT NULL', subHeat.id, subEE.id);
-                                if (bestD && bestD.best) rawRecord = bestD.best;
-                            }
+                }
+                // Always try to load sub-event heat/result data (for wind retrieval and as fallback for missing combined_score)
+                const subHeat = await db.get('SELECT id, wind FROM heat WHERE event_id=?', se.id);
+                if (subHeat) {
+                    const subEE = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', se.id, e.athlete_id);
+                    if (subEE) {
+                        // Find best result (track: lowest time; field_distance: highest distance)
+                        let subRes = null;
+                        if (se.category === 'track' || se.category === 'road' || se.category === 'relay') {
+                            subRes = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds IS NOT NULL ORDER BY time_seconds ASC LIMIT 1', subHeat.id, subEE.id);
+                        } else if (se.category === 'field_distance') {
+                            subRes = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters IS NOT NULL ORDER BY distance_meters DESC LIMIT 1', subHeat.id, subEE.id);
+                        } else {
+                            subRes = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? ORDER BY attempt_number LIMIT 1', subHeat.id, subEE.id);
                         }
+
+                        if (!sc && subRes) {
+                            // Fallback record only if no combined_score
+                            const isST = se.category === 'track' || se.category === 'road' || se.category === 'relay';
+                            rawRecord = isST ? subRes.time_seconds : subRes.distance_meters;
+                        }
+                        // Always pull wind for wind-affected sub-events
+                        if (isWindAffected) {
+                            // Prefer result.wind (per-attempt accuracy), then fall back to heat.wind
+                            wind = parseWindValue(subRes?.wind);
+                            if (wind == null) wind = parseWindValue(subHeat.wind);
+                        }
+                        // For field_height fallback
+                        if (!sc && se.category === 'field_height') {
+                            const best = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", subHeat.id, subEE.id);
+                            if (best && best.best) rawRecord = best.best;
+                        }
+                        // For field_distance no-result fallback
+                        if (!sc && se.category === 'field_distance' && !rawRecord) {
+                            const bestD = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters IS NOT NULL', subHeat.id, subEE.id);
+                            if (bestD && bestD.best) rawRecord = bestD.best;
+                        }
+                    } else if (isWindAffected) {
+                        // No event_entry for sub event → use heat-level wind as best-effort
+                        wind = parseWindValue(subHeat.wind);
                     }
                 }
                 subScores.push({ rawRecord, wind, points, subEvent: se });
@@ -9467,14 +9493,19 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         const windRowH = 14;
         doc.save();
         doc.rect(tableLeft, curY, totalW, windRowH).fill('#f5f5f5').stroke(PR_TABLE_BORDER);
+        // "WIND (m/s)" label placed in the team column area (left of sub-events) for clarity
+        pdfFont(doc, true).fontSize(6).fillColor('#555');
+        const teamColEnd = comCols[3] ? comCols[3].x + comCols[3].w : tableLeft + totalW * 0.32;
+        doc.text('WIND (m/s)', tableLeft, curY + 3, { width: teamColEnd - tableLeft, align: 'right' });
+        // Mark each wind-affected sub-event column with a small wind indicator above
         pdfFont(doc, false).fontSize(5.5).fillColor('#888');
         for (let i = 0; i < subEvents.length; i++) {
             const se = subEvents[i];
             if (se.category === 'track' || se.category === 'field_distance') {
-                // Show 'WIND' label for wind-affected sub-events
+                const col = comCols[4 + i];
+                if (col) doc.text('↓', col.x + 1, curY + 3, { width: col.w - 2, align: 'center' });
             }
         }
-        doc.text('WIND', comCols[4 + Math.floor(subEvents.length / 2)]?.x || tableLeft + totalW * 0.5, curY + 3, { width: 40 });
         doc.restore();
         curY += windRowH;
 
@@ -9540,13 +9571,13 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 if (col && sc.points) doc.text(String(sc.points), col.x + 1, y2, { width: col.w - 2, align: 'center' });
             }
 
-            // Row 3: wind
+            // Row 3: wind (per sub-event, for track/field_distance only)
             const y3 = curY + subRowH * 2;
-            pdfFont(doc, false).fontSize(5).fillColor('#999');
+            pdfFont(doc, false).fontSize(6).fillColor('#0066aa');
             for (let i = 0; i < ath.subScores.length; i++) {
                 const sc = ath.subScores[i];
                 const col = comCols[4 + i];
-                if (col && sc.wind != null) {
+                if (col && typeof sc.wind === 'number' && isFinite(sc.wind)) {
                     const wStr = (sc.wind >= 0 ? '+' : '') + sc.wind.toFixed(1);
                     doc.text(wStr, col.x + 1, y3, { width: col.w - 2, align: 'center' });
                 }
