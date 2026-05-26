@@ -2491,12 +2491,36 @@ async function _renderScoreboard(container) {
             </table>
         </div>
         <p style="margin-top:6px;font-size:11px;color:var(--text-muted);">종목명을 클릭하면 해당 종목 기록 입력으로 이동합니다.</p>
-        <div class="track-actions" style="margin-top:12px;">
+        <div class="track-actions" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             ${evt.round_status === 'completed'
                 ? `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:13px;">✓ 경기 완료됨</div>
                    <button class="btn btn-warning btn-sm" onclick="revertCombinedComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`
                 : `<button class="btn btn-success" onclick="completeCombinedEvent()" title="모든 세부종목 기록을 최종 확정하고 경기를 완료합니다">⚑ 모든 경기 완료</button>`}
+            <button class="btn btn-sm btn-outline" onclick="repairCombinedScoresAction()" title="점수가 이상하게 표시될 때 모든 세부기록을 재계산합니다 (이전 잘못된 매핑 자동 정리)" style="margin-left:auto;">🔧 점수 재계산</button>
         </div>`;
+}
+
+// 🔧 Force-repair combined scores when scoreboard shows wrong values
+async function repairCombinedScoresAction() {
+    const evt = _combinedParentEvt || state.selectedEvent;
+    if (!evt) return;
+    if (!confirm(`${evt.name} 종합 점수를 모두 지우고 세부기록에서 다시 계산합니다.\n\n(점수가 잘못 표시될 때만 사용)\n계속하시겠습니까?`)) return;
+    let adminKey = '';
+    try {
+        const stored = sessionStorage.getItem('admin_key') || localStorage.getItem('admin_key') || '';
+        adminKey = stored || prompt('운영 키를 입력하세요:') || '';
+    } catch(e) {
+        adminKey = prompt('운영 키를 입력하세요:') || '';
+    }
+    if (!adminKey) return;
+    try {
+        const result = await API.repairCombinedScores(evt.id, adminKey);
+        showToast(`✓ 재계산 완료 (삭제 ${result.wiped}건, 재구축 ${result.rebuilt}건)`, 'success', 3000);
+        // Reload scoreboard
+        _renderCombinedContent();
+    } catch (err) {
+        showToast('재계산 실패: ' + (err.message || err.error || err), 'error', 4000);
+    }
 }
 
 // ── Complete combined event (10종/7종 모든 경기 완료) ──────

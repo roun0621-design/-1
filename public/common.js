@@ -493,6 +493,7 @@ const API = {
     saveCombinedScore: body => api('POST', '/api/combined-scores/save', body),
     getCombinedSubEvents: pid => api('GET', `/api/combined-sub-events?parent_event_id=${pid}`),
     syncCombinedScores: pid => api('POST', '/api/combined-scores/sync', { parent_event_id: pid }),
+    repairCombinedScores: (pid, admin_key) => api('POST', '/api/combined-scores/repair', { parent_event_id: pid, admin_key }),
     syncCombinedCheckin: eid => api('POST', '/api/combined/sync-checkin', { event_id: eid }),
     saveQualifications: (eid, sel) => api('POST', '/api/qualifications/save', { event_id: eid, selections: sel }),
     approveQualifications: eid => api('POST', '/api/qualifications/approve', { event_id: eid }),

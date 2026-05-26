@@ -2671,7 +2671,7 @@ app.get('/api/combined-sub-events', async (req, res) => {
     res.json(await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', req.query.parent_event_id));
 });
 app.post('/api/combined-scores/sync', async (req, res) => {
-    const { parent_event_id } = req.body;
+    const { parent_event_id, force } = req.body;
     if (!parent_event_id) return res.status(400).json({ error: 'parent_event_id required' });
     const parentEvent = await db.get('SELECT * FROM event WHERE id=?', parent_event_id);
     if (!parentEvent || parentEvent.category !== 'combined') return res.status(400).json({ error: 'Not a combined event' });
@@ -2681,13 +2681,63 @@ app.post('/api/combined-scores/sync', async (req, res) => {
     // 환산되는 버그 발생 (raw_record=49.54 → calcWAPoints('M_long_jump',49.54)=20058pt).
     const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', parent_event_id);
     const parentEntries = await db.all('SELECT ee.id AS event_entry_id, ee.athlete_id FROM event_entry ee WHERE ee.event_id=?', parent_event_id);
+    const waKeys = parentEvent.gender === 'M' ? DECATHLON_KEYS : HEPTATHLON_KEYS;
+    const expectedCount = waKeys.length; // 10 or 7
     let syncCount = 0;
+    let purgedCount = 0;
+    let healedCount = 0;
     const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points)
         VALUES (?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name`;
+
+    // 🛡️ Defensive cleanup (always runs, even without force):
+    // Remove any combined_score row whose sub_event_order is outside [1, expectedCount].
+    // These are orphans created in older buggy code paths and never reachable from the UI.
+    await db.transaction(async () => {
+        const orphan = await db.run(
+            `DELETE FROM combined_score
+             WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)
+               AND (sub_event_order < 1 OR sub_event_order > ?)`,
+            parent_event_id, expectedCount
+        );
+        if (orphan && orphan.changes) purgedCount += orphan.changes;
+    })();
+
+    // 🛡️ Force mode (or when raw_record sanity check fails):
+    // Wipe everything for this parent and rebuild from scratch.
+    // Triggered when sub-event categories don't match WA-expected categories (i.e., sub_event reordering happened).
+    const expectedCatBySubOrder = waKeys.map(k => {
+        const t = WA_TABLES[k]; if (!t) return null;
+        if (t.type === 'track') return 'track';
+        if (t.type === 'field_cm') return k.includes('high_jump') || k.includes('pole_vault') ? 'field_height' : 'field_distance';
+        return 'field_distance'; // field_m → throws (field_distance)
+    });
+    // Compute actual sort_order rank for each sub-event (1-based, matches frontend `s.sort_order === se.order` mapping after sync)
+    let categoryMismatch = false;
+    for (let idx = 0; idx < subEvents.length && idx < expectedCount; idx++) {
+        const expCat = expectedCatBySubOrder[idx];
+        const actCat = subEvents[idx].category;
+        // field_distance ↔ field (legacy) are equivalent for jumps/throws
+        if (expCat && actCat && expCat !== actCat) {
+            categoryMismatch = true;
+            break;
+        }
+    }
+    if (force || categoryMismatch) {
+        await db.transaction(async () => {
+            const wipe = await db.run(
+                `DELETE FROM combined_score
+                 WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)`,
+                parent_event_id
+            );
+            if (wipe && wipe.changes) healedCount += wipe.changes;
+        })();
+    }
+
     await db.transaction(async () => {
         for (let idx = 0; idx < subEvents.length; idx++) {
             const subEvt = subEvents[idx];
             const subOrder = idx + 1;
+            if (subOrder > expectedCount) break; // Guard: ignore extra sub-events beyond decathlon/heptathlon size
             const subHeat = await db.get('SELECT id FROM heat WHERE event_id=? LIMIT 1', subEvt.id);
             if (!subHeat) continue;
             for (const pe of parentEntries) {
@@ -2715,8 +2765,26 @@ app.post('/api/combined-scores/sync', async (req, res) => {
                     if (cnt && cnt.c > 0) hasAttempts = true;
                 }
                 if (bestRecord != null) {
-                    const waKeys = parentEvent.gender === 'M' ? DECATHLON_KEYS : HEPTATHLON_KEYS;
                     const waKey = waKeys[subOrder - 1];
+                    // 🛡️ Sanity check: raw_record must be plausible for the WA event type.
+                    // Long jump/triple jump: typically 3-9m. If we get a 40+m value here, the sub-event
+                    // category mapping is wrong — skip this row (don't write) to avoid 20000pt artifacts.
+                    let valid = true;
+                    if (waKey === 'M_long_jump' || waKey === 'F_long_jump') {
+                        if (bestRecord > 12) valid = false;       // world record ~8.95m → 12m hard cap
+                    } else if (waKey === 'M_high_jump' || waKey === 'F_high_jump') {
+                        if (bestRecord > 3) valid = false;        // world record ~2.45m
+                    } else if (waKey === 'M_pole_vault') {
+                        if (bestRecord > 7) valid = false;        // world record ~6.23m
+                    } else if (waKey === 'M_shot_put' || waKey === 'F_shot_put') {
+                        if (bestRecord > 25) valid = false;       // world record ~23m
+                    }
+                    if (!valid) {
+                        console.warn(`[sync] Skipping implausible record: ${subEvt.name} (subOrder=${subOrder}, waKey=${waKey}, raw=${bestRecord}) — likely sub-event mapping mismatch`);
+                        const delResult = await db.run('DELETE FROM combined_score WHERE event_entry_id=? AND sub_event_order=?', pe.event_entry_id, subOrder);
+                        if (delResult.changes > 0) healedCount += delResult.changes;
+                        continue;
+                    }
                     const waPoints = waKey ? calcWAPoints(waKey, bestRecord) : 0;
                     await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, bestRecord, waPoints);
                     syncCount++;
@@ -2732,7 +2800,82 @@ app.post('/api/combined-scores/sync', async (req, res) => {
             }
         }
     })();
-    res.json({ success: true, synced: syncCount });
+    res.json({ success: true, synced: syncCount, purged: purgedCount, healed: healedCount });
+});
+
+// 🔧 Force-repair: wipe and rebuild all combined_score rows for a parent event.
+// Use when the scoreboard shows clearly wrong values (e.g., long jump 49.54m / 20058pt)
+// due to historical sub-event reordering corrupting sub_event_order ↔ raw_record mapping.
+app.post('/api/combined-scores/repair', async (req, res) => {
+    const { parent_event_id, admin_key } = req.body;
+    if (!parent_event_id) return res.status(400).json({ error: 'parent_event_id required' });
+    if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) {
+        return res.status(403).json({ error: '운영자 또는 관리자 키가 필요합니다.' });
+    }
+    const parentEvent = await db.get('SELECT * FROM event WHERE id=?', parent_event_id);
+    if (!parentEvent || parentEvent.category !== 'combined') return res.status(400).json({ error: 'Not a combined event' });
+    // Wipe and rebuild all combined_score rows for this parent
+    const wipe = await db.run(
+        `DELETE FROM combined_score
+         WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)`,
+        parent_event_id
+    );
+    const wipedCount = (wipe && wipe.changes) || 0;
+    try {
+        // Use an internal HTTP call would be heavy — re-run the sync logic inline
+        const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', parent_event_id);
+        const parentEntries = await db.all('SELECT ee.id AS event_entry_id, ee.athlete_id FROM event_entry ee WHERE ee.event_id=?', parent_event_id);
+        const waKeys = parentEvent.gender === 'M' ? DECATHLON_KEYS : HEPTATHLON_KEYS;
+        const expectedCount = waKeys.length;
+        let synced = 0;
+        const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points)
+            VALUES (?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name`;
+        await db.transaction(async () => {
+            for (let idx = 0; idx < subEvents.length && idx < expectedCount; idx++) {
+                const subEvt = subEvents[idx];
+                const subOrder = idx + 1;
+                const subHeat = await db.get('SELECT id FROM heat WHERE event_id=? LIMIT 1', subEvt.id);
+                if (!subHeat) continue;
+                for (const pe of parentEntries) {
+                    const subEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', subEvt.id, pe.athlete_id);
+                    if (!subEntry) continue;
+                    let bestRecord = null;
+                    let hasAttempts = false;
+                    if (subEvt.category === 'track') {
+                        const r = await db.get('SELECT MIN(time_seconds) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds > 0', subHeat.id, subEntry.id);
+                        if (r && r.best) bestRecord = r.best;
+                        const cnt = await db.get('SELECT COUNT(*) AS c FROM result WHERE heat_id=? AND event_entry_id=?', subHeat.id, subEntry.id);
+                        if (cnt && cnt.c > 0) hasAttempts = true;
+                    } else if (subEvt.category === 'field_distance') {
+                        const r = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters > 0', subHeat.id, subEntry.id);
+                        if (r && r.best) bestRecord = r.best;
+                        const cnt = await db.get('SELECT COUNT(*) AS c FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NOT NULL', subHeat.id, subEntry.id);
+                        if (cnt && cnt.c > 0) hasAttempts = true;
+                    } else if (subEvt.category === 'field_height') {
+                        const r = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", subHeat.id, subEntry.id);
+                        if (r && r.best) bestRecord = r.best;
+                        const cnt = await db.get('SELECT COUNT(*) AS c FROM height_attempt WHERE heat_id=? AND event_entry_id=?', subHeat.id, subEntry.id);
+                        if (cnt && cnt.c > 0) hasAttempts = true;
+                    }
+                    if (bestRecord != null) {
+                        const waKey = waKeys[subOrder - 1];
+                        const waPoints = waKey ? calcWAPoints(waKey, bestRecord) : 0;
+                        await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, bestRecord, waPoints);
+                        synced++;
+                    } else if (hasAttempts) {
+                        await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, 0, 0);
+                        synced++;
+                    }
+                }
+            }
+        })();
+        broadcastSSE('combined_update', { event_id: parent_event_id });
+        opLog(`🔧 종합 결과 강제 재계산: ${parentEvent.name} (삭제 ${wipedCount}건, 재구축 ${synced}건)`, 'event', 'admin', parentEvent.competition_id);
+        res.json({ success: true, wiped: wipedCount, rebuilt: synced });
+    } catch (err) {
+        console.error('[combined-scores/repair]', err);
+        res.status(500).json({ error: 'Repair failed: ' + (err.message || err) });
+    }
 });
 
 // ============================================================
