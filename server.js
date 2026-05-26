@@ -9213,37 +9213,135 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
     const tableRight = pageW - margin;
     const totalW = tableRight - tableLeft;
 
-    let curY = margin;
+    // ============================================================
+    // [PAGE-REPEAT] 종목 상단 헤더 + 하단 NR/DR/CR 박스를 매 페이지마다 반복
+    //   - drawEventTopHeader: 대회 로고/제목 + OFFICIAL RESULT + 종목명 + Round/Date bar
+    //   - drawEventBottomBox: legend + 서명 + NR/DR/CR 표
+    //   - body 영역(heats) 그리는 동안 addPage 직후 curY 를 헤더 아래로 리셋
+    //   - body 영역 끝 한계는 pageH - margin - BOTTOM_RESERVED 로 강제
+    //   - PDF 종료 직전 bufferPages 로 전체 페이지 순회하며 헤더/하단 재그리기
+    // ============================================================
+    const drawEventTopHeader = (d) => {
+        let y = margin;
+        if (tpl.show_header !== false) {
+            y = drawPdfHeader(d, comp, tpl, pageW, margin);
+        }
+        // "OFFICIAL RESULT" label
+        pdfFont(d, true).fontSize(11).fillColor(PR_GREEN);
+        d.text('OFFICIAL RESULT', margin, y, { width: pageW - margin * 2 });
+        y += 16;
+        // Event title
+        pdfFont(d, true).fontSize(12).fillColor('#000');
+        d.text(`${gK}  ${event.name}`, margin, y);
+        y += 18;
+        // Round / Date bar
+        const barH = 22;
+        d.save();
+        d.rect(margin, y, 80, barH).fill('#1a1a1a');
+        pdfFont(d, true).fontSize(9).fillColor('#fff');
+        d.text(roundL, margin + 4, y + 6, { width: 72, align: 'center' });
+        d.restore();
+        pdfFont(d, false).fontSize(9).fillColor('#333');
+        d.text(comp ? comp.start_date : '', margin + 88, y + 6);
+        d.save();
+        d.moveTo(margin, y).lineTo(pageW - margin, y).lineWidth(0.5).stroke('#333');
+        d.moveTo(margin, y + barH).lineTo(pageW - margin, y + barH).lineWidth(0.5).stroke('#333');
+        d.restore();
+        y += barH + 8;
+        return y;
+    };
 
-    // Header with logos
-    if (tpl.show_header !== false) {
-        curY = drawPdfHeader(doc, comp, tpl, pageW, margin);
-    }
+    // 하단 NR/DR/CR + 서명 + legend 박스 데이터 (페이지 마다 반복 그리기 위해 미리 준비)
+    // event_records 와 global event_record 에서 NR/DR/CR 로드
+    const _loadRecordsData = async () => {
+        const evtRecRow = await db.get('SELECT records FROM event_records WHERE event_id=?', event.id);
+        let evtRec = {};
+        if (evtRecRow) { try { evtRec = JSON.parse(evtRecRow.records || '{}'); } catch(e) {} }
+        let normName = event.name.replace(/\s+/g, '').replace(/,/g, '').replace(/(\d)[×Xx](\d)/g, '$1x$2');
+        const nameMap = { '110m허들':'110mH','100m허들':'100mH','400m허들':'400mH','3000m장애물':'3000mSC','10000m경보':'10000mW','십종경기':'10종경기','칠종경기':'7종경기','4x100m릴레이':'4x100mR','4x400m릴레이':'4x400mR','혼성4x400mR':'MIXED 4x400mR','MIXED4x400mR':'MIXED 4x400mR','4x800m릴레이':'4x800mR','4x1500m릴레이':'4x1500mR' };
+        normName = nameMap[normName] || normName;
+        try {
+            const globalRecs = await db.all('SELECT * FROM event_record WHERE gender=? AND event_name=?', event.gender, normName);
+            for (const gr of globalRecs) {
+                const keyMap = { national: 'nr', division: 'dr', competition: 'cr' };
+                const shortKey = keyMap[gr.record_type];
+                if (shortKey && (!evtRec[shortKey] || !evtRec[shortKey].record)) {
+                    evtRec[shortKey] = { label: gr.record_type === 'national' ? '한국기록(NR)' : gr.record_type === 'division' ? '부별기록(DR)' : '대회기록(CR)', record: gr.record_value || '', athlete: gr.holder_name || '', team: gr.holder_team || '', year: gr.record_year || '' };
+                }
+            }
+        } catch(e) {}
+        const recTpl = tpl.records || {};
+        return [
+            { ...(recTpl.nr || { label: '한국기록(NR)' }), ...(evtRec.nr || {}) },
+            { ...(recTpl.dr || { label: '부별기록(DR)' }), ...(evtRec.dr || {}) },
+            { ...(recTpl.cr || { label: '대회기록(CR)' }), ...(evtRec.cr || {}) }
+        ];
+    };
+    const recRowsForFooter = (tpl.show_records_table !== false) ? await _loadRecordsData() : null;
 
-    // "OFFICIAL RESULT" label (green)
-    pdfFont(doc, true).fontSize(11).fillColor(PR_GREEN);
-    doc.text('OFFICIAL RESULT', margin, curY, { width: pageW - margin * 2 });
-    curY += 16;
+    // 하단 박스 그리기: legend + 서명선 + NR/DR/CR 3행 표
+    // 페이지 하단 영역 레이아웃 (위→아래):
+    //   [legend 12]  +  [signature 24]  +  [표 header 22 + data row 20 x 3 = 82]  =  118pt
+    //   브랜딩 푸터 ≈ 34.5pt, footerY = pageH - margin - 34.5 ≈ 767.4
+    //   박스 ↔ 푸터 간격 12pt 확보
+    // 박스를 푸터 바로 위로 "anchor down" 방식으로 배치 (정확한 위치 보장)
+    const BRANDING_FOOTER_H = 34.5;
+    const BOX_FOOTER_GAP = 12;
+    // 박스 실제 높이 = legend 12 + (signature 24 if shown) + table header 22 + data rows 20 * N
+    const _recCount = recRowsForFooter ? recRowsForFooter.length : 0;
+    const _sigH = (tpl.show_signature !== false) ? 24 : 0;
+    const _tableH = recRowsForFooter ? (22 + 20 * _recCount) : 0;
+    const BOX_H = 12 + _sigH + _tableH; // legend + sig + table
+    // 본문 영역 하단 한계: 박스 시작 y - 8pt 여백
+    const BOX_TOP_Y = pageH - margin - BRANDING_FOOTER_H - BOX_FOOTER_GAP - BOX_H;
+    const BOTTOM_RESERVED = pageH - margin - BOX_TOP_Y + 8; // 본문 ↔ 박스 사이 8pt 여백
+    const drawEventBottomBox = (d) => {
+        d.save(); // bufferPages + switchToPage 안전성 위한 그래픽 상태 격리
+        const totalH = pageH - margin * 2;
+        // 박스 시작 Y: 푸터 위로 정확히 anchor 됨 → 어떤 BOTTOM_RESERVED 값과도 무관하게 항상 푸터 위에 위치
+        let y = BOX_TOP_Y;
+        // Legend line
+        pdfFont(d, false).fontSize(7).fillColor('#555');
+        d.text('DQ=실격  DNS=경기불참  DNF=중도기권  NM=기록없음  Q=순위통과  q=기록통과', margin, y);
+        y += 12;
+        // Signature (작게)
+        if (tpl.show_signature !== false) {
+            pdfFont(d, false).fontSize(8.5).fillColor('#333');
+            const recName = tpl.recorder_name || '';
+            const chiefName = tpl.chief_recorder_name || '';
+            const sigLineW = 150;
+            d.text(`기록자 :    ${recName}`, tableLeft, y);
+            const chiefX = tableRight - sigLineW;
+            d.text(`기록주임 :    ${chiefName}`, chiefX, y);
+            y += 14;
+            d.save();
+            d.moveTo(tableLeft, y).lineTo(tableLeft + sigLineW, y).lineWidth(0.5).stroke('#999');
+            d.moveTo(chiefX, y).lineTo(tableRight, y).lineWidth(0.5).stroke('#999');
+            d.restore();
+            y += 10;
+        }
+        // NR/DR/CR 표
+        if (recRowsForFooter) {
+            const recCols = [
+                { key: 'label', label: '구 분', x: tableLeft, w: totalW * 0.22 },
+                { key: 'record', label: '기 록', x: tableLeft + totalW * 0.22, w: totalW * 0.18 },
+                { key: 'athlete', label: '선 수 명', x: tableLeft + totalW * 0.40, w: totalW * 0.20 },
+                { key: 'team', label: '소 속 명', x: tableLeft + totalW * 0.60, w: totalW * 0.22 },
+                { key: 'year', label: '수립년도', x: tableLeft + totalW * 0.82, w: totalW * 0.18 }
+            ];
+            y = drawTableHeader(d, recCols, y, tableLeft, tableRight, fontSize);
+            for (const row of recRowsForFooter) {
+                const vals = recCols.map(c => row[c.key] || '');
+                y = drawTableRow(d, recCols, vals, y, tableLeft, tableRight, fontSize);
+            }
+        }
+        d.restore();
+    };
 
-    // Event title
-    pdfFont(doc, true).fontSize(12).fillColor('#000');
-    doc.text(`${gK}  ${event.name}`, margin, curY);
-    curY += 18;
-
-    // Round / Date bar
-    const barH = 22;
-    doc.save();
-    doc.rect(margin, curY, 80, barH).fill('#1a1a1a');
-    pdfFont(doc, true).fontSize(9).fillColor('#fff');
-    doc.text(roundL, margin + 4, curY + 6, { width: 72, align: 'center' });
-    doc.restore();
-    pdfFont(doc, false).fontSize(9).fillColor('#333');
-    doc.text(comp ? comp.start_date : '', margin + 88, curY + 6);
-    doc.save();
-    doc.moveTo(margin, curY).lineTo(pageW - margin, curY).lineWidth(0.5).stroke('#333');
-    doc.moveTo(margin, curY + barH).lineTo(pageW - margin, curY + barH).lineWidth(0.5).stroke('#333');
-    doc.restore();
-    curY += barH + 8;
+    let curY = drawEventTopHeader(doc);
+    // body 영역 하단 한계: 기존 코드들의 `pageH - margin - 80` 대신
+    // 하단 박스 자리를 비워두기 위해 BOTTOM_RESERVED 사용
+    const BODY_BOTTOM = pageH - margin - BOTTOM_RESERVED;
 
     // ============================================================
     // COMBINED EVENT (10종/7종) — completely different layout
@@ -9364,8 +9462,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         let rank = 0;
         for (const ath of athleteData) {
             const rowH3 = 42; // 3 sub-rows * 14px each
-            if (curY + rowH3 > pageH - margin - 80) {
-                doc.addPage(); curY = margin;
+            if (curY + rowH3 > BODY_BOTTOM) {
+                doc.addPage(); curY = drawEventTopHeader(doc);
                 curY = drawTableHeader(doc, comCols, curY, tableLeft, tableRight, comFS);
                 curY += windRowH; // skip wind header space
             }
@@ -9526,8 +9624,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
 
         let rank = 0; let prevAth = null; let athIdx = 0;
         for (const ath of athleteData) {
-            if (curY + Math.max(20, hFS + 10) > pageH - margin - 80) {
-                doc.addPage(); curY = margin;
+            if (curY + Math.max(20, hFS + 10) > BODY_BOTTOM) {
+                doc.addPage(); curY = drawEventTopHeader(doc);
                 curY = drawTableHeader(doc, hCols, curY, tableLeft, tableRight, hFS);
             }
             const special = ['DNS','DNF','DQ','NM'].includes(ath.status_code) || ath.bestCleared == null;
@@ -9560,7 +9658,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         const minRows = 12;
         const drawn = athleteData.length;
         for (let i = drawn + 1; i <= minRows; i++) {
-            if (curY + Math.max(20, hFS + 10) > pageH - margin - 80) break;
+            if (curY + Math.max(20, hFS + 10) > BODY_BOTTOM) break;
             const emptyVals = hCols.map(col => col.key === 'rank' ? String(i) : '');
             curY = drawTableRow(doc, hCols, emptyVals, curY, tableLeft, tableRight, hFS);
         }
@@ -9651,7 +9749,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
 
             // Heat label
             if (heats.length > 1) {
-                if (curY + 80 > pageH - margin - 80) { doc.addPage(); curY = margin; }
+                if (curY + 80 > BODY_BOTTOM) { doc.addPage(); curY = drawEventTopHeader(doc); }
                 pdfFont(doc, true).fontSize(10).fillColor('#000');
                 doc.text(heat.heat_name || `Heat ${heat.heat_number}`, margin, curY);
                 curY += 16;
@@ -9690,8 +9788,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
             let rank = 0;
             for (const ath of athleteData) {
                 const rowH = hasWind ? 30 : 18; // 2 sub-rows if wind, 1 if not
-                if (curY + rowH > pageH - margin - 80) {
-                    doc.addPage(); curY = margin;
+                if (curY + rowH > BODY_BOTTOM) {
+                    doc.addPage(); curY = drawEventTopHeader(doc);
                     curY = drawTableHeader(doc, fdCols, curY, tableLeft, tableRight, fdFS);
                     if (hasWind) curY += 12;
                 }
@@ -9796,7 +9894,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
             if (heats.length > 1) {
                 const headerRowH2 = Math.max(22, fontSize + 12);
                 const neededH = 30 + headerRowH2 + entries.length * dataRowH2 + 20;
-                if (curY + neededH > pageH - margin - 80) { doc.addPage(); curY = margin; }
+                if (curY + neededH > BODY_BOTTOM) { doc.addPage(); curY = drawEventTopHeader(doc); }
                 const hLabel = heat.heat_name || `Heat ${heat.heat_number}`;
                 pdfFont(doc, true).fontSize(10).fillColor('#000');
                 doc.text(hLabel, margin, curY);
@@ -9836,8 +9934,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
 
             let rank = 0;
             for (const e of ranked) {
-                if (curY + dataRowH2 > pageH - margin - 80) {
-                    doc.addPage(); curY = margin;
+                if (curY + dataRowH2 > BODY_BOTTOM) {
+                    doc.addPage(); curY = drawEventTopHeader(doc);
                     curY = drawTableHeader(doc, rsCols, curY, tableLeft, tableRight, fontSize);
                 }
                 const special = ['DNS','DNF','NM','DQ'].includes(e.status_code);
@@ -9871,77 +9969,31 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         }
     }
 
-    // Legend line
-    curY += 4;
-    pdfFont(doc, false).fontSize(7).fillColor('#555');
-    doc.text('DQ=실격  DNS=경기불참  DNF=중도기권  NM=기록없음  Q=순위통과  q=기록통과', margin, curY);
-    curY += 12;
-
-    // Signature section (conditional) — aligned to table edges
-    if (tpl.show_signature !== false) {
-        if (curY > pageH - margin - 100) { doc.addPage(); curY = margin; }
-        curY += 10;
-        pdfFont(doc, false).fontSize(8.5).fillColor('#333');
-        const recName = tpl.recorder_name || '';
-        const chiefName = tpl.chief_recorder_name || '';
-        const sigLineW = 150;
-        doc.text(`기록자 :    ${recName}`, tableLeft, curY);
-        const chiefX = tableRight - sigLineW;
-        doc.text(`기록주임 :    ${chiefName}`, chiefX, curY);
-        curY += 16;
-        doc.moveTo(tableLeft, curY).lineTo(tableLeft + sigLineW, curY).lineWidth(0.5).stroke('#999');
-        doc.moveTo(chiefX, curY).lineTo(tableRight, curY).lineWidth(0.5).stroke('#999');
-        curY += 18;
-    }
-
-    // NR/DR/CR Records table (conditional) — per-event records with global fallback
-    if (tpl.show_records_table !== false) {
-        if (curY > pageH - margin - 100) { doc.addPage(); curY = margin; }
-        // Load per-event records from event_records table
-        const evtRecRow = await db.get('SELECT records FROM event_records WHERE event_id=?', event.id);
-        let evtRec = {};
-        if (evtRecRow) { try { evtRec = JSON.parse(evtRecRow.records || '{}'); } catch(e) {} }
-        
-        // Fallback: load from global event_record table (records management tab)
-        // Normalize event name for lookup
-        let normName = event.name.replace(/\s+/g, '').replace(/,/g, '').replace(/(\d)[×Xx](\d)/g, '$1x$2');
-        const nameMap = { '110m허들':'110mH','100m허들':'100mH','400m허들':'400mH','3000m장애물':'3000mSC','10000m경보':'10000mW','십종경기':'10종경기','칠종경기':'7종경기','4x100m릴레이':'4x100mR','4x400m릴레이':'4x400mR','혼성4x400mR':'MIXED 4x400mR','MIXED4x400mR':'MIXED 4x400mR','4x800m릴레이':'4x800mR','4x1500m릴레이':'4x1500mR' };
-        normName = nameMap[normName] || normName;
-        try {
-            const globalRecs = await db.all('SELECT * FROM event_record WHERE gender=? AND event_name=?', event.gender, normName);
-            for (const gr of globalRecs) {
-                const keyMap = { national: 'nr', division: 'dr', competition: 'cr' };
-                const shortKey = keyMap[gr.record_type];
-                if (shortKey && (!evtRec[shortKey] || !evtRec[shortKey].record)) {
-                    evtRec[shortKey] = { label: gr.record_type === 'national' ? '한국기록(NR)' : gr.record_type === 'division' ? '부별기록(DR)' : '대회기록(CR)', record: gr.record_value || '', athlete: gr.holder_name || '', team: gr.holder_team || '', year: gr.record_year || '' };
-                }
-            }
-        } catch(e) { /* event_record table might not exist */ }
-        
-        // Fallback to template-level labels
-        const recTpl = tpl.records || {};
-        const recRows = [
-            { ...(recTpl.nr || { label: '한국기록(NR)' }), ...(evtRec.nr || {}) },
-            { ...(recTpl.dr || { label: '부별기록(DR)' }), ...(evtRec.dr || {}) },
-            { ...(recTpl.cr || { label: '대회기록(CR)' }), ...(evtRec.cr || {}) }
-        ];
-        const recCols = [
-            { key: 'label', label: '구 분', x: tableLeft, w: totalW * 0.22 },
-            { key: 'record', label: '기 록', x: tableLeft + totalW * 0.22, w: totalW * 0.18 },
-            { key: 'athlete', label: '선 수 명', x: tableLeft + totalW * 0.40, w: totalW * 0.20 },
-            { key: 'team', label: '소 속 명', x: tableLeft + totalW * 0.60, w: totalW * 0.22 },
-            { key: 'year', label: '수립년도', x: tableLeft + totalW * 0.82, w: totalW * 0.18 }
-        ];
-        curY = drawTableHeader(doc, recCols, curY, tableLeft, tableRight, fontSize);
-        for (const row of recRows) {
-            const vals = recCols.map(c => row[c.key] || '');
-            curY = drawTableRow(doc, recCols, vals, curY, tableLeft, tableRight, fontSize);
+    // [PAGE-REPEAT] 모든 페이지에 상단 헤더(이미 본문 그릴 때 그렸음) + 하단 박스 보장
+    // bufferPages: true 옵션 덕에 doc.bufferedPageRange() 로 전체 페이지 순회 가능.
+    // 본문은 이미 BODY_BOTTOM 위까지만 그렸으므로 하단은 비어 있음 → 박스 안전하게 추가.
+    // 단, 마지막 페이지에서 본문이 너무 짧게 끝났더라도 박스는 페이지 하단 고정 위치에 그려야 함.
+    try {
+        const range = doc.bufferedPageRange(); // { start, count }
+        for (let i = range.start; i < range.start + range.count; i++) {
+            doc.switchToPage(i);
+            // 페이지 마다 상단 헤더는 본문 그릴 때 이미 그렸지만, 첫 페이지 외에 누락 가능성 방어
+            // → 본문 그리는 곳 모두에서 drawEventTopHeader 를 호출하므로 여기서는 하단 박스만 그림
+            drawEventBottomBox(doc);
         }
-        curY += 10;
-    }
+    } catch (e) { console.warn('[result-sheet] page-repeat error:', e.message); }
 
-    // Branding footer
-    drawBrandingFooter(doc, pageW, pageH, margin);
+    // Branding footer (마지막 페이지에만 그릴 수도 있고 모든 페이지에 그릴 수도 있음.
+    // 기존 동작 유지: 마지막 페이지에만 푸터 — drawBrandingFooter 가 현재 페이지에 그리므로
+    // 위 루프 종료 후 마지막 페이지가 활성 상태 → 그대로 호출하면 마지막 페이지에 그려짐.)
+    // [개선] 모든 페이지에 푸터도 같이 그리도록 변경
+    try {
+        const range = doc.bufferedPageRange();
+        for (let i = range.start; i < range.start + range.count; i++) {
+            doc.switchToPage(i);
+            drawBrandingFooter(doc, pageW, pageH, margin);
+        }
+    } catch (e) { drawBrandingFooter(doc, pageW, pageH, margin); }
     doc.end();
   } catch (err) {
     console.error('[Result Sheet Error]', err);
