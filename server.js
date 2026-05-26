@@ -8274,15 +8274,29 @@ app.post('/api/doc-logos/upload', upload.single('logo'), async (req, res) => {
     if (!compId || !['left', 'right', 'bottom'].includes(position)) return res.status(400).json({ error: 'competition_id and position (left/right/bottom) required' });
 
     // Save to persistent location
-    const ext = path.extname(req.file.originalname) || '.png';
+    const ext = (path.extname(req.file.originalname) || '.png').toLowerCase();
     const destDir = path.join(__dirname, 'public', 'uploads', 'logos');
     if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+
+    // 🛠️ 새 로고 업로드 전에 동일 (대회×포지션) 의 기존 로고 파일을 모두 제거.
+    // 그래야 PNG → JPG 처럼 확장자가 바뀐 재업로드 시 옛 파일이 우선 매치되어
+    // 종합기록지 등에 이전 로고가 계속 나오는 문제를 막을 수 있음.
+    const oldExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+    for (const oe of oldExts) {
+        try {
+            const oldPath = path.join(destDir, `logo_${position}_${compId}${oe}`);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        } catch(e) { /* skip */ }
+    }
+
     const filename = `logo_${position}_${compId}${ext}`;
     const destPath = path.join(destDir, filename);
     fs.copyFileSync(req.file.path, destPath);
     fs.unlinkSync(req.file.path);
 
-    const publicUrl = `/uploads/logos/${filename}`;
+    // 캐시버스터: 업로드 시각을 query 로 붙여 브라우저/하위 시스템이 옛 이미지를 안 쓰게 함.
+    const cacheBust = Date.now();
+    const publicUrl = `/uploads/logos/${filename}?v=${cacheBust}`;
 
     // Auto-update doc_template with the logo path for all document types
     const logoField = position === 'left' ? 'logo_left' : position === 'right' ? 'logo_right' : null;
