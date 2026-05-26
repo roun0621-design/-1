@@ -8294,9 +8294,12 @@ app.post('/api/doc-logos/upload', upload.single('logo'), async (req, res) => {
     fs.copyFileSync(req.file.path, destPath);
     fs.unlinkSync(req.file.path);
 
-    // 캐시버스터: 업로드 시각을 query 로 붙여 브라우저/하위 시스템이 옛 이미지를 안 쓰게 함.
-    const cacheBust = Date.now();
-    const publicUrl = `/uploads/logos/${filename}?v=${cacheBust}`;
+    // ⚠️ DB 에 저장하는 경로에는 절대 querystring(?v=...) 을 붙이지 않는다.
+    // drawPdfHeader 등 서버 측에서 path.join(__dirname, 'public', logoLeft) 로
+    // 실제 파일을 찾을 때 ?v=... 가 경로의 일부로 들어가 fs.existsSync 가 실패하기 때문.
+    // 캐시버스터는 클라이언트 응답에만 별도로 붙여 브라우저 미리보기 캐시를 무효화.
+    const publicUrl = `/uploads/logos/${filename}`;
+    const cacheBustUrl = `${publicUrl}?v=${Date.now()}`;
 
     // Auto-update doc_template with the logo path for all document types
     const logoField = position === 'left' ? 'logo_left' : position === 'right' ? 'logo_right' : null;
@@ -8321,7 +8324,8 @@ app.post('/api/doc-logos/upload', upload.single('logo'), async (req, res) => {
     }
 
     opLog(`로고 업로드 (${position})`, 'admin', 'admin', compId);
-    res.json({ success: true, url: publicUrl, path: destPath });
+    // 응답 url 은 캐시버스터 포함 → 클라이언트 미리보기가 즉시 새 이미지로 갱신.
+    res.json({ success: true, url: cacheBustUrl, path: destPath });
 });
 
 // Logo delete for PDF documents
@@ -9311,8 +9315,10 @@ const PR_TABLE_BORDER = '#d0d0d0';
 
 // Helper: Draw page header with logos, competition name, and venue/dates
 function drawPdfHeader(doc, comp, tpl, pageW, margin) {
-    const logoLeft = tpl.logo_left || '';
-    const logoRight = tpl.logo_right || '';
+    // querystring(?v=...) 을 제거해 실제 파일 경로만 사용 (DB 에 캐시버스터 URL 이 저장돼 있을 수 있음)
+    const stripQs = (u) => (u || '').split('?')[0];
+    const logoLeft = stripQs(tpl.logo_left);
+    const logoRight = stripQs(tpl.logo_right);
     const headerTop = margin;
     const logoMaxH = 50;
     const logoMaxW = 65;
