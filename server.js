@@ -7111,9 +7111,9 @@ app.get('/api/scoreboard/keys', async (req, res) => {
         WHERE e.competition_id = ? AND h.scoreboard_key IS NOT NULL
         ORDER BY e.sort_order, h.heat_number
     `, competition_id);
-    
-    // Also include joint scoreboard keys from event_link
-    const jointKeys = await db.all(`
+
+    // 구식 event_link 기반 합동 키 (2-way 만 가능)
+    const linkKeys = await db.all(`
         SELECT el.id as link_id, el.joint_scoreboard_key, el.event_id_a, el.event_id_b,
                ea.name as event_name, ea.gender, ea.round_type, ea.category
         FROM event_link el
@@ -7121,10 +7121,43 @@ app.get('/api/scoreboard/keys', async (req, res) => {
         WHERE (ea.competition_id = ? OR el.event_id_b IN (SELECT id FROM event WHERE competition_id = ?))
               AND el.joint_scoreboard_key IS NOT NULL
     `, competition_id, competition_id);
-    
+
+    // 신식 joint_group 기반 합동 키 (N-way 지원, 3-way "3way 10,000mW" 같은 케이스)
+    const jointGroupKeysRaw = await db.all(`
+        SELECT DISTINCT jg.id as joint_group_id, jg.name as joint_group_name, jg.joint_scoreboard_key
+        FROM joint_group jg
+        JOIN joint_group_member jgm ON jgm.joint_group_id = jg.id
+        WHERE jgm.competition_id = ? AND jg.joint_scoreboard_key IS NOT NULL
+    `, competition_id);
+
+    // 각 joint_group 의 멤버 종목 정보까지 함께 묶어서 반환
+    const jointGroupKeys = [];
+    for (const jg of jointGroupKeysRaw) {
+        const members = await db.all(`
+            SELECT jgm.event_id, jgm.competition_id, jgm.sort_order,
+                   e.name as event_name, e.gender, e.round_type, e.category, e.division
+            FROM joint_group_member jgm
+            JOIN event e ON e.id = jgm.event_id
+            WHERE jgm.joint_group_id = ?
+            ORDER BY jgm.sort_order
+        `, jg.joint_group_id);
+        const rep = members[0] || {};
+        jointGroupKeys.push({
+            joint_group_id: jg.joint_group_id,
+            joint_scoreboard_key: jg.joint_scoreboard_key,
+            name: jg.joint_group_name,
+            gender: rep.gender || '',
+            round_type: rep.round_type || '',
+            category: rep.category || '',
+            member_count: members.length,
+            members
+        });
+    }
+
     res.json({
         heat_keys: keys,
-        joint_keys: jointKeys
+        joint_keys: linkKeys,        // 호환성을 위해 기존 필드 유지
+        joint_groups: jointGroupKeys // 신식 N-way 합동 그룹 (3way 등 — 외부 전광판은 이걸 봐야 함)
     });
 });
 
@@ -7154,6 +7187,74 @@ app.get('/api/scoreboard/lookup', async (req, res) => {
     
     // If not found, check for joint scoreboard key
     if (!heat) {
+        // ─── 신식 joint_group 우선 확인 (N-way 합동, 3way 등) ───
+        const jointGroup = await db.get('SELECT * FROM joint_group WHERE joint_scoreboard_key = ?', key);
+        if (jointGroup) {
+            const members = await db.all(`
+                SELECT jgm.event_id, jgm.competition_id, jgm.sort_order,
+                       e.name as event_name, e.gender, e.round_type, e.category, e.division,
+                       c.name as comp_name, c.federation
+                FROM joint_group_member jgm
+                JOIN event e ON e.id = jgm.event_id
+                JOIN competition c ON c.id = jgm.competition_id
+                WHERE jgm.joint_group_id = ?
+                ORDER BY jgm.sort_order
+            `, jointGroup.id);
+
+            const allEntries = [];
+            const seenEntry = new Set();
+            for (const m of members) {
+                // 각 멤버 종목의 최신 heat 가져옴
+                const memberHeat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1', m.event_id);
+                if (!memberHeat) continue;
+                const memberEntries = await db.all(`
+                    SELECT he.lane_number, he.sub_group, ee.id as event_entry_id, ee.status,
+                           a.id as athlete_id, a.name, a.bib_number, a.team, a.gender,
+                           a.federation as athlete_federation
+                    FROM heat_entry he
+                    JOIN event_entry ee ON ee.id = he.event_entry_id
+                    JOIN athlete a ON a.id = ee.athlete_id
+                    WHERE he.heat_id = ?
+                    ORDER BY he.lane_number
+                `, memberHeat.id);
+                const memberResults = await db.all('SELECT * FROM result WHERE heat_id=?', memberHeat.id);
+                for (const e of memberEntries) {
+                    if (seenEntry.has(e.event_entry_id)) continue;
+                    seenEntry.add(e.event_entry_id);
+                    const r = memberResults.find(r => r.event_entry_id === e.event_entry_id);
+                    allEntries.push({
+                        ...e,
+                        record: r ? (r.time_seconds || r.distance_meters || null) : null,
+                        status_code: r ? r.status_code : null,
+                        federation: m.federation || m.comp_name,
+                        competition_id: m.competition_id,
+                        event_id: m.event_id,
+                        event_name: m.event_name,
+                        heat_id: memberHeat.id,
+                        wind: memberHeat.wind,
+                    });
+                }
+            }
+
+            const rep = members[0] || {};
+            return res.json({
+                is_joint: true,
+                is_joint_group: true,
+                joint_group_id: jointGroup.id,
+                joint_scoreboard_key: key,
+                event: {
+                    name: jointGroup.joint_scoreboard_key || jointGroup.name,
+                    gender: rep.gender || '',
+                    round_type: rep.round_type || '',
+                    category: rep.category || '',
+                    competition_id: rep.competition_id
+                },
+                member_event_ids: members.map(m => m.event_id),
+                entries: allEntries
+            });
+        }
+
+        // ─── 구식 event_link 확인 (호환성 유지) ───
         const jointLink = await db.get(`SELECT * FROM event_link WHERE joint_scoreboard_key = ?`, key);
         if (jointLink) {
             // Found a joint key — redirect to joint scoreboard data
@@ -12141,12 +12242,71 @@ app.get('/api/external/events/search', externalApiAuth, async (req, res) => {
 
     try {
         const rows = await db.all(sql, ...params);
+
+        // ─── 합동 종목 가상 row 추가 ──────────────────────────────
+        // joint_group (3way 등) 을 별도 종목처럼 노출해서 외부 전광판 프로그램이
+        // "3way 10,000mW" 같은 합동 키를 종목 목록에서 볼 수 있게 함.
+        // 가상 ID 는 충돌 방지를 위해 음수 사용: -(joint_group.id) 로 매핑.
+        // 단건 조회 시 /api/external/event/:id 가 음수 ID 를 받으면 joint_group 로 해석함.
+        let virtualJointItems = [];
+        try {
+            // 이 대회에 속한 종목을 멤버로 가진 joint_group 들
+            const jointGroups = await db.all(`
+                SELECT DISTINCT jg.id, jg.name, jg.joint_scoreboard_key
+                FROM joint_group jg
+                JOIN joint_group_member jgm ON jgm.joint_group_id = jg.id
+                WHERE jgm.competition_id = ?
+            `, compId);
+
+            for (const jg of jointGroups) {
+                // 대표 멤버 1개 가져와서 gender/round_type/division 등 메타 추정
+                const repMember = await db.get(`
+                    SELECT e.gender, e.round_type, e.division, e.category, e.sort_order, e.name as orig_name
+                    FROM joint_group_member jgm JOIN event e ON e.id = jgm.event_id
+                    WHERE jgm.joint_group_id = ?
+                    ORDER BY jgm.sort_order LIMIT 1
+                `, jg.id);
+                if (!repMember) continue;
+
+                const virtualName = jg.joint_scoreboard_key || jg.name || `합동 ${repMember.orig_name}`;
+
+                // 검색 필터 — 외부 API 가 받았던 동일 조건을 가상 row 에도 적용
+                if (name && !virtualName.includes(name)) continue;
+                if (division && repMember.division && !String(repMember.division).includes(division)) continue;
+                if (gender && ['M', 'F', 'X'].includes(gender) && repMember.gender !== gender) continue;
+                if (roundType && ['preliminary', 'semifinal', 'final'].includes(roundType) && repMember.round_type !== roundType) continue;
+
+                virtualJointItems.push({
+                    id: -jg.id,                              // 음수 ID = joint group 표식
+                    competition_id: compId,
+                    name: virtualName,
+                    category: repMember.category || '',
+                    gender: repMember.gender || '',
+                    division: repMember.division || '',
+                    round_type: repMember.round_type || '',
+                    round_status: '',                        // 합동 그룹 자체는 상태 없음
+                    sort_order: repMember.sort_order || 0,
+                    result_url: '',
+                    video_url: '',
+                    is_joint: true,
+                    joint_group_id: jg.id,
+                    joint_scoreboard_key: jg.joint_scoreboard_key || null
+                });
+            }
+        } catch (e) {
+            console.error('[external/events/search] joint group enrich error:', e.message);
+        }
+
+        // limit 적용: 원본 rows 가 limit 을 가득 채웠으면 합동은 추가만, 아니면 같이 자르기
+        const combined = [...rows, ...virtualJointItems];
+        const items = combined.slice(0, limit);
+
         return res.json({
             ok: true,
             competition: { id: compCheck.comp.id, name: compCheck.comp.name, mode: compCheck.comp.mode, start_date: compCheck.comp.start_date, end_date: compCheck.comp.end_date },
-            count: rows.length,
+            count: items.length,
             limit,
-            items: rows
+            items
         });
     } catch (e) {
         console.error('[external/events/search]', e);
@@ -12156,12 +12316,72 @@ app.get('/api/external/events/search', externalApiAuth, async (req, res) => {
 
 // ── Phase 4: 종목 단건 조회 ──
 // GET /api/external/event/:id
+// 음수 ID = joint_group (합동 종목) — search 응답에서 받은 가상 ID 그대로 사용 가능
 app.get('/api/external/event/:id', externalApiAuth, async (req, res) => {
     const eventId = parseInt(req.params.id);
-    if (!Number.isFinite(eventId) || eventId <= 0) {
+    if (!Number.isFinite(eventId) || eventId === 0) {
         return res.status(400).json({ ok: false, code: 'INVALID_EVENT_ID', message: 'event id가 올바르지 않습니다.' });
     }
 
+    // ─── 합동 종목 (음수 ID) 처리 ──────────────────────────────────
+    if (eventId < 0) {
+        const groupId = -eventId;
+        const jg = await db.get('SELECT * FROM joint_group WHERE id=?', groupId);
+        if (!jg) return res.status(404).json({ ok: false, code: 'EVENT_NOT_FOUND', message: '합동 종목을 찾을 수 없습니다.' });
+
+        const members = await db.all(`
+            SELECT jgm.event_id, jgm.competition_id, jgm.sort_order,
+                   e.name, e.gender, e.round_type, e.division, e.category, e.sort_order as event_sort_order,
+                   e.round_status,
+                   COALESCE(e.result_url,'') as result_url,
+                   COALESCE(e.video_url,'') as video_url
+            FROM joint_group_member jgm
+            JOIN event e ON e.id = jgm.event_id
+            WHERE jgm.joint_group_id = ?
+            ORDER BY jgm.sort_order
+        `, groupId);
+        if (!members.length) return res.status(404).json({ ok: false, code: 'EVENT_NOT_FOUND', message: '합동 종목에 멤버가 없습니다.' });
+
+        const rep = members[0];
+        const compCheck = await _ensureDisplayCompetition(rep.competition_id);
+        if (!compCheck.ok) return res.status(404).json({ ok: false, code: compCheck.code, message: compCheck.message });
+
+        // 키 범위 검증 — 키가 대표 멤버 대회에 접근 가능해야 함
+        const scope = _checkCompetitionScope(req.extApiKey, rep.competition_id);
+        if (!scope.ok) return res.status(403).json({ ok: false, code: scope.code, message: scope.message });
+
+        return res.json({
+            ok: true,
+            competition: { id: compCheck.comp.id, name: compCheck.comp.name, mode: compCheck.comp.mode, start_date: compCheck.comp.start_date, end_date: compCheck.comp.end_date },
+            event: {
+                id: eventId,                                 // 음수 ID 그대로
+                competition_id: rep.competition_id,
+                name: jg.joint_scoreboard_key || jg.name,
+                category: rep.category || '',
+                gender: rep.gender || '',
+                division: rep.division || '',
+                round_type: rep.round_type || '',
+                round_status: rep.round_status || '',
+                sort_order: rep.event_sort_order || 0,
+                result_url: '',
+                video_url: '',
+                is_joint: true,
+                joint_group_id: jg.id,
+                joint_scoreboard_key: jg.joint_scoreboard_key || null,
+                members: members.map(m => ({
+                    event_id: m.event_id,
+                    competition_id: m.competition_id,
+                    name: m.name,
+                    gender: m.gender,
+                    round_type: m.round_type,
+                    division: m.division,
+                    sort_order: m.sort_order
+                }))
+            }
+        });
+    }
+
+    // ─── 일반 종목 (양수 ID) — 기존 동작 그대로 ───────────────────
     const evt = await db.get(`
         SELECT e.id, e.competition_id, e.name, e.category, e.gender, e.division,
                e.round_type, e.round_status, e.sort_order,
