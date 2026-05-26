@@ -9348,15 +9348,33 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
     // ============================================================
     if (isCombined) {
         const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', event.id);
-        const heat = heats[0];
-        if (!heat) { doc.end(); return; }
-        const entries = await db.all(`
-            SELECT he.lane_number, ee.id AS event_entry_id, ee.status, ee.athlete_id,
-                   a.name, a.bib_number, a.team
-            FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-            JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-            ORDER BY he.lane_number ASC
-        `, heat.id);
+        const heat = heats[0]; // optional — 혼성 부모는 heat 가 없을 수 있음
+        // 부모 종목의 entries 조회: heat 가 있으면 lane 순, 없으면 event_entry 직접 조회
+        let entries;
+        if (heat) {
+            entries = await db.all(`
+                SELECT he.lane_number, ee.id AS event_entry_id, ee.status, ee.athlete_id,
+                       a.name, a.bib_number, a.team
+                FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
+                JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
+                ORDER BY he.lane_number ASC
+            `, heat.id);
+        } else {
+            // heat 없는 혼성 부모: event_entry 만으로 본문 생성 (lane 정보는 null)
+            entries = await db.all(`
+                SELECT NULL AS lane_number, ee.id AS event_entry_id, ee.status, ee.athlete_id,
+                       a.name, a.bib_number, a.team
+                FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id
+                WHERE ee.event_id=?
+                ORDER BY a.bib_number ASC, ee.id ASC
+            `, event.id);
+        }
+        // 그래도 entries 가 비어있으면 안내 텍스트만 출력하고 종료 (빈 페이지 방지)
+        if (!entries || entries.length === 0) {
+            pdfFont(doc, false).fontSize(11).fillColor('#888');
+            doc.text('— 등록된 선수가 없습니다 —', margin, curY + 20, { width: pageW - margin * 2, align: 'center' });
+            // bufferPages 루프에서 헤더/푸터/박스 그려지도록 본문은 비워두고 정상 종료
+        }
 
         // Build sub-event short names for columns
         const subLabels = subEvents.map(se => {
@@ -9405,8 +9423,10 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 }
                 subScores.push({ rawRecord, wind, points, subEvent: se });
             }
-            // Check for DNF status
-            const status = await db.get("SELECT status_code FROM result WHERE heat_id=? AND event_entry_id=? AND status_code IN ('DNF','DNS','DQ') LIMIT 1", heat.id, e.event_entry_id);
+            // Check for DNF status — heat 가 없으면 heat_id 조건 없이 entry 만으로 조회
+            const status = heat
+                ? await db.get("SELECT status_code FROM result WHERE heat_id=? AND event_entry_id=? AND status_code IN ('DNF','DNS','DQ') LIMIT 1", heat.id, e.event_entry_id)
+                : await db.get("SELECT status_code FROM result WHERE event_entry_id=? AND status_code IN ('DNF','DNS','DQ') LIMIT 1", e.event_entry_id);
             let statusCode = status?.status_code || '';
             // Fallback: if entry status is no_show and no explicit DNS result, treat as DNS
             if (!statusCode && e.status === 'no_show') statusCode = 'DNS';
