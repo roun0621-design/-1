@@ -29,3 +29,4 @@ backups/
 public/og-preview.html
 public/icons/preview/
 tmp/
+*.bak.*

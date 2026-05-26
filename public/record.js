@@ -429,6 +429,155 @@ function buildJointInfoHTML() {
     </div>`;
 }
 
+// ============================================================
+// JOINT GROUP HELPERS (대회 합동 입력 지원)
+// ----------------------------------------------------------------
+// state._jointGroup 가 셋팅돼 있으면 (selectEvent 에서 fetch)
+// 트랙/필드/높이 화면에서 다른 대회 멤버의 entries/results/height_attempts
+// 도 모두 함께 로드해서 한 화면에 표시한다.
+// 각 entry/result/attempt 에 _sourceHeatId 를 부착해서
+// 저장 시 entry 의 원래 대회 heat 로 보내도록 한다.
+// ============================================================
+
+// 현재 selected event 가 속한 joint group 의 "다른 대회" 멤버들의
+// (current event 가 아닌) 멤버 리스트 반환. 합동 아니면 [].
+function _jointOtherMembers() {
+    const jg = state._jointGroup;
+    if (!jg || !Array.isArray(jg.members)) return [];
+    return jg.members.filter(m => m.event_id !== state.selectedEventId);
+}
+
+// 합동 모드인지 (= 다른 대회 멤버가 1개 이상 있는지)
+function isJointMode() {
+    return _jointOtherMembers().length > 0;
+}
+
+// 한 멤버 event 의 (heatIndex 순서에 맞는) heat_id 를 구한다.
+// 합동은 보통 같은 round_type / 같은 heat 구조이므로 heat_number 일치를 우선,
+// 없으면 정렬 순 첫 heat 사용.
+async function _getMemberHeatId(memberEventId, currentHeatNumber) {
+    const heats = await API.getHeats(memberEventId);
+    if (!heats || heats.length === 0) return null;
+    if (currentHeatNumber != null) {
+        const matched = heats.find(h => h.heat_number === currentHeatNumber);
+        if (matched) return matched.id;
+    }
+    return heats[0].id;
+}
+
+// 합동 모드일 때 다른 멤버 대회들의 heat_entries 를 fetch 해서
+// 각각 _sourceHeatId / _federation / _compName 부착 후 반환.
+// 합동 아니면 빈 배열.
+async function fetchJointExtraEntries() {
+    if (!isJointMode()) return [];
+    const currentHeat = state.heats?.find(h => h.id === state.heatId);
+    const curHeatNum = currentHeat ? currentHeat.heat_number : null;
+    const extra = [];
+    for (const m of _jointOtherMembers()) {
+        try {
+            const mHeatId = await _getMemberHeatId(m.event_id, curHeatNum);
+            if (!mHeatId) continue;
+            const entries = await API.getHeatEntries(mHeatId);
+            entries.forEach(e => {
+                e._sourceHeatId = mHeatId;
+                e._sourceEventId = m.event_id;
+                e._federation = m.federation || m.comp_name || '';
+                e._compName = m.comp_name || '';
+                e._compId = m.competition_id;
+            });
+            extra.push(...entries);
+        } catch (err) { console.warn('[joint] fetch entries failed for', m.event_id, err); }
+    }
+    return extra;
+}
+
+// 합동 모드일 때 다른 멤버 heat 들의 results 를 모아서 반환.
+// 각 result 에 _sourceHeatId 부착.
+async function fetchJointExtraResults() {
+    if (!isJointMode()) return [];
+    const currentHeat = state.heats?.find(h => h.id === state.heatId);
+    const curHeatNum = currentHeat ? currentHeat.heat_number : null;
+    const extra = [];
+    for (const m of _jointOtherMembers()) {
+        try {
+            const mHeatId = await _getMemberHeatId(m.event_id, curHeatNum);
+            if (!mHeatId) continue;
+            const results = await API.getResults(mHeatId);
+            results.forEach(r => { r._sourceHeatId = mHeatId; });
+            extra.push(...results);
+        } catch (err) { console.warn('[joint] fetch results failed for', m.event_id, err); }
+    }
+    return extra;
+}
+
+// 합동 모드일 때 다른 멤버 heat 들의 height_attempts 를 모아서 반환.
+async function fetchJointExtraHeightAttempts() {
+    if (!isJointMode()) return [];
+    const currentHeat = state.heats?.find(h => h.id === state.heatId);
+    const curHeatNum = currentHeat ? currentHeat.heat_number : null;
+    const extra = [];
+    for (const m of _jointOtherMembers()) {
+        try {
+            const mHeatId = await _getMemberHeatId(m.event_id, curHeatNum);
+            if (!mHeatId) continue;
+            const atts = await API.getHeightAttempts(mHeatId);
+            atts.forEach(a => { a._sourceHeatId = mHeatId; });
+            extra.push(...atts);
+        } catch (err) { console.warn('[joint] fetch height_attempts failed for', m.event_id, err); }
+    }
+    return extra;
+}
+
+// entry_id 로 해당 entry 가 어느 heat 에 속하는지 lookup.
+// state.heatEntries 에서 찾으면 _sourceHeatId 우선, 없으면 state.heatId.
+function getSaveHeatId(eid) {
+    const e = (state.heatEntries || []).find(x =>
+        x.event_entry_id === eid || x.event_entry_id === +eid
+    );
+    if (e && e._sourceHeatId) return e._sourceHeatId;
+    return state.heatId;
+}
+
+// 합동 모드용: entry 객체로 소속 대회 뱃지 HTML 생성
+function jointBadgeHTML(entry) {
+    if (!entry || !entry._federation) return '';
+    // 색상 팔레트 — federation 별 안정적 색상 (joint info bar 와 동일 색)
+    const palette = ['#6b6b6b', '#dc2626', '#9a8548', '#ea580c', '#8a7640', '#2563eb', '#059669'];
+    let idx = 0;
+    if (state._jointGroup && Array.isArray(state._jointGroup.members)) {
+        const m = state._jointGroup.members.find(mm => mm.event_id === entry._sourceEventId);
+        if (m) {
+            idx = state._jointGroup.members.indexOf(m);
+            if (idx < 0) idx = 0;
+        }
+    }
+    const color = palette[idx % palette.length];
+    return `<span class="joint-fed-badge" style="display:inline-block;background:${color};color:#fff;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-right:4px;vertical-align:middle;" title="${entry._compName || entry._federation}">${entry._federation}</span>`;
+}
+
+// 현재 selected event 의 federation/comp_name (current event 멤버용)
+function _currentMemberInfo() {
+    const jg = state._jointGroup;
+    if (!jg || !Array.isArray(jg.members)) return null;
+    return jg.members.find(m => m.event_id === state.selectedEventId);
+}
+
+// 현재 event 소속 entry 에 _federation 부착 (badge 표시 용)
+function _attachCurrentEventBadge(entries) {
+    if (!isJointMode()) return entries;
+    const me = _currentMemberInfo();
+    if (!me) return entries;
+    entries.forEach(e => {
+        if (e._federation) return; // 이미 다른 대회 entry 면 skip
+        e._sourceEventId = state.selectedEventId;
+        e._federation = me.federation || me.comp_name || '';
+        e._compName = me.comp_name || '';
+        e._compId = me.competition_id;
+        // _sourceHeatId 는 부착하지 않음 — 그래야 getSaveHeatId 에서 state.heatId 사용
+    });
+    return entries;
+}
+
 function showPlaceholder() {
     document.getElementById('record-detail').innerHTML = `
         <div class="detail-placeholder">
@@ -543,9 +692,22 @@ async function switchTrackHeat(heatId, btn) {
 
 async function loadTrackHeatData() {
     // Show checked_in athletes + no_show as DNS
-    const allEntries = await API.getHeatEntries(state.heatId);
+    let allEntries = await API.getHeatEntries(state.heatId);
+    // [JOINT] 합동 모드: 다른 대회 멤버 heat 의 entries 도 합치기
+    if (isJointMode()) {
+        _attachCurrentEventBadge(allEntries);
+        const extra = await fetchJointExtraEntries();
+        allEntries = allEntries.concat(extra);
+    }
     state.heatEntries = allEntries.filter(e => e.status === 'checked_in' || e.status === 'no_show');
-    state.results = await API.getResults(state.heatId);
+
+    let allResults = await API.getResults(state.heatId);
+    if (isJointMode()) {
+        const extraR = await fetchJointExtraResults();
+        allResults = allResults.concat(extraR);
+    }
+    state.results = allResults;
+
     state._pendingInlineTrack = {};
     clearUnsaved();
     await renderTrackTable();
@@ -647,7 +809,7 @@ async function renderTrackTable() {
                     <td>${r.status_code ? scBadge : (r.rank || '<span class="no-rank">—</span>')}</td>
                     <td>${r.lane_number || '—'}</td>
                     <td><strong>${bib(r.bib_number)}</strong></td>
-                    <td style="text-align:left;">${r.name}${qualBadge}${relayMemberHtml}</td>
+                    <td style="text-align:left;">${jointBadgeHTML(r)}${r.name}${qualBadge}${relayMemberHtml}</td>
                     <td style="font-size:12px;text-align:left;">${r.team || ''}</td>
                     <td><input class="track-time-input ${savedClass}" data-eid="${r.event_entry_id}" data-row="${idx}"
                         value="${displayVal}" placeholder="${placeholder}" ${r.status_code ? 'disabled' : ''}
@@ -711,6 +873,7 @@ function trackInlineKeydown(e, inp) {
 async function saveSingleTrackInline(inp, doRerender = true) {
     if (!confirmCompletedEdit()) return;
     const eid = +inp.dataset.eid;
+    const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
     const v = parseTimeInput(inp.value);
     // If input is empty and there was a saved result, DELETE the result
     if (v == null || v <= 0) {
@@ -720,7 +883,7 @@ async function saveSingleTrackInline(inp, doRerender = true) {
             if (existingResult) {
                 inp.classList.add('saving'); inp.disabled = true;
                 try {
-                    await API.deleteResult({ heat_id: state.heatId, event_entry_id: eid });
+                    await API.deleteResult({ heat_id: hid, event_entry_id: eid });
                     showToast('✓ 기록 삭제됨');
                     if (doRerender) await loadTrackHeatData();
                     if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
@@ -735,7 +898,7 @@ async function saveSingleTrackInline(inp, doRerender = true) {
     }
     inp.classList.add('saving'); inp.disabled = true;
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, time_seconds: v });
+        await API.upsertResult({ heat_id: hid, event_entry_id: eid, time_seconds: v });
         delete state._pendingInlineTrack[eid];
         if (Object.keys(state._pendingInlineTrack).length === 0) clearUnsaved();
         inp.classList.remove('saving'); inp.classList.add('has-value');
@@ -758,9 +921,10 @@ async function saveAllTrackInline() {
         const v = parseTimeInput(inp.value);
         if (v == null || v <= 0) continue;
         const eid = +inp.dataset.eid;
+        const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
         inp.classList.add('saving'); inp.disabled = true;
         try {
-            await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, time_seconds: v });
+            await API.upsertResult({ heat_id: hid, event_entry_id: eid, time_seconds: v });
             delete state._pendingInlineTrack[eid];
         } catch (err) { inp.classList.remove('saving'); inp.disabled = false; inp.classList.add('error'); showToast(err.error || '저장 실패', 'error'); }
     }
@@ -861,9 +1025,16 @@ async function setStatusCode(sel) {
     if (!confirmCompletedEdit()) { sel.value = ''; return; }
     const eid = +sel.dataset.eid;
     const sc = sel.value;
+    const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, status_code: sc, time_seconds: sc ? null : undefined });
-        state.results = await API.getResults(state.heatId);
+        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, time_seconds: sc ? null : undefined });
+        // [JOINT] 합동모드면 현재 heat + joint extras 모두 재로딩, 아니면 기존 heat 만
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
+        }
+        state.results = allResults;
         renderTrackTable();
         // Sync combined scores when changing status in a sub-event (10종/7종)
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
@@ -874,8 +1045,9 @@ async function setStatusCode(sel) {
 async function saveRemark(inp) {
     if (!confirmCompletedEdit()) return;
     const eid = +inp.dataset.eid;
+    const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, remark: inp.value.trim() });
+        await API.upsertResult({ heat_id: hid, event_entry_id: eid, remark: inp.value.trim() });
     } catch (e) { console.error(e); }
 }
 
@@ -884,9 +1056,15 @@ async function setFieldDistStatusCode(sel) {
     if (!confirmCompletedEdit()) { sel.value = ''; return; }
     const eid = +sel.dataset.eid;
     const sc = sel.value;
+    const hid = getSaveHeatId(eid); // [JOINT]
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, status_code: sc, distance_meters: sc ? null : undefined });
-        state.results = await API.getResults(state.heatId);
+        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, distance_meters: sc ? null : undefined });
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
+        }
+        state.results = allResults;
         renderFieldDistanceContent();
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
@@ -899,11 +1077,19 @@ async function setFieldHeightStatusCode(sel) {
     if (!confirmCompletedEdit()) { sel.value = ''; return; }
     const eid = +sel.dataset.eid;
     const sc = sel.value;
+    const hid = getSaveHeatId(eid); // [JOINT]
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, status_code: sc });
-        state.results = await API.getResults(state.heatId);
-        // Re-fetch height attempts and re-render
-        state.heightAttempts = await API.getHeightAttempts(state.heatId);
+        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc });
+        let allResults = await API.getResults(state.heatId);
+        let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            const extraH = await fetchJointExtraHeightAttempts();
+            allResults = allResults.concat(extraR);
+            allHeightAttempts = allHeightAttempts.concat(extraH);
+        }
+        state.results = allResults;
+        state.heightAttempts = allHeightAttempts;
         renderHeightContent();
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
@@ -986,9 +1172,17 @@ function setFieldMode(mode) {
 }
 
 async function loadFieldDistanceData() {
-    const allEntries = await API.getHeatEntries(state.heatId);
+    let allEntries = await API.getHeatEntries(state.heatId);
+    let allResults = await API.getResults(state.heatId);
+    if (isJointMode()) {
+        _attachCurrentEventBadge(allEntries);
+        const extra = await fetchJointExtraEntries();
+        allEntries = allEntries.concat(extra);
+        const extraR = await fetchJointExtraResults();
+        allResults = allResults.concat(extraR);
+    }
     state.heatEntries = allEntries.filter(e => e.status === 'checked_in' || e.status === 'no_show');
-    state.results = await API.getResults(state.heatId);
+    state.results = allResults;
     renderFieldDistanceContent();
 }
 
@@ -1247,7 +1441,7 @@ function renderFieldDistanceContent() {
                             return `<tr class="field-row1 ${cls} ${windZebraCls} ${r.status_code ? 'row-status-code' : ''}">
                                 <td rowspan="2">${rankDisp}</td>
                                 <td rowspan="2">${r.lane_number || '—'}</td>
-                                <td class="name-cell"><strong>${r.name}</strong> <span class="bib-tag">#${bib(r.bib_number)}</span></td>
+                                <td class="name-cell">${jointBadgeHTML(r)}<strong>${r.name}</strong> <span class="bib-tag">#${bib(r.bib_number)}</span></td>
                                 ${distCells}
                                 <td rowspan="2" class="best-cell att-col-best">${bestDisp}<div class="best-wind">${bestWindDisp}</div></td>
                                 ${windScCell}
@@ -1260,7 +1454,7 @@ function renderFieldDistanceContent() {
                             return `<tr class="${cls} ${zebraCls} ${r.status_code ? 'row-status-code' : ''}">
                                 <td>${rankDisp}</td>
                                 <td>${r.lane_number || '—'}</td>
-                                <td class="name-cell"><strong>${r.name}</strong> <span class="bib-tag">#${bib(r.bib_number)}</span></td>
+                                <td class="name-cell">${jointBadgeHTML(r)}<strong>${r.name}</strong> <span class="bib-tag">#${bib(r.bib_number)}</span></td>
                                 <td class="team-cell">${r.team || ''}</td>
                                 ${distCells}
                                 <td class="best-cell att-col-best">${bestDisp}</td>
@@ -1537,8 +1731,14 @@ async function saveFieldWind(entryId, attempt, wind) {
     try {
         const existing = state.results.find(r => r.event_entry_id === entryId && r.attempt_number === attempt);
         if (existing) {
-            await API.upsertResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: existing.distance_meters, wind });
-            state.results = await API.getResults(state.heatId);
+            const hid = getSaveHeatId(entryId); // [JOINT]
+            await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: existing.distance_meters, wind });
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
             state._activeWindCell = null;
             state._activeFieldCell = null;
             showToast('✓ 풍속 저장');
@@ -1557,8 +1757,14 @@ async function saveFieldInline(entryId, attempt, distance) {
     const wind = existingResult ? (existingResult.wind ?? null) : null;
 
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
-        state.results = await API.getResults(state.heatId);
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
+        }
+        state.results = allResults;
         state._activeFieldCell = null;
         state._activeWindCell = null;
         showToast('✓ 기록 저장');
@@ -1593,8 +1799,14 @@ function showWindWarning(entryId, attempt) {
 async function fieldInlineFoul(entryId, attempt) {
     if (!confirmCompletedEdit()) return;
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
-        state.results = await API.getResults(state.heatId);
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
+        }
+        state.results = allResults;
         state._activeFieldCell = null;
         renderFieldDistanceContent();
         showFoulNotice();
@@ -1609,8 +1821,14 @@ async function fieldInlineFoul(entryId, attempt) {
 async function fieldDblClickFoul(entryId, attempt) {
     if (state.fieldMode === 'view') return;
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
-        state.results = await API.getResults(state.heatId);
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
+        }
+        state.results = allResults;
         state._activeFieldCell = null;
         renderFieldDistanceContent();
         showFoulNotice();
@@ -1669,8 +1887,14 @@ function fieldInlineBlur(inp) {
 async function fieldInlineClear(entryId, attempt) {
     if (!confirmCompletedEdit()) return;
     try {
-        await API.deleteResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt });
-        state.results = await API.getResults(state.heatId);
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        await API.deleteResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt });
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
+        }
+        state.results = allResults;
         state._activeFieldCell = null;
         renderFieldDistanceContent();
         showToast('✓ 기록 삭제');
@@ -1687,8 +1911,14 @@ async function fieldInlineClear(entryId, attempt) {
 async function fieldInlinePass(entryId, attempt) {
     if (!confirmCompletedEdit()) return;
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: -1 });
-        state.results = await API.getResults(state.heatId);
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: -1 });
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
+        }
+        state.results = allResults;
         state._activeFieldCell = null;
         renderFieldDistanceContent();
         showToast('✓ 패스 처리');
@@ -1789,12 +2019,28 @@ async function deleteBarHeight(barHeight) {
         try {
             const key = localStorage.getItem('op_key') || prompt('운영키를 입력하세요');
             if (!key) return;
+            // [JOINT] 합동 모드면 모든 멤버 대회 heat 에서 동시에 삭제
             await api('POST', '/api/height-attempts/delete-bar', { heat_id: state.heatId, bar_height: h, admin_key: key });
+            if (isJointMode()) {
+                const currentHeat = state.heats?.find(hh => hh.id === state.heatId);
+                const curHeatNum = currentHeat ? currentHeat.heat_number : null;
+                for (const m of _jointOtherMembers()) {
+                    try {
+                        const mHeatId = await _getMemberHeatId(m.event_id, curHeatNum);
+                        if (mHeatId) await api('POST', '/api/height-attempts/delete-bar', { heat_id: mHeatId, bar_height: h, admin_key: key });
+                    } catch (err) { console.warn('[joint] delete-bar failed for', m.event_id, err); }
+                }
+            }
         } catch (err) { alert('삭제 실패: ' + (err.error || '')); return; }
     }
     // Remove from local bar list
     state._heightBarList = state._heightBarList.filter(x => x !== h);
-    state.heightAttempts = await API.getHeightAttempts(state.heatId);
+    let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+    if (isJointMode()) {
+        const extraH = await fetchJointExtraHeightAttempts();
+        allHeightAttempts = allHeightAttempts.concat(extraH);
+    }
+    state.heightAttempts = allHeightAttempts;
     renderHeightContent();
 }
 
@@ -1818,10 +2064,21 @@ function raiseBar() {
 }
 
 async function loadFieldHeightData() {
-    const allEntries = await API.getHeatEntries(state.heatId);
+    let allEntries = await API.getHeatEntries(state.heatId);
+    let allResults = await API.getResults(state.heatId);
+    let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+    if (isJointMode()) {
+        _attachCurrentEventBadge(allEntries);
+        const extra = await fetchJointExtraEntries();
+        allEntries = allEntries.concat(extra);
+        const extraR = await fetchJointExtraResults();
+        allResults = allResults.concat(extraR);
+        const extraH = await fetchJointExtraHeightAttempts();
+        allHeightAttempts = allHeightAttempts.concat(extraH);
+    }
     state.heatEntries = allEntries.filter(e => e.status === 'checked_in' || e.status === 'no_show');
-    state.heightAttempts = await API.getHeightAttempts(state.heatId);
-    state.results = await API.getResults(state.heatId);
+    state.heightAttempts = allHeightAttempts;
+    state.results = allResults;
     // Build bar list from existing data
     const existingHeights = [...new Set(state.heightAttempts.map(a => a.bar_height))].sort((a, b) => a - b);
     state._heightBarList = [...new Set([...(state._heightBarList || []), ...existingHeights])].sort((a, b) => a - b);
@@ -1975,7 +2232,7 @@ function renderHeightContent() {
                 return `<tr class="${r.eliminated ? 'row-eliminated' : ''} ${r.status_code ? 'row-status-code' : ''} ${r._isNoShow ? 'row-dns' : ''}">
                     <td>${rankDisp}</td>
                     <td>${r.lane_number || '—'}</td>
-                    <td style="text-align:left;"><strong>${r.name}</strong> <span style="color:var(--text-muted);font-size:11px;">#${bib(r.bib_number)}</span></td>
+                    <td style="text-align:left;">${jointBadgeHTML(r)}<strong>${r.name}</strong> <span style="color:var(--text-muted);font-size:11px;">#${bib(r.bib_number)}</span></td>
                     ${cells}
                     <td>${r.bestHeight != null ? `<strong>${formatHeight(r.bestHeight)}</strong>` : '—'}</td>
                     <td>${statusCell}</td>
@@ -2000,14 +2257,20 @@ async function toggleHeightMark(entryId, barHeight, attemptNumber) {
     const newMark = currentMark in cycle ? cycle[currentMark] : 'O';
 
     try {
+        const hid = getSaveHeatId(entryId); // [JOINT]
         await API.saveHeightAttempt({
-            heat_id: state.heatId,
+            heat_id: hid,
             event_entry_id: entryId,
             bar_height: barHeight,
             attempt_number: attemptNumber,
             result_mark: newMark
         });
-        state.heightAttempts = await API.getHeightAttempts(state.heatId);
+        let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+        if (isJointMode()) {
+            const extraH = await fetchJointExtraHeightAttempts();
+            allHeightAttempts = allHeightAttempts.concat(extraH);
+        }
+        state.heightAttempts = allHeightAttempts;
         renderHeightContent();
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
@@ -2029,14 +2292,21 @@ function setupHeightModal() {
     document.querySelectorAll('.height-mark-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             try {
+                const _hmEid = heightModalState.eventEntryId;
+                const _hmHid = getSaveHeatId(_hmEid); // [JOINT]
                 await API.saveHeightAttempt({
-                    heat_id: state.heatId, event_entry_id: heightModalState.eventEntryId,
+                    heat_id: _hmHid, event_entry_id: _hmEid,
                     bar_height: state.currentBarHeight,
                     attempt_number: +document.getElementById('hmodal-attempt-select').value,
                     result_mark: btn.dataset.mark
                 });
                 ov.style.display = 'none';
-                state.heightAttempts = await API.getHeightAttempts(state.heatId);
+                let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+                if (isJointMode()) {
+                    const extraH = await fetchJointExtraHeightAttempts();
+                    allHeightAttempts = allHeightAttempts.concat(extraH);
+                }
+                state.heightAttempts = allHeightAttempts;
                 renderHeightContent();
                 if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
                 renderAuditLog();
@@ -3993,9 +4263,27 @@ async function doCompleteRound() {
     if (!adminKey) { errEl.textContent = '운영키를 입력하세요.'; errEl.style.display = 'block'; return; }
 
     try {
+        // [JOINT] 본 대회 종목 완료
         await API.completeEvent(state.selectedEventId, judgeName, adminKey);
+        // [JOINT] 합동 모드: 같은 그룹의 다른 대회 종목들도 함께 완료처리 시도
+        // (각 대회별 운영키가 다를 수 있어 실패 가능 — 실패해도 본 대회는 이미 완료됨)
+        let jointMsgs = [];
+        if (isJointMode()) {
+            for (const m of _jointOtherMembers()) {
+                try {
+                    await API.completeEvent(m.event_id, judgeName, adminKey);
+                    jointMsgs.push(`✓ ${m.comp_name || m.federation || '연합대회'} 동시 완료`);
+                } catch (err) {
+                    jointMsgs.push(`⚠ ${m.comp_name || m.federation || '연합대회'} 완료 실패 (운영키 다를 수 있음)`);
+                    console.warn('[joint] completeEvent failed for', m.event_id, err);
+                }
+            }
+        }
         document.getElementById('complete-modal-overlay').remove();
         showToast('✓ ' + (state.selectedEvent?.name || '') + ' 경기 완료', 'success', 3000);
+        if (jointMsgs.length > 0) {
+            setTimeout(() => showToast(jointMsgs.join(' | '), 'info', 4000), 500);
+        }
         state.events = await API.getAllEvents(getCompetitionId());
         state.selectedEvent = await API.getEvent(state.selectedEventId);
         renderMatrix();
