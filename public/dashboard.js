@@ -641,7 +641,8 @@ function renderViewerBtn(evt) {
     const rc = _roundColors[evt.round_type] || { color: '#555', bg: '#f5f5f5', border: '#ccc' };
 
     if (evt.round_status === 'completed') {
-        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인" style="background:${rc.bg};color:${rc.color};border:1px solid ${rc.border};cursor:pointer;font-size:10px;padding:3px 6px;font-weight:700;">완료</span>`;
+        // 완료 — 진한 채움 스타일(라운드 색) + 체크 아이콘으로 "기록 입력됨" 강조
+        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);">✓ 완료</span>`;
     }
 
     // 소집 완료 또는 in_progress → LIVE (경기 진행 중)
@@ -655,9 +656,10 @@ function renderViewerBtn(evt) {
     }
 
     // 히트가 있고 아직 소집 전 → 명단 버튼
+    // 명단 — 연한(흰 배경 + 점선 테두리 + 일반 굵기) 스타일로 "준비만 됨, 기록 미입력" 시각 표현
     if (hasHeats) {
         const eName = (evt.name || '').replace(/'/g, "\\'");
-        return `<span class="round-btn" style="background:${rc.bg};color:${rc.color};border:1px solid ${rc.border};cursor:pointer;font-size:10px;padding:3px 6px;white-space:nowrap;" onclick="openRosterModal(${evt.id},'${eName}')" title="조편성 명단">명단</span>`;
+        return `<span class="round-btn" style="background:#fff;color:${rc.color};border:1px dashed ${rc.color};cursor:pointer;font-size:10px;padding:3px 6px;white-space:nowrap;font-weight:500;" onclick="openRosterModal(${evt.id},'${eName}')" title="조편성 명단 (기록 미입력)">명단</span>`;
     }
 
     // created — 대기

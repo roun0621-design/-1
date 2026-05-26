@@ -1509,12 +1509,27 @@ async function openTimetable(compId) {
                     const _bracketMatch = _roundFull.match(/\(([^)]+)\)/);
                     const _roundBase = _roundFull.replace(/\([^)]*\)/g, '').trim();
                     const _eventFullName = `${item.category || ''} ${item.event_name}${_roundBase ? ' ' + _roundBase : ''}`.trim();
-                    // Right-aligned tags: result link badge + round badge + bracket info (color-coded)
+                    // Right-aligned tags: result link badge + status badge + round badge + bracket info (color-coded)
                     const _resultTag = item.result_url ? `<span style="color:#fff;font-size:9px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window.open('${(item.result_url||'').replace(/'/g,"\\'")}','_blank')">결과</span>` : '';
                     const _bracketTag = _bracketMatch ? `<span style="color:#8a7640;font-size:10px;font-weight:600;background:#f8f4ea;padding:1px 6px;border-radius:8px;white-space:nowrap;">(${_bracketMatch[1]})</span>` : '';
                     const _roundColorMap = { '예선': { color: '#1565c0', bg: '#e3f2fd' }, '준결승': { color: '#e65100', bg: '#fff3e0' }, '결승': { color: '#b71c1c', bg: '#ffebee' }, '기록경기': { color: '#4a148c', bg: '#f3e5f5' } };
                     const _rbc = _roundColorMap[_roundBase] || { color: '#555', bg: '#f0f0f0' };
                     const _roundBadge = _roundBase ? `<span style="color:${_rbc.color};font-size:10px;font-weight:600;background:${_rbc.bg};padding:1px 6px;border-radius:8px;white-space:nowrap;">${_roundBase}</span>` : '';
+                    // Status badge based on round_status (so operators can see at a glance whether records are entered)
+                    let _statusTag = '';
+                    if (item.event_id && item.round_status) {
+                        if (item.round_status === 'completed') {
+                            // 결과보기 — 진한 녹색, 클릭 시 결과 패널 또는 결과지 PDF
+                            _statusTag = `<span style="color:#fff;font-size:9px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="결과 보기">결과보기</span>`;
+                        } else if (item.round_status === 'in_progress') {
+                            // 진행중 — 골드 LIVE
+                            _statusTag = `<span style="color:#b79f58;font-size:9px;font-weight:700;background:#f8f4ea;border:1px solid #e8dfc0;padding:1px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="실시간 기록">LIVE</span>`;
+                        } else if (item.round_status === 'heats_generated') {
+                            // 명단 — 연한 회색
+                            _statusTag = `<span style="color:#666;font-size:9px;font-weight:600;background:#f5f5f5;border:1px dashed #bbb;padding:1px 6px;border-radius:8px;white-space:nowrap;">명단</span>`;
+                        }
+                        // 'created' (대기) → no badge (시간표가 너무 복잡해지지 않도록)
+                    }
                     // Click behavior: display mode → open result_url if exists, else do nothing
                     // Non-display mode → navigate to event
                     let clickAction = '';
@@ -1528,7 +1543,7 @@ async function openTimetable(compId) {
                     html += `<div id="tt-item-${item.id}" ${clickAction} style="display:flex;align-items:center;gap:8px;padding:9px 12px;${borderBottom}${defaultBg ? 'background:' + defaultBg + ';' : ''}${highlightStyle}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${restoreBg}'"` : ''}>
                         <span style="font-weight:700;color:#333;font-size:13px;font-variant-numeric:tabular-nums;min-width:48px;white-space:nowrap;">${item.time}${nowBadge}</span>
                         <span style="flex:1;font-weight:600;font-size:13px;color:#222;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_eventFullName}${crBadge}</span>
-                        <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;">${_resultTag}${_roundBadge}${_bracketTag}</div>
+                        <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;">${_resultTag}${_statusTag}${_roundBadge}${_bracketTag}</div>
                     </div>`;
                 });
 
@@ -1556,6 +1571,23 @@ async function openTimetable(compId) {
                 }
                 // No result_url → do nothing
             } catch(e) { /* silent */ }
+        };
+        // Open result for completed/in_progress events from timetable status badge
+        // - dashboard: openResult / openLiveResult (in-page modal)
+        // - results page: openResultDetail
+        // - other pages: navigate to dashboard with event hash
+        window._ttOpenResult = function(eventId) {
+            const overlay = document.getElementById('timetable-overlay');
+            if (overlay) overlay.remove();
+            if (typeof openResult === 'function') {
+                openResult(eventId);
+            } else if (typeof openLiveResult === 'function') {
+                openLiveResult(eventId);
+            } else if (typeof openResultDetail === 'function') {
+                openResultDetail(eventId);
+            } else {
+                window.location.href = '/dashboard.html?event=' + eventId;
+            }
         };
         window._ttGoToEvent = function(eventId) {
             // Close timetable overlay and navigate to event

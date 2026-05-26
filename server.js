@@ -8162,13 +8162,17 @@ app.get('/api/timetable/:compId', async (req, res) => {
     for (const r of rows) {
         if (!days[r.day]) days[r.day] = { track: [], field: [] };
         const s = r.section === 'field' ? 'field' : 'track';
-        // Include result_url from linked event (if any)
+        // Include result_url + round_status from linked event (if any)
         let result_url = null;
+        let round_status = null;
         if (r.event_id) {
-            const evt = await db.get('SELECT result_url FROM event WHERE id=?', r.event_id);
-            if (evt) result_url = evt.result_url || null;
+            const evt = await db.get('SELECT result_url, round_status FROM event WHERE id=?', r.event_id);
+            if (evt) {
+                result_url = evt.result_url || null;
+                round_status = evt.round_status || null;
+            }
         }
-        days[r.day][s].push({ id: r.id, time: r.time, event_name: r.event_name, category: r.category, round: r.round, note: r.note, event_id: r.event_id, callroom_time: r.callroom_time, scheduled_date: r.scheduled_date, result_url });
+        days[r.day][s].push({ id: r.id, time: r.time, event_name: r.event_name, category: r.category, round: r.round, note: r.note, event_id: r.event_id, callroom_time: r.callroom_time, scheduled_date: r.scheduled_date, result_url, round_status });
     }
     res.json({ competition_id: parseInt(req.params.compId), days, start_date: comp ? comp.start_date : null });
 });
