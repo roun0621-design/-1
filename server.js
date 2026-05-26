@@ -2223,7 +2223,11 @@ app.post('/api/results/upsert', async (req, res) => {
                 if (heat) {
                     const _delEvt = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
                     if (_delEvt && _delEvt.parent_event_id) {
-                        const _subOrd = await db.get('SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND id<=?', _delEvt.parent_event_id, _delEvt.id)?.cnt || 0;
+                        // sub_event_order는 sort_order rank (1-base) — id 순서가 아닌 canonical 순서.
+                        const _subOrd = await db.get(
+                            'SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND (sort_order < ? OR (sort_order = ? AND id <= ?))',
+                            _delEvt.parent_event_id, _delEvt.sort_order, _delEvt.sort_order, _delEvt.id
+                        )?.cnt || 0;
                         await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=? AND athlete_id=(SELECT athlete_id FROM event_entry WHERE id=?)) AND sub_event_order=?', _delEvt.parent_event_id, event_entry_id, _subOrd);
                         broadcastSSE('combined_update', { event_id: _delEvt.parent_event_id });
                     }
@@ -2380,7 +2384,11 @@ app.delete('/api/results', async (req, res) => {
     if (heat) {
         const evt = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
         if (evt && evt.parent_event_id) {
-            const subOrder = await db.get('SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND id<=?', evt.parent_event_id, evt.id)?.cnt || 0;
+            // sub_event_order는 sort_order rank (1-base) — id 순서가 아닌 canonical 순서.
+            const subOrder = await db.get(
+                'SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND (sort_order < ? OR (sort_order = ? AND id <= ?))',
+                evt.parent_event_id, evt.sort_order, evt.sort_order, evt.id
+            )?.cnt || 0;
             await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=? AND athlete_id=(SELECT athlete_id FROM event_entry WHERE id=?)) AND sub_event_order=?', evt.parent_event_id, event_entry_id, subOrder);
         }
     }
@@ -2412,7 +2420,11 @@ app.post('/api/results/reset-sub-event', async (req, res) => {
     
     // Clear combined_score for this sub-event
     if (evt.parent_event_id) {
-        const subOrder = await db.get('SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND id<=?', evt.parent_event_id, evt.id)?.cnt || 0;
+        // sub_event_order는 sort_order rank (1-base) — id 순서가 아닌 canonical 순서.
+        const subOrder = await db.get(
+            'SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND (sort_order < ? OR (sort_order = ? AND id <= ?))',
+            evt.parent_event_id, evt.sort_order, evt.sort_order, evt.id
+        )?.cnt || 0;
         if (subOrder > 0) {
             await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?) AND sub_event_order=?', evt.parent_event_id, subOrder);
         }
@@ -2654,14 +2666,20 @@ app.post('/api/combined-scores/save', async (req, res) => {
 });
 app.get('/api/combined-sub-events', async (req, res) => {
     if (!req.query.parent_event_id) return res.status(400).json({ error: 'parent_event_id required' });
-    res.json(await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY id', req.query.parent_event_id));
+    // sort_order가 DECATHLON_EVENTS / HEPTATHLON_EVENTS의 정식 순서(1..10/1..7)와 매핑되는 canonical 순서.
+    // id 순서로 정렬하면 sub-event 삭제/추가/재정렬 후 DECATHLON 순서와 어긋날 수 있음.
+    res.json(await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', req.query.parent_event_id));
 });
 app.post('/api/combined-scores/sync', async (req, res) => {
     const { parent_event_id } = req.body;
     if (!parent_event_id) return res.status(400).json({ error: 'parent_event_id required' });
     const parentEvent = await db.get('SELECT * FROM event WHERE id=?', parent_event_id);
     if (!parentEvent || parentEvent.category !== 'combined') return res.status(400).json({ error: 'Not a combined event' });
-    const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY id', parent_event_id);
+    // ⚠️ 중요: ORDER BY sort_order, id (DECATHLON/HEPTATHLON 정식 순서와 매핑되는 canonical 정렬)
+    // 과거 ORDER BY id만 사용 시, sub-event 삭제/추가/재정렬로 id 순서와 sort_order가 어긋난 대회에서
+    // sub_event_order/waKey 매핑이 잘못되어 다른 종목 기록(예: 창던지기 49.54m)이 멀리뛰기로 잘못
+    // 환산되는 버그 발생 (raw_record=49.54 → calcWAPoints('M_long_jump',49.54)=20058pt).
+    const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', parent_event_id);
     const parentEntries = await db.all('SELECT ee.id AS event_entry_id, ee.athlete_id FROM event_entry ee WHERE ee.event_id=?', parent_event_id);
     let syncCount = 0;
     const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points)
@@ -3478,7 +3496,15 @@ app.delete('/api/events/:id/sub-events/:subId', async (req, res) => {
         }
         await db.run('DELETE FROM heat WHERE event_id=?', sub.id);
         await db.run('DELETE FROM event_entry WHERE event_id=?', sub.id);
-        await db.run('DELETE FROM combined_score WHERE sub_event_order=? AND event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', sub.sort_order, parent.id);
+        // sub_event_order는 sort_order rank (1-base, ORDER BY sort_order, id 기준)
+        const subOrderRow = await db.get(
+            'SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND (sort_order < ? OR (sort_order = ? AND id <= ?))',
+            parent.id, sub.sort_order, sub.sort_order, sub.id
+        );
+        const subOrderRank = (subOrderRow && subOrderRow.cnt) || 0;
+        if (subOrderRank > 0) {
+            await db.run('DELETE FROM combined_score WHERE sub_event_order=? AND event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', subOrderRank, parent.id);
+        }
         await db.run('DELETE FROM event WHERE id=?', sub.id);
     })();
     opLog(`세부종목 삭제: ${sub.name} (부모: ${parent.name})`, 'event', 'admin', parent.competition_id);
