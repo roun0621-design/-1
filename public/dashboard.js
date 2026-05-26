@@ -775,7 +775,16 @@ async function openDisplayRoster(eventId, eventName, division) {
 async function openResult(eventId) {
     const overlay = document.getElementById('result-overlay');
     const panel = document.getElementById('result-panel');
-    panel.innerHTML = '<div class="result-panel-header"><h3>결과 불러오는 중...</h3><button class="result-panel-close" onclick="closeResult()">&times;</button></div><div class="result-panel-body" style="text-align:center;padding:40px;">로딩 중...</div>';
+    panel.innerHTML = `<div class="result-panel-header"><h3>결과 불러오는 중…</h3><button class="result-panel-close" onclick="closeResult()">&times;</button></div>
+        <div class="result-panel-body" style="padding:20px;">
+            <div class="skeleton-block" style="box-shadow:none;padding:0;">
+                <div class="skeleton skeleton-title"></div>
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text" style="width:90%;"></div>
+                <div class="skeleton skeleton-text" style="width:75%;"></div>
+                <div class="skeleton skeleton-text" style="width:85%;"></div>
+            </div>
+        </div>`;
     overlay.classList.add('show');
     if (window.pushModalState) pushModalState(() => closeResult());
 
@@ -895,7 +904,15 @@ async function openLiveResult(eventId) {
     _liveEventId = eventId;
     const overlay = document.getElementById('result-overlay');
     const panel = document.getElementById('result-panel');
-    panel.innerHTML = '<div class="result-panel-header"><h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>로딩 중...</h3><button class="result-panel-close" onclick="closeLiveResult()">&times;</button></div><div class="result-panel-body" style="text-align:center;padding:40px;">실시간 기록 불러오는 중...</div>';
+    panel.innerHTML = `<div class="result-panel-header"><h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>로딩 중…</h3><button class="result-panel-close" onclick="closeLiveResult()">&times;</button></div>
+        <div class="result-panel-body" style="padding:20px;">
+            <div class="skeleton-block" style="box-shadow:none;padding:0;">
+                <div class="skeleton skeleton-title"></div>
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text" style="width:90%;"></div>
+                <div class="skeleton skeleton-text" style="width:75%;"></div>
+            </div>
+        </div>`;
     overlay.classList.add('show');
     if (window.pushModalState) pushModalState(() => closeLiveResult());
     await refreshLiveResult();
@@ -1222,7 +1239,13 @@ function renderLiveCombinedResults(data) {
 
     // We need combined scores — make an inline fetch
     let html = `<div id="live-combined-content" style="padding:8px;">
-        <div style="text-align:center;padding:20px;color:var(--text-muted);"><div class="loading-spinner"></div> 혼성 경기 결과 불러오는 중...</div>
+        <div class="skeleton-block" style="margin:8px;">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-text"></div>
+            <div class="skeleton skeleton-text" style="width:85%;"></div>
+            <div class="skeleton skeleton-text" style="width:70%;"></div>
+            <div style="text-align:center;padding:8px 0 0;color:var(--text-muted);font-size:11px;">혼성 경기 결과 불러오는 중…</div>
+        </div>
     </div>`;
 
     // Async load combined data after rendering container
@@ -1305,7 +1328,13 @@ function renderLiveCombinedResults(data) {
 function renderCombinedResults(data) {
     const evt = data.event;
     return `<div id="combined-result-content" style="padding:8px;">
-        <div style="text-align:center;padding:20px;color:var(--text-muted);"><div class="loading-spinner"></div> ${evt.gender === 'M' ? '10종경기' : '7종경기'} 결과 불러오는 중...</div>
+        <div class="skeleton-block" style="margin:8px;">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-text"></div>
+            <div class="skeleton skeleton-text" style="width:85%;"></div>
+            <div class="skeleton skeleton-text" style="width:70%;"></div>
+            <div style="text-align:center;padding:8px 0 0;color:var(--text-muted);font-size:11px;">${evt.gender === 'M' ? '10종경기' : '7종경기'} 결과 불러오는 중…</div>
+        </div>
     </div>`;
 }
 
@@ -1425,7 +1454,11 @@ async function _cResultShowSub(order) {
         b.style.fontWeight = +b.dataset.order === order ? '800' : '';
     });
 
-    area.innerHTML = '<div style="text-align:center;padding:10px;color:var(--text-muted);"><div class="loading-spinner"></div></div>';
+    area.innerHTML = `<div class="skeleton-block" style="margin:0;">
+        <div class="skeleton skeleton-text"></div>
+        <div class="skeleton skeleton-text" style="width:90%;"></div>
+        <div class="skeleton skeleton-text" style="width:75%;"></div>
+    </div>`;
 
     try {
         // Find DB sub-event

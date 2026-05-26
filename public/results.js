@@ -1205,7 +1205,11 @@ async function _showCombinedSubResult(subOrder) {
     
     const area = document.getElementById('combined-sub-result-area');
     if (!area) return;
-    area.innerHTML = '<div class="loading-inline"><div class="loading-spinner"></div></div>';
+    area.innerHTML = `<div class="skeleton-block" style="box-shadow:none;padding:8px 0;">
+        <div class="skeleton skeleton-text"></div>
+        <div class="skeleton skeleton-text" style="width:88%;"></div>
+        <div class="skeleton skeleton-text" style="width:70%;"></div>
+    </div>`;
     
     // Find the DB sub-event
     let dbSub = subEvents.find(s => s.sort_order === subOrder);
