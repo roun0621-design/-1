@@ -1209,6 +1209,42 @@ async function printCallroom(mode) {
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
+    // ─── 인쇄 헤더 자동 생성 — 대회명 + 종목명 + 경기시간 ──────────────
+    // 종이 출력 시 "남자 200m 예선" 만으로는 어느 대회(대학/실업/초등)인지 식별 불가하므로
+    // 대회명과 시간표 시간을 함께 표시. 합동종목은 모든 대회명 함께 표시.
+    let compNamesLabel = '';
+    try {
+        const comps = await API.getCompetitions();
+        const jointGroup = window._crJointGroup || null;
+        if (jointGroup && Array.isArray(jointGroup.members) && jointGroup.members.length > 1) {
+            // 합동 종목: 모든 대회 표시 (각 대회별 짧은 라벨/소속연맹 우선)
+            const labels = jointGroup.members.map(m => {
+                const c = comps.find(x => x.id === m.competition_id);
+                return m.federation || m.comp_name || (c && c.name) || '';
+            }).filter(Boolean);
+            compNamesLabel = [...new Set(labels)].join(' / ');
+        } else {
+            const comp = comps.find(c => c.id === evt.competition_id);
+            compNamesLabel = comp ? (comp.name || '') : '';
+        }
+    } catch(e) { /* best-effort: 대회명을 못 가져와도 인쇄는 진행 */ }
+
+    // 시간표 연동 — 경기시간/소집시간/날짜
+    let scheduleLabel = '';
+    try {
+        if (!_crScheduleMap || Object.keys(_crScheduleMap).length === 0) {
+            _crScheduleMap = await fetch('/api/timetable/' + getCompetitionId() + '/event-schedule').then(r => r.json()) || {};
+        }
+        const sch = _crScheduleMap && _crScheduleMap[evt.id];
+        if (sch) {
+            const parts = [];
+            if (sch.scheduled_date) parts.push(sch.scheduled_date);
+            if (sch.time) parts.push('경기 ' + sch.time);
+            if (sch.callroom_time) parts.push('소집 ' + sch.callroom_time);
+            scheduleLabel = parts.join(' · ');
+        }
+    } catch(e) {}
+
     // Get event-level memo
     let eventMemo = '';
     try {
@@ -1274,6 +1310,8 @@ async function printCallroom(mode) {
     .print-header { text-align:center; margin-bottom:16px; border-bottom:3px double #333; padding-bottom:10px; }
     .print-header h1 { font-size:20px; margin-bottom:2px; }
     .print-header h2 { font-size:15px; font-weight:400; color:#333; }
+    .print-header .print-comp { font-size:14px; font-weight:700; color:#000; margin-top:4px; letter-spacing:0.3px; }
+    .print-header .print-schedule { font-size:13px; color:#333; margin-top:3px; font-weight:600; }
     .print-header .print-date { font-size:11px; color:#666; margin-top:4px; }
     .print-header .print-event-memo { font-size:24px; font-weight:700; color:#6b6b6b; margin-top:8px; padding:8px 12px; border:2px solid #6b6b6b; border-radius:6px; background:#f0f0f0; }
     .print-heat-block { margin-bottom:20px; page-break-inside:avoid; }
@@ -1294,7 +1332,9 @@ async function printCallroom(mode) {
 <body>
     <div class="print-header">
         <h1>소집 명단</h1>
+        ${compNamesLabel ? `<div class="print-comp">${compNamesLabel}</div>` : ''}
         <h2>${gL} ${evt.name} ${roundLabel}</h2>
+        ${scheduleLabel ? `<div class="print-schedule">${scheduleLabel}</div>` : ''}
         <div class="print-date">출력일시: ${dateStr}</div>
         ${eventMemo ? `<div class="print-event-memo">${eventMemo}</div>` : ''}
     </div>
@@ -1328,6 +1368,42 @@ async function exportCallroomExcel() {
     const roundLabel = fmtRound(evt.round_type);
 
     const rows = [];
+
+    // ─── 자동 헤더: 대회명 + 종목/부/라운드 + 시간표 시각 ─────────────────
+    let compNamesLabel = '';
+    try {
+        const comps = await API.getCompetitions();
+        const jointGroup = window._crJointGroup || null;
+        if (jointGroup && Array.isArray(jointGroup.members) && jointGroup.members.length > 1) {
+            const labels = jointGroup.members.map(m => {
+                const c = comps.find(x => x.id === m.competition_id);
+                return m.federation || m.comp_name || (c && c.name) || '';
+            }).filter(Boolean);
+            compNamesLabel = [...new Set(labels)].join(' / ');
+        } else {
+            const comp = comps.find(c => c.id === evt.competition_id);
+            compNamesLabel = comp ? (comp.name || '') : '';
+        }
+    } catch(e) {}
+    let scheduleLabel = '';
+    try {
+        if (!_crScheduleMap || Object.keys(_crScheduleMap).length === 0) {
+            _crScheduleMap = await fetch('/api/timetable/' + getCompetitionId() + '/event-schedule').then(r => r.json()) || {};
+        }
+        const sch = _crScheduleMap && _crScheduleMap[evt.id];
+        if (sch) {
+            const parts = [];
+            if (sch.scheduled_date) parts.push(sch.scheduled_date);
+            if (sch.time) parts.push('경기 ' + sch.time);
+            if (sch.callroom_time) parts.push('소집 ' + sch.callroom_time);
+            scheduleLabel = parts.join(' · ');
+        }
+    } catch(e) {}
+
+    if (compNamesLabel) rows.push([compNamesLabel]);
+    rows.push([`${gL} ${evt.name} ${roundLabel}`]);
+    if (scheduleLabel) rows.push([scheduleLabel]);
+    rows.push([]); // blank row
 
     // Get event-level memo
     let eventMemo = '';
