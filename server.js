@@ -9484,8 +9484,9 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
             // Fallback: if entry status is no_show and no explicit DNS result, treat as DNS
             if (!status && e.status === 'no_show') status = 'DNS';
             // If no height_attempt data, check result table for best distance_meters (used as height)
+            // [FIX] distance_meters===0 은 파울, -1 은 패스 이므로 양수만 유효
             if (bestCleared === null && !status) {
-                const bestR = results.find(r => r.distance_meters != null);
+                const bestR = results.find(r => r.distance_meters != null && r.distance_meters > 0);
                 if (bestR) bestCleared = bestR.distance_meters;
             }
             return { ...e, bestCleared, totalMisses, missesAtBest, heightResults, status_code: status };
@@ -9601,11 +9602,15 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 for (let i = 1; i <= numAttempts; i++) {
                     const r = recs.find(r => r.attempt_number === i);
                     if (r) {
-                        if (r.status_code === 'X' || r.status_code === 'FOUL') {
+                        // [FIX] 수기입력 record.js 는 파울=distance_meters:0, 패스=distance_meters:-1 로 저장하므로
+                        //       status_code 뿐 아니라 distance_meters 값으로도 판정해야 한다.
+                        const isFoulByDist = (r.distance_meters === 0);
+                        const isPassByDist = (r.distance_meters === -1);
+                        if (r.status_code === 'X' || r.status_code === 'FOUL' || isFoulByDist) {
                             attempts.push({ dist: null, wind: r.wind, foul: true, pass: false });
-                        } else if (r.status_code === '-' || r.status_code === 'PASS') {
+                        } else if (r.status_code === '-' || r.status_code === 'PASS' || isPassByDist) {
                             attempts.push({ dist: null, wind: null, foul: false, pass: true });
-                        } else if (r.distance_meters != null) {
+                        } else if (r.distance_meters != null && r.distance_meters > 0) {
                             attempts.push({ dist: r.distance_meters, wind: r.wind, foul: false, pass: false });
                             if (best === null || r.distance_meters > best) {
                                 best = r.distance_meters;
@@ -9622,7 +9627,11 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 let status = recs.find(r => r.status_code && ['DNS','DNF','NM','DQ'].includes(r.status_code))?.status_code || '';
                 // Fallback: if entry status is no_show and no explicit DNS result, treat as DNS
                 if (!status && e.status === 'no_show') status = 'DNS';
-                if (!status && best === null && recs.length > 0 && recs.every(r => r.status_code === 'X' || r.status_code === 'FOUL')) {
+                // [FIX] NM 판정도 distance_meters===0 (파울) 포함
+                const allFoulOrEmpty = recs.length > 0 && recs.every(r =>
+                    r.status_code === 'X' || r.status_code === 'FOUL' || r.distance_meters === 0
+                );
+                if (!status && best === null && allFoulOrEmpty) {
                     return { ...e, attempts, best, bestWind, status_code: 'NM' };
                 }
                 return { ...e, attempts, best, bestWind, status_code: status };
@@ -10909,7 +10918,8 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           let status = results.find(r => r.status_code && ['DNS','DNF','DQ','NM'].includes(r.status_code))?.status_code || '';
           if (!status && e.status === 'no_show') status = 'DNS';
           if (bestCleared === null && !status) {
-            const bestR = results.find(r => r.distance_meters != null);
+            // [FIX] 파울(0) / 패스(-1) 제외
+            const bestR = results.find(r => r.distance_meters != null && r.distance_meters > 0);
             if (bestR) bestCleared = bestR.distance_meters;
           }
           if (!status && bestCleared === null && myAttempts.length > 0) status = 'NM';
@@ -10960,13 +10970,18 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
             const recs = resMap[e.event_entry_id] || [];
             let best = null; let bestWind = null;
             for (const r of recs) {
-              if (r.distance_meters != null && (r.status_code !== 'X' && r.status_code !== 'FOUL')) {
+              // [FIX] 파울(distance=0) / 패스(distance=-1) 제외, status_code X/FOUL 도 제외
+              if (r.distance_meters != null && r.distance_meters > 0 && (r.status_code !== 'X' && r.status_code !== 'FOUL')) {
                 if (best === null || r.distance_meters > best) { best = r.distance_meters; bestWind = r.wind; }
               }
             }
             let status = recs.find(r => r.status_code && ['DNS','DNF','NM','DQ'].includes(r.status_code))?.status_code || '';
             if (!status && e.status === 'no_show') status = 'DNS';
-            if (!status && best === null && recs.length > 0 && recs.every(r => r.status_code === 'X' || r.status_code === 'FOUL')) status = 'NM';
+            // [FIX] NM 판정: 파울(distance===0) 또는 status X/FOUL 만 있으면 NM
+            const allFoulRecs = recs.length > 0 && recs.every(r =>
+              r.status_code === 'X' || r.status_code === 'FOUL' || r.distance_meters === 0
+            );
+            if (!status && best === null && allFoulRecs) status = 'NM';
             allEntries.push({ ...e, best, bestWind, status_code: status });
           }
         }
