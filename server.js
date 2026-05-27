@@ -8910,7 +8910,29 @@ app.get('/api/admin/event-record-matching', async (req, res) => {
             // 3) 정규화 fallback
             const normMatch = cands.find(r => normalizeEventNameServer(r.event_name || '') === targetNorm);
             if (normMatch) return { status: 'normalized', record: normMatch };
-            return { status: 'none', record: null, candidates: cands.slice(0, 5).map(c => c.event_name) };
+            // 매칭 안 됨 → 종목명 유사도로 후보 좁히기 (전체 cands 가 아닌 관련 후보만)
+            //   1) 정규형이 동일하거나
+            //   2) 한쪽이 다른 쪽의 부분문자열이거나
+            //   3) 정규형 기준 substring 관계
+            const targetLower = String(eventName || '').toLowerCase();
+            function _isRelated(c) {
+                const cn = String(c.event_name || '');
+                const cnNorm = normalizeEventNameServer(cn);
+                if (cnNorm === targetNorm) return true;
+                const cnLower = cn.toLowerCase();
+                if (cnLower.includes(targetLower) || targetLower.includes(cnLower)) return true;
+                if (cnNorm && (cnNorm.includes(targetNorm) || targetNorm.includes(cnNorm))) return true;
+                return false;
+            }
+            const related = cands.filter(_isRelated);
+            // 유사 후보만 표시 (관련 없는 전체 후보 노출 X). 관련 후보 0 이면 빈 배열.
+            const finalCands = related.slice(0, 5);
+            return {
+                status: 'none',
+                record: null,
+                candidates: finalCands.map(c => c.event_name),
+                candidate_records: finalCands.map(c => ({ id: c.id, event_name: c.event_name, record_value: c.record_value, holder_name: c.holder_name }))
+            };
         }
 
         const results = events.map(evt => {
@@ -8927,9 +8949,9 @@ app.get('/api/admin/event-record-matching', async (req, res) => {
                 event_name_normalized: normalizeEventNameServer(evt.name),
                 gender: evt.gender,
                 division_code: evt.division_code,
-                national: { status: nr.status, db_event_name: nr.record ? nr.record.event_name : null, record_id: nr.record ? nr.record.id : null, record_value: nr.record ? nr.record.record_value : null, holder_name: nr.record ? nr.record.holder_name : null, candidates: nr.candidates || [] },
-                division: { status: dr.status, db_event_name: dr.record ? dr.record.event_name : null, record_id: dr.record ? dr.record.id : null, record_value: dr.record ? dr.record.record_value : null, holder_name: dr.record ? dr.record.holder_name : null, candidates: dr.candidates || [] },
-                competition: { status: cr.status, db_event_name: cr.record ? cr.record.event_name : null, record_id: cr.record ? cr.record.id : null, record_value: cr.record ? cr.record.record_value : null, holder_name: cr.record ? cr.record.holder_name : null, candidates: cr.candidates || [] }
+                national:    { status: nr.status, db_event_name: nr.record ? nr.record.event_name : null, record_id: nr.record ? nr.record.id : null, record_value: nr.record ? nr.record.record_value : null, holder_name: nr.record ? nr.record.holder_name : null, candidates: nr.candidates || [], candidate_records: nr.candidate_records || [] },
+                division:    { status: dr.status, db_event_name: dr.record ? dr.record.event_name : null, record_id: dr.record ? dr.record.id : null, record_value: dr.record ? dr.record.record_value : null, holder_name: dr.record ? dr.record.holder_name : null, candidates: dr.candidates || [], candidate_records: dr.candidate_records || [] },
+                competition: { status: cr.status, db_event_name: cr.record ? cr.record.event_name : null, record_id: cr.record ? cr.record.id : null, record_value: cr.record ? cr.record.record_value : null, holder_name: cr.record ? cr.record.holder_name : null, candidates: cr.candidates || [], candidate_records: cr.candidate_records || [] }
             };
         });
 
@@ -9032,6 +9054,51 @@ app.post('/api/admin/event-records/normalize-all', async (req, res) => {
         });
     } catch (err) {
         console.error('[event-records/normalize-all]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ──────────────────────────────────────────────────────────────
+// PUT /api/admin/event-records/:id/relink
+// Body: { admin_key, target_event_name }
+// → 시간표↔종목 매칭과 동일한 패턴의 인라인 1:1 매칭.
+//   기존 event_record 의 event_name 을 target_event_name 으로 변경하여
+//   특정 대회 종목(event.name)과 매칭되도록 함.
+//   UNIQUE(record_type, event_name, gender, division_code, series_id) 충돌 시 거부.
+// ──────────────────────────────────────────────────────────────
+app.put('/api/admin/event-records/:id/relink', async (req, res) => {
+    try {
+        const { admin_key, target_event_name } = req.body || {};
+        if (!isAdminKey(admin_key) && !isOperationKey(admin_key)) {
+            return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        }
+        const id = parseInt(req.params.id, 10);
+        if (!id) return res.status(400).json({ error: 'id 필수' });
+        const target = String(target_event_name || '').trim();
+        if (!target) return res.status(400).json({ error: 'target_event_name 필수' });
+
+        const r = await db.get(`SELECT id, record_type, event_name, gender, division_code, series_id FROM event_record WHERE id=?`, id);
+        if (!r) return res.status(404).json({ error: '기록을 찾을 수 없습니다.' });
+        if (r.event_name === target) {
+            return res.json({ success: true, no_change: true });
+        }
+        // UNIQUE 충돌 검사 (같은 type/gender/divCode/seriesId 안에서)
+        const conflict = await db.get(
+            `SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=?
+               AND COALESCE(division_code,'')=COALESCE(?,'')
+               AND COALESCE(series_id,-1)=COALESCE(?,-1)
+               AND id<>?`,
+            r.record_type, target, r.gender, r.division_code || null, r.series_id || null, r.id
+        );
+        if (conflict) {
+            return res.status(409).json({ error: `이미 같은 슬롯에 '${target}' 기록이 존재합니다 (id=${conflict.id}).` });
+        }
+        const _nowER = db.isAsync ? 'NOW()' : "datetime('now')";
+        await db.run(`UPDATE event_record SET event_name=?, updated_at=${_nowER} WHERE id=?`, target, id);
+        try { opLog(`[기록재연결] event_record id=${id} '${r.event_name}' → '${target}'`, 'admin', 'admin', null); } catch(e) {}
+        res.json({ success: true, before: r.event_name, after: target });
+    } catch (err) {
+        console.error('[event-records/relink]', err);
         res.status(500).json({ error: err.message });
     }
 });

@@ -1138,7 +1138,7 @@ POST /api/external/event-result-link/batch<br>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
                         <div>
                             <h4 style="margin:0;">🔗 시리즈 ↔ 대회 종목 매칭 진단 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(NR / DR / CR)</span></h4>
-                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회의 각 종목이 등록된 NR/DR/CR 기록과 매칭되는지 진단합니다. <strong>매칭 안 됨</strong> 표시가 있는 종목은 대시보드/기록지에 배지가 안 보입니다. 종목명 표기 차이가 원인이면 <strong>일괄 정규화</strong> 버튼으로 해결 가능합니다.</p>
+                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회의 각 종목이 등록된 NR/DR/CR 기록과 매칭되는지 진단합니다. <strong>매칭 안 됨</strong> 표시 옆의 드롭다운에서 DB 후보를 선택하고 <strong>[연결]</strong> 버튼을 누르거나, 후보가 없으면 <strong>[+ 신규 등록]</strong> 으로 직접 입력할 수 있습니다 (시간표 매칭과 동일한 방식). 표기 차이가 많을 땐 <strong>일괄 정규화</strong> 로 한 번에 정리하세요.</p>
                         </div>
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                             <select id="match-comp-select" onchange="loadMatchingDiagnostic()" style="padding:5px 8px;font-size:12px;border:1px solid var(--gray);border-radius:5px;min-width:220px;">
@@ -7110,6 +7110,12 @@ POST /api/external/event-result-link/batch<br>
             const b = _MATCH_BADGE[status] || _MATCH_BADGE['n/a'];
             return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:${b.color};background:${b.bg};">${b.label}</span>`;
         }
+        // inline 이벤트 핸들러에 안전하게 문자열 임베드하기 위한 JSON 직렬화 헬퍼
+        function _jsStr(s) {
+            return JSON.stringify(String(s == null ? '' : s));
+        }
+        // 종목별 매칭 진단 결과 캐시 (인라인 액션 핸들러용)
+        let _matchCache = { events: [], compId: null };
 
         async function loadMatchingDiagnostic() {
             const compId = document.getElementById('match-comp-select')?.value;
@@ -7135,19 +7141,51 @@ POST /api/external/event-result-link/batch<br>
                         <div>CR: ${_matchBadge('exact')} ${s.cr.exact} · ${_matchBadge('normalized')} ${s.cr.normalized} · ${_matchBadge('none')} ${s.cr.none} · n/a ${s.cr.na}</div>
                     </div>`;
                 // 종목별 표
+                // 캐시: 종목별 후보 + record_id (액션 핸들러용)
+                _matchCache = { events: data.events, compId };
                 let rows = '';
                 for (const ev of data.events) {
                     const gLabel = ev.gender === 'M' ? '남' : ev.gender === 'F' ? '여' : 'X';
                     function cell(t) {
-                        const dbName = ev[t].db_event_name;
-                        let extra = '';
-                        if (ev[t].status === 'normalized' && dbName && dbName !== ev.event_name) {
-                            extra = `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">DB: <code>${_esc(dbName)}</code></div>`;
-                        } else if (ev[t].status === 'none' && (ev[t].candidates || []).length > 0) {
-                            extra = `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;" title="DB 후보">후보: ${ev[t].candidates.map(c => _esc(c)).join(', ')}</div>`;
+                        const slot = ev[t];
+                        const status = slot.status;
+                        const dbName = slot.db_event_name;
+                        const recId = slot.record_id;
+                        const val = slot.record_value ? `<div style="font-size:10px;color:var(--text);margin-top:1px;font-family:var(--font-mono);">${_esc(slot.record_value)} <span style="color:var(--text-muted);">${_esc(slot.holder_name || '')}</span></div>` : '';
+
+                        // ── 시간표 매칭 패턴: 인라인 액션 ──
+                        if (status === 'n/a') {
+                            return `<td style="padding:6px 8px;vertical-align:top;">${_matchBadge(status)}</td>`;
                         }
-                        const val = ev[t].record_value ? `<div style="font-size:10px;color:var(--text);margin-top:1px;">${_esc(ev[t].record_value)} (${_esc(ev[t].holder_name || '')})</div>` : '';
-                        return `<td style="padding:6px 8px;vertical-align:top;">${_matchBadge(ev[t].status)}${val}${extra}</td>`;
+                        if (status === 'exact') {
+                            // 정확 매칭: 배지만 + 값. 해제 버튼 (선택)
+                            return `<td style="padding:6px 8px;vertical-align:top;">${_matchBadge(status)}${val}</td>`;
+                        }
+                        if (status === 'normalized') {
+                            // 정규화로 매칭됨 → 1클릭으로 event_name 을 종목명에 정확 일치시키기
+                            const note = (dbName && dbName !== ev.event_name)
+                                ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">DB: <code>${_esc(dbName)}</code></div>` : '';
+                            const fix = recId
+                                ? `<button onclick="matchRelinkRecord(${recId}, ${_jsStr(ev.event_name)})" class="btn btn-sm btn-outline" style="margin-top:4px;font-size:10px;padding:2px 8px;border-color:#e67e22;color:#e67e22;" title="DB의 event_name 을 현재 종목명과 동일하게 변경 (정확 매칭으로 승격)">→ 정확 매칭으로 고정</button>` : '';
+                            return `<td style="padding:6px 8px;vertical-align:top;">${_matchBadge(status)}${val}${note}${fix}</td>`;
+                        }
+                        // status === 'none' : 매칭 안 됨 → 시간표 매칭 패턴의 드롭다운 + [연결] / [신규 등록]
+                        // candidate_records: [{ id, event_name, record_value, holder_name }] — 후보의 record_id 직접 보유
+                        const candRecs = slot.candidate_records || [];
+                        let inline = '';
+                        if (candRecs.length > 0) {
+                            const selId = `match-sel-${ev.event_id}-${t}`;
+                            inline = `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                                <select id="${selId}" style="font-size:10px;padding:2px 4px;border:1px solid #e8e2d0;border-radius:4px;max-width:180px;">
+                                    <option value="">DB 기록 선택...</option>
+                                    ${candRecs.map(c => `<option value="${c.id}">${_esc(c.event_name)}${c.record_value ? ' (' + _esc(c.record_value) + ')' : ''}</option>`).join('')}
+                                </select>
+                                <button onclick="matchLinkBySelect(${ev.event_id}, ${_jsStr(t)}, ${_jsStr(ev.event_name)})" style="background:#16a085;border:none;color:#fff;border-radius:4px;font-size:10px;padding:2px 8px;cursor:pointer;font-weight:600;" title="선택한 DB 기록의 event_name 을 현재 종목명으로 변경하여 연결">연결</button>
+                            </div>`;
+                        }
+                        const newBtn = t !== 'division' // DR 신규는 division_code 가 필요해서 이 UI에서는 NR/CR 만 제공
+                            ? `<button onclick="matchNewRecord(${ev.event_id}, ${_jsStr(t)}, ${_jsStr(ev.event_name)}, ${_jsStr(ev.gender)})" class="btn btn-sm btn-outline" style="margin-top:4px;font-size:10px;padding:2px 8px;" title="이 종목명으로 새 ${t === 'national' ? 'NR' : 'CR'} 기록을 직접 등록">+ 신규 등록</button>` : '';
+                        return `<td style="padding:6px 8px;vertical-align:top;">${_matchBadge(status)}${inline}${newBtn}</td>`;
                     }
                     const rowBg = (ev.national.status === 'none' || (ev.division.status === 'none') || (ev.competition.status === 'none')) ? 'background:#fff8f5;' : '';
                     rows += `<tr style="${rowBg}border-bottom:1px solid var(--gray);">
@@ -7172,6 +7210,102 @@ POST /api/external/event-result-link/batch<br>
                 console.error('loadMatchingDiagnostic', e);
                 listEl.innerHTML = `<p style="color:var(--danger);font-size:12px;padding:20px;text-align:center;">진단 실패: ${_esc(e.message || String(e))}</p>`;
             }
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // 시간표 매칭 패턴: 인라인 종목별 매칭 액션 (2026-05 추가)
+        // ──────────────────────────────────────────────────────────────
+        // [정확 매칭으로 고정] — normalized 상태의 record_id 를 종목명으로 변경
+        async function matchRelinkRecord(recordId, targetEventName) {
+            if (!recordId || !targetEventName) return;
+            const key = await _getAdminKeyForNormalize();
+            if (!key) return;
+            try {
+                const r = await fetch(`/api/admin/event-records/${recordId}/relink`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: key, target_event_name: targetEventName })
+                });
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.error || '연결 실패');
+                toast(`연결 완료: ${data.before || ''} → ${data.after || targetEventName}`);
+                loadMatchingDiagnostic();
+            } catch (e) {
+                toast(e.message || '연결 실패', 'error');
+            }
+        }
+        // [드롭다운 + 연결] — 후보 record_id 를 종목명에 정확 일치시키기
+        async function matchLinkBySelect(eventId, slot, targetEventName) {
+            const selId = `match-sel-${eventId}-${slot}`;
+            const sel = document.getElementById(selId);
+            if (!sel || !sel.value) { toast('연결할 DB 기록을 선택하세요', 'error'); return; }
+            const recId = parseInt(sel.value, 10);
+            if (!Number.isFinite(recId)) { toast('잘못된 선택입니다', 'error'); return; }
+            await matchRelinkRecord(recId, targetEventName);
+        }
+        // [+ 신규 등록] — 현재 종목명으로 새 NR/CR 기록 등록 모달 띄우기
+        function matchNewRecord(eventId, slot, eventName, gender) {
+            // 기존 rec-cell-modal 재사용 (보유자/년도/값 입력)
+            const modal = document.getElementById('rec-cell-modal');
+            if (!modal) {
+                // 모달이 없으면 prompt 로 폴백
+                _matchNewRecordPrompt(eventId, slot, eventName, gender);
+                return;
+            }
+            const titleEl = document.getElementById('rec-cell-title');
+            const subEl = document.getElementById('rec-cell-subtitle');
+            const idEl = document.getElementById('rec-cell-id');
+            const typeEl = document.getElementById('rec-cell-record-type');
+            const nameEl = document.getElementById('rec-cell-event-name');
+            const genEl = document.getElementById('rec-cell-gender');
+            const divEl = document.getElementById('rec-cell-division-code');
+            const sidEl = document.getElementById('rec-cell-series-id');
+            const valEl = document.getElementById('rec-cell-value');
+            const yrEl = document.getElementById('rec-cell-year');
+            const hnEl = document.getElementById('rec-cell-holder-name');
+            const htEl = document.getElementById('rec-cell-holder-team');
+            const delBtn = document.getElementById('rec-cell-delete-btn');
+            if (titleEl) titleEl.textContent = (slot === 'national' ? 'NR' : slot === 'competition' ? 'CR' : 'DR') + ' 신규 등록';
+            if (subEl)   subEl.textContent = `${eventName} · ${gender === 'M' ? '남' : gender === 'F' ? '여' : '혼성'}`;
+            if (idEl)    idEl.value = '';
+            if (typeEl)  typeEl.value = slot;
+            if (nameEl)  nameEl.value = eventName;
+            if (genEl)   genEl.value = gender;
+            if (divEl)   divEl.value = '';
+            // CR 등록일 때는 현재 대회의 series_id 를 prefill
+            if (slot === 'competition' && sidEl) {
+                fetch('/api/competitions').then(r => r.json()).then(comps => {
+                    const comp = (comps || []).find(c => c.id === _matchCache.compId);
+                    sidEl.value = (comp && comp.series_id) ? comp.series_id : '';
+                }).catch(() => { sidEl.value = ''; });
+            } else if (sidEl) {
+                sidEl.value = '';
+            }
+            if (valEl) valEl.value = '';
+            if (yrEl)  yrEl.value = new Date().getFullYear();
+            if (hnEl)  hnEl.value = '';
+            if (htEl)  htEl.value = '';
+            if (delBtn) delBtn.style.display = 'none';
+            modal.style.display = 'flex';
+        }
+        function _matchNewRecordPrompt(eventId, slot, eventName, gender) {
+            const val = prompt(`${slot.toUpperCase()} 기록값을 입력하세요 (예: 10.34 / 8.21m / 2:05.12):`);
+            if (!val) return;
+            const holder = prompt('보유자명 (선택):') || '';
+            const year = prompt('수립년도 (선택):') || '';
+            _getAdminKeyForNormalize().then(key => {
+                if (!key) return;
+                return fetch('/api/event-records', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: key, gender, event_name: eventName, record_type: slot, record_value: val, holder_name: holder, record_year: year })
+                });
+            }).then(r => r ? r.json() : null).then(data => {
+                if (!data) return;
+                if (data.error) throw new Error(data.error);
+                toast('신규 등록 완료');
+                loadMatchingDiagnostic();
+            }).catch(e => toast(e.message || '등록 실패', 'error'));
         }
 
         async function previewNormalizeAll() {
