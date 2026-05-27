@@ -8880,10 +8880,15 @@ app.get('/api/admin/event-record-matching', async (req, res) => {
 
         const seriesId = comp.series_id || null;
         // 대회의 모든 종목 (부모 합동/혼성 포함, 세부종목 제외)
+        // ⚠️ event 테이블에는 division_code 컬럼이 없다 (division 만 존재).
+        //    DR 매칭은 event 의 division_code 가 아닌 competition 의 division_type 으로 처리하거나
+        //    종목별 부 구분이 없으면 n/a 처리. 현재는 모든 event 의 division_code 를 null 로 본다.
         const events = await db.all(
-            `SELECT id, name, gender, division_code FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY id`,
+            `SELECT id, name, gender FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY id`,
             compId
         );
+        // division_code 필드를 가상으로 추가 (현재 event 테이블에 컬럼 없으므로 항상 null)
+        for (const e of events) e.division_code = null;
         // 모든 event_record (approved=1) 를 한 번에 가져와 매칭 (DB hit 최소화)
         const allRecords = await db.all(
             `SELECT id, record_type, event_name, gender, division_code, series_id, record_value, holder_name FROM event_record WHERE approved=1`

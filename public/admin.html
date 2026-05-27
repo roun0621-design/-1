@@ -7183,9 +7183,22 @@ POST /api/external/event-result-link/batch<br>
             if (!key) return;
             await _runNormalizeAll(false, key);
         }
+        // ⚠️ 관리자키 UX 개선 (2026-05): 매번 prompt 하지 않고
+        //    이미 admin.html 로그인 시 저장된 localStorage 의 키를 우선 사용.
+        //    없을 때만 prompt + sessionStorage 에 저장하여 세션 동안 재사용.
         async function _getAdminKeyForNormalize() {
+            // 1) admin.html 로그인 시 저장된 키
+            const akStored = (typeof AK === 'function') ? AK() : '';
+            if (akStored) return akStored.trim();
+            // 2) 세션 동안 캐시
+            const sess = sessionStorage.getItem('pace_normalize_key');
+            if (sess) return sess.trim();
+            // 3) prompt
             const k = prompt('관리자 키 또는 운영진 키를 입력하세요:');
-            return k ? k.trim() : null;
+            if (!k) return null;
+            const trimmed = k.trim();
+            try { sessionStorage.setItem('pace_normalize_key', trimmed); } catch(_) {}
+            return trimmed;
         }
         async function _runNormalizeAll(isDry, adminKey) {
             const body = { dry_run: isDry };
