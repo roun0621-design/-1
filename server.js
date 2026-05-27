@@ -9103,6 +9103,43 @@ app.put('/api/admin/event-records/:id/relink', async (req, res) => {
     }
 });
 
+// ──────────────────────────────────────────────────────────────
+// GET /api/admin/event-records/all-candidates
+// Query: ?record_type=national|division|competition&gender=M|F|X&series_id=N(optional)
+// → 같은 슬롯(type+gender+series) 에 등록된 모든 event_record 반환.
+//   사용자가 정규화로도 매칭 안 되는 종목을 강제로 연결할 때 사용.
+//   "있는데 못 불러오는" 케이스 (콤마/공백/표기 차이 등 정규화기가 못 잡는 경우).
+// ──────────────────────────────────────────────────────────────
+app.get('/api/admin/event-records/all-candidates', async (req, res) => {
+    try {
+        const recordType = String(req.query.record_type || '').trim();
+        const gender = String(req.query.gender || '').trim();
+        if (!['national', 'division', 'competition'].includes(recordType)) {
+            return res.status(400).json({ error: 'record_type 은 national/division/competition' });
+        }
+        if (!gender) return res.status(400).json({ error: 'gender 필수' });
+        const seriesId = req.query.series_id ? parseInt(req.query.series_id, 10) : null;
+
+        let sql = `SELECT id, record_type, event_name, gender, division_code, series_id,
+                          record_value, holder_name, holder_team, record_year
+                   FROM event_record
+                   WHERE record_type=? AND gender=? AND approved=1`;
+        const args = [recordType, gender];
+        if (recordType === 'competition' && seriesId) {
+            sql += ` AND series_id=?`;
+            args.push(seriesId);
+        } else if (recordType === 'national') {
+            sql += ` AND series_id IS NULL AND division_code IS NULL`;
+        }
+        sql += ` ORDER BY event_name`;
+        const rows = await db.all(sql, ...args);
+        res.json({ candidates: rows || [] });
+    } catch (err) {
+        console.error('[event-records/all-candidates]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ============================================================
 // TIMETABLE (시간표) — Excel upload, parse, store, serve
 // ============================================================

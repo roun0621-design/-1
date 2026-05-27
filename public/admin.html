@@ -1138,7 +1138,7 @@ POST /api/external/event-result-link/batch<br>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
                         <div>
                             <h4 style="margin:0;">🔗 시리즈 ↔ 대회 종목 매칭 진단 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(NR / DR / CR)</span></h4>
-                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회의 각 종목이 등록된 NR/DR/CR 기록과 매칭되는지 진단합니다. <strong>매칭 안 됨</strong> 표시 옆의 드롭다운에서 DB 후보를 선택하고 <strong>[연결]</strong> 버튼을 누르거나, 후보가 없으면 <strong>[+ 신규 등록]</strong> 으로 직접 입력할 수 있습니다 (시간표 매칭과 동일한 방식). 표기 차이가 많을 땐 <strong>일괄 정규화</strong> 로 한 번에 정리하세요.</p>
+                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회의 각 종목이 등록된 NR/DR/CR 기록과 매칭되는지 진단합니다. <strong>매칭 안 됨</strong> 옆의 드롭다운에서 DB 후보를 선택하고 <strong>[연결]</strong>, 자동 후보가 없으면 <strong>[📋 전체 후보에서 선택]</strong> 으로 DB 전체 목록에서 강제 매칭, 정말 없으면 <strong>[+ 신규 등록]</strong> 으로 직접 입력합니다. 표기 차이가 많을 땐 <strong>일괄 정규화</strong> 로 한 번에 정리하세요.</p>
                         </div>
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                             <select id="match-comp-select" onchange="loadMatchingDiagnostic()" style="padding:5px 8px;font-size:12px;border:1px solid var(--gray);border-radius:5px;min-width:220px;">
@@ -7111,8 +7111,17 @@ POST /api/external/event-result-link/batch<br>
             return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:${b.color};background:${b.bg};">${b.label}</span>`;
         }
         // inline 이벤트 핸들러에 안전하게 문자열 임베드하기 위한 JSON 직렬화 헬퍼
+        // ⚠️ onclick="..." 속성은 큰따옴표(")로 감싸여 있으므로 JSON 의 " 가 그대로 들어가면
+        //    HTML 속성이 깨져 onclick 핸들러가 동작하지 않는다.
+        //    → 큰따옴표를 &quot; 로, &/< 등도 HTML-safe 하게 인코딩하여 반환.
         function _jsStr(s) {
-            return JSON.stringify(String(s == null ? '' : s));
+            const raw = JSON.stringify(String(s == null ? '' : s));
+            // HTML 속성 안에 안전하게 들어갈 수 있도록 인코딩
+            return raw
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
         }
         // 종목별 매칭 진단 결과 캐시 (인라인 액션 핸들러용)
         let _matchCache = { events: [], compId: null };
@@ -7185,7 +7194,10 @@ POST /api/external/event-result-link/batch<br>
                         }
                         const newBtn = t !== 'division' // DR 신규는 division_code 가 필요해서 이 UI에서는 NR/CR 만 제공
                             ? `<button onclick="matchNewRecord(${ev.event_id}, ${_jsStr(t)}, ${_jsStr(ev.event_name)}, ${_jsStr(ev.gender)})" class="btn btn-sm btn-outline" style="margin-top:4px;font-size:10px;padding:2px 8px;" title="이 종목명으로 새 ${t === 'national' ? 'NR' : 'CR'} 기록을 직접 등록">+ 신규 등록</button>` : '';
-                        return `<td style="padding:6px 8px;vertical-align:top;">${_matchBadge(status)}${inline}${newBtn}</td>`;
+                        // "있는데 못 불러오는" 케이스 대비: 전체 후보에서 강제 매칭
+                        const forceBtn = t !== 'division'
+                            ? `<button onclick="matchForceLink(${ev.event_id}, ${_jsStr(t)}, ${_jsStr(ev.event_name)}, ${_jsStr(ev.gender)})" class="btn btn-sm btn-ghost" style="margin-top:4px;font-size:10px;padding:2px 8px;color:#6b5520;" title="DB 전체에서 검색하여 강제로 연결 (정규화기가 못 잡는 표기 차이 해결)">📋 전체 후보에서 선택</button>` : '';
+                        return `<td style="padding:6px 8px;vertical-align:top;">${_matchBadge(status)}${inline}${newBtn}${forceBtn}</td>`;
                     }
                     const rowBg = (ev.national.status === 'none' || (ev.division.status === 'none') || (ev.competition.status === 'none')) ? 'background:#fff8f5;' : '';
                     rows += `<tr style="${rowBg}border-bottom:1px solid var(--gray);">
@@ -7306,6 +7318,126 @@ POST /api/external/event-result-link/batch<br>
                 toast('신규 등록 완료');
                 loadMatchingDiagnostic();
             }).catch(e => toast(e.message || '등록 실패', 'error'));
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // [📋 전체 후보에서 선택] — 정규화기가 못 잡는 케이스 강제 매칭
+        // 같은 (record_type, gender, series) 의 모든 event_record 를
+        // 모달 리스트로 띄우고 한 개를 선택해 종목명으로 relink.
+        // ──────────────────────────────────────────────────────────────
+        async function matchForceLink(eventId, slot, eventName, gender) {
+            try {
+                // 현재 대회의 series_id 조회 (CR 검색용)
+                let seriesId = null;
+                if (slot === 'competition') {
+                    try {
+                        const comps = await fetch('/api/competitions').then(r => r.json());
+                        const comp = (comps || []).find(c => c.id === _matchCache.compId);
+                        seriesId = comp && comp.series_id ? comp.series_id : null;
+                    } catch(_) {}
+                }
+                const params = new URLSearchParams({ record_type: slot, gender });
+                if (seriesId) params.set('series_id', seriesId);
+                const r = await fetch('/api/admin/event-records/all-candidates?' + params.toString());
+                if (!r.ok) {
+                    const err = await r.json().catch(() => ({}));
+                    throw new Error(err.error || '후보 조회 실패');
+                }
+                const data = await r.json();
+                const list = data.candidates || [];
+                _matchForceModalShow(eventName, slot, gender, list);
+            } catch (e) {
+                console.error('matchForceLink', e);
+                toast(e.message || '후보 조회 실패', 'error');
+            }
+        }
+        function _matchForceModalShow(targetEventName, slot, gender, candidates) {
+            let modal = document.getElementById('match-force-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'match-force-modal';
+                modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2200;align-items:center;justify-content:center;';
+                modal.innerHTML = `
+                    <div style="background:var(--white);border-radius:12px;padding:0;width:680px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+                        <div style="padding:14px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
+                            <h3 id="mf-title" style="margin:0;font-size:15px;font-weight:700;"></h3>
+                            <button class="btn btn-ghost" style="padding:2px 8px;font-size:18px;line-height:1;" onclick="_matchForceModalClose()">×</button>
+                        </div>
+                        <div style="padding:10px 20px;border-bottom:1px solid #f0f0f0;background:#fafafa;font-size:11px;color:#666;">
+                            <input id="mf-filter" type="text" placeholder="종목명/보유자/기록값으로 필터..." style="width:100%;padding:6px 8px;border:1px solid #e8e2d0;border-radius:4px;font-size:12px;" oninput="_matchForceFilter()">
+                        </div>
+                        <div id="mf-list" style="flex:1;overflow-y:auto;padding:6px 0;"></div>
+                        <div style="padding:10px 20px;border-top:1px solid #e5e7eb;background:#fafafa;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#666;">
+                            <span id="mf-count"></span>
+                            <button class="btn btn-sm btn-outline" onclick="_matchForceModalClose()">취소</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+            }
+            // 데이터 상태 저장
+            window._matchForceState = { targetEventName, slot, gender, candidates };
+            const slotLabel = slot === 'national' ? 'NR(한국)' : slot === 'competition' ? 'CR(시리즈)' : 'DR(부별)';
+            const gLabel = gender === 'M' ? '남' : gender === 'F' ? '여' : '혼성';
+            document.getElementById('mf-title').textContent = `📋 [${slotLabel}] '${targetEventName}' (${gLabel}) 강제 매칭 — 전체 후보`;
+            document.getElementById('mf-filter').value = '';
+            _matchForceRenderList(candidates);
+            modal.style.display = 'flex';
+        }
+        function _matchForceRenderList(items) {
+            const listEl = document.getElementById('mf-list');
+            const cntEl = document.getElementById('mf-count');
+            if (!items || items.length === 0) {
+                listEl.innerHTML = '<div style="padding:30px;text-align:center;color:#999;font-size:13px;">등록된 기록이 없습니다.</div>';
+                cntEl.textContent = '0개';
+                return;
+            }
+            const st = window._matchForceState || {};
+            let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+            html += '<thead><tr style="background:#f5f5f5;position:sticky;top:0;"><th style="padding:6px 10px;text-align:left;border-bottom:1px solid #ddd;">DB 종목명</th><th style="padding:6px 10px;text-align:left;border-bottom:1px solid #ddd;">기록</th><th style="padding:6px 10px;text-align:left;border-bottom:1px solid #ddd;">보유자</th><th style="padding:6px 10px;border-bottom:1px solid #ddd;width:80px;"></th></tr></thead><tbody>';
+            for (const c of items) {
+                const isSelf = c.event_name === st.targetEventName;
+                html += `<tr style="border-bottom:1px solid #f0f0f0;${isSelf ? 'background:#eafaf1;' : ''}">
+                    <td style="padding:6px 10px;font-family:var(--font-mono);">${_esc(c.event_name)}${isSelf ? ' <span style="color:#27ae60;font-size:10px;">(현재 이름)</span>' : ''}</td>
+                    <td style="padding:6px 10px;font-family:var(--font-mono);">${_esc(c.record_value || '')}</td>
+                    <td style="padding:6px 10px;color:#666;">${_esc(c.holder_name || '')}${c.holder_team ? ' · ' + _esc(c.holder_team) : ''}</td>
+                    <td style="padding:6px 10px;text-align:right;">
+                        ${isSelf ? '<span style="color:#27ae60;font-size:11px;">✓</span>' :
+                            `<button onclick="_matchForceConfirm(${c.id})" style="background:#16a085;border:none;color:#fff;border-radius:4px;font-size:11px;padding:3px 10px;cursor:pointer;font-weight:600;">→ 연결</button>`}
+                    </td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            listEl.innerHTML = html;
+            cntEl.textContent = items.length + '개';
+        }
+        function _matchForceFilter() {
+            const q = (document.getElementById('mf-filter').value || '').trim().toLowerCase();
+            const st = window._matchForceState || {};
+            if (!st.candidates) return;
+            if (!q) { _matchForceRenderList(st.candidates); return; }
+            const filtered = st.candidates.filter(c =>
+                (c.event_name || '').toLowerCase().includes(q) ||
+                (c.holder_name || '').toLowerCase().includes(q) ||
+                (c.holder_team || '').toLowerCase().includes(q) ||
+                String(c.record_value || '').toLowerCase().includes(q)
+            );
+            _matchForceRenderList(filtered);
+        }
+        function _matchForceModalClose() {
+            const m = document.getElementById('match-force-modal');
+            if (m) m.style.display = 'none';
+        }
+        async function _matchForceConfirm(recordId) {
+            const st = window._matchForceState || {};
+            if (!st.targetEventName) return;
+            // 사용자 안내: DB 의 event_name 이 종목명으로 영구 변경됨
+            const cand = (st.candidates || []).find(c => c.id === recordId);
+            const msg = `'${cand ? cand.event_name : ''}' 기록을 종목명 '${st.targetEventName}' 으로 강제 연결합니다.\n\n` +
+                `→ DB 의 event_name 이 '${st.targetEventName}' 으로 영구 변경됩니다.\n` +
+                `→ 이 종목의 NR/CR 배지가 대시보드/기록지에 표시됩니다.\n\n계속하시겠습니까?`;
+            if (!confirm(msg)) return;
+            _matchForceModalClose();
+            await matchRelinkRecord(recordId, st.targetEventName);
         }
 
         async function previewNormalizeAll() {

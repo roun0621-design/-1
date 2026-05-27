@@ -225,12 +225,17 @@ function normalizeEventNameClient(name) {
     let s = String(name).trim();
     s = s.replace(/\s*(예선|준결승|결승|preliminary|semifinal|final)\s*/gi, ' ').trim();
     s = s.replace(/^(남자|여자|남|여|M|F)\s+/i, '').trim();
+    // 천단위 콤마/공백 제거: "10,000m" / "10 000m" → "10000m"
+    s = s.replace(/[,，]/g, '');
+    s = s.replace(/(\d)\s+(\d)/g, '$1$2');
     s = s.replace(/미터\s*허들/g, 'mH')
          .replace(/미터\s*장애물/g, 'mSC')
          .replace(/미터\s*경보/g, 'mW')
          .replace(/미터/g, 'm');
     s = s.replace(/×/g, 'x').replace(/X/g, 'x');
     s = s.replace(/(\d+)\s*x\s*(\d+)\s*m(?:\s*릴레이|\s*계주|\s*R)?/gi, '$1x$2mR');
+    // 숫자와 단위 사이 공백 제거
+    s = s.replace(/(\d)\s+(m\b|mH\b|mSC\b|mW\b|mR\b)/gi, '$1$2');
     s = s.replace(/\s+/g, ' ').trim();
     return s;
 }
