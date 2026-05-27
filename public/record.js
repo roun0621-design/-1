@@ -2406,14 +2406,14 @@ function setHeightMode(mode) {
     renderHeightContent();
 }
 
-// Toggle height mark: cycles O → X → - (pass) → empty
+// Toggle height mark: cycles X → O → - (pass) → empty
 async function toggleHeightMark(entryId, barHeight, attemptNumber) {
     const current = state.heightAttempts.find(a => 
         a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
     );
     const currentMark = current ? current.result_mark : '';
-    const cycle = { '': 'O', 'O': 'X', 'X': '-', '-': '', 'PASS': '' };
-    const newMark = currentMark in cycle ? cycle[currentMark] : 'O';
+    const cycle = { '': 'X', 'X': 'O', 'O': '-', '-': '', 'PASS': '' };
+    const newMark = currentMark in cycle ? cycle[currentMark] : 'X';
 
     try {
         const hid = getSaveHeatId(entryId); // [JOINT]
@@ -3753,8 +3753,8 @@ async function _cSubHeightToggle(entryId, barHeight, attemptNumber) {
         a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
     );
     const currentMark = current ? current.result_mark : '';
-    const cycle = { '': 'O', 'O': 'X', 'X': '-', '-': '', 'PASS': '' };
-    const newMark = currentMark in cycle ? cycle[currentMark] : 'O';
+    const cycle = { '': 'X', 'X': 'O', 'O': '-', '-': '', 'PASS': '' };
+    const newMark = currentMark in cycle ? cycle[currentMark] : 'X';
 
     try {
         // ─── 옵티미스틱
