@@ -1132,6 +1132,38 @@ POST /api/external/event-result-link/batch<br>
                     </div>
                     <div id="series-list" style="font-size:13px;"></div>
                 </div>
+
+                <!-- 시리즈 ↔ 대회 종목 매칭 진단 (Issue 3b) -->
+                <div class="admin-card" style="border-left:4px solid #16a085;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+                        <div>
+                            <h4 style="margin:0;">🔗 시리즈 ↔ 대회 종목 매칭 진단 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(NR / DR / CR)</span></h4>
+                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회의 각 종목이 등록된 NR/DR/CR 기록과 매칭되는지 진단합니다. <strong>매칭 안 됨</strong> 표시가 있는 종목은 대시보드/기록지에 배지가 안 보입니다. 종목명 표기 차이가 원인이면 <strong>일괄 정규화</strong> 버튼으로 해결 가능합니다.</p>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <select id="match-comp-select" onchange="loadMatchingDiagnostic()" style="padding:5px 8px;font-size:12px;border:1px solid var(--gray);border-radius:5px;min-width:220px;">
+                                <option value="">대회 선택…</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline" onclick="loadMatchingDiagnostic()" style="font-size:11px;">새로고침</button>
+                            <button class="btn btn-sm btn-outline" onclick="previewNormalizeAll()" style="font-size:11px;" title="실제 적용하지 않고 어떤 행이 어떻게 바뀔지 미리보기">📋 정규화 미리보기</button>
+                            <button class="btn btn-sm btn-primary" onclick="confirmNormalizeAll()" style="font-size:11px;background:#16a085;border-color:#16a085;" title="event_record 의 event_name 을 정규화된 형태로 일괄 업데이트">⚡ 일괄 정규화 실행</button>
+                        </div>
+                    </div>
+                    <div id="matching-summary" style="margin-top:6px;"></div>
+                    <div id="matching-list" style="margin-top:10px;font-size:12px;"></div>
+                </div>
+
+                <!-- 정규화 미리보기/결과 모달 -->
+                <div id="normalize-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;align-items:center;justify-content:center;">
+                    <div style="background:var(--white);border-radius:12px;padding:24px;width:720px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <h3 style="margin:0;font-size:16px;" id="normalize-modal-title">정규화 미리보기</h3>
+                            <button class="btn btn-sm btn-outline" onclick="closeNormalizeModal()">닫기</button>
+                        </div>
+                        <div id="normalize-modal-body" style="flex:1;overflow-y:auto;font-size:12px;"></div>
+                        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--gray);" id="normalize-modal-footer"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Series Create/Edit Modal -->
@@ -1699,7 +1731,7 @@ POST /api/external/event-result-link/batch<br>
     </div>
 
     <script src="lib/xlsx.full.min.js"></script>
-    <script src="common.js?v=74"></script>
+    <script src="common.js?v=75"></script>
     <script>
         renderPageNav('admin');
         // Helper: display bib_number safely (null/undefined → '—')
@@ -6588,6 +6620,9 @@ POST /api/external/event-result-link/batch<br>
 
             // Phase C: 승인 대기 큐 로드
             await loadRecordBreaks();
+
+            // Issue 3b: 매칭 진단 — 대회 셀렉트 로드
+            try { await loadMatchingCompList(); } catch(e) { console.warn('matching list load fail', e); }
         }
 
         function renderRecordsEventList() {
@@ -7045,6 +7080,183 @@ POST /api/external/event-result-link/batch<br>
             } catch (err) {
                 toast('삭제 오류: ' + err.message, 'error');
             }
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // Issue 3b: 시리즈 ↔ 대회 종목 매칭 진단 + 일괄 정규화
+        // ──────────────────────────────────────────────────────────────
+        async function loadMatchingCompList() {
+            const sel = document.getElementById('match-comp-select');
+            if (!sel) return;
+            try {
+                const cRes = await fetch('/api/competitions');
+                const comps = await cRes.json();
+                let html = '<option value="">대회 선택…</option>';
+                for (const c of (comps || [])) {
+                    const sn = c.series_id ? '' : ' [시리즈 미연결]';
+                    html += `<option value="${c.id}">${_esc(c.name)}${sn}</option>`;
+                }
+                sel.innerHTML = html;
+            } catch (e) { console.warn('match comp list fail', e); }
+        }
+
+        const _MATCH_BADGE = {
+            exact:      { label: '✓ 정확', color: '#27ae60', bg: '#eafaf1' },
+            normalized: { label: '~ 정규화', color: '#e67e22', bg: '#fdf2e9' },
+            none:       { label: '✗ 없음', color: '#c0392b', bg: '#fdedec' },
+            'n/a':      { label: '—', color: '#95a5a6', bg: '#ecf0f1' }
+        };
+        function _matchBadge(status) {
+            const b = _MATCH_BADGE[status] || _MATCH_BADGE['n/a'];
+            return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:${b.color};background:${b.bg};">${b.label}</span>`;
+        }
+
+        async function loadMatchingDiagnostic() {
+            const compId = document.getElementById('match-comp-select')?.value;
+            const summaryEl = document.getElementById('matching-summary');
+            const listEl = document.getElementById('matching-list');
+            if (!compId) {
+                summaryEl.innerHTML = '';
+                listEl.innerHTML = '<p style="color:var(--text-muted);font-size:12px;padding:20px;text-align:center;">대회를 선택하세요.</p>';
+                return;
+            }
+            listEl.innerHTML = '<p style="color:var(--text-muted);font-size:12px;padding:20px;text-align:center;">진단 중…</p>';
+            try {
+                const r = await fetch(`/api/admin/event-record-matching?competition_id=${compId}`);
+                if (!r.ok) throw new Error(await r.text());
+                const data = await r.json();
+                // 요약
+                const s = data.summary;
+                summaryEl.innerHTML = `
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;background:var(--bg);padding:10px 14px;border-radius:8px;">
+                        <div><strong>${_esc(data.competition.name)}</strong> · 총 종목 ${s.total_events}개</div>
+                        <div>NR: ${_matchBadge('exact')} ${s.nr.exact} · ${_matchBadge('normalized')} ${s.nr.normalized} · ${_matchBadge('none')} ${s.nr.none}</div>
+                        <div>DR: ${_matchBadge('exact')} ${s.dr.exact} · ${_matchBadge('normalized')} ${s.dr.normalized} · ${_matchBadge('none')} ${s.dr.none} · n/a ${s.dr.na}</div>
+                        <div>CR: ${_matchBadge('exact')} ${s.cr.exact} · ${_matchBadge('normalized')} ${s.cr.normalized} · ${_matchBadge('none')} ${s.cr.none} · n/a ${s.cr.na}</div>
+                    </div>`;
+                // 종목별 표
+                let rows = '';
+                for (const ev of data.events) {
+                    const gLabel = ev.gender === 'M' ? '남' : ev.gender === 'F' ? '여' : 'X';
+                    function cell(t) {
+                        const dbName = ev[t].db_event_name;
+                        let extra = '';
+                        if (ev[t].status === 'normalized' && dbName && dbName !== ev.event_name) {
+                            extra = `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">DB: <code>${_esc(dbName)}</code></div>`;
+                        } else if (ev[t].status === 'none' && (ev[t].candidates || []).length > 0) {
+                            extra = `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;" title="DB 후보">후보: ${ev[t].candidates.map(c => _esc(c)).join(', ')}</div>`;
+                        }
+                        const val = ev[t].record_value ? `<div style="font-size:10px;color:var(--text);margin-top:1px;">${_esc(ev[t].record_value)} (${_esc(ev[t].holder_name || '')})</div>` : '';
+                        return `<td style="padding:6px 8px;vertical-align:top;">${_matchBadge(ev[t].status)}${val}${extra}</td>`;
+                    }
+                    const rowBg = (ev.national.status === 'none' || (ev.division.status === 'none') || (ev.competition.status === 'none')) ? 'background:#fff8f5;' : '';
+                    rows += `<tr style="${rowBg}border-bottom:1px solid var(--gray);">
+                        <td style="padding:6px 8px;font-weight:600;vertical-align:top;"><span style="font-size:10px;color:var(--text-muted);">[${gLabel}]</span> ${_esc(ev.event_name)}
+                            ${ev.event_name !== ev.event_name_normalized ? `<div style="font-size:10px;color:#e67e22;margin-top:2px;">정규형: <code>${_esc(ev.event_name_normalized)}</code></div>` : ''}
+                        </td>
+                        ${cell('national')}${cell('division')}${cell('competition')}
+                    </tr>`;
+                }
+                if (!rows) rows = '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-muted);">종목이 없습니다.</td></tr>';
+                listEl.innerHTML = `
+                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                        <thead><tr style="background:var(--bg);">
+                            <th style="padding:8px;text-align:left;border-bottom:2px solid var(--gray);">종목</th>
+                            <th style="padding:8px;text-align:left;border-bottom:2px solid var(--gray);width:25%;">NR (한국)</th>
+                            <th style="padding:8px;text-align:left;border-bottom:2px solid var(--gray);width:25%;">DR (부별)</th>
+                            <th style="padding:8px;text-align:left;border-bottom:2px solid var(--gray);width:25%;">CR (시리즈)</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>`;
+            } catch (e) {
+                console.error('loadMatchingDiagnostic', e);
+                listEl.innerHTML = `<p style="color:var(--danger);font-size:12px;padding:20px;text-align:center;">진단 실패: ${_esc(e.message || String(e))}</p>`;
+            }
+        }
+
+        async function previewNormalizeAll() {
+            await _runNormalizeAll(true);
+        }
+        async function confirmNormalizeAll() {
+            if (!confirm('event_record 전체 행에 대해 종목명 정규화를 실행합니다. 계속하시겠습니까?\n\n(미리보기를 먼저 해 보시려면 [📋 정규화 미리보기] 를 사용하세요)')) return;
+            const key = await _getAdminKeyForNormalize();
+            if (!key) return;
+            await _runNormalizeAll(false, key);
+        }
+        async function _getAdminKeyForNormalize() {
+            const k = prompt('관리자 키 또는 운영진 키를 입력하세요:');
+            return k ? k.trim() : null;
+        }
+        async function _runNormalizeAll(isDry, adminKey) {
+            const body = { dry_run: isDry };
+            if (!isDry) body.admin_key = adminKey;
+            try {
+                const r = await fetch('/api/admin/event-records/normalize-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (!r.ok) {
+                    const err = await r.json().catch(() => ({ error: r.statusText }));
+                    throw new Error(err.error || 'failed');
+                }
+                const data = await r.json();
+                _showNormalizeResult(data);
+                if (!isDry) {
+                    // 실제 실행 후 → 매칭 진단 재로드
+                    setTimeout(() => { try { loadMatchingDiagnostic(); } catch(e) {} }, 500);
+                }
+            } catch (e) {
+                alert('정규화 실패: ' + (e.message || String(e)));
+            }
+        }
+        function _showNormalizeResult(data) {
+            const modal = document.getElementById('normalize-modal');
+            const title = document.getElementById('normalize-modal-title');
+            const body = document.getElementById('normalize-modal-body');
+            const footer = document.getElementById('normalize-modal-footer');
+            title.textContent = data.dry_run ? '정규화 미리보기 결과' : '정규화 실행 완료';
+            const planRows = (data.planned || []).map(p =>
+                `<tr style="border-bottom:1px solid var(--gray);">
+                    <td style="padding:4px 6px;">${_esc(p.record_type)}</td>
+                    <td style="padding:4px 6px;">${_esc(p.gender)}</td>
+                    <td style="padding:4px 6px;"><code style="color:var(--danger);">${_esc(p.before)}</code></td>
+                    <td style="padding:4px 6px;">→</td>
+                    <td style="padding:4px 6px;"><code style="color:#27ae60;">${_esc(p.after)}</code></td>
+                </tr>`
+            ).join('') || '<tr><td colspan="5" style="padding:12px;text-align:center;color:var(--text-muted);">변경 대상 없음 — 이미 모든 종목명이 정규화되어 있습니다.</td></tr>';
+            const skipRows = (data.skipped || []).map(s =>
+                `<tr style="border-bottom:1px solid var(--gray);">
+                    <td style="padding:4px 6px;">${s.id}</td>
+                    <td style="padding:4px 6px;"><code>${_esc(s.before)}</code></td>
+                    <td style="padding:4px 6px;"><code>${_esc(s.after)}</code></td>
+                    <td style="padding:4px 6px;color:var(--danger);">${_esc(s.reason)}</td>
+                </tr>`
+            ).join('');
+            body.innerHTML = `
+                <div style="margin-bottom:10px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:12px;">
+                    스캔: ${data.total_scanned} · 예정 업데이트: <strong>${data.planned_updates}</strong> · 적용됨: ${data.updated_count} · 건너뜀: ${data.skipped_count}
+                </div>
+                <div style="margin-bottom:6px;font-weight:700;font-size:13px;">변경 ${data.dry_run ? '예정' : '내역'} (${data.planned_updates})</div>
+                <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px;">
+                    <thead><tr style="background:var(--bg);"><th style="padding:6px;text-align:left;">type</th><th style="padding:6px;text-align:left;">성별</th><th style="padding:6px;text-align:left;">변경 전</th><th></th><th style="padding:6px;text-align:left;">변경 후</th></tr></thead>
+                    <tbody>${planRows}</tbody>
+                </table>
+                ${skipRows ? `<div style="margin-bottom:6px;font-weight:700;font-size:13px;color:var(--danger);">건너뜀 (UNIQUE 충돌 등) — ${data.skipped_count}</div>
+                <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                    <thead><tr style="background:var(--bg);"><th style="padding:6px;text-align:left;">id</th><th style="padding:6px;text-align:left;">변경 전</th><th style="padding:6px;text-align:left;">정규형</th><th style="padding:6px;text-align:left;">사유</th></tr></thead>
+                    <tbody>${skipRows}</tbody>
+                </table>` : ''}
+            `;
+            footer.innerHTML = data.dry_run && data.planned_updates > 0
+                ? `<button class="btn btn-sm btn-outline" onclick="closeNormalizeModal()">취소</button>
+                   <button class="btn btn-sm btn-primary" style="background:#16a085;border-color:#16a085;" onclick="closeNormalizeModal(); confirmNormalizeAll();">⚡ 이대로 실행</button>`
+                : `<button class="btn btn-sm btn-primary" onclick="closeNormalizeModal()">닫기</button>`;
+            modal.style.display = 'flex';
+        }
+        function closeNormalizeModal() {
+            const m = document.getElementById('normalize-modal');
+            if (m) m.style.display = 'none';
         }
 
         // ──────────────────────────────────────────────────────────────

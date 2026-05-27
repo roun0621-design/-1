@@ -203,8 +203,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     onSSE('height_update', async (data) => {
         if (state.heatId && state.selectedEvent && state.selectedEvent.category === 'field_height') {
-            state.heightAttempts = await API.getHeightAttempts(state.heatId);
-            renderHeightContent();
+            // ─── 옵티미스틱 보존 머지 (race 방지):
+            //     SSE 가 도착할 때 통째 교체하면 직전에 클릭한 옵티미스틱 'O' 가 서버 응답에 아직 반영 안 된
+            //     이전 'X' 로 되돌아가는 race 가 발생. → 옵티미스틱 항목은 보존.
+            try {
+                const fresh = await API.getHeightAttempts(state.heatId);
+                const optimisticPending = (state.heightAttempts || []).filter(a => a && a._optimistic);
+                const key = a => `${a.event_entry_id}|${a.bar_height}|${a.attempt_number}`;
+                const freshMap = new Map(fresh.map(a => [key(a), a]));
+                for (const opt of optimisticPending) {
+                    if (!freshMap.has(key(opt))) freshMap.set(key(opt), opt);
+                }
+                state.heightAttempts = Array.from(freshMap.values());
+                renderHeightContent();
+            } catch (e) { console.error('SSE height_update merge error:', e); }
         }
     });
     onSSE('wind_update', async (data) => {
@@ -2205,8 +2217,25 @@ async function deleteBarHeight(barHeight) {
 
 async function saveHeightAndReload() {
     // Height attempts are saved on each toggle click. This button reloads and confirms.
-    state.heightAttempts = await API.getHeightAttempts(state.heatId);
-    renderHeightContent();
+    // ─── 옵티미스틱 보존 머지 (race 방지):
+    //     단순히 state.heightAttempts = await getHeightAttempts() 로 통째 교체하면
+    //     사용자가 직전에 클릭해서 옵티미스틱으로 떠 있는 'O' 가 서버 응답에 아직 반영 안 된 경우,
+    //     서버의 이전 'X' 가 옵티미스틱 'O' 를 덮어써서 "전부 X 처리됨" 처럼 보이는 버그가 발생.
+    //     → 옵티미스틱 (_optimistic:true) 항목은 보존하고, 서버에서 도착한 동일 키 행으로만 갱신.
+    try {
+        const fresh = await API.getHeightAttempts(state.heatId);
+        const optimisticPending = (state.heightAttempts || []).filter(a => a && a._optimistic);
+        const key = a => `${a.event_entry_id}|${a.bar_height}|${a.attempt_number}`;
+        const freshMap = new Map(fresh.map(a => [key(a), a]));
+        // 옵티미스틱이 살아 있고, 서버에서 아직 동일 키 응답이 없으면 옵티미스틱 보존
+        for (const opt of optimisticPending) {
+            if (!freshMap.has(key(opt))) freshMap.set(key(opt), opt);
+        }
+        state.heightAttempts = Array.from(freshMap.values());
+        renderHeightContent();
+    } catch (e) {
+        console.error('saveHeightAndReload error:', e);
+    }
     // Brief visual feedback
     const btn = document.querySelector('.track-actions .btn-primary');
     if (btn) { const orig = btn.textContent; btn.textContent = '✓ 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
@@ -3767,8 +3796,21 @@ async function _cSubHeightDeleteBar(barHeight) {
 }
 
 async function _cSubHeightSave() {
-    _cSubHeightData.attempts = await API.getHeightAttempts(_cSubHeightData.heatId);
-    _cSubHeightRender();
+    // ─── 옵티미스틱 보존 머지 (saveHeightAndReload 와 동일 패턴, race 방지)
+    try {
+        const fresh = await API.getHeightAttempts(_cSubHeightData.heatId);
+        const prev = Array.isArray(_cSubHeightData.attempts) ? _cSubHeightData.attempts : [];
+        const optimisticPending = prev.filter(a => a && a._optimistic);
+        const key = a => `${a.event_entry_id}|${a.bar_height}|${a.attempt_number}`;
+        const freshMap = new Map(fresh.map(a => [key(a), a]));
+        for (const opt of optimisticPending) {
+            if (!freshMap.has(key(opt))) freshMap.set(key(opt), opt);
+        }
+        _cSubHeightData.attempts = Array.from(freshMap.values());
+        _cSubHeightRender();
+    } catch (e) {
+        console.error('_cSubHeightSave error:', e);
+    }
     const btn = document.querySelector('.track-actions .btn-primary');
     if (btn) { const orig = btn.textContent; btn.textContent = '✓ 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
 }
