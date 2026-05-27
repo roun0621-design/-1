@@ -10177,6 +10177,75 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
     const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
     const tpl = (await getDocTemplate(event.competition_id)).result_sheet;
 
+    // ─── 종목별 실제 진행 날짜 조회 ─────────────────────────────────────
+    // timetable.scheduled_date / day 에서 이 event 의 실제 날짜를 가져온다.
+    // 우선순위:
+    //   1) timetable.event_id 가 event.id 와 일치하는 row 의 scheduled_date
+    //   2) timetable.event_ids JSON 배열에 event.id 가 포함된 row 의 scheduled_date
+    //   3) timetable.day 와 comp.start_date 를 더해서 계산 (day 는 1-based)
+    //   4) 매칭 없으면 fallback 으로 comp.start_date 사용
+    // round_type 이 일치하는 row 를 우선 고른다 (예선/결승 같은 종목이 다른 날일 수 있음).
+    let eventDateStr = '';
+    try {
+        const roundMap = { preliminary: '예선', semifinal: '준결승', final: '결승', heats: '예선' };
+        const ttRound = roundMap[event.round_type] || event.round_type;
+        // (1) event_id 직접 매칭 + round 일치 우선
+        // 참고: SQLite 백엔드는 db.get 이 동기, PG 는 async. 두 케이스 모두에서 await 가 안전하게 동작.
+        //       try-catch 만으로 에러 처리 (db.get(...).catch 패턴은 SQLite 에서 TypeError 발생).
+        let ttRow = null;
+        try {
+            ttRow = await db.get(
+                `SELECT scheduled_date, day FROM timetable
+                 WHERE competition_id=? AND event_id=? AND (round=? OR round IS NULL OR round='')
+                 ORDER BY (round=?) DESC, day ASC, time ASC LIMIT 1`,
+                event.competition_id, event.id, ttRound, ttRound
+            );
+        } catch(_) { ttRow = null; }
+        // (1b) round 무시하고 event_id 만 매칭
+        if (!ttRow) {
+            try {
+                ttRow = await db.get(
+                    `SELECT scheduled_date, day FROM timetable
+                     WHERE competition_id=? AND event_id=? ORDER BY day ASC, time ASC LIMIT 1`,
+                    event.competition_id, event.id
+                );
+            } catch(_) { ttRow = null; }
+        }
+        // (2) event_ids JSON 매칭 (혼성/공동 종목 대비)
+        if (!ttRow) {
+            let candidates = [];
+            try {
+                candidates = await db.all(
+                    `SELECT scheduled_date, day, event_ids FROM timetable
+                     WHERE competition_id=? AND event_ids IS NOT NULL AND event_ids <> ''`,
+                    event.competition_id
+                );
+            } catch(_) { candidates = []; }
+            for (const c of candidates) {
+                try {
+                    const ids = JSON.parse(c.event_ids);
+                    if (Array.isArray(ids) && ids.map(Number).includes(Number(event.id))) {
+                        ttRow = c; break;
+                    }
+                } catch(_) {}
+            }
+        }
+        if (ttRow) {
+            if (ttRow.scheduled_date) {
+                eventDateStr = ttRow.scheduled_date;
+            } else if (ttRow.day && comp && comp.start_date) {
+                // day 가 1-based 라고 가정하고 comp.start_date 에 (day-1) 일 더하기
+                const d = new Date(comp.start_date + 'T00:00:00');
+                d.setDate(d.getDate() + (Number(ttRow.day) - 1));
+                eventDateStr = d.toISOString().slice(0, 10);
+            }
+        }
+    } catch (e) {
+        console.warn('[result-sheet PDF] event date lookup failed:', e.message);
+    }
+    // Fallback: 종목별 날짜 못 찾으면 comp.start_date 사용 (기존 동작 유지)
+    if (!eventDateStr && comp) eventDateStr = comp.start_date || '';
+
     const pageW = 595.28; const pageH = 841.89; const margin = 40;
     const doc = new PDFDocument({ size: 'A4', margin, bufferPages: true });
     res.setHeader('Content-Type', 'application/pdf');
@@ -10229,7 +10298,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         d.text(roundL, margin + 4, y + 6, { width: 72, align: 'center' });
         d.restore();
         pdfFont(d, false).fontSize(9).fillColor('#333');
-        d.text(comp ? comp.start_date : '', margin + 88, y + 6);
+        // 종목별 실제 진행 날짜 사용 (timetable.scheduled_date) — 대회 시작일이 아닌 종목 당일 표시
+        d.text(eventDateStr || '', margin + 88, y + 6);
         d.save();
         d.moveTo(margin, y).lineTo(pageW - margin, y).lineWidth(0.5).stroke('#333');
         d.moveTo(margin, y + barH).lineTo(pageW - margin, y + barH).lineWidth(0.5).stroke('#333');
