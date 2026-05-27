@@ -1325,7 +1325,8 @@ function renderLiveCombinedResults(data) {
                 subDefs.forEach(se => {
                     const sc = scores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
                     const p = sc ? (sc.wa_points || 0) : 0;
-                    pts[se.order] = { points: p, raw: sc ? sc.raw_record : null };
+                    // 🔴 status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
+                    pts[se.order] = { points: p, raw: sc ? sc.raw_record : null, status_code: sc ? (sc.status_code || '') : '' };
                     total += p;
                 });
                 return { ...e, pts, total };
@@ -1357,6 +1358,12 @@ function renderLiveCombinedResults(data) {
                                 const p = r.pts[se.order];
                                 if (!p || p.raw == null)
                                     return `<td style="color:#ccc;font-size:10px;">—</td>`;
+                                // 🔴 status_code (DNS/DNF/DQ/NM) 이 있으면 우선 표시 — “점수 0 = NM” 으로 잘못 표시되는 버그 수정.
+                                if (p.status_code) {
+                                    const _sc = p.status_code;
+                                    const _scColor = (_sc === 'DQ') ? '#a02050' : 'var(--danger)';
+                                    return `<td style="font-size:10px;color:${_scColor};font-weight:700;"><div>${_sc}</div><div style="color:var(--text-muted);font-size:9px;font-weight:400;">${p.points}pt</div></td>`;
+                                }
                                 if (p.raw === 0 && p.points === 0)
                                     return `<td style="font-size:10px;color:var(--danger);font-weight:700;">NM</td>`;
                                 if (p.raw <= 0)
@@ -1417,7 +1424,8 @@ async function _loadCombinedResultsAsync(evt) {
             subDefs.forEach(se => {
                 const sc = scores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
                 const p = sc ? (sc.wa_points || 0) : 0;
-                pts[se.order] = { points: p, raw: sc ? sc.raw_record : null };
+                // 🔴 status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
+                pts[se.order] = { points: p, raw: sc ? sc.raw_record : null, status_code: sc ? (sc.status_code || '') : '' };
                 total += p;
             });
             return { ...e, pts, total };
@@ -1462,6 +1470,12 @@ async function _loadCombinedResultsAsync(evt) {
                             const p = r.pts[se.order];
                             if (!p || p.raw == null)
                                 return `<td style="color:#ccc;font-size:10px;cursor:pointer;" onclick="_cResultShowSub(${se.order})">—</td>`;
+                            // 🔴 status_code (DNS/DNF/DQ/NM) 이 있으면 우선 표시
+                            if (p.status_code) {
+                                const _sc = p.status_code;
+                                const _scColor = (_sc === 'DQ') ? '#a02050' : 'var(--danger)';
+                                return `<td style="font-size:10px;cursor:pointer;color:${_scColor};font-weight:700;" onclick="_cResultShowSub(${se.order})"><div>${_sc}</div><div style="color:var(--text-muted);font-size:9px;font-weight:400;">${p.points}pt</div></td>`;
+                            }
                             if (p.raw === 0 && p.points === 0)
                                 return `<td style="font-size:10px;cursor:pointer;color:var(--danger);font-weight:700;" onclick="_cResultShowSub(${se.order})">NM</td>`;
                             if (p.raw <= 0)

@@ -2441,9 +2441,10 @@ async function _syncCombinedScoresForAthlete(parent_event, parentEntry, athleteI
         if (scRow && scRow.status_code) {
             statusCode = scRow.status_code;
         } else {
+            // ⚠️ heat_entry 에는 status 컬럼이 없음 — status 는 event_entry 에 있다.
             const heRow = await db.get(
-                `SELECT status FROM heat_entry WHERE heat_id IN (${heatPh}) AND event_entry_id=? LIMIT 1`,
-                ...subHeatIds, subEntry.id
+                `SELECT status FROM event_entry WHERE id=?`,
+                subEntry.id
             );
             if (heRow && heRow.status === 'no_show') statusCode = 'DNS';
         }
@@ -2968,9 +2969,10 @@ app.post('/api/combined-scores/sync', async (req, res) => {
                 if (_scRow && _scRow.status_code) {
                     statusCode = _scRow.status_code;
                 } else {
+                    // ⚠️ heat_entry 에는 status 컬럼이 없음 — status 는 event_entry 에 있다.
                     const _heRow = await db.get(
-                        `SELECT status FROM heat_entry WHERE heat_id IN (${heatPh}) AND event_entry_id=? LIMIT 1`,
-                        ...subHeatIds, subEntry.id
+                        `SELECT status FROM event_entry WHERE id=?`,
+                        subEntry.id
                     );
                     if (_heRow && _heRow.status === 'no_show') statusCode = 'DNS';
                 }
@@ -3093,9 +3095,10 @@ app.post('/api/combined-scores/repair', async (req, res) => {
                     if (_scRow && _scRow.status_code) {
                         statusCode = _scRow.status_code;
                     } else {
+                        // ⚠️ heat_entry 에는 status 컬럼이 없음 — status 는 event_entry 에 있다.
                         const _heRow = await db.get(
-                            `SELECT status FROM heat_entry WHERE heat_id IN (${heatPh}) AND event_entry_id=? LIMIT 1`,
-                            ...subHeatIds, subEntry.id
+                            `SELECT status FROM event_entry WHERE id=?`,
+                            subEntry.id
                         );
                         if (_heRow && _heRow.status === 'no_show') statusCode = 'DNS';
                     }
