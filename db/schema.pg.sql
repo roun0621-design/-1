@@ -332,10 +332,13 @@ CREATE TABLE IF NOT EXISTS "height_attempt" (
     "attempt_number" BIGINT NOT NULL,
     "result_mark" TEXT NOT NULL,
     "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "updated_at" TEXT NOT NULL DEFAULT NOW(),  -- 오프라인 충돌 감지용
     CHECK (attempt_number BETWEEN 1 AND 3),
     CHECK (result_mark IN ('O','X','PASS','-')),  -- '-' = 시기 자체 무시(미시도). 운영 PG는 ALTER 로 패치 완료(2026-05-19), 신규 부팅도 호환.
     UNIQUE ("heat_id", "event_entry_id", "bar_height", "attempt_number")
 );
+-- 운영 PG 호환: 기존 테이블에 updated_at 없으면 ADD
+DO $$ BEGIN ALTER TABLE "height_attempt" ADD COLUMN "updated_at" TEXT NOT NULL DEFAULT NOW(); EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 
 -- Table: home_popup
 CREATE TABLE IF NOT EXISTS "home_popup" (

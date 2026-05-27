@@ -1253,10 +1253,18 @@ if ('serviceWorker' in navigator) {
                     _updateOfflineBadge();
                 }
                 if (event.data.type === 'SYNC_COMPLETE') {
-                    const { synced, failed } = event.data;
-                    if (synced > 0) showToast(`Synced ${synced} offline changes`, 'success', 3000);
-                    if (failed > 0) showToast(`${failed} changes failed to sync`, 'error', 3000);
+                    const { synced, failed, conflicts } = event.data;
+                    if (synced > 0) showToast(`동기화 완료: ${synced}건`, 'success', 3000);
+                    if (failed > 0) showToast(`${failed}건 동기화 실패`, 'error', 3000);
+                    // ─── 운영진 기록과 충돌해서 거부된 항목 알림 ───
+                    if (Array.isArray(conflicts) && conflicts.length > 0) {
+                        _showConflictModal(conflicts);
+                    }
                     _updateOfflineBadge();
+                    // 페이지에 있는 record/results 데이터 갱신 트리거 (있을 때만)
+                    if (synced > 0 && typeof window.onSyncComplete === 'function') {
+                        try { window.onSyncComplete({ synced, failed, conflicts }); } catch(e) {}
+                    }
                 }
             });
         }).catch(() => {});
@@ -1936,3 +1944,63 @@ window.prInitFontSize = function(targetSelector) {
 
     apply();
 };
+
+// ============================================================
+// OFFLINE SYNC CONFLICT MODAL — 운영진 기록과 충돌해서 거부된 항목 표시
+// ============================================================
+function _showConflictModal(conflicts) {
+    if (!Array.isArray(conflicts) || conflicts.length === 0) return;
+
+    // 기존 모달 있으면 제거
+    const existing = document.getElementById('pr-conflict-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'pr-conflict-modal';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 100000;
+        background: rgba(0,0,0,0.6); display: flex;
+        align-items: center; justify-content: center;
+        padding: 16px;
+    `;
+
+    const formatValue = (v) => {
+        if (!v) return '-';
+        if (v.result_mark) return `높이 ${v.bar_height || '?'}m ${v.attempt_number || '?'}차 → ${v.result_mark}`;
+        if (v.distance_meters != null) return `거리 ${v.distance_meters}m${v.attempt_number ? ` (${v.attempt_number}차)` : ''}`;
+        if (v.time_seconds != null) return `시간 ${v.time_seconds}초`;
+        if (v.status_code) return `상태 ${v.status_code}`;
+        return JSON.stringify(v);
+    };
+
+    const items = conflicts.map((c, i) => `
+        <div style="border:1px solid #e5e5e5; border-radius:8px; padding:12px; margin-bottom:10px; background:#fff;">
+            <div style="font-weight:600; color:#c62828; margin-bottom:6px;">⚠ 항목 ${i+1}</div>
+            <div style="font-size:13px; color:#555; margin-bottom:4px;"><b>경로:</b> ${c.url || '-'}</div>
+            <div style="font-size:13px; color:#888; margin-bottom:4px;"><b>오프라인 입력값 (거부됨):</b> ${formatValue(c.rejected_offline_value)}</div>
+            <div style="font-size:13px; color:#2e7d32;"><b>운영진 기록 (유지됨):</b> ${formatValue(c.server_value)}</div>
+        </div>
+    `).join('');
+
+    overlay.innerHTML = `
+        <div style="background:#fff; border-radius:12px; max-width:560px; width:100%; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+            <div style="padding:18px 20px; background:#fff3cd; border-bottom:1px solid #ffe082;">
+                <div style="font-size:18px; font-weight:700; color:#856404;">⚠ 오프라인 동기화 — 충돌 알림</div>
+                <div style="font-size:13px; color:#856404; margin-top:6px; line-height:1.5;">
+                    아래 ${conflicts.length}건의 오프라인 입력값은 <b>운영진이 그 사이에 입력한 기록</b>이 우선되어 <b>적용되지 않았습니다.</b><br>
+                    필요시 운영진 기록을 확인하고 수동으로 다시 입력해주세요.
+                </div>
+            </div>
+            <div style="padding:14px 20px; overflow-y:auto; flex:1;">
+                ${items}
+            </div>
+            <div style="padding:14px 20px; border-top:1px solid #eee; text-align:right; background:#fafafa;">
+                <button type="button" id="pr-conflict-modal-close" style="padding:10px 24px; background:#2d9d78; color:#fff; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">확인</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+    document.getElementById('pr-conflict-modal-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}

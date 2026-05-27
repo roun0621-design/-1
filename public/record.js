@@ -10,6 +10,96 @@
 // Helper: heat display label (custom name or "Heat N")
 function heatLabel(h) { return h.heat_name || ('Heat ' + h.heat_number); }
 
+// ─── 오프라인 응답 감지 헬퍼 ─────────────────────────────────
+// SW 가 오프라인 큐잉 응답을 줄 때 { queued: true, offline: true } 가 들어있음.
+// 옵티미스틱 업데이트 후 서버 fetch 가 의미없으므로 (캐시는 stale) 이 경우 skip.
+function isOfflineResp(r) { return r && (r.queued === true || r.offline === true); }
+
+// 옵티미스틱: state.results 배열에 임시 result 객체를 삽입/갱신.
+// 서버 응답을 못 받아도 화면이 즉시 입력값을 반영하도록.
+function _optimisticUpsertResult(eid, attempt, fields) {
+    const idx = state.results.findIndex(r =>
+        r.event_entry_id === eid &&
+        (attempt == null ? r.attempt_number == null : r.attempt_number === attempt)
+    );
+    const base = idx >= 0 ? { ...state.results[idx] } : {
+        event_entry_id: eid,
+        attempt_number: attempt ?? null,
+        heat_id: state.heatId,
+        distance_meters: null, time_seconds: null,
+        status_code: '', wind: null, remark: ''
+    };
+    Object.assign(base, fields, { _optimistic: true, updated_at: new Date().toISOString() });
+    if (idx >= 0) state.results[idx] = base;
+    else state.results.push(base);
+}
+
+// 옵티미스틱 (콤바인드 서브): _cSubFieldData.results 갱신
+function _cSubOptimisticUpsert(eid, attempt, fields) {
+    if (typeof _cSubFieldData === 'undefined' || !_cSubFieldData) return;
+    if (!Array.isArray(_cSubFieldData.results)) _cSubFieldData.results = [];
+    const idx = _cSubFieldData.results.findIndex(r =>
+        r.event_entry_id === eid &&
+        (attempt == null ? r.attempt_number == null : r.attempt_number === attempt)
+    );
+    const base = idx >= 0 ? { ..._cSubFieldData.results[idx] } : {
+        event_entry_id: eid,
+        attempt_number: attempt ?? null,
+        heat_id: _cSubFieldData.heatId,
+        distance_meters: null, time_seconds: null,
+        status_code: '', wind: null, remark: ''
+    };
+    Object.assign(base, fields, { _optimistic: true, updated_at: new Date().toISOString() });
+    if (idx >= 0) _cSubFieldData.results[idx] = base;
+    else _cSubFieldData.results.push(base);
+}
+
+// 옵티미스틱 (콤바인드 서브): _cSubHeightData.attempts 갱신
+function _cSubOptimisticHeight(eid, barHeight, attemptNumber, resultMark) {
+    if (typeof _cSubHeightData === 'undefined' || !_cSubHeightData) return;
+    if (!Array.isArray(_cSubHeightData.attempts)) _cSubHeightData.attempts = [];
+    const idx = _cSubHeightData.attempts.findIndex(a =>
+        a.event_entry_id === eid && a.bar_height === barHeight && a.attempt_number === attemptNumber
+    );
+    if (!resultMark) {
+        if (idx >= 0) _cSubHeightData.attempts.splice(idx, 1);
+        return;
+    }
+    const norm = resultMark === '-' ? 'PASS' : resultMark;
+    const base = idx >= 0 ? { ..._cSubHeightData.attempts[idx] } : {
+        event_entry_id: eid, bar_height: barHeight,
+        attempt_number: attemptNumber, heat_id: _cSubHeightData.heatId
+    };
+    base.result_mark = norm;
+    base._optimistic = true;
+    base.updated_at = new Date().toISOString();
+    if (idx >= 0) _cSubHeightData.attempts[idx] = base;
+    else _cSubHeightData.attempts.push(base);
+}
+
+// 옵티미스틱: height_attempt 추가/갱신
+function _optimisticUpsertHeightAttempt(eid, barHeight, attemptNumber, resultMark) {
+    const idx = state.heightAttempts.findIndex(a =>
+        a.event_entry_id === eid && a.bar_height === barHeight && a.attempt_number === attemptNumber
+    );
+    if (!resultMark) {
+        // 빈 마크 = 삭제
+        if (idx >= 0) state.heightAttempts.splice(idx, 1);
+        return;
+    }
+    // '-' → 'PASS' 정규화 (서버와 동일)
+    const norm = resultMark === '-' ? 'PASS' : resultMark;
+    const base = idx >= 0 ? { ...state.heightAttempts[idx] } : {
+        event_entry_id: eid, bar_height: barHeight,
+        attempt_number: attemptNumber, heat_id: state.heatId
+    };
+    base.result_mark = norm;
+    base._optimistic = true;
+    base.updated_at = new Date().toISOString();
+    if (idx >= 0) state.heightAttempts[idx] = base;
+    else state.heightAttempts.push(base);
+}
+
 // ============================================================
 // State
 // ============================================================
@@ -31,6 +121,18 @@ const state = {
 document.addEventListener('DOMContentLoaded', async () => {
     if (!(await requireCompetition())) return;
     renderPageNav('record');
+
+    // ─── 오프라인 동기화 완료 시 현재 화면 데이터 다시 fetch (옵티미스틱 값을 서버 값으로 reconcile)
+    window.onSyncComplete = async function() {
+        try {
+            if (state.selectedEvent) {
+                const cat = state.selectedEvent.category;
+                if (cat === 'track' || cat === 'relay' || cat === 'road') await loadTrackHeatData();
+                else if (cat === 'field_distance') await loadFieldDistanceData();
+                else if (cat === 'field_height') await loadFieldHeightData();
+            }
+        } catch(e) { console.warn('[sync] reload after sync failed:', e); }
+    };
 
     // Check if competition has ended and user is not admin - show lock banner
     let _compLocked = false;
@@ -898,16 +1000,23 @@ async function saveSingleTrackInline(inp, doRerender = true) {
     }
     inp.classList.add('saving'); inp.disabled = true;
     try {
-        await API.upsertResult({ heat_id: hid, event_entry_id: eid, time_seconds: v });
+        // ─── 옵티미스틱: 화면 state 에 먼저 반영 (오프라인에서도 보이게)
+        _optimisticUpsertResult(eid, null, { heat_id: hid, time_seconds: v, status_code: '' });
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, time_seconds: v });
         delete state._pendingInlineTrack[eid];
         if (Object.keys(state._pendingInlineTrack).length === 0) clearUnsaved();
         inp.classList.remove('saving'); inp.classList.add('has-value');
         inp.disabled = false;
-        showToast('✓ 저장 완료');
-        if (doRerender) {
-            await loadTrackHeatData();
-            const allInputs = document.querySelectorAll('.track-time-input');
-            for (const ni of allInputs) { if (!ni.value.trim()) { ni.focus(); break; } }
+        if (isOfflineResp(resp)) {
+            showToast('✓ 로컬 저장 (오프라인)');
+        } else {
+            showToast('✓ 저장 완료');
+            if (doRerender) {
+                await loadTrackHeatData();
+                const allInputs = document.querySelectorAll('.track-time-input');
+                for (const ni of allInputs) { if (!ni.value.trim()) { ni.focus(); break; } }
+            }
         }
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
@@ -1058,14 +1167,20 @@ async function setFieldDistStatusCode(sel) {
     const sc = sel.value;
     const hid = getSaveHeatId(eid); // [JOINT]
     try {
-        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, distance_meters: sc ? null : undefined });
-        let allResults = await API.getResults(state.heatId);
-        if (isJointMode()) {
-            const extraR = await fetchJointExtraResults();
-            allResults = allResults.concat(extraR);
-        }
-        state.results = allResults;
+        // ─── 옵티미스틱: status_code 는 attempt 없는 세션으로 동작 → attempt_number null 으로 저장
+        _optimisticUpsertResult(eid, null, { heat_id: hid, status_code: sc, distance_meters: sc ? null : 0 });
         renderFieldDistanceContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, distance_meters: sc ? null : undefined });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+        }
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         }
@@ -1079,18 +1194,24 @@ async function setFieldHeightStatusCode(sel) {
     const sc = sel.value;
     const hid = getSaveHeatId(eid); // [JOINT]
     try {
-        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc });
-        let allResults = await API.getResults(state.heatId);
-        let allHeightAttempts = await API.getHeightAttempts(state.heatId);
-        if (isJointMode()) {
-            const extraR = await fetchJointExtraResults();
-            const extraH = await fetchJointExtraHeightAttempts();
-            allResults = allResults.concat(extraR);
-            allHeightAttempts = allHeightAttempts.concat(extraH);
-        }
-        state.results = allResults;
-        state.heightAttempts = allHeightAttempts;
+        // ─── 옵티미스틱
+        _optimisticUpsertResult(eid, null, { heat_id: hid, status_code: sc });
         renderHeightContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                const extraH = await fetchJointExtraHeightAttempts();
+                allResults = allResults.concat(extraR);
+                allHeightAttempts = allHeightAttempts.concat(extraH);
+            }
+            state.results = allResults;
+            state.heightAttempts = allHeightAttempts;
+            renderHeightContent();
+        }
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         }
@@ -1102,9 +1223,13 @@ async function _cSubHeightSetStatus(sel) {
     const eid = +sel.dataset.eid, hid = +sel.dataset.hid, pid = +sel.dataset.pid;
     const sc = sel.value;
     try {
-        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc });
-        _cSubHeightData.attempts = await API.getHeightAttempts(hid);
-        _cSubHeightRender();
+        // ─── 옵티미스틱: status_code 는 height_attempts 가 아닌 result 에 저장되지만
+        //                  화면은 height 영역이므로 그냥 reload 만 옵티미스틱하게 skip
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc });
+        if (!isOfflineResp(resp)) {
+            _cSubHeightData.attempts = await API.getHeightAttempts(hid);
+            _cSubHeightRender();
+        }
         await syncCombinedFromSubEvent(pid);
     } catch(e) { console.error('_cSubHeightSetStatus error:', e); }
 }
@@ -1758,17 +1883,26 @@ async function saveFieldInline(entryId, attempt, distance) {
 
     try {
         const hid = getSaveHeatId(entryId); // [JOINT]
-        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
-        let allResults = await API.getResults(state.heatId);
-        if (isJointMode()) {
-            const extraR = await fetchJointExtraResults();
-            allResults = allResults.concat(extraR);
-        }
-        state.results = allResults;
+        // ─── 옵티미스틱: 서버 호출 전에 화면에 먼저 반영 (오프라인에서도 즉시 보이게)
+        _optimisticUpsertResult(entryId, attempt, { heat_id: hid, distance_meters: distance, wind, status_code: '' });
         state._activeFieldCell = null;
         state._activeWindCell = null;
-        showToast('✓ 기록 저장');
         renderFieldDistanceContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
+        if (isOfflineResp(resp)) {
+            showToast('✓ 로컬 저장 (오프라인)');
+        } else {
+            // 온라인: 서버에서 fresh 데이터로 reconcile
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+            showToast('✓ 기록 저장');
+        }
         // If wind measurement needed and distance valid but no wind, auto-activate wind cell
         const needsWind = requiresWindMeasurement(state.selectedEvent?.name, 'field_distance');
         if (needsWind && distance > 0 && wind == null) {
@@ -1800,15 +1934,21 @@ async function fieldInlineFoul(entryId, attempt) {
     if (!confirmCompletedEdit()) return;
     try {
         const hid = getSaveHeatId(entryId); // [JOINT]
-        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
-        let allResults = await API.getResults(state.heatId);
-        if (isJointMode()) {
-            const extraR = await fetchJointExtraResults();
-            allResults = allResults.concat(extraR);
-        }
-        state.results = allResults;
+        // ─── 옵티미스틱: 0 = 파울
+        _optimisticUpsertResult(entryId, attempt, { heat_id: hid, distance_meters: 0, status_code: '' });
         state._activeFieldCell = null;
         renderFieldDistanceContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+        }
         showFoulNotice();
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
@@ -1822,15 +1962,21 @@ async function fieldDblClickFoul(entryId, attempt) {
     if (state.fieldMode === 'view') return;
     try {
         const hid = getSaveHeatId(entryId); // [JOINT]
-        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
-        let allResults = await API.getResults(state.heatId);
-        if (isJointMode()) {
-            const extraR = await fetchJointExtraResults();
-            allResults = allResults.concat(extraR);
-        }
-        state.results = allResults;
+        // ─── 옵티미스틱
+        _optimisticUpsertResult(entryId, attempt, { heat_id: hid, distance_meters: 0, status_code: '' });
         state._activeFieldCell = null;
         renderFieldDistanceContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+        }
         showFoulNotice();
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
@@ -1888,15 +2034,22 @@ async function fieldInlineClear(entryId, attempt) {
     if (!confirmCompletedEdit()) return;
     try {
         const hid = getSaveHeatId(entryId); // [JOINT]
-        await API.deleteResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt });
-        let allResults = await API.getResults(state.heatId);
-        if (isJointMode()) {
-            const extraR = await fetchJointExtraResults();
-            allResults = allResults.concat(extraR);
-        }
-        state.results = allResults;
+        // ─── 옵티미스틱: state 에서 해당 result 제거
+        const idx = state.results.findIndex(r => r.event_entry_id === entryId && r.attempt_number === attempt);
+        if (idx >= 0) state.results.splice(idx, 1);
         state._activeFieldCell = null;
         renderFieldDistanceContent();
+
+        const resp = await API.deleteResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+        }
         showToast('✓ 기록 삭제');
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
@@ -1912,15 +2065,21 @@ async function fieldInlinePass(entryId, attempt) {
     if (!confirmCompletedEdit()) return;
     try {
         const hid = getSaveHeatId(entryId); // [JOINT]
-        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: -1 });
-        let allResults = await API.getResults(state.heatId);
-        if (isJointMode()) {
-            const extraR = await fetchJointExtraResults();
-            allResults = allResults.concat(extraR);
-        }
-        state.results = allResults;
+        // ─── 옵티미스틱: -1 = 패스
+        _optimisticUpsertResult(entryId, attempt, { heat_id: hid, distance_meters: -1, status_code: '' });
         state._activeFieldCell = null;
         renderFieldDistanceContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: -1 });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+        }
         showToast('✓ 패스 처리');
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
@@ -2258,20 +2417,27 @@ async function toggleHeightMark(entryId, barHeight, attemptNumber) {
 
     try {
         const hid = getSaveHeatId(entryId); // [JOINT]
-        await API.saveHeightAttempt({
+        // ─── 옵티미스틱: 화면에 먼저 마크 반영 (오프라인에서도 즉시 보이게)
+        _optimisticUpsertHeightAttempt(entryId, barHeight, attemptNumber, newMark);
+        renderHeightContent();
+
+        const resp = await API.saveHeightAttempt({
             heat_id: hid,
             event_entry_id: entryId,
             bar_height: barHeight,
             attempt_number: attemptNumber,
             result_mark: newMark
         });
-        let allHeightAttempts = await API.getHeightAttempts(state.heatId);
-        if (isJointMode()) {
-            const extraH = await fetchJointExtraHeightAttempts();
-            allHeightAttempts = allHeightAttempts.concat(extraH);
+        if (!isOfflineResp(resp)) {
+            // 온라인: fresh 데이터로 reconcile
+            let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+            if (isJointMode()) {
+                const extraH = await fetchJointExtraHeightAttempts();
+                allHeightAttempts = allHeightAttempts.concat(extraH);
+            }
+            state.heightAttempts = allHeightAttempts;
+            renderHeightContent();
         }
-        state.heightAttempts = allHeightAttempts;
-        renderHeightContent();
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
     } catch (err) {
@@ -3226,20 +3392,32 @@ async function _cSubFieldSave(entryId, attempt, distance, heatId, parentId) {
         // Preserve existing wind value when saving distance
         const existingResult = _cSubFieldData.results.find(r => r.event_entry_id === entryId && r.attempt_number === attempt);
         const wind = existingResult ? (existingResult.wind ?? null) : null;
-        await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
-        _cSubFieldData.results = await API.getResults(heatId);
+        // ─── 옵티미스틱: _cSubFieldData.results 에 먼저 반영
+        _cSubOptimisticUpsert(entryId, attempt, { heat_id: heatId, distance_meters: distance, wind, status_code: '' });
         _cSubFieldActive = null;
         _cSubFieldRender();
+
+        const resp = await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
+        if (!isOfflineResp(resp)) {
+            _cSubFieldData.results = await API.getResults(heatId);
+            _cSubFieldRender();
+        }
         await syncCombinedFromSubEvent(parentId);
     } catch (err) { console.error('_cSubFieldSave error:', err); showBanner('저장 실패', 'error'); }
 }
 
 async function _cSubFieldFoul(entryId, attempt, heatId, parentId) {
     try {
-        await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
-        _cSubFieldData.results = await API.getResults(heatId);
+        // ─── 옵티미스틱
+        _cSubOptimisticUpsert(entryId, attempt, { heat_id: heatId, distance_meters: 0, status_code: '' });
         _cSubFieldActive = null;
         _cSubFieldRender();
+
+        const resp = await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
+        if (!isOfflineResp(resp)) {
+            _cSubFieldData.results = await API.getResults(heatId);
+            _cSubFieldRender();
+        }
         showFoulNotice();
         await syncCombinedFromSubEvent(parentId);
     } catch (err) { console.error('_cSubFieldFoul error:', err); }
@@ -3274,9 +3452,15 @@ async function _cSubFieldSetStatus(sel) {
     const eid = +sel.dataset.eid, hid = +sel.dataset.hid, pid = +sel.dataset.pid;
     const sc = sel.value;
     try {
-        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, distance_meters: sc ? null : undefined });
-        _cSubFieldData.results = await API.getResults(hid);
+        // ─── 옵티미스틱: attempt null 에 저장 (status_code 는 세션 전체)
+        _cSubOptimisticUpsert(eid, null, { heat_id: hid, status_code: sc, distance_meters: sc ? null : 0 });
         _cSubFieldRender();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, distance_meters: sc ? null : undefined });
+        if (!isOfflineResp(resp)) {
+            _cSubFieldData.results = await API.getResults(hid);
+            _cSubFieldRender();
+        }
         await syncCombinedFromSubEvent(pid);
     } catch(e) { console.error('_cSubFieldSetStatus error:', e); }
 }
@@ -3573,15 +3757,21 @@ async function _cSubHeightToggle(entryId, barHeight, attemptNumber) {
     const newMark = currentMark in cycle ? cycle[currentMark] : 'O';
 
     try {
-        await API.saveHeightAttempt({
+        // ─── 옵티미스틱
+        _cSubOptimisticHeight(entryId, barHeight, attemptNumber, newMark);
+        _cSubHeightRender();
+
+        const resp = await API.saveHeightAttempt({
             heat_id: heatId,
             event_entry_id: entryId,
             bar_height: barHeight,
             attempt_number: attemptNumber,
             result_mark: newMark
         });
-        _cSubHeightData.attempts = await API.getHeightAttempts(heatId);
-        _cSubHeightRender();
+        if (!isOfflineResp(resp)) {
+            _cSubHeightData.attempts = await API.getHeightAttempts(heatId);
+            _cSubHeightRender();
+        }
         await syncCombinedFromSubEvent(parentId);
     } catch (err) {
         console.error('_cSubHeightToggle error:', err);

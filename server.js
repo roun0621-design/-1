@@ -224,6 +224,8 @@ try { db.exec(`ALTER TABLE result ADD COLUMN status_code TEXT DEFAULT ''`); } ca
 // Add wind columns (migration)
 try { db.exec(`ALTER TABLE result ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE heat ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
+// 오프라인 충돌 감지용 — height_attempt 에 updated_at 추가 (result 는 이미 보유)
+try { db.exec(`ALTER TABLE height_attempt ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`); } catch(e) {}
 // Phase C 후속: record_breaking_log에 풍속 컬럼 추가 (NR/DR/CR 감지 시점의 풍속 보존)
 try { db.exec(`ALTER TABLE record_breaking_log ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 // Migrate existing numeric wind values to "N.N m/s" text format for scoreboard compatibility
@@ -2152,7 +2154,7 @@ app.get('/api/results', async (req, res) => {
     `, heatId));
 });
 app.post('/api/results/upsert', async (req, res) => {
-    const { heat_id, event_entry_id, attempt_number, distance_meters, time_seconds, remark, status_code, wind, admin_key } = req.body;
+    const { heat_id, event_entry_id, attempt_number, distance_meters, time_seconds, remark, status_code, wind, admin_key, offline_input_at } = req.body;
     if (!heat_id || !event_entry_id) return res.status(400).json({ error: 'heat_id and event_entry_id required' });
     const he = await db.get('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?', heat_id, event_entry_id);
     if (!he) return res.status(404).json({ error: 'Entry not in heat' });
@@ -2243,6 +2245,27 @@ app.post('/api/results/upsert', async (req, res) => {
             existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? ORDER BY id DESC LIMIT 1', heat_id, event_entry_id);
         }
         if (existing) {
+            // ─── 오프라인 동기화 충돌 감지 ─────────────────────────
+            // offline_input_at: 클라이언트가 오프라인 상태에서 입력한 시각 (ms epoch)
+            // 서버의 existing.updated_at 이 더 최근이면 → 운영진이 그 사이에 갱신했다는 뜻 → 거부
+            if (offline_input_at && existing.updated_at) {
+                const serverUpdatedMs = new Date(existing.updated_at.includes('T') ? existing.updated_at : existing.updated_at.replace(' ', 'T') + 'Z').getTime();
+                const offlineMs = Number(offline_input_at);
+                if (Number.isFinite(serverUpdatedMs) && Number.isFinite(offlineMs) && serverUpdatedMs > offlineMs) {
+                    return res.status(409).json({
+                        error: 'CONFLICT_NEWER_ON_SERVER',
+                        message: '운영진이 그 사이에 기록을 갱신했습니다. 오프라인 입력값은 적용되지 않았습니다.',
+                        server_value: {
+                            distance_meters: existing.distance_meters,
+                            time_seconds: existing.time_seconds,
+                            status_code: existing.status_code,
+                            wind: existing.wind,
+                            updated_at: existing.updated_at
+                        },
+                        rejected_offline_value: { distance_meters, time_seconds, status_code, wind, offline_input_at }
+                    });
+                }
+            }
             // Preserve existing values for fields not included in the request (undefined → keep existing)
             const updDist = distance_meters !== undefined ? (distance_meters ?? null) : existing.distance_meters;
             const updTime = time_seconds !== undefined ? (time_seconds ?? null) : existing.time_seconds;
@@ -2643,7 +2666,7 @@ app.get('/api/height-attempts', async (req, res) => {
     `, req.query.heat_id));
 });
 app.post('/api/height-attempts/save', async (req, res) => {
-    const { heat_id, event_entry_id, bar_height, attempt_number, result_mark, admin_key } = req.body;
+    const { heat_id, event_entry_id, bar_height, attempt_number, result_mark, admin_key, offline_input_at } = req.body;
     if (!heat_id || !event_entry_id || !bar_height || !attempt_number)
         return res.status(400).json({ error: 'heat_id, event_entry_id, bar_height, attempt_number required' });
 
@@ -2694,7 +2717,20 @@ app.post('/api/height-attempts/save', async (req, res) => {
     try {
         const existing = await db.get('SELECT * FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND bar_height=? AND attempt_number=?', heat_id, event_entry_id, bar_height, attempt_number);
         if (existing) {
-            await db.run('UPDATE height_attempt SET result_mark=? WHERE id=?', normalizedMark, existing.id);
+            // ─── 오프라인 동기화 충돌 감지 ─────────────────────────
+            if (offline_input_at && existing.updated_at) {
+                const serverUpdatedMs = new Date(existing.updated_at.includes('T') ? existing.updated_at : existing.updated_at.replace(' ', 'T') + 'Z').getTime();
+                const offlineMs = Number(offline_input_at);
+                if (Number.isFinite(serverUpdatedMs) && Number.isFinite(offlineMs) && serverUpdatedMs > offlineMs) {
+                    return res.status(409).json({
+                        error: 'CONFLICT_NEWER_ON_SERVER',
+                        message: '운영진이 그 사이에 기록을 갱신했습니다. 오프라인 입력값은 적용되지 않았습니다.',
+                        server_value: { result_mark: existing.result_mark, updated_at: existing.updated_at },
+                        rejected_offline_value: { result_mark, bar_height, attempt_number, offline_input_at }
+                    });
+                }
+            }
+            await db.run("UPDATE height_attempt SET result_mark=?,updated_at=datetime('now') WHERE id=?", normalizedMark, existing.id);
             const upd = await db.get('SELECT * FROM height_attempt WHERE id=?', existing.id);
             broadcastSSE('height_update', { heat_id, event_entry_id, bar_height });
             res.json(upd);

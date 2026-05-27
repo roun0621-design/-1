@@ -2,7 +2,7 @@
 // Offline-first PWA: cache app shell, queue API mutations for sync
 // v3: auto version sync, IndexedDB offline queue, background sync
 
-const CACHE_NAME = 'pacerise-v100';
+const CACHE_NAME = 'pacerise-v101';
 const OFFLINE_URL = '/';
 
 // App shell — version-free paths (actual files are network-first, cache updated on every fetch)
@@ -192,6 +192,12 @@ self.addEventListener('fetch', (event) => {
                             // Network failed: queue for later sync
                             let body = null;
                             try { body = JSON.parse(bodyText); } catch(e) { body = bodyText; }
+                            // ─── 오프라인 입력 시각 자동 박기 (충돌 감지 메타데이터) ───
+                            // JSON 바디일 때만, offline_input_at 이 비어있으면 현재 시각을 박음
+                            const offlineInputAt = Date.now();
+                            if (body && typeof body === 'object' && !Array.isArray(body) && body.offline_input_at == null) {
+                                body.offline_input_at = offlineInputAt;
+                            }
                             await enqueueRequest(event.request.method, url.pathname + url.search, body);
 
                             // Notify all clients about queued operation
@@ -209,6 +215,7 @@ self.addEventListener('fetch', (event) => {
                                 success: true,
                                 offline: true,
                                 queued: true,
+                                offline_input_at: offlineInputAt,
                                 message: 'Operation queued for sync'
                             }), {
                                 headers: { 'Content-Type': 'application/json', 'X-Offline': 'true' }
@@ -292,6 +299,7 @@ self.addEventListener('sync', (event) => {
 async function syncQueuedRequests() {
     const queued = await getQueuedRequests();
     let synced = 0, failed = 0;
+    const conflicts = [];  // ─── 충돌(운영진 우선)로 거부된 항목 모음
 
     for (const item of queued) {
         try {
@@ -306,6 +314,22 @@ async function syncQueuedRequests() {
             if (response.ok) {
                 await markSynced(item.id);
                 synced++;
+            } else if (response.status === 409) {
+                // ─── 서버가 충돌이라고 알려준 경우: 큐에서 제거(재시도 무의미) + 충돌 모음에 추가
+                let detail = null;
+                try { detail = await response.clone().json(); } catch(e) {}
+                if (detail && detail.error === 'CONFLICT_NEWER_ON_SERVER') {
+                    conflicts.push({
+                        url: item.url,
+                        offline_input_at: item.body && item.body.offline_input_at,
+                        server_value: detail.server_value,
+                        rejected_offline_value: detail.rejected_offline_value,
+                        message: detail.message
+                    });
+                    await markSynced(item.id);  // 큐에서 제거 (= synced 처리)
+                } else {
+                    failed++;
+                }
             } else {
                 failed++;
             }
@@ -321,7 +345,8 @@ async function syncQueuedRequests() {
         client.postMessage({
             type: 'SYNC_COMPLETE',
             synced, failed,
-            remaining
+            remaining,
+            conflicts  // ─── 거부 항목 같이 전달
         });
     });
 
