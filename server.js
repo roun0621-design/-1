@@ -12006,7 +12006,14 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
       '4X400mR(Mixed)': 'MIXED 4x400mR', '4x400mR(Mixed)': 'MIXED 4x400mR', '4×400mR(Mixed)': 'MIXED 4x400mR',
       'MIXED4x400mR': 'MIXED 4x400mR', 'MIXED4X400mR': 'MIXED 4x400mR',
       '4x1500mR': '4x1500mR', '4×1500mR': '4x1500mR', '4x1500m릴레이': '4x1500mR', '4X1500mR': '4x1500mR',
-      '4x800mR': '4x800mR', '4×800mR': '4x800mR', '4x800m릴레이': '4x800mR', '4X800mR': '4x800mR'
+      '4x800mR': '4x800mR', '4×800mR': '4x800mR', '4x800m릴레이': '4x800mR', '4X800mR': '4x800mR',
+      // MIXED 4x800mR — 혼성 계주 (DB에서 '4600mR(Mixed)' 명칭으로 저장된 경우 포함)
+      'MIXED 4x800mR': 'MIXED 4x800mR', 'MIXED 4×800mR': 'MIXED 4x800mR', '혼성4x800mR': 'MIXED 4x800mR',
+      '4X800mR(Mixed)': 'MIXED 4x800mR', '4x800mR(Mixed)': 'MIXED 4x800mR', '4×800mR(Mixed)': 'MIXED 4x800mR',
+      'MIXED4x800mR': 'MIXED 4x800mR', 'MIXED4X800mR': 'MIXED 4x800mR',
+      '4600mR(Mixed)': 'MIXED 4x800mR', '4600mR (Mixed)': 'MIXED 4x800mR', '4600mR': 'MIXED 4x800mR',
+      // 5000m 단체전 — 종목 칸만 생성 (자동 매칭 X, 사용자가 수기 입력)
+      // (별도 매핑 없음: DB에 동일 종목명이 있더라도 칸만 노출됨)
     };
     const WOMEN_EVENT_MAP = { ...MEN_EVENT_MAP,
       '100mH': '100mH', '100m허들': '100mH', '100m Hurdles': '100mH',
@@ -12030,7 +12037,7 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
     const THROW_EVENTS = new Set(['포환던지기','원반던지기','해머던지기','창던지기']);
     const JUMP_EVENTS = new Set(['멀리뛰기','세단뛰기']);
     // ---- Relay events ----
-    const RELAY_NAMES = new Set(['4x100mR','4x400mR','MIXED 4x400mR','4x800mR','4x1500mR']);
+    const RELAY_NAMES = new Set(['4x100mR','4x400mR','MIXED 4x400mR','4x800mR','MIXED 4x800mR','4x1500mR']);
     // ---- Combined events ----
     const COMBINED_NAMES = new Set(['10종경기','7종경기']);
 
@@ -12517,10 +12524,8 @@ app.get('/api/documents/:compId', async (req, res) => {
     const docs = [];
     docs.push({ type: 'comprehensive-excel', label: '종합기록지 (남자)', url: `/api/documents/comprehensive/${comp.id}/excel?gender=M` });
     docs.push({ type: 'comprehensive-excel', label: '종합기록지 (여자)', url: `/api/documents/comprehensive/${comp.id}/excel?gender=F` });
-    docs.push({ type: 'full-record-excel', label: '연맹 종합기록지 (남자)', url: `/api/documents/full-record/${comp.id}/excel?gender=M` });
-    docs.push({ type: 'full-record-excel', label: '연맹 종합기록지 (여자)', url: `/api/documents/full-record/${comp.id}/excel?gender=F` });
-    docs.push({ type: 'full-record-pdf', label: '연맹 종합기록지 PDF (남자)', url: `/api/documents/full-record/${comp.id}/pdf?gender=M` });
-    docs.push({ type: 'full-record-pdf', label: '연맹 종합기록지 PDF (여자)', url: `/api/documents/full-record/${comp.id}/pdf?gender=F` });
+    // 연맹 종합기록지(Excel/PDF) 4종은 사용자 요청으로 문서 목록에서 제외 (2026-05).
+    //   - 백엔드 라우트(/api/documents/full-record/...)는 그대로 유지하여 직접 URL 접근은 가능.
     const roundLabelMap = { preliminary: '예선', semifinal: '준결승', final: '결승' };
     const pushDocsForEvent = (evt, opts = {}) => {
         const gK = evt.gender === 'M' ? '남' : evt.gender === 'F' ? '여' : '혼';
