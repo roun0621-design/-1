@@ -4754,3 +4754,110 @@ async function resetSubEventResults(eventId, eventName) {
         showToast('기록 초기화 실패: ' + (err.error || err.message || '서버 오류'), 'error', 4000);
     }
 }
+
+// ============================================================
+// PREFETCH ALL EVENTS — 오프라인 대비 사전 로딩
+// 대회의 모든 종목/히트/엔트리/결과/높이시기 데이터를 GET 으로 fetch 해서
+// Service Worker 의 IndexedDB 캐시에 채워둔다. 오프라인 상태에서도
+// 임의 종목 간 이동이 가능하도록 보장.
+// ============================================================
+let _prefetchCancelled = false;
+
+async function runPrefetchAllEvents() {
+    const compId = getCompetitionId();
+    if (!compId) { showToast('대회가 선택되지 않았습니다.', 'error', 3000); return; }
+    if (!navigator.onLine) {
+        showToast('현재 오프라인 상태입니다. 온라인 상태에서 실행해주세요.', 'error', 3500);
+        return;
+    }
+    const btn = document.getElementById('btn-prefetch-offline');
+    const box = document.getElementById('prefetch-progress');
+    const bar = document.getElementById('prefetch-progress-bar');
+    const txt = document.getElementById('prefetch-status-text');
+    if (!box || !bar || !txt) return;
+    _prefetchCancelled = false;
+    box.style.display = 'block';
+    bar.style.width = '0%';
+    txt.textContent = '대회 정보 로딩…';
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+
+    try {
+        // 1) 공용 컨텍스트
+        await Promise.allSettled([
+            API.getCompetition(compId),
+            API.getCompetitionInfo(compId),
+            API.getAllEvents(compId)
+        ]);
+
+        // 2) 모든 종목 목록
+        const events = await API.getAllEvents(compId);
+        if (!events || events.length === 0) {
+            txt.textContent = '캐시할 종목이 없습니다.';
+            setTimeout(() => { box.style.display = 'none'; }, 2000);
+            return;
+        }
+
+        // 3) 각 종목별로 heats / entries / results / heightAttempts(높이뛰기만) fetch
+        let done = 0;
+        const total = events.length;
+        const errors = [];
+        // 동시 4개씩 처리 (서버 부하 방지)
+        const concurrency = 4;
+        const queue = [...events];
+        const workers = Array.from({ length: concurrency }, async () => {
+            while (queue.length > 0 && !_prefetchCancelled) {
+                const evt = queue.shift();
+                if (!evt) break;
+                try {
+                    // heats
+                    const heats = await API.getHeats(evt.id).catch(() => []);
+                    // 각 heat 별 entries / results / heightAttempts
+                    for (const h of (heats || [])) {
+                        if (_prefetchCancelled) break;
+                        await Promise.allSettled([
+                            API.getHeatEntries(h.id),
+                            API.getResults(h.id),
+                            (evt.category === 'field_height')
+                                ? API.getHeightAttempts(h.id)
+                                : Promise.resolve(null)
+                        ]);
+                    }
+                } catch (e) {
+                    errors.push({ event: evt.name, error: e.message || String(e) });
+                } finally {
+                    done++;
+                    const pct = Math.round((done / total) * 100);
+                    bar.style.width = pct + '%';
+                    txt.textContent = `${done}/${total} 종목 (${pct}%) — ${evt.name}`;
+                }
+            }
+        });
+        await Promise.all(workers);
+
+        if (_prefetchCancelled) {
+            txt.textContent = `취소됨 (${done}/${total})`;
+            showToast(`사전로딩이 취소되었습니다 (${done}/${total} 완료).`, 'info', 3500);
+        } else {
+            txt.textContent = `✓ 완료 ${done}/${total}${errors.length ? ` (실패 ${errors.length}건)` : ''}`;
+            const msg = errors.length === 0
+                ? `✓ 사전로딩 완료! ${total}개 종목의 데이터가 캐시되었습니다. 이제 오프라인에서도 종목 간 이동이 가능합니다.`
+                : `사전로딩 완료 — 성공 ${total - errors.length}/${total}, 실패 ${errors.length}건. 실패한 종목은 오프라인 이동이 안 될 수 있습니다.`;
+            showToast(msg, errors.length === 0 ? 'success' : 'info', 5000);
+            if (errors.length > 0) console.warn('[prefetch] errors:', errors);
+        }
+        // 3초 후 진행률 박스 숨김
+        setTimeout(() => { box.style.display = 'none'; }, 3000);
+    } catch (err) {
+        console.error('[prefetch] fatal:', err);
+        txt.textContent = '오류 발생: ' + (err.message || '알 수 없는 오류');
+        showToast('사전로딩 실패: ' + (err.message || '알 수 없는 오류'), 'error', 4000);
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    }
+}
+
+function cancelPrefetchAllEvents() {
+    _prefetchCancelled = true;
+    const txt = document.getElementById('prefetch-status-text');
+    if (txt) txt.textContent = '취소 중…';
+}

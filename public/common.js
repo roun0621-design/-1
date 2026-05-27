@@ -645,6 +645,62 @@ function notifySSE(eventType, data) {
 
 connectSSE();
 
+// ─── 신기록 감지 글로벌 알림 (모든 페이지 자동 적용) ───────────
+// 서버에서 record_break_detected SSE 가 broadcast 되면, 같은 대회 컨텍스트에 한해
+// 상단 알림 + 콘솔 로그 + 옵션 음향 알림을 표시한다.
+// admin / record / dashboard 등 어디서든 동작.
+let _recBreakNotifSeen = new Set();  // 중복 알림 방지 (동일 event_id+athlete+record_type)
+onSSE('record_break_detected', (data) => {
+    try {
+        // 현재 페이지의 대회 컨텍스트와 일치하는 경우에만 표시
+        const curCid = (typeof getCompetitionId === 'function') ? getCompetitionId() : null;
+        if (curCid && data.competition_id && Number(curCid) !== Number(data.competition_id)) return;
+        // 중복 dedup: 같은 (event_id + athlete_name + record_type 조합) 으로 묶음
+        const recTypes = (data.detected || []).map(d => d.record_type).join(',');
+        const dedupKey = `${data.event_id}|${data.athlete_name}|${recTypes}`;
+        if (_recBreakNotifSeen.has(dedupKey)) return;
+        _recBreakNotifSeen.add(dedupKey);
+        // 일정 시간 후 dedup 해제 (다른 시기에 다시 신기록 가능)
+        setTimeout(() => _recBreakNotifSeen.delete(dedupKey), 30000);
+        _showRecordBreakToast(data);
+    } catch (e) { console.error('[record_break_detected] handler error:', e); }
+});
+
+function _showRecordBreakToast(data) {
+    const labels = { national: 'NR · 한국기록', division: 'DR · 부별기록', competition: 'CR · 대회기록' };
+    const detected = (data.detected || []).map(d => labels[d.record_type] || d.record_type).join(' · ');
+    const valStr = (typeof data.value === 'number')
+        ? (data.value < 60 ? data.value.toFixed(2) : (() => {
+            const m = Math.floor(data.value / 60), s = (data.value - m * 60).toFixed(2);
+            return data.value < 3600 ? `${m}:${s.padStart(5, '0')}` : `${Math.floor(data.value/3600)}:${String(Math.floor((data.value%3600)/60)).padStart(2,'0')}:${(data.value%60).toFixed(2).padStart(5,'0')}`;
+        })())
+        : (data.value || '');
+    // Inject inline overlay (auto-dismiss after 8s, click to close)
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10000;max-width:420px;background:linear-gradient(135deg,#fff6dd,#fffbea);border:2px solid #d4a017;border-radius:12px;padding:14px 18px;box-shadow:0 8px 32px rgba(212,160,23,.35);cursor:pointer;animation:slideInRight .35s ease;font-family:var(--font-base,system-ui);';
+    overlay.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-size:24px;">🏆</span>
+            <strong style="color:#7a4f00;font-size:14px;letter-spacing:.3px;">${detected} 갱신 감지</strong>
+        </div>
+        <div style="color:#5a3a00;font-size:13px;line-height:1.45;">
+            <strong>${data.event_name || ''}</strong> — ${data.athlete_name || ''}
+            ${data.athlete_team ? `<span style="color:#8a6500;">(${data.athlete_team})</span>` : ''}
+            <div style="font-family:var(--font-mono,monospace);font-size:16px;font-weight:700;margin-top:4px;color:#b87400;">${valStr}</div>
+            <div style="margin-top:8px;font-size:11px;color:#8a6500;">관리자 화면에서 승인하시면 기록이 갱신됩니다. 클릭하여 닫기.</div>
+        </div>`;
+    overlay.onclick = () => overlay.remove();
+    document.body.appendChild(overlay);
+    // Inject keyframe once
+    if (!document.getElementById('rec-break-anim-style')) {
+        const st = document.createElement('style');
+        st.id = 'rec-break-anim-style';
+        st.textContent = '@keyframes slideInRight{from{transform:translateX(120%);opacity:0;}to{transform:translateX(0);opacity:1;}}';
+        document.head.appendChild(st);
+    }
+    setTimeout(() => { try { overlay.remove(); } catch(e) {} }, 12000);
+}
+
 // ============================================================
 // Common UI
 // ============================================================
