@@ -2124,6 +2124,9 @@ async function loadRosterModalData(eventId) {
             const cntPending = entries.length - cntChecked - cntNoShow;
             const allChecked = cntChecked === entries.length && entries.length > 0;
 
+            // === 그룹(A/B) 분리: 5000m/10000m 등 장거리 그룹 결승은 같은 조 안에서 A/B 따로 출발 ===
+            const hasSubGroup = entries.some(e => e.sub_group);
+
             html += `<div style="border-bottom:1.5px solid #e8e8e8;">`;
             html += `<div style="padding:8px 14px;background:#fafafa;display:flex;align-items:center;justify-content:space-between;">`;
             html += `<span style="font-weight:700;font-size:13px;color:#333;">${hLabel}</span>`;
@@ -2148,18 +2151,45 @@ async function loadRosterModalData(eventId) {
             html += `<thead><tr style="background:#f5f5f5;border-bottom:1px solid #e0e0e0;">`;
             html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">${isField ? '순서' : '레인'}</th>`;
             html += `<th style="padding:5px 8px;text-align:center;width:50px;font-weight:600;color:#777;">배번</th>`;
+            if (hasSubGroup) html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">그룹</th>`;
             html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">이름</th>`;
             html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">소속</th>`;
             if (showCallroomStatus) html += `<th style="padding:5px 8px;text-align:center;width:48px;font-weight:600;color:#777;">상태</th>`;
             html += `</tr></thead><tbody>`;
 
-            const sorted = [...entries].sort((a, b) => (a.lane_number || 999) - (b.lane_number || 999));
+            // 정렬: 그룹 있으면 A → B → null, 같은 그룹 안에선 레인 순
+            const sorted = [...entries].sort((a, b) => {
+                if (hasSubGroup) {
+                    const ga = a.sub_group || 'Z';
+                    const gb = b.sub_group || 'Z';
+                    if (ga !== gb) return ga.localeCompare(gb);
+                }
+                return (a.lane_number || 999) - (b.lane_number || 999);
+            });
+
+            // 그룹 경계 표시: 그룹이 바뀔 때마다 얇은 구분선
+            let prevGroup = null;
             for (const e of sorted) {
+                const curGroup = hasSubGroup ? (e.sub_group || '') : null;
+                // 그룹 경계 행 (A → B 사이)
+                if (hasSubGroup && prevGroup !== null && curGroup !== prevGroup) {
+                    html += `<tr><td colspan="${4 + (showCallroomStatus?1:0) + (hasSubGroup?1:0)}" style="padding:3px 8px;background:#fafafa;border-top:1.5px dashed #d0c89a;font-size:10px;color:#8b6914;text-align:left;font-weight:700;">${curGroup ? curGroup + ' 그룹' : '미지정'}</td></tr>`;
+                } else if (hasSubGroup && prevGroup === null) {
+                    // 첫 그룹도 라벨 표시
+                    html += `<tr><td colspan="${4 + (showCallroomStatus?1:0) + (hasSubGroup?1:0)}" style="padding:3px 8px;background:#fafafa;border-top:1.5px solid #d0c89a;font-size:10px;color:#8b6914;text-align:left;font-weight:700;">${curGroup ? curGroup + ' 그룹' : '미지정'}</td></tr>`;
+                }
+                prevGroup = curGroup;
+
                 // 상태별 행 배경색
                 const rowBg = e.status === 'no_show' ? 'background:#fff5f5;' : e.status === 'checked_in' ? 'background:#f1f8e9;' : '';
                 html += `<tr style="border-bottom:1px solid #f0f0f0;${rowBg}">`;
                 html += `<td style="padding:5px 8px;text-align:center;color:#555;">${e.lane_number || '-'}</td>`;
                 html += `<td style="padding:5px 8px;text-align:center;font-weight:700;">${e.bib_number || '-'}</td>`;
+                if (hasSubGroup) {
+                    const g = e.sub_group;
+                    const gColor = g === 'A' ? '#555' : g === 'B' ? '#8b1a2a' : '#999';
+                    html += `<td style="padding:5px 8px;text-align:center;font-weight:800;color:${gColor};">${g || '—'}</td>`;
+                }
                 html += `<td style="padding:5px 8px;text-align:left;font-weight:600;">${e.name}</td>`;
                 html += `<td style="padding:5px 8px;text-align:left;color:#666;">${e.team || ''}</td>`;
                 if (showCallroomStatus) {

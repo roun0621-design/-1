@@ -1266,35 +1266,73 @@ async function printCallroom(mode) {
 
         const isRelay = evt.category === 'relay';
 
-        tablesHtml += `
-        <div class="print-heat-block">
+        // === 그룹(A/B) 분리: 5000m/10000m 등 장거리 그룹 결승은 같은 조 안에서 A/B 가 따로 출발하므로
+        //     각 그룹별로 별도 표를 만들어 소집/출석을 분리해서 본다. ===
+        const hasSubGroup = entries.some(e => e.sub_group);
+        // 그룹 순서: A → B → (그 외 알파벳 순) → 그룹 없음(null) 마지막
+        const groupOrder = hasSubGroup
+            ? [...new Set(entries.map(e => e.sub_group || ''))]
+                .sort((a, b) => {
+                    if (a === '' && b !== '') return 1;
+                    if (b === '' && a !== '') return -1;
+                    return a.localeCompare(b);
+                })
+            : [''];
+
+        tablesHtml += `<div class="print-heat-block">
             <h3 style="margin:0 0 4px;font-size:15px;border-bottom:2px solid #333;padding-bottom:4px;">
                 ${heat.heat_number}조
                 <span style="font-size:12px;font-weight:400;color:#666;margin-left:8px;">
                     출석 ${cIn}/${total} | 결석 ${nS}
                 </span>
-            </h3>
-            <table class="print-table">
+            </h3>`;
+
+        for (const grp of groupOrder) {
+            const grpEntries = hasSubGroup
+                ? entries.filter(e => (e.sub_group || '') === grp)
+                : entries;
+            if (grpEntries.length === 0) continue;
+
+            const gIn = grpEntries.filter(e => e.status === 'checked_in').length;
+            const gNS = grpEntries.filter(e => e.status === 'no_show').length;
+            const gTotal = grpEntries.length;
+
+            // 그룹 헤더 (A/B 가 있을 때만)
+            if (hasSubGroup) {
+                const groupLabel = grp ? `${grp} 그룹` : '미지정';
+                tablesHtml += `<div style="margin-top:8px;padding:4px 8px;background:#f0f0f0;border-left:4px solid ${grp==='A'?'#555':grp==='B'?'#8b1a2a':'#bbb'};font-size:13px;font-weight:700;">
+                    ${groupLabel}
+                    <span style="font-size:11px;font-weight:400;color:#666;margin-left:8px;">
+                        출석 ${gIn}/${gTotal} | 결석 ${gNS}
+                    </span>
+                </div>`;
+            }
+
+            tablesHtml += `<table class="print-table">
                 <thead><tr>
                     <th style="width:50px;">레인</th>
                     <th style="width:60px;">BIB</th>
+                    ${hasSubGroup ? '<th style="width:50px;">그룹</th>' : ''}
                     <th style="text-align:left;">선수명</th>
                     <th style="text-align:left;">소속</th>
                     <th style="width:70px;">상태</th>
                     <th style="width:80px;">서명</th>
                 </tr></thead>
                 <tbody>
-                    ${entries.map((e, i) => `<tr>
+                    ${grpEntries.map((e, i) => `<tr>
                         <td><strong>${e.lane_number || ''}</strong></td>
                         <td><strong>${bib(e.bib_number)}</strong></td>
+                        ${hasSubGroup ? `<td><strong style="color:${e.sub_group==='A'?'#555':e.sub_group==='B'?'#8b1a2a':'#999'};">${e.sub_group || '—'}</strong></td>` : ''}
                         <td style="text-align:left;">${e.name}</td>
                         <td style="text-align:left;font-size:11px;">${e.team || ''}</td>
                         <td>${e.status === 'checked_in' ? '출석' : e.status === 'no_show' ? '결석' : '—'}</td>
                         <td></td>
                     </tr>`).join('')}
                 </tbody>
-            </table>
-        </div>`;
+            </table>`;
+        }
+
+        tablesHtml += `</div>`;
     }
 
     // Open print window
@@ -1418,29 +1456,73 @@ async function exportCallroomExcel() {
         rows.push([]); // blank row
     }
 
-    // Header row
-    rows.push(['조', 'BIB', '바코드', '스몰넘버', '선수명', '소속', '상태']);
-
+    // 그룹(A/B) 컬럼은 데이터가 있을 때만 노출
+    //   — 5000m/10000m 등 장거리 그룹 결승에서만 의미가 있음
+    let hasSubGroupAny = false;
+    const heatEntriesCache = [];
     for (const heat of crHeats) {
         const entries = await API.getHeatEntries(heat.id);
-        entries.forEach((e, i) => {
+        heatEntriesCache.push({ heat, entries });
+        if (entries.some(e => e.sub_group)) hasSubGroupAny = true;
+    }
+
+    // Header row
+    if (hasSubGroupAny) {
+        rows.push(['조', '그룹', 'BIB', '바코드', '스몰넘버', '선수명', '소속', '상태']);
+    } else {
+        rows.push(['조', 'BIB', '바코드', '스몰넘버', '선수명', '소속', '상태']);
+    }
+
+    for (const { heat, entries } of heatEntriesCache) {
+        // 그룹이 있을 땐 그룹별로 정렬 (A → B → null)
+        const sortedEntries = hasSubGroupAny
+            ? [...entries].sort((a, b) => {
+                const ga = a.sub_group || 'Z'; // null 은 마지막
+                const gb = b.sub_group || 'Z';
+                if (ga !== gb) return ga.localeCompare(gb);
+                return (a.lane_number || 999) - (b.lane_number || 999);
+            })
+            : entries;
+        sortedEntries.forEach((e, i) => {
             const statusText = e.status === 'checked_in' ? '출석'
                 : e.status === 'no_show' ? '결석' : '미확인';
-            rows.push([
-                heat.heat_number + '조',
-                e.bib_number || '',
-                e.barcode || '',
-                i + 1,
-                e.name,
-                e.team || '',
-                statusText
-            ]);
+            if (hasSubGroupAny) {
+                rows.push([
+                    heat.heat_number + '조',
+                    e.sub_group || '',
+                    e.bib_number || '',
+                    e.barcode || '',
+                    i + 1,
+                    e.name,
+                    e.team || '',
+                    statusText
+                ]);
+            } else {
+                rows.push([
+                    heat.heat_number + '조',
+                    e.bib_number || '',
+                    e.barcode || '',
+                    i + 1,
+                    e.name,
+                    e.team || '',
+                    statusText
+                ]);
+            }
         });
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
     // Column widths
-    ws['!cols'] = [
+    ws['!cols'] = hasSubGroupAny ? [
+        { wch: 6 },  // 조
+        { wch: 6 },  // 그룹
+        { wch: 8 },  // BIB
+        { wch: 12 }, // 바코드
+        { wch: 10 }, // 스몰넘버
+        { wch: 12 }, // 선수명
+        { wch: 16 }, // 소속
+        { wch: 8 },  // 상태
+    ] : [
         { wch: 6 },  // 조
         { wch: 8 },  // BIB
         { wch: 12 }, // 바코드
