@@ -2390,24 +2390,26 @@ function renderHeightContent() {
                 } else {
                     heights.forEach(h => {
                         const hd = r.heightData[h] || {};
-                        // WA Rule 30: O 가 있으면 같은 높이의 남은 시도 자동 skip,
-                        //             이전 시도가 O 또는 PASS('-') 이면 다음 시도 skip.
+                        // WA Rule 30 (단순화):
+                        //   · 같은 높이에 O 가 한 번이라도 있으면 → 남은 시도(빈칸)는 불필요 → 자동 비활성화
+                        //   · 3 X 이면 탈락(r.eliminated 로 별도 처리)
+                        //   · PASS('-') 는 그 차수만 포기 (다음 차수는 계속 활성화)
+                        //   · 이미 마크된 셀은 항상 활성화(되돌리기 위해)
                         const hasO = Object.values(hd).includes('O');
                         let cellContent = '<div class="height-attempt-row">';
                         for (let i = 1; i <= 3; i++) {
                             const mark = hd[i] || '';
                             const _normMark = mark === 'PASS' ? '-' : mark;
                             const markCls = _normMark === '-' ? 'mark-pass' : _normMark ? `mark-${_normMark}` : 'mark-empty';
-                            const disabled = r.eliminated && !mark ? 'disabled' : '';
-                            const prevResolved = (i > 1 && (hd[i-1] === 'O' || hd[i-1] === '-' || hd[i-1] === 'PASS'))
-                                              || (i > 2 && (hd[1] === 'O' || hd[1] === '-' || hd[1] === 'PASS'));
-                            const shouldSkip = !mark && (hasO || prevResolved);
+                            // 비활성화: (a) 탈락자의 빈 셀, (b) 같은 높이에 이미 O 있는데 비어있는 셀
+                            const isEmpty = !mark;
+                            const shouldDisable = (r.eliminated && isEmpty) || (hasO && isEmpty);
                             // busy 표시 (진행 중 클릭)
                             const _busy = _heightCellIsBusy(_heightCellKey(r.event_entry_id, h, i));
                             const busyAttr = _busy ? 'disabled data-busy="1"' : '';
                             const busyCls = _busy ? ' is-busy' : '';
                             const displayMark = _busy ? '…' : (_normMark === '-' ? '-' : (_normMark || '\u00b7'));
-                            cellContent += `<button class="height-toggle-btn ${markCls}${busyCls}" onclick="toggleHeightMark(${r.event_entry_id},${h},${i})" ${disabled || shouldSkip ? 'disabled' : ''} ${busyAttr} title="${i}차 시도">${displayMark}</button>`;
+                            cellContent += `<button class="height-toggle-btn ${markCls}${busyCls}" onclick="toggleHeightMark(${r.event_entry_id},${h},${i})" ${shouldDisable ? 'disabled' : ''} ${busyAttr} title="${i}차 시도">${displayMark}</button>`;
                         }
                         cellContent += '</div>';
                         cells += `<td class="height-toggle-cell">${cellContent}</td>`;
@@ -3767,22 +3769,23 @@ function _cSubHeightRender(area) {
                     } else {
                     heights.forEach(h => {
                         const hd = r.heightData[h] || {};
-                        // WA Rule 30: O 또는 PASS 후 남은 시도 skip
+                        // WA Rule 30 (혼성, 단순화):
+                        //   · 같은 높이에 O 가 있으면 → 남은 빈 시도 자동 비활성화
+                        //   · 탈락(eliminated) 자의 빈 셀은 비활성화
+                        //   · PASS('-') 는 그 차수만 포기 — 다음 차수 활성화 유지
                         const hasO = Object.values(hd).includes('O');
                         let cellContent = '<div class="height-attempt-row">';
                         for (let i = 1; i <= 3; i++) {
                             const mark = hd[i] || '';
                             const _normMark = mark === 'PASS' ? '-' : mark;
                             const markCls = _normMark === '-' ? 'mark-pass' : _normMark ? `mark-${_normMark}` : 'mark-empty';
-                            const disabled = r.eliminated && !mark ? 'disabled' : '';
-                            const prevResolved = (i > 1 && (hd[i-1] === 'O' || hd[i-1] === '-' || hd[i-1] === 'PASS'))
-                                              || (i > 2 && (hd[1] === 'O' || hd[1] === '-' || hd[1] === 'PASS'));
-                            const shouldSkip = !mark && (hasO || prevResolved);
+                            const isEmpty = !mark;
+                            const shouldDisable = (r.eliminated && isEmpty) || (hasO && isEmpty);
                             const _busy = _heightCellIsBusy(_heightCellKey(r.event_entry_id, h, i));
                             const busyAttr = _busy ? 'disabled data-busy="1"' : '';
                             const busyCls = _busy ? ' is-busy' : '';
                             const displayMark2 = _busy ? '…' : (_normMark === '-' ? '-' : (_normMark || '·'));
-                            cellContent += `<button class="height-toggle-btn ${markCls}${busyCls}" onclick="_cSubHeightToggle(${r.event_entry_id},${h},${i})" ${disabled || shouldSkip ? 'disabled' : ''} ${busyAttr} title="${i}차 시도">${displayMark2}</button>`;
+                            cellContent += `<button class="height-toggle-btn ${markCls}${busyCls}" onclick="_cSubHeightToggle(${r.event_entry_id},${h},${i})" ${shouldDisable ? 'disabled' : ''} ${busyAttr} title="${i}차 시도">${displayMark2}</button>`;
                         }
                         cellContent += '</div>';
                         cells += `<td class="height-toggle-cell">${cellContent}</td>`;

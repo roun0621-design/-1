@@ -854,6 +854,60 @@ if (db.isAsync) {
         } catch (e) {
             console.error('[DB Migration v4 PG] error:', e.message);
         }
+
+        // ─── 운영 PG 호환 멱등 컬럼 마이그레이션 (혼성/필드 NM·DNF 표시 핵심) ───
+        // 배경: schema.pg.sql 은 새로 배포할 때만 실행됨. 기존 운영 PG DB에는
+        //       result/combined_score/height_attempt 등에 새 컬럼이 누락돼 있을 수 있다.
+        //       /api/combined-scores/sync 의 UPSERT 가 status_code 컬럼 부재로 500 을 내는
+        //       문제가 보고됨 → 부팅 시 idempotent 하게 ADD COLUMN 시도.
+        // PostgreSQL 9.6+ : ADD COLUMN IF NOT EXISTS 지원. 안전을 위해 try/catch 로 래핑.
+        const pgIdempotentAddCol = async (table, col, def) => {
+            try {
+                await db.run(`ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${col}" ${def}`);
+            } catch (e) {
+                console.warn(`[PG migration] ${table}.${col} skipped: ${e.message}`);
+            }
+        };
+        try {
+            // combined_score: 종합기록지 NM/DNF/DNS/DQ 표시용 (← 사용자 보고 핵심 누락 컬럼)
+            await pgIdempotentAddCol('combined_score', 'status_code', `TEXT DEFAULT ''`);
+            // result: 트랙 종목 NM/DNF/DNS/DQ + 풍속 + remark
+            await pgIdempotentAddCol('result', 'status_code', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('result', 'remark', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('result', 'wind', `DOUBLE PRECISION DEFAULT NULL`);
+            // heat: 풍속 + heat_name + scoreboard_key
+            await pgIdempotentAddCol('heat', 'wind', `DOUBLE PRECISION DEFAULT NULL`);
+            await pgIdempotentAddCol('heat', 'heat_name', `TEXT DEFAULT NULL`);
+            await pgIdempotentAddCol('heat', 'scoreboard_key', `TEXT DEFAULT NULL`);
+            // height_attempt: 오프라인 충돌 감지용 updated_at
+            await pgIdempotentAddCol('height_attempt', 'updated_at', `TEXT NOT NULL DEFAULT NOW()`);
+            // heat_entry: sub_group
+            await pgIdempotentAddCol('heat_entry', 'sub_group', `TEXT DEFAULT NULL`);
+            // event_entry: callroom_memo
+            await pgIdempotentAddCol('event_entry', 'callroom_memo', `TEXT DEFAULT ''`);
+            // event: callroom_event_memo, video_url
+            await pgIdempotentAddCol('event', 'callroom_event_memo', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('event', 'video_url', `TEXT DEFAULT ''`);
+            // competition: federation, division_type, video_url
+            await pgIdempotentAddCol('competition', 'federation', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'division_type', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'video_url', `TEXT DEFAULT ''`);
+            // athlete: federation, personal_best, date_of_birth
+            await pgIdempotentAddCol('athlete', 'federation', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('athlete', 'personal_best', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('athlete', 'date_of_birth', `TEXT DEFAULT ''`);
+            // qualification_selection: qualification_type
+            await pgIdempotentAddCol('qualification_selection', 'qualification_type', `TEXT DEFAULT ''`);
+            // record_breaking_log: wind
+            await pgIdempotentAddCol('record_breaking_log', 'wind', `DOUBLE PRECISION DEFAULT NULL`);
+            // event_link: joint_scoreboard_key
+            await pgIdempotentAddCol('event_link', 'joint_scoreboard_key', `TEXT DEFAULT NULL`);
+            // operation_key: can_manage
+            await pgIdempotentAddCol('operation_key', 'can_manage', `BIGINT NOT NULL DEFAULT 0`);
+            console.log('[PG migration] idempotent column migrations complete (combined_score.status_code 등)');
+        } catch (e) {
+            console.error('[PG migration] idempotent column migrations error:', e.message);
+        }
     })();
 }
 
@@ -2071,7 +2125,8 @@ app.put('/api/home-popups/:id', async (req, res) => {
     const old = await db.get('SELECT * FROM home_popup WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
     try {
-        await db.run(`UPDATE home_popup SET popup_type=?, title=?, subtitle=?, intro_text=?, bottom_btn_text=?, bottom_btn_desc=?, bottom_btn_link=?, bottom_btn_active=?, is_active=?, show_from=?, show_until=?, sort_order=?, updated_at=datetime('now') WHERE id=?`, popup_type || old.popup_type, title ?? old.title, subtitle ?? old.subtitle, intro_text ?? old.intro_text, bottom_btn_text ?? old.bottom_btn_text, bottom_btn_desc ?? old.bottom_btn_desc, bottom_btn_link ?? old.bottom_btn_link, bottom_btn_active ?? old.bottom_btn_active, is_active ?? old.is_active, show_from || old.show_from, show_until || old.show_until, sort_order ?? old.sort_order ?? 0, old.id);
+        const _nowF1 = db.isAsync ? 'NOW()' : "datetime('now')";
+        await db.run(`UPDATE home_popup SET popup_type=?, title=?, subtitle=?, intro_text=?, bottom_btn_text=?, bottom_btn_desc=?, bottom_btn_link=?, bottom_btn_active=?, is_active=?, show_from=?, show_until=?, sort_order=?, updated_at=${_nowF1} WHERE id=?`, popup_type || old.popup_type, title ?? old.title, subtitle ?? old.subtitle, intro_text ?? old.intro_text, bottom_btn_text ?? old.bottom_btn_text, bottom_btn_desc ?? old.bottom_btn_desc, bottom_btn_link ?? old.bottom_btn_link, bottom_btn_active ?? old.bottom_btn_active, is_active ?? old.is_active, show_from || old.show_from, show_until || old.show_until, sort_order ?? old.sort_order ?? 0, old.id);
         // Replace sections if provided
         if (Array.isArray(sections)) {
             await db.run('DELETE FROM home_popup_section WHERE popup_id=?', old.id);
@@ -2330,7 +2385,8 @@ app.post('/api/results/upsert', async (req, res) => {
                 return res.json({ success: true, deleted: true, deleted_id: existing.id });
             }
             
-            await db.run("UPDATE result SET distance_meters=?,time_seconds=?,remark=?,status_code=?,wind=?,updated_at=datetime('now') WHERE id=?", updDist, updTime, updRemark, updSc, updWind, existing.id);
+            const _nowFR = db.isAsync ? 'NOW()' : "datetime('now')";
+            await db.run(`UPDATE result SET distance_meters=?,time_seconds=?,remark=?,status_code=?,wind=?,updated_at=${_nowFR} WHERE id=?`, updDist, updTime, updRemark, updSc, updWind, existing.id);
             const upd = await db.get('SELECT * FROM result WHERE id=?', existing.id);
             audit('result', existing.id, 'UPDATE', existing, upd, 'operator', null, req);
             // Phase C1: 기록 갱신 감지 (best-effort, 실패해도 응답에 영향 없음)
@@ -2799,7 +2855,8 @@ app.post('/api/height-attempts/save', async (req, res) => {
                     });
                 }
             }
-            await db.run("UPDATE height_attempt SET result_mark=?,updated_at=datetime('now') WHERE id=?", normalizedMark, existing.id);
+            const _nowFH = db.isAsync ? 'NOW()' : "datetime('now')";
+            await db.run(`UPDATE height_attempt SET result_mark=?,updated_at=${_nowFH} WHERE id=?`, normalizedMark, existing.id);
             const upd = await db.get('SELECT * FROM height_attempt WHERE id=?', existing.id);
             broadcastSSE('height_update', { heat_id, event_entry_id, bar_height });
             res.json(upd);
@@ -3514,7 +3571,7 @@ app.post('/api/qualifications/save', async (req, res) => {
     await db.transaction(async () => {
         for (const s of selections) {
             await db.run(`INSERT INTO qualification_selection (event_id,event_entry_id,selected,qualification_type) VALUES (?,?,?,?)
-                ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=excluded.selected, qualification_type=excluded.qualification_type, updated_at=datetime('now')`,
+                ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=excluded.selected, qualification_type=excluded.qualification_type, updated_at=${db.isAsync ? 'NOW()' : "datetime('now')"}`,
                 event_id, s.event_entry_id, s.selected ? 1 : 0, s.qualification_type || '');
         }
     })();
@@ -3523,7 +3580,8 @@ app.post('/api/qualifications/save', async (req, res) => {
 app.post('/api/qualifications/approve', async (req, res) => {
     const { event_id } = req.body;
     if (!event_id) return res.status(400).json({ error: 'event_id required' });
-    await db.run("UPDATE qualification_selection SET approved=1,approved_by='admin',updated_at=datetime('now') WHERE event_id=? AND selected=1", event_id);
+    const _nowFQ = db.isAsync ? 'NOW()' : "datetime('now')";
+    await db.run(`UPDATE qualification_selection SET approved=1,approved_by='admin',updated_at=${_nowFQ} WHERE event_id=? AND selected=1`, event_id);
     res.json({ success: true });
 });
 
@@ -7182,7 +7240,8 @@ app.post('/api/scoreboard/import', upload.array('files', 50), async (req, res) =
                     const existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NULL ORDER BY id DESC LIMIT 1', heat_id, event_entry_id);
 
                     if (existing) {
-                        await db.run("UPDATE result SET time_seconds=?,status_code=?,remark=?,updated_at=datetime('now') WHERE id=?", time_seconds, status_code, '', existing.id);
+                        const _nowFR2 = db.isAsync ? 'NOW()' : "datetime('now')";
+                        await db.run(`UPDATE result SET time_seconds=?,status_code=?,remark=?,updated_at=${_nowFR2} WHERE id=?`, time_seconds, status_code, '', existing.id);
                         const upd = await db.get('SELECT * FROM result WHERE id=?', existing.id);
                         audit('result', existing.id, 'UPDATE', existing, upd, 'scoreboard', null, req);
                     } else {
@@ -8947,7 +9006,8 @@ app.post('/api/admin/event-records/normalize-all', async (req, res) => {
             }
             plan.push({ id: r.id, before: r.event_name, after: norm, record_type: r.record_type, gender: r.gender });
             if (!isDry) {
-                await db.run(`UPDATE event_record SET event_name=?, updated_at=datetime('now') WHERE id=?`, norm, r.id);
+                const _nowFER = db.isAsync ? 'NOW()' : "datetime('now')";
+                await db.run(`UPDATE event_record SET event_name=?, updated_at=${_nowFER} WHERE id=?`, norm, r.id);
                 updated.push(r.id);
             }
         }
@@ -13073,7 +13133,8 @@ app.post('/api/admin/external-keys/:id/revoke', async (req, res) => {
     const id = parseInt(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'id 오류' });
 
-    const r = await db.run(`UPDATE external_api_key SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`, id);
+    const _nowFEA = db.isAsync ? 'NOW()' : "datetime('now')";
+    const r = await db.run(`UPDATE external_api_key SET revoked_at = ${_nowFEA} WHERE id = ? AND revoked_at IS NULL`, id);
     if (r.changes === 0) return res.status(404).json({ error: '해당 키 없음 또는 이미 회수됨' });
     return res.json({ ok: true, id, revoked_at: new Date().toISOString() });
 });
