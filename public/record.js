@@ -100,6 +100,26 @@ function _optimisticUpsertHeightAttempt(eid, barHeight, attemptNumber, resultMar
     else state.heightAttempts.push(base);
 }
 
+// 모든 옵티미스틱 height_attempt 가 서버에 commit 될 때까지 대기 (최대 timeoutMs).
+// completeRound 같은 critical 동작 전에 호출.
+// state.heightAttempts 와 _cSubHeightData.attempts 둘 다 검사.
+async function waitForOptimisticHeightFlush(timeoutMs) {
+    const deadline = Date.now() + (timeoutMs || 2000);
+    function _hasPending() {
+        const a = (state && Array.isArray(state.heightAttempts)) ? state.heightAttempts : [];
+        if (a.some(x => x && x._optimistic)) return true;
+        if (typeof _cSubHeightData !== 'undefined' && _cSubHeightData && Array.isArray(_cSubHeightData.attempts)) {
+            if (_cSubHeightData.attempts.some(x => x && x._optimistic)) return true;
+        }
+        return false;
+    }
+    while (Date.now() < deadline) {
+        if (!_hasPending()) return true;
+        await new Promise(r => setTimeout(r, 60));
+    }
+    return !_hasPending();
+}
+
 // ============================================================
 // State
 // ============================================================
@@ -2266,8 +2286,24 @@ async function loadFieldHeightData() {
         allHeightAttempts = allHeightAttempts.concat(extraH);
     }
     state.heatEntries = allEntries.filter(e => e.status === 'checked_in' || e.status === 'no_show');
-    state.heightAttempts = allHeightAttempts;
+
+    // ─── 옵티미스틱 우선 머지 (race 방지):
+    //     loadFieldHeightData 가 renderDetail / completeRound 등에서 자동 호출될 때,
+    //     사용자가 직전에 클릭한 옵티미스틱 'O'/'PASS' 가 서버에 아직 commit 안 됐으면
+    //     서버의 이전 'X' 가 옵티미스틱을 덮어써서 "전부 X 처리" 가 됨.
+    //     → _optimistic:true 항목은 같은 키여도 fresh 보다 우선.
+    const prev = Array.isArray(state.heightAttempts) ? state.heightAttempts : [];
+    const optimisticPending = prev.filter(a => a && a._optimistic);
+    if (optimisticPending.length > 0) {
+        const k = a => `${a.event_entry_id}|${a.bar_height}|${a.attempt_number}`;
+        const m = new Map(allHeightAttempts.map(a => [k(a), a]));
+        for (const opt of optimisticPending) m.set(k(opt), opt);
+        state.heightAttempts = Array.from(m.values());
+    } else {
+        state.heightAttempts = allHeightAttempts;
+    }
     state.results = allResults;
+
     // Build bar list from existing data
     const existingHeights = [...new Set(state.heightAttempts.map(a => a.bar_height))].sort((a, b) => a - b);
     state._heightBarList = [...new Set([...(state._heightBarList || []), ...existingHeights])].sort((a, b) => a - b);
@@ -4481,6 +4517,17 @@ async function revertRoundComplete() {
 // ROUND COMPLETION — with registered judge dropdown
 // ============================================================
 async function completeRound() {
+    // ─── height_attempt 옵티미스틱이 아직 서버에 commit 안 된 게 있으면 대기.
+    //     이걸 안 하면 검증/완료 직후 loadFieldHeightData 가 stale 한 fresh 로 옵티미스틱을 덮어
+    //     "전부 X 처리" 가 됨.
+    const isHeightEvt = state.selectedEvent && state.selectedEvent.category === 'field_height';
+    if (isHeightEvt) {
+        const ok = await waitForOptimisticHeightFlush(2500);
+        if (!ok) {
+            const proceed = confirm('일부 시기 기록 저장이 아직 완료되지 않았습니다.\n그래도 경기를 완료하시겠습니까? (불완전한 데이터로 완료될 수 있음)');
+            if (!proceed) return;
+        }
+    }
     // Validate: all entries in all heats must have a result or status code
     try {
         const allHeats = await API.getHeats(state.selectedEventId);
