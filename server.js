@@ -2359,10 +2359,12 @@ async function _runRecordCompareHook(result, heatRow) {
         // combined 부모: 단일 result 경로로는 처리 안 함 (combined_score sync 경로에서 처리)
         if (event.category === 'combined') return;
         // sub-event(parent_event_id 존재): 일반 NR/DR/CR은 비교 안 하지만,
-        // 부모 combined의 신기록 감지는 별도로 호출
+        // 부모 combined의 신기록 감지는 별도로 호출.
+        // ⚠️ race 차단 (2026-05): 과거엔 fire-and-forget 호출이라
+        //     클라이언트 응답 → syncCombinedFromSubEvent 가 _syncCombinedScoresForAthlete 보다 먼저 끝나
+        //     status_code='DNF' 가 빈 값으로 덮어써지는 버그 발생. → await 로 동기화.
         if (event.parent_event_id) {
-            // best-effort: combined hook 호출
-            _runCombinedRecordCompareHook(event.parent_event_id, result.event_entry_id).catch(()=>{});
+            await _runCombinedRecordCompareHook(event.parent_event_id, result.event_entry_id).catch(()=>{});
             return;
         }
         const competition = await db.get('SELECT * FROM competition WHERE id=?', event.competition_id);
@@ -2890,8 +2892,11 @@ app.post('/api/combined-scores/sync', async (req, res) => {
     let syncCount = 0;
     let purgedCount = 0;
     let healedCount = 0;
-    const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points)
-        VALUES (?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name`;
+    // ─── status_code 컬럼 포함 UPSERT (DNS/DNF/DQ/NM 을 종합기록지에 그대로 노출).
+    //     이전엔 UPSERT_SQL 에 status_code 가 빠져서, /sync 호출 시 새 row 가 status_code='' 로 INSERT 되어
+    //     트랙 DNF 등이 종합기록지에 표시 안 되는 버그 발생. (2026-05 fix)
+    const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points,status_code)
+        VALUES (?,?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name, status_code=excluded.status_code`;
 
     // 🛡️ Defensive cleanup (always runs, even without force):
     // Remove any combined_score row whose sub_event_order is outside [1, expectedCount].
@@ -2952,6 +2957,23 @@ app.post('/api/combined-scores/sync', async (req, res) => {
             for (const pe of parentEntries) {
                 const subEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', subEvt.id, pe.athlete_id);
                 if (!subEntry) continue;
+                // ─── status_code 우선 조회 (DNS/DNF/DQ/NM) — _syncCombinedScoresForAthlete 와 동일 로직.
+                //     1) result.status_code 가 있으면 채택
+                //     2) heat_entry.status='no_show' → DNS
+                let statusCode = '';
+                const _scRow = await db.get(
+                    `SELECT status_code FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND status_code IS NOT NULL AND status_code <> '' LIMIT 1`,
+                    ...subHeatIds, subEntry.id
+                );
+                if (_scRow && _scRow.status_code) {
+                    statusCode = _scRow.status_code;
+                } else {
+                    const _heRow = await db.get(
+                        `SELECT status FROM heat_entry WHERE heat_id IN (${heatPh}) AND event_entry_id=? LIMIT 1`,
+                        ...subHeatIds, subEntry.id
+                    );
+                    if (_heRow && _heRow.status === 'no_show') statusCode = 'DNS';
+                }
                 let bestRecord = null;
                 let hasAttempts = false;
                 if (subEvt.category === 'track') {
@@ -2995,11 +3017,21 @@ app.post('/api/combined-scores/sync', async (req, res) => {
                         continue;
                     }
                     const waPoints = waKey ? calcWAPoints(waKey, bestRecord) : 0;
-                    await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, bestRecord, waPoints);
+                    // 유효 기록 있어도 status_code 가 있으면 함께 저장 (보통 DQ 같은 케이스)
+                    await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, bestRecord, waPoints, statusCode);
+                    syncCount++;
+                } else if (statusCode) {
+                    // ─── 기록 0 + status_code 존재 → DNS/DNF/DQ/NM 으로 표시, WA 점수 0.
+                    //     트랙 NM 은 부적합 → DNF 로 폴백 (_syncCombinedScoresForAthlete 와 동일 로직)
+                    let effSc = statusCode;
+                    if (subEvt.category === 'track' && effSc === 'NM') effSc = 'DNF';
+                    await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, 0, 0, effSc);
                     syncCount++;
                 } else if (hasAttempts) {
-                    // NM (No Mark): athlete attempted but has no valid record → 0 points
-                    await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, 0, 0);
+                    // NM (No Mark): athlete attempted but has no valid record → 0 points.
+                    // 필드는 NM, 트랙은 DNF 로 폴백 (status_code 없는 옛 데이터 호환)
+                    const fallbackSc = (subEvt.category === 'field_distance' || subEvt.category === 'field_height') ? 'NM' : 'DNF';
+                    await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, 0, 0, fallbackSc);
                     syncCount++;
                 } else {
                     // No record and no attempts → DELETE any existing combined_score for this sub-event
@@ -3037,8 +3069,9 @@ app.post('/api/combined-scores/repair', async (req, res) => {
         const waKeys = parentEvent.gender === 'M' ? DECATHLON_KEYS : HEPTATHLON_KEYS;
         const expectedCount = waKeys.length;
         let synced = 0;
-        const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points)
-            VALUES (?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name`;
+        // ─── status_code 컬럼 포함 UPSERT (DNS/DNF/DQ/NM 보존)
+        const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points,status_code)
+            VALUES (?,?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name, status_code=excluded.status_code`;
         await db.transaction(async () => {
             for (let idx = 0; idx < subEvents.length && idx < expectedCount; idx++) {
                 const subEvt = subEvents[idx];
@@ -3051,6 +3084,21 @@ app.post('/api/combined-scores/repair', async (req, res) => {
                 for (const pe of parentEntries) {
                     const subEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', subEvt.id, pe.athlete_id);
                     if (!subEntry) continue;
+                    // ─── status_code 우선 조회 (DNS/DNF/DQ/NM)
+                    let statusCode = '';
+                    const _scRow = await db.get(
+                        `SELECT status_code FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND status_code IS NOT NULL AND status_code <> '' LIMIT 1`,
+                        ...subHeatIds, subEntry.id
+                    );
+                    if (_scRow && _scRow.status_code) {
+                        statusCode = _scRow.status_code;
+                    } else {
+                        const _heRow = await db.get(
+                            `SELECT status FROM heat_entry WHERE heat_id IN (${heatPh}) AND event_entry_id=? LIMIT 1`,
+                            ...subHeatIds, subEntry.id
+                        );
+                        if (_heRow && _heRow.status === 'no_show') statusCode = 'DNS';
+                    }
                     let bestRecord = null;
                     let hasAttempts = false;
                     if (subEvt.category === 'track') {
@@ -3072,10 +3120,16 @@ app.post('/api/combined-scores/repair', async (req, res) => {
                     if (bestRecord != null) {
                         const waKey = waKeys[subOrder - 1];
                         const waPoints = waKey ? calcWAPoints(waKey, bestRecord) : 0;
-                        await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, bestRecord, waPoints);
+                        await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, bestRecord, waPoints, statusCode);
+                        synced++;
+                    } else if (statusCode) {
+                        let effSc = statusCode;
+                        if (subEvt.category === 'track' && effSc === 'NM') effSc = 'DNF';
+                        await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, 0, 0, effSc);
                         synced++;
                     } else if (hasAttempts) {
-                        await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, 0, 0);
+                        const fallbackSc = (subEvt.category === 'field_distance' || subEvt.category === 'field_height') ? 'NM' : 'DNF';
+                        await db.run(UPSERT_SQL, pe.event_entry_id, subEvt.name, subOrder, 0, 0, fallbackSc);
                         synced++;
                     }
                 }

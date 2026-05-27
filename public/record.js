@@ -100,6 +100,27 @@ function _optimisticUpsertHeightAttempt(eid, barHeight, attemptNumber, resultMar
     else state.heightAttempts.push(base);
 }
 
+// ─── 셀별 클릭 직렬화 락 (2026-05 race 차단 v4) ─────────────────────────
+//     장대높이뛰기/높이뛰기에서 같은 셀(entry+bar+attempt)에 빠르게 두 번 클릭하면
+//     두 요청이 동시 진행 → 서버 순서 보장 안 됨 → 응답 도착 순서가 뒤바뀌어
+//     "입력한 대로 저장 안 되고 멋대로 X 로 바뀌는" 증상.
+//     같은 셀에 대해서는 이전 요청의 응답을 받기 전까지 다음 클릭을 큐잉하여 직렬 처리.
+const _heightCellLocks = new Map();  // cellKey → Promise(현재 진행 중 작업)
+function _heightCellKey(eid, barHeight, attemptNumber) {
+    return `${eid}|${barHeight}|${attemptNumber}`;
+}
+// op 는 async 함수. 같은 cellKey 의 이전 작업이 끝난 후 실행됨. 결과 Promise 반환.
+function _heightCellRunSerial(cellKey, op) {
+    const prev = _heightCellLocks.get(cellKey) || Promise.resolve();
+    const next = prev.catch(() => {}).then(() => op());
+    _heightCellLocks.set(cellKey, next);
+    // 끝나면 동일 키 정리 (다른 작업이 그 사이에 덮어쓰지 않았다면)
+    next.finally(() => {
+        if (_heightCellLocks.get(cellKey) === next) _heightCellLocks.delete(cellKey);
+    });
+    return next;
+}
+
 // 모든 옵티미스틱 height_attempt 가 서버에 commit 될 때까지 대기 (최대 timeoutMs).
 // completeRound 같은 critical 동작 전에 호출.
 // state.heightAttempts 와 _cSubHeightData.attempts 둘 다 검사.
@@ -2474,67 +2495,64 @@ function setHeightMode(mode) {
 }
 
 // Toggle height mark: cycles X → O → - (pass) → empty
-// ─── 옵티미스틱만 사용 (reconcile race 방지):
-//     기존엔 클릭 후 getHeightAttempts() 로 전체 재조회 → 빠른 연속 클릭 시 첫 요청의 reconcile 응답이
-//     두 번째 옵티미스틱(O)을 덮어써서 화면이 X 로 되돌아가는 race condition 발생.
-//     이제는 서버 응답 1건만 받아 해당 셀만 갱신 (전체 refetch 안 함).
+// ─── 셀별 클릭 직렬화 (2026-05 race fix v4):
+//     같은 셀에 빠르게 두 번 클릭해도 두 요청이 동시 진행 안 되도록 직렬화.
+//     이전 응답이 도착해서 _optimistic 가 제거된 후에야 다음 cycle 계산 → "X 로 되돌아감" 차단.
 async function toggleHeightMark(entryId, barHeight, attemptNumber) {
-    const current = state.heightAttempts.find(a => 
-        a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
-    );
-    const currentMark = current ? current.result_mark : '';
-    const cycle = { '': 'X', 'X': 'O', 'O': '-', '-': '', 'PASS': '' };
-    const newMark = currentMark in cycle ? cycle[currentMark] : 'X';
-
-    try {
-        const hid = getSaveHeatId(entryId); // [JOINT]
-        // ─── 옵티미스틱: 화면에 먼저 마크 반영 (오프라인에서도 즉시 보이게)
-        //     클릭 식별자(epoch) 로 reconcile 시 같은 셀에 더 새로운 클릭이 있었는지 판별.
-        const clickId = Date.now() + Math.random();
-        _optimisticUpsertHeightAttempt(entryId, barHeight, attemptNumber, newMark);
-        // 옵티미스틱 항목에 클릭 식별자 부여 (가장 최신 의도 추적)
-        const _optIdx = state.heightAttempts.findIndex(a =>
+    const cellKey = _heightCellKey(entryId, barHeight, attemptNumber);
+    return _heightCellRunSerial(cellKey, async () => {
+        // ⚠️ 직전 작업 완료 후 현재 상태 다시 조회 → cycle 계산이 항상 최신 mark 기준
+        const current = state.heightAttempts.find(a =>
             a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
         );
-        if (_optIdx >= 0) state.heightAttempts[_optIdx]._clickId = clickId;
-        renderHeightContent();
+        const currentMark = current ? current.result_mark : '';
+        const cycle = { '': 'X', 'X': 'O', 'O': '-', '-': '', 'PASS': '' };
+        const newMark = currentMark in cycle ? cycle[currentMark] : 'X';
 
-        const resp = await API.saveHeightAttempt({
-            heat_id: hid,
-            event_entry_id: entryId,
-            bar_height: barHeight,
-            attempt_number: attemptNumber,
-            result_mark: newMark
-        });
-        // ─── reconcile: 서버 응답(단일 행) 으로 해당 셀만 정확히 동기화.
-        //     ⚠️ 단, reconcile 도착 시 같은 셀에 더 새로운 클릭(_clickId)이 있으면 reconcile 무시.
-        //         (사용자가 빠르게 다시 클릭해서 옵티미스틱이 바뀐 상태이면 이 응답은 stale)
-        if (!isOfflineResp(resp) && resp && typeof resp === 'object') {
-            const idx = state.heightAttempts.findIndex(a =>
+        try {
+            const hid = getSaveHeatId(entryId); // [JOINT]
+            // ─── 옵티미스틱: 화면에 먼저 마크 반영 (오프라인에서도 즉시 보이게)
+            const clickId = Date.now() + Math.random();
+            _optimisticUpsertHeightAttempt(entryId, barHeight, attemptNumber, newMark);
+            const _optIdx = state.heightAttempts.findIndex(a =>
                 a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
             );
-            const cur = idx >= 0 ? state.heightAttempts[idx] : null;
-            // 더 새로운 클릭이 있으면 이 응답은 stale → 무시
-            const isStale = cur && cur._clickId && cur._clickId !== clickId;
-            if (!isStale) {
-                if (resp.deleted) {
-                    if (idx >= 0) state.heightAttempts.splice(idx, 1);
-                } else if (resp.id) {
-                    // 서버에서 받은 행으로 갱신 (PASS/'-' 정규화 포함)
-                    const merged = { ...(cur || {}), ...resp };
-                    delete merged._optimistic;
-                    delete merged._clickId;
-                    if (idx >= 0) state.heightAttempts[idx] = merged;
-                    else state.heightAttempts.push(merged);
+            if (_optIdx >= 0) state.heightAttempts[_optIdx]._clickId = clickId;
+            renderHeightContent();
+
+            const resp = await API.saveHeightAttempt({
+                heat_id: hid,
+                event_entry_id: entryId,
+                bar_height: barHeight,
+                attempt_number: attemptNumber,
+                result_mark: newMark
+            });
+            // reconcile: 서버 응답으로 해당 셀만 갱신. 직렬화 덕분에 항상 본인의 응답.
+            if (!isOfflineResp(resp) && resp && typeof resp === 'object') {
+                const idx = state.heightAttempts.findIndex(a =>
+                    a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
+                );
+                const cur = idx >= 0 ? state.heightAttempts[idx] : null;
+                const isStale = cur && cur._clickId && cur._clickId !== clickId;
+                if (!isStale) {
+                    if (resp.deleted) {
+                        if (idx >= 0) state.heightAttempts.splice(idx, 1);
+                    } else if (resp.id) {
+                        const merged = { ...(cur || {}), ...resp };
+                        delete merged._optimistic;
+                        delete merged._clickId;
+                        if (idx >= 0) state.heightAttempts[idx] = merged;
+                        else state.heightAttempts.push(merged);
+                    }
+                    renderHeightContent();
                 }
-                renderHeightContent();
             }
+            if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
+            renderAuditLog();
+        } catch (err) {
+            console.error('toggleHeightMark error:', err);
         }
-        if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
-        renderAuditLog();
-    } catch (err) {
-        console.error('toggleHeightMark error:', err);
-    }
+    });
 }
 
 // ============================================================
@@ -3867,57 +3885,61 @@ async function _cSubHeightSave() {
 }
 
 async function _cSubHeightToggle(entryId, barHeight, attemptNumber) {
-    const { heatId, parentId, attempts } = _cSubHeightData;
-    const current = attempts.find(a =>
-        a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
-    );
-    const currentMark = current ? current.result_mark : '';
-    const cycle = { '': 'X', 'X': 'O', 'O': '-', '-': '', 'PASS': '' };
-    const newMark = currentMark in cycle ? cycle[currentMark] : 'X';
-
-    try {
-        // ─── 옵티미스틱 + 클릭 식별자 (stale reconcile 차단용)
-        const clickId = Date.now() + Math.random();
-        _cSubOptimisticHeight(entryId, barHeight, attemptNumber, newMark);
-        const _oIdx = (_cSubHeightData.attempts || []).findIndex(a =>
+    const { heatId, parentId } = _cSubHeightData;
+    // ─── 셀별 클릭 직렬화 (2026-05 race fix v4):
+    //     같은 셀에 빠르게 두 번 클릭해도 두 요청이 동시 진행 안 되도록 직렬화.
+    //     이전 응답이 도착해서 옵티미스틱이 reconcile 된 후에야 다음 cycle 계산.
+    const cellKey = _heightCellKey(entryId, barHeight, attemptNumber);
+    return _heightCellRunSerial(cellKey, async () => {
+        const attempts = _cSubHeightData.attempts || [];
+        const current = attempts.find(a =>
             a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
         );
-        if (_oIdx >= 0) _cSubHeightData.attempts[_oIdx]._clickId = clickId;
-        _cSubHeightRender();
+        const currentMark = current ? current.result_mark : '';
+        const cycle = { '': 'X', 'X': 'O', 'O': '-', '-': '', 'PASS': '' };
+        const newMark = currentMark in cycle ? cycle[currentMark] : 'X';
 
-        const resp = await API.saveHeightAttempt({
-            heat_id: heatId,
-            event_entry_id: entryId,
-            bar_height: barHeight,
-            attempt_number: attemptNumber,
-            result_mark: newMark
-        });
-        // ─── reconcile: 단일 행만 갱신 (race 방지, 메인 toggleHeightMark 와 동일 패턴)
-        //     더 새로운 클릭(_clickId 변경)이 있으면 이 응답은 stale → 무시.
-        if (!isOfflineResp(resp) && resp && typeof resp === 'object') {
-            if (!Array.isArray(_cSubHeightData.attempts)) _cSubHeightData.attempts = [];
-            const idx = _cSubHeightData.attempts.findIndex(a =>
+        try {
+            const clickId = Date.now() + Math.random();
+            _cSubOptimisticHeight(entryId, barHeight, attemptNumber, newMark);
+            const _oIdx = (_cSubHeightData.attempts || []).findIndex(a =>
                 a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
             );
-            const cur = idx >= 0 ? _cSubHeightData.attempts[idx] : null;
-            const isStale = cur && cur._clickId && cur._clickId !== clickId;
-            if (!isStale) {
-                if (resp.deleted) {
-                    if (idx >= 0) _cSubHeightData.attempts.splice(idx, 1);
-                } else if (resp.id) {
-                    const merged = { ...(cur || {}), ...resp };
-                    delete merged._optimistic;
-                    delete merged._clickId;
-                    if (idx >= 0) _cSubHeightData.attempts[idx] = merged;
-                    else _cSubHeightData.attempts.push(merged);
+            if (_oIdx >= 0) _cSubHeightData.attempts[_oIdx]._clickId = clickId;
+            _cSubHeightRender();
+
+            const resp = await API.saveHeightAttempt({
+                heat_id: heatId,
+                event_entry_id: entryId,
+                bar_height: barHeight,
+                attempt_number: attemptNumber,
+                result_mark: newMark
+            });
+            if (!isOfflineResp(resp) && resp && typeof resp === 'object') {
+                if (!Array.isArray(_cSubHeightData.attempts)) _cSubHeightData.attempts = [];
+                const idx = _cSubHeightData.attempts.findIndex(a =>
+                    a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
+                );
+                const cur = idx >= 0 ? _cSubHeightData.attempts[idx] : null;
+                const isStale = cur && cur._clickId && cur._clickId !== clickId;
+                if (!isStale) {
+                    if (resp.deleted) {
+                        if (idx >= 0) _cSubHeightData.attempts.splice(idx, 1);
+                    } else if (resp.id) {
+                        const merged = { ...(cur || {}), ...resp };
+                        delete merged._optimistic;
+                        delete merged._clickId;
+                        if (idx >= 0) _cSubHeightData.attempts[idx] = merged;
+                        else _cSubHeightData.attempts.push(merged);
+                    }
+                    _cSubHeightRender();
                 }
-                _cSubHeightRender();
             }
+            await syncCombinedFromSubEvent(parentId);
+        } catch (err) {
+            console.error('_cSubHeightToggle error:', err);
         }
-        await syncCombinedFromSubEvent(parentId);
-    } catch (err) {
-        console.error('_cSubHeightToggle error:', err);
-    }
+    });
 }
 
 // ── WA Summary ──────────────────────────────────────────────
