@@ -339,6 +339,8 @@ CREATE TABLE IF NOT EXISTS "height_attempt" (
 );
 -- 운영 PG 호환: 기존 테이블에 updated_at 없으면 ADD
 DO $$ BEGIN ALTER TABLE "height_attempt" ADD COLUMN "updated_at" TEXT NOT NULL DEFAULT NOW(); EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+-- 혼성경기 종합기록지 DNS/DNF/DQ/NM 표시용
+DO $$ BEGIN ALTER TABLE "combined_score" ADD COLUMN "status_code" TEXT DEFAULT ''; EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 
 -- Table: home_popup
 CREATE TABLE IF NOT EXISTS "home_popup" (

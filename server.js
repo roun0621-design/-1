@@ -16,7 +16,7 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const { initDatabase, DB_PATH } = require('./db/init');
 const { getDb } = require('./lib/db');
-const { detectRecordBreaks, detectCombinedRecordBreaks } = require('./lib/recordCompare');
+const { detectRecordBreaks, detectCombinedRecordBreaks, normalizeEventName: normalizeEventNameServer } = require('./lib/recordCompare');
 const WebSocket = require('ws');
 const PDFDocument = require('pdfkit');
 const { createCanvas, registerFont } = require('canvas');
@@ -258,6 +258,8 @@ try { db.exec(`ALTER TABLE result ADD COLUMN wind REAL DEFAULT NULL`); } catch(e
 try { db.exec(`ALTER TABLE heat ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 // 오프라인 충돌 감지용 — height_attempt 에 updated_at 추가 (result 는 이미 보유)
 try { db.exec(`ALTER TABLE height_attempt ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`); } catch(e) {}
+// 혼성경기 종합기록지의 DNS/DNF/DQ/NM 표시용 — combined_score 에 status_code 추가
+try { db.exec(`ALTER TABLE combined_score ADD COLUMN status_code TEXT DEFAULT ''`); } catch(e) {}
 // Phase C 후속: record_breaking_log에 풍속 컬럼 추가 (NR/DR/CR 감지 시점의 풍속 보존)
 try { db.exec(`ALTER TABLE record_breaking_log ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 // Migrate existing numeric wind values to "N.N m/s" text format for scoreboard compatibility
@@ -2412,8 +2414,9 @@ async function _syncCombinedScoresForAthlete(parent_event, parentEntry, athleteI
     const waKeys = parent_event.gender === 'M' ? DECATHLON_KEYS : HEPTATHLON_KEYS;
     const expectedCount = waKeys.length;
     const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', parent_event.id);
-    const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points)
-        VALUES (?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name`;
+    // ─── status_code 컬럼 포함 UPSERT (DNS/DNF/DQ/NM 을 종합기록지에 그대로 노출)
+    const UPSERT_SQL = `INSERT INTO combined_score (event_entry_id,sub_event_name,sub_event_order,raw_record,wa_points,status_code)
+        VALUES (?,?,?,?,?,?) ON CONFLICT(event_entry_id,sub_event_order) DO UPDATE SET raw_record=excluded.raw_record, wa_points=excluded.wa_points, sub_event_name=excluded.sub_event_name, status_code=excluded.status_code`;
 
     for (let idx = 0; idx < subEvents.length && idx < expectedCount; idx++) {
         const subEvt = subEvents[idx];
@@ -2424,6 +2427,25 @@ async function _syncCombinedScoresForAthlete(parent_event, parentEntry, athleteI
         const heatPh = subHeatIds.map(() => '?').join(',');
         const subEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', subEvt.id, athleteId);
         if (!subEntry) continue;
+
+        // ─── status_code 우선 조회 (DNS/DNF/DQ/NM) ───────────────────
+        // 1) result 테이블의 명시적 status_code (트랙/필드 공통)
+        // 2) heat_entry.status='no_show' → DNS
+        let statusCode = '';
+        const scRow = await db.get(
+            `SELECT status_code FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND status_code IS NOT NULL AND status_code <> '' LIMIT 1`,
+            ...subHeatIds, subEntry.id
+        );
+        if (scRow && scRow.status_code) {
+            statusCode = scRow.status_code;
+        } else {
+            const heRow = await db.get(
+                `SELECT status FROM heat_entry WHERE heat_id IN (${heatPh}) AND event_entry_id=? LIMIT 1`,
+                ...subHeatIds, subEntry.id
+            );
+            if (heRow && heRow.status === 'no_show') statusCode = 'DNS';
+        }
+
         let bestRecord = null;
         let hasAttempts = false;
         if (subEvt.category === 'track') {
@@ -2455,9 +2477,18 @@ async function _syncCombinedScoresForAthlete(parent_event, parentEntry, athleteI
                 continue;
             }
             const waPoints = waKey ? calcWAPoints(waKey, bestRecord) : 0;
-            await db.run(UPSERT_SQL, parentEntry.id, subEvt.name, subOrder, bestRecord, waPoints);
+            // status_code 가 있더라도 유효 기록이 있으면 정상 점수 반영 (DQ 인 경우만 예외처리는 추후 정책에 따라)
+            await db.run(UPSERT_SQL, parentEntry.id, subEvt.name, subOrder, bestRecord, waPoints, statusCode);
+        } else if (statusCode) {
+            // ─── 기록 0, 상태코드 존재 → DNS/DNF/DQ/NM 으로 표시. WA 점수 0.
+            //     트랙에서 NM 이 들어오면 무시(트랙은 NM 불가) → DNF 로 폴백
+            let effSc = statusCode;
+            if (subEvt.category === 'track' && effSc === 'NM') effSc = 'DNF';
+            await db.run(UPSERT_SQL, parentEntry.id, subEvt.name, subOrder, 0, 0, effSc);
         } else if (hasAttempts) {
-            await db.run(UPSERT_SQL, parentEntry.id, subEvt.name, subOrder, 0, 0);
+            // 시도는 있는데 유효 기록 없음 → 필드는 NM, 트랙은 DNF (이전엔 무차별 raw=0, status=''→ 클라가 NM 표시)
+            const fallbackSc = (subEvt.category === 'field_distance' || subEvt.category === 'field_height') ? 'NM' : 'DNF';
+            await db.run(UPSERT_SQL, parentEntry.id, subEvt.name, subOrder, 0, 0, fallbackSc);
         } else {
             await db.run('DELETE FROM combined_score WHERE event_entry_id=? AND sub_event_order=?', parentEntry.id, subOrder);
         }
@@ -8667,28 +8698,37 @@ app.get('/api/event-records/lookup', async (req, res) => {
         if (!eventName || !gender) return res.status(400).json({ error: 'event_name, gender 필수' });
         const divCode = req.query.division_code ? String(req.query.division_code).trim() : null;
         const seriesId = req.query.series_id ? parseInt(req.query.series_id, 10) : null;
+
+        // ─── 종목명 매칭 헬퍼: 1) 정확 매칭 시도 → 없으면 2) 정규화 fallback.
+        //     event_record 에 '10000mW' 로 저장돼있고 클라가 '10,000m W' 처럼 보낸 경우도 잡아냄.
+        const targetNorm = normalizeEventNameServer(eventName);
+        async function _findOne(typeKey, extraSql, extraArgs) {
+            // 1차: 정확 매칭
+            const exact = await db.get(
+                `SELECT * FROM event_record WHERE record_type='${typeKey}' AND event_name=? AND gender=?
+                 ${extraSql} AND approved=1 ORDER BY id DESC LIMIT 1`,
+                eventName, gender, ...extraArgs
+            );
+            if (exact) return exact;
+            // 2차: 동일 (gender + 조건) 안에서 event_name 정규화 후 비교
+            const candidates = await db.all(
+                `SELECT * FROM event_record WHERE record_type='${typeKey}' AND gender=?
+                 ${extraSql} AND approved=1`,
+                gender, ...extraArgs
+            );
+            for (const c of (candidates || [])) {
+                if (normalizeEventNameServer(c.event_name || '') === targetNorm) return c;
+            }
+            return null;
+        }
+
         const out = { national: null, division: null, competition: null };
-        out.national = await db.get(
-            `SELECT * FROM event_record WHERE record_type='national' AND event_name=? AND gender=?
-             AND division_code IS NULL AND series_id IS NULL AND approved=1
-             ORDER BY id DESC LIMIT 1`,
-            eventName, gender
-        ) || null;
+        out.national = await _findOne('national', `AND division_code IS NULL AND series_id IS NULL`, []);
         if (divCode) {
-            out.division = await db.get(
-                `SELECT * FROM event_record WHERE record_type='division' AND event_name=? AND gender=?
-                 AND division_code=? AND series_id IS NULL AND approved=1
-                 ORDER BY id DESC LIMIT 1`,
-                eventName, gender, divCode
-            ) || null;
+            out.division = await _findOne('division', `AND division_code=? AND series_id IS NULL`, [divCode]);
         }
         if (seriesId) {
-            out.competition = await db.get(
-                `SELECT * FROM event_record WHERE record_type='competition' AND event_name=? AND gender=?
-                 AND division_code IS NULL AND series_id=? AND approved=1
-                 ORDER BY id DESC LIMIT 1`,
-                eventName, gender, seriesId
-            ) || null;
+            out.competition = await _findOne('competition', `AND division_code IS NULL AND series_id=?`, [seriesId]);
         }
         res.json(out);
     } catch (err) {

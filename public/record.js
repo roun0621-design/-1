@@ -2378,10 +2378,11 @@ function renderHeightContent() {
                 const rankDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` :
                     (r.rank || '—');
                 // Status dropdown
-                const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" onchange="setFieldHeightStatusCode(this)" title="DNS=불출전, DNF=미완주, DQ=실격" ${r._isNoShow ? 'disabled' : ''}>
+                const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" onchange="setFieldHeightStatusCode(this)" title="DNS=불출전, DNF=미완주, DQ=실격, NM=기록없음" ${r._isNoShow ? 'disabled' : ''}>
                     <option value="">—</option><option value="DNS" ${r.status_code==='DNS'?'selected':''}>DNS</option>
                     <option value="DNF" ${r.status_code==='DNF'?'selected':''}>DNF</option>
                     <option value="DQ" ${r.status_code==='DQ'?'selected':''}>DQ</option>
+                    <option value="NM" ${r.status_code==='NM'?'selected':''}>NM</option>
                 </select>`;
                 const statusCell = r.status_code ? scDropdown
                     : r._isNoShow ? '<span class="sc-badge sc-DNS">DNS</span>'
@@ -2631,7 +2632,12 @@ async function _renderScoreboard(container) {
         subDefs.forEach(se => {
             const sc = state.combinedScores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
             const p = sc ? (sc.wa_points || 0) : 0;
-            pts[se.order] = { points: p, raw: sc ? sc.raw_record : null };
+            pts[se.order] = {
+                points: p,
+                raw: sc ? sc.raw_record : null,
+                // ─── 세부종목의 상태코드 (DNS/DNF/DQ/NM). 트랙 NM 은 서버에서 DNF 로 폴백되어 옴.
+                status_code: sc ? (sc.status_code || '') : ''
+            };
             total += p;
         });
         return { ...e, pts, total };
@@ -2651,11 +2657,18 @@ async function _renderScoreboard(container) {
                 <tbody>${rows.map(r => {
                     const cells = subDefs.map(se => {
                         const p = r.pts[se.order];
-                        if (!p || p.raw == null)
+                        if (!p || (p.raw == null && !p.status_code))
                             return `<td style="cursor:pointer;color:var(--text-muted);" onclick="switchCombinedTab(${se.order})">—</td>`;
+                        // ─── 우선순위 1: 상태코드 (DNS/DNF/DQ/NM) 가 있으면 그것을 표시. 점수는 그대로(보통 0pt).
+                        //     이전엔 raw=0 & points=0 일 때 무조건 'NM' 으로 찍어서 트랙의 DNF/DNS 도 NM 으로 잘못 표시되던 버그.
+                        if (p.status_code) {
+                            const scLabel = p.status_code;
+                            return `<td style="cursor:pointer;" onclick="switchCombinedTab(${se.order})"><div style="font-weight:600;font-size:11px;color:var(--danger);">${scLabel}</div><div style="font-size:10px;color:var(--text-muted);">${p.points}pt</div></td>`;
+                        }
+                        // 우선순위 2: 기존 fallback (raw=0 & points=0 인데 status_code 도 없는 옛 데이터) → NM 으로 표시
                         if (p.raw === 0 && p.points === 0)
                             return `<td style="cursor:pointer;" onclick="switchCombinedTab(${se.order})"><div style="font-weight:600;font-size:11px;color:var(--danger);">NM</div><div style="font-size:10px;color:var(--text-muted);">0pt</div></td>`;
-                        if (p.raw <= 0)
+                        if (p.raw == null || p.raw <= 0)
                             return `<td style="cursor:pointer;color:var(--text-muted);" onclick="switchCombinedTab(${se.order})">—</td>`;
                         const isHt = se.key && (se.key.includes('high_jump') || se.key.includes('pole_vault'));
                         const rec = se.unit === 's' ? formatTime(p.raw) : (isHt ? formatHeight(p.raw) : p.raw.toFixed(2) + 'm');
@@ -3705,10 +3718,11 @@ function _cSubHeightRender(area) {
                     const rankDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` :
                         (r.rank || '—');
                     // Status dropdown
-                    const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" onchange="_cSubHeightSetStatus(this)" title="DNS=불출전, DNF=미완주, DQ=실격" ${r._isNoShow ? 'disabled' : ''}>
+                    const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" onchange="_cSubHeightSetStatus(this)" title="DNS=불출전, DNF=미완주, DQ=실격, NM=기록없음" ${r._isNoShow ? 'disabled' : ''}>
                         <option value="">—</option><option value="DNS" ${r.status_code==='DNS'?'selected':''}>DNS</option>
                         <option value="DNF" ${r.status_code==='DNF'?'selected':''}>DNF</option>
                         <option value="DQ" ${r.status_code==='DQ'?'selected':''}>DQ</option>
+                        <option value="NM" ${r.status_code==='NM'?'selected':''}>NM</option>
                     </select>`;
                     return `<tr class="${r.eliminated ? 'row-eliminated' : ''} ${r.status_code ? 'row-status-code' : ''} ${r._isNoShow ? 'row-dns' : ''}">
                         <td>${rankDisp}</td>
