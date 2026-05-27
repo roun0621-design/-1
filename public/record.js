@@ -2407,6 +2407,10 @@ function setHeightMode(mode) {
 }
 
 // Toggle height mark: cycles X → O → - (pass) → empty
+// ─── 옵티미스틱만 사용 (reconcile race 방지):
+//     기존엔 클릭 후 getHeightAttempts() 로 전체 재조회 → 빠른 연속 클릭 시 첫 요청의 reconcile 응답이
+//     두 번째 옵티미스틱(O)을 덮어써서 화면이 X 로 되돌아가는 race condition 발생.
+//     이제는 서버 응답 1건만 받아 해당 셀만 갱신 (전체 refetch 안 함).
 async function toggleHeightMark(entryId, barHeight, attemptNumber) {
     const current = state.heightAttempts.find(a => 
         a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
@@ -2428,14 +2432,22 @@ async function toggleHeightMark(entryId, barHeight, attemptNumber) {
             attempt_number: attemptNumber,
             result_mark: newMark
         });
-        if (!isOfflineResp(resp)) {
-            // 온라인: fresh 데이터로 reconcile
-            let allHeightAttempts = await API.getHeightAttempts(state.heatId);
-            if (isJointMode()) {
-                const extraH = await fetchJointExtraHeightAttempts();
-                allHeightAttempts = allHeightAttempts.concat(extraH);
+        // ─── reconcile: 서버 응답(단일 행) 으로 해당 셀만 정확히 동기화.
+        //     전체 refetch 하지 않으므로 빠른 연속 클릭의 race condition 발생 안 함.
+        //     SSE 'height_update' 가 다른 셀 변화는 따로 반영함.
+        if (!isOfflineResp(resp) && resp && typeof resp === 'object') {
+            const idx = state.heightAttempts.findIndex(a =>
+                a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
+            );
+            if (resp.deleted) {
+                if (idx >= 0) state.heightAttempts.splice(idx, 1);
+            } else if (resp.id) {
+                // 서버에서 받은 행으로 갱신 (PASS/'-' 정규화 포함)
+                const merged = { ...(idx >= 0 ? state.heightAttempts[idx] : {}), ...resp };
+                delete merged._optimistic;
+                if (idx >= 0) state.heightAttempts[idx] = merged;
+                else state.heightAttempts.push(merged);
             }
-            state.heightAttempts = allHeightAttempts;
             renderHeightContent();
         }
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
@@ -3768,8 +3780,20 @@ async function _cSubHeightToggle(entryId, barHeight, attemptNumber) {
             attempt_number: attemptNumber,
             result_mark: newMark
         });
-        if (!isOfflineResp(resp)) {
-            _cSubHeightData.attempts = await API.getHeightAttempts(heatId);
+        // ─── reconcile: 단일 행만 갱신 (race 방지, 메인 toggleHeightMark 와 동일 패턴)
+        if (!isOfflineResp(resp) && resp && typeof resp === 'object') {
+            if (!Array.isArray(_cSubHeightData.attempts)) _cSubHeightData.attempts = [];
+            const idx = _cSubHeightData.attempts.findIndex(a =>
+                a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
+            );
+            if (resp.deleted) {
+                if (idx >= 0) _cSubHeightData.attempts.splice(idx, 1);
+            } else if (resp.id) {
+                const merged = { ...(idx >= 0 ? _cSubHeightData.attempts[idx] : {}), ...resp };
+                delete merged._optimistic;
+                if (idx >= 0) _cSubHeightData.attempts[idx] = merged;
+                else _cSubHeightData.attempts.push(merged);
+            }
             _cSubHeightRender();
         }
         await syncCombinedFromSubEvent(parentId);
