@@ -2721,11 +2721,12 @@ async function _renderScoreboard(container) {
                 <tbody>${rows.map(r => {
                     const cells = subDefs.map(se => {
                         const p = r.pts[se.order];
-                        if (!p || (p.raw == null && !p.status_code))
+                        const _validSc = p && p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code);
+                        if (!p || (p.raw == null && !_validSc))
                             return `<td style="cursor:pointer;color:var(--text-muted);" onclick="switchCombinedTab(${se.order})">—</td>`;
                         // ─── 우선순위 1: 상태코드 (DNS/DNF/DQ/NM) 가 있으면 그것을 표시. 점수는 그대로(보통 0pt).
-                        //     이전엔 raw=0 & points=0 일 때 무조건 'NM' 으로 찍어서 트랙의 DNF/DNS 도 NM 으로 잘못 표시되던 버그.
-                        if (p.status_code) {
+                        //     ⚠️ 'X'/'PASS'/'-' 등 시도 마크는 status_code 가 아니므로 무시 (화이트리스트만 채택).
+                        if (_validSc) {
                             const scLabel = p.status_code;
                             return `<td style="cursor:pointer;" onclick="switchCombinedTab(${se.order})"><div style="font-weight:600;font-size:11px;color:var(--danger);">${scLabel}</div><div style="font-size:10px;color:var(--text-muted);">${p.points}pt</div></td>`;
                         }

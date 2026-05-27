@@ -2434,8 +2434,9 @@ async function _syncCombinedScoresForAthlete(parent_event, parentEntry, athleteI
         // 1) result 테이블의 명시적 status_code (트랙/필드 공통)
         // 2) heat_entry.status='no_show' → DNS
         let statusCode = '';
+        // ⚠️ 'X'/'PASS'/'-' 같은 시도별 마크 는 status_code 가 아니므로 제외. 화이트리스트만 채택.
         const scRow = await db.get(
-            `SELECT status_code FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND status_code IS NOT NULL AND status_code <> '' LIMIT 1`,
+            `SELECT status_code FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND status_code IN ('DNS','DNF','DQ','NM') LIMIT 1`,
             ...subHeatIds, subEntry.id
         );
         if (scRow && scRow.status_code) {
@@ -2962,8 +2963,9 @@ app.post('/api/combined-scores/sync', async (req, res) => {
                 //     1) result.status_code 가 있으면 채택
                 //     2) heat_entry.status='no_show' → DNS
                 let statusCode = '';
+                // ⚠️ 'X'/'PASS'/'-' 등 시도별 마크 는 status_code 가 아닌 좌석 별 파울 표시 용도 — 화이트리스트만 채택.
                 const _scRow = await db.get(
-                    `SELECT status_code FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND status_code IS NOT NULL AND status_code <> '' LIMIT 1`,
+                    `SELECT status_code FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND status_code IN ('DNS','DNF','DQ','NM') LIMIT 1`,
                     ...subHeatIds, subEntry.id
                 );
                 if (_scRow && _scRow.status_code) {
@@ -3088,8 +3090,9 @@ app.post('/api/combined-scores/repair', async (req, res) => {
                     if (!subEntry) continue;
                     // ─── status_code 우선 조회 (DNS/DNF/DQ/NM)
                     let statusCode = '';
+                    // ⚠️ 화이트리스트 (DNS/DNF/DQ/NM) 만 status_code 로 인정. 'X'/'PASS'/'-' 등 시도 마크 제외.
                     const _scRow = await db.get(
-                        `SELECT status_code FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND status_code IS NOT NULL AND status_code <> '' LIMIT 1`,
+                        `SELECT status_code FROM result WHERE heat_id IN (${heatPh}) AND event_entry_id=? AND status_code IN ('DNS','DNF','DQ','NM') LIMIT 1`,
                         ...subHeatIds, subEntry.id
                     );
                     if (_scRow && _scRow.status_code) {

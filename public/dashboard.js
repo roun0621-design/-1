@@ -1358,8 +1358,9 @@ function renderLiveCombinedResults(data) {
                                 const p = r.pts[se.order];
                                 if (!p || p.raw == null)
                                     return `<td style="color:#ccc;font-size:10px;">—</td>`;
-                                // 🔴 status_code (DNS/DNF/DQ/NM) 이 있으면 우선 표시 — “점수 0 = NM” 으로 잘못 표시되는 버그 수정.
-                                if (p.status_code) {
+                                // 🔴 status_code (DNS/DNF/DQ/NM) 이 있으면 우선 표시.
+                                //     'X'/'PASS'/'-' 등 시도 마크 는 status_code 가 아닌 일부 레거시 데이터 이므로 화이트리스트만 채택.
+                                if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) {
                                     const _sc = p.status_code;
                                     const _scColor = (_sc === 'DQ') ? '#a02050' : 'var(--danger)';
                                     return `<td style="font-size:10px;color:${_scColor};font-weight:700;"><div>${_sc}</div><div style="color:var(--text-muted);font-size:9px;font-weight:400;">${p.points}pt</div></td>`;
@@ -1470,8 +1471,8 @@ async function _loadCombinedResultsAsync(evt) {
                             const p = r.pts[se.order];
                             if (!p || p.raw == null)
                                 return `<td style="color:#ccc;font-size:10px;cursor:pointer;" onclick="_cResultShowSub(${se.order})">—</td>`;
-                            // 🔴 status_code (DNS/DNF/DQ/NM) 이 있으면 우선 표시
-                            if (p.status_code) {
+                            // 🔴 status_code 는 화이트리스트(DNS/DNF/DQ/NM)만 인정.
+                            if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) {
                                 const _sc = p.status_code;
                                 const _scColor = (_sc === 'DQ') ? '#a02050' : 'var(--danger)';
                                 return `<td style="font-size:10px;cursor:pointer;color:${_scColor};font-weight:700;" onclick="_cResultShowSub(${se.order})"><div>${_sc}</div><div style="color:var(--text-muted);font-size:9px;font-weight:400;">${p.points}pt</div></td>`;
