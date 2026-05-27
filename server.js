@@ -38,6 +38,38 @@ function kstNow() {
     return d.toISOString().replace('T', ' ').substring(0, 19);
 }
 
+// ─── DB 타임스탬프 → ms epoch 파서 ───────────────────────────────
+// SQLite datetime('now')         → "2026-05-27 09:01:00"           (UTC, 공백, TZ 없음)
+// PG NOW()::text                 → "2026-05-27 09:01:00.123456+00" (UTC, 공백, +00)
+// 표준 ISO                       → "2026-05-27T09:01:00Z" / +00:00
+// pg 드라이버 timestamp(tz)      → Date 객체
+// 모든 형식에서 ms epoch 을 반환. 파싱 불가 시 NaN.
+function parseDbTimestampMs(v) {
+    if (v == null) return NaN;
+    if (v instanceof Date) return v.getTime();
+    if (typeof v === 'number') return v;
+    if (typeof v !== 'string') return NaN;
+    let s = v.trim();
+    if (!s) return NaN;
+    // 1) 그대로 파싱 시도 (Node 20+ 은 PG 공백/+00 형식도 받음)
+    let ms = new Date(s).getTime();
+    if (Number.isFinite(ms)) return ms;
+    // 2) 공백 → T 치환
+    if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T');
+    ms = new Date(s).getTime();
+    if (Number.isFinite(ms)) return ms;
+    // 3) "+00" / "-00" → "+00:00" 보정 (구버전 Node 대응)
+    const s2 = s.replace(/([+-])(\d{2})$/, '$1$2:00');
+    ms = new Date(s2).getTime();
+    if (Number.isFinite(ms)) return ms;
+    // 4) TZ 표기가 전혀 없으면 UTC 로 간주
+    if (!/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s2)) {
+        ms = new Date(s2 + 'Z').getTime();
+        if (Number.isFinite(ms)) return ms;
+    }
+    return NaN;
+}
+
 // ---- Auto Backup System ----
 const BACKUP_DIR = path.join(__dirname, 'backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -2248,8 +2280,9 @@ app.post('/api/results/upsert', async (req, res) => {
             // ─── 오프라인 동기화 충돌 감지 ─────────────────────────
             // offline_input_at: 클라이언트가 오프라인 상태에서 입력한 시각 (ms epoch)
             // 서버의 existing.updated_at 이 더 최근이면 → 운영진이 그 사이에 갱신했다는 뜻 → 거부
+            // PG/SQLite 양쪽 timestamp 텍스트 형식을 모두 안전하게 파싱 (parseDbTimestampMs)
             if (offline_input_at && existing.updated_at) {
-                const serverUpdatedMs = new Date(existing.updated_at.includes('T') ? existing.updated_at : existing.updated_at.replace(' ', 'T') + 'Z').getTime();
+                const serverUpdatedMs = parseDbTimestampMs(existing.updated_at);
                 const offlineMs = Number(offline_input_at);
                 if (Number.isFinite(serverUpdatedMs) && Number.isFinite(offlineMs) && serverUpdatedMs > offlineMs) {
                     return res.status(409).json({
@@ -2718,8 +2751,9 @@ app.post('/api/height-attempts/save', async (req, res) => {
         const existing = await db.get('SELECT * FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND bar_height=? AND attempt_number=?', heat_id, event_entry_id, bar_height, attempt_number);
         if (existing) {
             // ─── 오프라인 동기화 충돌 감지 ─────────────────────────
+            // PG/SQLite 양쪽 timestamp 텍스트 형식을 모두 안전하게 파싱 (parseDbTimestampMs)
             if (offline_input_at && existing.updated_at) {
-                const serverUpdatedMs = new Date(existing.updated_at.includes('T') ? existing.updated_at : existing.updated_at.replace(' ', 'T') + 'Z').getTime();
+                const serverUpdatedMs = parseDbTimestampMs(existing.updated_at);
                 const offlineMs = Number(offline_input_at);
                 if (Number.isFinite(serverUpdatedMs) && Number.isFinite(offlineMs) && serverUpdatedMs > offlineMs) {
                     return res.status(409).json({
