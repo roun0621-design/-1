@@ -10114,6 +10114,8 @@ function drawTableRow(doc, cols, values, y, tableLeft, tableRight, fontSize, opt
     const baseRowH = minRowH != null ? minRowH : Math.max(20, fontSize + 10);
 
     // ─── 1) wrapCols 가 지정된 경우 콘텐츠에 따라 행 높이 계산 ───
+    // ⚠️ 중요: heightOfString 측정 옵션과 doc.text 그리기 옵션을 100% 동일하게 맞춰야
+    //         마지막 줄이 잘리지 않음 (lineGap 등 누락 주의).
     let rowH = baseRowH;
     if (wrapCols.length > 0) {
         for (let i = 0; i < cols.length; i++) {
@@ -10125,9 +10127,14 @@ function drawTableRow(doc, cols, values, y, tableLeft, tableRight, fontSize, opt
             const isBold = boldCols.includes(col.key);
             pdfFont(doc, isBold).fontSize(colFontSize);
             try {
-                const measured = doc.heightOfString(val, { width: col.w - 4, align: alignByCol[col.key] || 'center' });
-                // 위/아래 4pt 패딩
-                const needed = Math.ceil(measured) + 8;
+                // measure 옵션 = draw 옵션 (lineGap 포함, ellipsis 등은 측정에 영향 없음)
+                const measured = doc.heightOfString(val, {
+                    width: col.w - 4,
+                    align: alignByCol[col.key] || 'center',
+                    lineGap: 0.5
+                });
+                // 위/아래 6pt 패딩 + 안전 마진 4pt = 16pt (마지막 줄 descender 보호)
+                const needed = Math.ceil(measured) + 16;
                 if (needed > rowH) rowH = needed;
             } catch (_) { /* heightOfString 실패시 기본 높이 유지 */ }
         }
@@ -10158,11 +10165,13 @@ function drawTableRow(doc, cols, values, y, tableLeft, tableRight, fontSize, opt
 
         let textY;
         if (wrapCols.includes(col.key)) {
-            // 줄바꿈 셀: 위쪽 4pt 패딩에서 시작 (height 옵션으로 영역 제한)
-            textY = y + 4;
+            // 줄바꿈 셀: 위쪽 6pt 패딩에서 시작.
+            // ⚠️ height 옵션을 지정하지 않음 — rowH는 heightOfString 측정값+16pt 안전마진으로
+            //   이미 충분하므로 height 제약을 주면 오히려 마지막 줄이 잘릴 수 있음.
+            //   (열 너비 부족으로 PDFKit 이 자동 줄바꿈한 라인까지 모두 그려져야 함)
+            textY = y + 6;
             doc.text(String(val), col.x + 2, textY, {
                 width: col.w - 4,
-                height: rowH - 8,
                 align: align,
                 ellipsis: false,
                 lineGap: 0.5
@@ -11260,14 +11269,28 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                     smallFontCols: { remark: Math.max(7, fontSize - 1) }
                 };
                 // 페이지 break 안전성: drawTableRow 가 행 높이를 늘릴 수 있으므로
-                // 실제 그리기 전에 측정 한번 하고, 자리 부족하면 페이지 추가.
-                // (간단 추정: 비고에 \n N개면 (N+1)줄 × 8pt + padding)
+                // 실제 그리기 전에 heightOfString 으로 정확히 측정하고, 자리 부족하면 페이지 추가.
+                // ⚠️ 단순 \n 개수 기반 추정은 부정확함 — 비고 컬럼 너비가 좁아서 PDFKit이
+                //   자동 줄바꿈으로 추가 라인을 만들 수 있기 때문 (예: "김현우(15:20.06)"이
+                //   한 줄에 안 들어가서 2줄이 됨). 반드시 heightOfString 으로 실측해야 함.
                 let estRowH = dataRowH2;
                 if (remarkStr) {
-                    const lineCount = (remarkStr.match(/\n/g) || []).length + 1;
-                    if (lineCount > 1) {
+                    const remarkCol = rsCols.find(c => c.key === 'remark');
+                    if (remarkCol) {
                         const remarkFs = drawOpts.smallFontCols.remark;
-                        estRowH = Math.max(estRowH, lineCount * (remarkFs + 2) + 8);
+                        pdfFont(doc, false).fontSize(remarkFs);
+                        try {
+                            const measured = doc.heightOfString(remarkStr, {
+                                width: remarkCol.w - 4,
+                                align: 'left',
+                                lineGap: 0.5
+                            });
+                            estRowH = Math.max(estRowH, Math.ceil(measured) + 16);
+                        } catch (_) {
+                            // 실측 실패시 폴백 — \n 기반 추정에 안전 마진 추가
+                            const lineCount = (remarkStr.match(/\n/g) || []).length + 1;
+                            estRowH = Math.max(estRowH, lineCount * 2 * (remarkFs + 2) + 16);
+                        }
                     }
                 }
                 if (curY + estRowH > BODY_BOTTOM) {
