@@ -187,6 +187,99 @@ const authLimiter = rateLimit({
 app.use(compression());
 app.use(express.json());
 
+// ------------------------------------------------------------
+// 글로벌 쓰기 가드 미들웨어 — 종료된 대회는 운영자/녹화관 쓰기 금지
+// (관리자 키는 통과, 읽기 메서드 GET/HEAD/OPTIONS는 통과)
+// competition_id 추출 우선순위:
+//   1) URL :compId 또는 req.params.id (단, /api/competitions/:id 같이 직접 참조 라우트)
+//   2) req.body.competition_id / req.query.competition_id
+//   3) 본문/쿼리의 event_id → event.competition_id lookup
+//   4) 본문의 athlete_id → athlete.competition_id lookup
+//   5) 본문의 heat_id → heat→event→competition lookup
+//   6) 본문의 event_entry_id → event_entry→event lookup
+// 추출 못 하면 통과 (라우트별 가드에 위임)
+// ------------------------------------------------------------
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+// 종료 가드 면제 경로 (관리자가 종료 자체를 푸는 라우트, 인증/로그 등)
+const COMP_END_GUARD_EXEMPT = [
+    /^\/api\/admin\/competitions\/\d+\/(close|reopen)$/,
+    /^\/api\/judge\/login$/,
+    /^\/api\/judge\/logout$/,
+    /^\/api\/admin\/login$/,
+    /^\/api\/operation-log/,
+    /^\/api\/audit-log/,
+];
+async function _extractCompetitionIdFromRequest(req) {
+    try {
+        // URL 직접 매칭 — /api/competitions/:id, /api/admin/competitions/:id/*
+        const mDirect = req.path.match(/^\/api(?:\/admin)?\/competitions\/(\d+)/);
+        if (mDirect) return parseInt(mDirect[1]);
+
+        const b = req.body || {};
+        const q = req.query || {};
+
+        // 직접 competition_id
+        const direct = b.competition_id || q.competition_id || b.comp_id || q.comp_id;
+        if (direct) return parseInt(direct);
+
+        // URL의 :compId/:competitionId 파라미터
+        if (req.params && (req.params.compId || req.params.competitionId)) {
+            return parseInt(req.params.compId || req.params.competitionId);
+        }
+
+        // event_id → event.competition_id
+        const eventId = b.event_id || q.event_id;
+        if (eventId) {
+            const ev = await db.get('SELECT competition_id FROM event WHERE id=?', eventId);
+            if (ev) return ev.competition_id;
+        }
+        // heat_id → heat→event
+        const heatId = b.heat_id || q.heat_id;
+        if (heatId) {
+            const h = await db.get('SELECT e.competition_id AS competition_id FROM heat h JOIN event e ON e.id=h.event_id WHERE h.id=?', heatId);
+            if (h) return h.competition_id;
+        }
+        // event_entry_id → event_entry→event
+        const entryId = b.event_entry_id || q.event_entry_id;
+        if (entryId) {
+            const ee = await db.get('SELECT e.competition_id AS competition_id FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.id=?', entryId);
+            if (ee) return ee.competition_id;
+        }
+        // athlete_id → athlete.competition_id
+        const athId = b.athlete_id || q.athlete_id;
+        if (athId) {
+            const a = await db.get('SELECT competition_id FROM athlete WHERE id=?', athId);
+            if (a) return a.competition_id;
+        }
+    } catch (e) { /* 추출 실패는 통과시킴 */ }
+    return null;
+}
+app.use(async (req, res, next) => {
+    if (!WRITE_METHODS.has(req.method)) return next();
+    // 정적 자원이나 API 외부 요청은 통과
+    if (!req.path.startsWith('/api/')) return next();
+    // 면제 경로
+    for (const re of COMP_END_GUARD_EXEMPT) if (re.test(req.path)) return next();
+    // 키 추출 (본문 / 쿼리)
+    const key = (req.body && (req.body.admin_key || req.body.operation_key || req.body.key))
+            || (req.query && (req.query.admin_key || req.query.key));
+    // 관리자 키는 무조건 통과
+    if (key && isAdminKey(key)) return next();
+    // competition_id 추출 시도
+    const compId = await _extractCompetitionIdFromRequest(req);
+    if (!compId) return next(); // 추출 못 하면 통과
+    try {
+        if (await isCompetitionEnded(compId)) {
+            return res.status(403).json({
+                error: '대회가 종료되었습니다. 관리자 권한으로만 수정할 수 있습니다.',
+                competition_ended: true,
+                competition_id: compId,
+            });
+        }
+    } catch (e) { /* 가드 실패 시 통과 (가용성 우선) */ }
+    next();
+});
+
 // Block results.html access — redirect to dashboard
 app.get('/results.html', (req, res) => {
     const comp = req.query.comp ? `?comp=${req.query.comp}` : '';
@@ -1070,11 +1163,17 @@ function getKeyRole(key) {
 }
 
 // Check if competition has ended (for post-competition lock)
+// 우선순위:
+//   1) status === 'completed'  → 종료 (관리자가 명시적으로 종료한 경우)
+//   2) status === 'active'     → 진행중 (관리자가 reopen 한 경우, 자동 만료 무시)
+//   3) status === 'upcoming'   → 진행전 (자동 만료 검사 안 함)
+//   4) end_date < today        → 자동 만료 (status 미지정 시의 폴백)
 async function isCompetitionEnded(competitionId) {
     if (!competitionId) return false;
     const comp = await db.get('SELECT status, end_date FROM competition WHERE id=?', competitionId);
     if (!comp) return false;
     if (comp.status === 'completed') return true;
+    if (comp.status === 'active' || comp.status === 'upcoming') return false;
     const today = kstNow().slice(0, 10);
     if (comp.end_date && comp.end_date < today) return true;
     return false;
@@ -1899,6 +1998,41 @@ app.put('/api/competitions/:id', async (req, res) => {
         compMode||'operation', sId, old.id);
     res.json(await db.get('SELECT * FROM competition WHERE id=?', old.id));
 });
+// ------------------------------------------------------------
+// 대회 종료/재개 — 관리자 전용
+// 종료(status='completed') 시 글로벌 쓰기 가드(requireAdminAfterCompEnd)가
+// 운영자/녹화관 키의 모든 쓰기를 차단 → 뷰어모드로 전환됨.
+// ------------------------------------------------------------
+app.post('/api/admin/competitions/:id/close', async (req, res) => {
+    const { admin_key } = req.body || {};
+    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.id);
+    if (!comp) return res.status(404).json({ error: 'Not found' });
+    if (comp.status === 'completed') {
+        return res.json({ success: true, already_closed: true, status: 'completed' });
+    }
+    await db.run("UPDATE competition SET status='completed' WHERE id=?", comp.id);
+    try { opLog(`대회 종료: ${comp.name}`, 'admin', 'admin', comp.id); } catch(e) {}
+    broadcastSSE('competition_status', { competition_id: comp.id, status: 'completed' });
+    res.json({ success: true, status: 'completed', competition: await db.get('SELECT * FROM competition WHERE id=?', comp.id) });
+});
+
+app.post('/api/admin/competitions/:id/reopen', async (req, res) => {
+    const { admin_key } = req.body || {};
+    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.id);
+    if (!comp) return res.status(404).json({ error: 'Not found' });
+    // 시작/종료일과 오늘을 비교해 'upcoming' 또는 'active' 로 자동 결정
+    // (DB CHECK 제약: status IN ('upcoming','active','completed'))
+    const today = kstNow().slice(0, 10);
+    let newStatus = 'active';
+    if (comp.start_date && comp.start_date > today) newStatus = 'upcoming';
+    await db.run('UPDATE competition SET status=? WHERE id=?', newStatus, comp.id);
+    try { opLog(`대회 재개: ${comp.name} → ${newStatus}`, 'admin', 'admin', comp.id); } catch(e) {}
+    broadcastSSE('competition_status', { competition_id: comp.id, status: newStatus });
+    res.json({ success: true, status: newStatus, competition: await db.get('SELECT * FROM competition WHERE id=?', comp.id) });
+});
+
 app.delete('/api/competitions/:id', async (req, res) => {
     const { admin_key } = req.body;
     if (!isAdminOrManager(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
@@ -4987,12 +5121,30 @@ app.delete('/api/admin/heats/:id', async (req, res) => {
 });
 // Remove athlete from heat (without deleting event_entry — just unlink from heat)
 app.post('/api/admin/heats/:id/remove-entry', async (req, res) => {
-    const { admin_key, event_entry_id, delete_event_entry } = req.body;
+    const { admin_key, event_entry_id, delete_event_entry, force } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
     const he = await db.get('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
     if (!he) return res.status(404).json({ error: '해당 선수가 이 조에 없습니다.' });
+
+    // delete_event_entry=true 인 경우 결과 데이터 존재 여부 체크
+    let removedResultCount = 0;
+    if (delete_event_entry) {
+        const r1 = await db.get('SELECT COUNT(*) AS n FROM result WHERE event_entry_id=?', event_entry_id);
+        const r2 = await db.get('SELECT COUNT(*) AS n FROM height_attempt WHERE event_entry_id=?', event_entry_id);
+        const r3 = await db.get('SELECT COUNT(*) AS n FROM combined_score WHERE event_entry_id=?', event_entry_id);
+        removedResultCount = (r1?.n || 0) + (r2?.n || 0) + (r3?.n || 0);
+        if (removedResultCount > 0 && !force) {
+            return res.status(409).json({
+                error: '기록 데이터가 존재합니다',
+                detail: `이 선수에 ${removedResultCount}건의 기록이 저장되어 있습니다. 강제로 삭제하려면 force=true 와 함께 다시 요청하세요.`,
+                result_count: removedResultCount,
+                needs_force: true,
+            });
+        }
+    }
+
     await db.transaction(async () => {
         // Remove from heat
         await db.run('DELETE FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
@@ -5007,7 +5159,7 @@ app.post('/api/admin/heats/:id/remove-entry', async (req, res) => {
         }
     })();
     broadcastSSE('entry_status', { event_entry_id, status: 'removed' });
-    res.json({ success: true });
+    res.json({ success: true, removed_results: removedResultCount });
 });
 app.post('/api/admin/heats/:id/move-entry', async (req, res) => {
     const { admin_key, event_entry_id, target_heat_id, lane_number } = req.body;
