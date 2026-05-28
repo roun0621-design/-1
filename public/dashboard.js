@@ -641,8 +641,8 @@ function renderViewerBtn(evt) {
     const rc = _roundColors[evt.round_type] || { color: '#555', bg: '#f5f5f5', border: '#ccc' };
 
     if (evt.round_status === 'completed') {
-        // 완료 — 진한 채움 스타일(라운드 색) + 체크 아이콘으로 "기록 입력됨" 강조
-        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);">✓ 완료</span>`;
+        // 완료 라운드 — 클릭 시 결과 화면으로 이동하므로 라벨도 "결과"로 표기 (일관성)
+        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);">✓ 결과</span>`;
     }
 
     // 소집 완료 또는 in_progress → LIVE (경기 진행 중)
