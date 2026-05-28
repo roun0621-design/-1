@@ -457,7 +457,7 @@ function renderMatrix() {
         '높이뛰기','장대높이뛰기',
         '멀리뛰기','세단뛰기',
         '포환던지기','원반던지기','해머던지기','창던지기',
-        '7종경기','10종경기',
+        '5종경기','7종경기','10종경기',
         '4x100mR','4x400mR','4x400mR(혼성)','4x400mR(믹스)','4x800mR','4x1500mR'
     ];
     // 종목명 정규화 (공백·콤마 제거, ×→x, Mixed→혼성, 허들/경보/장애물 표기 통일)
@@ -1381,7 +1381,7 @@ function renderLiveCombinedResults(data) {
                         }).join('')}</tbody>
                     </table>
                 </div>
-                <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">실시간 WA 점수 합산 | ${evt.gender === 'M' ? '10종경기' : '7종경기'}</p>`;
+                <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">실시간 WA 점수 합산 | ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')}</p>`;
         } catch (e) {
             const container = document.getElementById('live-combined-content');
             if (container) container.innerHTML = `<p style="color:var(--danger);">혼성 경기 데이터 로드 실패</p>`;
@@ -1400,7 +1400,7 @@ function renderCombinedResults(data) {
             <div class="skeleton skeleton-text"></div>
             <div class="skeleton skeleton-text" style="width:85%;"></div>
             <div class="skeleton skeleton-text" style="width:70%;"></div>
-            <div style="text-align:center;padding:8px 0 0;color:var(--text-muted);font-size:11px;">${evt.gender === 'M' ? '10종경기' : '7종경기'} 결과 불러오는 중…</div>
+            <div style="text-align:center;padding:8px 0 0;color:var(--text-muted);font-size:11px;">${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')} 결과 불러오는 중…</div>
         </div>
     </div>`;
 }
@@ -1494,7 +1494,7 @@ async function _loadCombinedResultsAsync(evt) {
                     }).join('')}</tbody>
                 </table>
             </div>
-            <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">☆ ${evt.gender === 'M' ? '10종경기' : '7종경기'} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
+            <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">☆ ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
             <div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border);">
                 <div style="font-weight:700;font-size:13px;margin-bottom:6px;">종목별 세부기록</div>
                 <div style="margin-bottom:4px;">

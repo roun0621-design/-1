@@ -4640,10 +4640,12 @@ async function doCompleteRound() {
 }
 
 // ============================================================
-// 10종 경기 날짜별 분리 (Day 1 / Day 2)
+// 혼성경기 날짜별 분리 (Day 1 / Day 2) — 참고용 메모
 // ============================================================
-// Decathlon: Day 1 = events 1-5, Day 2 = events 6-10
-// Heptathlon: Day 1 = events 1-4, Day 2 = events 5-7
+// Decathlon (10종): Day 1 = events 1-5, Day 2 = events 6-10
+// Heptathlon (7종): Day 1 = events 1-4, Day 2 = events 5-7
+// Pentathlon (5종, 중학교): Day 1 = events 1-3 (100m,포환,허들), Day 2 = events 4-5 (높이뛰기,800m)
+//   ※ KAAF 규정: 1일 또는 연속 2일간 위 순서로 실시
 
 // ============================================================
 // MANUAL HEAT / LANE EDIT UI

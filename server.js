@@ -1190,6 +1190,7 @@ const FED_EVENT_MAP = {
     '해머던지기':{name:'해머던지기',category:'field_distance'},'창던지기':{name:'창던지기',category:'field_distance'},
     '높이뛰기':{name:'높이뛰기',category:'field_height'},'장대높이뛰기':{name:'장대높이뛰기',category:'field_height'},
     '10종경기':{name:'10종경기',category:'combined'},'7종경기':{name:'7종경기',category:'combined'},
+    '5종경기':{name:'5종경기',category:'combined'},'펜타슬론':{name:'5종경기',category:'combined'},'Pentathlon':{name:'5종경기',category:'combined'},
     // Road race events
     '마라톤':{name:'마라톤',category:'road'},'하프마라톤':{name:'하프마라톤',category:'road'},
     '10K':{name:'10K',category:'road'},'10k':{name:'10K',category:'road'},
@@ -4791,7 +4792,7 @@ const STANDARD_EVENT_ORDER = [
     // Throws
     '포환던지기','원반던지기','해머던지기','창던지기',
     // Combined
-    '7종경기','10종경기',
+    '5종경기','7종경기','10종경기',
     // Relays
     '4x100mR','4x400mR','4x400mR(혼성)','4x800mR','4x1500mR',
 ];
@@ -5508,7 +5509,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
             }
 
             // ============================================================
-            // AUTO-CREATE COMBINED (10종/7종) SUB-EVENTS
+            // AUTO-CREATE COMBINED (10종/7종/5종) SUB-EVENTS
             // ============================================================
             const DECATHLON_SUBS = [
                 {order:1, name:'100m', category:'track'},
@@ -5531,6 +5532,26 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 {order:6, name:'창던지기', category:'field_distance'},
                 {order:7, name:'800m', category:'track'},
             ];
+            // ─── KAAF 중학교 5종경기 (Pentathlon) ───
+            // 출처: KAAF 2018-2019 경기규칙 제5장 혼성경기
+            // 1일 또는 연속 2일 실시 가능
+            //   제1일: 100m → 포환던지기 → 110mH(남) / 100mH(여)
+            //   제2일: 높이뛰기 → 800m
+            // ★ 남녀 5종 차이점: 허들 종목만 다름 (남 110mH, 여 100mH)
+            const PENTATHLON_M_SUBS = [
+                {order:1, name:'100m',       category:'track'},          // Day 1
+                {order:2, name:'포환던지기', category:'field_distance'}, // Day 1
+                {order:3, name:'110mH',      category:'track'},          // Day 1
+                {order:4, name:'높이뛰기',   category:'field_height'},   // Day 2
+                {order:5, name:'800m',       category:'track'},          // Day 2
+            ];
+            const PENTATHLON_F_SUBS = [
+                {order:1, name:'100m',       category:'track'},          // Day 1
+                {order:2, name:'포환던지기', category:'field_distance'}, // Day 1
+                {order:3, name:'100mH',      category:'track'},          // Day 1  ← 여자
+                {order:4, name:'높이뛰기',   category:'field_height'},   // Day 2
+                {order:5, name:'800m',       category:'track'},          // Day 2
+            ];
             for (const [key, info] of neededIndividual) {
                 if (info.category !== 'combined') continue;
                 const parentId = eventCache.get(`${info.name}|${info.category}|${info.gender}`);
@@ -5538,8 +5559,20 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 const existingSubsRow = await db.get('SELECT COUNT(*) AS c FROM event WHERE parent_event_id=?', parentId);
                 const existingSubs = (existingSubsRow && existingSubsRow.c) || 0;
                 if (existingSubs > 0) continue;
-                const subs = info.name === '10종경기' ? DECATHLON_SUBS : HEPTATHLON_SUBS;
-                const prefix = info.name === '10종경기' ? '[10종]' : '[7종]';
+                // ─── 종목별 sub-events 매핑 (gender 분기 포함) ───
+                let subs, prefix;
+                if (info.name === '10종경기') {
+                    subs = DECATHLON_SUBS;
+                    prefix = '[10종]';
+                } else if (info.name === '7종경기') {
+                    subs = HEPTATHLON_SUBS;
+                    prefix = '[7종]';
+                } else if (info.name === '5종경기') {
+                    subs = info.gender === 'F' ? PENTATHLON_F_SUBS : PENTATHLON_M_SUBS;
+                    prefix = '[5종]';
+                } else {
+                    continue;  // 알 수 없는 combined 종목 → 스킵
+                }
                 for (const sub of subs) {
                     const subName = `${prefix} ${sub.name}`;
                     const subR = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)', competition_id, subName, sub.category, info.gender, 'final', 'heats_generated', parentId, sub.order);
@@ -9840,8 +9873,11 @@ async function autoLinkTimetable(compId, options = {}) {
     // Parse round from timetable: handle "결승", "4-1+4", "10종(3)", "결승2조", "결승(A,B)" etc.
     function parseRound(roundStr, eventName) {
         const r = (roundStr || '').trim();
-        // Combined event sub-events: "10종(N)" or "7종(N)"
-        if (/^[17]0?종\(\d+\)/.test(r)) return { round: 'final', isCombinedSub: true, combinedType: r.startsWith('10') || r.startsWith('7') ? r.match(/^(\d+종)/)[1] : null };
+        // Combined event sub-events: "10종(N)", "7종(N)", "5종(N)"
+        if (/^(?:10|7|5)종\(\d+\)/.test(r)) {
+            const m = r.match(/^(\d+종)/);
+            return { round: 'final', isCombinedSub: true, combinedType: m ? m[1] : null };
+        }
         // Preliminary patterns: "N-N+N" format
         if (/^\d+-\d+\+\d+$/.test(r)) return { round: 'preliminary' };
         // Final variants: "결승", "결승2조", "결승(A,B)"
@@ -9861,11 +9897,12 @@ async function autoLinkTimetable(compId, options = {}) {
         // A6: Skip if division doesn't match this competition's federation
         if (!isDivisionMatch(catInfo)) continue;
 
-        // For combined sub-events (10종/7종), match to the combined event
+        // For combined sub-events (10종/7종/5종), match to the combined event
         let targetName = tt.event_name;
         if (parsed.isCombinedSub) {
             if (parsed.combinedType === '10종') targetName = '10종경기';
             else if (parsed.combinedType === '7종') targetName = '7종경기';
+            else if (parsed.combinedType === '5종') targetName = '5종경기';
         }
 
         const ttNorm = norm(targetName);
@@ -10489,7 +10526,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         let evtRec = {};
         if (evtRecRow) { try { evtRec = JSON.parse(evtRecRow.records || '{}'); } catch(e) {} }
         let normName = event.name.replace(/\s+/g, '').replace(/,/g, '').replace(/(\d)[×Xx](\d)/g, '$1x$2');
-        const nameMap = { '110m허들':'110mH','100m허들':'100mH','400m허들':'400mH','3000m장애물':'3000mSC','10000m경보':'10000mW','십종경기':'10종경기','칠종경기':'7종경기','4x100m릴레이':'4x100mR','4x400m릴레이':'4x400mR','혼성4x400mR':'MIXED 4x400mR','MIXED4x400mR':'MIXED 4x400mR','4x800m릴레이':'4x800mR','4x1500m릴레이':'4x1500mR' };
+        const nameMap = { '110m허들':'110mH','100m허들':'100mH','400m허들':'400mH','3000m장애물':'3000mSC','10000m경보':'10000mW','십종경기':'10종경기','칠종경기':'7종경기','오종경기':'5종경기','펜타슬론':'5종경기','Pentathlon':'5종경기','4x100m릴레이':'4x100mR','4x400m릴레이':'4x400mR','혼성4x400mR':'MIXED 4x400mR','MIXED4x400mR':'MIXED 4x400mR','4x800m릴레이':'4x800mR','4x1500m릴레이':'4x1500mR' };
         normName = nameMap[normName] || normName;
         try {
             const globalRecs = await db.all('SELECT * FROM event_record WHERE gender=? AND event_name=?', event.gender, normName);
@@ -12087,6 +12124,31 @@ app.post('/api/record-breaks/:id/reject', async (req, res) => {
 });
 
 // ============================================================
+// COMPREHENSIVE RESULT SHEET BY DIVISION — 부별 종합기록지 (Excel)
+// ------------------------------------------------------------
+// 부(division)별로 시트를 분리하여 모든 종목을 동적으로 출력.
+// 기존 템플릿 기반 종합기록지와 달리 화이트리스트가 없으므로
+// 80m, 3000m, 마라톤, 5종경기 등 모든 종목이 자동 포함된다.
+// ============================================================
+app.get('/api/documents/comprehensive-by-division/:compId/excel', async (req, res) => {
+  try {
+    const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
+    if (!comp) return res.status(404).json({ error: 'Competition not found' });
+    const { generateComprehensiveByDivision } = require('./lib/comprehensiveByDivision');
+    const wb = await generateComprehensiveByDivision(db, comp);
+    const buf = await wb.xlsx.writeBuffer();
+    const baseName = `부별종합기록지_${(comp.name || 'result').replace(/[\\/:*?"<>|]/g, '_')}.xlsx`;
+    const fileName = encodeURIComponent(baseName);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${fileName}`);
+    res.end(Buffer.from(buf));
+  } catch (err) {
+    console.error('[CompByDiv Excel Error]', err);
+    res.status(500).json({ error: '부별 종합기록지 생성 오류: ' + err.message });
+  }
+});
+
+// ============================================================
 // COMPREHENSIVE RESULT SHEET — 종합기록지 (Excel)
 // ============================================================
 app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
@@ -12156,7 +12218,7 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
     // ---- Relay events ----
     const RELAY_NAMES = new Set(['4x100mR','4x400mR','MIXED 4x400mR','4x800mR','MIXED 4x800mR','4x1500mR']);
     // ---- Combined events ----
-    const COMBINED_NAMES = new Set(['10종경기','7종경기']);
+    const COMBINED_NAMES = new Set(['10종경기','7종경기','5종경기']);
 
     // ---- Query ONLY final-round events ----
     // 종합기록지는 무조건 결승만 표시. 결승이 없는 종목은 제외.
@@ -12641,6 +12703,8 @@ app.get('/api/documents/:compId', async (req, res) => {
     const docs = [];
     docs.push({ type: 'comprehensive-excel', label: '종합기록지 (남자)', url: `/api/documents/comprehensive/${comp.id}/excel?gender=M` });
     docs.push({ type: 'comprehensive-excel', label: '종합기록지 (여자)', url: `/api/documents/comprehensive/${comp.id}/excel?gender=F` });
+    // 부별 종합기록지 — 부(division) 단위 시트 분리, 전체 종목 동적 출력 (80m/3000m/마라톤/5종경기 등 포함)
+    docs.push({ type: 'comprehensive-by-division-excel', label: '부별 종합기록지 (전체 부)', url: `/api/documents/comprehensive-by-division/${comp.id}/excel` });
     // 연맹 종합기록지(Excel/PDF) 4종은 사용자 요청으로 문서 목록에서 제외 (2026-05).
     //   - 백엔드 라우트(/api/documents/full-record/...)는 그대로 유지하여 직접 URL 접근은 가능.
     const roundLabelMap = { preliminary: '예선', semifinal: '준결승', final: '결승' };
