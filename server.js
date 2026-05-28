@@ -10096,8 +10096,42 @@ function drawTableHeader(doc, cols, y, tableLeft, tableRight, fontSize) {
 
 // Helper: Draw a table data row with borders
 function drawTableRow(doc, cols, values, y, tableLeft, tableRight, fontSize, opts = {}) {
-    const rowH = Math.max(20, fontSize + 10);
-    const { boldCols = [], highlight = false } = opts;
+    const {
+        boldCols = [],
+        highlight = false,
+        // wrapCols: 자동 줄바꿈을 허용하고 행높이를 콘텐츠에 맞춰 늘릴 컬럼 key 배열.
+        //           기본값 빈 배열 → 기존 동작(고정 높이) 그대로 유지 (하위 호환).
+        wrapCols = [],
+        // alignByCol: 컬럼별 정렬 override. { remark: 'left', ... } 형식.
+        alignByCol = {},
+        // minRowH: 최소 행 높이 (override). 기본 = Math.max(20, fontSize + 10)
+        minRowH = null,
+        // smallFontCols: 특정 컬럼을 더 작은 폰트로 그리고 싶을 때 (예: 단체전 멤버 리스트)
+        //                { remark: 7 } 형식 — 값이 폰트 크기. 미지정 컬럼은 fontSize 사용.
+        smallFontCols = {}
+    } = opts;
+
+    const baseRowH = minRowH != null ? minRowH : Math.max(20, fontSize + 10);
+
+    // ─── 1) wrapCols 가 지정된 경우 콘텐츠에 따라 행 높이 계산 ───
+    let rowH = baseRowH;
+    if (wrapCols.length > 0) {
+        for (let i = 0; i < cols.length; i++) {
+            const col = cols[i];
+            if (!wrapCols.includes(col.key)) continue;
+            const val = String(values[i] || '');
+            if (!val) continue;
+            const colFontSize = smallFontCols[col.key] || fontSize;
+            const isBold = boldCols.includes(col.key);
+            pdfFont(doc, isBold).fontSize(colFontSize);
+            try {
+                const measured = doc.heightOfString(val, { width: col.w - 4, align: alignByCol[col.key] || 'center' });
+                // 위/아래 4pt 패딩
+                const needed = Math.ceil(measured) + 8;
+                if (needed > rowH) rowH = needed;
+            } catch (_) { /* heightOfString 실패시 기본 높이 유지 */ }
+        }
+    }
 
     if (highlight) {
         doc.save();
@@ -10118,8 +10152,30 @@ function drawTableRow(doc, cols, values, y, tableLeft, tableRight, fontSize, opt
         const col = cols[i];
         const val = values[i] || '';
         const isBold = boldCols.includes(col.key);
-        pdfFont(doc, isBold).fontSize(fontSize).fillColor('#000');
-        doc.text(String(val), col.x + 2, y + (rowH - fontSize) / 2, { width: col.w - 4, align: 'center' });
+        const colFontSize = smallFontCols[col.key] || fontSize;
+        const align = alignByCol[col.key] || 'center';
+        pdfFont(doc, isBold).fontSize(colFontSize).fillColor('#000');
+
+        let textY;
+        if (wrapCols.includes(col.key)) {
+            // 줄바꿈 셀: 위쪽 4pt 패딩에서 시작 (height 옵션으로 영역 제한)
+            textY = y + 4;
+            doc.text(String(val), col.x + 2, textY, {
+                width: col.w - 4,
+                height: rowH - 8,
+                align: align,
+                ellipsis: false,
+                lineGap: 0.5
+            });
+        } else {
+            // 단일 라인 셀: 기존처럼 세로 중앙 정렬 (단, 행높이가 늘어났을 수 있으므로 rowH 기준)
+            textY = y + (rowH - colFontSize) / 2;
+            doc.text(String(val), col.x + 2, textY, {
+                width: col.w - 4,
+                align: align,
+                lineBreak: false   // 단일 라인 — 줄바꿈 차단해서 다음 행과 겹침 방지
+            });
+        }
     }
 
     return y + rowH;
@@ -11167,6 +11223,18 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 else if (qualMap[e.event_entry_id]) remarkStr = qualMap[e.event_entry_id];
                 else remarkStr = e.allResults?.[0]?.remark || '';
 
+                // ─── 비고 멤버 리스트 정규화 (긴 텍스트 줄바꿈) ───
+                // 사용자가 비고에 멤버 이름을 ", " 로 구분해 직접 입력하는 케이스 대비:
+                //   "이동욱(14:48.74), 이정윤(15:09.42), 김현우(15:20.06)"
+                //   → 콤마마다 개행으로 분리해 비고 컬럼 안에 세로로 적층
+                // 짧은 텍스트(PB/SB/Q/NR 같은 코드 또는 콤마 없는 단순 텍스트)는 그대로 유지.
+                // 임계: 25자 이상 + 콤마 포함 → 멤버 리스트로 간주 (어느 종목이든 안전)
+                if (remarkStr && remarkStr.length > 25 && remarkStr.includes(',')) {
+                    remarkStr = remarkStr
+                        .replace(/\s*,\s*/g, '\n')   // ", " → 개행
+                        .trim();
+                }
+
                 const vals = rsCols.map(col => {
                     switch (col.key) {
                         case 'rank': return special ? '' : String(rank);
@@ -11180,7 +11248,33 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                         default: return '';
                     }
                 });
-                curY = drawTableRow(doc, rsCols, vals, curY, tableLeft, tableRight, fontSize, { boldCols: ['name', 'record'] });
+
+                // ─── 비고 자동 줄바꿈 + 행높이 자동 확장 (긴 텍스트 대비) ───
+                // wrapCols 에 'remark' 포함 → drawTableRow 가 heightOfString 으로 측정하여 rowH 자동 확장.
+                // alignByCol: 비고는 좌측 정렬(이름 리스트가 길 때 가독성 향상)
+                // smallFontCols: 비고만 작은 폰트(7pt)로 줄여 좁은 컬럼 안에 더 잘 들어가게 함
+                const drawOpts = {
+                    boldCols: ['name', 'record'],
+                    wrapCols: ['remark'],
+                    alignByCol: { remark: 'left' },
+                    smallFontCols: { remark: Math.max(7, fontSize - 1) }
+                };
+                // 페이지 break 안전성: drawTableRow 가 행 높이를 늘릴 수 있으므로
+                // 실제 그리기 전에 측정 한번 하고, 자리 부족하면 페이지 추가.
+                // (간단 추정: 비고에 \n N개면 (N+1)줄 × 8pt + padding)
+                let estRowH = dataRowH2;
+                if (remarkStr) {
+                    const lineCount = (remarkStr.match(/\n/g) || []).length + 1;
+                    if (lineCount > 1) {
+                        const remarkFs = drawOpts.smallFontCols.remark;
+                        estRowH = Math.max(estRowH, lineCount * (remarkFs + 2) + 8);
+                    }
+                }
+                if (curY + estRowH > BODY_BOTTOM) {
+                    doc.addPage(); curY = drawEventTopHeader(doc);
+                    curY = drawTableHeader(doc, rsCols, curY, tableLeft, tableRight, fontSize);
+                }
+                curY = drawTableRow(doc, rsCols, vals, curY, tableLeft, tableRight, fontSize, drawOpts);
             }
             curY += 8;
         }
