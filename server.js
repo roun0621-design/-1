@@ -11873,6 +11873,141 @@ app.get('/api/divisions', async (req, res) => {
     }
 });
 
+// ─── Division Master CRUD (관리자 전용) ───
+// 기본 13부 시드(시스템 부)는 code 변경/삭제 차단, label_ko/sort_order만 편집 허용.
+const BASE_DIVISION_CODES = new Set([
+    'M_ELEM','M_MID','M_HIGH','M_UNIV','M_GEN','M_OPEN',
+    'F_ELEM','F_MID','F_HIGH','F_UNIV','F_GEN','F_OPEN',
+    'MIXED'
+]);
+
+// GET all divisions (active+inactive, admin/operator view)
+app.get('/api/admin/divisions', async (req, res) => {
+    try {
+        const rows = await db.all('SELECT code, label_ko, gender, school_level, sort_order, active, created_at FROM division_master ORDER BY sort_order, code');
+        // is_base 플래그 부여 (UI 보호용)
+        const result = rows.map(r => ({ ...r, is_base: BASE_DIVISION_CODES.has(r.code) }));
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST create division (admin only)
+app.post('/api/admin/divisions', async (req, res) => {
+    try {
+        const { admin_key, code, label_ko, gender, school_level, sort_order } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        if (!code || !code.trim()) return res.status(400).json({ error: 'code 필수' });
+        if (!label_ko || !label_ko.trim()) return res.status(400).json({ error: 'label_ko 필수' });
+        if (!['M','F','X'].includes(gender)) return res.status(400).json({ error: 'gender는 M/F/X 중 하나' });
+        const validLevels = ['OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED'];
+        if (!validLevels.includes(school_level)) return res.status(400).json({ error: 'school_level은 ' + validLevels.join('/') + ' 중 하나' });
+        const codeTrim = code.trim().toUpperCase();
+        // code 형식 검증 (영숫자/언더스코어만)
+        if (!/^[A-Z0-9_]+$/.test(codeTrim)) return res.status(400).json({ error: 'code는 영문 대문자/숫자/언더스코어만 사용 가능' });
+        const so = Number.isFinite(parseInt(sort_order, 10)) ? parseInt(sort_order, 10) : 500;
+        try {
+            await db.run(
+                'INSERT INTO division_master (code, label_ko, gender, school_level, sort_order, active) VALUES (?, ?, ?, ?, ?, 1)',
+                codeTrim, label_ko.trim(), gender, school_level, so
+            );
+            const row = await db.get('SELECT code, label_ko, gender, school_level, sort_order, active, created_at FROM division_master WHERE code=?', codeTrim);
+            opLog(`부 생성: ${codeTrim} (${label_ko.trim()})`, 'admin', 'admin');
+            res.json({ ...row, is_base: false });
+        } catch (e) {
+            if (/UNIQUE|duplicate|PRIMARY/i.test(e.message)) return res.status(400).json({ error: '같은 code의 부가 이미 존재합니다.' });
+            throw e;
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT update division (admin only). 기본 13부는 label_ko / sort_order 만 변경 가능.
+app.put('/api/admin/divisions/:code', async (req, res) => {
+    try {
+        const { admin_key, label_ko, gender, school_level, sort_order, active } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        const code = req.params.code;
+        const old = await db.get('SELECT * FROM division_master WHERE code=?', code);
+        if (!old) return res.status(404).json({ error: 'Not found' });
+        const isBase = BASE_DIVISION_CODES.has(code);
+
+        // 변경 가능 필드 결정
+        const newLabel = (label_ko !== undefined && label_ko !== null && String(label_ko).trim()) ? String(label_ko).trim() : old.label_ko;
+        const newSort = (sort_order !== undefined && Number.isFinite(parseInt(sort_order, 10))) ? parseInt(sort_order, 10) : old.sort_order;
+        let newGender = old.gender;
+        let newLevel = old.school_level;
+        let newActive = old.active;
+
+        if (!isBase) {
+            if (gender !== undefined) {
+                if (!['M','F','X'].includes(gender)) return res.status(400).json({ error: 'gender는 M/F/X 중 하나' });
+                newGender = gender;
+            }
+            if (school_level !== undefined) {
+                const validLevels = ['OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED'];
+                if (!validLevels.includes(school_level)) return res.status(400).json({ error: 'school_level은 ' + validLevels.join('/') + ' 중 하나' });
+                newLevel = school_level;
+            }
+            if (active !== undefined) newActive = active ? 1 : 0;
+        }
+
+        await db.run(
+            'UPDATE division_master SET label_ko=?, gender=?, school_level=?, sort_order=?, active=? WHERE code=?',
+            newLabel, newGender, newLevel, newSort, newActive, code
+        );
+        const row = await db.get('SELECT code, label_ko, gender, school_level, sort_order, active, created_at FROM division_master WHERE code=?', code);
+        opLog(`부 수정: ${code} (${newLabel})`, 'admin', 'admin');
+        res.json({ ...row, is_base: isBase });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE division (admin only). 기본 13부는 삭제 차단. 커스텀 부는 사용 중이면 force 필요.
+app.delete('/api/admin/divisions/:code', async (req, res) => {
+    try {
+        const { admin_key, force, hard } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+        const code = req.params.code;
+        if (BASE_DIVISION_CODES.has(code)) return res.status(400).json({ error: '기본 13부는 삭제할 수 없습니다.' });
+        const old = await db.get('SELECT * FROM division_master WHERE code=?', code);
+        if (!old) return res.status(404).json({ error: 'Not found' });
+
+        // 사용 중인 종목/기록 카운트 (SQLite/PG 양쪽 호환)
+        let eventCnt = null, recCnt = null;
+        try { eventCnt = await db.get('SELECT COUNT(*) AS c FROM event WHERE division=?', code); } catch(_) {}
+        try { recCnt = await db.get('SELECT COUNT(*) AS c FROM event_record WHERE division_code=?', code); } catch(_) {}
+        const usedEvents = eventCnt?.c || 0;
+        const usedRecords = recCnt?.c || 0;
+
+        if ((usedEvents > 0 || usedRecords > 0) && !force) {
+            return res.status(409).json({
+                error: '사용 중인 부입니다.',
+                needs_force: true,
+                used_events: usedEvents,
+                used_records: usedRecords,
+                message: `종목 ${usedEvents}개, 기록 ${usedRecords}개에서 사용 중입니다. 강제 삭제하려면 force=true로 다시 요청하세요.`
+            });
+        }
+
+        if (hard && usedEvents === 0 && usedRecords === 0) {
+            await db.run('DELETE FROM division_master WHERE code=?', code);
+            opLog(`부 완전 삭제: ${code} (${old.label_ko})`, 'admin', 'admin');
+            res.json({ success: true, deleted: 'hard', code });
+        } else {
+            // 기본 동작: soft delete (active=0). 종목/기록의 division 값은 그대로 유지 (보존).
+            await db.run('UPDATE division_master SET active=0 WHERE code=?', code);
+            opLog(`부 비활성화: ${code} (${old.label_ko}) — 사용 종목 ${usedEvents}, 기록 ${usedRecords}건`, 'admin', 'admin');
+            res.json({ success: true, deleted: 'soft', code, used_events: usedEvents, used_records: usedRecords });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Competition Series CRUD ───
 app.get('/api/competition-series', async (req, res) => {
     try {

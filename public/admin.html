@@ -289,6 +289,7 @@
                         <div style="padding:6px 10px;border-top:1px solid var(--gray);font-size:11px;color:var(--text-muted);background:#fafafa;display:flex;justify-content:space-between;align-items:center;gap:4px;">
                             <span id="evt-count"></span>
                             <div style="display:flex;gap:4px;">
+                                <button class="btn btn-sm btn-outline" onclick="openDivisionManagerModal()" title="부(division) 추가/수정/삭제 관리">부 관리</button>
                                 <button class="btn btn-sm btn-outline" onclick="cleanupUndefinedEvents()" style="color:#c62828;border-color:#ef9a9a;" title="부별이 빈 '미지정' 종목을 부별 있는 동일 종목으로 흡수하거나 삭제합니다">미지정 정리</button>
                                 <button class="btn btn-sm btn-outline" onclick="autoSortEvents()" title="표준 육상 순서로 종목을 자동 정렬합니다">종목 재정렬</button>
                                 <button class="btn btn-sm btn-primary" onclick="showAddEvent()">+ 종목 추가</button>
@@ -1170,6 +1171,84 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                         <div id="normalize-modal-body" style="flex:1;overflow-y:auto;font-size:12px;"></div>
                         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--gray);" id="normalize-modal-footer"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Division Manager Modal (목록 + 추가 + 편집/삭제) -->
+            <div id="division-manager-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2100;align-items:center;justify-content:center;">
+                <div style="background:var(--white);border-radius:12px;padding:20px;width:720px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3 style="margin:0;font-size:16px;">부(Division) 관리</h3>
+                        <button class="btn btn-sm btn-primary" onclick="openDivisionEditModal(null)">+ 부 추가</button>
+                    </div>
+                    <p style="margin:0 0 10px;font-size:11px;color:var(--text-muted);">기본 13부는 라벨/정렬값만 편집 가능합니다. 사용자 정의 부만 성별/학교급/삭제 가능.</p>
+                    <div style="flex:1;overflow-y:auto;border:1px solid var(--gray);border-radius:8px;">
+                        <table class="crud-table" id="division-master-table" style="width:100%;font-size:12px;">
+                            <thead style="position:sticky;top:0;background:#f5f5f5;z-index:1;">
+                                <tr>
+                                    <th style="width:90px;">code</th>
+                                    <th>라벨</th>
+                                    <th style="width:50px;">성별</th>
+                                    <th style="width:70px;">학교급</th>
+                                    <th style="width:50px;">순서</th>
+                                    <th style="width:50px;">상태</th>
+                                    <th style="width:50px;">유형</th>
+                                    <th style="width:120px;">작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="division-master-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+                        <button class="btn btn-sm btn-outline" onclick="closeDivisionManagerModal()">닫기</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Division Create/Edit Modal -->
+            <div id="division-edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2110;align-items:center;justify-content:center;">
+                <div style="background:var(--white);border-radius:12px;padding:24px;width:480px;max-width:95vw;">
+                    <h3 style="margin:0 0 14px;font-size:16px;" id="division-edit-title">부 추가</h3>
+                    <input type="hidden" id="division-edit-original-code">
+                    <input type="hidden" id="division-edit-is-base" value="0">
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <label style="font-size:12px;">code * <span style="color:var(--text-muted);font-size:10px;">(영문 대문자/숫자/언더스코어, 생성 후 변경 불가)</span>
+                            <input type="text" id="division-edit-code" placeholder="예: M_ELEM_5" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;font-family:monospace;text-transform:uppercase;">
+                        </label>
+                        <label style="font-size:12px;">라벨 (한글) *
+                            <input type="text" id="division-edit-label" placeholder="예: 남자초등5학년부" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;">
+                        </label>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                            <label style="font-size:12px;">성별 *
+                                <select id="division-edit-gender" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;">
+                                    <option value="M">M (남)</option>
+                                    <option value="F">F (여)</option>
+                                    <option value="X">X (혼성)</option>
+                                </select>
+                            </label>
+                            <label style="font-size:12px;">학교급 *
+                                <select id="division-edit-level" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;">
+                                    <option value="ELEM">ELEM (초)</option>
+                                    <option value="MID">MID (중)</option>
+                                    <option value="HIGH">HIGH (고)</option>
+                                    <option value="UNIV">UNIV (대)</option>
+                                    <option value="GEN">GEN (일반)</option>
+                                    <option value="OPEN">OPEN (공개)</option>
+                                    <option value="MIXED">MIXED (통합)</option>
+                                </select>
+                            </label>
+                            <label style="font-size:12px;">정렬값
+                                <input type="number" id="division-edit-sort" value="500" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;">
+                            </label>
+                        </div>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:6px;" id="division-edit-active-row">
+                            <input type="checkbox" id="division-edit-active" checked> 활성 (비활성화 시 종목/기록 입력 시 선택 불가)
+                        </label>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+                        <button class="btn btn-sm btn-outline" onclick="closeDivisionEditModal()">취소</button>
+                        <button class="btn btn-sm btn-primary" onclick="saveDivision()">저장</button>
                     </div>
                 </div>
             </div>
@@ -7328,6 +7407,182 @@ POST /api/external/event-result-link/batch<br>
                     toast('시리즈가 비활성화되었습니다.');
                     await loadRecordsTab();
                     if (typeof refreshCompSeriesSelect === 'function') refreshCompSeriesSelect();
+                } else {
+                    toast(data.error || '삭제 실패', 'error');
+                }
+            } catch (err) {
+                toast('삭제 오류: ' + err.message, 'error');
+            }
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // Division Master 관리 (부 CRUD)
+        // ──────────────────────────────────────────────────────────────
+        async function openDivisionManagerModal() {
+            document.getElementById('division-manager-modal').style.display = 'flex';
+            await loadDivisionMasterTable();
+        }
+        function closeDivisionManagerModal() {
+            document.getElementById('division-manager-modal').style.display = 'none';
+        }
+        async function loadDivisionMasterTable() {
+            const tbody = document.getElementById('division-master-tbody');
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:14px;">불러오는 중...</td></tr>';
+            try {
+                const res = await fetch('/api/admin/divisions');
+                const rows = await res.json();
+                if (!Array.isArray(rows) || rows.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:14px;">등록된 부가 없습니다.</td></tr>';
+                    return;
+                }
+                const genderLabel = { M: '남', F: '여', X: '혼' };
+                tbody.innerHTML = rows.map(r => {
+                    const isBase = !!r.is_base;
+                    const stateBadge = r.active ? '<span style="color:#16a34a;font-weight:600;">활성</span>' : '<span style="color:#9ca3af;">비활성</span>';
+                    const typeBadge = isBase
+                        ? '<span style="padding:2px 6px;border-radius:8px;background:#dbeafe;color:#1e40af;font-size:10px;font-weight:600;">기본</span>'
+                        : '<span style="padding:2px 6px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;">사용자</span>';
+                    const codeEsc = String(r.code).replace(/'/g, "\\'");
+                    return `<tr>
+                        <td style="font-family:monospace;font-size:11px;">${r.code}</td>
+                        <td>${r.label_ko}</td>
+                        <td style="text-align:center;">${genderLabel[r.gender] || r.gender}</td>
+                        <td style="text-align:center;font-size:11px;">${r.school_level}</td>
+                        <td style="text-align:right;">${r.sort_order}</td>
+                        <td style="text-align:center;">${stateBadge}</td>
+                        <td style="text-align:center;">${typeBadge}</td>
+                        <td style="text-align:center;">
+                            <button class="btn btn-sm btn-outline" style="padding:2px 6px;font-size:11px;" onclick="openDivisionEditModal('${codeEsc}')">수정</button>
+                            ${isBase ? '<button class="btn btn-sm btn-outline" disabled style="padding:2px 6px;font-size:11px;opacity:.4;cursor:not-allowed;" title="기본 부는 삭제 불가">삭제</button>'
+                                     : '<button class="btn btn-sm btn-outline" style="padding:2px 6px;font-size:11px;color:#c62828;border-color:#ef9a9a;" onclick="deleteDivision(\'' + codeEsc + '\')">삭제</button>'}
+                        </td>
+                    </tr>`;
+                }).join('');
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#c62828;padding:14px;">불러오기 실패: ${err.message}</td></tr>`;
+            }
+        }
+        async function openDivisionEditModal(code) {
+            // code === null → 추가 모드
+            const isAdd = !code;
+            document.getElementById('division-edit-title').textContent = isAdd ? '부 추가' : '부 수정';
+            document.getElementById('division-edit-original-code').value = code || '';
+            const codeInput = document.getElementById('division-edit-code');
+            if (isAdd) {
+                document.getElementById('division-edit-is-base').value = '0';
+                codeInput.value = '';
+                codeInput.disabled = false;
+                document.getElementById('division-edit-label').value = '';
+                document.getElementById('division-edit-gender').value = 'M';
+                document.getElementById('division-edit-level').value = 'GEN';
+                document.getElementById('division-edit-sort').value = '500';
+                document.getElementById('division-edit-active').checked = true;
+                document.getElementById('division-edit-gender').disabled = false;
+                document.getElementById('division-edit-level').disabled = false;
+                document.getElementById('division-edit-active-row').style.display = '';
+            } else {
+                // 기존 데이터 로드
+                try {
+                    const res = await fetch('/api/admin/divisions');
+                    const rows = await res.json();
+                    const row = rows.find(r => r.code === code);
+                    if (!row) { toast('부를 찾을 수 없습니다.', 'error'); return; }
+                    const isBase = !!row.is_base;
+                    document.getElementById('division-edit-is-base').value = isBase ? '1' : '0';
+                    codeInput.value = row.code;
+                    codeInput.disabled = true;
+                    document.getElementById('division-edit-label').value = row.label_ko;
+                    document.getElementById('division-edit-gender').value = row.gender;
+                    document.getElementById('division-edit-level').value = row.school_level;
+                    document.getElementById('division-edit-sort').value = row.sort_order;
+                    document.getElementById('division-edit-active').checked = !!row.active;
+                    // 기본 부는 성별/학교급/활성 변경 불가
+                    document.getElementById('division-edit-gender').disabled = isBase;
+                    document.getElementById('division-edit-level').disabled = isBase;
+                    document.getElementById('division-edit-active-row').style.display = isBase ? 'none' : '';
+                } catch (err) { toast('로드 실패: ' + err.message, 'error'); return; }
+            }
+            document.getElementById('division-edit-modal').style.display = 'flex';
+        }
+        function closeDivisionEditModal() {
+            document.getElementById('division-edit-modal').style.display = 'none';
+        }
+        async function saveDivision() {
+            const originalCode = document.getElementById('division-edit-original-code').value;
+            const isAdd = !originalCode;
+            const isBase = document.getElementById('division-edit-is-base').value === '1';
+            const code = document.getElementById('division-edit-code').value.trim().toUpperCase();
+            const label_ko = document.getElementById('division-edit-label').value.trim();
+            const gender = document.getElementById('division-edit-gender').value;
+            const school_level = document.getElementById('division-edit-level').value;
+            const sort_order = parseInt(document.getElementById('division-edit-sort').value, 10) || 0;
+            const active = document.getElementById('division-edit-active').checked;
+
+            if (!label_ko) { toast('라벨을 입력하세요.', 'error'); return; }
+            if (isAdd) {
+                if (!code) { toast('code를 입력하세요.', 'error'); return; }
+                if (!/^[A-Z0-9_]+$/.test(code)) { toast('code는 영문 대문자/숫자/언더스코어만 사용 가능', 'error'); return; }
+            }
+
+            try {
+                let res, data;
+                if (isAdd) {
+                    res = await fetch('/api/admin/divisions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ admin_key: AK(), code, label_ko, gender, school_level, sort_order })
+                    });
+                } else {
+                    const body = { admin_key: AK(), label_ko, sort_order };
+                    if (!isBase) {
+                        body.gender = gender;
+                        body.school_level = school_level;
+                        body.active = active;
+                    }
+                    res = await fetch('/api/admin/divisions/' + encodeURIComponent(originalCode), {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    });
+                }
+                data = await res.json();
+                if (res.ok && data.code) {
+                    toast(isAdd ? '부 추가 완료' : '부 수정 완료');
+                    closeDivisionEditModal();
+                    await loadDivisionMasterTable();
+                    // 종목 관리의 부별 탭/드롭다운 리프레시
+                    if (typeof loadEvents === 'function') loadEvents();
+                } else {
+                    toast(data.error || '저장 실패', 'error');
+                }
+            } catch (err) {
+                toast('저장 오류: ' + err.message, 'error');
+            }
+        }
+        async function deleteDivision(code) {
+            if (!confirm(`부 "${code}"를 비활성화하시겠습니까?\n\n(연결된 종목/기록의 division 값은 그대로 유지되며, 종목/기록 입력 시 선택 목록에서만 사라집니다.)`)) return;
+            try {
+                let res = await fetch('/api/admin/divisions/' + encodeURIComponent(code), {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK() })
+                });
+                let data = await res.json();
+                if (res.status === 409 && data.needs_force) {
+                    // 사용 중 - 강제 삭제 확인
+                    if (!confirm(`${data.message}\n\n그래도 비활성화하시겠습니까?`)) return;
+                    res = await fetch('/api/admin/divisions/' + encodeURIComponent(code), {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ admin_key: AK(), force: true })
+                    });
+                    data = await res.json();
+                }
+                if (res.ok && data.success) {
+                    const msg = data.deleted === 'hard' ? '부가 완전히 삭제되었습니다.' : '부가 비활성화되었습니다.';
+                    toast(msg);
+                    await loadDivisionMasterTable();
+                    if (typeof loadEvents === 'function') loadEvents();
                 } else {
                     toast(data.error || '삭제 실패', 'error');
                 }
