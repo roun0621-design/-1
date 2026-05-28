@@ -1113,11 +1113,12 @@ POST /api/external/event-result-link/batch<br>
                     <div style="display:flex;flex-wrap:wrap;gap:0;min-height:560px;">
                         <!-- LEFT: 종목 리스트 -->
                         <div style="flex:0 0 240px;border-right:1px solid var(--gray);padding:14px;background:var(--bg);">
-                            <div style="display:flex;gap:6px;margin-bottom:12px;">
+                            <div style="display:flex;gap:6px;margin-bottom:8px;">
                                 <button class="btn btn-sm" id="rec-gender-M" onclick="switchRecGender('M')" style="font-weight:700;flex:1;">남자</button>
                                 <button class="btn btn-sm btn-outline" id="rec-gender-F" onclick="switchRecGender('F')" style="flex:1;">여자</button>
                             </div>
-                            <div id="records-event-list" style="max-height:520px;overflow-y:auto;font-size:12px;"></div>
+                            <button id="rec-add-custom-evt-btn" class="btn btn-sm btn-primary" onclick="openCustomEventModal()" style="width:100%;margin-bottom:10px;font-size:12px;display:none;" title="기본 목록에 없는 종목을 직접 추가합니다 (80m, 1000m, 3000m, 마라톤 등)">+ 종목 추가</button>
+                            <div id="records-event-list" style="max-height:480px;overflow-y:auto;font-size:12px;"></div>
                         </div>
                         <!-- RIGHT: 매트릭스 뷰 -->
                         <div style="flex:1;min-width:520px;padding:14px;">
@@ -6656,7 +6657,7 @@ POST /api/external/event-result-link/batch<br>
         const REC_TYPE_LABELS = { national: '한국기록 (NR)', division: '부별기록 (DR)', competition: '대회기록 (CR)' };
         const REC_TYPE_SHORT = { national: 'NR', division: 'DR', competition: 'CR' };
         const REC_TYPE_COLOR = { national: '#c0392b', division: '#2980b9', competition: '#27ae60' };
-        const EVENT_GROUPS = [
+        const EVENT_GROUPS_BASE = [
             { label: '트랙 (단거리)', events: ['100m','200m','400m'] },
             { label: '트랙 (중장거리)', events: ['800m','1500m','5000m','10000m'] },
             { label: '허들/장애물/경보', events_m: ['110mH','400mH','3000mSC','10000mW'], events_f: ['100mH','400mH','3000mSC','10000mW'] },
@@ -6665,6 +6666,171 @@ POST /api/external/event-result-link/batch<br>
             { label: '혼성', events_m: ['5종경기','10종경기'], events_f: ['5종경기','7종경기'] },
             { label: '릴레이', events: ['4x100mR','4x400mR','MIXED 4x400mR','4x800mR','4x1500mR'] }
         ];
+
+        // 사용자 정의 종목 — localStorage 저장 (브라우저별)
+        // 구조: [{ name:'80m', group:'트랙 (단거리)', gender:'all'|'M'|'F' }]
+        function _getCustomRecEvents() {
+            try { return JSON.parse(localStorage.getItem('pace_custom_rec_events') || '[]'); }
+            catch(e) { return []; }
+        }
+        function _setCustomRecEvents(list) {
+            try { localStorage.setItem('pace_custom_rec_events', JSON.stringify(list || [])); }
+            catch(e) {}
+        }
+        // EVENT_GROUPS — base + custom (동적 getter)
+        function _getEventGroups() {
+            const custom = _getCustomRecEvents();
+            if (custom.length === 0) return EVENT_GROUPS_BASE;
+            const customGroup = {
+                label: '사용자 정의 (커스텀)',
+                _custom: true,
+                events_m: custom.filter(e => e.gender !== 'F').map(e => e.name),
+                events_f: custom.filter(e => e.gender !== 'M').map(e => e.name),
+            };
+            return [...EVENT_GROUPS_BASE, customGroup];
+        }
+        // 호환 변수 — 기존 EVENT_GROUPS 참조 유지
+        Object.defineProperty(window, 'EVENT_GROUPS', {
+            get: () => _getEventGroups(),
+            configurable: true,
+        });
+
+        // ---------- 사용자 정의 종목 추가/삭제 모달 ----------
+        function openCustomEventModal() {
+            // 이미 열려있으면 제거
+            document.getElementById('custom-rec-evt-modal')?.remove();
+            const customList = _getCustomRecEvents();
+            const overlay = document.createElement('div');
+            overlay.id = 'custom-rec-evt-modal';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;display:flex;align-items:center;justify-content:center;';
+            overlay.innerHTML = `
+              <div style="background:var(--white);border-radius:12px;padding:22px;width:520px;max-width:95vw;max-height:88vh;overflow-y:auto;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                  <h4 style="margin:0;font-size:16px;">+ 신기록 종목 추가</h4>
+                  <button class="btn btn-ghost btn-sm" onclick="document.getElementById('custom-rec-evt-modal').remove()">닫기</button>
+                </div>
+                <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;line-height:1.5;">
+                  기본 목록에 없는 종목을 추가합니다 (예: <strong>80m, 600m, 1000m, 마라톤, 하프마라톤</strong>).<br>
+                  추가한 종목은 좌측 리스트에 표시되며, 클릭해서 NR/DR/CR 기록을 입력할 수 있습니다.<br>
+                  <span style="color:#92400e;">※ 이 설정은 현재 브라우저에만 저장됩니다.</span>
+                </p>
+                <div style="display:grid;grid-template-columns:1fr 140px 120px auto;gap:8px;align-items:end;margin-bottom:14px;">
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);font-weight:600;">종목명</label>
+                    <input id="cre-name" type="text" placeholder="예: 80m, 마라톤" style="width:100%;padding:7px 10px;border:1.5px solid var(--gray);border-radius:6px;font-size:13px;">
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);font-weight:600;">분류</label>
+                    <select id="cre-group" style="width:100%;padding:7px 8px;border:1.5px solid var(--gray);border-radius:6px;font-size:12px;">
+                      <option value="트랙 (단거리)">트랙 단거리</option>
+                      <option value="트랙 (중장거리)" selected>트랙 중장거리</option>
+                      <option value="허들/장애물/경보">허들/장애물/경보</option>
+                      <option value="도약">도약</option>
+                      <option value="투척">투척</option>
+                      <option value="혼성">혼성</option>
+                      <option value="릴레이">릴레이</option>
+                      <option value="기타">기타</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);font-weight:600;">성별</label>
+                    <select id="cre-gender" style="width:100%;padding:7px 8px;border:1.5px solid var(--gray);border-radius:6px;font-size:12px;">
+                      <option value="all" selected>남/여 공통</option>
+                      <option value="M">남자만</option>
+                      <option value="F">여자만</option>
+                    </select>
+                  </div>
+                  <button class="btn btn-sm btn-primary" onclick="addCustomRecEvent()" style="white-space:nowrap;">추가</button>
+                </div>
+                <div style="border-top:1px dashed var(--gray);padding-top:12px;">
+                  <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;">추가된 종목 (${customList.length}개)</div>
+                  <div id="cre-list" style="max-height:280px;overflow-y:auto;"></div>
+                </div>
+                <div style="margin-top:14px;text-align:right;">
+                  <button class="btn btn-sm btn-outline" onclick="document.getElementById('custom-rec-evt-modal').remove()">완료</button>
+                </div>
+              </div>`;
+            document.body.appendChild(overlay);
+            overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+            _renderCustomRecEventList();
+            setTimeout(() => document.getElementById('cre-name')?.focus(), 100);
+            // Enter 키로 추가
+            document.getElementById('cre-name')?.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); addCustomRecEvent(); }
+            });
+        }
+
+        function _renderCustomRecEventList() {
+            const list = _getCustomRecEvents();
+            const el = document.getElementById('cre-list');
+            if (!el) return;
+            if (list.length === 0) {
+                el.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:14px;font-size:12px;">추가된 종목이 없습니다.</p>';
+                return;
+            }
+            const genderLabel = { all:'남/여', M:'남자만', F:'여자만' };
+            el.innerHTML = `
+              <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                <thead>
+                  <tr style="background:var(--bg);color:var(--text-muted);">
+                    <th style="text-align:left;padding:6px 8px;">종목명</th>
+                    <th style="text-align:left;padding:6px 8px;">분류</th>
+                    <th style="text-align:center;padding:6px 8px;">성별</th>
+                    <th style="width:40px;"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.map((e, i) => `
+                    <tr style="border-top:1px solid var(--gray);">
+                      <td style="padding:6px 8px;font-weight:600;">${_esc(e.name)}</td>
+                      <td style="padding:6px 8px;color:var(--text-muted);">${_esc(e.group || '기타')}</td>
+                      <td style="padding:6px 8px;text-align:center;">${genderLabel[e.gender || 'all']}</td>
+                      <td style="padding:6px 8px;text-align:center;">
+                        <button class="btn btn-xs btn-ghost" onclick="removeCustomRecEvent(${i})" title="삭제" style="color:#dc2626;">✕</button>
+                      </td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>`;
+        }
+
+        function addCustomRecEvent() {
+            const name = (document.getElementById('cre-name')?.value || '').trim();
+            const group = document.getElementById('cre-group')?.value || '기타';
+            const gender = document.getElementById('cre-gender')?.value || 'all';
+            if (!name) { toast('종목명을 입력하세요', 'error'); return; }
+            if (name.length > 30) { toast('종목명이 너무 깁니다 (30자 이내)', 'error'); return; }
+            const list = _getCustomRecEvents();
+            // 기본 목록 + 커스텀 목록 중복 검사
+            const baseAll = EVENT_GROUPS_BASE.flatMap(g => [...(g.events||[]), ...(g.events_m||[]), ...(g.events_f||[])]);
+            if (baseAll.includes(name)) { toast('이미 기본 목록에 존재하는 종목입니다', 'error'); return; }
+            if (list.some(e => e.name === name)) { toast('이미 추가된 종목입니다', 'error'); return; }
+            list.push({ name, group, gender });
+            _setCustomRecEvents(list);
+            // 입력 필드 초기화 + 리스트 갱신 + 좌측 종목 리스트도 갱신
+            const inp = document.getElementById('cre-name');
+            if (inp) { inp.value = ''; inp.focus(); }
+            _renderCustomRecEventList();
+            renderRecordsEventList();
+            toast(`"${name}" 추가됨`);
+        }
+
+        function removeCustomRecEvent(index) {
+            const list = _getCustomRecEvents();
+            if (index < 0 || index >= list.length) return;
+            const removed = list[index].name;
+            if (!confirm(`"${removed}" 종목을 목록에서 제거하시겠습니까?\n(이미 입력된 NR/DR/CR 기록은 DB에서 삭제되지 않습니다)`)) return;
+            list.splice(index, 1);
+            _setCustomRecEvents(list);
+            _renderCustomRecEventList();
+            renderRecordsEventList();
+            // 선택 중이던 종목이면 해제
+            if (_recSelectedEvent === removed) {
+                _recSelectedEvent = null;
+                const area = document.getElementById('records-matrix-area');
+                if (area) area.innerHTML = '<p style="color:var(--text-muted);font-size:13px;text-align:center;padding:60px 0;">← 왼쪽에서 종목을 선택하세요.</p>';
+            }
+            toast(`"${removed}" 제거됨`);
+        }
 
         function switchRecGender(g) {
             _recGender = g;
@@ -6707,12 +6873,21 @@ POST /api/external/event-result-link/batch<br>
         function renderRecordsEventList() {
             const el = document.getElementById('records-event-list');
             if (!el) return;
+            // 관리자에게만 "+ 종목 추가" 버튼 노출
+            const addBtn = document.getElementById('rec-add-custom-evt-btn');
+            if (addBtn) {
+                const role = (typeof _adminRole !== 'undefined' && _adminRole) || localStorage.getItem('pace_role') || '';
+                addBtn.style.display = (role === 'admin') ? 'block' : 'none';
+            }
             let html = '';
             for (const group of EVENT_GROUPS) {
                 const evts = group[`events_${_recGender.toLowerCase()}`] || group.events || [];
                 if (evts.length === 0) continue;
-                html += `<div style="margin-bottom:12px;">
-                    <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px;letter-spacing:0.5px;">${_esc(group.label)}</div>`;
+                const isCustom = !!group._custom;
+                const labelColor = isCustom ? '#b79f58' : 'var(--text-muted)';
+                const labelIcon = isCustom ? '★ ' : '';
+                html += `<div style="margin-bottom:12px;${isCustom?'padding-top:8px;border-top:1px dashed var(--gray);':''}">
+                    <div style="font-size:11px;color:${labelColor};font-weight:700;margin-bottom:4px;letter-spacing:0.5px;">${labelIcon}${_esc(group.label)}</div>`;
                 for (const evtName of evts) {
                     const active = _recSelectedEvent === evtName;
                     html += `<div class="rec-evt-item" data-evt="${_esc(evtName)}"
