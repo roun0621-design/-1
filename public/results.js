@@ -840,7 +840,7 @@ async function renderTrackResults(entries) {
             const broken = detectBrokenRecordsClient(r.time_seconds, window._currentEventRecords, window._currentEventDirection);
             recordBadges = broken.map(lbl => {
                 const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신">🏆${lbl}</span>`;
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong>★</strong>${lbl}</span>`;
             }).join('');
         }
         // 비고: status_code(DNF/DQ 등), Q/q, 풍속 초과 시 참고기록
@@ -920,7 +920,7 @@ async function renderUnifiedTrackResults() {
             const broken = detectBrokenRecordsClient(r.time_seconds, window._currentEventRecords, window._currentEventDirection);
             recordBadges = broken.map(lbl => {
                 const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신">🏆${lbl}</span>`;
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong>★</strong>${lbl}</span>`;
             }).join('');
         }
         const windCell = needsWind ? `<td style="font-size:11px;font-family:var(--font-mono);${heatW != null && heatW > 2.0 ? 'font-weight:700;' : ''}">${heatW != null ? formatWind(heatW) : ''}</td>` : '';
@@ -1034,7 +1034,7 @@ async function renderFieldDistanceResults(entries) {
             const broken = detectBrokenRecordsClient(r.best, window._currentEventRecords, window._currentEventDirection);
             recordBadges = broken.map(lbl => {
                 const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신">🏆${lbl}</span>`;
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong>★</strong>${lbl}</span>`;
             }).join('');
         }
         // 비고: status_code(DNF/DQ/NM 등), 풍속 초과 시 참고기록
@@ -1112,7 +1112,7 @@ async function renderFieldHeightResults(entries) {
             const broken = detectBrokenRecordsClient(r.best, window._currentEventRecords, window._currentEventDirection);
             recordBadges = broken.map(lbl => {
                 const cc = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-                return `<span style="display:inline-block;background:${cc};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신">🏆${lbl}</span>`;
+                return `<span style="display:inline-block;background:${cc};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong>★</strong>${lbl}</span>`;
             }).join('');
         }
         const rmk = r.isNM ? 'NM' : '';

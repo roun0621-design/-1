@@ -197,7 +197,16 @@
         }
         .sb-item:hover { background:#f3f4f6; }
         .sb-item.active { background:#eef2ff; color:#3730a3; font-weight:700; }
-        .sb-item .sb-icon { width:16px; text-align:center; font-size:13px; opacity:0.85; }
+        .sb-item .sb-icon { width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted); flex-shrink:0; }
+        .sb-item.active .sb-icon { color:#3730a3; }
+        .sb-item .sb-icon svg { display:block; }
+        .palette-item .pi-icon { font-size:0; flex-shrink:0; margin-top:1px; color:var(--text-muted); width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; }
+        .palette-item .pi-icon svg { display:block; }
+        .palette-item.selected .pi-icon, .palette-item:hover .pi-icon { color:#6366f1; }
+        .sidebar-search .search-icon svg { display:block; color:var(--text-muted); }
+        /* 카드 헤더 라인 아이콘 (이모지 교체) */
+        .card-icon { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; color:var(--text-muted); flex-shrink:0; vertical-align:-3px; }
+        .card-icon svg { display:block; }
         .sb-item .sb-badge {
             margin-left:auto; font-size:10px; background:#e5e7eb;
             color:#374151; padding:1px 6px; border-radius:10px; font-weight:600;
@@ -338,7 +347,7 @@
             <div class="admin-shell">
                 <aside class="admin-sidebar" id="admin-sidebar">
                     <div class="sidebar-search">
-                        <span class="search-icon">🔍</span>
+                        <span class="search-icon" id="sidebar-search-icon"></span>
                         <input type="text" id="sidebar-search-input" placeholder="기능 검색…" autocomplete="off">
                         <span class="kbd-hint">⌘K</span>
                     </div>
@@ -763,7 +772,7 @@
 
                 <!-- 심판장·로고 설정 (독립 섹션) -->
                 <div class="admin-card" id="card-chief-judge" style="border-left:4px solid var(--gold);scroll-margin-top:20px;">
-                    <h4 style="display:flex;align-items:center;gap:8px;">🏷️ 심판장 이름 · 로고 설정</h4>
+                    <h4 style="display:flex;align-items:center;gap:8px;"><span class="card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg></span>심판장 이름 · 로고 설정</h4>
                     <p class="t-help-lg">종합기록지·세부기록지에 표시되는 심판장 이름과 로고를 설정합니다. 변경 후 <strong>저장</strong> 버튼을 눌러야 반영됩니다.</p>
                     <div class="admin-form-row" style="align-items:flex-end;">
                         <div class="admin-form-group" style="flex:1;min-width:180px;">
@@ -857,7 +866,7 @@
 
                 <!-- 기록위원 전용 키 (Phase C 확장) -->
                 <div class="admin-card" id="card-record-officer-key" style="border-left:4px solid #c0392b;scroll-margin-top:20px;">
-                    <h4 style="display:flex;align-items:center;gap:8px;">🏆 기록위원 전용 키 <span class="t-sm t-muted">신기록 승인/거부 전담</span></h4>
+                    <h4 style="display:flex;align-items:center;gap:8px;"><span class="card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"/><polyline points="8.21 13.89 7 22 12 19 17 22 15.79 13.88"/></svg></span>기록위원 전용 키 <span class="t-sm t-muted">신기록 승인/거부 전담</span></h4>
                     <p class="t-help-lg">
                         기록위원 키를 별도로 설정하면, 관리자 권한 없이도 NR/DR/CR 승인·거부만 가능한 전용 역할이 활성화됩니다.
                         <br>· 빈 값으로 저장하면 비활성 (관리자만 승인 가능)
@@ -964,7 +973,7 @@
 
                 <!-- Phase C: 기록 시스템 운영 가이드 -->
                 <div class="admin-card" id="card-record-guide" style="border-left:4px solid #e67e22;scroll-margin-top:20px;">
-                    <h4 style="display:flex;align-items:center;gap:8px;">🏆 기록 관리 시스템 운영 가이드 <span class="t-sm t-muted">NR / DR / CR · 자동 감지 워크플로</span></h4>
+                    <h4 style="display:flex;align-items:center;gap:8px;"><span class="card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5a2.5 2.5 0 0 0 0 5H20"/></svg></span>기록 관리 시스템 운영 가이드 <span class="t-sm t-muted">NR / DR / CR · 자동 감지 워크플로</span></h4>
                     <p class="t-help-lg">신기록 자동 감지 시스템의 동작 원리와 운영 규칙입니다. 관리자/운영자가 숙지해야 할 내용입니다.</p>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;">
                         <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#fffaf3;">
@@ -1208,7 +1217,7 @@ POST /api/external/event-result-link/batch<br>
                 <div class="admin-card" id="record-breaks-card" style="border-left:4px solid #e67e22;display:none;">
                     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="record-breaks-toggle">
                         <div>
-                            <h4 style="margin:0;">🏆 기록 갱신 승인 대기 <span id="rb-pending-badge" style="display:inline-block;background:#e67e22;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;margin-left:8px;">0</span></h4>
+                            <h4 style="margin:0;display:flex;align-items:center;gap:8px;"><span class="card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"/><polyline points="8.21 13.89 7 22 12 19 17 22 15.79 13.88"/></svg></span>기록 갱신 승인 대기 <span id="rb-pending-badge" style="display:inline-block;background:#e67e22;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;margin-left:8px;">0</span></h4>
                             <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">기록 입력 시 자동 감지된 NR/DR/CR 갱신 후보입니다. 검토 후 승인하면 기록이 갱신됩니다.</p>
                         </div>
                         <div style="display:flex;gap:8px;align-items:center;">
@@ -1279,7 +1288,7 @@ POST /api/external/event-result-link/batch<br>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
                         <div>
                             <h4 style="margin:0;">🔗 시리즈 ↔ 대회 종목 매칭 진단 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(NR / DR / CR)</span></h4>
-                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회의 각 종목이 등록된 NR/DR/CR 기록과 매칭되는지 진단합니다. <strong>매칭 안 됨</strong> 옆의 드롭다운에서 DB 후보를 선택하고 <strong>[연결]</strong>, 자동 후보가 없으면 <strong>[📋 전체 후보에서 선택]</strong> 으로 DB 전체 목록에서 강제 매칭, 정말 없으면 <strong>[+ 신규 등록]</strong> 으로 직접 입력합니다. 표기 차이가 많을 땐 <strong>일괄 정규화</strong> 로 한 번에 정리하세요.</p>
+                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회의 각 종목이 등록된 NR/DR/CR 기록과 매칭되는지 진단합니다. <strong>매칭 안 됨</strong> 옆의 드롭다운에서 DB 후보를 선택하고 <strong>[연결]</strong>, 자동 후보가 없으면 <strong>[전체 후보에서 선택]</strong> 으로 DB 전체 목록에서 강제 매칭, 정말 없으면 <strong>[+ 신규 등록]</strong> 으로 직접 입력합니다. 표기 차이가 많을 땐 <strong>일괄 정규화</strong> 로 한 번에 정리하세요.</p>
                         </div>
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                             <select id="match-comp-select" onchange="loadMatchingDiagnostic()" style="padding:5px 8px;font-size:12px;border:1px solid var(--gray);border-radius:5px;min-width:220px;">
@@ -2205,39 +2214,89 @@ POST /api/external/event-result-link/batch<br>
         // [대 리뉴얼] 사이드바 그룹 메뉴 + 기능 검색 팔레트
         // ============================================================
 
+        // ─── [아이콘 시스템] Lucide 스타일 모노크롬 라인 아이콘 ───
+        // 외부 의존성 없이 인라인 SVG로 제공. 1.5px stroke, currentColor 사용.
+        // 사용: ICON('chart') → SVG 문자열 반환
+        const ICON_PATHS = {
+            // overview
+            chart:      '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/>',
+            // 대회 운영
+            stadium:    '<path d="M3 8c0-2 4-3 9-3s9 1 9 3-4 3-9 3-9-1-9-3z"/><path d="M3 8v8c0 2 4 3 9 3s9-1 9-3V8"/>',
+            upload:     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/>',
+            user:       '<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v2"/>',
+            list:       '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/>',
+            timer:      '<circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 15 15"/><path d="M9 2h6"/>',
+            // 결과·기록
+            file:       '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+            monitor:    '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+            // 인프라
+            key:        '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.5 12.5L20 3l1.5 1.5L20 6l1.5 1.5L20 9l-2-2"/>',
+            tag:        '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7.5" cy="7.5" r="1.2"/>',
+            shield:     '<path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/><polyline points="9 12 11 14 15 10"/>',
+            award:      '<circle cx="12" cy="9" r="6"/><polyline points="8.21 13.89 7 22 12 19 17 22 15.79 13.88"/>',
+            traffic:    '<rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="7" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="17" r="1.3"/>',
+            plug:       '<path d="M9 2v6"/><path d="M15 2v6"/><path d="M6 8h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6V8z"/><path d="M12 17v5"/>',
+            // 시스템 마스터
+            building:   '<rect x="4" y="3" width="16" height="18" rx="1"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="15" y1="9" x2="15" y2="9.01"/><line x1="9" y1="13" x2="9" y2="13.01"/><line x1="15" y1="13" x2="15" y2="13.01"/><line x1="9" y1="17" x2="15" y2="17"/>',
+            folder:     '<path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>',
+            home:       '<path d="M3 11l9-8 9 8"/><path d="M5 9v11a1 1 0 0 0 1 1h4v-7h4v7h4a1 1 0 0 0 1-1V9"/>',
+            message:    '<path d="M21 12a8 8 0 0 1-12.5 6.6L3 20l1.4-5.4A8 8 0 1 1 21 12z"/>',
+            book:       '<path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5a2.5 2.5 0 0 0 0 5H20"/>',
+            // 기타 (카드 헤더용)
+            trophy:     '<path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/>',
+            search:     '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+            // 결과/오버뷰
+            check:      '<polyline points="20 6 9 17 4 12"/>',
+            close:      '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+        };
+        function ICON(name, opts) {
+            opts = opts || {};
+            const size = opts.size || 16;
+            const stroke = opts.stroke || 1.5;
+            const cls = opts.cls || 'ui-icon';
+            const path = ICON_PATHS[name] || ICON_PATHS.list;
+            return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"
+                aria-hidden="true">${path}</svg>`;
+        }
+        // 사이드바·팔레트에서 string 그대로 쓰기 편하도록 노출
+        window.ICON = ICON;
+        window.ICON_PATHS = ICON_PATHS;
+
         // 기능 인덱스: 사이드바 그룹 + 팔레트 검색의 단일 데이터 소스
         // - tab: switchTab() 인자 (기존 12개 탭 유지)
         // - anchor: 해당 탭 내부 카드 id (있으면 카드까지 스크롤·강조)
         // - keywords: 검색 매칭용 추가 키워드
+        // - icon: ICON_PATHS의 키 (Lucide 스타일 라인 아이콘)
         const ADMIN_FEATURES = [
             // ───── 현황 ─────
-            { group:'overview', label:'현황',           tab:'overview', icon:'📊', desc:'대회/시스템 전체 상태 요약', keywords:'dashboard 상태 요약' },
+            { group:'overview', label:'현황',           tab:'overview', icon:'chart', desc:'대회/시스템 전체 상태 요약', keywords:'dashboard 상태 요약' },
 
             // ───── 대회 운영 ─────
-            { group:'op', label:'대회 설정',           tab:'competition', icon:'🏟️', desc:'대회 정보·기간·연맹·시리즈 설정', keywords:'competition 대회 정보 수정' },
-            { group:'op', label:'업로드 · 시간표',     tab:'upload',      icon:'📤', desc:'엑셀 업로드, 시간표, 매칭', keywords:'upload xlsx timetable' },
-            { group:'op', label:'선수 관리',           tab:'athletes',    icon:'🏃', desc:'선수 추가/수정/삭제, 배번', keywords:'athlete 선수 배번 bib' },
-            { group:'op', label:'종목 관리',           tab:'events',      icon:'📋', desc:'종목 추가/수정, 조편성, 부 매칭', keywords:'event 종목 heat 조' },
-            { group:'op', label:'기록 입력 / 관리',    tab:'records',     icon:'⏱️', desc:'NR/DR/CR 승인 큐, 기록 관리', keywords:'record 기록 입력 신기록' },
+            { group:'op', label:'대회 설정',           tab:'competition', icon:'stadium', desc:'대회 정보·기간·연맹·시리즈 설정', keywords:'competition 대회 정보 수정' },
+            { group:'op', label:'업로드 · 시간표',     tab:'upload',      icon:'upload',  desc:'엑셀 업로드, 시간표, 매칭', keywords:'upload xlsx timetable' },
+            { group:'op', label:'선수 관리',           tab:'athletes',    icon:'user',    desc:'선수 추가/수정/삭제, 배번', keywords:'athlete 선수 배번 bib' },
+            { group:'op', label:'종목 관리',           tab:'events',      icon:'list',    desc:'종목 추가/수정, 조편성, 부 매칭', keywords:'event 종목 heat 조' },
+            { group:'op', label:'기록 입력 / 관리',    tab:'records',     icon:'timer',   desc:'NR/DR/CR 승인 큐, 기록 관리', keywords:'record 기록 입력 신기록' },
 
             // ───── 결과·기록 ─────
-            { group:'result', label:'문서 · 다운로드',  tab:'documents',  icon:'📄', desc:'종합기록지, 백업, PDF/Excel', keywords:'document download pdf excel xlsx 백업' },
-            { group:'result', label:'스코어보드',       tab:'scoreboard', icon:'🖥️', desc:'스코어보드 그룹·종목 연동', keywords:'scoreboard joint group' },
+            { group:'result', label:'문서 · 다운로드',  tab:'documents',  icon:'file',    desc:'종합기록지, 백업, PDF/Excel', keywords:'document download pdf excel xlsx 백업' },
+            { group:'result', label:'스코어보드',       tab:'scoreboard', icon:'monitor', desc:'스코어보드 그룹·종목 연동', keywords:'scoreboard joint group' },
 
             // ───── 인프라 (심판·키·페이싱·API) ─────
-            { group:'infra', label:'심판별 운영키',     tab:'judges',    anchor:'card-judge-keys',        icon:'🔑', desc:'심판별 고유키, 권한 부여', keywords:'judge key 심판 운영 권한' },
-            { group:'infra', label:'심판장 · 로고 설정', tab:'competition', anchor:'card-chief-judge',     icon:'🏷️', desc:'심판장/기록주임 이름, 좌·우 로고 (기록지 출력용)', keywords:'심판장 chief judge logo 로고 기록주임' },
-            { group:'infra', label:'기본 운영키 / 관리자키', tab:'settings', anchor:'card-default-keys',   icon:'🗝️', desc:'전역 기본 운영키와 관리자키 변경', keywords:'admin key operation 운영키 관리자키 access' },
-            { group:'infra', label:'기록위원 전용 키',  tab:'settings',   anchor:'card-record-officer-key', icon:'🏆', desc:'NR/DR/CR 승인 전담 기록위원 키', keywords:'기록위원 record officer key 신기록 승인' },
-            { group:'infra', label:'페이싱 라이트',     tab:'pacing',     icon:'🚦', desc:'페이싱 색상·세그먼트 설정', keywords:'pacing light 페이싱 색상' },
-            { group:'infra', label:'외부 API',          tab:'extapi',     icon:'🔌', desc:'외부 result-link API 키·로그', keywords:'extapi external api result link 외부' },
+            { group:'infra', label:'심판별 운영키',     tab:'judges',    anchor:'card-judge-keys',        icon:'key',    desc:'심판별 고유키, 권한 부여', keywords:'judge key 심판 운영 권한' },
+            { group:'infra', label:'심판장 · 로고 설정', tab:'competition', anchor:'card-chief-judge',     icon:'tag',    desc:'심판장/기록주임 이름, 좌·우 로고 (기록지 출력용)', keywords:'심판장 chief judge logo 로고 기록주임' },
+            { group:'infra', label:'기본 운영키 / 관리자키', tab:'settings', anchor:'card-default-keys',   icon:'shield', desc:'전역 기본 운영키와 관리자키 변경', keywords:'admin key operation 운영키 관리자키 access' },
+            { group:'infra', label:'기록위원 전용 키',  tab:'settings',   anchor:'card-record-officer-key', icon:'award',  desc:'NR/DR/CR 승인 전담 기록위원 키', keywords:'기록위원 record officer key 신기록 승인' },
+            { group:'infra', label:'페이싱 라이트',     tab:'pacing',     icon:'traffic', desc:'페이싱 색상·세그먼트 설정', keywords:'pacing light 페이싱 색상' },
+            { group:'infra', label:'외부 API',          tab:'extapi',     icon:'plug',    desc:'외부 result-link API 키·로그', keywords:'extapi external api result link 외부' },
 
             // ───── 시스템 / 마스터 ─────
-            { group:'sys', label:'연맹 마스터',        tab:'competition', anchor:'card-federations', icon:'🏛️', desc:'대회에 배정할 연맹 목록 (코드·배지·라벨)', keywords:'federation 연맹 ktfl' },
-            { group:'sys', label:'부(Division) 마스터', tab:'events', action:'openDivisionManagerModal', icon:'🗂️', desc:'부(division) 추가/수정/삭제 (실업·대학·고·중·일반 등)', keywords:'division 부 실업 대학부 고등부 중등부' },
-            { group:'sys', label:'홈 페이지 콘텐츠',    tab:'settings',   anchor:'card-site-content', icon:'🏠', desc:'홈의 설치 안내·운영 매뉴얼 HTML', keywords:'site content install guide manual 매뉴얼 홈' },
-            { group:'sys', label:'홈 팝업 관리',        tab:'settings',   anchor:'card-home-popup', icon:'💬', desc:'홈 진입 자동 팝업 (일반/관리자)', keywords:'popup 팝업 home 홈' },
-            { group:'sys', label:'기록 시스템 가이드',  tab:'settings',   anchor:'card-record-guide', icon:'📘', desc:'NR/DR/CR 자동 감지 운영 가이드', keywords:'guide 가이드 기록 시스템' },
+            { group:'sys', label:'연맹 마스터',        tab:'competition', anchor:'card-federations', icon:'building', desc:'대회에 배정할 연맹 목록 (코드·배지·라벨)', keywords:'federation 연맹 ktfl' },
+            { group:'sys', label:'부(Division) 마스터', tab:'events', action:'openDivisionManagerModal', icon:'folder',  desc:'부(division) 추가/수정/삭제 (실업·대학·고·중·일반 등)', keywords:'division 부 실업 대학부 고등부 중등부' },
+            { group:'sys', label:'홈 페이지 콘텐츠',    tab:'settings',   anchor:'card-site-content', icon:'home',    desc:'홈의 설치 안내·운영 매뉴얼 HTML', keywords:'site content install guide manual 매뉴얼 홈' },
+            { group:'sys', label:'홈 팝업 관리',        tab:'settings',   anchor:'card-home-popup',   icon:'message', desc:'홈 진입 자동 팝업 (일반/관리자)', keywords:'popup 팝업 home 홈' },
+            { group:'sys', label:'기록 시스템 가이드',  tab:'settings',   anchor:'card-record-guide', icon:'book',    desc:'NR/DR/CR 자동 감지 운영 가이드', keywords:'guide 가이드 기록 시스템' },
         ];
 
         const ADMIN_GROUPS = [
@@ -2263,7 +2322,7 @@ POST /api/external/event-result-link/batch<br>
                                     data-anchor="${f.anchor || ''}"
                                     data-action="${f.action || ''}"
                                     onclick="sidebarNavigate(${ADMIN_FEATURES.indexOf(f)})">
-                                <span class="sb-icon">${f.icon || '•'}</span>
+                                <span class="sb-icon">${ICON(f.icon || 'list', { size: 15 })}</span>
                                 <span>${f.label}</span>
                             </button>
                         `).join('')}
@@ -2367,7 +2426,7 @@ POST /api/external/event-result-link/batch<br>
                 <div class="palette-item ${idx === 0 ? 'selected' : ''}" data-idx="${idx}"
                      onclick="paletteSelect(${idx})"
                      onmouseenter="paletteHover(${idx})">
-                    <span class="pi-icon">${m.f.icon || '•'}</span>
+                    <span class="pi-icon">${ICON(m.f.icon || 'list', { size: 18 })}</span>
                     <div class="pi-body">
                         <div class="pi-label">${m.f.label}
                             <span class="pi-group-badge">${groupTitle(m.f.group)}</span>
@@ -2418,6 +2477,9 @@ POST /api/external/event-result-link/batch<br>
 
         // 사이드바 검색 input
         document.addEventListener('DOMContentLoaded', () => {
+            // 검색 아이콘 (SVG)
+            const searchIconEl = document.getElementById('sidebar-search-icon');
+            if (searchIconEl) searchIconEl.innerHTML = ICON('search', { size: 14 });
             renderSidebar();
             const sbInput = document.getElementById('sidebar-search-input');
             if (sbInput) {
@@ -8101,7 +8163,7 @@ POST /api/external/event-result-link/batch<br>
                             ? `<button onclick="matchNewRecord(${ev.event_id}, ${_jsStr(t)}, ${_jsStr(ev.event_name)}, ${_jsStr(ev.gender)})" class="btn btn-sm btn-outline" style="margin-top:4px;font-size:10px;padding:2px 8px;" title="이 종목명으로 새 ${t === 'national' ? 'NR' : 'CR'} 기록을 직접 등록">+ 신규 등록</button>` : '';
                         // "있는데 못 불러오는" 케이스 대비: 전체 후보에서 강제 매칭
                         const forceBtn = t !== 'division'
-                            ? `<button onclick="matchForceLink(${ev.event_id}, ${_jsStr(t)}, ${_jsStr(ev.event_name)}, ${_jsStr(ev.gender)})" class="btn btn-sm btn-ghost" style="margin-top:4px;font-size:10px;padding:2px 8px;color:#6b5520;" title="DB 전체에서 검색하여 강제로 연결 (정규화기가 못 잡는 표기 차이 해결)">📋 전체 후보에서 선택</button>` : '';
+                            ? `<button onclick="matchForceLink(${ev.event_id}, ${_jsStr(t)}, ${_jsStr(ev.event_name)}, ${_jsStr(ev.gender)})" class="btn btn-sm btn-ghost" style="margin-top:4px;font-size:10px;padding:2px 8px;color:#6b5520;" title="DB 전체에서 검색하여 강제로 연결 (정규화기가 못 잡는 표기 차이 해결)">전체 후보에서 선택</button>` : '';
                         return `<td style="padding:6px 8px;vertical-align:top;">${_matchBadge(status)}${inline}${newBtn}${forceBtn}</td>`;
                     }
                     const rowBg = (ev.national.status === 'none' || (ev.division.status === 'none') || (ev.competition.status === 'none')) ? 'background:#fff8f5;' : '';
@@ -8234,7 +8296,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         // ──────────────────────────────────────────────────────────────
-        // [📋 전체 후보에서 선택] — 정규화기가 못 잡는 케이스 강제 매칭
+        // [전체 후보에서 선택] — 정규화기가 못 잡는 케이스 강제 매칭
         // 같은 (record_type, gender, series) 의 모든 event_record 를
         // 모달 리스트로 띄우고 한 개를 선택해 종목명으로 relink.
         // ──────────────────────────────────────────────────────────────

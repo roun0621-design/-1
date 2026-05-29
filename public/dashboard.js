@@ -1026,7 +1026,7 @@ function _buildRecordBadgesHTML(newValNum) {
     if (!broken || broken.length === 0) return '';
     return broken.map(lbl => {
         const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-        return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신">🏆${lbl}</span>`;
+        return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong>★</strong>${lbl}</span>`;
     }).join('');
 }
 
