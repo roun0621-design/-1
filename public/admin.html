@@ -1953,6 +1953,160 @@ POST /api/external/event-result-link/batch<br>
                 </div>
             </div>
 
+            <!-- ========== tab-certificates : 상장 출력 ========== -->
+            <div id="tab-certificates" class="admin-tab-panel">
+
+                <!-- A. 일괄 발급 -->
+                <div class="admin-card" style="border-left:4px solid #b8945a;">
+                    <h4 style="color:#7a5a20;margin-bottom:8px;">상장 일괄 발급 · 인쇄</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+                        대회·종목·순위 범위를 선택하면 A4 세로 PDF로 일괄 생성됩니다. 한 페이지에 한 명씩 인쇄용으로 출력됩니다.
+                    </p>
+
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:12px;">
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">양식 선택</label>
+                            <select id="cert-template-select" style="width:100%;padding:6px 8px;border:1px solid var(--gray);border-radius:6px;"></select>
+                        </div>
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">발급 모드</label>
+                            <select id="cert-mode-select" style="width:100%;padding:6px 8px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="award">시상장 (순위별)</option>
+                                <option value="finisher">완주증 (등수 없이 완주자 전원)</option>
+                            </select>
+                        </div>
+                        <div id="cert-rank-range-wrap">
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">순위 범위</label>
+                            <div style="display:flex;gap:6px;align-items:center;">
+                                <input type="number" id="cert-rank-from" min="1" value="1" style="width:60px;padding:4px;border:1px solid var(--gray);border-radius:4px;">
+                                <span>~</span>
+                                <input type="number" id="cert-rank-to" min="1" value="3" style="width:60px;padding:4px;border:1px solid var(--gray);border-radius:4px;">
+                                <span style="font-size:11px;color:var(--text-muted);">위</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">완주자 포함</label>
+                            <label style="font-size:12px;display:flex;align-items:center;gap:6px;padding-top:6px;">
+                                <input type="checkbox" id="cert-include-finishers">
+                                순위 외 완주자도 출력
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">발급 대상 종목 (미선택 시 대회 전체 결승)</label>
+                        <div id="cert-event-list" style="max-height:240px;overflow-y:auto;border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#fafafa;">
+                            대회를 선택하면 종목이 표시됩니다.
+                        </div>
+                        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+                            <button class="btn btn-xs btn-outline" onclick="certSelectAllEvents(true)">전체 선택</button>
+                            <button class="btn btn-xs btn-outline" onclick="certSelectAllEvents(false)">전체 해제</button>
+                            <button class="btn btn-xs btn-outline" onclick="loadCertEvents()">목록 새로고침</button>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-top:1px solid #eee;padding-top:12px;">
+                        <button class="btn btn-primary" onclick="generateCertificates()">상장 PDF 일괄 생성</button>
+                        <button class="btn btn-outline" onclick="previewCertificate()">양식 미리보기</button>
+                        <span id="cert-gen-status" style="font-size:12px;color:var(--green);font-weight:600;"></span>
+                    </div>
+                </div>
+
+                <!-- B. 양식 관리 -->
+                <div class="admin-card">
+                    <h4>양식 관리</h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">시상장·완주증·단체상 등 여러 양식을 저장해두고 발급 시 선택할 수 있습니다.</p>
+                    <div id="cert-template-list" style="margin-bottom:12px;"></div>
+                    <button class="btn btn-sm btn-primary" onclick="openCertTemplateEditor(null)">+ 새 양식 추가</button>
+                </div>
+
+                <!-- C. 발급 이력 -->
+                <div class="admin-card">
+                    <h4>발급 이력</h4>
+                    <div style="margin-bottom:8px;">
+                        <button class="btn btn-xs btn-outline" onclick="loadCertLog()">새로고침</button>
+                    </div>
+                    <div id="cert-log-list" style="max-height:300px;overflow-y:auto;font-size:12px;">아직 발급 이력이 없습니다.</div>
+                </div>
+            </div>
+
+            <!-- 양식 편집 모달 -->
+            <div id="cert-template-editor-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9000;align-items:center;justify-content:center;">
+                <div style="background:#fff;border-radius:10px;max-width:760px;width:92%;max-height:92vh;overflow-y:auto;padding:20px;">
+                    <h3 id="cert-editor-title" style="margin-bottom:12px;">양식 편집</h3>
+                    <input type="hidden" id="cert-edit-id">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div>
+                            <label class="t-xs">양식 이름</label>
+                            <input type="text" id="cert-edit-name" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">종류</label>
+                            <select id="cert-edit-kind" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="award">시상장</option>
+                                <option value="finisher">완주증</option>
+                                <option value="team">단체상</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="t-xs">제목 텍스트</label>
+                            <input type="text" id="cert-edit-title" placeholder="상  장" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">순위 표기 방식</label>
+                            <select id="cert-edit-rank-style" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="ordinal">우승/준우승/3위</option>
+                                <option value="numeric">1위/2위/3위</option>
+                                <option value="mixed">혼합 (우승·준우승·3위·이후 N위)</option>
+                            </select>
+                        </div>
+                        <div style="grid-column:1 / -1;">
+                            <label class="t-xs">본문 (변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {date} {competition_name})</label>
+                            <textarea id="cert-edit-body" rows="5" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;font-family:inherit;"></textarea>
+                        </div>
+                        <div>
+                            <label class="t-xs">발급 단체명</label>
+                            <input type="text" id="cert-edit-signer-org" placeholder="한국육상연맹" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">발급자 직책</label>
+                            <input type="text" id="cert-edit-signer-title" placeholder="회장" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">발급자 이름</label>
+                            <input type="text" id="cert-edit-signer-name" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">테두리 스타일</label>
+                            <select id="cert-edit-border" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="double-gold">이중선 (금색)</option>
+                                <option value="classic">클래식</option>
+                                <option value="single">단일선</option>
+                                <option value="none">없음</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="t-xs">배경색</label>
+                            <input type="color" id="cert-edit-bg" value="#fffdf6" style="width:100%;padding:2px;border:1px solid var(--gray);border-radius:6px;height:32px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">표시 옵션</label>
+                            <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;padding-top:4px;">
+                                <label><input type="checkbox" id="cert-edit-show-record" checked> 기록값</label>
+                                <label><input type="checkbox" id="cert-edit-show-team" checked> 소속</label>
+                                <label><input type="checkbox" id="cert-edit-show-date" checked> 날짜</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;border-top:1px solid #eee;padding-top:12px;">
+                        <button class="btn btn-outline" onclick="previewCertificateFromEditor()">미리보기</button>
+                        <button class="btn btn-outline" onclick="closeCertTemplateEditor()">취소</button>
+                        <button class="btn btn-primary" onclick="saveCertTemplate()">저장</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- tab-relay panel removed — orphan with no tab button; relay management is in events tab -->
 
                 </div><!-- /.admin-main -->
@@ -2281,6 +2435,7 @@ POST /api/external/event-result-link/batch<br>
 
             // ───── 결과·기록 ─────
             { group:'result', label:'문서 · 다운로드',  tab:'documents',  icon:'file',    desc:'종합기록지, 백업, PDF/Excel', keywords:'document download pdf excel xlsx 백업' },
+            { group:'result', label:'상장 출력',         tab:'certificates', icon:'trophy', desc:'상장·완주증 양식 편집 및 일괄 인쇄', keywords:'certificate 상장 완주증 시상 시상장 인쇄 출력' },
             { group:'result', label:'스코어보드',       tab:'scoreboard', icon:'monitor', desc:'스코어보드 그룹·종목 연동', keywords:'scoreboard joint group' },
 
             // ───── 인프라 (심판·키·페이싱·API) ─────
@@ -8914,6 +9069,328 @@ POST /api/external/event-result-link/batch<br>
             const filt = document.getElementById('ext-log-filter');
             if (filt) filt.addEventListener('change', extLoadLogs);
         });
+
+        // ====================================================================
+        // Certificate (상장) System
+        // ====================================================================
+        let _certTemplates = [];
+        let _certEvents = [];
+
+        async function loadCertTemplates() {
+            try {
+                const url = `/api/admin/certificate-templates?admin_key=${encodeURIComponent(AK())}` +
+                            (_selectedCompId ? `&competition_id=${_selectedCompId}` : '');
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'load failed');
+                _certTemplates = data.templates || [];
+                renderCertTemplateList();
+                renderCertTemplateSelect();
+            } catch (e) {
+                console.error('[cert] load templates:', e);
+                toast('양식 목록 로드 실패: ' + e.message, 'error');
+            }
+        }
+
+        function renderCertTemplateSelect() {
+            const sel = document.getElementById('cert-template-select');
+            if (!sel) return;
+            sel.innerHTML = _certTemplates.map(t =>
+                `<option value="${t.id}" ${t.is_default ? 'selected' : ''}>${_esc(t.name)} [${t.kind === 'finisher' ? '완주증' : t.kind === 'team' ? '단체상' : '시상장'}]</option>`
+            ).join('');
+
+            // mode auto-sync with selected template kind
+            sel.onchange = () => {
+                const t = _certTemplates.find(x => String(x.id) === sel.value);
+                if (!t) return;
+                const modeSel = document.getElementById('cert-mode-select');
+                if (modeSel) {
+                    modeSel.value = (t.kind === 'finisher') ? 'finisher' : 'award';
+                    toggleCertRankRangeWrap();
+                }
+            };
+            // initial sync
+            if (sel.value) sel.onchange();
+        }
+
+        function toggleCertRankRangeWrap() {
+            const mode = document.getElementById('cert-mode-select').value;
+            const wrap = document.getElementById('cert-rank-range-wrap');
+            if (wrap) wrap.style.display = (mode === 'finisher') ? 'none' : '';
+        }
+
+        function renderCertTemplateList() {
+            const root = document.getElementById('cert-template-list');
+            if (!root) return;
+            if (!_certTemplates.length) {
+                root.innerHTML = '<div class="t-muted t-sm">저장된 양식이 없습니다.</div>';
+                return;
+            }
+            root.innerHTML = '<table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+                '<thead><tr style="background:#f5f5f5;"><th style="text-align:left;padding:6px;">이름</th><th style="padding:6px;">종류</th><th style="padding:6px;">순위표기</th><th style="padding:6px;">기본</th><th style="padding:6px;">동작</th></tr></thead><tbody>' +
+                _certTemplates.map(t => `
+                    <tr style="border-bottom:1px solid #eee;">
+                        <td style="padding:6px;">${_esc(t.name)}</td>
+                        <td style="padding:6px;text-align:center;">${t.kind === 'finisher' ? '완주증' : t.kind === 'team' ? '단체상' : '시상장'}</td>
+                        <td style="padding:6px;text-align:center;">${t.rank_label_style === 'numeric' ? '1위/2위' : t.rank_label_style === 'mixed' ? '혼합' : '우승/준우승'}</td>
+                        <td style="padding:6px;text-align:center;">${t.is_default ? '★' : ''}</td>
+                        <td style="padding:6px;text-align:center;white-space:nowrap;">
+                            <button class="btn btn-xs btn-outline" onclick="openCertTemplateEditor(${t.id})">편집</button>
+                            <button class="btn btn-xs btn-outline" onclick="previewCertById(${t.id})">미리보기</button>
+                            <button class="btn btn-xs" style="background:#fee;color:#a00;" onclick="deleteCertTemplate(${t.id})">삭제</button>
+                        </td>
+                    </tr>
+                `).join('') + '</tbody></table>';
+        }
+
+        async function loadCertEvents() {
+            const root = document.getElementById('cert-event-list');
+            if (!root) return;
+            if (!_selectedCompId) {
+                root.innerHTML = '<span class="t-muted">대회를 먼저 선택하세요.</span>';
+                _certEvents = [];
+                return;
+            }
+            try {
+                const res = await fetch(`/api/competitions/${_selectedCompId}/events`);
+                const data = await res.json();
+                const events = (data.events || data || []).filter(e => !e.parent_event_id);
+                _certEvents = events;
+                root.innerHTML = events.length === 0 ? '<span class="t-muted">종목이 없습니다.</span>' :
+                    events.map(e => `
+                        <label style="display:block;padding:3px 0;">
+                            <input type="checkbox" class="cert-event-cb" value="${e.id}" data-name="${_esc(e.name)}">
+                            ${e.gender === 'M' ? '남' : e.gender === 'F' ? '여' : '혼'} ${_esc(e.name)}
+                            <span class="t-muted t-xs">[${e.round_type || ''}]</span>
+                        </label>
+                    `).join('');
+            } catch (e) {
+                console.error('[cert] events load:', e);
+                root.innerHTML = '<span class="t-muted">종목 로드 실패</span>';
+            }
+        }
+
+        function certSelectAllEvents(on) {
+            document.querySelectorAll('.cert-event-cb').forEach(cb => cb.checked = !!on);
+        }
+
+        async function generateCertificates() {
+            const tplId = document.getElementById('cert-template-select').value;
+            if (!tplId) { toast('양식을 선택하세요', 'error'); return; }
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+
+            const mode = document.getElementById('cert-mode-select').value;
+            const rankFrom = parseInt(document.getElementById('cert-rank-from').value || 1, 10);
+            const rankTo = parseInt(document.getElementById('cert-rank-to').value || 3, 10);
+            const includeFinishers = document.getElementById('cert-include-finishers').checked;
+            const selectedIds = Array.from(document.querySelectorAll('.cert-event-cb:checked')).map(cb => parseInt(cb.value, 10));
+
+            const status = document.getElementById('cert-gen-status');
+            if (status) status.textContent = '생성 중...';
+
+            try {
+                const res = await fetch('/api/admin/certificates/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        admin_key: AK(),
+                        template_id: parseInt(tplId, 10),
+                        competition_id: _selectedCompId,
+                        event_ids: selectedIds,
+                        rank_from: rankFrom,
+                        rank_to: rankTo,
+                        include_finishers: includeFinishers,
+                        mode,
+                    })
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({error:'생성 실패'}));
+                    throw new Error(err.error || '생성 실패');
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                if (status) status.textContent = '완료 — 새 창에서 PDF가 열립니다';
+                setTimeout(() => { if (status) status.textContent = ''; }, 4000);
+                loadCertLog();
+            } catch (e) {
+                console.error('[cert] generate:', e);
+                toast('상장 생성 실패: ' + e.message, 'error');
+                if (status) status.textContent = '실패';
+            }
+        }
+
+        async function previewCertificate() {
+            const tplId = document.getElementById('cert-template-select').value;
+            if (!tplId) { toast('양식을 선택하세요', 'error'); return; }
+            await previewCertById(parseInt(tplId, 10));
+        }
+
+        async function previewCertById(id) {
+            const tpl = _certTemplates.find(x => x.id === id);
+            if (!tpl) { toast('양식을 찾을 수 없습니다', 'error'); return; }
+            try {
+                const res = await fetch('/api/admin/certificates/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK(), template: tpl })
+                });
+                if (!res.ok) throw new Error('미리보기 실패');
+                const blob = await res.blob();
+                window.open(URL.createObjectURL(blob), '_blank');
+            } catch (e) {
+                toast('미리보기 실패: ' + e.message, 'error');
+            }
+        }
+
+        // ----- Template Editor -----
+        function openCertTemplateEditor(id) {
+            const t = id ? _certTemplates.find(x => x.id === id) : null;
+            document.getElementById('cert-editor-title').textContent = t ? `양식 편집: ${t.name}` : '새 양식 추가';
+            document.getElementById('cert-edit-id').value = t ? t.id : '';
+            document.getElementById('cert-edit-name').value = t ? t.name : '';
+            document.getElementById('cert-edit-kind').value = t ? t.kind : 'award';
+            document.getElementById('cert-edit-title').value = t ? t.title_text : '상  장';
+            document.getElementById('cert-edit-rank-style').value = t ? t.rank_label_style : 'ordinal';
+            document.getElementById('cert-edit-body').value = t ? (t.body_template || '') : '';
+            document.getElementById('cert-edit-signer-org').value = t ? (t.signer_org || '') : '';
+            document.getElementById('cert-edit-signer-title').value = t ? (t.signer_title || '회장') : '회장';
+            document.getElementById('cert-edit-signer-name').value = t ? (t.signer_name || '') : '';
+            document.getElementById('cert-edit-border').value = t ? (t.border_style || 'double-gold') : 'double-gold';
+            document.getElementById('cert-edit-bg').value = t ? (t.background_color || '#fffdf6') : '#fffdf6';
+            document.getElementById('cert-edit-show-record').checked = t ? !!t.show_record_value : true;
+            document.getElementById('cert-edit-show-team').checked = t ? !!t.show_athlete_team : true;
+            document.getElementById('cert-edit-show-date').checked = t ? !!t.show_date : true;
+            document.getElementById('cert-template-editor-modal').style.display = 'flex';
+        }
+
+        function closeCertTemplateEditor() {
+            document.getElementById('cert-template-editor-modal').style.display = 'none';
+        }
+
+        function _readCertEditorForm() {
+            return {
+                id: document.getElementById('cert-edit-id').value || null,
+                name: document.getElementById('cert-edit-name').value.trim() || '새 양식',
+                kind: document.getElementById('cert-edit-kind').value,
+                title_text: document.getElementById('cert-edit-title').value.trim() || '상  장',
+                rank_label_style: document.getElementById('cert-edit-rank-style').value,
+                body_template: document.getElementById('cert-edit-body').value,
+                signer_org: document.getElementById('cert-edit-signer-org').value.trim(),
+                signer_title: document.getElementById('cert-edit-signer-title').value.trim() || '회장',
+                signer_name: document.getElementById('cert-edit-signer-name').value.trim(),
+                border_style: document.getElementById('cert-edit-border').value,
+                background_color: document.getElementById('cert-edit-bg').value,
+                show_record_value: document.getElementById('cert-edit-show-record').checked ? 1 : 0,
+                show_athlete_team: document.getElementById('cert-edit-show-team').checked ? 1 : 0,
+                show_date: document.getElementById('cert-edit-show-date').checked ? 1 : 0,
+                paper_orientation: 'portrait',
+                font_family: 'NanumSquare',
+            };
+        }
+
+        async function saveCertTemplate() {
+            const form = _readCertEditorForm();
+            const id = form.id;
+            try {
+                const url = id ? `/api/admin/certificate-templates/${id}` : '/api/admin/certificate-templates';
+                const method = id ? 'PUT' : 'POST';
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(Object.assign({ admin_key: AK() }, form))
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '저장 실패');
+                toast(id ? '양식이 수정되었습니다' : '양식이 추가되었습니다', 'success');
+                closeCertTemplateEditor();
+                loadCertTemplates();
+            } catch (e) {
+                toast('저장 실패: ' + e.message, 'error');
+            }
+        }
+
+        async function previewCertificateFromEditor() {
+            const form = _readCertEditorForm();
+            try {
+                const res = await fetch('/api/admin/certificates/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK(), template: form })
+                });
+                if (!res.ok) throw new Error('미리보기 실패');
+                const blob = await res.blob();
+                window.open(URL.createObjectURL(blob), '_blank');
+            } catch (e) {
+                toast('미리보기 실패: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteCertTemplate(id) {
+            if (!confirm('이 양식을 삭제하시겠습니까?')) return;
+            try {
+                const res = await fetch(`/api/admin/certificate-templates/${id}?admin_key=${encodeURIComponent(AK())}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '삭제 실패');
+                toast('삭제되었습니다', 'success');
+                loadCertTemplates();
+            } catch (e) {
+                toast('삭제 실패: ' + e.message, 'error');
+            }
+        }
+
+        async function loadCertLog() {
+            const root = document.getElementById('cert-log-list');
+            if (!root) return;
+            try {
+                const url = `/api/admin/certificates/log?admin_key=${encodeURIComponent(AK())}` +
+                            (_selectedCompId ? `&competition_id=${_selectedCompId}` : '');
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'load failed');
+                const logs = data.logs || [];
+                if (!logs.length) { root.innerHTML = '<div class="t-muted t-sm">아직 발급 이력이 없습니다.</div>'; return; }
+                root.innerHTML = '<table style="width:100%;font-size:11px;border-collapse:collapse;">' +
+                    '<thead><tr style="background:#f5f5f5;"><th style="padding:4px;text-align:left;">일시</th><th style="padding:4px;">양식</th><th style="padding:4px;">선수</th><th style="padding:4px;">소속</th><th style="padding:4px;">순위</th><th style="padding:4px;">기록</th></tr></thead><tbody>' +
+                    logs.map(l => `
+                        <tr style="border-bottom:1px solid #eee;">
+                            <td style="padding:4px;">${_fmtDate(l.issued_at)}</td>
+                            <td style="padding:4px;text-align:center;">${_esc(l.template_name||'')}</td>
+                            <td style="padding:4px;text-align:center;">${_esc(l.athlete_name||'')}</td>
+                            <td style="padding:4px;text-align:center;">${_esc(l.team||'')}</td>
+                            <td style="padding:4px;text-align:center;">${l.rank_value != null ? l.rank_value+'위' : '-'}</td>
+                            <td style="padding:4px;text-align:center;">${_esc(l.record_value||'')}</td>
+                        </tr>
+                    `).join('') + '</tbody></table>';
+            } catch (e) {
+                root.innerHTML = '<div class="t-muted t-sm">로그 로드 실패: '+e.message+'</div>';
+            }
+        }
+
+        // mode 변경 → 순위 범위 hide
+        document.addEventListener('DOMContentLoaded', () => {
+            const modeSel = document.getElementById('cert-mode-select');
+            if (modeSel) modeSel.addEventListener('change', toggleCertRankRangeWrap);
+        });
+
+        // 탭 진입 시 자동 로드 — switchTab 후킹
+        (function() {
+            const _origSwitchTab = window.switchTab;
+            if (typeof _origSwitchTab === 'function') {
+                window.switchTab = function(name, btn) {
+                    _origSwitchTab(name, btn);
+                    if (name === 'certificates') {
+                        loadCertTemplates();
+                        loadCertEvents();
+                        loadCertLog();
+                        // ensure mode/range sync
+                        setTimeout(toggleCertRankRangeWrap, 50);
+                    }
+                };
+            }
+        })();
 
     </script>
 </body>

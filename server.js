@@ -12,6 +12,7 @@ const XLSX = require('xlsx');
 const helmet = require('helmet');
 const { generateFullRecordExcel } = require('./lib/fullRecordExcel');
 const { generateFullRecordPdf } = require('./lib/fullRecordPdf');
+const { generateCertificatePdf, generateCertificateBatch, renderRankLabel } = require('./lib/certificatePdf');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const { initDatabase, DB_PATH } = require('./db/init');
@@ -355,6 +356,88 @@ try { db.exec(`ALTER TABLE height_attempt ADD COLUMN updated_at TEXT NOT NULL DE
 try { db.exec(`ALTER TABLE combined_score ADD COLUMN status_code TEXT DEFAULT ''`); } catch(e) {}
 // Phase C 후속: record_breaking_log에 풍속 컬럼 추가 (NR/DR/CR 감지 시점의 풍속 보존)
 try { db.exec(`ALTER TABLE record_breaking_log ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
+
+// ============================================================
+// 상장(Certificate) 시스템 — 양식 저장 + 발행 로그
+// ============================================================
+try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_template (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    competition_id INTEGER,             -- NULL=전역 기본 양식 (모든 대회에서 사용 가능)
+    name TEXT NOT NULL,                  -- '시상용 기본', '완주증', '단체상' 등
+    kind TEXT NOT NULL DEFAULT 'award',  -- 'award'(시상장) | 'finisher'(완주증) | 'team'(단체상)
+    title_text TEXT NOT NULL DEFAULT '상  장',
+    body_template TEXT NOT NULL,         -- 본문 (변수: {comp_name} {event_name} {rank_label} {athlete_name} {team} {record} {date} 등)
+    rank_label_style TEXT NOT NULL DEFAULT 'ordinal',  -- 'ordinal'(우승/준우승/3위) | 'numeric'(1위/2위/3위) | 'mixed'(우승만 한자 나머지 숫자)
+    signer_org TEXT NOT NULL DEFAULT '',
+    signer_title TEXT NOT NULL DEFAULT '회장',
+    signer_name TEXT NOT NULL DEFAULT '',
+    logo_left_path TEXT NOT NULL DEFAULT '',
+    logo_right_path TEXT NOT NULL DEFAULT '',
+    seal_image_path TEXT NOT NULL DEFAULT '',
+    paper_orientation TEXT NOT NULL DEFAULT 'portrait',  -- 'portrait' | 'landscape'
+    show_record_value INTEGER NOT NULL DEFAULT 1,
+    show_athlete_team INTEGER NOT NULL DEFAULT 1,
+    show_date INTEGER NOT NULL DEFAULT 1,
+    background_color TEXT NOT NULL DEFAULT '#fffdf6',
+    border_style TEXT NOT NULL DEFAULT 'double-gold',    -- 'double-gold' | 'single' | 'none'
+    font_family TEXT NOT NULL DEFAULT 'NanumSquare',
+    is_default INTEGER NOT NULL DEFAULT 0,                -- 기본 양식 1개만 ON
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) { console.error('[DB] certificate_template create error:', e.message); }
+
+try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_issue_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    competition_id INTEGER NOT NULL,
+    template_id INTEGER NOT NULL,
+    event_id INTEGER,                    -- NULL=종합/혼성
+    athlete_id INTEGER NOT NULL,
+    rank_value INTEGER,                  -- NULL=완주증 등
+    record_value TEXT NOT NULL DEFAULT '',
+    issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+    issued_by TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT ''
+)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue_log(competition_id, issued_at DESC)`); } catch(e) {}
+
+// 기본 상장 템플릿 시드 (최초 1회) — 시상장 + 완주증
+try {
+    const sqlDb = getDb();
+    const cnt = sqlDb.prepare('SELECT COUNT(*) AS c FROM certificate_template').get();
+    if (cnt && cnt.c === 0) {
+        const now = new Date().toISOString();
+        const ins = sqlDb.prepare(`INSERT INTO certificate_template (
+            competition_id, name, kind, title_text, body_template, rank_label_style,
+            signer_org, signer_title, signer_name,
+            paper_orientation, show_record_value, show_athlete_team, show_date,
+            background_color, border_style, font_family, is_default, sort_order,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        // 1) 기본 시상장 (ordinal: 우승/준우승/3위)
+        ins.run(null, '기본 시상장 (우승/준우승)', 'award', '상  장',
+            '위 선수는 {competition_name}\n{event_name} 종목에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
+            'ordinal', '', '회장', '',
+            'portrait', 1, 1, 1, '#fffdf6', 'double-gold', 'NanumSquare', 1, 1, now, now);
+        // 2) 숫자형 시상장 (1위/2위/3위)
+        ins.run(null, '기본 시상장 (1위/2위/3위)', 'award', '상  장',
+            '위 선수는 {competition_name}\n{event_name} 종목에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
+            'numeric', '', '회장', '',
+            'portrait', 1, 1, 1, '#fffdf6', 'double-gold', 'NanumSquare', 0, 2, now, now);
+        // 3) 완주증 (마스터즈 등 — 등수 없음)
+        ins.run(null, '완주증 (마스터즈용)', 'finisher', '완 주 증',
+            '위 선수는 {competition_name} {event_name} 종목에 출전하여\n끝까지 완주하였기에 그 노력과 의지를 높이 평가하여\n이 증서를 수여합니다.',
+            'ordinal', '', '회장', '',
+            'portrait', 1, 1, 1, '#fffdf6', 'classic', 'NanumSquare', 0, 3, now, now);
+        // 4) 단체상
+        ins.run(null, '단체상', 'team', '단 체 상',
+            '위 단체는 {competition_name}에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
+            'ordinal', '', '회장', '',
+            'portrait', 0, 0, 1, '#fffdf6', 'double-gold', 'NanumSquare', 0, 4, now, now);
+        console.log('[DB] certificate_template seeded (4 templates)');
+    }
+} catch(e) { console.error('[DB] certificate_template seed error:', e.message); }
+
 // Migrate existing numeric wind values to "N.N m/s" text format for scoreboard compatibility
 // (SQLite 부팅 전용 마이그레이션 — PG 백엔드에서는 별도 마이그레이션 스크립트로 처리)
 if (!db.isAsync) {
@@ -12974,6 +13057,414 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
     }
   }
 });
+
+// ========== 상장(Certificate) System ==========
+//
+// 양식 종류: award(시상장) | finisher(완주증) | team(단체상)
+// 순위 표기: ordinal(우승/준우승/3위) | numeric(1위/2위/3위) | mixed
+//
+
+// 종목 결과 가져오기 (랭킹·기록 포함) — 상장 발급용 헬퍼
+function getEventResultsForCert(eventId) {
+    const sqlDb = getDb();
+    const event = sqlDb.prepare('SELECT * FROM event WHERE id=?').get(eventId);
+    if (!event) return { event: null, rows: [] };
+
+    // 트랙(time_seconds) / 필드(distance_meters) 자동 판별
+    const rows = sqlDb.prepare(`
+        SELECT
+            ee.id AS entry_id,
+            ee.athlete_id,
+            a.name AS athlete_name,
+            a.team,
+            a.bib_number,
+            r.time_seconds,
+            r.distance_meters,
+            r.status_code,
+            r.wind,
+            r.attempt_number
+        FROM event_entry ee
+        JOIN athlete a ON a.id = ee.athlete_id
+        LEFT JOIN heat h ON h.event_id = ee.event_id
+        LEFT JOIN result r ON r.event_entry_id = ee.id AND r.heat_id = h.id
+        WHERE ee.event_id = ?
+    `).all(eventId);
+
+    // 같은 선수에 여러 시도가 있을 수 있어 best 기록만 추림
+    const byAthlete = new Map();
+    for (const row of rows) {
+        const cur = byAthlete.get(row.athlete_id);
+        const valid = (row.status_code == null || row.status_code === '' || row.status_code === 'OK');
+        const t = (row.time_seconds != null && row.time_seconds > 0) ? row.time_seconds : null;
+        const d = (row.distance_meters != null && row.distance_meters > 0) ? row.distance_meters : null;
+        if (!cur) { byAthlete.set(row.athlete_id, row); continue; }
+        // 더 좋은 기록 갱신
+        if (t && (cur.time_seconds == null || t < cur.time_seconds)) byAthlete.set(row.athlete_id, row);
+        else if (d && (cur.distance_meters == null || d > cur.distance_meters)) byAthlete.set(row.athlete_id, row);
+    }
+    const list = Array.from(byAthlete.values());
+
+    // 시간(track) → 오름차순, 거리(field) → 내림차순
+    const hasTime = list.some(x => x.time_seconds != null && x.time_seconds > 0);
+    const hasDist = list.some(x => x.distance_meters != null && x.distance_meters > 0);
+    list.sort((a, b) => {
+        const aStatus = a.status_code && a.status_code !== 'OK';
+        const bStatus = b.status_code && b.status_code !== 'OK';
+        if (aStatus && !bStatus) return 1;
+        if (!aStatus && bStatus) return -1;
+        if (hasTime) {
+            const at = a.time_seconds || 999999, bt = b.time_seconds || 999999;
+            return at - bt;
+        }
+        if (hasDist) {
+            const ad = a.distance_meters || -1, bd = b.distance_meters || -1;
+            return bd - ad;
+        }
+        return 0;
+    });
+
+    // 순위 부여 및 기록 포맷
+    const ranked = list.map((row, idx) => {
+        const hasResult = (row.time_seconds && row.time_seconds > 0) ||
+                         (row.distance_meters && row.distance_meters > 0) ||
+                         (row.status_code === 'DNS' || row.status_code === 'DNF' || row.status_code === 'DQ');
+        const rank = (row.status_code && row.status_code !== 'OK') ? null : (idx + 1);
+        let recordValue = '';
+        if (row.time_seconds && row.time_seconds > 0) {
+            const t = row.time_seconds;
+            if (t >= 60) {
+                const m = Math.floor(t / 60);
+                const s = (t - m * 60).toFixed(2);
+                recordValue = `${m}:${s.padStart(5, '0')}`;
+            } else {
+                recordValue = t.toFixed(2);
+            }
+            if (row.wind) recordValue += ` (${row.wind})`;
+        } else if (row.distance_meters && row.distance_meters > 0) {
+            recordValue = row.distance_meters.toFixed(2) + 'm';
+        } else if (row.status_code) {
+            recordValue = row.status_code;
+        }
+        return {
+            athlete_id: row.athlete_id,
+            athlete_name: row.athlete_name,
+            team: row.team || '',
+            bib_number: row.bib_number,
+            rank,
+            record_value: recordValue,
+            finished: hasResult && (!row.status_code || row.status_code === 'OK'),
+            status_code: row.status_code,
+        };
+    });
+    return { event, rows: ranked };
+}
+
+// 템플릿 목록 (관리자) — 대회 ID 옵션
+app.get('/api/admin/certificate-templates', (req, res) => {
+    try {
+        const adminKey = req.query.admin_key;
+        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const compId = req.query.competition_id;
+        const sqlDb = getDb();
+        let rows;
+        if (compId) {
+            rows = sqlDb.prepare(`SELECT * FROM certificate_template
+                WHERE competition_id IS NULL OR competition_id = ?
+                ORDER BY sort_order, id`).all(compId);
+        } else {
+            rows = sqlDb.prepare('SELECT * FROM certificate_template ORDER BY sort_order, id').all();
+        }
+        res.json({ templates: rows });
+    } catch (err) {
+        console.error('[CERT][list] error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 템플릿 단건 조회
+app.get('/api/admin/certificate-templates/:id', (req, res) => {
+    try {
+        const adminKey = req.query.admin_key;
+        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const row = getDb().prepare('SELECT * FROM certificate_template WHERE id=?').get(req.params.id);
+        if (!row) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
+        res.json({ template: row });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 템플릿 생성
+app.post('/api/admin/certificate-templates', (req, res) => {
+    try {
+        const { admin_key } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const t = req.body || {};
+        const now = new Date().toISOString();
+        const result = getDb().prepare(`INSERT INTO certificate_template (
+            competition_id, name, kind, title_text, body_template, rank_label_style,
+            signer_org, signer_title, signer_name,
+            logo_left_path, logo_right_path, seal_image_path,
+            paper_orientation, show_record_value, show_athlete_team, show_date,
+            background_color, border_style, font_family, is_default, sort_order,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            t.competition_id || null,
+            t.name || '새 양식',
+            t.kind || 'award',
+            t.title_text || '상  장',
+            t.body_template || '',
+            t.rank_label_style || 'ordinal',
+            t.signer_org || '',
+            t.signer_title || '회장',
+            t.signer_name || '',
+            t.logo_left_path || '',
+            t.logo_right_path || '',
+            t.seal_image_path || '',
+            t.paper_orientation || 'portrait',
+            t.show_record_value == null ? 1 : (t.show_record_value ? 1 : 0),
+            t.show_athlete_team == null ? 1 : (t.show_athlete_team ? 1 : 0),
+            t.show_date == null ? 1 : (t.show_date ? 1 : 0),
+            t.background_color || '#fffdf6',
+            t.border_style || 'double-gold',
+            t.font_family || 'NanumSquare',
+            t.is_default ? 1 : 0,
+            t.sort_order || 0,
+            now, now
+        );
+        const row = getDb().prepare('SELECT * FROM certificate_template WHERE id=?').get(result.lastInsertRowid);
+        res.json({ success: true, template: row });
+    } catch (err) {
+        console.error('[CERT][create]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 템플릿 수정
+app.put('/api/admin/certificate-templates/:id', (req, res) => {
+    try {
+        const { admin_key } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const t = req.body || {};
+        const id = req.params.id;
+        const cur = getDb().prepare('SELECT * FROM certificate_template WHERE id=?').get(id);
+        if (!cur) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
+        const now = new Date().toISOString();
+        getDb().prepare(`UPDATE certificate_template SET
+            competition_id=?, name=?, kind=?, title_text=?, body_template=?, rank_label_style=?,
+            signer_org=?, signer_title=?, signer_name=?,
+            logo_left_path=?, logo_right_path=?, seal_image_path=?,
+            paper_orientation=?, show_record_value=?, show_athlete_team=?, show_date=?,
+            background_color=?, border_style=?, font_family=?, is_default=?, sort_order=?,
+            updated_at=?
+            WHERE id=?`).run(
+            t.competition_id !== undefined ? t.competition_id : cur.competition_id,
+            t.name ?? cur.name,
+            t.kind ?? cur.kind,
+            t.title_text ?? cur.title_text,
+            t.body_template ?? cur.body_template,
+            t.rank_label_style ?? cur.rank_label_style,
+            t.signer_org ?? cur.signer_org,
+            t.signer_title ?? cur.signer_title,
+            t.signer_name ?? cur.signer_name,
+            t.logo_left_path ?? cur.logo_left_path,
+            t.logo_right_path ?? cur.logo_right_path,
+            t.seal_image_path ?? cur.seal_image_path,
+            t.paper_orientation ?? cur.paper_orientation,
+            t.show_record_value == null ? cur.show_record_value : (t.show_record_value ? 1 : 0),
+            t.show_athlete_team == null ? cur.show_athlete_team : (t.show_athlete_team ? 1 : 0),
+            t.show_date == null ? cur.show_date : (t.show_date ? 1 : 0),
+            t.background_color ?? cur.background_color,
+            t.border_style ?? cur.border_style,
+            t.font_family ?? cur.font_family,
+            t.is_default == null ? cur.is_default : (t.is_default ? 1 : 0),
+            t.sort_order ?? cur.sort_order,
+            now, id
+        );
+        const row = getDb().prepare('SELECT * FROM certificate_template WHERE id=?').get(id);
+        res.json({ success: true, template: row });
+    } catch (err) {
+        console.error('[CERT][update]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 템플릿 삭제
+app.delete('/api/admin/certificate-templates/:id', (req, res) => {
+    try {
+        const adminKey = (req.body && req.body.admin_key) || req.query.admin_key;
+        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        getDb().prepare('DELETE FROM certificate_template WHERE id=?').run(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 미리보기 PDF — 가짜 데이터로 한 페이지
+app.post('/api/admin/certificates/preview', async (req, res) => {
+    try {
+        const { admin_key, template, sample } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const tpl = template || {};
+        const data = Object.assign({
+            athlete_name: '홍길동',
+            team: '소속명',
+            event_name: '남자 100m',
+            rank: 1,
+            record_value: '10.32 (NR)',
+            competition_name: '제00회 대회',
+        }, sample || {});
+        const buf = await generateCertificatePdf(tpl, data);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline; filename="cert_preview.pdf"');
+        res.end(buf);
+    } catch (err) {
+        console.error('[CERT][preview]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 일괄 발급 — 대회/종목/순위범위 선택해서 PDF
+app.post('/api/admin/certificates/generate', async (req, res) => {
+    try {
+        const { admin_key, template_id, competition_id, event_ids,
+                rank_from, rank_to, include_finishers, mode } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+
+        const sqlDb = getDb();
+        const tpl = sqlDb.prepare('SELECT * FROM certificate_template WHERE id=?').get(template_id);
+        if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
+
+        const comp = competition_id ? sqlDb.prepare('SELECT * FROM competition WHERE id=?').get(competition_id) : null;
+
+        let targetEventIds = Array.isArray(event_ids) ? event_ids.slice() : [];
+        if (targetEventIds.length === 0 && competition_id) {
+            // 대회 전체 이벤트
+            const all = sqlDb.prepare(`SELECT id FROM event WHERE competition_id=? AND round_type='final' ORDER BY sort_order, id`).all(competition_id);
+            targetEventIds = all.map(e => e.id);
+        }
+        if (targetEventIds.length === 0) {
+            return res.status(400).json({ error: '발급할 종목이 없습니다.' });
+        }
+
+        const rankFrom = Math.max(1, parseInt(rank_from || 1, 10));
+        const rankTo = Math.max(rankFrom, parseInt(rank_to || 3, 10));
+        const wantFinishers = !!include_finishers;
+        const certMode = mode || tpl.kind || 'award';
+
+        const items = [];
+        for (const eid of targetEventIds) {
+            const { event, rows } = getEventResultsForCert(eid);
+            if (!event) continue;
+            for (const row of rows) {
+                let shouldInclude = false;
+                if (certMode === 'finisher') {
+                    // 완주증 모드 — 완주한 모든 선수
+                    if (row.finished) shouldInclude = true;
+                } else {
+                    // 시상장 모드 — 순위 범위 내
+                    if (row.rank != null && row.rank >= rankFrom && row.rank <= rankTo) shouldInclude = true;
+                    // 옵션: 동시 완주증도 포함
+                    if (!shouldInclude && wantFinishers && row.finished && (row.rank == null || row.rank > rankTo)) {
+                        shouldInclude = true;
+                    }
+                }
+                if (!shouldInclude) continue;
+                items.push({
+                    athlete_id: row.athlete_id,
+                    athlete_name: row.athlete_name,
+                    team: row.team,
+                    event_name: event.name,
+                    rank: certMode === 'finisher' ? null : row.rank,
+                    record_value: row.record_value,
+                    competition_name: comp ? comp.name : '',
+                });
+            }
+        }
+
+        if (items.length === 0) {
+            return res.status(400).json({ error: '조건에 해당하는 발급 대상이 없습니다.' });
+        }
+
+        const buf = await generateCertificateBatch(tpl, items);
+
+        // 발급 로그 기록
+        const now = new Date().toISOString();
+        const insertLog = sqlDb.prepare(`INSERT INTO certificate_issue_log
+            (competition_id, template_id, event_id, athlete_id, rank_value, record_value, issued_at, issued_by, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        try {
+            const txn = sqlDb.transaction(() => {
+                for (const it of items) {
+                    insertLog.run(
+                        competition_id || null,
+                        tpl.id,
+                        null,
+                        it.athlete_id,
+                        it.rank == null ? null : it.rank,
+                        it.record_value || '',
+                        now,
+                        '관리자',
+                        certMode
+                    );
+                }
+            });
+            txn();
+        } catch (_) { /* log failure should not block PDF */ }
+
+        const fileName = encodeURIComponent(`상장_${(comp?.name||'대회')}_${items.length}건.pdf`);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${fileName}`);
+        res.end(buf);
+    } catch (err) {
+        console.error('[CERT][generate]', err);
+        if (!res.headersSent) res.status(500).json({ error: err.message });
+    }
+});
+
+// 개별 발급 — 특정 선수 1명에 대해 PDF (재발급용)
+app.post('/api/admin/certificates/single', async (req, res) => {
+    try {
+        const { admin_key, template_id, data } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const tpl = getDb().prepare('SELECT * FROM certificate_template WHERE id=?').get(template_id);
+        if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
+        const buf = await generateCertificatePdf(tpl, data || {});
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="cert.pdf"`);
+        res.end(buf);
+    } catch (err) {
+        console.error('[CERT][single]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 발급 로그
+app.get('/api/admin/certificates/log', (req, res) => {
+    try {
+        const adminKey = req.query.admin_key;
+        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const compId = req.query.competition_id;
+        const limit = Math.min(parseInt(req.query.limit || 200, 10), 1000);
+        const sqlDb = getDb();
+        const where = compId ? 'WHERE l.competition_id=?' : '';
+        const params = compId ? [compId, limit] : [limit];
+        const rows = sqlDb.prepare(`
+            SELECT l.*, t.name AS template_name, a.name AS athlete_name, a.team
+            FROM certificate_issue_log l
+            LEFT JOIN certificate_template t ON t.id = l.template_id
+            LEFT JOIN athlete a ON a.id = l.athlete_id
+            ${where}
+            ORDER BY l.issued_at DESC
+            LIMIT ?
+        `).all(...params);
+        res.json({ logs: rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ========== END Certificate System ==========
 
 // Document listing — available documents for a competition
 app.get('/api/documents/:compId', async (req, res) => {
