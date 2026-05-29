@@ -149,6 +149,124 @@
         .pacing-config-item.active { border-color:var(--primary); background:#f0f0f0; }
         .pacing-config-item .dots { display:flex; gap:3px; }
         .pacing-config-item .dots span { width:10px; height:10px; border-radius:50%; display:inline-block; }
+
+        /* ==========================================================
+           [대 리뉴얼] 관리 페이지 2단 레이아웃 + 검색 팔레트
+           ========================================================== */
+        .admin-shell { display:flex; gap:18px; align-items:flex-start; }
+        .admin-sidebar {
+            width:240px; min-width:240px; flex-shrink:0;
+            position:sticky; top:12px; align-self:flex-start;
+            max-height:calc(100vh - 32px); overflow-y:auto;
+            background:var(--white); border:1px solid var(--gray);
+            border-radius:var(--radius); padding:10px;
+        }
+        .admin-main { flex:1; min-width:0; }
+        /* 기존 가로탭 숨김 (DOM은 유지 — switchTab 호환) */
+        .admin-tabs { display:none !important; }
+
+        .sidebar-search { position:relative; margin-bottom:10px; }
+        .sidebar-search input {
+            width:100%; padding:8px 30px 8px 30px;
+            border:1.5px solid var(--gray); border-radius:6px;
+            font-size:13px; box-sizing:border-box; background:#fafafa;
+        }
+        .sidebar-search input:focus { background:#fff; border-color:var(--blue); outline:none; }
+        .sidebar-search .search-icon {
+            position:absolute; left:8px; top:50%; transform:translateY(-50%);
+            font-size:13px; color:var(--text-muted); pointer-events:none;
+        }
+        .sidebar-search .kbd-hint {
+            position:absolute; right:6px; top:50%; transform:translateY(-50%);
+            font-size:10px; color:var(--text-muted); background:#f3f4f6;
+            border:1px solid #e5e7eb; padding:1px 5px; border-radius:3px;
+            font-family:monospace;
+        }
+
+        .sb-group { margin-bottom:6px; }
+        .sb-group-title {
+            font-size:11px; font-weight:700; color:var(--text-muted);
+            padding:8px 8px 4px; letter-spacing:0.5px; text-transform:uppercase;
+        }
+        .sb-item {
+            display:flex; align-items:center; gap:8px;
+            padding:7px 10px; border-radius:5px; cursor:pointer;
+            font-size:13px; color:var(--text); font-weight:500;
+            border:none; background:none; width:100%; text-align:left;
+            transition:background .12s;
+        }
+        .sb-item:hover { background:#f3f4f6; }
+        .sb-item.active { background:#eef2ff; color:#3730a3; font-weight:700; }
+        .sb-item .sb-icon { width:16px; text-align:center; font-size:13px; opacity:0.85; }
+        .sb-item .sb-badge {
+            margin-left:auto; font-size:10px; background:#e5e7eb;
+            color:#374151; padding:1px 6px; border-radius:10px; font-weight:600;
+        }
+
+        /* 검색 팔레트 모달 */
+        .palette-backdrop {
+            position:fixed; inset:0; background:rgba(15,23,42,0.4);
+            display:none; align-items:flex-start; justify-content:center;
+            z-index:9998; padding-top:80px; backdrop-filter:blur(2px);
+        }
+        .palette-backdrop.show { display:flex; }
+        .palette {
+            width:560px; max-width:92vw; background:#fff; border-radius:12px;
+            box-shadow:0 20px 60px rgba(0,0,0,0.25); overflow:hidden;
+            border:1px solid #e5e7eb;
+        }
+        .palette-header { padding:14px 16px; border-bottom:1px solid #f1f5f9; }
+        .palette-input {
+            width:100%; padding:10px 12px; border:1.5px solid var(--gray);
+            border-radius:8px; font-size:15px; box-sizing:border-box;
+        }
+        .palette-input:focus { border-color:var(--blue); outline:none; }
+        .palette-results { max-height:50vh; overflow-y:auto; padding:6px 0; }
+        .palette-item {
+            padding:10px 16px; cursor:pointer; display:flex; gap:10px;
+            align-items:flex-start; border-left:3px solid transparent;
+        }
+        .palette-item:hover, .palette-item.selected { background:#f1f5f9; border-left-color:#6366f1; }
+        .palette-item .pi-icon { font-size:18px; flex-shrink:0; margin-top:2px; }
+        .palette-item .pi-body { flex:1; min-width:0; }
+        .palette-item .pi-label {
+            font-size:13px; font-weight:600; color:var(--text);
+            display:flex; align-items:center; gap:6px;
+        }
+        .palette-item .pi-group-badge {
+            font-size:10px; font-weight:500; color:var(--text-muted);
+            background:#f3f4f6; padding:1px 6px; border-radius:8px;
+        }
+        .palette-item .pi-desc {
+            font-size:11px; color:var(--text-muted); margin-top:2px;
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        }
+        .palette-empty {
+            padding:24px; text-align:center; color:var(--text-muted); font-size:13px;
+        }
+        .palette-footer {
+            padding:8px 16px; background:#fafafa; border-top:1px solid #f1f5f9;
+            font-size:11px; color:var(--text-muted);
+            display:flex; gap:14px; justify-content:space-between;
+        }
+        .palette-footer kbd {
+            font-family:monospace; background:#fff; border:1px solid #e5e7eb;
+            border-bottom-width:2px; padding:1px 5px; border-radius:3px; font-size:10px;
+        }
+
+        /* 카드 점프 시 강조 효과 */
+        @keyframes cardFlash {
+            0% { box-shadow:0 0 0 0 rgba(99,102,241,0); }
+            30% { box-shadow:0 0 0 4px rgba(99,102,241,0.35); }
+            100% { box-shadow:0 0 0 0 rgba(99,102,241,0); }
+        }
+        .card-flash { animation:cardFlash 1.4s ease-out; }
+
+        /* 반응형 (모바일) */
+        @media (max-width: 900px) {
+            .admin-shell { flex-direction:column; }
+            .admin-sidebar { width:100%; min-width:0; position:static; max-height:none; }
+        }
     </style>
 </head>
 <body>
@@ -200,6 +318,7 @@
                 </div>
             </div>
 
+            <!-- [대 리뉴얼] 가로 탭바는 호환성 위해 DOM 유지 (CSS로 숨김) -->
             <div class="admin-tabs">
                 <button class="admin-tab active" data-tab="overview" onclick="switchTab('overview',this)">현황</button>
                 <button class="admin-tab" data-tab="competition" onclick="switchTab('competition',this)">대회 설정</button>
@@ -214,6 +333,19 @@
                 <button class="admin-tab" data-tab="settings" onclick="switchTab('settings',this)">시스템</button>
                 <button class="admin-tab" data-tab="extapi" onclick="switchTab('extapi',this)">외부 API</button>
             </div>
+
+            <!-- [대 리뉴얼] 2단 레이아웃: 좌 그룹 사이드바 + 검색 / 우 메인 -->
+            <div class="admin-shell">
+                <aside class="admin-sidebar" id="admin-sidebar">
+                    <div class="sidebar-search">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="sidebar-search-input" placeholder="기능 검색…" autocomplete="off">
+                        <span class="kbd-hint">⌘K</span>
+                    </div>
+                    <div id="sidebar-nav"><!-- JS로 렌더링 --></div>
+                </aside>
+
+                <div class="admin-main">
 
             <!-- TAB: Overview -->
             <div id="tab-overview" class="admin-tab-panel active">
@@ -289,7 +421,7 @@
                         <div style="padding:6px 10px;border-top:1px solid var(--gray);font-size:11px;color:var(--text-muted);background:#fafafa;display:flex;justify-content:space-between;align-items:center;gap:4px;">
                             <span id="evt-count"></span>
                             <div style="display:flex;gap:4px;">
-                                <button class="btn btn-sm btn-outline" onclick="openDivisionManagerModal()" title="부(division) 추가/수정/삭제 관리">부 관리</button>
+                                <button class="btn btn-sm btn-outline" id="btn-division-manager" onclick="openDivisionManagerModal()" title="부(division) 추가/수정/삭제 관리">부 관리</button>
                                 <button class="btn btn-sm btn-outline" onclick="cleanupUndefinedEvents()" style="color:#c62828;border-color:#ef9a9a;" title="부별이 빈 '미지정' 종목을 부별 있는 동일 종목으로 흡수하거나 삭제합니다">미지정 정리</button>
                                 <button class="btn btn-sm btn-outline" onclick="autoSortEvents()" title="표준 육상 순서로 종목을 자동 정렬합니다">종목 재정렬</button>
                                 <button class="btn btn-sm btn-primary" onclick="showAddEvent()">+ 종목 추가</button>
@@ -308,7 +440,7 @@
 
             <!-- TAB: Judges (심판 관리) -->
             <div id="tab-judges" class="admin-tab-panel">
-                <div class="admin-card">
+                <div class="admin-card" id="card-judge-keys" style="scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;"><span class="css-icon css-icon-judge" data-icon="J"></span> 심판별 운영키 관리</h4>
                     <p class="t-help-lg">심판별로 고유한 운영키를 생성하면, 로그에 심판 이름이 자동으로 표시됩니다.</p>
                     <div class="admin-form-row" style="margin-bottom:12px;">
@@ -630,7 +762,7 @@
                 </div>
 
                 <!-- 심판장·로고 설정 (독립 섹션) -->
-                <div class="admin-card" style="border-left:4px solid var(--gold);">
+                <div class="admin-card" id="card-chief-judge" style="border-left:4px solid var(--gold);scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;">🏷️ 심판장 이름 · 로고 설정</h4>
                     <p class="t-help-lg">종합기록지·세부기록지에 표시되는 심판장 이름과 로고를 설정합니다. 변경 후 <strong>저장</strong> 버튼을 눌러야 반영됩니다.</p>
                     <div class="admin-form-row" style="align-items:flex-end;">
@@ -681,7 +813,7 @@
                     </div>
                 </div>
                 <!-- Federation Management (moved from settings) -->
-                <div class="admin-card">
+                <div class="admin-card" id="card-federations" style="scroll-margin-top:20px;">
                     <h4>연맹 관리</h4>
                     <p class="t-help-lg">대회에 배정할 수 있는 연맹 목록을 관리합니다.</p>
                     <div class="admin-form-row" style="margin-bottom:8px;align-items:flex-end;">
@@ -712,7 +844,7 @@
 
             <!-- TAB: System Settings -->
             <div id="tab-settings" class="admin-tab-panel">
-                <div class="admin-card">
+                <div class="admin-card" id="card-default-keys" style="scroll-margin-top:20px;">
                     <h4>기본 접근 키 관리</h4>
                     <p class="t-help-lg">기본 운영키와 관리자키를 변경할 수 있습니다.</p>
                     <div id="current-keys"></div>
@@ -724,7 +856,7 @@
                 </div>
 
                 <!-- 기록위원 전용 키 (Phase C 확장) -->
-                <div class="admin-card" style="border-left:4px solid #c0392b;">
+                <div class="admin-card" id="card-record-officer-key" style="border-left:4px solid #c0392b;scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;">🏆 기록위원 전용 키 <span class="t-sm t-muted">신기록 승인/거부 전담</span></h4>
                     <p class="t-help-lg">
                         기록위원 키를 별도로 설정하면, 관리자 권한 없이도 NR/DR/CR 승인·거부만 가능한 전용 역할이 활성화됩니다.
@@ -742,7 +874,7 @@
                     </div>
                 </div>
                 <!-- Site Config: Install Guide & Manual Editor -->
-                <div class="admin-card">
+                <div class="admin-card" id="card-site-content" style="scroll-margin-top:20px;">
                     <h4>홈 페이지 콘텐츠 관리</h4>
                     <p class="t-help-lg">홈 화면의 앱 설치 안내, 운영 매뉴얼 내용을 편집합니다. HTML 태그를 사용할 수 있습니다. 비워두면 기본 내용이 표시됩니다.</p>
                     <div style="margin-bottom:16px;">
@@ -764,7 +896,7 @@
                 </div>
 
                 <!-- Home Popup CMS -->
-                <div class="admin-card" style="border-left:4px solid #6366f1;">
+                <div class="admin-card" id="card-home-popup" style="border-left:4px solid #6366f1;scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;">홈 팝업 관리 <span class="t-sm t-muted">홈 화면 자동 팝업 설정</span></h4>
                     <p class="t-help-lg">홈 진입 시 자동으로 표시되는 팝업을 관리합니다. 일반 유저용 / 관리자용 각각 설정 가능합니다.</p>
                     <div style="display:flex;gap:8px;margin-bottom:16px;">
@@ -831,7 +963,7 @@
                 </div>
 
                 <!-- Phase C: 기록 시스템 운영 가이드 -->
-                <div class="admin-card" style="border-left:4px solid #e67e22;">
+                <div class="admin-card" id="card-record-guide" style="border-left:4px solid #e67e22;scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;">🏆 기록 관리 시스템 운영 가이드 <span class="t-sm t-muted">NR / DR / CR · 자동 감지 워크플로</span></h4>
                     <p class="t-help-lg">신기록 자동 감지 시스템의 동작 원리와 운영 규칙입니다. 관리자/운영자가 숙지해야 할 내용입니다.</p>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;">
@@ -1814,6 +1946,23 @@ POST /api/external/event-result-link/batch<br>
 
             <!-- tab-relay panel removed — orphan with no tab button; relay management is in events tab -->
 
+                </div><!-- /.admin-main -->
+            </div><!-- /.admin-shell -->
+        </div>
+    </div>
+
+    <!-- [대 리뉴얼] 검색 팔레트 (Cmd/Ctrl+K) -->
+    <div class="palette-backdrop" id="cmd-palette" onclick="if(event.target===this)closeCmdPalette()">
+        <div class="palette" role="dialog" aria-label="기능 검색">
+            <div class="palette-header">
+                <input type="text" id="cmd-palette-input" class="palette-input"
+                       placeholder="기능명 또는 키워드 검색…" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="palette-results" id="cmd-palette-results"></div>
+            <div class="palette-footer">
+                <span><kbd>↑</kbd> <kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 이동 · <kbd>Esc</kbd> 닫기</span>
+                <span id="cmd-palette-count"></span>
+            </div>
         </div>
     </div>
 
@@ -2030,8 +2179,11 @@ POST /api/external/event-result-link/batch<br>
         function switchTab(name, btn) {
             document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById('tab-' + name).classList.add('active');
+            // 사이드바에서 호출했을 때 btn이 없을 수도 있으니, data-tab으로 자동 매칭
+            if (!btn) btn = document.querySelector(`.admin-tab[data-tab="${name}"]`);
+            if (btn) btn.classList.add('active');
+            const panel = document.getElementById('tab-' + name);
+            if (panel) panel.classList.add('active');
             if (name === 'overview') loadOverview();
             if (name === 'athletes') loadAthletes();
             if (name === 'events') loadEvents();
@@ -2045,7 +2197,243 @@ POST /api/external/event-result-link/batch<br>
             if (name === 'documents') loadDocTemplates();
             if (name === 'records') loadRecordsTab();
             if (name === 'extapi') { extLoadCompetitions(); extLoadKeys(); extLoadLogs(); }
+            // [대 리뉴얼] 사이드바 활성 항목 동기화
+            try { syncSidebarActive(name); } catch(_) {}
         }
+
+        // ============================================================
+        // [대 리뉴얼] 사이드바 그룹 메뉴 + 기능 검색 팔레트
+        // ============================================================
+
+        // 기능 인덱스: 사이드바 그룹 + 팔레트 검색의 단일 데이터 소스
+        // - tab: switchTab() 인자 (기존 12개 탭 유지)
+        // - anchor: 해당 탭 내부 카드 id (있으면 카드까지 스크롤·강조)
+        // - keywords: 검색 매칭용 추가 키워드
+        const ADMIN_FEATURES = [
+            // ───── 현황 ─────
+            { group:'overview', label:'현황',           tab:'overview', icon:'📊', desc:'대회/시스템 전체 상태 요약', keywords:'dashboard 상태 요약' },
+
+            // ───── 대회 운영 ─────
+            { group:'op', label:'대회 설정',           tab:'competition', icon:'🏟️', desc:'대회 정보·기간·연맹·시리즈 설정', keywords:'competition 대회 정보 수정' },
+            { group:'op', label:'업로드 · 시간표',     tab:'upload',      icon:'📤', desc:'엑셀 업로드, 시간표, 매칭', keywords:'upload xlsx timetable' },
+            { group:'op', label:'선수 관리',           tab:'athletes',    icon:'🏃', desc:'선수 추가/수정/삭제, 배번', keywords:'athlete 선수 배번 bib' },
+            { group:'op', label:'종목 관리',           tab:'events',      icon:'📋', desc:'종목 추가/수정, 조편성, 부 매칭', keywords:'event 종목 heat 조' },
+            { group:'op', label:'기록 입력 / 관리',    tab:'records',     icon:'⏱️', desc:'NR/DR/CR 승인 큐, 기록 관리', keywords:'record 기록 입력 신기록' },
+
+            // ───── 결과·기록 ─────
+            { group:'result', label:'문서 · 다운로드',  tab:'documents',  icon:'📄', desc:'종합기록지, 백업, PDF/Excel', keywords:'document download pdf excel xlsx 백업' },
+            { group:'result', label:'스코어보드',       tab:'scoreboard', icon:'🖥️', desc:'스코어보드 그룹·종목 연동', keywords:'scoreboard joint group' },
+
+            // ───── 인프라 (심판·키·페이싱·API) ─────
+            { group:'infra', label:'심판별 운영키',     tab:'judges',    anchor:'card-judge-keys',        icon:'🔑', desc:'심판별 고유키, 권한 부여', keywords:'judge key 심판 운영 권한' },
+            { group:'infra', label:'심판장 · 로고 설정', tab:'competition', anchor:'card-chief-judge',     icon:'🏷️', desc:'심판장/기록주임 이름, 좌·우 로고 (기록지 출력용)', keywords:'심판장 chief judge logo 로고 기록주임' },
+            { group:'infra', label:'기본 운영키 / 관리자키', tab:'settings', anchor:'card-default-keys',   icon:'🗝️', desc:'전역 기본 운영키와 관리자키 변경', keywords:'admin key operation 운영키 관리자키 access' },
+            { group:'infra', label:'기록위원 전용 키',  tab:'settings',   anchor:'card-record-officer-key', icon:'🏆', desc:'NR/DR/CR 승인 전담 기록위원 키', keywords:'기록위원 record officer key 신기록 승인' },
+            { group:'infra', label:'페이싱 라이트',     tab:'pacing',     icon:'🚦', desc:'페이싱 색상·세그먼트 설정', keywords:'pacing light 페이싱 색상' },
+            { group:'infra', label:'외부 API',          tab:'extapi',     icon:'🔌', desc:'외부 result-link API 키·로그', keywords:'extapi external api result link 외부' },
+
+            // ───── 시스템 / 마스터 ─────
+            { group:'sys', label:'연맹 마스터',        tab:'competition', anchor:'card-federations', icon:'🏛️', desc:'대회에 배정할 연맹 목록 (코드·배지·라벨)', keywords:'federation 연맹 ktfl' },
+            { group:'sys', label:'부(Division) 마스터', tab:'events', action:'openDivisionManagerModal', icon:'🗂️', desc:'부(division) 추가/수정/삭제 (실업·대학·고·중·일반 등)', keywords:'division 부 실업 대학부 고등부 중등부' },
+            { group:'sys', label:'홈 페이지 콘텐츠',    tab:'settings',   anchor:'card-site-content', icon:'🏠', desc:'홈의 설치 안내·운영 매뉴얼 HTML', keywords:'site content install guide manual 매뉴얼 홈' },
+            { group:'sys', label:'홈 팝업 관리',        tab:'settings',   anchor:'card-home-popup', icon:'💬', desc:'홈 진입 자동 팝업 (일반/관리자)', keywords:'popup 팝업 home 홈' },
+            { group:'sys', label:'기록 시스템 가이드',  tab:'settings',   anchor:'card-record-guide', icon:'📘', desc:'NR/DR/CR 자동 감지 운영 가이드', keywords:'guide 가이드 기록 시스템' },
+        ];
+
+        const ADMIN_GROUPS = [
+            { id:'overview', title:'현황' },
+            { id:'op',       title:'대회 운영' },
+            { id:'result',   title:'결과 · 기록' },
+            { id:'infra',    title:'인프라 (키 · 페이싱 · API)' },
+            { id:'sys',      title:'시스템 / 마스터' },
+        ];
+
+        // 사이드바 렌더
+        function renderSidebar() {
+            const root = document.getElementById('sidebar-nav');
+            if (!root) return;
+            const html = ADMIN_GROUPS.map(g => {
+                const items = ADMIN_FEATURES.filter(f => f.group === g.id);
+                if (items.length === 0) return '';
+                return `
+                    <div class="sb-group">
+                        <div class="sb-group-title">${g.title}</div>
+                        ${items.map((f, i) => `
+                            <button class="sb-item" data-tab="${f.tab}"
+                                    data-anchor="${f.anchor || ''}"
+                                    data-action="${f.action || ''}"
+                                    onclick="sidebarNavigate(${ADMIN_FEATURES.indexOf(f)})">
+                                <span class="sb-icon">${f.icon || '•'}</span>
+                                <span>${f.label}</span>
+                            </button>
+                        `).join('')}
+                    </div>`;
+            }).join('');
+            root.innerHTML = html;
+            // 초기 활성 동기화 (현재 활성 탭)
+            const activeTab = document.querySelector('.admin-tab.active');
+            if (activeTab) syncSidebarActive(activeTab.dataset.tab);
+        }
+
+        // 사이드바 활성 표시 (탭 이름 기준)
+        function syncSidebarActive(tabName) {
+            document.querySelectorAll('#sidebar-nav .sb-item').forEach(el => {
+                el.classList.toggle('active', el.dataset.tab === tabName && !el.dataset.anchor);
+            });
+        }
+
+        // 사이드바/팔레트에서 항목 클릭 시 이동
+        function sidebarNavigate(idx) {
+            const f = ADMIN_FEATURES[idx];
+            if (!f) return;
+            const tabBtn = document.querySelector(`.admin-tab[data-tab="${f.tab}"]`);
+            // 다른 탭이면 우선 switchTab으로 이동
+            const isAlreadyActive = tabBtn && tabBtn.classList.contains('active');
+            if (!isAlreadyActive) {
+                switchTab(f.tab, tabBtn);
+            }
+            // 사이드바 활성: anchor가 있는 항목은 그 항목 자체를 active로
+            document.querySelectorAll('#sidebar-nav .sb-item').forEach(el => el.classList.remove('active'));
+            const target = document.querySelectorAll('#sidebar-nav .sb-item')[idx];
+            if (target) target.classList.add('active');
+
+            // 카드/요소 점프
+            setTimeout(() => {
+                if (f.anchor) {
+                    const card = document.getElementById(f.anchor);
+                    if (card) {
+                        card.scrollIntoView({ behavior:'smooth', block:'start' });
+                        card.classList.remove('card-flash');
+                        void card.offsetWidth; // reflow
+                        card.classList.add('card-flash');
+                    }
+                }
+                if (f.action && typeof window[f.action] === 'function') {
+                    try { window[f.action](); } catch(e) { console.warn('action 실행 실패:', e); }
+                }
+            }, isAlreadyActive ? 0 : 120);
+        }
+
+        // 사이드바 검색 (인라인): 일치하는 항목만 보이게 필터
+        function filterSidebar(q) {
+            q = (q || '').trim().toLowerCase();
+            document.querySelectorAll('#sidebar-nav .sb-item').forEach(el => {
+                if (!q) { el.style.display = ''; return; }
+                const idx = parseInt((el.getAttribute('onclick').match(/\d+/)||[0])[0]);
+                const f = ADMIN_FEATURES[idx];
+                const hay = (f.label + ' ' + (f.desc||'') + ' ' + (f.keywords||'')).toLowerCase();
+                el.style.display = hay.includes(q) ? '' : 'none';
+            });
+            // 빈 그룹 제목도 숨김
+            document.querySelectorAll('#sidebar-nav .sb-group').forEach(g => {
+                const anyVisible = Array.from(g.querySelectorAll('.sb-item')).some(el => el.style.display !== 'none');
+                g.style.display = anyVisible ? '' : 'none';
+            });
+        }
+
+        // ─── Cmd/Ctrl+K 검색 팔레트 ───
+        let _paletteSelectedIdx = 0;
+        let _paletteMatches = [];
+
+        function openCmdPalette() {
+            const back = document.getElementById('cmd-palette');
+            if (!back) return;
+            back.classList.add('show');
+            const input = document.getElementById('cmd-palette-input');
+            input.value = '';
+            renderPaletteResults('');
+            setTimeout(() => input.focus(), 30);
+        }
+        function closeCmdPalette() {
+            const back = document.getElementById('cmd-palette');
+            if (back) back.classList.remove('show');
+        }
+        function renderPaletteResults(q) {
+            q = (q || '').trim().toLowerCase();
+            _paletteSelectedIdx = 0;
+            _paletteMatches = ADMIN_FEATURES
+                .map((f, i) => ({ f, i, hay: (f.label + ' ' + (f.desc||'') + ' ' + (f.keywords||'')).toLowerCase() }))
+                .filter(x => !q || x.hay.includes(q));
+            const root = document.getElementById('cmd-palette-results');
+            const countEl = document.getElementById('cmd-palette-count');
+            if (_paletteMatches.length === 0) {
+                root.innerHTML = '<div class="palette-empty">일치하는 기능이 없습니다.</div>';
+                countEl.textContent = '0건';
+                return;
+            }
+            countEl.textContent = `${_paletteMatches.length}건`;
+            const groupTitle = (gid) => (ADMIN_GROUPS.find(g => g.id === gid) || {}).title || '';
+            root.innerHTML = _paletteMatches.map((m, idx) => `
+                <div class="palette-item ${idx === 0 ? 'selected' : ''}" data-idx="${idx}"
+                     onclick="paletteSelect(${idx})"
+                     onmouseenter="paletteHover(${idx})">
+                    <span class="pi-icon">${m.f.icon || '•'}</span>
+                    <div class="pi-body">
+                        <div class="pi-label">${m.f.label}
+                            <span class="pi-group-badge">${groupTitle(m.f.group)}</span>
+                        </div>
+                        <div class="pi-desc">${m.f.desc || ''}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        function paletteHover(idx) {
+            _paletteSelectedIdx = idx;
+            document.querySelectorAll('#cmd-palette-results .palette-item').forEach((el, i) => {
+                el.classList.toggle('selected', i === idx);
+            });
+        }
+        function paletteSelect(idx) {
+            const m = _paletteMatches[idx];
+            if (!m) return;
+            closeCmdPalette();
+            sidebarNavigate(m.i);
+        }
+        function paletteMoveSelection(delta) {
+            if (_paletteMatches.length === 0) return;
+            _paletteSelectedIdx = (_paletteSelectedIdx + delta + _paletteMatches.length) % _paletteMatches.length;
+            const items = document.querySelectorAll('#cmd-palette-results .palette-item');
+            items.forEach((el, i) => el.classList.toggle('selected', i === _paletteSelectedIdx));
+            const sel = items[_paletteSelectedIdx];
+            if (sel) sel.scrollIntoView({ block:'nearest' });
+        }
+
+        // 글로벌 키바인딩
+        document.addEventListener('keydown', (e) => {
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            const mod = isMac ? e.metaKey : e.ctrlKey;
+            if (mod && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                openCmdPalette();
+                return;
+            }
+            const back = document.getElementById('cmd-palette');
+            if (back && back.classList.contains('show')) {
+                if (e.key === 'Escape') { e.preventDefault(); closeCmdPalette(); }
+                else if (e.key === 'ArrowDown') { e.preventDefault(); paletteMoveSelection(1); }
+                else if (e.key === 'ArrowUp')   { e.preventDefault(); paletteMoveSelection(-1); }
+                else if (e.key === 'Enter')     { e.preventDefault(); paletteSelect(_paletteSelectedIdx); }
+            }
+        });
+
+        // 사이드바 검색 input
+        document.addEventListener('DOMContentLoaded', () => {
+            renderSidebar();
+            const sbInput = document.getElementById('sidebar-search-input');
+            if (sbInput) {
+                sbInput.addEventListener('input', (e) => filterSidebar(e.target.value));
+                // 사이드바 검색창에서 Enter → 첫 결과로 이동
+                sbInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        const first = document.querySelector('#sidebar-nav .sb-item:not([style*="display: none"])');
+                        if (first) first.click();
+                    }
+                });
+            }
+            // 팔레트 input
+            const paInput = document.getElementById('cmd-palette-input');
+            if (paInput) paInput.addEventListener('input', (e) => renderPaletteResults(e.target.value));
+        });
 
         function toast(msg, type = 'success') {
             const t = document.createElement('div'); t.className = 'toast ' + type; t.textContent = msg;
