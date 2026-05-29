@@ -583,8 +583,9 @@ async function loadResultsData() {
                 chip('CR', '#27ae60', recs.competition)
             ].filter(Boolean);
             if (parts.length > 0) {
-                recordsBannerHtml = `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;">
-                    <span style="color:var(--text-muted);">🏆 기존 기록:</span> ${parts.join('')}
+                recordsBannerHtml = `<div class="record-banner-mobile" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;">
+                    <span style="color:var(--text-muted);font-weight:600;white-space:nowrap;">기존 기록</span>
+                    <span class="record-chips" style="display:inline-flex;flex-wrap:wrap;gap:4px;">${parts.join('')}</span>
                 </div>`;
             }
             // 캐시 (행 렌더링 시 사용)

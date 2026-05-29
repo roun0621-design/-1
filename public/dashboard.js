@@ -1013,8 +1013,9 @@ function _buildRecordsBannerHTML(records) {
         chip('CR', '#27ae60', records.competition)
     ].filter(Boolean);
     if (parts.length === 0) return '';
-    return `<div style="margin:8px 0 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;padding:8px 12px;background:#fffbea;border:1px solid #f1d68a;border-radius:8px;">
-        <span style="color:var(--text-muted);">🏆 기존 기록:</span> ${parts.join('')}
+    return `<div class="record-banner-mobile" style="margin:8px 0 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;padding:8px 12px;background:#fffbea;border:1px solid #f1d68a;border-radius:8px;">
+        <span style="color:var(--text-muted);font-weight:600;white-space:nowrap;">기존 기록</span>
+        <span class="record-chips" style="display:inline-flex;flex-wrap:wrap;gap:4px;">${parts.join('')}</span>
     </div>`;
 }
 function _buildRecordBadgesHTML(newValNum) {
@@ -1451,8 +1452,8 @@ async function _loadCombinedResultsAsync(evt) {
         }).join('');
 
         container.innerHTML = `
-            <div class="matrix-scroll-wrap" style="overflow-x:auto;">
-                <table class="data-table" style="font-size:11px;">
+            <div class="matrix-scroll-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+                <table class="data-table sticky-leading" style="font-size:11px;">
                     <thead>
                     <tr>
                         <th colspan="4" style="border-bottom:none;"></th>
