@@ -13,6 +13,7 @@ const helmet = require('helmet');
 const { generateFullRecordExcel } = require('./lib/fullRecordExcel');
 const { generateFullRecordPdf } = require('./lib/fullRecordPdf');
 const { generateCertificatePdf, generateCertificateBatch, renderRankLabel } = require('./lib/certificatePdf');
+const SMS = require('./lib/smsSender');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const { initDatabase, DB_PATH } = require('./db/init');
@@ -400,6 +401,46 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_issue_log (
     note TEXT NOT NULL DEFAULT ''
 )`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue_log(competition_id, issued_at DESC)`); } catch(e) {}
+
+// athlete.phone 컬럼 추가 (SMS 발송용)
+try { db.exec(`ALTER TABLE athlete ADD COLUMN phone TEXT NOT NULL DEFAULT ''`); } catch(e) { /* already exists */ }
+
+// ========== SMS System (Aligo + Simulation) ==========
+try { db.exec(`CREATE TABLE IF NOT EXISTS sms_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    provider TEXT NOT NULL DEFAULT 'aligo',
+    api_key TEXT NOT NULL DEFAULT '',
+    user_id TEXT NOT NULL DEFAULT '',
+    sender_number TEXT NOT NULL DEFAULT '',
+    sender_name TEXT NOT NULL DEFAULT '',
+    sim_mode INTEGER NOT NULL DEFAULT 1,     -- 1=시뮬레이션 모드 (실제 발송 안함)
+    default_template TEXT NOT NULL DEFAULT '안녕하세요 {athlete_name}님,\n{competition_name} {event_name} 결과:\n{rank_label} {record_value}\n상장 다운로드: {cert_url}',
+    monthly_quota INTEGER NOT NULL DEFAULT 0,
+    sent_this_month INTEGER NOT NULL DEFAULT 0,
+    last_reset_month TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) { console.error('[DB] sms_config error:', e.message); }
+
+// 단일 row 보장
+try { db.exec(`INSERT OR IGNORE INTO sms_config (id) VALUES (1)`); } catch(e) {}
+
+try { db.exec(`CREATE TABLE IF NOT EXISTS sms_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    competition_id INTEGER,
+    athlete_id INTEGER,
+    phone_number TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',  -- pending|sent|failed|simulated
+    provider TEXT NOT NULL DEFAULT 'aligo',
+    provider_msg_id TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    cost INTEGER NOT NULL DEFAULT 0,         -- 원
+    sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+    triggered_by TEXT NOT NULL DEFAULT ''    -- e.g. 'manual', 'cert_batch'
+)`); } catch(e) { console.error('[DB] sms_log error:', e.message); }
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC)`); } catch(e) {}
+// ========== END SMS Schema ==========
 
 // 기본 상장 템플릿 시드 (최초 1회) — 시상장 + 완주증
 try {
@@ -13440,6 +13481,90 @@ app.post('/api/admin/certificates/single', async (req, res) => {
     }
 });
 
+// 상장 이미지 업로드 (로고/인장)
+// position: 'logo_left' | 'logo_right' | 'seal'
+app.post('/api/admin/certificate-images/upload', upload.single('image'), async (req, res) => {
+    try {
+        if (!isAdminKey(req.body.admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        if (!req.file) return res.status(400).json({ error: '파일이 업로드되지 않았습니다.' });
+        const templateId = parseInt(req.body.template_id, 10);
+        const position = req.body.position;
+        if (!templateId || !['logo_left', 'logo_right', 'seal'].includes(position)) {
+            return res.status(400).json({ error: 'template_id, position(logo_left|logo_right|seal) 필요' });
+        }
+
+        const sqlDb = getDb();
+        const tpl = sqlDb.prepare('SELECT * FROM certificate_template WHERE id=?').get(templateId);
+        if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
+
+        // 저장 디렉토리
+        const destDir = path.join(__dirname, 'public', 'uploads', 'cert_images');
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+
+        // 기존 파일 제거 (확장자 다를 수 있음)
+        const oldExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+        for (const oe of oldExts) {
+            const oldPath = path.join(destDir, `cert_${position}_${templateId}${oe}`);
+            try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); } catch(e) {}
+        }
+
+        // 새 파일 저장
+        const ext = (path.extname(req.file.originalname) || '.png').toLowerCase();
+        const filename = `cert_${position}_${templateId}${ext}`;
+        const destPath = path.join(destDir, filename);
+        fs.copyFileSync(req.file.path, destPath);
+        try { fs.unlinkSync(req.file.path); } catch(_) {}
+
+        const publicUrl = `/uploads/cert_images/${filename}`;
+
+        // 템플릿 DB 업데이트
+        const fieldMap = {
+            'logo_left': 'logo_left_path',
+            'logo_right': 'logo_right_path',
+            'seal': 'seal_image_path',
+        };
+        const dbField = fieldMap[position];
+        const now = new Date().toISOString();
+        sqlDb.prepare(`UPDATE certificate_template SET ${dbField}=?, updated_at=? WHERE id=?`)
+            .run(publicUrl, now, templateId);
+
+        const cacheBust = `${publicUrl}?v=${Date.now()}`;
+        res.json({ success: true, url: cacheBust, path: publicUrl });
+    } catch (err) {
+        console.error('[CERT][image-upload]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 상장 이미지 삭제
+app.post('/api/admin/certificate-images/delete', (req, res) => {
+    try {
+        const { admin_key, template_id, position } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        if (!template_id || !['logo_left', 'logo_right', 'seal'].includes(position)) {
+            return res.status(400).json({ error: 'template_id, position 필요' });
+        }
+        const fieldMap = {
+            'logo_left': 'logo_left_path',
+            'logo_right': 'logo_right_path',
+            'seal': 'seal_image_path',
+        };
+        const sqlDb = getDb();
+        const tpl = sqlDb.prepare('SELECT * FROM certificate_template WHERE id=?').get(template_id);
+        if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
+        const oldPath = tpl[fieldMap[position]];
+        if (oldPath) {
+            const absPath = path.join(__dirname, 'public', oldPath.replace(/^\/+/, ''));
+            try { if (fs.existsSync(absPath)) fs.unlinkSync(absPath); } catch(e) {}
+        }
+        sqlDb.prepare(`UPDATE certificate_template SET ${fieldMap[position]}='', updated_at=? WHERE id=?`)
+            .run(new Date().toISOString(), template_id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 발급 로그
 app.get('/api/admin/certificates/log', (req, res) => {
     try {
@@ -13465,6 +13590,244 @@ app.get('/api/admin/certificates/log', (req, res) => {
     }
 });
 // ========== END Certificate System ==========
+
+// ========== SMS System API ==========
+
+// 월 카운터 리셋 헬퍼
+function _resetSmsCounterIfNeeded(cfg, sqlDb) {
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (cfg.last_reset_month !== ym) {
+        sqlDb.prepare('UPDATE sms_config SET sent_this_month=0, last_reset_month=? WHERE id=1').run(ym);
+        cfg.sent_this_month = 0;
+        cfg.last_reset_month = ym;
+    }
+    return cfg;
+}
+
+// SMS 설정 조회
+app.get('/api/admin/sms/config', (req, res) => {
+    try {
+        const adminKey = req.query.admin_key;
+        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const sqlDb = getDb();
+        const cfg = sqlDb.prepare('SELECT * FROM sms_config WHERE id=1').get();
+        _resetSmsCounterIfNeeded(cfg, sqlDb);
+        // api_key는 마스킹
+        const masked = Object.assign({}, cfg, {
+            api_key: cfg.api_key ? '***' + cfg.api_key.slice(-4) : '',
+            api_key_set: !!cfg.api_key,
+        });
+        res.json({ config: masked });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// SMS 설정 저장
+app.post('/api/admin/sms/config', (req, res) => {
+    try {
+        const { admin_key, provider, api_key, user_id, sender_number, sender_name, sim_mode, default_template, monthly_quota } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const sqlDb = getDb();
+        const cur = sqlDb.prepare('SELECT * FROM sms_config WHERE id=1').get();
+        const now = new Date().toISOString();
+        // api_key가 빈 문자열이면 기존 유지 (편의)
+        const finalApiKey = (api_key === undefined || api_key === '***UNCHANGED***') ? cur.api_key : (api_key || '');
+        sqlDb.prepare(`UPDATE sms_config SET
+            provider=?, api_key=?, user_id=?, sender_number=?, sender_name=?,
+            sim_mode=?, default_template=?, monthly_quota=?, updated_at=?
+            WHERE id=1`).run(
+            provider || cur.provider || 'aligo',
+            finalApiKey,
+            user_id || '',
+            SMS.normalizePhone(sender_number || ''),
+            sender_name || '',
+            sim_mode ? 1 : 0,
+            default_template || cur.default_template,
+            parseInt(monthly_quota || 0, 10),
+            now
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[SMS][config]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 메시지 길이/종류 미리보기
+app.post('/api/admin/sms/preview', (req, res) => {
+    try {
+        const { admin_key, message } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const bytes = SMS.getMessageBytes(message || '');
+        const msgType = SMS.detectMessageType(message || '');
+        const cost = msgType === 'LMS' ? 35 : 13;
+        res.json({ bytes, msg_type: msgType, est_cost_per_msg: cost });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 단건 발송
+app.post('/api/admin/sms/send', async (req, res) => {
+    try {
+        const { admin_key, phone, message, title, competition_id, athlete_id, triggered_by } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const sqlDb = getDb();
+        const cfg = sqlDb.prepare('SELECT * FROM sms_config WHERE id=1').get();
+        _resetSmsCounterIfNeeded(cfg, sqlDb);
+
+        const result = await SMS.sendOne(cfg, { phone, message, title });
+
+        // 로그 기록
+        sqlDb.prepare(`INSERT INTO sms_log
+            (competition_id, athlete_id, phone_number, message, status, provider, provider_msg_id, error_message, cost, sent_at, triggered_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            competition_id || null,
+            athlete_id || null,
+            SMS.normalizePhone(phone),
+            message,
+            result.status,
+            cfg.provider,
+            result.provider_msg_id,
+            result.error_message,
+            result.cost,
+            new Date().toISOString(),
+            triggered_by || 'manual'
+        );
+
+        if (result.status === 'sent' || result.status === 'simulated') {
+            sqlDb.prepare('UPDATE sms_config SET sent_this_month = sent_this_month + 1 WHERE id=1').run();
+        }
+
+        res.json({ success: true, ...result });
+    } catch (err) {
+        console.error('[SMS][send]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 일괄 발송 (대회+종목+상장 모드 등 → 자동 메시지 생성)
+app.post('/api/admin/sms/batch-send', async (req, res) => {
+    try {
+        const { admin_key, competition_id, event_ids, rank_from, rank_to, include_finishers,
+                template, triggered_by, cert_url_base } = req.body || {};
+        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
+
+        const sqlDb = getDb();
+        const cfg = sqlDb.prepare('SELECT * FROM sms_config WHERE id=1').get();
+        _resetSmsCounterIfNeeded(cfg, sqlDb);
+
+        const comp = sqlDb.prepare('SELECT * FROM competition WHERE id=?').get(competition_id);
+        if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
+
+        let targetEventIds = Array.isArray(event_ids) ? event_ids.slice() : [];
+        if (targetEventIds.length === 0) {
+            const all = sqlDb.prepare(`SELECT id FROM event WHERE competition_id=? AND round_type='final' ORDER BY sort_order, id`).all(competition_id);
+            targetEventIds = all.map(e => e.id);
+        }
+
+        const rankFrom = Math.max(1, parseInt(rank_from || 1, 10));
+        const rankTo = Math.max(rankFrom, parseInt(rank_to || 3, 10));
+        const wantFinishers = !!include_finishers;
+        const tplMsg = template || cfg.default_template;
+
+        const recipients = [];
+        for (const eid of targetEventIds) {
+            const { event, rows } = getEventResultsForCert(eid);
+            if (!event) continue;
+            for (const row of rows) {
+                // 선수 폰번호 조회 (athlete table에 phone 컬럼이 있어야 함 — 없으면 빈 칸으로 시뮬레이션)
+                let include = false;
+                if (row.rank != null && row.rank >= rankFrom && row.rank <= rankTo) include = true;
+                if (!include && wantFinishers && row.finished) include = true;
+                if (!include) continue;
+
+                const ath = sqlDb.prepare('SELECT * FROM athlete WHERE id=?').get(row.athlete_id);
+                const phone = ath && (ath.phone || ath.phone_number || '') || '';
+                const message = SMS.fillMessageTemplate(tplMsg, {
+                    athlete_name: row.athlete_name,
+                    team: row.team,
+                    event_name: event.name,
+                    rank: row.rank == null ? '' : row.rank,
+                    rank_label: row.rank == null ? '완주' : (row.rank === 1 ? '우승' : row.rank === 2 ? '준우승' : `${row.rank}위`),
+                    record_value: row.record_value,
+                    competition_name: comp.name,
+                    cert_url: cert_url_base ? `${cert_url_base}/${row.athlete_id}` : '',
+                });
+                recipients.push({ athlete_id: row.athlete_id, athlete_name: row.athlete_name, phone, message });
+            }
+        }
+
+        // 발송 (순차 — 알리고 동시연결 제한 회피)
+        const results = [];
+        for (const r of recipients) {
+            const sendResult = await SMS.sendOne(cfg, { phone: r.phone, message: r.message });
+            sqlDb.prepare(`INSERT INTO sms_log
+                (competition_id, athlete_id, phone_number, message, status, provider, provider_msg_id, error_message, cost, sent_at, triggered_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                competition_id,
+                r.athlete_id,
+                SMS.normalizePhone(r.phone),
+                r.message,
+                sendResult.status,
+                cfg.provider,
+                sendResult.provider_msg_id,
+                sendResult.error_message,
+                sendResult.cost,
+                new Date().toISOString(),
+                triggered_by || 'cert_batch'
+            );
+            if (sendResult.status === 'sent' || sendResult.status === 'simulated') {
+                sqlDb.prepare('UPDATE sms_config SET sent_this_month = sent_this_month + 1 WHERE id=1').run();
+            }
+            results.push({
+                athlete_id: r.athlete_id,
+                athlete_name: r.athlete_name,
+                phone: r.phone,
+                status: sendResult.status,
+                error: sendResult.error_message,
+            });
+        }
+
+        const summary = results.reduce((acc, r) => {
+            acc[r.status] = (acc[r.status] || 0) + 1;
+            return acc;
+        }, {});
+
+        res.json({ success: true, sim_mode: !!cfg.sim_mode, total: results.length, summary, results });
+    } catch (err) {
+        console.error('[SMS][batch-send]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 발송 이력
+app.get('/api/admin/sms/log', (req, res) => {
+    try {
+        const adminKey = req.query.admin_key;
+        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        const compId = req.query.competition_id;
+        const limit = Math.min(parseInt(req.query.limit || 200, 10), 1000);
+        const sqlDb = getDb();
+        const where = compId ? 'WHERE l.competition_id=?' : '';
+        const params = compId ? [compId, limit] : [limit];
+        const rows = sqlDb.prepare(`
+            SELECT l.*, a.name AS athlete_name, a.team
+            FROM sms_log l
+            LEFT JOIN athlete a ON a.id = l.athlete_id
+            ${where}
+            ORDER BY l.sent_at DESC
+            LIMIT ?
+        `).all(...params);
+        res.json({ logs: rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ========== END SMS System ==========
 
 // Document listing — available documents for a competition
 app.get('/api/documents/:compId', async (req, res) => {

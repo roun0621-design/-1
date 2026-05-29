@@ -2099,11 +2099,194 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                     </div>
 
+                    <!-- 이미지 업로드 (양식 저장 후 활성화) -->
+                    <div id="cert-images-section" style="margin-top:14px;border-top:1px solid #eee;padding-top:12px;display:none;">
+                        <h5 style="margin-bottom:8px;">이미지 업로드</h5>
+                        <p class="t-xs t-muted" style="margin-bottom:10px;">권장: PNG (배경 투명), 정사각형. 로고 60×60pt, 인장 50×50pt로 출력됩니다.</p>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
+                            <div>
+                                <label class="t-xs" style="font-weight:600;">좌측 로고</label>
+                                <div id="cert-img-preview-logo_left" class="cert-img-slot"></div>
+                                <input type="file" id="cert-img-input-logo_left" accept="image/*" style="display:none;" onchange="uploadCertImage('logo_left', this.files[0])">
+                                <div style="display:flex;gap:4px;margin-top:4px;">
+                                    <button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('cert-img-input-logo_left').click()">선택</button>
+                                    <button type="button" class="btn btn-xs" style="background:#fee;color:#a00;" onclick="deleteCertImage('logo_left')">제거</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="t-xs" style="font-weight:600;">우측 로고</label>
+                                <div id="cert-img-preview-logo_right" class="cert-img-slot"></div>
+                                <input type="file" id="cert-img-input-logo_right" accept="image/*" style="display:none;" onchange="uploadCertImage('logo_right', this.files[0])">
+                                <div style="display:flex;gap:4px;margin-top:4px;">
+                                    <button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('cert-img-input-logo_right').click()">선택</button>
+                                    <button type="button" class="btn btn-xs" style="background:#fee;color:#a00;" onclick="deleteCertImage('logo_right')">제거</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="t-xs" style="font-weight:600;">인장</label>
+                                <div id="cert-img-preview-seal" class="cert-img-slot"></div>
+                                <input type="file" id="cert-img-input-seal" accept="image/*" style="display:none;" onchange="uploadCertImage('seal', this.files[0])">
+                                <div style="display:flex;gap:4px;margin-top:4px;">
+                                    <button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('cert-img-input-seal').click()">선택</button>
+                                    <button type="button" class="btn btn-xs" style="background:#fee;color:#a00;" onclick="deleteCertImage('seal')">제거</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="cert-images-section-disabled" style="margin-top:14px;border-top:1px solid #eee;padding-top:12px;font-size:11px;color:var(--text-muted);">
+                        새 양식은 저장 후 이미지(로고·인장)를 업로드할 수 있습니다.
+                    </div>
+
                     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;border-top:1px solid #eee;padding-top:12px;">
                         <button class="btn btn-outline" onclick="previewCertificateFromEditor()">미리보기</button>
                         <button class="btn btn-outline" onclick="closeCertTemplateEditor()">취소</button>
                         <button class="btn btn-primary" onclick="saveCertTemplate()">저장</button>
                     </div>
+                </div>
+            </div>
+
+            <style>
+            .cert-img-slot { width:100%; height:80px; border:1px dashed #ccc; border-radius:6px; background:#fafafa; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+            .cert-img-slot img { max-width:100%; max-height:100%; object-fit:contain; }
+            .cert-img-slot .empty { color:#aaa; font-size:11px; }
+            </style>
+
+            <!-- ========== tab-sms : 문자 발송 ========== -->
+            <div id="tab-sms" class="admin-tab-panel">
+                <!-- A. 발송 설정 -->
+                <div class="admin-card" style="border-left:4px solid #2d5016;">
+                    <h4 style="color:#2d5016;margin-bottom:8px;">알리고(Aligo) SMS 설정</h4>
+                    <div style="background:#fff3cd;border:1px solid #ffe69c;border-radius:6px;padding:10px;font-size:12px;margin-bottom:12px;">
+                        <strong>알리고 가입 안내:</strong> <a href="https://smartsms.aligo.in/" target="_blank" rel="noopener">smartsms.aligo.in</a> 가입 → 발신번호 등록 → API 키 발급 → 아래에 입력하세요.<br>
+                        <strong>시뮬레이션 모드</strong>가 켜져 있으면 실제 발송 없이 로그만 기록됩니다 (가입 전 테스트용).
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+                        <div>
+                            <label class="t-xs">Provider</label>
+                            <select id="sms-cfg-provider" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="aligo">알리고(Aligo)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="t-xs">알리고 User ID</label>
+                            <input type="text" id="sms-cfg-user-id" placeholder="알리고 사이트 ID" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">API Key <span id="sms-cfg-apikey-status" class="t-muted t-xs"></span></label>
+                            <input type="password" id="sms-cfg-api-key" placeholder="비워두면 기존 값 유지" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">발신 번호 (사전 등록)</label>
+                            <input type="text" id="sms-cfg-sender-number" placeholder="01012345678" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">발신자 이름 (선택)</label>
+                            <input type="text" id="sms-cfg-sender-name" placeholder="대회 사무국" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">월 한도 (0 = 무제한)</label>
+                            <input type="number" id="sms-cfg-monthly-quota" placeholder="0" min="0" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div style="grid-column:1 / -1;">
+                            <label class="t-xs">기본 메시지 템플릿 (변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {competition_name} {cert_url})</label>
+                            <textarea id="sms-cfg-template" rows="4" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;font-family:inherit;"></textarea>
+                            <div style="display:flex;gap:10px;align-items:center;margin-top:4px;font-size:11px;color:var(--text-muted);">
+                                <span id="sms-cfg-tpl-bytes">0 bytes</span>
+                                <span id="sms-cfg-tpl-type">SMS</span>
+                                <span id="sms-cfg-tpl-cost">예상: 13원/건</span>
+                                <button class="btn btn-xs btn-outline" onclick="previewSmsTemplate()" type="button">샘플로 변환</button>
+                            </div>
+                        </div>
+                        <div style="grid-column:1 / -1;">
+                            <label style="font-size:13px;display:flex;align-items:center;gap:6px;font-weight:600;color:#a05a00;">
+                                <input type="checkbox" id="sms-cfg-sim-mode" checked>
+                                시뮬레이션 모드 (실제 발송 안 함 — 가입 전 또는 테스트용)
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="saveSmsConfig()">설정 저장</button>
+                        <span id="sms-cfg-save-status" style="font-size:12px;color:var(--green);font-weight:600;"></span>
+                        <span class="t-muted t-xs">이번 달 발송: <span id="sms-cfg-sent-count">0</span>건</span>
+                    </div>
+                </div>
+
+                <!-- B. 단건 발송 -->
+                <div class="admin-card">
+                    <h4>단건 발송 (테스트)</h4>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+                        <div>
+                            <label class="t-xs">수신 번호</label>
+                            <input type="text" id="sms-send-phone" placeholder="01012345678" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div style="grid-column:1 / -1;">
+                            <label class="t-xs">메시지</label>
+                            <textarea id="sms-send-message" rows="4" placeholder="테스트 메시지" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></textarea>
+                            <div class="t-xs t-muted" style="margin-top:4px;">
+                                <span id="sms-send-bytes">0 bytes</span> · <span id="sms-send-type">SMS</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <button class="btn btn-primary" onclick="sendSingleSms()">발송</button>
+                        <span id="sms-send-status" style="font-size:12px;font-weight:600;margin-left:10px;"></span>
+                    </div>
+                </div>
+
+                <!-- C. 일괄 발송 -->
+                <div class="admin-card" style="border-left:4px solid #b8945a;">
+                    <h4 style="color:#7a5a20;">일괄 발송 — 결과 + 상장 링크</h4>
+                    <p class="t-xs t-muted" style="margin-bottom:10px;">대회·종목·순위 범위를 선택해 선수에게 결과 안내 + 상장 다운로드 링크 SMS를 보냅니다.</p>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px;">
+                        <div>
+                            <label class="t-xs">발송 모드</label>
+                            <select id="sms-batch-mode" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="award">시상장 (순위별)</option>
+                                <option value="finisher">완주자 전원</option>
+                            </select>
+                        </div>
+                        <div id="sms-batch-rank-wrap">
+                            <label class="t-xs">순위 범위</label>
+                            <div style="display:flex;gap:6px;align-items:center;">
+                                <input type="number" id="sms-batch-rank-from" min="1" value="1" style="width:60px;padding:4px;border:1px solid var(--gray);border-radius:4px;">
+                                <span>~</span>
+                                <input type="number" id="sms-batch-rank-to" min="1" value="3" style="width:60px;padding:4px;border:1px solid var(--gray);border-radius:4px;">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="t-xs">완주자 포함</label>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding-top:6px;">
+                                <input type="checkbox" id="sms-batch-include-finishers"> 순위 외 완주자도
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label class="t-xs" style="font-weight:600;">발송 대상 종목</label>
+                        <div id="sms-batch-event-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#fafafa;">대회를 선택하면 종목이 표시됩니다.</div>
+                        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+                            <button class="btn btn-xs btn-outline" onclick="smsBatchSelectAll(true)">전체 선택</button>
+                            <button class="btn btn-xs btn-outline" onclick="smsBatchSelectAll(false)">전체 해제</button>
+                            <button class="btn btn-xs btn-outline" onclick="loadSmsBatchEvents()">새로고침</button>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:10px;background:#f5f5f5;border-radius:6px;padding:10px;">
+                        <div class="t-xs t-muted" style="margin-bottom:4px;">⚠️ 선수 휴대폰 번호는 athlete.phone 컬럼에서 가져옵니다. 비어 있는 선수는 자동 시뮬레이션 실패로 기록됩니다.</div>
+                        <button class="btn btn-sm btn-warning" onclick="dryRunSmsBatch()">먼저 미리보기 (발송 없이 대상자 표시)</button>
+                    </div>
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="runSmsBatch()">일괄 발송 실행</button>
+                        <span id="sms-batch-status" style="font-size:12px;font-weight:600;"></span>
+                    </div>
+                    <div id="sms-batch-result" style="margin-top:10px;font-size:11px;"></div>
+                </div>
+
+                <!-- D. 발송 이력 -->
+                <div class="admin-card">
+                    <h4>발송 이력</h4>
+                    <div style="margin-bottom:8px;">
+                        <button class="btn btn-xs btn-outline" onclick="loadSmsLog()">새로고침</button>
+                    </div>
+                    <div id="sms-log-list" style="max-height:400px;overflow-y:auto;font-size:11px;">로딩 중...</div>
                 </div>
             </div>
 
@@ -2436,6 +2619,7 @@ POST /api/external/event-result-link/batch<br>
             // ───── 결과·기록 ─────
             { group:'result', label:'문서 · 다운로드',  tab:'documents',  icon:'file',    desc:'종합기록지, 백업, PDF/Excel', keywords:'document download pdf excel xlsx 백업' },
             { group:'result', label:'상장 출력',         tab:'certificates', icon:'trophy', desc:'상장·완주증 양식 편집 및 일괄 인쇄', keywords:'certificate 상장 완주증 시상 시상장 인쇄 출력' },
+            { group:'result', label:'문자 발송',         tab:'sms',         icon:'message', desc:'결과·상장 링크 SMS 발송 (알리고)', keywords:'sms 문자 알리고 aligo 발송 lms' },
             { group:'result', label:'스코어보드',       tab:'scoreboard', icon:'monitor', desc:'스코어보드 그룹·종목 연동', keywords:'scoreboard joint group' },
 
             // ───── 인프라 (심판·키·페이싱·API) ─────
@@ -9261,7 +9445,73 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('cert-edit-show-record').checked = t ? !!t.show_record_value : true;
             document.getElementById('cert-edit-show-team').checked = t ? !!t.show_athlete_team : true;
             document.getElementById('cert-edit-show-date').checked = t ? !!t.show_date : true;
+            // 이미지 섹션 — 기존 양식만
+            const imgSec = document.getElementById('cert-images-section');
+            const imgSecDis = document.getElementById('cert-images-section-disabled');
+            if (t) {
+                imgSec.style.display = '';
+                imgSecDis.style.display = 'none';
+                renderCertImagePreview('logo_left', t.logo_left_path);
+                renderCertImagePreview('logo_right', t.logo_right_path);
+                renderCertImagePreview('seal', t.seal_image_path);
+            } else {
+                imgSec.style.display = 'none';
+                imgSecDis.style.display = '';
+            }
             document.getElementById('cert-template-editor-modal').style.display = 'flex';
+        }
+
+        function renderCertImagePreview(position, urlPath) {
+            const root = document.getElementById('cert-img-preview-' + position);
+            if (!root) return;
+            if (urlPath) {
+                const bust = urlPath + (urlPath.indexOf('?') === -1 ? ('?v=' + Date.now()) : '');
+                root.innerHTML = `<img src="${_esc(bust)}" alt="">`;
+            } else {
+                root.innerHTML = '<span class="empty">없음</span>';
+            }
+        }
+
+        async function uploadCertImage(position, file) {
+            if (!file) return;
+            const id = document.getElementById('cert-edit-id').value;
+            if (!id) { toast('먼저 양식을 저장하세요', 'error'); return; }
+            const fd = new FormData();
+            fd.append('admin_key', AK());
+            fd.append('template_id', id);
+            fd.append('position', position);
+            fd.append('image', file);
+            try {
+                const res = await fetch('/api/admin/certificate-images/upload', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'upload failed');
+                toast('이미지 업로드 완료', 'success');
+                renderCertImagePreview(position, data.url);
+                // 캐시 갱신
+                await loadCertTemplates();
+            } catch (e) {
+                toast('업로드 실패: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteCertImage(position) {
+            const id = document.getElementById('cert-edit-id').value;
+            if (!id) return;
+            if (!confirm('이미지를 제거하시겠습니까?')) return;
+            try {
+                const res = await fetch('/api/admin/certificate-images/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_key: AK(), template_id: parseInt(id, 10), position })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'delete failed');
+                renderCertImagePreview(position, '');
+                await loadCertTemplates();
+                toast('이미지 제거됨', 'success');
+            } catch (e) {
+                toast('제거 실패: ' + e.message, 'error');
+            }
         }
 
         function closeCertTemplateEditor() {
@@ -9375,6 +9625,257 @@ POST /api/external/event-result-link/batch<br>
             if (modeSel) modeSel.addEventListener('change', toggleCertRankRangeWrap);
         });
 
+        // ====================================================================
+        // SMS System
+        // ====================================================================
+        async function loadSmsConfig() {
+            try {
+                const res = await fetch(`/api/admin/sms/config?admin_key=${encodeURIComponent(AK())}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'load failed');
+                const c = data.config;
+                document.getElementById('sms-cfg-provider').value = c.provider || 'aligo';
+                document.getElementById('sms-cfg-user-id').value = c.user_id || '';
+                document.getElementById('sms-cfg-api-key').value = '';
+                document.getElementById('sms-cfg-api-key').placeholder = c.api_key_set ? `(설정됨: ${c.api_key}) - 변경 시에만 입력` : 'API 키 입력';
+                document.getElementById('sms-cfg-apikey-status').textContent = c.api_key_set ? '✓ 설정됨' : '미설정';
+                document.getElementById('sms-cfg-sender-number').value = c.sender_number || '';
+                document.getElementById('sms-cfg-sender-name').value = c.sender_name || '';
+                document.getElementById('sms-cfg-monthly-quota').value = c.monthly_quota || 0;
+                document.getElementById('sms-cfg-template').value = c.default_template || '';
+                document.getElementById('sms-cfg-sim-mode').checked = !!c.sim_mode;
+                document.getElementById('sms-cfg-sent-count').textContent = c.sent_this_month || 0;
+                updateSmsTemplateMeta();
+            } catch (e) {
+                toast('SMS 설정 로드 실패: ' + e.message, 'error');
+            }
+        }
+
+        async function saveSmsConfig() {
+            const body = {
+                admin_key: AK(),
+                provider: document.getElementById('sms-cfg-provider').value,
+                user_id: document.getElementById('sms-cfg-user-id').value.trim(),
+                api_key: document.getElementById('sms-cfg-api-key').value || '***UNCHANGED***',
+                sender_number: document.getElementById('sms-cfg-sender-number').value.trim(),
+                sender_name: document.getElementById('sms-cfg-sender-name').value.trim(),
+                sim_mode: document.getElementById('sms-cfg-sim-mode').checked,
+                default_template: document.getElementById('sms-cfg-template').value,
+                monthly_quota: parseInt(document.getElementById('sms-cfg-monthly-quota').value || 0, 10),
+            };
+            try {
+                const res = await fetch('/api/admin/sms/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'save failed');
+                const st = document.getElementById('sms-cfg-save-status');
+                st.textContent = '저장됨 ✓';
+                setTimeout(() => { st.textContent = ''; }, 3000);
+                loadSmsConfig();
+            } catch (e) {
+                toast('저장 실패: ' + e.message, 'error');
+            }
+        }
+
+        function _bytesUtf8(s) {
+            if (!s) return 0;
+            let b = 0;
+            for (const ch of s) b += (ch.charCodeAt(0) < 128) ? 1 : 2;
+            return b;
+        }
+        function _detectMsgType(s) {
+            const b = _bytesUtf8(s);
+            return b <= 90 ? 'SMS' : 'LMS';
+        }
+
+        function updateSmsTemplateMeta() {
+            const msg = document.getElementById('sms-cfg-template').value;
+            const b = _bytesUtf8(msg);
+            const t = _detectMsgType(msg);
+            document.getElementById('sms-cfg-tpl-bytes').textContent = b + ' bytes';
+            document.getElementById('sms-cfg-tpl-type').textContent = t;
+            document.getElementById('sms-cfg-tpl-cost').textContent = `예상: ${t === 'LMS' ? 35 : 13}원/건`;
+        }
+
+        function previewSmsTemplate() {
+            const tpl = document.getElementById('sms-cfg-template').value;
+            const sample = {
+                athlete_name: '홍길동', team: '서울육상클럽', event_name: '남자 100m',
+                rank_label: '우승', record_value: '10.32', competition_name: '제30회 전국선수권',
+                cert_url: 'https://pacerise.kr/c/abc123'
+            };
+            const out = tpl.replace(/\{(\w+)\}/g, (m, k) => sample[k] !== undefined ? sample[k] : '');
+            alert('샘플 변환 결과:\n\n' + out);
+        }
+
+        function updateSmsSendMeta() {
+            const msg = document.getElementById('sms-send-message').value;
+            document.getElementById('sms-send-bytes').textContent = _bytesUtf8(msg) + ' bytes';
+            document.getElementById('sms-send-type').textContent = _detectMsgType(msg);
+        }
+
+        async function sendSingleSms() {
+            const phone = document.getElementById('sms-send-phone').value.trim();
+            const message = document.getElementById('sms-send-message').value;
+            if (!phone || !message) { toast('전화번호와 메시지를 입력하세요', 'error'); return; }
+            const st = document.getElementById('sms-send-status');
+            st.textContent = '발송 중...';
+            st.style.color = '#888';
+            try {
+                const res = await fetch('/api/admin/sms/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        admin_key: AK(), phone, message,
+                        competition_id: _selectedCompId, triggered_by: 'manual'
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'send failed');
+                st.textContent = data.status === 'simulated' ? '시뮬레이션 완료 (실제 발송 안 됨)' :
+                                  data.status === 'sent' ? '발송 성공 ✓' :
+                                  '실패: ' + data.error_message;
+                st.style.color = (data.status === 'sent') ? 'var(--green)' :
+                                  (data.status === 'simulated') ? '#a05a00' : '#a00';
+                loadSmsLog();
+            } catch (e) {
+                st.textContent = '오류: ' + e.message;
+                st.style.color = '#a00';
+            }
+        }
+
+        async function loadSmsBatchEvents() {
+            const root = document.getElementById('sms-batch-event-list');
+            if (!root) return;
+            if (!_selectedCompId) { root.innerHTML = '<span class="t-muted">대회를 먼저 선택하세요.</span>'; return; }
+            try {
+                const res = await fetch(`/api/competitions/${_selectedCompId}/events`);
+                const data = await res.json();
+                const events = (data.events || data || []).filter(e => !e.parent_event_id);
+                root.innerHTML = events.length === 0 ? '<span class="t-muted">종목이 없습니다.</span>' :
+                    events.map(e => `
+                        <label style="display:block;padding:3px 0;">
+                            <input type="checkbox" class="sms-batch-event-cb" value="${e.id}">
+                            ${e.gender === 'M' ? '남' : e.gender === 'F' ? '여' : '혼'} ${_esc(e.name)}
+                            <span class="t-muted t-xs">[${e.round_type || ''}]</span>
+                        </label>
+                    `).join('');
+            } catch (e) {
+                root.innerHTML = '<span class="t-muted">종목 로드 실패</span>';
+            }
+        }
+
+        function smsBatchSelectAll(on) {
+            document.querySelectorAll('.sms-batch-event-cb').forEach(cb => cb.checked = !!on);
+        }
+
+        function toggleSmsBatchRankWrap() {
+            const mode = document.getElementById('sms-batch-mode').value;
+            const wrap = document.getElementById('sms-batch-rank-wrap');
+            if (wrap) wrap.style.display = (mode === 'finisher') ? 'none' : '';
+        }
+
+        async function dryRunSmsBatch() {
+            // 백엔드 발송 직전 단계 시뮬레이션 — 그냥 sim_mode가 켜져 있으면 OK, 아니면 임시로 forcing
+            const cfg = await fetch(`/api/admin/sms/config?admin_key=${encodeURIComponent(AK())}`).then(r => r.json()).catch(() => ({}));
+            if (!cfg.config || !cfg.config.sim_mode) {
+                if (!confirm('시뮬레이션 모드가 꺼져 있습니다. 실제 발송됩니다. 계속할까요?\n\n(미리보기만 하려면 설정에서 시뮬레이션 모드를 켜고 다시 시도하세요)')) return;
+            }
+            runSmsBatch();
+        }
+
+        async function runSmsBatch() {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const mode = document.getElementById('sms-batch-mode').value;
+            const rankFrom = parseInt(document.getElementById('sms-batch-rank-from').value || 1, 10);
+            const rankTo = parseInt(document.getElementById('sms-batch-rank-to').value || 3, 10);
+            const includeFinishers = document.getElementById('sms-batch-include-finishers').checked;
+            const selectedIds = Array.from(document.querySelectorAll('.sms-batch-event-cb:checked')).map(cb => parseInt(cb.value, 10));
+
+            const status = document.getElementById('sms-batch-status');
+            const resultBox = document.getElementById('sms-batch-result');
+            status.textContent = '발송 중...';
+            status.style.color = '#888';
+            resultBox.innerHTML = '';
+
+            try {
+                const res = await fetch('/api/admin/sms/batch-send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        admin_key: AK(),
+                        competition_id: _selectedCompId,
+                        event_ids: selectedIds,
+                        mode,
+                        rank_from: rankFrom,
+                        rank_to: rankTo,
+                        include_finishers: includeFinishers,
+                        triggered_by: 'cert_batch',
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'batch failed');
+                const sum = data.summary || {};
+                const sumStr = Object.entries(sum).map(([k, v]) => `${k}: ${v}`).join(', ');
+                status.textContent = `${data.sim_mode ? '[시뮬레이션]' : ''} ${data.total}건 처리 (${sumStr})`;
+                status.style.color = data.sim_mode ? '#a05a00' : 'var(--green)';
+
+                resultBox.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#f5f5f5;"><th style="padding:4px;text-align:left;">선수</th><th style="padding:4px;">번호</th><th style="padding:4px;">상태</th><th style="padding:4px;text-align:left;">메모</th></tr></thead><tbody>' +
+                    (data.results || []).map(r => `
+                        <tr style="border-bottom:1px solid #eee;">
+                            <td style="padding:4px;">${_esc(r.athlete_name||'')}</td>
+                            <td style="padding:4px;text-align:center;">${_esc(r.phone||'(없음)')}</td>
+                            <td style="padding:4px;text-align:center;color:${r.status==='sent'?'var(--green)':r.status==='simulated'?'#a05a00':'#a00'};">${r.status}</td>
+                            <td style="padding:4px;">${_esc(r.error||'')}</td>
+                        </tr>
+                    `).join('') + '</tbody></table>';
+                loadSmsLog();
+            } catch (e) {
+                status.textContent = '실패: ' + e.message;
+                status.style.color = '#a00';
+            }
+        }
+
+        async function loadSmsLog() {
+            const root = document.getElementById('sms-log-list');
+            if (!root) return;
+            try {
+                const url = `/api/admin/sms/log?admin_key=${encodeURIComponent(AK())}` +
+                            (_selectedCompId ? `&competition_id=${_selectedCompId}` : '');
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'load failed');
+                const logs = data.logs || [];
+                if (!logs.length) { root.innerHTML = '<div class="t-muted t-sm">발송 이력이 없습니다.</div>'; return; }
+                root.innerHTML = '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f5f5f5;"><th style="padding:4px;text-align:left;">일시</th><th style="padding:4px;">선수</th><th style="padding:4px;">번호</th><th style="padding:4px;">상태</th><th style="padding:4px;">비용</th><th style="padding:4px;text-align:left;">메시지</th></tr></thead><tbody>' +
+                    logs.map(l => `
+                        <tr style="border-bottom:1px solid #eee;">
+                            <td style="padding:4px;white-space:nowrap;">${_fmtDate(l.sent_at)}</td>
+                            <td style="padding:4px;text-align:center;">${_esc(l.athlete_name||'-')}</td>
+                            <td style="padding:4px;text-align:center;">${_esc(l.phone_number||'-')}</td>
+                            <td style="padding:4px;text-align:center;color:${l.status==='sent'?'var(--green)':l.status==='simulated'?'#a05a00':'#a00'};">${l.status}</td>
+                            <td style="padding:4px;text-align:center;">${l.cost || 0}원</td>
+                            <td style="padding:4px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc((l.message||'').replace(/\n/g,' / '))}${l.error_message?' <span style="color:#a00;">['+_esc(l.error_message)+']</span>':''}</td>
+                        </tr>
+                    `).join('') + '</tbody></table>';
+            } catch (e) {
+                root.innerHTML = '<div class="t-muted t-sm">로그 로드 실패: ' + e.message + '</div>';
+            }
+        }
+
+        // 입력 이벤트 바인딩
+        document.addEventListener('DOMContentLoaded', () => {
+            const cfgTpl = document.getElementById('sms-cfg-template');
+            if (cfgTpl) cfgTpl.addEventListener('input', updateSmsTemplateMeta);
+            const sendMsg = document.getElementById('sms-send-message');
+            if (sendMsg) sendMsg.addEventListener('input', updateSmsSendMeta);
+            const batchMode = document.getElementById('sms-batch-mode');
+            if (batchMode) batchMode.addEventListener('change', toggleSmsBatchRankWrap);
+        });
+
         // 탭 진입 시 자동 로드 — switchTab 후킹
         (function() {
             const _origSwitchTab = window.switchTab;
@@ -9385,8 +9886,12 @@ POST /api/external/event-result-link/batch<br>
                         loadCertTemplates();
                         loadCertEvents();
                         loadCertLog();
-                        // ensure mode/range sync
                         setTimeout(toggleCertRankRangeWrap, 50);
+                    } else if (name === 'sms') {
+                        loadSmsConfig();
+                        loadSmsBatchEvents();
+                        loadSmsLog();
+                        setTimeout(toggleSmsBatchRankWrap, 50);
                     }
                 };
             }
