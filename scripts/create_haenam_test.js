@@ -60,6 +60,13 @@ async function createCompetition() {
         const eids = db.prepare('SELECT id FROM event WHERE competition_id=?').all(existing.id).map(e => e.id);
         for (const eid of eids) {
             const heatIds = db.prepare('SELECT id FROM heat WHERE event_id=?').all(eid).map(h => h.id);
+            const eeIds = db.prepare('SELECT id FROM event_entry WHERE event_id=?').all(eid).map(e => e.id);
+            // event_entry 의존 데이터 정리
+            for (const eeId of eeIds) {
+                try { db.prepare('DELETE FROM combined_score WHERE event_entry_id=?').run(eeId); } catch(e) {}
+                try { db.prepare('DELETE FROM height_attempt WHERE event_entry_id=?').run(eeId); } catch(e) {}
+                try { db.prepare('DELETE FROM relay_member WHERE event_entry_id=?').run(eeId); } catch(e) {}
+            }
             for (const hid of heatIds) {
                 db.prepare('DELETE FROM result WHERE heat_id=?').run(hid);
                 db.prepare('DELETE FROM heat_entry WHERE heat_id=?').run(hid);
@@ -155,11 +162,18 @@ function createEventsAndResults(compId, entries, athleteMap) {
 
     const insEvent = db.prepare(`INSERT INTO event (competition_id, name, category, sort_order, gender, round_type, round_status, division)
                                  VALUES (?, ?, ?, ?, ?, 'final', 'completed', ?)`);
-    const insHeat = db.prepare(`INSERT INTO heat (event_id, heat_number) VALUES (?, ?)`);
+    const insHeat = db.prepare(`INSERT INTO heat (event_id, heat_number, wind) VALUES (?, ?, ?)`);
     const insEvEntry = db.prepare(`INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?, ?, 'checked_in')`);
     const insHeatEntry = db.prepare(`INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)`);
-    const insResult = db.prepare(`INSERT INTO result (heat_id, event_entry_id, attempt_number, time_seconds, distance_meters, status_code)
-                                  VALUES (?, ?, ?, ?, ?, ?)`);
+    const insResult = db.prepare(`INSERT INTO result (heat_id, event_entry_id, attempt_number, time_seconds, distance_meters, status_code, wind)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    // 풍속 측정 종목 set
+    const WIND_TRACK = new Set(['100m', '200m', '100mH', '110mH']);  // heat 풍속 (단일 값)
+    const WIND_FIELD = new Set(['멀리뛰기', '세단뛰기']);              // result 풍속 (시도별)
+    function randWind() {
+      // -2.0 ~ +2.5 사이 균등, 소수 첫째자리
+      return Math.round((Math.random() * 4.5 - 2.0) * 10) / 10;
+    }
     const insCombined = db.prepare(`INSERT INTO combined_score (event_entry_id, sub_event_name, sub_event_order, raw_record, wa_points, status_code)
                                     VALUES (?, ?, ?, ?, ?, '')`);
     // 10종/7종 sub-event 정의 (이름은 임의)
@@ -195,8 +209,9 @@ function createEventsAndResults(compId, entries, athleteMap) {
             const eventId = evInfo.lastInsertRowid;
             createdEvents++;
 
-            // heat (1조)
-            const heatInfo = insHeat.run(eventId, 1);
+            // heat (1조) + heat 풍속 (트랙 단거리만)
+            const heatWind = WIND_TRACK.has(eventName) ? randWind() : null;
+            const heatInfo = insHeat.run(eventId, 1, heatWind == null ? null : `${heatWind > 0 ? '+' : ''}${heatWind.toFixed(1)} m/s`);
             const heatId = heatInfo.lastInsertRowid;
 
             // 각 선수에 entry + heat_entry + result 생성
@@ -257,7 +272,14 @@ function createEventsAndResults(compId, entries, athleteMap) {
                     }
                     createdResults++;
                 } else {
-                    insResult.run(heatId, eeId, 1, timeSec, distM, status);
+                    // result 풍속:
+                    //   - 트랙 단거리: heatWind (heat 단위로 공통)
+                    //   - 필드(멀리/세단): 시도별 풍속 (선수별로 다름)
+                    //   - 그 외: null
+                    let resultWind = null;
+                    if (WIND_TRACK.has(eventName)) resultWind = heatWind;
+                    else if (WIND_FIELD.has(eventName)) resultWind = randWind();
+                    insResult.run(heatId, eeId, 1, timeSec, distM, status, resultWind);
                     createdResults++;
                 }
             }
