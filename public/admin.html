@@ -30,6 +30,15 @@
         .crud-table tr:hover td { background:var(--bg); }
         .crud-table tr.selected-row td { background:#f0f0f0; }
         .crud-table input, .crud-table select { font-size:12px; padding:4px 6px; border:1px solid var(--gray); border-radius:4px; width:100%; box-sizing:border-box; }
+        /* [텍스트 줄바뀜 방지 안전망] 표 내부의 짧은 배지/상태 cell은 항상 1줄로 — 좁은 컬럼에서 "기/본" 같이 깨지는 현상 차단 */
+        .crud-table td > span[style*="border-radius"] { white-space:nowrap; display:inline-block; line-height:1.4; }
+        .crud-table th { white-space:nowrap; }
+        /* 공통 배지 유틸리티 */
+        .badge-pill { display:inline-block; padding:2px 8px; border-radius:8px; font-size:10px; font-weight:600; white-space:nowrap; line-height:1.4; }
+        .badge-pill.badge-base { background:#dbeafe; color:#1e40af; }
+        .badge-pill.badge-user { background:#fef3c7; color:#92400e; }
+        .badge-pill.badge-on   { background:#dcfce7; color:#166534; }
+        .badge-pill.badge-off  { background:#f3f4f6; color:#6b7280; }
         .crud-scroll { max-height:500px; overflow-y:auto; border:1px solid var(--gray); border-radius:var(--radius); }
         .admin-form-row { display:flex; gap:12px; margin-bottom:12px; align-items:flex-end; flex-wrap:wrap; }
         .admin-form-group { display:flex; flex-direction:column; gap:4px; }
@@ -835,13 +844,56 @@
 
                 <div class="admin-card" id="card-data-backup" style="scroll-margin-top:20px;">
                     <h4>데이터 백업</h4>
-                    <p class="t-help-lg">현재 선택된 대회의 전체 데이터(선수, 종목, 기록, 조편성)를 백업합니다.</p>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                        <button class="btn btn-outline" onclick="downloadBackup('json')">JSON 백업</button>
-                        <button class="btn btn-outline" onclick="downloadBackup('xlsx')">Excel (XLSX) 백업</button>
-                        <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;margin-left:8px;">
-                            <input type="checkbox" id="backup-comp-only" checked> 현재 대회만
-                        </label>
+
+                    <!-- 1) 대회별 부분 백업 (기존) -->
+                    <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;margin-bottom:14px;background:#fafafa;">
+                        <h5 style="margin:0 0 8px;font-size:13px;color:var(--text);">대회별 데이터 백업</h5>
+                        <p class="t-help-lg" style="margin:0 0 10px;">선택한 대회의 데이터(선수·종목·기록·조편성)만 JSON/Excel로 다운로드합니다.</p>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                            <button class="btn btn-outline" onclick="downloadBackup('json')">JSON 백업</button>
+                            <button class="btn btn-outline" onclick="downloadBackup('xlsx')">Excel (XLSX) 백업</button>
+                            <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;margin-left:8px;">
+                                <input type="checkbox" id="backup-comp-only" checked> 현재 대회만
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 2) 통백업 / 통복원 (Full Snapshot) -->
+                    <div style="border:2px solid #b79f58;border-radius:8px;padding:14px;background:#fffdf5;">
+                        <h5 style="margin:0 0 8px;font-size:13px;color:#7a5d1e;display:flex;align-items:center;gap:8px;">
+                            <span style="background:#b79f58;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;">FULL</span>
+                            시스템 통백업 / 복원
+                        </h5>
+                        <p class="t-help-lg" style="margin:0 0 12px;">
+                            <strong>전체 시스템 상태</strong>를 ZIP 1개 파일로 묶거나, 그 파일을 다시 올려 <strong>시스템 전체를 복원</strong>합니다.<br>
+                            포함: 모든 대회·선수·기록·조편성·운영로그·심판키·연맹·상장양식·SMS설정·홈팝업·홈콘텐츠 + 업로드된 로고/이미지 파일.
+                        </p>
+
+                        <!-- 통백업 다운로드 -->
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;padding-bottom:14px;border-bottom:1px dashed var(--gray);">
+                            <button class="btn btn-primary" onclick="downloadFullBackup()">
+                                통백업 ZIP 다운로드
+                            </button>
+                            <span style="font-size:11px;color:var(--text-muted);">
+                                관리자 키 필요 · 파일명: pace-rise-full-backup-YYYY-MM-DD_HH-MM.zip
+                            </span>
+                        </div>
+
+                        <!-- 통복원 업로드 -->
+                        <div>
+                            <div style="background:#fff5f5;border:1px solid #e74c3c;padding:8px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;color:#c0392b;line-height:1.5;">
+                                <strong>[경고] 복원 시 현재 모든 데이터가 백업 파일의 내용으로 교체됩니다.</strong><br>
+                                · 복원 직전 자동으로 현재 상태를 안전 백업합니다 (backups/backup_prerestore_*.db)<br>
+                                · 복원 후 서버가 자동 재시작됩니다<br>
+                                · PostgreSQL 환경에서는 작동하지 않습니다 (SQLite 전용)
+                            </div>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                <input type="file" id="full-restore-file" accept=".zip" style="font-size:12px;flex:1;min-width:220px;">
+                                <button class="btn btn-outline" onclick="previewFullRestore()">파일 검증</button>
+                                <button class="btn btn-danger" onclick="applyFullRestore()" id="btn-full-restore" disabled>복원 실행</button>
+                            </div>
+                            <div id="full-restore-status" style="margin-top:10px;font-size:12px;"></div>
+                        </div>
                     </div>
                 </div>
                 <!-- Federation Management (moved from settings) -->
@@ -1356,9 +1408,9 @@ POST /api/external/event-result-link/batch<br>
                                     <th style="width:50px;">성별</th>
                                     <th style="width:70px;">학교급</th>
                                     <th style="width:50px;">순서</th>
-                                    <th style="width:50px;">상태</th>
-                                    <th style="width:50px;">유형</th>
-                                    <th style="width:120px;">작업</th>
+                                    <th style="width:60px;white-space:nowrap;">상태</th>
+                                    <th style="width:64px;white-space:nowrap;">유형</th>
+                                    <th style="width:120px;white-space:nowrap;">작업</th>
                                 </tr>
                             </thead>
                             <tbody id="division-master-tbody"></tbody>
@@ -4186,6 +4238,119 @@ POST /api/external/event-result-link/batch<br>
                 if (compId) url += '&competition_id=' + compId;
             }
             window.open(url, '_blank');
+        }
+
+        // ─── 통백업 / 통복원 (Full Snapshot) ───────────────────────────
+        // 시스템 전체(DB + 업로드 자산)를 ZIP 1개로 받거나, 그 ZIP을 다시 올려 복원.
+        // 매우 위험한 작업이므로 명시적 confirm 절차를 거침.
+
+        function downloadFullBackup() {
+            const key = AK();
+            if (!key) { toast('관리자 키가 필요합니다.', 'error'); return; }
+            // 직접 navigation으로 다운로드 (브라우저가 헤더 기반 파일명 처리)
+            const url = '/api/admin/full-backup/download?key=' + encodeURIComponent(key);
+            // 새 탭에서 열되, 큰 파일이라 메인 탭은 그대로 유지
+            window.open(url, '_blank');
+            toast('통백업 ZIP 생성 중... 다운로드가 시작되면 저장하세요.', 'success');
+        }
+
+        // 통복원 — 1단계: 미리보기 (manifest 검증만, 실제 복원은 안 함)
+        let _fullRestoreVerifiedFile = null;
+        async function previewFullRestore() {
+            const statusEl = document.getElementById('full-restore-status');
+            const btnApply = document.getElementById('btn-full-restore');
+            const fileInput = document.getElementById('full-restore-file');
+            btnApply.disabled = true;
+            _fullRestoreVerifiedFile = null;
+
+            if (!fileInput.files.length) {
+                statusEl.innerHTML = '<span style="color:#c0392b;">[경고] ZIP 파일을 선택하세요.</span>';
+                return;
+            }
+            const file = fileInput.files[0];
+            if (!file.name.toLowerCase().endsWith('.zip')) {
+                statusEl.innerHTML = '<span style="color:#c0392b;">[경고] .zip 파일만 가능합니다.</span>';
+                return;
+            }
+            const key = AK();
+            if (!key) { toast('관리자 키가 필요합니다.', 'error'); return; }
+
+            statusEl.innerHTML = '<span style="color:var(--text-muted);">검증 중...</span>';
+            try {
+                const form = new FormData();
+                form.append('file', file);
+                form.append('admin_key', key);
+                const r = await fetch('/api/admin/full-backup/preview', { method:'POST', body: form });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.error || '검증 실패');
+
+                const m = j.manifest || {};
+                const s = m.summary || {};
+                const sizeMB = (j.zip_size / 1024 / 1024).toFixed(2);
+                const assetMB = ((s.total_asset_bytes || 0) / 1024 / 1024).toFixed(2);
+                statusEl.innerHTML = `
+                    <div style="background:#f0f9f4;border:1px solid #16a085;padding:10px;border-radius:6px;color:#0e6a52;line-height:1.7;">
+                        <strong>[검증 통과]</strong><br>
+                        · 백업 생성 시각: ${_esc ? _esc(m.created_at || '') : (m.created_at || '')}<br>
+                        · 백업 버전: v${m.version} (${_esc ? _esc(m.db_backend || '') : (m.db_backend || '')})<br>
+                        · ZIP 크기: ${sizeMB} MB · 자산 ${s.asset_files || 0}개 (${assetMB} MB)<br>
+                        · DB 파일: ${j.db_present ? '포함' : '없음'} · 총 엔트리 ${j.entries_count}개<br><br>
+                        <span style="color:#c0392b;">[복원 실행] 버튼을 누르면 현재 시스템이 위 시점으로 되돌아갑니다.</span>
+                    </div>`;
+                _fullRestoreVerifiedFile = file;
+                btnApply.disabled = false;
+            } catch (e) {
+                statusEl.innerHTML = `<span style="color:#c0392b;">[검증 실패] ${_esc ? _esc(e.message) : e.message}</span>`;
+            }
+        }
+
+        // 통복원 — 2단계: 실제 복원 실행
+        async function applyFullRestore() {
+            if (!_fullRestoreVerifiedFile) {
+                toast('먼저 [파일 검증]을 통과해야 합니다.', 'error');
+                return;
+            }
+            const confirmText = prompt(
+                '시스템 전체 복원을 진행하시겠습니까?\n\n' +
+                '현재 모든 데이터(대회·선수·기록·로그·설정·업로드 파일)가\n' +
+                '백업 파일의 내용으로 교체됩니다.\n\n' +
+                '계속하려면 RESTORE 라고 입력하세요:'
+            );
+            if (confirmText !== 'RESTORE') {
+                toast('복원 취소됨', 'error');
+                return;
+            }
+            const key = AK();
+            if (!key) { toast('관리자 키가 필요합니다.', 'error'); return; }
+
+            const statusEl = document.getElementById('full-restore-status');
+            const btnApply = document.getElementById('btn-full-restore');
+            btnApply.disabled = true;
+            statusEl.innerHTML = '<span style="color:var(--text-muted);">복원 중... 서버가 곧 재시작됩니다.</span>';
+
+            try {
+                const form = new FormData();
+                form.append('file', _fullRestoreVerifiedFile);
+                form.append('admin_key', key);
+                form.append('confirm', 'RESTORE');
+                const r = await fetch('/api/admin/full-backup/restore', { method:'POST', body: form });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.error || '복원 실패');
+
+                statusEl.innerHTML = `
+                    <div style="background:#f0f9f4;border:1px solid #16a085;padding:10px;border-radius:6px;color:#0e6a52;line-height:1.7;">
+                        <strong>[복원 완료]</strong><br>
+                        · 자산 ${j.restored_assets}개 복원<br>
+                        · 자동 안전 백업: ${_esc ? _esc(j.rollback_file || '없음') : (j.rollback_file || '없음')}<br>
+                        · 백업 시점: ${_esc ? _esc(j.manifest_created_at || '') : (j.manifest_created_at || '')}<br><br>
+                        <span style="color:#c0392b;">서버 재시작 중... 10초 후 페이지를 새로고침합니다.</span>
+                    </div>`;
+                // 서버 재시작 대기 후 새로고침
+                setTimeout(() => location.reload(), 10000);
+            } catch (e) {
+                statusEl.innerHTML = `<span style="color:#c0392b;">[복원 실패] ${_esc ? _esc(e.message) : e.message}</span>`;
+                btnApply.disabled = false;
+            }
         }
         async function deleteCompetition() {
             const compId = getCompetitionId();
@@ -8374,8 +8539,8 @@ POST /api/external/event-result-link/batch<br>
                     const isBase = !!r.is_base;
                     const stateBadge = r.active ? '<span style="color:#16a34a;font-weight:600;">활성</span>' : '<span style="color:#9ca3af;">비활성</span>';
                     const typeBadge = isBase
-                        ? '<span style="padding:2px 6px;border-radius:8px;background:#dbeafe;color:#1e40af;font-size:10px;font-weight:600;">기본</span>'
-                        : '<span style="padding:2px 6px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;">사용자</span>';
+                        ? '<span style="display:inline-block;padding:2px 8px;border-radius:8px;background:#dbeafe;color:#1e40af;font-size:10px;font-weight:600;white-space:nowrap;line-height:1.4;">기본</span>'
+                        : '<span style="display:inline-block;padding:2px 8px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;white-space:nowrap;line-height:1.4;">사용자</span>';
                     const codeEsc = String(r.code).replace(/'/g, "\\'");
                     return `<tr>
                         <td style="font-family:monospace;font-size:11px;">${r.code}</td>
