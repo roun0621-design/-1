@@ -744,7 +744,7 @@
 
             <!-- TAB: Competition Settings -->
             <div id="tab-competition" class="admin-tab-panel">
-                <div class="admin-card">
+                <div class="admin-card" id="card-comp-edit" style="scroll-margin-top:20px;">
                     <h4>대회 정보 수정</h4>
                     <div class="admin-form-row">
                         <div class="admin-form-group" style="flex:1;min-width:200px;"><label>대회명</label><input id="comp-edit-name"></div>
@@ -833,7 +833,7 @@
                     </div>
                 </div>
 
-                <div class="admin-card">
+                <div class="admin-card" id="card-data-backup" style="scroll-margin-top:20px;">
                     <h4>데이터 백업</h4>
                     <p class="t-help-lg">현재 선택된 대회의 전체 데이터(선수, 종목, 기록, 조편성)를 백업합니다.</p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -2546,6 +2546,40 @@ POST /api/external/event-result-link/batch<br>
         }
 
         // ---- TABS ----
+        // [세부 분리] 사이드바 anchor 항목 클릭 시 같은 탭 내 다른 카드 숨기기 위한 헬퍼
+        // 직접 자식 .admin-card만 대상 (popup-editor-wrap 내부의 nested card 제외)
+        function _isolateCardInTab(tabName, anchorId) {
+            const panel = document.getElementById('tab-' + tabName);
+            if (!panel) return;
+            // :scope > .admin-card 로 직접 자식만 선택
+            panel.querySelectorAll(':scope > .admin-card').forEach(card => {
+                card.style.display = (card.id === anchorId) ? '' : 'none';
+            });
+            // popup-editor-wrap, sb-keys-area 등 wrapper 들도 anchor 격리 시 일관되게 숨김
+            panel.querySelectorAll(':scope > div:not(.admin-card)').forEach(wrap => {
+                // 활성 상태(display 명시)인 wrap은 그대로 두되, 카드 격리 모드에선 숨김
+                if (wrap.id !== anchorId) wrap.dataset._prevDisplay = wrap.style.display || '';
+                wrap.style.display = 'none';
+            });
+        }
+        function _showAllCardsInTab(tabName) {
+            const panel = document.getElementById('tab-' + tabName);
+            if (!panel) return;
+            panel.querySelectorAll(':scope > .admin-card').forEach(card => {
+                card.style.display = '';
+            });
+            panel.querySelectorAll(':scope > div:not(.admin-card)').forEach(wrap => {
+                // 이전에 격리로 숨겼던 wrap 복원
+                if (wrap.dataset._prevDisplay !== undefined) {
+                    wrap.style.display = wrap.dataset._prevDisplay;
+                    delete wrap.dataset._prevDisplay;
+                } else {
+                    // 기본값 유지: 명시적으로 display 속성이 인라인에 있으면 그대로
+                    // (예: popup-editor-wrap 의 display:none 기본값)
+                }
+            });
+        }
+
         function switchTab(name, btn) {
             document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.remove('active'));
@@ -2554,6 +2588,8 @@ POST /api/external/event-result-link/batch<br>
             if (btn) btn.classList.add('active');
             const panel = document.getElementById('tab-' + name);
             if (panel) panel.classList.add('active');
+            // 탭 전환 시 항상 모든 카드 복원 (사이드바 anchor 격리 모드를 초기화)
+            _showAllCardsInTab(name);
             if (name === 'overview') loadOverview();
             if (name === 'athletes') loadAthletes();
             if (name === 'events') loadEvents();
@@ -2634,7 +2670,7 @@ POST /api/external/event-result-link/batch<br>
             { group:'overview', label:'현황',           tab:'overview', icon:'chart', desc:'대회/시스템 전체 상태 요약', keywords:'dashboard 상태 요약' },
 
             // ───── 대회 운영 ─────
-            { group:'op', label:'대회 설정',           tab:'competition', icon:'stadium', desc:'대회 정보·기간·연맹·시리즈 설정', keywords:'competition 대회 정보 수정' },
+            { group:'op', label:'대회 정보 수정',       tab:'competition', anchor:'card-comp-edit', icon:'stadium', desc:'대회명·기간·연맹·시리즈·운영 모드 등 기본 정보', keywords:'competition 대회 정보 수정 기간 연맹 시리즈 mode' },
             { group:'op', label:'업로드 · 시간표',     tab:'upload',      icon:'upload',  desc:'엑셀 업로드, 시간표, 매칭', keywords:'upload xlsx timetable' },
             { group:'op', label:'선수 관리',           tab:'athletes',    icon:'user',    desc:'선수 추가/수정/삭제, 배번', keywords:'athlete 선수 배번 bib' },
             { group:'op', label:'종목 관리',           tab:'events',      icon:'list',    desc:'종목 추가/수정, 조편성, 부 매칭', keywords:'event 종목 heat 조' },
@@ -2660,6 +2696,7 @@ POST /api/external/event-result-link/batch<br>
             { group:'sys', label:'홈 페이지 콘텐츠',    tab:'settings',   anchor:'card-site-content', icon:'home',    desc:'홈의 설치 안내·운영 매뉴얼 HTML', keywords:'site content install guide manual 매뉴얼 홈' },
             { group:'sys', label:'홈 팝업 관리',        tab:'settings',   anchor:'card-home-popup',   icon:'message', desc:'홈 진입 자동 팝업 (일반/관리자)', keywords:'popup 팝업 home 홈' },
             { group:'sys', label:'기록 시스템 가이드',  tab:'settings',   anchor:'card-record-guide', icon:'book',    desc:'NR/DR/CR 자동 감지 운영 가이드', keywords:'guide 가이드 기록 시스템' },
+            { group:'sys', label:'데이터 백업',          tab:'competition', anchor:'card-data-backup', icon:'folder', desc:'현재 대회 데이터 JSON·Excel 백업', keywords:'backup 백업 json xlsx excel 데이터' },
         ];
 
         const ADMIN_GROUPS = [
@@ -2705,6 +2742,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         // 사이드바/팔레트에서 항목 클릭 시 이동
+        // [세부 분리] anchor가 있는 메뉴 → 해당 카드만 단독 표시, anchor 없는 메뉴 → 탭 내 모든 카드 표시
         function sidebarNavigate(idx) {
             const f = ADMIN_FEATURES[idx];
             if (!f) return;
@@ -2714,21 +2752,35 @@ POST /api/external/event-result-link/batch<br>
             if (!isAlreadyActive) {
                 switchTab(f.tab, tabBtn);
             }
-            // 사이드바 활성: anchor가 있는 항목은 그 항목 자체를 active로
+            // 사이드바 활성: 클릭한 항목 자체를 active로
             document.querySelectorAll('#sidebar-nav .sb-item').forEach(el => el.classList.remove('active'));
             const target = document.querySelectorAll('#sidebar-nav .sb-item')[idx];
             if (target) target.classList.add('active');
 
-            // 카드/요소 점프
+            // [세부 분리] 카드 격리/복원
+            // - anchor 있음: 해당 카드만 단독 표시 (메뉴별 전문성·집중도 ↑)
+            // - anchor 없음(탭 전체 메뉴): 모든 카드 표시
+            if (f.anchor) {
+                _isolateCardInTab(f.tab, f.anchor);
+            } else {
+                _showAllCardsInTab(f.tab);
+            }
+
+            // 카드/요소 점프 + 액션
             setTimeout(() => {
                 if (f.anchor) {
                     const card = document.getElementById(f.anchor);
                     if (card) {
+                        // 격리 후 단독 카드를 부드럽게 강조
                         card.scrollIntoView({ behavior:'smooth', block:'start' });
                         card.classList.remove('card-flash');
                         void card.offsetWidth; // reflow
                         card.classList.add('card-flash');
                     }
+                } else {
+                    // 탭 상단으로 스크롤
+                    const panel = document.getElementById('tab-' + f.tab);
+                    if (panel) panel.scrollIntoView({ behavior:'smooth', block:'start' });
                 }
                 if (f.action && typeof window[f.action] === 'function') {
                     try { window[f.action](); } catch(e) { console.warn('action 실행 실패:', e); }
