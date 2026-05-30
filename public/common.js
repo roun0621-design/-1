@@ -337,12 +337,12 @@ function _updateOfflineBanner() {
         banner.style.display = 'block';
         banner.style.background = '#e74c3c';
         banner.style.color = '#fff';
-        banner.textContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 오프라인 — 기록은 로컬에 저장됩니다${_offlineState.pendingCount > 0 ? ` (대기 ${_offlineState.pendingCount}건)` : ''}`;
+        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 오프라인 — 기록은 로컬에 저장됩니다${_offlineState.pendingCount > 0 ? ` (대기 ${_offlineState.pendingCount}건)` : ''}`;
     } else if (_offlineState.pendingCount > 0) {
         banner.style.display = 'block';
         banner.style.background = '#f39c12';
         banner.style.color = '#fff';
-        banner.textContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 동기화 중... (${_offlineState.pendingCount}건 대기)`;
+        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 동기화 중... (${_offlineState.pendingCount}건 대기)`;
     } else {
         banner.style.display = 'none';
     }

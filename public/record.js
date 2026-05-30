@@ -1082,7 +1082,7 @@ async function saveHeatWind() {
         else if (v === 0) inp.value = '';
         else inp.value = v.toFixed(1);
         const statusEl = document.getElementById('wind-status');
-        if (statusEl) { statusEl.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; statusEl.style.color = 'var(--green)'; setTimeout(() => statusEl.textContent = '', 2000); }
+        if (statusEl) { statusEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; statusEl.style.color = 'var(--green)'; setTimeout(() => statusEl.textContent = '', 2000); }
         updateWindRecordBadge(v);
         // Show/hide + button
         const plusBtn = document.getElementById('wind-plus-btn');
@@ -1943,7 +1943,7 @@ function showWindWarning(entryId, attempt) {
         notice.id = 'wind-warning-notice';
         document.body.appendChild(notice);
     }
-    notice.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 풍속을 입력하세요!';
+    notice.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 풍속을 입력하세요!';
     notice.style.display = 'block';
     notice.style.opacity = '1';
     setTimeout(() => { notice.style.opacity = '0'; setTimeout(() => { notice.style.display = 'none'; }, 300); }, 1500);
@@ -2238,7 +2238,7 @@ async function saveHeightAndReload() {
         console.error('saveHeightAndReload error:', e);
     }
     const btn = document.querySelector('.track-actions .btn-primary');
-    if (btn) { const orig = btn.textContent; btn.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
+    if (btn) { const orig = btn.textContent; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
 }
 
 // Legacy compat
@@ -3102,7 +3102,7 @@ async function _cSubTrackSaveWind(heatId) {
         const plusBtn = document.getElementById('csub-wind-plus-btn');
         if (plusBtn) plusBtn.style.display = (v === 0) ? 'inline-block' : 'none';
         const st = document.getElementById('csub-wind-status');
-        if (st) { st.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; st.style.color = 'var(--green)'; setTimeout(() => st.textContent = '', 2000); }
+        if (st) { st.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; st.style.color = 'var(--green)'; setTimeout(() => st.textContent = '', 2000); }
         _cSubTrackUpdateWindBadge(v);
     } catch(e) { console.error('_cSubTrackSaveWind:', e); }
 }
@@ -3184,7 +3184,7 @@ async function _cSubTrackSaveAll(heatId, parentId) {
     const btn = document.querySelector('.track-actions .btn-outline');
     if (btn) {
         const orig = btn.textContent;
-        btn.textContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨 (${saveCount}건)`; btn.disabled = true;
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨 (${saveCount}건)`; btn.disabled = true;
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
     }
 }
@@ -3855,7 +3855,7 @@ async function _cSubHeightSave() {
         console.error('_cSubHeightSave error:', e);
     }
     const btn = document.querySelector('.track-actions .btn-primary');
-    if (btn) { const orig = btn.textContent; btn.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
+    if (btn) { const orig = btn.textContent; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
 }
 
 async function _cSubHeightToggle(entryId, barHeight, attemptNumber) {
@@ -4890,7 +4890,7 @@ function closeFieldZoomModal() {
 // RESET EVENT RESULTS — 종목 기록 전체 초기화 (10종/7종 + 일반 종목)
 // ============================================================
 async function resetSubEventResults(eventId, eventName) {
-    if (!confirm(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> [${eventName}] 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.\n정말 초기화하시겠습니까?`)) return;
+    if (!confirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.\n정말 초기화하시겠습니까?`)) return;
     if (!confirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
 
     try {
@@ -4991,7 +4991,7 @@ async function runPrefetchAllEvents() {
             txt.textContent = `취소됨 (${done}/${total})`;
             showToast(`사전로딩이 취소되었습니다 (${done}/${total} 완료).`, 'info', 3500);
         } else {
-            txt.textContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 완료 ${done}/${total}${errors.length ? ` (실패 ${errors.length}건)` : ''}`;
+            txt.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 완료 ${done}/${total}${errors.length ? ` (실패 ${errors.length}건)` : ''}`;
             const msg = errors.length === 0
                 ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 사전로딩 완료! ${total}개 종목의 데이터가 캐시되었습니다. 이제 오프라인에서도 종목 간 이동이 가능합니다.`
                 : `사전로딩 완료 — 성공 ${total - errors.length}/${total}, 실패 ${errors.length}건. 실패한 종목은 오프라인 이동이 안 될 수 있습니다.`;

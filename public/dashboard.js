@@ -278,18 +278,18 @@ function renderHeroSchedule() {
 
     if (liveItem) {
         card.classList.add('live');
-        iconEl.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>';
+        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>';
         titleEl.innerHTML = `<span class="hero-live-dot"></span> LIVE 진행중 <span class="hero-day-chip">DAY ${targetDay}</span>`;
         const nextTxt = nextItem ? ` · 다음 <strong>${_esc(nextItem.event_name)}</strong> ${nextItem.time}` : '';
         subEl.innerHTML = `<strong>${_esc(liveItem.event_name)}</strong> ${_esc(liveItem.round||'')} · ${liveItem.time}${nextTxt}`;
     } else if (isToday && nextItem) {
         card.classList.remove('live');
-        iconEl.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
         titleEl.innerHTML = `오늘의 시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
         subEl.innerHTML = `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`;
     } else {
         card.classList.remove('live');
-        iconEl.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
         titleEl.innerHTML = `시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
         const subTxt = nextItem
             ? `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`

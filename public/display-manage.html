@@ -1132,7 +1132,7 @@ async function uploadTT(inp){
     const file=inp.files[0]; if(!file)return;
     const forceMode = document.getElementById('upload-force')?.checked;
     if(forceMode){
-        if(!confirm('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 강제 덮어쓰기 모드입니다.\n\n과거 일차의 시간표도 모두 삭제 후 새로 등록되며, 결과 링크나 수동 수정 사항이 사라질 수 있습니다.\n\n계속하시겠습니까?')){
+        if(!confirm('[경고] 강제 덮어쓰기 모드입니다.\n\n과거 일차의 시간표도 모두 삭제 후 새로 등록되며, 결과 링크나 수동 수정 사항이 사라질 수 있습니다.\n\n계속하시겠습니까?')){
             inp.value=''; return;
         }
     }
@@ -1284,7 +1284,7 @@ async function showUnmatchedRoster(){
 
 // 실제 삭제 — 미리보기 후 진행 권장
 async function cleanupOrphanEvents(){
-    if(!confirm('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 고아 종목을 삭제합니다.\n\n시간표·엔트리·조·결과(result_url/video_url)가 모두 없는 종목만 삭제됩니다.\n부모 종목으로 참조되는 10종/7종 sub-event 도 보호됩니다.\n\n계속하시겠습니까?')) return;
+    if(!confirm('[경고] 고아 종목을 삭제합니다.\n\n시간표·엔트리·조·결과(result_url/video_url)가 모두 없는 종목만 삭제됩니다.\n부모 종목으로 참조되는 10종/7종 sub-event 도 보호됩니다.\n\n계속하시겠습니까?')) return;
     if(!confirm('한번 더 확인합니다. 정말 삭제하시겠습니까?')) return;
     const box = document.getElementById('orphan-result');
     box.innerHTML = '<span style="color:var(--gold);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 삭제 중...</span>';
@@ -1686,7 +1686,7 @@ async function uploadRoster(inp){
     const okCnt = results.filter(r => r.ok).length;
     const failCnt = results.length - okCnt;
     const summaryColor = failCnt === 0 ? 'var(--green)' : (okCnt === 0 ? 'var(--danger)' : 'var(--gold)');
-    const summaryIcon = failCnt === 0 ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' : (okCnt === 0 ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>');
+    const summaryIcon = failCnt === 0 ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' : (okCnt === 0 ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ');
     const items = results.map(r => {
         const icon = r.ok ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
         const color = r.ok ? 'var(--green)' : 'var(--danger)';
