@@ -443,41 +443,44 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete
 // ========== END SMS Schema ==========
 
 // 기본 상장 템플릿 시드 (최초 1회) — 시상장 + 완주증
-try {
-    const sqlDb = getDb();
-    const cnt = sqlDb.prepare('SELECT COUNT(*) AS c FROM certificate_template').get();
-    if (cnt && cnt.c === 0) {
-        const now = new Date().toISOString();
-        const ins = sqlDb.prepare(`INSERT INTO certificate_template (
-            competition_id, name, kind, title_text, body_template, rank_label_style,
-            signer_org, signer_title, signer_name,
-            paper_orientation, show_record_value, show_athlete_team, show_date,
-            background_color, border_style, font_family, is_default, sort_order,
-            created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-        // 1) 기본 시상장 (ordinal: 우승/준우승/3위)
-        ins.run(null, '기본 시상장 (우승/준우승)', 'award', '상  장',
-            '위 선수는 {competition_name}\n{event_name} 종목에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
-            'ordinal', '', '회장', '',
-            'portrait', 1, 1, 1, '#fffdf6', 'double-gold', 'NanumSquare', 1, 1, now, now);
-        // 2) 숫자형 시상장 (1위/2위/3위)
-        ins.run(null, '기본 시상장 (1위/2위/3위)', 'award', '상  장',
-            '위 선수는 {competition_name}\n{event_name} 종목에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
-            'numeric', '', '회장', '',
-            'portrait', 1, 1, 1, '#fffdf6', 'double-gold', 'NanumSquare', 0, 2, now, now);
-        // 3) 완주증 (마스터즈 등 — 등수 없음)
-        ins.run(null, '완주증 (마스터즈용)', 'finisher', '완 주 증',
-            '위 선수는 {competition_name} {event_name} 종목에 출전하여\n끝까지 완주하였기에 그 노력과 의지를 높이 평가하여\n이 증서를 수여합니다.',
-            'ordinal', '', '회장', '',
-            'portrait', 1, 1, 1, '#fffdf6', 'classic', 'NanumSquare', 0, 3, now, now);
-        // 4) 단체상
-        ins.run(null, '단체상', 'team', '단 체 상',
-            '위 단체는 {competition_name}에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
-            'ordinal', '', '회장', '',
-            'portrait', 0, 0, 1, '#fffdf6', 'double-gold', 'NanumSquare', 0, 4, now, now);
-        console.log('[DB] certificate_template seeded (4 templates)');
-    }
-} catch(e) { console.error('[DB] certificate_template seed error:', e.message); }
+// SQLite/PostgreSQL 양쪽에서 동작하도록 통합 db API 사용 (비동기)
+(async () => {
+    try {
+        const cntRow = await db.get('SELECT COUNT(*) AS c FROM certificate_template');
+        const cnt = cntRow ? Number(cntRow.c) : 0;
+        if (cnt === 0) {
+            const now = new Date().toISOString();
+            const INS_SQL = `INSERT INTO certificate_template (
+                competition_id, name, kind, title_text, body_template, rank_label_style,
+                signer_org, signer_title, signer_name,
+                paper_orientation, show_record_value, show_athlete_team, show_date,
+                background_color, border_style, font_family, is_default, sort_order,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            // 1) 기본 시상장 (ordinal: 우승/준우승/3위)
+            await db.run(INS_SQL, null, '기본 시상장 (우승/준우승)', 'award', '상  장',
+                '위 선수는 {competition_name}\n{event_name} 종목에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
+                'ordinal', '', '회장', '',
+                'portrait', 1, 1, 1, '#fffdf6', 'double-gold', 'NanumSquare', 1, 1, now, now);
+            // 2) 숫자형 시상장 (1위/2위/3위)
+            await db.run(INS_SQL, null, '기본 시상장 (1위/2위/3위)', 'award', '상  장',
+                '위 선수는 {competition_name}\n{event_name} 종목에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
+                'numeric', '', '회장', '',
+                'portrait', 1, 1, 1, '#fffdf6', 'double-gold', 'NanumSquare', 0, 2, now, now);
+            // 3) 완주증 (마스터즈 등 — 등수 없음)
+            await db.run(INS_SQL, null, '완주증 (마스터즈용)', 'finisher', '완 주 증',
+                '위 선수는 {competition_name} {event_name} 종목에 출전하여\n끝까지 완주하였기에 그 노력과 의지를 높이 평가하여\n이 증서를 수여합니다.',
+                'ordinal', '', '회장', '',
+                'portrait', 1, 1, 1, '#fffdf6', 'classic', 'NanumSquare', 0, 3, now, now);
+            // 4) 단체상
+            await db.run(INS_SQL, null, '단체상', 'team', '단 체 상',
+                '위 단체는 {competition_name}에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
+                'ordinal', '', '회장', '',
+                'portrait', 0, 0, 1, '#fffdf6', 'double-gold', 'NanumSquare', 0, 4, now, now);
+            console.log('[DB] certificate_template seeded (4 templates)');
+        }
+    } catch(e) { console.error('[DB] certificate_template seed error:', e.message); }
+})();
 
 // Migrate existing numeric wind values to "N.N m/s" text format for scoreboard compatibility
 // (SQLite 부팅 전용 마이그레이션 — PG 백엔드에서는 별도 마이그레이션 스크립트로 처리)
@@ -13218,13 +13221,12 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
 //
 
 // 종목 결과 가져오기 (랭킹·기록 포함) — 상장 발급용 헬퍼
-function getEventResultsForCert(eventId) {
-    const sqlDb = getDb();
-    const event = sqlDb.prepare('SELECT * FROM event WHERE id=?').get(eventId);
+async function getEventResultsForCert(eventId) {
+    const event = await db.get('SELECT * FROM event WHERE id=?', eventId);
     if (!event) return { event: null, rows: [] };
 
     // 트랙(time_seconds) / 필드(distance_meters) 자동 판별
-    const rows = sqlDb.prepare(`
+    const rows = await db.all(`
         SELECT
             ee.id AS entry_id,
             ee.athlete_id,
@@ -13241,7 +13243,7 @@ function getEventResultsForCert(eventId) {
         LEFT JOIN heat h ON h.event_id = ee.event_id
         LEFT JOIN result r ON r.event_entry_id = ee.id AND r.heat_id = h.id
         WHERE ee.event_id = ?
-    `).all(eventId);
+    `, eventId);
 
     // 같은 선수에 여러 시도가 있을 수 있어 best 기록만 추림
     const byAthlete = new Map();
@@ -13313,19 +13315,19 @@ function getEventResultsForCert(eventId) {
 }
 
 // 템플릿 목록 (관리자) — 대회 ID 옵션
-app.get('/api/admin/certificate-templates', (req, res) => {
+app.get('/api/admin/certificate-templates', async (req, res) => {
     try {
         const adminKey = req.query.admin_key;
         if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
         const compId = req.query.competition_id;
-        const sqlDb = getDb();
         let rows;
         if (compId) {
-            rows = sqlDb.prepare(`SELECT * FROM certificate_template
-                WHERE competition_id IS NULL OR competition_id = ?
-                ORDER BY sort_order, id`).all(compId);
+            rows = await db.all(
+                `SELECT * FROM certificate_template
+                 WHERE competition_id IS NULL OR competition_id = ?
+                 ORDER BY sort_order, id`, compId);
         } else {
-            rows = sqlDb.prepare('SELECT * FROM certificate_template ORDER BY sort_order, id').all();
+            rows = await db.all('SELECT * FROM certificate_template ORDER BY sort_order, id');
         }
         res.json({ templates: rows });
     } catch (err) {
@@ -13335,11 +13337,11 @@ app.get('/api/admin/certificate-templates', (req, res) => {
 });
 
 // 템플릿 단건 조회
-app.get('/api/admin/certificate-templates/:id', (req, res) => {
+app.get('/api/admin/certificate-templates/:id', async (req, res) => {
     try {
         const adminKey = req.query.admin_key;
         if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const row = getDb().prepare('SELECT * FROM certificate_template WHERE id=?').get(req.params.id);
+        const row = await db.get('SELECT * FROM certificate_template WHERE id=?', req.params.id);
         if (!row) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
         res.json({ template: row });
     } catch (err) {
@@ -13348,20 +13350,20 @@ app.get('/api/admin/certificate-templates/:id', (req, res) => {
 });
 
 // 템플릿 생성
-app.post('/api/admin/certificate-templates', (req, res) => {
+app.post('/api/admin/certificate-templates', async (req, res) => {
     try {
         const { admin_key } = req.body || {};
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
         const t = req.body || {};
         const now = new Date().toISOString();
-        const result = getDb().prepare(`INSERT INTO certificate_template (
+        const result = await db.run(`INSERT INTO certificate_template (
             competition_id, name, kind, title_text, body_template, rank_label_style,
             signer_org, signer_title, signer_name,
             logo_left_path, logo_right_path, seal_image_path,
             paper_orientation, show_record_value, show_athlete_team, show_date,
             background_color, border_style, font_family, is_default, sort_order,
             created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             t.competition_id || null,
             t.name || '새 양식',
             t.kind || 'award',
@@ -13385,7 +13387,7 @@ app.post('/api/admin/certificate-templates', (req, res) => {
             t.sort_order || 0,
             now, now
         );
-        const row = getDb().prepare('SELECT * FROM certificate_template WHERE id=?').get(result.lastInsertRowid);
+        const row = await db.get('SELECT * FROM certificate_template WHERE id=?', result.lastInsertRowid);
         res.json({ success: true, template: row });
     } catch (err) {
         console.error('[CERT][create]', err);
@@ -13394,23 +13396,23 @@ app.post('/api/admin/certificate-templates', (req, res) => {
 });
 
 // 템플릿 수정
-app.put('/api/admin/certificate-templates/:id', (req, res) => {
+app.put('/api/admin/certificate-templates/:id', async (req, res) => {
     try {
         const { admin_key } = req.body || {};
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
         const t = req.body || {};
         const id = req.params.id;
-        const cur = getDb().prepare('SELECT * FROM certificate_template WHERE id=?').get(id);
+        const cur = await db.get('SELECT * FROM certificate_template WHERE id=?', id);
         if (!cur) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
         const now = new Date().toISOString();
-        getDb().prepare(`UPDATE certificate_template SET
+        await db.run(`UPDATE certificate_template SET
             competition_id=?, name=?, kind=?, title_text=?, body_template=?, rank_label_style=?,
             signer_org=?, signer_title=?, signer_name=?,
             logo_left_path=?, logo_right_path=?, seal_image_path=?,
             paper_orientation=?, show_record_value=?, show_athlete_team=?, show_date=?,
             background_color=?, border_style=?, font_family=?, is_default=?, sort_order=?,
             updated_at=?
-            WHERE id=?`).run(
+            WHERE id=?`,
             t.competition_id !== undefined ? t.competition_id : cur.competition_id,
             t.name ?? cur.name,
             t.kind ?? cur.kind,
@@ -13434,7 +13436,7 @@ app.put('/api/admin/certificate-templates/:id', (req, res) => {
             t.sort_order ?? cur.sort_order,
             now, id
         );
-        const row = getDb().prepare('SELECT * FROM certificate_template WHERE id=?').get(id);
+        const row = await db.get('SELECT * FROM certificate_template WHERE id=?', id);
         res.json({ success: true, template: row });
     } catch (err) {
         console.error('[CERT][update]', err);
@@ -13443,11 +13445,11 @@ app.put('/api/admin/certificate-templates/:id', (req, res) => {
 });
 
 // 템플릿 삭제
-app.delete('/api/admin/certificate-templates/:id', (req, res) => {
+app.delete('/api/admin/certificate-templates/:id', async (req, res) => {
     try {
         const adminKey = (req.body && req.body.admin_key) || req.query.admin_key;
         if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        getDb().prepare('DELETE FROM certificate_template WHERE id=?').run(req.params.id);
+        await db.run('DELETE FROM certificate_template WHERE id=?', req.params.id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -13485,16 +13487,15 @@ app.post('/api/admin/certificates/generate', async (req, res) => {
                 rank_from, rank_to, include_finishers, mode } = req.body || {};
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
 
-        const sqlDb = getDb();
-        const tpl = sqlDb.prepare('SELECT * FROM certificate_template WHERE id=?').get(template_id);
+        const tpl = await db.get('SELECT * FROM certificate_template WHERE id=?', template_id);
         if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
 
-        const comp = competition_id ? sqlDb.prepare('SELECT * FROM competition WHERE id=?').get(competition_id) : null;
+        const comp = competition_id ? await db.get('SELECT * FROM competition WHERE id=?', competition_id) : null;
 
         let targetEventIds = Array.isArray(event_ids) ? event_ids.slice() : [];
         if (targetEventIds.length === 0 && competition_id) {
             // 대회 전체 이벤트
-            const all = sqlDb.prepare(`SELECT id FROM event WHERE competition_id=? AND round_type='final' ORDER BY sort_order, id`).all(competition_id);
+            const all = await db.all(`SELECT id FROM event WHERE competition_id=? AND round_type='final' ORDER BY sort_order, id`, competition_id);
             targetEventIds = all.map(e => e.id);
         }
         if (targetEventIds.length === 0) {
@@ -13508,7 +13509,7 @@ app.post('/api/admin/certificates/generate', async (req, res) => {
 
         const items = [];
         for (const eid of targetEventIds) {
-            const { event, rows } = getEventResultsForCert(eid);
+            const { event, rows } = await getEventResultsForCert(eid);
             if (!event) continue;
             for (const row of rows) {
                 let shouldInclude = false;
@@ -13544,13 +13545,13 @@ app.post('/api/admin/certificates/generate', async (req, res) => {
 
         // 발급 로그 기록
         const now = new Date().toISOString();
-        const insertLog = sqlDb.prepare(`INSERT INTO certificate_issue_log
+        const INSERT_LOG_SQL = `INSERT INTO certificate_issue_log
             (competition_id, template_id, event_id, athlete_id, rank_value, record_value, issued_at, issued_by, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         try {
-            const txn = sqlDb.transaction(() => {
+            const txn = db.transaction(async () => {
                 for (const it of items) {
-                    insertLog.run(
+                    await db.run(INSERT_LOG_SQL,
                         competition_id || null,
                         tpl.id,
                         null,
@@ -13563,7 +13564,7 @@ app.post('/api/admin/certificates/generate', async (req, res) => {
                     );
                 }
             });
-            txn();
+            await txn();
         } catch (_) { /* log failure should not block PDF */ }
 
         const fileName = encodeURIComponent(`상장_${(comp?.name||'대회')}_${items.length}건.pdf`);
@@ -13581,7 +13582,7 @@ app.post('/api/admin/certificates/single', async (req, res) => {
     try {
         const { admin_key, template_id, data } = req.body || {};
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const tpl = getDb().prepare('SELECT * FROM certificate_template WHERE id=?').get(template_id);
+        const tpl = await db.get('SELECT * FROM certificate_template WHERE id=?', template_id);
         if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
         const buf = await generateCertificatePdf(tpl, data || {});
         res.setHeader('Content-Type', 'application/pdf');
@@ -13605,8 +13606,7 @@ app.post('/api/admin/certificate-images/upload', upload.single('image'), async (
             return res.status(400).json({ error: 'template_id, position(logo_left|logo_right|seal) 필요' });
         }
 
-        const sqlDb = getDb();
-        const tpl = sqlDb.prepare('SELECT * FROM certificate_template WHERE id=?').get(templateId);
+        const tpl = await db.get('SELECT * FROM certificate_template WHERE id=?', templateId);
         if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
 
         // 저장 디렉토리
@@ -13637,8 +13637,7 @@ app.post('/api/admin/certificate-images/upload', upload.single('image'), async (
         };
         const dbField = fieldMap[position];
         const now = new Date().toISOString();
-        sqlDb.prepare(`UPDATE certificate_template SET ${dbField}=?, updated_at=? WHERE id=?`)
-            .run(publicUrl, now, templateId);
+        await db.run(`UPDATE certificate_template SET ${dbField}=?, updated_at=? WHERE id=?`, publicUrl, now, templateId);
 
         const cacheBust = `${publicUrl}?v=${Date.now()}`;
         res.json({ success: true, url: cacheBust, path: publicUrl });
@@ -13649,7 +13648,7 @@ app.post('/api/admin/certificate-images/upload', upload.single('image'), async (
 });
 
 // 상장 이미지 삭제
-app.post('/api/admin/certificate-images/delete', (req, res) => {
+app.post('/api/admin/certificate-images/delete', async (req, res) => {
     try {
         const { admin_key, template_id, position } = req.body || {};
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
@@ -13661,16 +13660,14 @@ app.post('/api/admin/certificate-images/delete', (req, res) => {
             'logo_right': 'logo_right_path',
             'seal': 'seal_image_path',
         };
-        const sqlDb = getDb();
-        const tpl = sqlDb.prepare('SELECT * FROM certificate_template WHERE id=?').get(template_id);
+        const tpl = await db.get('SELECT * FROM certificate_template WHERE id=?', template_id);
         if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
         const oldPath = tpl[fieldMap[position]];
         if (oldPath) {
             const absPath = path.join(__dirname, 'public', oldPath.replace(/^\/+/, ''));
             try { if (fs.existsSync(absPath)) fs.unlinkSync(absPath); } catch(e) {}
         }
-        sqlDb.prepare(`UPDATE certificate_template SET ${fieldMap[position]}='', updated_at=? WHERE id=?`)
-            .run(new Date().toISOString(), template_id);
+        await db.run(`UPDATE certificate_template SET ${fieldMap[position]}='', updated_at=? WHERE id=?`, new Date().toISOString(), template_id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -13678,16 +13675,15 @@ app.post('/api/admin/certificate-images/delete', (req, res) => {
 });
 
 // 발급 로그
-app.get('/api/admin/certificates/log', (req, res) => {
+app.get('/api/admin/certificates/log', async (req, res) => {
     try {
         const adminKey = req.query.admin_key;
         if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
         const compId = req.query.competition_id;
         const limit = Math.min(parseInt(req.query.limit || 200, 10), 1000);
-        const sqlDb = getDb();
         const where = compId ? 'WHERE l.competition_id=?' : '';
         const params = compId ? [compId, limit] : [limit];
-        const rows = sqlDb.prepare(`
+        const rows = await db.all(`
             SELECT l.*, t.name AS template_name, a.name AS athlete_name, a.team
             FROM certificate_issue_log l
             LEFT JOIN certificate_template t ON t.id = l.template_id
@@ -13695,7 +13691,7 @@ app.get('/api/admin/certificates/log', (req, res) => {
             ${where}
             ORDER BY l.issued_at DESC
             LIMIT ?
-        `).all(...params);
+        `, ...params);
         res.json({ logs: rows });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -13705,12 +13701,12 @@ app.get('/api/admin/certificates/log', (req, res) => {
 
 // ========== SMS System API ==========
 
-// 월 카운터 리셋 헬퍼
-function _resetSmsCounterIfNeeded(cfg, sqlDb) {
+// 월 카운터 리셋 헬퍼 (async)
+async function _resetSmsCounterIfNeeded(cfg) {
     const now = new Date();
     const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     if (cfg.last_reset_month !== ym) {
-        sqlDb.prepare('UPDATE sms_config SET sent_this_month=0, last_reset_month=? WHERE id=1').run(ym);
+        await db.run('UPDATE sms_config SET sent_this_month=0, last_reset_month=? WHERE id=1', ym);
         cfg.sent_this_month = 0;
         cfg.last_reset_month = ym;
     }
@@ -13718,13 +13714,13 @@ function _resetSmsCounterIfNeeded(cfg, sqlDb) {
 }
 
 // SMS 설정 조회
-app.get('/api/admin/sms/config', (req, res) => {
+app.get('/api/admin/sms/config', async (req, res) => {
     try {
         const adminKey = req.query.admin_key;
         if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const sqlDb = getDb();
-        const cfg = sqlDb.prepare('SELECT * FROM sms_config WHERE id=1').get();
-        _resetSmsCounterIfNeeded(cfg, sqlDb);
+        const cfg = await db.get('SELECT * FROM sms_config WHERE id=1');
+        if (!cfg) return res.status(500).json({ error: 'sms_config가 초기화되지 않았습니다.' });
+        await _resetSmsCounterIfNeeded(cfg);
         // api_key는 마스킹
         const masked = Object.assign({}, cfg, {
             api_key: cfg.api_key ? '***' + cfg.api_key.slice(-4) : '',
@@ -13737,26 +13733,25 @@ app.get('/api/admin/sms/config', (req, res) => {
 });
 
 // SMS 설정 저장
-app.post('/api/admin/sms/config', (req, res) => {
+app.post('/api/admin/sms/config', async (req, res) => {
     try {
         const { admin_key, provider, api_key, user_id, sender_number, sender_name, sim_mode, default_template, monthly_quota } = req.body || {};
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const sqlDb = getDb();
-        const cur = sqlDb.prepare('SELECT * FROM sms_config WHERE id=1').get();
+        const cur = await db.get('SELECT * FROM sms_config WHERE id=1');
         const now = new Date().toISOString();
         // api_key가 빈 문자열이면 기존 유지 (편의)
-        const finalApiKey = (api_key === undefined || api_key === '***UNCHANGED***') ? cur.api_key : (api_key || '');
-        sqlDb.prepare(`UPDATE sms_config SET
+        const finalApiKey = (api_key === undefined || api_key === '***UNCHANGED***') ? (cur ? cur.api_key : '') : (api_key || '');
+        await db.run(`UPDATE sms_config SET
             provider=?, api_key=?, user_id=?, sender_number=?, sender_name=?,
             sim_mode=?, default_template=?, monthly_quota=?, updated_at=?
-            WHERE id=1`).run(
-            provider || cur.provider || 'aligo',
+            WHERE id=1`,
+            provider || (cur && cur.provider) || 'aligo',
             finalApiKey,
             user_id || '',
             SMS.normalizePhone(sender_number || ''),
             sender_name || '',
             sim_mode ? 1 : 0,
-            default_template || cur.default_template,
+            default_template || (cur && cur.default_template) || '',
             parseInt(monthly_quota || 0, 10),
             now
         );
@@ -13786,16 +13781,16 @@ app.post('/api/admin/sms/send', async (req, res) => {
     try {
         const { admin_key, phone, message, title, competition_id, athlete_id, triggered_by } = req.body || {};
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const sqlDb = getDb();
-        const cfg = sqlDb.prepare('SELECT * FROM sms_config WHERE id=1').get();
-        _resetSmsCounterIfNeeded(cfg, sqlDb);
+        const cfg = await db.get('SELECT * FROM sms_config WHERE id=1');
+        if (!cfg) return res.status(500).json({ error: 'sms_config가 초기화되지 않았습니다.' });
+        await _resetSmsCounterIfNeeded(cfg);
 
         const result = await SMS.sendOne(cfg, { phone, message, title });
 
         // 로그 기록
-        sqlDb.prepare(`INSERT INTO sms_log
+        await db.run(`INSERT INTO sms_log
             (competition_id, athlete_id, phone_number, message, status, provider, provider_msg_id, error_message, cost, sent_at, triggered_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             competition_id || null,
             athlete_id || null,
             SMS.normalizePhone(phone),
@@ -13810,7 +13805,7 @@ app.post('/api/admin/sms/send', async (req, res) => {
         );
 
         if (result.status === 'sent' || result.status === 'simulated') {
-            sqlDb.prepare('UPDATE sms_config SET sent_this_month = sent_this_month + 1 WHERE id=1').run();
+            await db.run('UPDATE sms_config SET sent_this_month = sent_this_month + 1 WHERE id=1');
         }
 
         res.json({ success: true, ...result });
@@ -13828,16 +13823,16 @@ app.post('/api/admin/sms/batch-send', async (req, res) => {
         if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
         if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
 
-        const sqlDb = getDb();
-        const cfg = sqlDb.prepare('SELECT * FROM sms_config WHERE id=1').get();
-        _resetSmsCounterIfNeeded(cfg, sqlDb);
+        const cfg = await db.get('SELECT * FROM sms_config WHERE id=1');
+        if (!cfg) return res.status(500).json({ error: 'sms_config가 초기화되지 않았습니다.' });
+        await _resetSmsCounterIfNeeded(cfg);
 
-        const comp = sqlDb.prepare('SELECT * FROM competition WHERE id=?').get(competition_id);
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', competition_id);
         if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
 
         let targetEventIds = Array.isArray(event_ids) ? event_ids.slice() : [];
         if (targetEventIds.length === 0) {
-            const all = sqlDb.prepare(`SELECT id FROM event WHERE competition_id=? AND round_type='final' ORDER BY sort_order, id`).all(competition_id);
+            const all = await db.all(`SELECT id FROM event WHERE competition_id=? AND round_type='final' ORDER BY sort_order, id`, competition_id);
             targetEventIds = all.map(e => e.id);
         }
 
@@ -13848,7 +13843,7 @@ app.post('/api/admin/sms/batch-send', async (req, res) => {
 
         const recipients = [];
         for (const eid of targetEventIds) {
-            const { event, rows } = getEventResultsForCert(eid);
+            const { event, rows } = await getEventResultsForCert(eid);
             if (!event) continue;
             for (const row of rows) {
                 // 선수 폰번호 조회 (athlete table에 phone 컬럼이 있어야 함 — 없으면 빈 칸으로 시뮬레이션)
@@ -13857,7 +13852,7 @@ app.post('/api/admin/sms/batch-send', async (req, res) => {
                 if (!include && wantFinishers && row.finished) include = true;
                 if (!include) continue;
 
-                const ath = sqlDb.prepare('SELECT * FROM athlete WHERE id=?').get(row.athlete_id);
+                const ath = await db.get('SELECT * FROM athlete WHERE id=?', row.athlete_id);
                 const phone = ath && (ath.phone || ath.phone_number || '') || '';
                 const message = SMS.fillMessageTemplate(tplMsg, {
                     athlete_name: row.athlete_name,
@@ -13877,9 +13872,9 @@ app.post('/api/admin/sms/batch-send', async (req, res) => {
         const results = [];
         for (const r of recipients) {
             const sendResult = await SMS.sendOne(cfg, { phone: r.phone, message: r.message });
-            sqlDb.prepare(`INSERT INTO sms_log
+            await db.run(`INSERT INTO sms_log
                 (competition_id, athlete_id, phone_number, message, status, provider, provider_msg_id, error_message, cost, sent_at, triggered_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 competition_id,
                 r.athlete_id,
                 SMS.normalizePhone(r.phone),
@@ -13893,7 +13888,7 @@ app.post('/api/admin/sms/batch-send', async (req, res) => {
                 triggered_by || 'cert_batch'
             );
             if (sendResult.status === 'sent' || sendResult.status === 'simulated') {
-                sqlDb.prepare('UPDATE sms_config SET sent_this_month = sent_this_month + 1 WHERE id=1').run();
+                await db.run('UPDATE sms_config SET sent_this_month = sent_this_month + 1 WHERE id=1');
             }
             results.push({
                 athlete_id: r.athlete_id,
@@ -13917,23 +13912,22 @@ app.post('/api/admin/sms/batch-send', async (req, res) => {
 });
 
 // 발송 이력
-app.get('/api/admin/sms/log', (req, res) => {
+app.get('/api/admin/sms/log', async (req, res) => {
     try {
         const adminKey = req.query.admin_key;
         if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
         const compId = req.query.competition_id;
         const limit = Math.min(parseInt(req.query.limit || 200, 10), 1000);
-        const sqlDb = getDb();
         const where = compId ? 'WHERE l.competition_id=?' : '';
         const params = compId ? [compId, limit] : [limit];
-        const rows = sqlDb.prepare(`
+        const rows = await db.all(`
             SELECT l.*, a.name AS athlete_name, a.team
             FROM sms_log l
             LEFT JOIN athlete a ON a.id = l.athlete_id
             ${where}
             ORDER BY l.sent_at DESC
             LIMIT ?
-        `).all(...params);
+        `, ...params);
         res.json({ logs: rows });
     } catch (err) {
         res.status(500).json({ error: err.message });
