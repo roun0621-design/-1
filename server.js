@@ -17386,6 +17386,10 @@ function migrateNormalizeDivisionAndRound() {
     }
 }
 
+// Export app/server for tests; only auto-listen when run directly (node server.js)
+if (require.main !== module) {
+    module.exports = { app, server };
+} else
 server.listen(PORT, '0.0.0.0', async () => {
     // PG 모드: boot 시 1회 async 캐시 로드 (SQLite는 boot 직후 sync 로드 완료됨)
     if (db.isAsync) {

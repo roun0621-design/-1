@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "athletics",
@@ -36,6 +39,9 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "canvas": "^3.2.1"
+    "@vitest/coverage-v8": "^4.1.7",
+    "canvas": "^3.2.1",
+    "supertest": "^7.2.2",
+    "vitest": "^4.1.7"
   }
 }

@@ -1,0 +1,45 @@
+name: CI — Automated Tests
+
+# PR 마다 자동 실행 → 회귀 방지의 핵심 안전망
+# (audit P0 — 자동 테스트 베이스라인의 1단계)
+
+on:
+  push:
+    branches: [ main, genspark_ai_developer ]
+  pull_request:
+    branches: [ main, genspark_ai_developer ]
+
+jobs:
+  test:
+    name: Vitest (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.x']   # 운영 동일 버전. 22.x 도 추가하려면 ['20.x', '22.x']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax check (server.js)
+        run: node --check server.js
+
+      - name: Run tests
+        run: npm test
+        env:
+          # 안전 격리: 운영 DB / 키 절대 사용 금지
+          DB_BACKEND: sqlite
+          NODE_ENV: test
+          ADMIN_PW: testadmin1234
+          OPERATION_KEY: testopkey
