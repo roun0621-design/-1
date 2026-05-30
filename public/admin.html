@@ -861,36 +861,46 @@
                     <!-- 2) 통백업 / 통복원 (Full Snapshot) -->
                     <div style="border:2px solid #b79f58;border-radius:8px;padding:14px;background:#fffdf5;">
                         <h5 style="margin:0 0 8px;font-size:13px;color:#7a5d1e;display:flex;align-items:center;gap:8px;">
-                            <span style="background:#b79f58;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;">FULL</span>
+                            <span style="background:#b79f58;color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;white-space:nowrap;">FULL</span>
                             시스템 통백업 / 복원
                         </h5>
                         <p class="t-help-lg" style="margin:0 0 12px;">
-                            <strong>전체 시스템 상태</strong>를 ZIP 1개 파일로 묶거나, 그 파일을 다시 올려 <strong>시스템 전체를 복원</strong>합니다.<br>
-                            포함: 모든 대회·선수·기록·조편성·운영로그·심판키·연맹·상장양식·SMS설정·홈팝업·홈콘텐츠 + 업로드된 로고/이미지 파일.
+                            <strong>전체 시스템 상태를 ZIP 파일 1개</strong>로 묶거나, 그 파일을 다시 올려 <strong>시스템 전체를 복원</strong>합니다.<br>
+                            포함: 모든 대회·선수·기록·조편성·운영로그·심판키·연맹·상장양식·SMS설정·홈팝업·홈콘텐츠 + 업로드된 로고/이미지/PDF 파일.
                         </p>
 
-                        <!-- 통백업 다운로드 -->
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;padding-bottom:14px;border-bottom:1px dashed var(--gray);">
-                            <button class="btn btn-primary" onclick="downloadFullBackup()">
-                                통백업 ZIP 다운로드
-                            </button>
-                            <span style="font-size:11px;color:var(--text-muted);">
-                                관리자 키 필요 · 파일명: pace-rise-full-backup-YYYY-MM-DD_HH-MM.zip
-                            </span>
+                        <!-- STEP 1: 통백업 다운로드 -->
+                        <div style="margin-bottom:14px;padding:12px;background:#fff;border:1px solid #e8d9a8;border-radius:6px;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                                <span style="background:#16a085;color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">1</span>
+                                <strong style="font-size:13px;color:#0e6a52;">통백업 다운로드</strong>
+                            </div>
+                            <p style="margin:0 0 8px;font-size:11px;color:var(--text-muted);line-height:1.5;">
+                                지금 이 순간의 시스템 전체 상태를 ZIP 한 개로 받아 보관하세요.<br>
+                                (별도로 매일/매시간 자동 백업도 backups/ 폴더에 저장됩니다)
+                            </p>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                <button class="btn btn-primary" onclick="downloadFullBackup()">통백업 ZIP 다운로드</button>
+                                <span style="font-size:11px;color:var(--text-muted);">관리자 키 필요</span>
+                            </div>
                         </div>
 
-                        <!-- 통복원 업로드 -->
-                        <div>
-                            <div style="background:#fff5f5;border:1px solid #e74c3c;padding:8px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;color:#c0392b;line-height:1.5;">
+                        <!-- STEP 2: 통복원 업로드 -->
+                        <div style="padding:12px;background:#fff;border:1px solid #f3c4c4;border-radius:6px;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                                <span style="background:#c0392b;color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">2</span>
+                                <strong style="font-size:13px;color:#922b21;">통복원 (ZIP 붙여넣기)</strong>
+                            </div>
+                            <div style="background:#fff5f5;border:1px solid #e74c3c;padding:8px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;color:#c0392b;line-height:1.6;">
                                 <strong>[경고] 복원 시 현재 모든 데이터가 백업 파일의 내용으로 교체됩니다.</strong><br>
-                                · 복원 직전 자동으로 현재 상태를 안전 백업합니다 (backups/backup_prerestore_*.db)<br>
-                                · 복원 후 서버가 자동 재시작됩니다<br>
+                                · 복원 직전 현재 상태를 자동으로 안전 백업합니다 (backups/backup_prerestore_*.db)<br>
+                                · 복원 후 서버가 자동 재시작되고 약 10초 후 페이지가 새로고침됩니다<br>
                                 · PostgreSQL 환경에서는 작동하지 않습니다 (SQLite 전용)
                             </div>
                             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                                 <input type="file" id="full-restore-file" accept=".zip" style="font-size:12px;flex:1;min-width:220px;">
-                                <button class="btn btn-outline" onclick="previewFullRestore()">파일 검증</button>
-                                <button class="btn btn-danger" onclick="applyFullRestore()" id="btn-full-restore" disabled>복원 실행</button>
+                                <button class="btn btn-outline" onclick="previewFullRestore()">① 파일 검증</button>
+                                <button class="btn btn-danger" onclick="applyFullRestore()" id="btn-full-restore" disabled>② 복원 실행</button>
                             </div>
                             <div id="full-restore-status" style="margin-top:10px;font-size:12px;"></div>
                         </div>
@@ -4244,14 +4254,39 @@ POST /api/external/event-result-link/batch<br>
         // 시스템 전체(DB + 업로드 자산)를 ZIP 1개로 받거나, 그 ZIP을 다시 올려 복원.
         // 매우 위험한 작업이므로 명시적 confirm 절차를 거침.
 
-        function downloadFullBackup() {
+        async function downloadFullBackup() {
             const key = AK();
             if (!key) { toast('관리자 키가 필요합니다.', 'error'); return; }
-            // 직접 navigation으로 다운로드 (브라우저가 헤더 기반 파일명 처리)
-            const url = '/api/admin/full-backup/download?key=' + encodeURIComponent(key);
-            // 새 탭에서 열되, 큰 파일이라 메인 탭은 그대로 유지
-            window.open(url, '_blank');
-            toast('통백업 ZIP 생성 중... 다운로드가 시작되면 저장하세요.', 'success');
+            const btn = document.querySelector('[onclick="downloadFullBackup()"]');
+            const origLabel = btn ? btn.innerHTML : '';
+            try {
+                if (btn) { btn.disabled = true; btn.innerHTML = '백업 생성 중...'; }
+                toast('통백업 ZIP 생성 중... (DB + 업로드 파일 묶는 중)', 'success');
+                const url = '/api/admin/full-backup/download?key=' + encodeURIComponent(key);
+                const r = await fetch(url);
+                if (!r.ok) {
+                    let msg = '백업 실패: HTTP ' + r.status;
+                    try { const j = await r.json(); if (j.error) msg = j.error; } catch(_) {}
+                    throw new Error(msg);
+                }
+                const blob = await r.blob();
+                // 서버 헤더의 filename 사용 (실패 시 fallback)
+                const cd = r.headers.get('Content-Disposition') || '';
+                const m = cd.match(/filename="([^"]+)"/);
+                const fname = m ? m[1] : `pace-rise-full-backup-${new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')}.zip`;
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = fname;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+                const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
+                toast(`통백업 완료 (${sizeMB} MB) — ${fname}`, 'success');
+            } catch (e) {
+                toast(e.message || '백업 다운로드 실패', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+            }
         }
 
         // 통복원 — 1단계: 미리보기 (manifest 검증만, 실제 복원은 안 함)
