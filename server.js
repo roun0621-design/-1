@@ -4866,25 +4866,39 @@ app.get('/api/admin/athletes', async (req, res) => {
     if (compId) return res.json(await db.all(`SELECT * FROM athlete WHERE competition_id=? ORDER BY ${orderByBibSql()}`, compId));
     res.json(await db.all(`SELECT * FROM athlete ORDER BY ${orderByBibSql()}`));
 });
+// 전화번호 정규화 (CRUD 공용)
+function _normalizeAthletePhone(p) {
+    if (p === undefined || p === null) return '';
+    let s = String(p).trim();
+    if (!s) return '';
+    s = s.replace(/[^0-9+]/g, '');
+    if (s.startsWith('+82')) s = '0' + s.slice(3);
+    else if (s.startsWith('82') && s.length >= 11) s = '0' + s.slice(2);
+    if (/^1\d{9}$/.test(s)) s = '0' + s;
+    return s;
+}
+
 app.post('/api/admin/athletes', async (req, res) => {
-    const { admin_key, competition_id, name, bib_number, team, gender, barcode } = req.body;
+    const { admin_key, competition_id, name, bib_number, team, gender, barcode, phone } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!name || !gender || !competition_id) return res.status(400).json({ error: '필수 항목이 누락되었습니다 (이름, 성별, 대회ID).' });
     try {
         const bib = bib_number ? String(bib_number).trim() : null;
         const bc = barcode || '';
-        const info = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', competition_id, name, bib, team || '', bc, gender);
+        const ph = _normalizeAthletePhone(phone);
+        const info = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone) VALUES (?,?,?,?,?,?,?)', competition_id, name, bib, team || '', bc, gender, ph);
         res.json(await db.get('SELECT * FROM athlete WHERE id=?', info.lastInsertRowid));
     } catch (e) { res.status(400).json({ error: '등록 오류: ' + e.message }); }
 });
 app.put('/api/admin/athletes/:id', async (req, res) => {
-    const { admin_key, name, bib_number, team, gender, barcode } = req.body;
+    const { admin_key, name, bib_number, team, gender, barcode, phone } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const old = await db.get('SELECT * FROM athlete WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
     try {
         const newBib = bib_number !== undefined ? (bib_number ? String(bib_number).trim() : null) : old.bib_number;
-        await db.run('UPDATE athlete SET name=?,bib_number=?,team=?,gender=?,barcode=? WHERE id=?', name || old.name, newBib, team ?? old.team, gender || old.gender, barcode ?? old.barcode, old.id);
+        const newPhone = phone !== undefined ? _normalizeAthletePhone(phone) : (old.phone || '');
+        await db.run('UPDATE athlete SET name=?,bib_number=?,team=?,gender=?,barcode=?,phone=? WHERE id=?', name || old.name, newBib, team ?? old.team, gender || old.gender, barcode ?? old.barcode, newPhone, old.id);
         res.json(await db.get('SELECT * FROM athlete WHERE id=?', old.id));
     } catch (e) { res.status(400).json({ error: '수정 오류: ' + e.message }); }
 });
@@ -6031,6 +6045,7 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
             else if (/^(성별|gender)$/i.test(hn)) hdrMap.gender = idx;
             else if (/^(배번|배번호|bib|bib_number)$/i.test(hn)) hdrMap.bib = idx;
             else if (/^(바코드|바코드번호|barcode|바코드\s*번호)$/i.test(hn)) hdrMap.barcode = idx;
+            else if (/^(휴대폰|핸드폰|전화|전화번호|연락처|phone|phone_number|mobile)$/i.test(hn)) hdrMap.phone = idx;
         });
 
         // Determine format: header-detected or legacy fixed columns
@@ -6051,21 +6066,37 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
             const existingRows = await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id);
             existingRows.forEach(a => existingCache.set(`${a.name}|${a.team}|${a.gender}`, a));
 
+            // 휴대폰 번호 정규화 (010-1234-5678 → 01012345678) — 양식에 비어있으면 빈 문자열
+            const normPhone = (p) => {
+                if (p === undefined || p === null) return '';
+                let s = String(p).trim();
+                if (!s) return '';
+                // 엑셀이 숫자로 인식할 경우 앞 0이 누락된 경우 보정
+                s = s.replace(/[^0-9+]/g, '');
+                if (s.startsWith('+82')) s = '0' + s.slice(3);
+                else if (s.startsWith('82') && s.length >= 11) s = '0' + s.slice(2);
+                // 1로 시작하는 10자리는 0 보정 (엑셀이 010 → 10으로 저장하는 경우)
+                if (/^1\d{9}$/.test(s)) s = '0' + s;
+                return s;
+            };
+
             for (const row of dataRows) {
-                let name, team, genderRaw, bib, barcode;
+                let name, team, genderRaw, bib, barcode, phone;
                 if (useHeaders) {
                     name = String(row[hdrMap.name] || '').trim();
                     team = hdrMap.team !== undefined ? String(row[hdrMap.team] || '').trim() : '';
                     genderRaw = hdrMap.gender !== undefined ? String(row[hdrMap.gender] || '').trim() : '';
                     bib = hdrMap.bib !== undefined ? (String(row[hdrMap.bib] || '').trim() || null) : null;
                     barcode = hdrMap.barcode !== undefined ? (String(row[hdrMap.barcode] || '').trim() || '') : '';
+                    phone = hdrMap.phone !== undefined ? normPhone(row[hdrMap.phone]) : '';
                 } else {
-                    // Legacy fixed columns: bib | name | team | gender | barcode
+                    // Legacy fixed columns: bib | name | team | gender | barcode | phone(optional)
                     bib = String(row[0] || '').trim() || null;
                     name = String(row[1] || '').trim();
                     team = String(row[2] || '').trim();
                     genderRaw = String(row[3] || '').trim();
                     barcode = String(row[4] || '').trim() || '';
+                    phone = normPhone(row[5]);
                 }
                 const gender = (genderRaw === '남' || genderRaw === '남자' || genderRaw === 'M') ? 'M' : (genderRaw === '여' || genderRaw === '여자' || genderRaw === 'F') ? 'F' : null;
                 if (!name || !gender) { stats.skipped++; continue; }
@@ -6084,12 +6115,16 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
                             await db.run('UPDATE athlete SET barcode=? WHERE id=?', barcode, existing.id);
                             didUpdate = true;
                         }
+                        if (phone && !existing.phone) {
+                            await db.run('UPDATE athlete SET phone=? WHERE id=?', phone, existing.id);
+                            didUpdate = true;
+                        }
                         if (didUpdate) stats.updated = (stats.updated || 0) + 1;
                     }
                     stats.skipped++; continue;
                 }
-                await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', competition_id, name, bib, team, barcode, gender);
-                existingCache.set(key, { id: null, bib_number: bib, barcode });
+                await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone) VALUES (?,?,?,?,?,?,?)', competition_id, name, bib, team, barcode, gender, phone || '');
+                existingCache.set(key, { id: null, bib_number: bib, barcode, phone });
                 stats.added++;
             }
         })();
@@ -6206,6 +6241,83 @@ app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => 
         opLog(`BIB 일괄 수정: ${results.updated}명 업데이트, ${results.matched}명 매칭`, 'import', 'admin', competition_id);
         res.json({ success: true, results });
     } catch (err) { console.error(err); res.status(500).json({ error: 'BIB 업데이트 오류: ' + err.message }); }
+});
+
+// ============================================================
+// PHONE BATCH UPDATE (from Excel)
+// 양식: 선수명 + 팀명(선택) + 성별(선택) + 휴대폰
+// 이름+소속(+성별)으로 매칭하여 phone만 업데이트
+// ============================================================
+app.post('/api/athletes/update-phone', upload.single('file'), async (req, res) => {
+    const adminKey = req.body.admin_key || req.headers['x-admin-key'];
+    if (!isAdminKey(adminKey) && !isOperationKey(adminKey)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+    if (!req.file) return res.status(400).json({ error: '파일이 필요합니다.' });
+    const competition_id = parseInt(req.body.competition_id);
+    if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
+    const previewOnly = req.body.preview === 'true' || req.body.preview === true;
+    try {
+        const wb = XLSX.readFile(req.file.path);
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        if (rows.length < 2) return res.status(400).json({ error: '데이터가 없습니다.' });
+        const headers = rows[0] || [];
+
+        const hdrMap = {};
+        headers.forEach((h, idx) => {
+            const hn = String(h || '').trim();
+            if (/^(선수명|성명|이름|name)$/i.test(hn)) hdrMap.name = idx;
+            else if (/^(팀명|소속|팀|team)$/i.test(hn)) hdrMap.team = idx;
+            else if (/^(성별|gender)$/i.test(hn)) hdrMap.gender = idx;
+            else if (/^(휴대폰|핸드폰|전화|전화번호|연락처|phone|phone_number|mobile)$/i.test(hn)) hdrMap.phone = idx;
+        });
+        if (hdrMap.name === undefined) return res.status(400).json({ error: '선수명 컬럼을 찾을 수 없습니다.' });
+        if (hdrMap.phone === undefined) return res.status(400).json({ error: '휴대폰 컬럼을 찾을 수 없습니다.' });
+
+        const cache = new Map();         // name|team|gender → athlete
+        const cacheNG = new Map();       // name|team → athlete (또는 null=ambiguous)
+        (await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id))
+            .forEach(a => {
+                cache.set(`${a.name}|${a.team}|${a.gender}`, a);
+                const ng = `${a.name}|${a.team}`;
+                cacheNG.set(ng, cacheNG.has(ng) ? null : a);
+            });
+
+        const results = { matched: 0, updated: 0, unchanged: 0, not_found: [] };
+        const updates = [];
+
+        for (const row of rows.slice(1)) {
+            const name = String(row[hdrMap.name] || '').trim();
+            if (!name) continue;
+            const team = hdrMap.team !== undefined ? String(row[hdrMap.team] || '').trim() : '';
+            const genderRaw = hdrMap.gender !== undefined ? String(row[hdrMap.gender] || '').trim() : '';
+            const gender = (genderRaw === '남' || genderRaw === '남자' || genderRaw === 'M') ? 'M' : (genderRaw === '여' || genderRaw === '여자' || genderRaw === 'F') ? 'F' : null;
+            const phone = _normalizeAthletePhone(row[hdrMap.phone]);
+            if (!phone) continue;
+
+            let existing = null;
+            if (gender) existing = cache.get(`${name}|${team}|${gender}`);
+            if (!existing) {
+                const found = cacheNG.get(`${name}|${team}`);
+                if (found) existing = found; // null이면 모호함
+            }
+            if (!existing) { results.not_found.push(`${name}/${team}`); continue; }
+            results.matched++;
+            if ((existing.phone || '') === phone) { results.unchanged++; continue; }
+            updates.push({ id: existing.id, name: existing.name, team: existing.team, old: existing.phone || '', new: phone });
+            results.updated++;
+        }
+
+        if (previewOnly) {
+            return res.json({ success: true, preview: true, results, sample_updates: updates.slice(0, 30) });
+        }
+
+        await db.transaction(async () => {
+            for (const u of updates) await db.run('UPDATE athlete SET phone=? WHERE id=?', u.new, u.id);
+        })();
+
+        opLog(`휴대폰 일괄 수정: ${results.updated}명 업데이트, ${results.matched}명 매칭`, 'import', 'admin', competition_id);
+        res.json({ success: true, results });
+    } catch (err) { console.error(err); res.status(500).json({ error: '휴대폰 업데이트 오류: ' + err.message }); }
 });
 
 // ============================================================

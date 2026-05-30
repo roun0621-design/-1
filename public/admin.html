@@ -579,6 +579,29 @@
                     <div id="bib-update-result" class="t-md"></div>
                 </div>
 
+                <!-- Phone Number Bulk Update -->
+                <div class="admin-card" style="border-left:4px solid #16a085;">
+                    <h4 style="color:#16a085;">휴대폰 번호 일괄 업로드 (SMS 발송용)</h4>
+                    <p class="t-help">
+                        엑셀에서 휴대폰 번호를 읽어 기존 선수와 <b>이름+소속(+성별)</b>으로 매칭하여 <b>휴대폰만</b> 업데이트합니다.<br>
+                        <span style="color:#16a085;">선수 업로드 양식(PACERISE_upload_template.xlsx)을 그대로 사용 가능 — 휴대폰 칸이 비어있으면 건너뜁니다.</span>
+                    </p>
+                    <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                        <strong>엑셀 인식 컬럼 (헤더명 기준 자동 매칭):</strong><br>
+                        <code>선수명</code> 또는 <code>성명</code>/<code>이름</code>/<code>name</code> *<br>
+                        <code>팀명</code> 또는 <code>소속</code>/<code>team</code><br>
+                        <code>성별</code>(선택, 남/여 또는 M/F)<br>
+                        <code>휴대폰</code> 또는 <code>핸드폰</code>/<code>전화</code>/<code>연락처</code>/<code>phone</code> *<br>
+                        <span style="color:#16a085;font-weight:600;">자동 정규화: 010-1234-5678 / +82 10... / 1012345678 → 01012345678</span>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+                        <input type="file" id="phone-update-file" accept=".xlsx,.xls,.csv" class="t-lg">
+                        <button class="btn btn-outline" onclick="previewPhoneUpdate()">미리보기</button>
+                        <button class="btn" onclick="applyPhoneUpdate()" style="background:#16a085;color:#fff;">적용</button>
+                    </div>
+                    <div id="phone-update-result" class="t-md"></div>
+                </div>
+
                 <!-- Event Upload -->
                 <div class="admin-card">
                     <h4>종목 리스트 엑셀 업로드</h4>
@@ -1550,6 +1573,7 @@ POST /api/external/event-result-link/batch<br>
                     <div class="admin-form-group" style="flex:1;"><label>성별</label><select id="am-gender"><option value="M">남</option><option value="F">여</option></select></div>
                 </div>
                 <div class="admin-form-group" style="width:100%;"><label>소속</label><input id="am-team"></div>
+                <div class="admin-form-group" style="width:100%;"><label>휴대폰 <span class="t-xs t-muted">(SMS 발송용)</span></label><input id="am-phone" placeholder="01012345678" style="font-family:monospace;"></div>
                 <div class="admin-form-group" style="width:100%;"><label>바코드</label><input id="am-barcode" style="font-family:monospace;"></div>
             </div>
             <hr style="margin:14px 0;border:none;border-top:1px solid var(--gray);">
@@ -3026,6 +3050,7 @@ POST /api/external/event-result-link/batch<br>
                         <div class="admin-form-group"><label>소속</label><input id="ath-edit-team" value="${a.team || ''}"></div>
                         <div class="admin-form-group"><label>성별</label><select id="ath-edit-gender"><option value="M" ${a.gender==='M'?'selected':''}>남</option><option value="F" ${a.gender==='F'?'selected':''}>여</option></select></div>
                         <div class="admin-form-group"><label>바코드</label><input id="ath-edit-barcode" value="${a.barcode || ''}" style="width:100px;"></div>
+                        <div class="admin-form-group"><label>휴대폰 <span class="t-xs t-muted">(SMS 발송용)</span></label><input id="ath-edit-phone" value="${a.phone || ''}" placeholder="01012345678" style="width:140px;"></div>
                     </div>
                     <div style="display:flex;gap:8px;margin-top:8px;">
                         <button class="btn btn-sm btn-primary" onclick="saveAthleteDetail(${a.id})">저장</button>
@@ -3058,7 +3083,8 @@ POST /api/external/event-result-link/batch<br>
                     bib_number: document.getElementById('ath-edit-bib').value,
                     team: document.getElementById('ath-edit-team').value,
                     gender: document.getElementById('ath-edit-gender').value,
-                    barcode: document.getElementById('ath-edit-barcode').value
+                    barcode: document.getElementById('ath-edit-barcode').value,
+                    phone: document.getElementById('ath-edit-phone') ? document.getElementById('ath-edit-phone').value : undefined
                 }, AK());
                 toast('저장 완료');
                 loadAthletes();
@@ -3128,6 +3154,7 @@ POST /api/external/event-result-link/batch<br>
                     <div class="admin-form-group"><label>소속</label><input id="new-ath-team"></div>
                     <div class="admin-form-group"><label>성별 *</label><select id="new-ath-gender"><option value="M">남</option><option value="F">여</option></select></div>
                     <div class="admin-form-group"><label>바코드</label><input id="new-ath-barcode" style="width:100px;"></div>
+                    <div class="admin-form-group"><label>휴대폰</label><input id="new-ath-phone" placeholder="01012345678" style="width:140px;"></div>
                 </div>
                 <div style="display:flex;gap:8px;margin-top:12px;">
                     <button class="btn btn-primary" onclick="addAthlete()">추가</button>
@@ -3141,9 +3168,10 @@ POST /api/external/event-result-link/batch<br>
             const team = document.getElementById('new-ath-team').value.trim();
             const gender = document.getElementById('new-ath-gender').value;
             const barcode = document.getElementById('new-ath-barcode').value.trim();
+            const phone = document.getElementById('new-ath-phone')?.value.trim() || '';
             if (!name || !bibVal) { toast('선수명과 BIB은 필수입니다', 'error'); return; }
             try {
-                await API.createAthlete({ competition_id: _selectedCompId, name, bib_number: bibVal, team, gender, barcode: barcode || undefined }, AK());
+                await API.createAthlete({ competition_id: _selectedCompId, name, bib_number: bibVal, team, gender, barcode: barcode || undefined, phone: phone || undefined }, AK());
                 toast('선수 추가 완료');
                 loadAthletes();
             } catch (e) { toast(e.error || '추가 실패', 'error'); }
@@ -4654,6 +4682,7 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('am-team').value = a.team || '';
             document.getElementById('am-gender').value = a.gender;
             document.getElementById('am-barcode').value = a.barcode || '';
+            document.getElementById('am-phone').value = a.phone || '';
 
             document.getElementById('ath-modal-title').textContent = `${a.name} (BIB: ${bib(a.bib_number)})`;
             const modal = document.getElementById('ath-detail-modal');
@@ -4670,7 +4699,8 @@ POST /api/external/event-result-link/batch<br>
                     bib_number: document.getElementById('am-bib').value,
                     team: document.getElementById('am-team').value,
                     gender: document.getElementById('am-gender').value,
-                    barcode: document.getElementById('am-barcode').value
+                    barcode: document.getElementById('am-barcode').value,
+                    phone: document.getElementById('am-phone').value
                 }, AK());
                 toast('저장 완료'); closeAthModal(); loadAthletes();
             } catch (e) { toast(e.error || '저장 실패', 'error'); }
@@ -7512,6 +7542,69 @@ POST /api/external/event-result-link/batch<br>
                 const r = data.results;
                 toast(`BIB 수정 완료: ${r.updated}명 업데이트`);
                 document.getElementById('bib-update-result').innerHTML = `<span style="color:#4f4;">✅ ${r.updated}명 BIB 업데이트 완료 (${r.matched}명 매칭, ${r.not_found.length}명 미매칭)</span>`;
+            } catch(e) { toast('업데이트 오류: ' + e.message, 'error'); }
+        }
+
+        // ---- PHONE BULK UPDATE ----
+        async function previewPhoneUpdate() {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const fileInput = document.getElementById('phone-update-file');
+            if (!fileInput.files[0]) { toast('파일을 선택하세요', 'error'); return; }
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('competition_id', _selectedCompId);
+            formData.append('admin_key', AK());
+            formData.append('preview', 'true');
+            const resultDiv = document.getElementById('phone-update-result');
+            resultDiv.innerHTML = '<span style="color:var(--text-muted);">분석 중...</span>';
+            try {
+                const resp = await fetch('/api/athletes/update-phone', { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (!data.success) { resultDiv.innerHTML = `<span style="color:#ef4444;">${data.error || '미리보기 실패'}</span>`; return; }
+                const r = data.results;
+                let html = `<div style="padding:10px;background:var(--surface);border-radius:8px;border:1px solid var(--gray);">`;
+                html += `<div style="font-size:13px;font-weight:600;margin-bottom:6px;">매칭 결과</div>`;
+                html += `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-bottom:8px;">`;
+                html += `<span>매칭: <b style="color:#22c55e;">${r.matched}명</b></span>`;
+                html += `<span>변경 대상: <b style="color:#16a085;">${r.updated}명</b></span>`;
+                html += `<span>동일: ${r.unchanged}명</span>`;
+                if (r.not_found.length > 0) html += `<span style="color:#ef4444;">실패: ${r.not_found.length}명</span>`;
+                html += `</div>`;
+                if (data.sample_updates && data.sample_updates.length > 0) {
+                    html += `<div style="max-height:300px;overflow-y:auto;"><table style="font-size:11px;width:100%;border-collapse:collapse;">`;
+                    html += `<tr style="background:#262324;color:#fff;position:sticky;top:0;"><th style="padding:4px 6px;text-align:left;">이름</th><th style="text-align:left;">소속</th><th>현재</th><th>새 번호</th></tr>`;
+                    for (const u of data.sample_updates) {
+                        html += `<tr style="border-bottom:1px solid #eee;"><td style="padding:3px 6px;">${u.name}</td><td>${u.team}</td><td style="text-align:center;color:#ef4444;text-decoration:line-through;font-family:monospace;">${u.old||'(없음)'}</td><td style="text-align:center;color:#16a085;font-weight:600;font-family:monospace;">${u.new}</td></tr>`;
+                    }
+                    html += `</table></div>`;
+                    if (data.sample_updates.length < r.updated) html += `<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">... 외 ${r.updated - data.sample_updates.length}명 더</div>`;
+                }
+                if (r.not_found.length > 0) {
+                    html += `<details style="margin-top:8px;font-size:11px;"><summary style="cursor:pointer;color:#ef4444;">매칭 실패 (${r.not_found.length}명)</summary><ul style="margin:4px 0;padding-left:16px;">`;
+                    for (const nf of r.not_found.slice(0, 20)) html += `<li>${nf}</li>`;
+                    if (r.not_found.length > 20) html += `<li>... 외 ${r.not_found.length - 20}명</li>`;
+                    html += `</ul></details>`;
+                }
+                html += `</div>`;
+                resultDiv.innerHTML = html;
+            } catch(e) { resultDiv.innerHTML = `<span style="color:#ef4444;">오류: ${e.message}</span>`; }
+        }
+        async function applyPhoneUpdate() {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const fileInput = document.getElementById('phone-update-file');
+            if (!fileInput.files[0]) { toast('파일을 선택하세요', 'error'); return; }
+            if (!confirm('휴대폰 번호를 일괄 업데이트하시겠습니까?')) return;
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('competition_id', _selectedCompId);
+            formData.append('admin_key', AK());
+            try {
+                const resp = await fetch('/api/athletes/update-phone', { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (!data.success) { toast(data.error || '업데이트 실패', 'error'); return; }
+                const r = data.results;
+                toast(`휴대폰 업데이트 완료: ${r.updated}명`);
+                document.getElementById('phone-update-result').innerHTML = `<span style="color:#16a085;">✅ ${r.updated}명 업데이트 완료 (${r.matched}명 매칭, ${r.unchanged}명 동일, ${r.not_found.length}명 미매칭)</span>`;
             } catch(e) { toast('업데이트 오류: ' + e.message, 'error'); }
         }
 
