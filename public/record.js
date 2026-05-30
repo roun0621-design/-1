@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 _compLocked = true;
                 const lockBanner = document.createElement('div');
                 lockBanner.style.cssText = 'background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 20px;margin-bottom:16px;display:flex;align-items:center;gap:10px;font-size:13px;color:#856404;';
-                lockBanner.innerHTML = '<span style="font-size:18px;">🔒</span> <strong>대회가 종료되었습니다.</strong> 기록 수정은 관리자 권한으로만 가능합니다.';
+                lockBanner.innerHTML = '<span style="font-size:18px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> <strong>대회가 종료되었습니다.</strong> 기록 수정은 관리자 권한으로만 가능합니다.';
                 document.querySelector('.main-content')?.insertBefore(lockBanner, document.querySelector('.main-content')?.children[1]);
             }
         }
@@ -525,7 +525,7 @@ async function editEventVideoUrl() {
     try {
         const key = localStorage.getItem('accessKey') || '';
         await API.setEventVideoUrl(state.selectedEvent.id, url.trim(), key);
-        showToast(url.trim() ? '✓ 영상 URL 저장' : '영상 URL 삭제됨');
+        showToast(url.trim() ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 영상 URL 저장' : '영상 URL 삭제됨');
         await loadEventVideoButtons();
     } catch(e) { showToast('저장 실패: ' + (e.error||e.message), 'error'); }
 }
@@ -769,16 +769,16 @@ async function renderTrackDetail(evt) {
             <button class="btn btn-sm btn-primary" onclick="saveHeatWind()" title="현재 히트 풍속 저장" style="padding:8px 16px;font-size:13px;">저장</button>
             <span id="wind-status" style="font-size:12px;margin-left:6px;"></span>
             <span id="wind-record-badge" style="font-size:12px;margin-left:6px;"></span>
-            <span id="wind-warning-inline" style="display:none;font-size:11px;color:#b79f58;font-weight:700;margin-left:6px;">⚠ 풍속 미입력</span>
+            <span id="wind-warning-inline" style="display:none;font-size:11px;color:#b79f58;font-weight:700;margin-left:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 풍속 미입력</span>
         </div>` : ''}
         <div class="heat-tabs">
             ${heatTabs}
-            <button class="btn btn-sm btn-outline" onclick="showHeatEditModal(state.selectedEvent)" style="margin-left:auto;font-size:11px;" title="조/레인 수동 수정">⚙ 조/레인 수정</button>
-            <button class="btn btn-sm btn-outline" onclick="validateWARegulations()" style="font-size:11px;" title="WA 규정 검증">✓ WA 검증</button>
+            <button class="btn btn-sm btn-outline" onclick="showHeatEditModal(state.selectedEvent)" style="margin-left:auto;font-size:11px;" title="조/레인 수동 수정"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> 조/레인 수정</button>
+            <button class="btn btn-sm btn-outline" onclick="validateWARegulations()" style="font-size:11px;" title="WA 규정 검증"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> WA 검증</button>
         </div>
         <div id="track-content"></div>
         <div class="track-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">
-            <button class="btn btn-primary btn-sm" id="track-save-all-btn" onclick="saveAllTrackInline()" title="현재 조의 모든 기록을 한번에 저장합니다">✓ 기록 저장</button>
+            <button class="btn btn-primary btn-sm" id="track-save-all-btn" onclick="saveAllTrackInline()" title="현재 조의 모든 기록을 한번에 저장합니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 기록 저장</button>
             <button class="btn btn-outline btn-sm" onclick="resetSubEventResults(${evt.id}, '${evt.name}')" title="이 종목의 모든 기록을 초기화합니다" style="color:#e53e3e;">기록 초기화</button>
             ${evt.round_type === 'preliminary' ? `
                 <button class="btn btn-outline btn-sm" onclick="openSemifinalQualification()" title="모든 조의 결과를 통합하여 준결승 진출자를 선택합니다">준결승 진출자 선택</button>
@@ -1005,7 +1005,7 @@ async function saveSingleTrackInline(inp, doRerender = true) {
                 inp.classList.add('saving'); inp.disabled = true;
                 try {
                     await API.deleteResult({ heat_id: hid, event_entry_id: eid });
-                    showToast('✓ 기록 삭제됨');
+                    showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 기록 삭제됨');
                     if (doRerender) await loadTrackHeatData();
                     if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
                     renderAuditLog();
@@ -1028,9 +1028,9 @@ async function saveSingleTrackInline(inp, doRerender = true) {
         inp.classList.remove('saving'); inp.classList.add('has-value');
         inp.disabled = false;
         if (isOfflineResp(resp)) {
-            showToast('✓ 로컬 저장 (오프라인)');
+            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 로컬 저장 (오프라인)');
         } else {
-            showToast('✓ 저장 완료');
+            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장 완료');
             if (doRerender) {
                 await loadTrackHeatData();
                 const allInputs = document.querySelectorAll('.track-time-input');
@@ -1057,7 +1057,7 @@ async function saveAllTrackInline() {
         } catch (err) { inp.classList.remove('saving'); inp.disabled = false; inp.classList.add('error'); showToast(err.error || '저장 실패', 'error'); }
     }
     if (Object.keys(state._pendingInlineTrack).length === 0) clearUnsaved();
-    showToast('✓ 전체 저장 완료');
+    showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 전체 저장 완료');
     await loadTrackHeatData();
     if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
     renderAuditLog();
@@ -1082,7 +1082,7 @@ async function saveHeatWind() {
         else if (v === 0) inp.value = '';
         else inp.value = v.toFixed(1);
         const statusEl = document.getElementById('wind-status');
-        if (statusEl) { statusEl.textContent = '✓ 저장됨'; statusEl.style.color = 'var(--green)'; setTimeout(() => statusEl.textContent = '', 2000); }
+        if (statusEl) { statusEl.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; statusEl.style.color = 'var(--green)'; setTimeout(() => statusEl.textContent = '', 2000); }
         updateWindRecordBadge(v);
         // Show/hide + button
         const plusBtn = document.getElementById('wind-plus-btn');
@@ -1885,7 +1885,7 @@ async function saveFieldWind(entryId, attempt, wind) {
             state.results = allResults;
             state._activeWindCell = null;
             state._activeFieldCell = null;
-            showToast('✓ 풍속 저장');
+            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 풍속 저장');
             renderFieldDistanceContent();
         }
     } catch (err) {
@@ -1910,7 +1910,7 @@ async function saveFieldInline(entryId, attempt, distance) {
 
         const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
         if (isOfflineResp(resp)) {
-            showToast('✓ 로컬 저장 (오프라인)');
+            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 로컬 저장 (오프라인)');
         } else {
             // 온라인: 서버에서 fresh 데이터로 reconcile
             let allResults = await API.getResults(state.heatId);
@@ -1920,7 +1920,7 @@ async function saveFieldInline(entryId, attempt, distance) {
             }
             state.results = allResults;
             renderFieldDistanceContent();
-            showToast('✓ 기록 저장');
+            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 기록 저장');
         }
         // If wind measurement needed and distance valid but no wind, auto-activate wind cell
         const needsWind = requiresWindMeasurement(state.selectedEvent?.name, 'field_distance');
@@ -1943,7 +1943,7 @@ function showWindWarning(entryId, attempt) {
         notice.id = 'wind-warning-notice';
         document.body.appendChild(notice);
     }
-    notice.textContent = '⚠ 풍속을 입력하세요!';
+    notice.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 풍속을 입력하세요!';
     notice.style.display = 'block';
     notice.style.opacity = '1';
     setTimeout(() => { notice.style.opacity = '0'; setTimeout(() => { notice.style.display = 'none'; }, 300); }, 1500);
@@ -2069,7 +2069,7 @@ async function fieldInlineClear(entryId, attempt) {
             state.results = allResults;
             renderFieldDistanceContent();
         }
-        showToast('✓ 기록 삭제');
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 기록 삭제');
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
     } catch (err) {
@@ -2099,7 +2099,7 @@ async function fieldInlinePass(entryId, attempt) {
             state.results = allResults;
             renderFieldDistanceContent();
         }
-        showToast('✓ 패스 처리');
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 패스 처리');
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
     } catch (err) {
@@ -2238,7 +2238,7 @@ async function saveHeightAndReload() {
         console.error('saveHeightAndReload error:', e);
     }
     const btn = document.querySelector('.track-actions .btn-primary');
-    if (btn) { const orig = btn.textContent; btn.textContent = '✓ 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
+    if (btn) { const orig = btn.textContent; btn.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
 }
 
 // Legacy compat
@@ -2624,7 +2624,7 @@ async function renderCombinedDetail(evt) {
         subDefs.forEach(se => {
             const has = state.combinedScores.some(s => s.sub_event_order === se.order && s.raw_record > 0);
             const cls = (_combinedActiveTab === se.order ? ' active' : '') + (has ? ' tab-completed' : '');
-            const btn = `<button class="combined-tab-btn${cls}" data-order="${se.order}" onclick="switchCombinedTab(${se.order})">${se.order}. ${se.name}${has ? ' ✓' : ''}</button>`;
+            const btn = `<button class="combined-tab-btn${cls}" data-order="${se.order}" onclick="switchCombinedTab(${se.order})">${se.order}. ${se.name}${has ? ' <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</button>`;
             if (se.order <= day1Max) day1Html += btn; else day2Html += btn;
         });
 
@@ -2727,7 +2727,7 @@ async function _renderScoreboard(container) {
                         if (!p || (p.raw == null && !_validSc))
                             return `<td style="cursor:pointer;color:var(--text-muted);" onclick="switchCombinedTab(${se.order})">—</td>`;
                         // ─── 우선순위 1: 상태코드 (DNS/DNF/DQ/NM) 가 있으면 그것을 표시. 점수는 그대로(보통 0pt).
-                        //     ⚠️ 'X'/'PASS'/'-' 등 시도 마크는 status_code 가 아니므로 무시 (화이트리스트만 채택).
+                        //     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 'X'/'PASS'/'-' 등 시도 마크는 status_code 가 아니므로 무시 (화이트리스트만 채택).
                         if (_validSc) {
                             const scLabel = p.status_code;
                             return `<td style="cursor:pointer;" onclick="switchCombinedTab(${se.order})"><div style="font-weight:600;font-size:11px;color:var(--danger);">${scLabel}</div><div style="font-size:10px;color:var(--text-muted);">${p.points}pt</div></td>`;
@@ -2751,14 +2751,14 @@ async function _renderScoreboard(container) {
         <p style="margin-top:6px;font-size:11px;color:var(--text-muted);">종목명을 클릭하면 해당 종목 기록 입력으로 이동합니다.</p>
         <div class="track-actions" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             ${evt.round_status === 'completed'
-                ? `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:13px;">✓ 경기 완료됨</div>
+                ? `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:13px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 경기 완료됨</div>
                    <button class="btn btn-warning btn-sm" onclick="revertCombinedComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`
-                : `<button class="btn btn-success" onclick="completeCombinedEvent()" title="모든 세부종목 기록을 최종 확정하고 경기를 완료합니다">⚑ 모든 경기 완료</button>`}
-            <button class="btn btn-sm btn-outline" onclick="repairCombinedScoresAction()" title="점수가 이상하게 표시될 때 모든 세부기록을 재계산합니다 (이전 잘못된 매핑 자동 정리)" style="margin-left:auto;">🔧 점수 재계산</button>
+                : `<button class="btn btn-success" onclick="completeCombinedEvent()" title="모든 세부종목 기록을 최종 확정하고 경기를 완료합니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> 모든 경기 완료</button>`}
+            <button class="btn btn-sm btn-outline" onclick="repairCombinedScoresAction()" title="점수가 이상하게 표시될 때 모든 세부기록을 재계산합니다 (이전 잘못된 매핑 자동 정리)" style="margin-left:auto;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 점수 재계산</button>
         </div>`;
 }
 
-// 🔧 Force-repair combined scores when scoreboard shows wrong values
+// <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Force-repair combined scores when scoreboard shows wrong values
 async function repairCombinedScoresAction() {
     const evt = _combinedParentEvt || state.selectedEvent;
     if (!evt) return;
@@ -2773,7 +2773,7 @@ async function repairCombinedScoresAction() {
     if (!adminKey) return;
     try {
         const result = await API.repairCombinedScores(evt.id, adminKey);
-        showToast(`✓ 재계산 완료 (삭제 ${result.wiped}건, 재구축 ${result.rebuilt}건)`, 'success', 3000);
+        showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 재계산 완료 (삭제 ${result.wiped}건, 재구축 ${result.rebuilt}건)`, 'success', 3000);
         // Reload scoreboard
         _renderCombinedContent();
     } catch (err) {
@@ -2856,9 +2856,9 @@ async function doCompleteCombined() {
         }
         
         document.getElementById('complete-modal-overlay').remove();
-        showToast('✓ ' + evt.name + ' 경기 완료', 'success', 3000);
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ' + evt.name + ' 경기 완료', 'success', 3000);
         
-        // ★ Re-fetch fresh data from server (same pattern as doCompleteRound)
+        // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> Re-fetch fresh data from server (same pattern as doCompleteRound)
         state.events = await API.getAllEvents(getCompetitionId());
         const freshEvt = await API.getEvent(evt.id);
         state.selectedEvent = freshEvt;
@@ -2898,7 +2898,7 @@ async function revertCombinedComplete() {
                     }
                 }
             }
-            showToast('↩️ ' + evt.name + ' 경기 완료가 취소되었습니다.', 'success', 3000);
+            showToast('↩ ' + evt.name + ' 경기 완료가 취소되었습니다.', 'success', 3000);
             _adminUnlocked = true;
             // Re-fetch fresh data
             state.events = await API.getAllEvents(getCompetitionId());
@@ -3102,7 +3102,7 @@ async function _cSubTrackSaveWind(heatId) {
         const plusBtn = document.getElementById('csub-wind-plus-btn');
         if (plusBtn) plusBtn.style.display = (v === 0) ? 'inline-block' : 'none';
         const st = document.getElementById('csub-wind-status');
-        if (st) { st.textContent = '✓ 저장됨'; st.style.color = 'var(--green)'; setTimeout(() => st.textContent = '', 2000); }
+        if (st) { st.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; st.style.color = 'var(--green)'; setTimeout(() => st.textContent = '', 2000); }
         _cSubTrackUpdateWindBadge(v);
     } catch(e) { console.error('_cSubTrackSaveWind:', e); }
 }
@@ -3184,7 +3184,7 @@ async function _cSubTrackSaveAll(heatId, parentId) {
     const btn = document.querySelector('.track-actions .btn-outline');
     if (btn) {
         const orig = btn.textContent;
-        btn.textContent = `✓ 저장됨 (${saveCount}건)`; btn.disabled = true;
+        btn.textContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨 (${saveCount}건)`; btn.disabled = true;
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
     }
 }
@@ -3586,7 +3586,7 @@ async function _cSubFieldSaveAll() {
     await syncCombinedFromSubEvent(parentId);
     const btn = document.querySelector('.track-actions .btn-primary');
     if (btn) {
-        const msg = nmCount > 0 ? `✓ 저장됨 (NM ${nmCount}건 자동처리)` : '✓ 저장됨';
+        const msg = nmCount > 0 ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨 (NM ${nmCount}건 자동처리)` : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨';
         const orig = btn.textContent;
         btn.textContent = msg; btn.disabled = true;
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
@@ -3855,7 +3855,7 @@ async function _cSubHeightSave() {
         console.error('_cSubHeightSave error:', e);
     }
     const btn = document.querySelector('.track-actions .btn-primary');
-    if (btn) { const orig = btn.textContent; btn.textContent = '✓ 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
+    if (btn) { const orig = btn.textContent; btn.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
 }
 
 async function _cSubHeightToggle(entryId, barHeight, attemptNumber) {
@@ -3996,7 +3996,7 @@ function showAdminKeyModal(onSubmit) {
                    lang="en" inputmode="text"
                    style="width:100%;padding:8px 12px;margin-top:4px;ime-mode:disabled;">
             <div id="admin-key-ime-warn" style="display:none;color:#d97706;font-size:12px;margin-top:6px;font-weight:600;">
-                ⚠️ 한글이 입력되었습니다. 키보드 <b>한/영 키</b>를 눌러 영문 모드로 전환 후 다시 입력해 주세요.
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 한글이 입력되었습니다. 키보드 <b>한/영 키</b>를 눌러 영문 모드로 전환 후 다시 입력해 주세요.
             </div>
             <div id="admin-key-modal-error" style="display:none;color:var(--danger);font-size:12px;margin-top:6px;"></div>
         </div>
@@ -4325,7 +4325,7 @@ async function showLaneAssignmentReview(finalEventId, athleteCount) {
         <div class="lane-review-overlay" id="lane-review-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;">
             <div style="background:white;border-radius:12px;max-width:800px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
                 <div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border-radius:12px 12px 0 0;">
-                    <h3 style="margin:0;font-size:16px;color:#166534;">✓ 결승 라운드 생성 완료</h3>
+                    <h3 style="margin:0;font-size:16px;color:#166534;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 결승 라운드 생성 완료</h3>
                     <p style="margin:4px 0 0;font-size:13px;color:#15803d;">${data.event_name} — ${athleteCount}명 진출 / WA ${data.pattern_label || '기본'} 레인 배정</p>
                 </div>
                 <div style="padding:16px 24px;">
@@ -4423,7 +4423,7 @@ async function saveLaneReview(finalEventId) {
             const err = await resp.json();
             throw new Error(err.error || 'Lane update failed');
         }
-        showToast('✓ 레인 배정 저장 완료', 'success', 2000);
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 레인 배정 저장 완료', 'success', 2000);
     } catch (e) {
         showToast('레인 저장 실패: ' + e.message, 'error', 3000);
     }
@@ -4465,7 +4465,7 @@ async function approveSemifinalQualification() {
 function _buildCompleteUI(evt) {
     // NOTE: 한글 깨짐 이슈로 "결과 이미지" 다운로드 버튼은 제거함 (PDF 결과지로 대체)
     if (evt.round_status === 'completed') {
-        return `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:12px;">✓ 경기 완료됨</div>
+        return `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:12px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 경기 완료됨</div>
                 <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`;
     }
     return `<button class="btn btn-success btn-sm" onclick="completeRound()" title="모든 기록이 저장된 후 경기를 최종 완료 처리합니다">경기 완료</button>`;
@@ -4489,7 +4489,7 @@ async function revertRoundComplete() {
         try {
             await API.revertComplete(evt.id, key);
             _adminUnlocked = true;
-            showToast('↩️ ' + evt.name + ' 경기 완료가 취소되었습니다.', 'success', 3000);
+            showToast('↩ ' + evt.name + ' 경기 완료가 취소되었습니다.', 'success', 3000);
             state.events = await API.getAllEvents(getCompetitionId());
             state.selectedEvent = await API.getEvent(evt.id);
             renderMatrix();
@@ -4616,15 +4616,15 @@ async function doCompleteRound() {
             for (const m of _jointOtherMembers()) {
                 try {
                     await API.completeEvent(m.event_id, judgeName, adminKey);
-                    jointMsgs.push(`✓ ${m.comp_name || m.federation || '연합대회'} 동시 완료`);
+                    jointMsgs.push(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${m.comp_name || m.federation || '연합대회'} 동시 완료`);
                 } catch (err) {
-                    jointMsgs.push(`⚠ ${m.comp_name || m.federation || '연합대회'} 완료 실패 (운영키 다를 수 있음)`);
+                    jointMsgs.push(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ${m.comp_name || m.federation || '연합대회'} 완료 실패 (운영키 다를 수 있음)`);
                     console.warn('[joint] completeEvent failed for', m.event_id, err);
                 }
             }
         }
         document.getElementById('complete-modal-overlay').remove();
-        showToast('✓ ' + (state.selectedEvent?.name || '') + ' 경기 완료', 'success', 3000);
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ' + (state.selectedEvent?.name || '') + ' 경기 완료', 'success', 3000);
         if (jointMsgs.length > 0) {
             setTimeout(() => showToast(jointMsgs.join(' | '), 'info', 4000), 500);
         }
@@ -4838,7 +4838,7 @@ function openFieldZoomModal() {
     overlay.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:#1a1f2b;color:#fff;flex-shrink:0;">
             <h3 style="margin:0;font-size:18px;font-family:var(--font-brand);letter-spacing:1px;">${title}</h3>
-            <button onclick="closeFieldZoomModal()" style="background:none;border:2px solid rgba(255,255,255,.3);color:#fff;font-size:16px;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:700;">✕ 닫기</button>
+            <button onclick="closeFieldZoomModal()" style="background:none;border:2px solid rgba(255,255,255,.3);color:#fff;font-size:16px;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:700;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 닫기</button>
         </div>
         <div id="field-zoom-body" style="flex:1;overflow:auto;padding:16px;background:#fff;"></div>`;
 
@@ -4890,13 +4890,13 @@ function closeFieldZoomModal() {
 // RESET EVENT RESULTS — 종목 기록 전체 초기화 (10종/7종 + 일반 종목)
 // ============================================================
 async function resetSubEventResults(eventId, eventName) {
-    if (!confirm(`⚠ [${eventName}] 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.\n정말 초기화하시겠습니까?`)) return;
+    if (!confirm(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> [${eventName}] 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.\n정말 초기화하시겠습니까?`)) return;
     if (!confirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
 
     try {
         showToast('기록 초기화 중...', 'info', 2000);
         const result = await API.resetSubEvent(eventId);
-        showToast(`✓ ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제)`, 'success', 4000);
+        showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제)`, 'success', 4000);
         // Reload the event list and current event data
         await loadEventsAndMatrix();
         if (state.selectedEventId) {
@@ -4991,9 +4991,9 @@ async function runPrefetchAllEvents() {
             txt.textContent = `취소됨 (${done}/${total})`;
             showToast(`사전로딩이 취소되었습니다 (${done}/${total} 완료).`, 'info', 3500);
         } else {
-            txt.textContent = `✓ 완료 ${done}/${total}${errors.length ? ` (실패 ${errors.length}건)` : ''}`;
+            txt.textContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 완료 ${done}/${total}${errors.length ? ` (실패 ${errors.length}건)` : ''}`;
             const msg = errors.length === 0
-                ? `✓ 사전로딩 완료! ${total}개 종목의 데이터가 캐시되었습니다. 이제 오프라인에서도 종목 간 이동이 가능합니다.`
+                ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 사전로딩 완료! ${total}개 종목의 데이터가 캐시되었습니다. 이제 오프라인에서도 종목 간 이동이 가능합니다.`
                 : `사전로딩 완료 — 성공 ${total - errors.length}/${total}, 실패 ${errors.length}건. 실패한 종목은 오프라인 이동이 안 될 수 있습니다.`;
             showToast(msg, errors.length === 0 ? 'success' : 'info', 5000);
             if (errors.length > 0) console.warn('[prefetch] errors:', errors);

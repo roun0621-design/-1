@@ -337,12 +337,12 @@ function _updateOfflineBanner() {
         banner.style.display = 'block';
         banner.style.background = '#e74c3c';
         banner.style.color = '#fff';
-        banner.textContent = `🔴 오프라인 — 기록은 로컬에 저장됩니다${_offlineState.pendingCount > 0 ? ` (대기 ${_offlineState.pendingCount}건)` : ''}`;
+        banner.textContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 오프라인 — 기록은 로컬에 저장됩니다${_offlineState.pendingCount > 0 ? ` (대기 ${_offlineState.pendingCount}건)` : ''}`;
     } else if (_offlineState.pendingCount > 0) {
         banner.style.display = 'block';
         banner.style.background = '#f39c12';
         banner.style.color = '#fff';
-        banner.textContent = `🟡 동기화 중... (${_offlineState.pendingCount}건 대기)`;
+        banner.textContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 동기화 중... (${_offlineState.pendingCount}건 대기)`;
     } else {
         banner.style.display = 'none';
     }
@@ -685,7 +685,7 @@ function _showRecordBreakToast(data) {
     overlay.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10000;max-width:420px;background:linear-gradient(135deg,#fff6dd,#fffbea);border:2px solid #d4a017;border-radius:12px;padding:14px 18px;box-shadow:0 8px 32px rgba(212,160,23,.35);cursor:pointer;animation:slideInRight .35s ease;font-family:var(--font-base,system-ui);';
     overlay.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:24px;">🏆</span>
+            <span style="font-size:24px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg></span>
             <strong style="color:#7a4f00;font-size:14px;letter-spacing:.3px;">${detected} 갱신 감지</strong>
         </div>
         <div style="color:#5a3a00;font-size:13px;line-height:1.45;">
@@ -1886,7 +1886,7 @@ async function openDocumentList() {
 async function docDownloadResultPNG(eventId, btn) {
     if (!eventId) return;
     const origText = btn.innerHTML;
-    btn.innerHTML = '⏳ 생성중...';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 생성중...';
     btn.disabled = true;
     try {
         const resp = await fetch('/api/documents/result-sheet/' + eventId + '/png');
@@ -2036,7 +2036,7 @@ function _showConflictModal(conflicts) {
 
     const items = conflicts.map((c, i) => `
         <div style="border:1px solid #e5e5e5; border-radius:8px; padding:12px; margin-bottom:10px; background:#fff;">
-            <div style="font-weight:600; color:#c62828; margin-bottom:6px;">⚠ 항목 ${i+1}</div>
+            <div style="font-weight:600; color:#c62828; margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 항목 ${i+1}</div>
             <div style="font-size:13px; color:#555; margin-bottom:4px;"><b>경로:</b> ${c.url || '-'}</div>
             <div style="font-size:13px; color:#888; margin-bottom:4px;"><b>오프라인 입력값 (거부됨):</b> ${formatValue(c.rejected_offline_value)}</div>
             <div style="font-size:13px; color:#2e7d32;"><b>운영진 기록 (유지됨):</b> ${formatValue(c.server_value)}</div>
@@ -2046,7 +2046,7 @@ function _showConflictModal(conflicts) {
     overlay.innerHTML = `
         <div style="background:#fff; border-radius:12px; max-width:560px; width:100%; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
             <div style="padding:18px 20px; background:#fff3cd; border-bottom:1px solid #ffe082;">
-                <div style="font-size:18px; font-weight:700; color:#856404;">⚠ 오프라인 동기화 — 충돌 알림</div>
+                <div style="font-size:18px; font-weight:700; color:#856404;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 오프라인 동기화 — 충돌 알림</div>
                 <div style="font-size:13px; color:#856404; margin-top:6px; line-height:1.5;">
                     아래 ${conflicts.length}건의 오프라인 입력값은 <b>운영진이 그 사이에 입력한 기록</b>이 우선되어 <b>적용되지 않았습니다.</b><br>
                     필요시 운영진 기록을 확인하고 수동으로 다시 입력해주세요.

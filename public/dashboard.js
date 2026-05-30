@@ -278,18 +278,18 @@ function renderHeroSchedule() {
 
     if (liveItem) {
         card.classList.add('live');
-        iconEl.textContent = '🔴';
+        iconEl.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>';
         titleEl.innerHTML = `<span class="hero-live-dot"></span> LIVE 진행중 <span class="hero-day-chip">DAY ${targetDay}</span>`;
         const nextTxt = nextItem ? ` · 다음 <strong>${_esc(nextItem.event_name)}</strong> ${nextItem.time}` : '';
         subEl.innerHTML = `<strong>${_esc(liveItem.event_name)}</strong> ${_esc(liveItem.round||'')} · ${liveItem.time}${nextTxt}`;
     } else if (isToday && nextItem) {
         card.classList.remove('live');
-        iconEl.textContent = '📅';
+        iconEl.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
         titleEl.innerHTML = `오늘의 시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
         subEl.innerHTML = `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`;
     } else {
         card.classList.remove('live');
-        iconEl.textContent = '📅';
+        iconEl.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
         titleEl.innerHTML = `시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
         const subTxt = nextItem
             ? `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`
@@ -328,7 +328,7 @@ function switchGender(g, btn) {
     // 재사용하므로 전역 querySelectorAll 로 잡으면 division 탭의 active 도 같이 풀려버림)
     document.querySelectorAll('#gender-tabs .gender-tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    // ★ FIX: 성별 변경 시 division 탭 목록도 새 성별에 맞게 다시 렌더링
+    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 성별 변경 시 division 탭 목록도 새 성별에 맞게 다시 렌더링
     //    (남자 탭에서 여자/혼성 division 이 보이던 버그 수정)
     if (typeof renderDivisionTabs === 'function') renderDivisionTabs();
     renderMatrix();
@@ -386,7 +386,7 @@ function renderDivisionTabs() {
         const genderTabs = document.getElementById('gender-tabs');
         if (genderTabs) genderTabs.after(divBar);
     }
-    // ★ FIX: 현재 성별 탭(M/F/X)에 해당하는 events 만 division 목록 추출
+    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 현재 성별 탭(M/F/X)에 해당하는 events 만 division 목록 추출
     //    이전엔 모든 events 의 division 합집합을 보여줘서 "남자" 탭에서도 "선수권(여)" 등이 표시됨.
     const existingDivs = [...new Set(
         allEvents
@@ -642,7 +642,7 @@ function renderViewerBtn(evt) {
 
     if (evt.round_status === 'completed') {
         // 완료 라운드 — 클릭 시 결과 화면으로 이동하므로 라벨도 "결과"로 표기 (일관성)
-        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);">✓ 결과</span>`;
+        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 결과</span>`;
     }
 
     // 소집 완료 또는 in_progress → LIVE (경기 진행 중)
@@ -1026,7 +1026,7 @@ function _buildRecordBadgesHTML(newValNum) {
     if (!broken || broken.length === 0) return '';
     return broken.map(lbl => {
         const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-        return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong>★</strong>${lbl}</span>`;
+        return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
     }).join('');
 }
 
@@ -1326,7 +1326,7 @@ function renderLiveCombinedResults(data) {
                 subDefs.forEach(se => {
                     const sc = scores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
                     const p = sc ? (sc.wa_points || 0) : 0;
-                    // 🔴 status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
+                    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
                     pts[se.order] = { points: p, raw: sc ? sc.raw_record : null, status_code: sc ? (sc.status_code || '') : '' };
                     total += p;
                 });
@@ -1359,7 +1359,7 @@ function renderLiveCombinedResults(data) {
                                 const p = r.pts[se.order];
                                 if (!p || p.raw == null)
                                     return `<td style="color:#ccc;font-size:10px;">—</td>`;
-                                // 🔴 status_code (DNS/DNF/DQ/NM) 이 있으면 우선 표시.
+                                // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 이 있으면 우선 표시.
                                 //     'X'/'PASS'/'-' 등 시도 마크 는 status_code 가 아닌 일부 레거시 데이터 이므로 화이트리스트만 채택.
                                 if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) {
                                     const _sc = p.status_code;
@@ -1426,7 +1426,7 @@ async function _loadCombinedResultsAsync(evt) {
             subDefs.forEach(se => {
                 const sc = scores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
                 const p = sc ? (sc.wa_points || 0) : 0;
-                // 🔴 status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
+                // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
                 pts[se.order] = { points: p, raw: sc ? sc.raw_record : null, status_code: sc ? (sc.status_code || '') : '' };
                 total += p;
             });
@@ -1472,7 +1472,7 @@ async function _loadCombinedResultsAsync(evt) {
                             const p = r.pts[se.order];
                             if (!p || p.raw == null)
                                 return `<td style="color:#ccc;font-size:10px;cursor:pointer;" onclick="_cResultShowSub(${se.order})">—</td>`;
-                            // 🔴 status_code 는 화이트리스트(DNS/DNF/DQ/NM)만 인정.
+                            // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code 는 화이트리스트(DNS/DNF/DQ/NM)만 인정.
                             if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) {
                                 const _sc = p.status_code;
                                 const _scColor = (_sc === 'DQ') ? '#a02050' : 'var(--danger)';
@@ -1495,7 +1495,7 @@ async function _loadCombinedResultsAsync(evt) {
                     }).join('')}</tbody>
                 </table>
             </div>
-            <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">☆ ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
+            <p style="margin-top:6px;font-size:10px;color:var(--text-muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
             <div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border);">
                 <div style="font-weight:700;font-size:13px;margin-bottom:6px;">종목별 세부기록</div>
                 <div style="margin-bottom:4px;">
@@ -2036,7 +2036,7 @@ function openPacingPopup(eventName) {
     }
 
     panel.innerHTML = `<div class="result-panel-header">
-        <h3>⌖ ${eventName} W/L Target</h3>
+        <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> ${eventName} W/L Target</h3>
         <button class="result-panel-close" onclick="closePacingPopup()">&times;</button>
     </div><div class="result-panel-body">${html}</div>`;
     overlay.classList.add('show');
@@ -2134,7 +2134,7 @@ async function loadRosterModalData(eventId) {
             // 소집 상태 뱃지
             if (showCallroomStatus) {
                 if (allChecked) {
-                    html += `<span style="font-size:10px;background:#b79f58;color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;">소집 완료 ✓</span>`;
+                    html += `<span style="font-size:10px;background:#b79f58;color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;">소집 완료 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg></span>`;
                 } else if (cntChecked > 0 || cntNoShow > 0) {
                     html += `<span style="font-size:10px;color:#555;">`;
                     html += `<span style="color:#b79f58;font-weight:700;">출석 ${cntChecked}</span>`;

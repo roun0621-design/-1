@@ -318,12 +318,12 @@
                     <label style="font-weight:600;font-size:13px;white-space:nowrap;">대회:</label>
                     <select id="admin-comp-select" onchange="onCompChange()" style="flex:1;"></select>
                     <!-- 대회 종료/재개 컨트롤 — 관리자만 작동 -->
-                    <span id="comp-status-badge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fee2e2;color:#991b1b;white-space:nowrap;" title="이 대회는 종료되었습니다. 운영자는 뷰어 모드로 동작합니다.">🔒 종료됨</span>
+                    <span id="comp-status-badge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fee2e2;color:#991b1b;white-space:nowrap;" title="이 대회는 종료되었습니다. 운영자는 뷰어 모드로 동작합니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> 종료됨</span>
                     <button id="comp-close-btn" class="btn btn-sm btn-outline" onclick="toggleCompetitionClose()" style="white-space:nowrap;font-size:12px;display:none;" title="대회 종료/재개 (관리자 전용)">대회 종료</button>
                 </div>
                 <!-- 종료된 대회일 때 운영자에게 보이는 안내 배너 -->
                 <div id="comp-ended-banner" style="display:none;padding:8px 12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;font-size:12px;color:#78350f;line-height:1.5;">
-                    🔒 <strong>이 대회는 종료되었습니다.</strong> 운영자 권한으로는 더 이상 수정할 수 없으며, 모든 데이터는 읽기 전용으로 표시됩니다. 수정이 필요하면 관리자에게 문의하세요.
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> <strong>이 대회는 종료되었습니다.</strong> 운영자 권한으로는 더 이상 수정할 수 없으며, 모든 데이터는 읽기 전용으로 표시됩니다. 수정이 필요하면 관리자에게 문의하세요.
                 </div>
             </div>
 
@@ -349,7 +349,7 @@
                     <div class="sidebar-search">
                         <span class="search-icon" id="sidebar-search-icon"></span>
                         <input type="text" id="sidebar-search-input" placeholder="기능 검색…" autocomplete="off">
-                        <span class="kbd-hint">⌘K</span>
+                        <span class="kbd-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="10.01"/><line x1="10" y1="10" x2="10" y2="10.01"/><line x1="14" y1="10" x2="14" y2="10.01"/><line x1="18" y1="10" x2="18" y2="10.01"/><line x1="6" y1="14" x2="18" y2="14"/></svg>K</span>
                     </div>
                     <div id="sidebar-nav"><!-- JS로 렌더링 --></div>
                 </aside>
@@ -695,7 +695,7 @@
                             <span id="jg-count-badge" class="t-sm" style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-weight:600;">활성 0</span>
                         </h4>
                         <div style="display:flex;gap:6px;align-items:center;">
-                            <button class="btn btn-sm btn-outline" onclick="jgShowDupModal()" title="조편성 재업로드 등으로 동일 종목이 여러 번 등록되었는지 확인 후 정리합니다">🔍 중복 종목 진단</button>
+                            <button class="btn btn-sm btn-outline" onclick="jgShowDupModal()" title="조편성 재업로드 등으로 동일 종목이 여러 번 등록되었는지 확인 후 정리합니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 중복 종목 진단</button>
                             <button class="btn btn-sm btn-primary" onclick="jgShowCreateModal()">+ 합동 그룹 추가</button>
                             <button class="btn btn-sm btn-ghost" onclick="jgLoadGroups()" title="새로고침">↻</button>
                         </div>
@@ -711,7 +711,7 @@
     <div id="jg-dup-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;align-items:center;justify-content:center;">
         <div style="background:var(--white);border-radius:12px;padding:0;width:760px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
             <div style="padding:16px 22px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
-                <h3 style="margin:0;font-size:15px;font-weight:700;">🔍 중복 종목 진단 — <span id="jg-dup-compname" style="color:#6b5520;"></span></h3>
+                <h3 style="margin:0;font-size:15px;font-weight:700;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 중복 종목 진단 — <span id="jg-dup-compname" style="color:#6b5520;"></span></h3>
                 <button class="btn btn-ghost" style="padding:2px 8px;font-size:18px;line-height:1;" onclick="document.getElementById('jg-dup-modal').style.display='none'">×</button>
             </div>
             <div style="padding:14px 22px;flex:1;overflow-y:auto;">
@@ -719,7 +719,7 @@
                     조편성을 재업로드하면 같은 종목이 DB에 여러 번 등록될 수 있습니다.
                     이렇게 되면 합동 그룹 모달이나 소집 화면에서 같은 선수가 중복 표시됩니다.<br>
                     <strong>안전 정리</strong>: 데이터(조/엔트리/기록)가 전혀 없는 빈 중복 종목만 자동 삭제합니다.<br>
-                    <span style="color:#dc2626;">⚠ 데이터가 있는 중복 종목은 자동으로 건드리지 않습니다 (수동 검토 필요).</span>
+                    <span style="color:#dc2626;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 데이터가 있는 중복 종목은 자동으로 건드리지 않습니다 (수동 검토 필요).</span>
                 </p>
                 <div id="jg-dup-loading" style="text-align:center;padding:20px;color:#6b7280;">분석 중...</div>
                 <div id="jg-dup-content" style="display:none;"></div>
@@ -728,7 +728,7 @@
                 <span id="jg-dup-summary" style="font-size:12px;color:#6b7280;"></span>
                 <div style="display:flex;gap:6px;">
                     <button class="btn btn-ghost" onclick="document.getElementById('jg-dup-modal').style.display='none'">닫기</button>
-                    <button id="jg-dup-cleanbtn" class="btn btn-primary" onclick="jgRunCleanup()" style="display:none;background:#dc2626;border-color:#dc2626;">⚠ 빈 중복 종목 삭제</button>
+                    <button id="jg-dup-cleanbtn" class="btn btn-primary" onclick="jgRunCleanup()" style="display:none;background:#dc2626;border-color:#dc2626;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 빈 중복 종목 삭제</button>
                 </div>
             </div>
         </div>
@@ -1172,8 +1172,8 @@ POST /api/external/event-result-link/batch<br>
                     <div style="margin-bottom:14px;">
                         <label class="t-label">① 성별 선택</label>
                         <div style="display:flex;gap:6px;">
-                            <button class="btn btn-sm" id="pacing-gender-M" onclick="switchPacingGender('M')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;">♂ 남자</button>
-                            <button class="btn btn-sm btn-outline" id="pacing-gender-F" onclick="switchPacingGender('F')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;">♀ 여자</button>
+                            <button class="btn btn-sm" id="pacing-gender-M" onclick="switchPacingGender('M')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="10" cy="14" r="6"/><line x1="14.5" y1="9.5" x2="21" y2="3"/><polyline points="15 3 21 3 21 9"/></svg> 남자</button>
+                            <button class="btn btn-sm btn-outline" id="pacing-gender-F" onclick="switchPacingGender('F')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="9" r="6"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="9" y1="19" x2="15" y2="19"/></svg> 여자</button>
                         </div>
                     </div>
                     <div style="margin-bottom:14px;">
@@ -1310,7 +1310,7 @@ POST /api/external/event-result-link/batch<br>
                 <div class="admin-card" style="border-left:4px solid #16a085;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
                         <div>
-                            <h4 style="margin:0;">🔗 시리즈 ↔ 대회 종목 매칭 진단 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(NR / DR / CR)</span></h4>
+                            <h4 style="margin:0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 시리즈 ↔ 대회 종목 매칭 진단 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(NR / DR / CR)</span></h4>
                             <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회의 각 종목이 등록된 NR/DR/CR 기록과 매칭되는지 진단합니다. <strong>매칭 안 됨</strong> 옆의 드롭다운에서 DB 후보를 선택하고 <strong>[연결]</strong>, 자동 후보가 없으면 <strong>[전체 후보에서 선택]</strong> 으로 DB 전체 목록에서 강제 매칭, 정말 없으면 <strong>[+ 신규 등록]</strong> 으로 직접 입력합니다. 표기 차이가 많을 땐 <strong>일괄 정규화</strong> 로 한 번에 정리하세요.</p>
                         </div>
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -1318,8 +1318,8 @@ POST /api/external/event-result-link/batch<br>
                                 <option value="">대회 선택…</option>
                             </select>
                             <button class="btn btn-sm btn-outline" onclick="loadMatchingDiagnostic()" style="font-size:11px;">새로고침</button>
-                            <button class="btn btn-sm btn-outline" onclick="previewNormalizeAll()" style="font-size:11px;" title="실제 적용하지 않고 어떤 행이 어떻게 바뀔지 미리보기">📋 정규화 미리보기</button>
-                            <button class="btn btn-sm btn-primary" onclick="confirmNormalizeAll()" style="font-size:11px;background:#16a085;border-color:#16a085;" title="event_record 의 event_name 을 정규화된 형태로 일괄 업데이트">⚡ 일괄 정규화 실행</button>
+                            <button class="btn btn-sm btn-outline" onclick="previewNormalizeAll()" style="font-size:11px;" title="실제 적용하지 않고 어떤 행이 어떻게 바뀔지 미리보기"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="6" y="3" width="12" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg> 정규화 미리보기</button>
+                            <button class="btn btn-sm btn-primary" onclick="confirmNormalizeAll()" style="font-size:11px;background:#16a085;border-color:#16a085;" title="event_record 의 event_name 을 정규화된 형태로 일괄 업데이트"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> 일괄 정규화 실행</button>
                         </div>
                     </div>
                     <div id="matching-summary" style="margin-top:6px;"></div>
@@ -1490,7 +1490,7 @@ POST /api/external/event-result-link/batch<br>
                     <label class="t-md t-bold" style="display:block;margin-bottom:6px;">합동 그룹 이름 <span style="color:#dc2626;">*</span></label>
                     <input id="jg-create-name" placeholder="예: 여자 장대 합동, 10000mW 합동" style="width:100%;padding:10px 12px;font-size:14px;border:1.5px solid var(--gray);border-radius:8px;">
                     <p class="t-help" style="margin-top:8px;color:#6b7280;font-size:12px;line-height:1.5;">
-                        💡 합동 그룹의 이름을 짧고 명확하게 적어주세요. 메인 목록과 스코어보드 노출 시 식별에 사용됩니다.<br>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c1 .8 1 2 1 3.3h6c0-1.3 0-2.5 1-3.3A7 7 0 0 0 12 2z"/></svg> 합동 그룹의 이름을 짧고 명확하게 적어주세요. 메인 목록과 스코어보드 노출 시 식별에 사용됩니다.<br>
                         예: <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px;">여자 장대 합동</code>, <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px;">10000mW 4-way 합동</code>
                     </p>
                 </div>
@@ -1512,7 +1512,7 @@ POST /api/external/event-result-link/batch<br>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <label class="t-md t-bold">합동으로 묶을 종목</label>
                         <div style="display:flex;gap:6px;">
-                            <input id="jg-event-search" placeholder="🔍 종목명 검색" oninput="jgRenderEvents()" style="font-size:12px;padding:4px 8px;border:1px solid #e5e7eb;border-radius:4px;">
+                            <input id="jg-event-search" placeholder="<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 종목명 검색" oninput="jgRenderEvents()" style="font-size:12px;padding:4px 8px;border:1px solid #e5e7eb;border-radius:4px;">
                             <select id="jg-cat-filter" onchange="jgRenderEvents()" style="font-size:12px;padding:4px 8px;border:1px solid #e5e7eb;border-radius:4px;">
                                 <option value="">전체</option>
                                 <option value="track">트랙</option>
@@ -1525,7 +1525,7 @@ POST /api/external/event-result-link/batch<br>
                     </div>
                     <div id="jg-event-list" style="max-height:340px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;"></div>
                     <p class="t-help" style="margin-top:8px;color:#6b7280;font-size:12px;">
-                        ⚠️ 체크박스는 <strong>기본 해제</strong>입니다. 합동으로 묶을 종목만 직접 선택하세요.<br>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 체크박스는 <strong>기본 해제</strong>입니다. 합동으로 묶을 종목만 직접 선택하세요.<br>
                         선택한 종목 각각이 별도 합동 그룹으로 생성됩니다.
                     </p>
                 </div>
@@ -1553,7 +1553,7 @@ POST /api/external/event-result-link/batch<br>
             </div>
             <div style="padding:14px 22px;flex:1;overflow-y:auto;">
                 <p class="t-help" style="color:#6b7280;margin-bottom:10px;font-size:12px;">이미 그룹에 속한 종목은 제외됩니다. 추가할 종목을 선택하세요.</p>
-                <input id="jg-addmem-search" placeholder="🔍 종목 검색" oninput="jgRenderAddMemberList()" style="width:100%;padding:6px 10px;font-size:12px;border:1px solid #e5e7eb;border-radius:4px;margin-bottom:8px;">
+                <input id="jg-addmem-search" placeholder="<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 종목 검색" oninput="jgRenderAddMemberList()" style="width:100%;padding:6px 10px;font-size:12px;border:1px solid #e5e7eb;border-radius:4px;margin-bottom:8px;">
                 <div id="jg-addmem-list" style="border:1px solid #e5e7eb;border-radius:6px;max-height:340px;overflow-y:auto;"></div>
             </div>
             <div style="padding:12px 22px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:6px;background:#fafafa;">
@@ -2294,7 +2294,7 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                     </div>
                     <div style="margin-bottom:10px;background:#f5f5f5;border-radius:6px;padding:10px;">
-                        <div class="t-xs t-muted" style="margin-bottom:4px;">⚠️ 선수 휴대폰 번호는 athlete.phone 컬럼에서 가져옵니다. 비어 있는 선수는 자동 시뮬레이션 실패로 기록됩니다.</div>
+                        <div class="t-xs t-muted" style="margin-bottom:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 선수 휴대폰 번호는 athlete.phone 컬럼에서 가져옵니다. 비어 있는 선수는 자동 시뮬레이션 실패로 기록됩니다.</div>
                         <button class="btn btn-sm btn-warning" onclick="dryRunSmsBatch()">먼저 미리보기 (발송 없이 대상자 표시)</button>
                     </div>
                     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -2893,7 +2893,7 @@ POST /api/external/event-result-link/batch<br>
                             const subtitle = (eventName || athleteName)
                                 ? `<div style="font-size:12px;margin-top:4px;opacity:.95;font-weight:500;">${eventName} · ${athleteName}${team ? ' ('+team+')' : ''} <strong>${valStr}</strong></div>`
                                 : '';
-                            banner.innerHTML = `🏆 <strong>${types} 기록 갱신 후보 ${list.length}건 감지</strong>${subtitle}<div style="font-size:11px;margin-top:4px;opacity:.85;">클릭 → 기록 관리 탭의 "승인 대기 큐"에서 검토</div>`;
+                            banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg> <strong>${types} 기록 갱신 후보 ${list.length}건 감지</strong>${subtitle}<div style="font-size:11px;margin-top:4px;opacity:.85;">클릭 → 기록 관리 탭의 "승인 대기 큐"에서 검토</div>`;
                             banner.onclick = () => {
                                 if (typeof switchTab === 'function') switchTab('records');
                                 banner.remove();
@@ -2914,7 +2914,7 @@ POST /api/external/event-result-link/batch<br>
                             banner.className = 'toast';
                             banner.style.cssText = 'background:linear-gradient(90deg,#7f8c8d,#95a5a6);color:#fff;font-weight:600;border-left:5px solid #fff3;padding:12px 16px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.25);max-width:380px;';
                             const wind = (typeof d.wind === 'number') ? `+${d.wind.toFixed(1)}m/s` : '';
-                            banner.innerHTML = `💨 <strong>참고기록 (풍속 초과)</strong><div style="font-size:11px;margin-top:3px;opacity:.95;">${d.event_name || ''} · ${d.athlete_name || ''} <strong>${d.value || ''}</strong> · 풍속 ${wind}<br>육상 규정 +2.0 m/s 초과 — 신기록 불인정</div>`;
+                            banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M17.73 2.27A2.5 2.5 0 1 1 19.5 7H2"/><path d="M14.83 21.41A2 2 0 1 0 16.24 18H2"/></svg> <strong>참고기록 (풍속 초과)</strong><div style="font-size:11px;margin-top:3px;opacity:.95;">${d.event_name || ''} · ${d.athlete_name || ''} <strong>${d.value || ''}</strong> · 풍속 ${wind}<br>육상 규정 +2.0 m/s 초과 — 신기록 불인정</div>`;
                             document.body.appendChild(banner);
                             setTimeout(() => banner.remove(), 6000);
                         } catch(e) { /* ignore */ }
@@ -3377,7 +3377,7 @@ POST /api/external/event-result-link/batch<br>
                     }
                     // Indicator for events that have any link (result_url or video_url) to encourage usage
                     const anyLink = g.rounds.some(r => (r.result_url && r.result_url.trim()) || (r.video_url && r.video_url.trim()));
-                    const linkDot = anyLink ? '<span title="링크 있음" style="color:#16a34a;margin-left:4px;font-size:11px;">🔗</span>' : '';
+                    const linkDot = anyLink ? '<span title="링크 있음" style="color:#16a34a;margin-left:4px;font-size:11px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>' : '';
                     html += `<tr>
                         <td class="rec-matrix-event">${divBadge}${g.name}${linkDot}</td>
                         <td class="round-cell">${_admRoundBtn(prelim, '예선')}</td>
@@ -3794,7 +3794,7 @@ POST /api/external/event-result-link/batch<br>
                         ${idx > 0 ? `<button class="btn btn-xs btn-ghost" onclick="moveFed(${f.id},-1)" title="위로">↑</button>` : ''}
                         ${idx < _federations.length-1 ? `<button class="btn btn-xs btn-ghost" onclick="moveFed(${f.id},1)" title="아래로">↓</button>` : ''}
                         <button class="btn btn-xs btn-ghost" onclick="editFed(${f.id})" title="수정">수정</button>
-                        <button class="btn btn-xs btn-danger" onclick="deleteFed(${f.id})" title="삭제" style="padding:2px 6px;font-size:10px;">✕</button>
+                        <button class="btn btn-xs btn-danger" onclick="deleteFed(${f.id})" title="삭제" style="padding:2px 6px;font-size:10px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                     </div>
                 </div>
             `).join('');
@@ -4006,7 +4006,7 @@ POST /api/external/event-result-link/batch<br>
                             ${i > 0 ? `<button class="btn btn-xs btn-ghost" onclick="moveSection(${i},-1)">↑</button>` : ''}
                             ${i < _popupSections.length-1 ? `<button class="btn btn-xs btn-ghost" onclick="moveSection(${i},1)">↓</button>` : ''}
                             <label style="font-size:10px;display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" ${s.is_active !== 0 ? 'checked' : ''} onchange="toggleSectionActive(${i},this.checked)"> 활성</label>
-                            <button class="btn btn-xs btn-danger" onclick="removeSection(${i})" style="padding:2px 6px;font-size:10px;">✕</button>
+                            <button class="btn btn-xs btn-danger" onclick="removeSection(${i})" style="padding:2px 6px;font-size:10px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                         </div>
                     </div>
                     <div class="admin-form-group" style="margin-bottom:6px;"><label class="t-sm">제목</label><input value="${(s.title||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].title=this.value" style="width:100%;"></div>
@@ -4237,7 +4237,7 @@ POST /api/external/event-result-link/batch<br>
                         <span style="font-weight:700;color:#333;font-size:12px;">${d}일차</span>
                         <span style="font-size:11px;color:#666;">${cnt}건</span>
                         <span style="font-size:10px;color:#999;">(트랙${trackCnt} 필드${fieldCnt})</span>
-                        <button onclick="deleteTimetableDay(${d})" style="background:none;border:none;color:#8b1a2a;cursor:pointer;font-size:11px;font-weight:600;padding:2px 4px;" title="${d}일차 삭제">✕</button>
+                        <button onclick="deleteTimetableDay(${d})" style="background:none;border:none;color:#8b1a2a;cursor:pointer;font-size:11px;font-weight:600;padding:2px 4px;" title="${d}일차 삭제"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                     </div>`;
                 });
                 html += `<span style="font-size:11px;color:#999;margin-left:4px;">총 ${total}건</span>`;
@@ -4327,9 +4327,9 @@ POST /api/external/event-result-link/batch<br>
                         // Filter available events: exclude already linked ones
                         const availableEvents = _ttEvents.filter(e => !linkedEventIds.has(e.id));
                         const statusHtml = isLinked
-                            ? `<span style="color:#b79f58;font-weight:700;">✓</span> <span style="font-size:11px;color:#333;">${linkedEvt ? linkedEvt.name + ' ' + (linkedEvt.gender === 'M' ? '남' : linkedEvt.gender === 'F' ? '여' : '혼성') + ' ' + _roundLabel(linkedEvt.round_type) : 'ID:' + item.event_id}</span>
+                            ? `<span style="color:#b79f58;font-weight:700;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg></span> <span style="font-size:11px;color:#333;">${linkedEvt ? linkedEvt.name + ' ' + (linkedEvt.gender === 'M' ? '남' : linkedEvt.gender === 'F' ? '여' : '혼성') + ' ' + _roundLabel(linkedEvt.round_type) : 'ID:' + item.event_id}</span>
                                <button onclick="ttUnlink(${item.id})" style="background:none;border:1px solid #dc3545;color:#dc3545;border-radius:4px;font-size:10px;padding:1px 6px;cursor:pointer;margin-left:4px;">해제</button>`
-                            : `<span style="color:#dc3545;font-weight:700;">✕</span>
+                            : `<span style="color:#dc3545;font-weight:700;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
                                <select id="tt-sel-${item.id}" style="font-size:11px;padding:2px 4px;border:1px solid #e8e2d0;border-radius:4px;max-width:200px;">
                                    <option value="">종목 선택...</option>
                                    ${availableEvents.map(e => `<option value="${e.id}">${e.name} ${e.gender === 'M' ? '남' : e.gender === 'F' ? '여' : '혼성'} ${_roundLabel(e.round_type)}</option>`).join('')}
@@ -4480,7 +4480,7 @@ POST /api/external/event-result-link/batch<br>
                 // 라운드 자동 병합 경고 표시
                 if (data.mergeWarnings && data.mergeWarnings.length > 0) {
                     html += `<div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:6px;padding:10px 14px;margin-bottom:14px;">`;
-                    html += `<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px;">⚠ 라운드 자동 보정 (엑셀 입력 오류 감지)</div>`;
+                    html += `<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 라운드 자동 보정 (엑셀 입력 오류 감지)</div>`;
                     for (const w of data.mergeWarnings) {
                         html += `<div style="font-size:11px;color:#78350f;margin-bottom:3px;">• ${w}</div>`;
                     }
@@ -4494,10 +4494,10 @@ POST /api/external/event-result-link/batch<br>
 
                 // Summary bar
                 html += `<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">`;
-                if (changed.length) html += `<span style="background:#f5f0e0;color:#166534;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">✓ 변경 적용: ${changed.length}개</span>`;
-                if (hasResults.length) html += `<span style="background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">⚠ 기록있음: ${hasResults.length}개</span>`;
-                if (unchanged.length) html += `<span style="background:#f3f4f6;color:#6b7280;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">⏭ 변경없음: ${unchanged.length}개</span>`;
-                if (notFound.length) html += `<span style="background:#fef2f2;color:#dc2626;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">✗ 미발견: ${notFound.length}개</span>`;
+                if (changed.length) html += `<span style="background:#f5f0e0;color:#166534;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 변경 적용: ${changed.length}개</span>`;
+                if (hasResults.length) html += `<span style="background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 기록있음: ${hasResults.length}개</span>`;
+                if (unchanged.length) html += `<span style="background:#f3f4f6;color:#6b7280;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg> 변경없음: ${unchanged.length}개</span>`;
+                if (notFound.length) html += `<span style="background:#fef2f2;color:#dc2626;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 미발견: ${notFound.length}개</span>`;
                 html += `</div>`;
 
                 // Detail table
@@ -4506,10 +4506,10 @@ POST /api/external/event-result-link/batch<br>
 
                 for (const item of data.preview) {
                     const statusColors = {
-                        changed: { bg: '#f5f0e0', color: '#166534', label: '✓ 변경' },
-                        has_results: { bg: '#fef3c7', color: '#92400e', label: '⚠ 기록있음' },
-                        unchanged: { bg: '#f3f4f6', color: '#9ca3af', label: '⏭ 스킵' },
-                        not_found: { bg: '#fef2f2', color: '#dc2626', label: '✗ 미발견' }
+                        changed: { bg: '#f5f0e0', color: '#166534', label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 변경' },
+                        has_results: { bg: '#fef3c7', color: '#92400e', label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 기록있음' },
+                        unchanged: { bg: '#f3f4f6', color: '#9ca3af', label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg> 스킵' },
+                        not_found: { bg: '#fef2f2', color: '#dc2626', label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 미발견' }
                     };
                     const sc = statusColors[item.status] || statusColors.not_found;
 
@@ -4577,7 +4577,7 @@ POST /api/external/event-result-link/batch<br>
             // Confirm if force-changing events with results
             const hasForced = forceIds.length > 0;
             if (hasForced) {
-                if (!confirm(`⚠ ${forceIds.length}개 종목의 기록이 초기화됩니다. 정말 진행하시겠습니까?`)) return;
+                if (!confirm(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ${forceIds.length}개 종목의 기록이 초기화됩니다. 정말 진행하시겠습니까?`)) return;
             }
 
             if (!confirm('조편성을 적용합니다. 계속하시겠습니까?')) return;
@@ -4597,7 +4597,7 @@ POST /api/external/event-result-link/batch<br>
                 if (!res.ok) throw data;
 
                 resultDiv.style.background = '#ecfdf5'; resultDiv.style.color = '#166534';
-                let msg = `✓ 조편성 적용 완료<br>`;
+                let msg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 조편성 적용 완료<br>`;
                 msg += `변경: ${data.stats.updated}개 종목 | 스킵(변경없음): ${data.stats.skippedUnchanged}개 | 스킵(기록보호): ${data.stats.skippedHasResults}개`;
                 if (data.stats.notFound) msg += ` | 미발견: ${data.stats.notFound}개`;
                 if (data.stats.athletesAdded) msg += ` | 신규선수: ${data.stats.athletesAdded}명`;
@@ -4634,7 +4634,7 @@ POST /api/external/event-result-link/batch<br>
                 const data = await res.json();
                 if (!res.ok) throw data;
                 resultDiv.style.background = 'var(--green-light,#ecfdf5)'; resultDiv.style.color = 'var(--green,#9a8548)';
-                resultDiv.innerHTML = `✓ 선수 ${data.stats.added}명 추가 | ${data.stats.skipped}명 스킵`;
+                resultDiv.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 선수 ${data.stats.added}명 추가 | ${data.stats.skipped}명 스킵`;
                 toast('선수 업로드 완료');
                 loadAthletes();
             } catch (e) {
@@ -4663,7 +4663,7 @@ POST /api/external/event-result-link/batch<br>
                 const data = await res.json();
                 if (!res.ok) throw data;
                 resultDiv.style.background = 'var(--green-light,#ecfdf5)'; resultDiv.style.color = 'var(--green,#9a8548)';
-                resultDiv.innerHTML = `✓ 종목 ${data.stats.added}개 추가 | ${data.stats.skipped}개 스킵`;
+                resultDiv.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 종목 ${data.stats.added}개 추가 | ${data.stats.skipped}개 스킵`;
                 toast('종목 업로드 완료');
                 loadEvents();
             } catch (e) {
@@ -4974,7 +4974,7 @@ POST /api/external/event-result-link/batch<br>
                             <button class="btn btn-xs btn-ghost" onclick="emEditSubName(${s.id})" title="이름 편집" style="font-size:10px;">•</button>
                             ${i > 0 ? `<button class="btn btn-xs btn-ghost" onclick="emMoveSubEvent(${parentId},${s.id},'up')" title="위로">▲</button>` : '<span style="display:inline-block;width:20px;"></span>'}
                             ${i < subs.length - 1 ? `<button class="btn btn-xs btn-ghost" onclick="emMoveSubEvent(${parentId},${s.id},'down')" title="아래로">▼</button>` : '<span style="display:inline-block;width:20px;"></span>'}
-                            <button class="btn btn-xs btn-ghost" style="color:red;" onclick="emDeleteSubEvent(${parentId},${s.id},'${shortName.replace(/'/g,"\\'")}')" title="삭제">✕</button>
+                            <button class="btn btn-xs btn-ghost" style="color:red;" onclick="emDeleteSubEvent(${parentId},${s.id},'${shortName.replace(/'/g,"\\'")}')" title="삭제"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                         </td>
                     </tr>`;
                 });
@@ -5652,7 +5652,7 @@ POST /api/external/event-result-link/batch<br>
                 } else {
                     btnClass += ' btn-outline';
                 }
-                return `<button class="${btnClass}" style="${btnStyle}" onclick="selectPacingEvent('${key.replace(/'/g,"\\'")}')">${e.name}${hasConfig ? ' ✓' : ''}</button>`;
+                return `<button class="${btnClass}" style="${btnStyle}" onclick="selectPacingEvent('${key.replace(/'/g,"\\'")}')">${e.name}${hasConfig ? ' <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</button>`;
             }).join('');
         }
 
@@ -5774,7 +5774,7 @@ POST /api/external/event-result-link/batch<br>
                 html += `<th colspan="2" style="padding:10px 6px;text-align:center;background:${bg};border-bottom:3px solid ${pc.hex};min-width:170px;${borderL}">
                     <span style="background:${pc.hex};width:20px;height:20px;border-radius:50%;display:inline-block;vertical-align:middle;border:2px solid rgba(0,0,0,.15);margin-right:6px;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>
                     <span style="font-weight:800;font-size:14px;color:${pc.hex==='#E0E0E0'?'#555':pc.hex};letter-spacing:0.5px;">${pc.label}</span>
-                    <button class="btn btn-xs btn-ghost" onclick="removePacingColor(${ci})" style="color:#aaa;font-size:10px;padding:0 3px;margin-left:4px;" title="삭제">✕</button>
+                    <button class="btn btn-xs btn-ghost" onclick="removePacingColor(${ci})" style="color:#aaa;font-size:10px;padding:0 3px;margin-left:4px;" title="삭제"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                 </th>`;
             });
             html += '</tr>';
@@ -5822,7 +5822,7 @@ POST /api/external/event-result-link/batch<br>
             }
 
             // ── Row: 총 기록 (total time — prominent, between segments and remark) ──
-            html += '<tr><td style="padding:10px 10px;font-weight:800;font-size:13px;color:#222;background:#f0f0f0;border-bottom:3px solid #bbb;border-top:3px solid #bbb;">☆ 총 기록</td>';
+            html += '<tr><td style="padding:10px 10px;font-weight:800;font-size:13px;color:#222;background:#f0f0f0;border-bottom:3px solid #bbb;border-top:3px solid #bbb;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> 총 기록</td>';
             colors.forEach((c, ci) => {
                 const total = c.segments.reduce((s, seg) => s + (seg.lap_seconds || 0), 0);
                 const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#333'};
@@ -5862,9 +5862,9 @@ POST /api/external/event-result-link/batch<br>
             if (eventDist > 0) {
                 const totalDist = (colors[0]?.segments || []).reduce((s, seg) => s + (seg.distance_meters || 0), 0);
                 if (totalDist !== eventDist) {
-                    warnEl.innerHTML = `<div style="color:var(--danger);font-size:12px;font-weight:600;">⚠ 구간 합계 ${totalDist}m ≠ 종목 거리 ${eventDist}m</div>`;
+                    warnEl.innerHTML = `<div style="color:var(--danger);font-size:12px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 구간 합계 ${totalDist}m ≠ 종목 거리 ${eventDist}m</div>`;
                 } else {
-                    warnEl.innerHTML = `<div style="color:var(--green);font-size:11px;">✓ 구간 합계 ${totalDist}m = ${eventDist}m</div>`;
+                    warnEl.innerHTML = `<div style="color:var(--green);font-size:11px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 구간 합계 ${totalDist}m = ${eventDist}m</div>`;
                 }
             } else { warnEl.innerHTML = ''; }
         }
@@ -5985,7 +5985,7 @@ POST /api/external/event-result-link/batch<br>
                 overlay.innerHTML = `<div style="background:#fff;border-radius:12px;max-width:650px;width:95%;max-height:85vh;overflow-y:auto;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.25);">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                         <h3 style="margin:0;font-size:16px;">${teamName} 출전선수 관리</h3>
-                        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('relay-admin-modal').remove()">✕</button>
+                        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('relay-admin-modal').remove()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                     </div>
                     <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">주자(1주~4주)를 추가/제거/순서 변경할 수 있습니다.</p>
                     <h4 style="font-size:13px;margin-bottom:6px;">현재 구성원 (${members.length}명)</h4>
@@ -6128,7 +6128,7 @@ POST /api/external/event-result-link/batch<br>
                     continue;
                 }
                 const statusColor = r.matchStatus === 'matched' ? '#b79f58' : '#ef4444';
-                const statusText = r.matchStatus === 'matched' ? '● 매칭됨' : '✖ 매칭 실패';
+                const statusText = r.matchStatus === 'matched' ? '● 매칭됨' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 매칭 실패';
                 html += `<div style="border:1px solid var(--gray);border-radius:8px;padding:12px;margin-bottom:8px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <strong>${r.filename}</strong>
@@ -6207,7 +6207,7 @@ POST /api/external/event-result-link/batch<br>
                 html += '<strong style="color:#b79f58;">스코어보드 기록 입력 완료</strong><br><br>';
                 for (const r of data.results) {
                     if (r.error) {
-                        html += `<div style="margin-bottom:6px;"><strong>${r.filename}</strong> — <span style="color:red;">✖ ${r.error}</span></div>`;
+                        html += `<div style="margin-bottom:6px;"><strong>${r.filename}</strong> — <span style="color:red;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${r.error}</span></div>`;
                     } else {
                         const windBadge = r.wind != null ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;${parseFloat(r.wind) > 2.0 ? 'background:#fef2f2;color:#ef4444;' : 'background:#f0fdf4;color:#b79f58;'}">WIND ${r.wind > 0 ? '+' : ''}${r.wind}m/s</span>` : '';
                         html += `<div style="margin-bottom:6px;">
@@ -6219,7 +6219,7 @@ POST /api/external/event-result-link/batch<br>
                         if (r.details && r.details.length > 0) {
                             html += '<div style="font-size:11px;color:var(--text-muted);margin-left:12px;">';
                             for (const d of r.details) {
-                                const icon = d.reason ? '▲' : (d.status === 'DNS' || d.status === 'DNF' || d.status === 'DQ' ? '●' : '✓');
+                                const icon = d.reason ? '▲' : (d.status === 'DNS' || d.status === 'DNF' || d.status === 'DQ' ? '●' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>');
                                 html += `${icon} ${d.name || '?'} (BIB ${d.bib || '-'}) — ${d.reason || (d.time != null ? d.time + 's' : d.status)}<br>`;
                             }
                             html += '</div>';
@@ -6330,7 +6330,7 @@ POST /api/external/event-result-link/batch<br>
                 if (!groups || groups.length === 0) {
                     list.innerHTML = `
                         <div style="padding:24px;background:#fafafa;border:1px dashed #d1d5db;border-radius:10px;text-align:center;">
-                            <div style="font-size:32px;margin-bottom:8px;opacity:0.5;">🔗</div>
+                            <div style="font-size:32px;margin-bottom:8px;opacity:0.5;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
                             <div style="font-weight:600;color:#374151;margin-bottom:4px;">아직 합동 그룹이 없습니다</div>
                             <div style="font-size:12px;color:#6b7280;line-height:1.6;">
                                 같은 시간·장소에서 동시에 진행되는 종목들을 묶어주세요.<br>
@@ -6375,7 +6375,7 @@ POST /api/external/event-result-link/batch<br>
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;">
                             <div style="flex:1;min-width:0;">
                                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
-                                    <span style="font-size:16px;">🔗</span>
+                                    <span style="font-size:16px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
                                     <strong style="font-size:15px;color:#111827;">${escapeHtml(g.name || '(이름 없음)')}</strong>
                                     ${statusBadge}
                                 </div>
@@ -6386,9 +6386,9 @@ POST /api/external/event-result-link/batch<br>
                                 </div>
                             </div>
                             <div style="display:flex;gap:4px;flex-shrink:0;">
-                                ${hasDups ? `<button class="btn btn-xs" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;" onclick='jgCleanDups(${g.id},${JSON.stringify(dupEventIds)})' title="이 그룹에 중복 등록된 종목 ${dupEventIds.length}개를 정리합니다">⚠ 중복 ${dupEventIds.length} 정리</button>` : ''}
+                                ${hasDups ? `<button class="btn btn-xs" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;" onclick='jgCleanDups(${g.id},${JSON.stringify(dupEventIds)})' title="이 그룹에 중복 등록된 종목 ${dupEventIds.length}개를 정리합니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 중복 ${dupEventIds.length} 정리</button>` : ''}
                                 <button class="btn btn-xs btn-outline" onclick="jgShowAddMemberModal(${g.id},'${escapeJs(g.name)}')" title="종목 추가">+ 종목</button>
-                                <button class="btn btn-xs btn-ghost" style="color:#dc2626;" onclick="jgDeleteGroup(${g.id},'${escapeJs(g.name)}')" title="합동 해제">🔓 해제</button>
+                                <button class="btn btn-xs btn-ghost" style="color:#dc2626;" onclick="jgDeleteGroup(${g.id},'${escapeJs(g.name)}')" title="합동 해제"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg> 해제</button>
                             </div>
                         </div>
                         <div style="background:#fafafa;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
@@ -6408,7 +6408,7 @@ POST /api/external/event-result-link/batch<br>
                     html += `   </div>
                         </div>
                         <details style="font-size:11px;">
-                            <summary style="cursor:pointer;color:#6b7280;outline:none;">🔧 스코어보드 키 (고급)</summary>
+                            <summary style="cursor:pointer;color:#6b7280;outline:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 스코어보드 키 (고급)</summary>
                             <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
                                 <input value="${escapeHtml(g.joint_scoreboard_key || '')}" onchange="jgUpdateKey(${g.id},this.value)"
                                     style="font-size:11px;font-family:monospace;padding:4px 8px;border:1px solid #e5e7eb;border-radius:4px;background:#f0fdf4;color:#166534;flex:1;">
@@ -6454,7 +6454,7 @@ POST /api/external/event-result-link/batch<br>
             // step dots
             document.querySelectorAll('.jg-step-dot').forEach(el => {
                 const s = parseInt(el.dataset.step);
-                if (s < _jgStep) { el.style.background = '#15803d'; el.style.color = '#fff'; el.textContent = '✓'; }
+                if (s < _jgStep) { el.style.background = '#15803d'; el.style.color = '#fff'; el.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>'; }
                 else if (s === _jgStep) { el.style.background = '#6b5520'; el.style.color = '#fff'; el.textContent = s; }
                 else { el.style.background = '#e5e7eb'; el.style.color = '#6b7280'; el.textContent = s; }
             });
@@ -6536,7 +6536,7 @@ POST /api/external/event-result-link/batch<br>
                     }
                 }
                 // 이미 합동된 종목 (이 대회의 다른 합동 그룹) — event_id → 그룹 이름 Map
-                // Step 3에서 종목 카드에 "🔗 이미 합동" 뱃지를 표시하기 위해 사용
+                // Step 3에서 종목 카드에 "<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 이미 합동" 뱃지를 표시하기 위해 사용
                 const linkedEventMap = new Map();  // event_id → group_name
                 try {
                     const existingGroups = await api('GET', `/api/joint-groups?competition_id=${CID()}`);
@@ -6596,7 +6596,7 @@ POST /api/external/event-result-link/batch<br>
                         const extraDup = (g._dupIds[String(e.competition_id)] || []).length;
                         const dupMark = extraDup > 1 ? `<span style="background:#fee2e2;color:#991b1b;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;margin-left:2px;" title="이 대회에 동일 종목이 ${extraDup}회 중복 등록되어 있습니다. 합동 그룹에는 자동으로 1개만 추가됩니다.">중복 ${extraDup}</span>` : '';
                         const linkedGroupName = linkedEventMap.get(e.id);
-                        const linkedMark = linkedGroupName ? `<span style="background:#dbeafe;color:#1e40af;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;margin-left:2px;" title="이미 합동 그룹 '${escapeHtml(linkedGroupName)}' 에 속해있습니다">🔗 ${escapeHtml(linkedGroupName)}</span>` : '';
+                        const linkedMark = linkedGroupName ? `<span style="background:#dbeafe;color:#1e40af;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;margin-left:2px;" title="이미 합동 그룹 '${escapeHtml(linkedGroupName)}' 에 속해있습니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> ${escapeHtml(linkedGroupName)}</span>` : '';
                         return `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#6b7280;margin-right:8px;">
                             <span style="background:${c};color:#fff;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;">${escapeHtml(e.federation || 'N/A')}</span>
                             ${escapeHtml(e.comp_name || '')}${dupMark}${linkedMark}
@@ -6608,7 +6608,7 @@ POST /api/external/event-result-link/batch<br>
                         ? 'opacity:0.55;background:#fafbfc;'
                         : (anyLinked ? 'background:#fefce8;' : '');
                     const headerWarn = anyLinked
-                        ? `<span style="background:${allLinked?'#fee2e2':'#fef3c7'};color:${allLinked?'#991b1b':'#92400e'};padding:1px 6px;border-radius:8px;font-size:9px;font-weight:600;" title="${allLinked?'모든 종목이 이미 합동됨':'일부 종목이 이미 다른 그룹에 합동됨'}">${allLinked?'⚠️ 이미 합동':'⚠️ 일부 합동됨'}</span>`
+                        ? `<span style="background:${allLinked?'#fee2e2':'#fef3c7'};color:${allLinked?'#991b1b':'#92400e'};padding:1px 6px;border-radius:8px;font-size:9px;font-weight:600;" title="${allLinked?'모든 종목이 이미 합동됨':'일부 종목이 이미 다른 그룹에 합동됨'}">${allLinked?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 이미 합동':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 일부 합동됨'}</span>`
                         : '';
                     return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;${rowStyle}" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='${allLinked?'#fafbfc':anyLinked?'#fefce8':''}'">
                         <input type="checkbox" class="jg-evt-cb" data-event-ids="${ids}" data-event-name="${escapeHtml(g.name)}" onchange="jgUpdateSummary()" style="margin-top:2px;">
@@ -6712,7 +6712,7 @@ POST /api/external/event-result-link/batch<br>
             content.style.display = '';
             if (!r || !r.duplicate_groups || r.duplicate_groups.length === 0) {
                 content.innerHTML = `<div style="text-align:center;padding:30px;color:#15803d;background:#f0fdf4;border-radius:8px;">
-                    ✅ 중복된 종목이 없습니다.<br><span style="font-size:12px;color:#6b7280;">이 대회의 종목 데이터가 깨끗합니다.</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 중복된 종목이 없습니다.<br><span style="font-size:12px;color:#6b7280;">이 대회의 종목 데이터가 깨끗합니다.</span>
                 </div>`;
                 document.getElementById('jg-dup-summary').textContent = `총 ${r?.total_dup_events || 0}개`;
                 return;
@@ -6731,9 +6731,9 @@ POST /api/external/event-result-link/batch<br>
                     </div>
                     <div style="font-size:11px;line-height:1.6;">
                         <div style="padding:4px 8px;background:#dcfce7;border-radius:4px;margin-bottom:4px;${keepHasJoint ? 'border-left:3px solid #2563eb;' : ''}">
-                            <strong style="color:#15803d;">✓ 보존:</strong> ID ${grp.keep.id} ·
+                            <strong style="color:#15803d;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 보존:</strong> ID ${grp.keep.id} ·
                             조 ${grp.keep.heat_count} / 엔트리 ${grp.keep.entry_count} / 기록 ${grp.keep.result_count}
-                            ${keepHasJoint ? `<span style="color:#1e40af;font-weight:600;"> · 🔗 합동 ${grp.keep.joint_member_count}개</span>` : ''}
+                            ${keepHasJoint ? `<span style="color:#1e40af;font-weight:600;"> · <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 합동 ${grp.keep.joint_member_count}개</span>` : ''}
                         </div>`;
                 grp.duplicates.forEach((dup, dIdx) => {
                     const isEmpty = dup.heat_count === 0 && dup.entry_count === 0 && dup.result_count === 0;
@@ -6741,15 +6741,15 @@ POST /api/external/event-result-link/batch<br>
                     const hasJoint = dup.joint_member_count > 0;
                     const bg = isEmpty ? '#fef3c7' : '#fee2e2';
                     const borderL = hasJoint ? 'border-left:3px solid #dc2626;' : '';
-                    const label = isEmpty ? '🗑 빈 종목 (안전 삭제 가능)' : '⚠ 데이터 있음 (수동 검토 필요)';
+                    const label = isEmpty ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 빈 종목 (안전 삭제 가능)' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 데이터 있음 (수동 검토 필요)';
                     const labelColor = isEmpty ? '#92400e' : '#991b1b';
                     html += `<div style="padding:4px 8px;background:${bg};border-radius:4px;margin-bottom:4px;${borderL}display:flex;justify-content:space-between;align-items:center;gap:8px;">
                         <div style="flex:1;">
                             <strong style="color:${labelColor};">${label}:</strong> ID ${dup.id} ·
                             조 ${dup.heat_count} / 엔트리 ${dup.entry_count} / 기록 ${dup.result_count}
-                            ${hasJoint ? `<span style="color:#dc2626;font-weight:600;"> · ⚠️ 합동 ${dup.joint_member_count}개 (병합 시 keep 으로 이전)</span>` : ''}
+                            ${hasJoint ? `<span style="color:#dc2626;font-weight:600;"> · <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 합동 ${dup.joint_member_count}개 (병합 시 keep 으로 이전)</span>` : ''}
                         </div>
-                        ${!isEmpty ? `<button class="btn btn-sm" onclick="jgShowMergeModal(${grp.keep.id}, ${dup.id})" style="font-size:11px;padding:3px 8px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;white-space:nowrap;">🔀 보존 종목으로 병합</button>` : ''}
+                        ${!isEmpty ? `<button class="btn btn-sm" onclick="jgShowMergeModal(${grp.keep.id}, ${dup.id})" style="font-size:11px;padding:3px 8px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;white-space:nowrap;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> 보존 종목으로 병합</button>` : ''}
                     </div>`;
                 });
                 html += `</div></div>`;
@@ -6758,7 +6758,7 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('jg-dup-summary').textContent = `중복 그룹 ${r.duplicate_groups.length}개 · 안전 삭제 ${safeCount}개 · 병합 가능 ${riskyCount}개`;
             if (safeCount > 0) {
                 const btn = document.getElementById('jg-dup-cleanbtn');
-                btn.textContent = `🗑 빈 중복 종목 ${safeCount}개 삭제`;
+                btn.textContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 빈 중복 종목 ${safeCount}개 삭제`;
                 btn.style.display = '';
             }
         }
@@ -6780,14 +6780,14 @@ POST /api/external/event-result-link/batch<br>
             }
             const s = preview.summary;
             const msg = `다음과 같이 병합합니다:\n\n` +
-                `📍 종목: ${s.keep_event.name} (${s.keep_event.gender}, ${s.keep_event.round_type})\n` +
+                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> 종목: ${s.keep_event.name} (${s.keep_event.gender}, ${s.keep_event.round_type})\n` +
                 `   보존(keep) ID ${s.keep_id}  ←  병합(dup) ID ${s.dup_id}\n\n` +
-                `🏃 엔트리:\n` +
+                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="13" cy="4" r="2"/><path d="M4 22l4-9 5 2 3-3 4 8"/><path d="M8 13l-2-5 4-2"/></svg> 엔트리:\n` +
                 `   · ${s.entries.will_move}명을 dup → keep 으로 이전\n` +
                 `   · ${s.entries.will_delete}명은 keep 에 이미 있어 dup 측 삭제\n\n` +
-                `🗂 조(heat):\n` +
+                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="5" width="18" height="4" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><line x1="10" y1="13" x2="14" y2="13"/></svg> 조(heat):\n` +
                 `   · ${s.heats.will_move}개 조를 keep 으로 이전 (번호 ${s.heats.renumber_from} 부터 재번호)\n\n` +
-                `🔗 합동 그룹:\n` +
+                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 합동 그룹:\n` +
                 `   · ${s.joint_members.will_move}개 합동 멤버십 이전\n` +
                 `   · ${s.joint_members.will_delete}개는 keep 에 이미 있어 dup 측 삭제\n\n` +
                 `완료 후 dup 종목(ID ${s.dup_id})은 삭제됩니다.\n시간표·event_link 의 dup 참조도 keep 으로 이전됩니다.\n\n계속하시겠습니까?`;
@@ -7187,7 +7187,7 @@ POST /api/external/event-result-link/batch<br>
                 if (el2) el2.value = recorderName;
                 if (el3) el3.value = judgeName;
                 if (el4) el4.value = recorderName;
-                document.getElementById('quick-judge-save-status').textContent = '저장 완료 ✓';
+                document.getElementById('quick-judge-save-status').textContent = '저장 완료 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>';
                 setTimeout(() => { document.getElementById('quick-judge-save-status').textContent = ''; }, 3000);
                 toast('심판장·기록주임 이름 저장 완료');
             } catch (e) {
@@ -7541,7 +7541,7 @@ POST /api/external/event-result-link/batch<br>
                 if (!data.success) { toast(data.error || '업데이트 실패', 'error'); return; }
                 const r = data.results;
                 toast(`BIB 수정 완료: ${r.updated}명 업데이트`);
-                document.getElementById('bib-update-result').innerHTML = `<span style="color:#4f4;">✅ ${r.updated}명 BIB 업데이트 완료 (${r.matched}명 매칭, ${r.not_found.length}명 미매칭)</span>`;
+                document.getElementById('bib-update-result').innerHTML = `<span style="color:#4f4;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${r.updated}명 BIB 업데이트 완료 (${r.matched}명 매칭, ${r.not_found.length}명 미매칭)</span>`;
             } catch(e) { toast('업데이트 오류: ' + e.message, 'error'); }
         }
 
@@ -7604,7 +7604,7 @@ POST /api/external/event-result-link/batch<br>
                 if (!data.success) { toast(data.error || '업데이트 실패', 'error'); return; }
                 const r = data.results;
                 toast(`휴대폰 업데이트 완료: ${r.updated}명`);
-                document.getElementById('phone-update-result').innerHTML = `<span style="color:#16a085;">✅ ${r.updated}명 업데이트 완료 (${r.matched}명 매칭, ${r.unchanged}명 동일, ${r.not_found.length}명 미매칭)</span>`;
+                document.getElementById('phone-update-result').innerHTML = `<span style="color:#16a085;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${r.updated}명 업데이트 완료 (${r.matched}명 매칭, ${r.unchanged}명 동일, ${r.not_found.length}명 미매칭)</span>`;
             } catch(e) { toast('업데이트 오류: ' + e.message, 'error'); }
         }
 
@@ -7747,7 +7747,7 @@ POST /api/external/event-result-link/batch<br>
                       <td style="padding:6px 8px;color:var(--text-muted);">${_esc(e.group || '기타')}</td>
                       <td style="padding:6px 8px;text-align:center;">${genderLabel[e.gender || 'all']}</td>
                       <td style="padding:6px 8px;text-align:center;">
-                        <button class="btn btn-xs btn-ghost" onclick="removeCustomRecEvent(${i})" title="삭제" style="color:#dc2626;">✕</button>
+                        <button class="btn btn-xs btn-ghost" onclick="removeCustomRecEvent(${i})" title="삭제" style="color:#dc2626;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                       </td>
                     </tr>`).join('')}
                 </tbody>
@@ -7846,7 +7846,7 @@ POST /api/external/event-result-link/batch<br>
                 if (evts.length === 0) continue;
                 const isCustom = !!group._custom;
                 const labelColor = isCustom ? '#b79f58' : 'var(--text-muted)';
-                const labelIcon = isCustom ? '★ ' : '';
+                const labelIcon = isCustom ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> ' : '';
                 html += `<div style="margin-bottom:12px;${isCustom?'padding-top:8px;border-top:1px dashed var(--gray);':''}">
                     <div style="font-size:11px;color:${labelColor};font-weight:700;margin-bottom:4px;letter-spacing:0.5px;">${labelIcon}${_esc(group.label)}</div>`;
                 for (const evtName of evts) {
@@ -8053,7 +8053,7 @@ POST /api/external/event-result-link/batch<br>
                                           border-radius:8px;padding:12px;background:var(--bg);">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;">
                             <div style="flex:1;min-width:0;">
-                                <div style="font-weight:700;font-size:13px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${_esc(s.name)}">📋 ${_esc(s.name)}</div>
+                                <div style="font-weight:700;font-size:13px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${_esc(s.name)}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="6" y="3" width="12" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg> ${_esc(s.name)}</div>
                                 ${s.description ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${_esc(s.description)}">${_esc(s.description)}</div>` : ''}
                                 <div style="font-size:10px;color:var(--text-muted);margin-top:3px;">연결 대회 ${s.comp_count || 0} · 총 CR ${s.record_count || 0}</div>
                             </div>
@@ -8492,9 +8492,9 @@ POST /api/external/event-result-link/batch<br>
         }
 
         const _MATCH_BADGE = {
-            exact:      { label: '✓ 정확', color: '#27ae60', bg: '#eafaf1' },
+            exact:      { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 정확', color: '#27ae60', bg: '#eafaf1' },
             normalized: { label: '~ 정규화', color: '#e67e22', bg: '#fdf2e9' },
-            none:       { label: '✗ 없음', color: '#c0392b', bg: '#fdedec' },
+            none:       { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 없음', color: '#c0392b', bg: '#fdedec' },
             'n/a':      { label: '—', color: '#95a5a6', bg: '#ecf0f1' }
         };
         function _matchBadge(status) {
@@ -8502,7 +8502,7 @@ POST /api/external/event-result-link/batch<br>
             return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:${b.color};background:${b.bg};">${b.label}</span>`;
         }
         // inline 이벤트 핸들러에 안전하게 문자열 임베드하기 위한 JSON 직렬화 헬퍼
-        // ⚠️ onclick="..." 속성은 큰따옴표(")로 감싸여 있으므로 JSON 의 " 가 그대로 들어가면
+        // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> onclick="..." 속성은 큰따옴표(")로 감싸여 있으므로 JSON 의 " 가 그대로 들어가면
         //    HTML 속성이 깨져 onclick 핸들러가 동작하지 않는다.
         //    → 큰따옴표를 &quot; 로, &/< 등도 HTML-safe 하게 인코딩하여 반환.
         function _jsStr(s) {
@@ -8785,7 +8785,7 @@ POST /api/external/event-result-link/batch<br>
             window._matchForceState = { targetEventName, slot, gender, candidates };
             const slotLabel = slot === 'national' ? 'NR(한국)' : slot === 'competition' ? 'CR(시리즈)' : 'DR(부별)';
             const gLabel = gender === 'M' ? '남' : gender === 'F' ? '여' : '혼성';
-            document.getElementById('mf-title').textContent = `📋 [${slotLabel}] '${targetEventName}' (${gLabel}) 강제 매칭 — 전체 후보`;
+            document.getElementById('mf-title').textContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="6" y="3" width="12" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg> [${slotLabel}] '${targetEventName}' (${gLabel}) 강제 매칭 — 전체 후보`;
             document.getElementById('mf-filter').value = '';
             _matchForceRenderList(candidates);
             modal.style.display = 'flex';
@@ -8808,7 +8808,7 @@ POST /api/external/event-result-link/batch<br>
                     <td style="padding:6px 10px;font-family:var(--font-mono);">${_esc(c.record_value || '')}</td>
                     <td style="padding:6px 10px;color:#666;">${_esc(c.holder_name || '')}${c.holder_team ? ' · ' + _esc(c.holder_team) : ''}</td>
                     <td style="padding:6px 10px;text-align:right;">
-                        ${isSelf ? '<span style="color:#27ae60;font-size:11px;">✓</span>' :
+                        ${isSelf ? '<span style="color:#27ae60;font-size:11px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg></span>' :
                             `<button onclick="_matchForceConfirm(${c.id})" style="background:#16a085;border:none;color:#fff;border-radius:4px;font-size:11px;padding:3px 10px;cursor:pointer;font-weight:600;">→ 연결</button>`}
                     </td>
                 </tr>`;
@@ -8851,12 +8851,12 @@ POST /api/external/event-result-link/batch<br>
             await _runNormalizeAll(true);
         }
         async function confirmNormalizeAll() {
-            if (!confirm('event_record 전체 행에 대해 종목명 정규화를 실행합니다. 계속하시겠습니까?\n\n(미리보기를 먼저 해 보시려면 [📋 정규화 미리보기] 를 사용하세요)')) return;
+            if (!confirm('event_record 전체 행에 대해 종목명 정규화를 실행합니다. 계속하시겠습니까?\n\n(미리보기를 먼저 해 보시려면 [<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="6" y="3" width="12" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg> 정규화 미리보기] 를 사용하세요)')) return;
             const key = await _getAdminKeyForNormalize();
             if (!key) return;
             await _runNormalizeAll(false, key);
         }
-        // ⚠️ 관리자키 UX 개선 (2026-05): 매번 prompt 하지 않고
+        // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 관리자키 UX 개선 (2026-05): 매번 prompt 하지 않고
         //    이미 admin.html 로그인 시 저장된 localStorage 의 키를 우선 사용.
         //    없을 때만 prompt + sessionStorage 에 저장하여 세션 동안 재사용.
         async function _getAdminKeyForNormalize() {
@@ -8936,7 +8936,7 @@ POST /api/external/event-result-link/batch<br>
             `;
             footer.innerHTML = data.dry_run && data.planned_updates > 0
                 ? `<button class="btn btn-sm btn-outline" onclick="closeNormalizeModal()">취소</button>
-                   <button class="btn btn-sm btn-primary" style="background:#16a085;border-color:#16a085;" onclick="closeNormalizeModal(); confirmNormalizeAll();">⚡ 이대로 실행</button>`
+                   <button class="btn btn-sm btn-primary" style="background:#16a085;border-color:#16a085;" onclick="closeNormalizeModal(); confirmNormalizeAll();"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> 이대로 실행</button>`
                 : `<button class="btn btn-sm btn-primary" onclick="closeNormalizeModal()">닫기</button>`;
             modal.style.display = 'flex';
         }
@@ -9071,8 +9071,8 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                         ${r.status === 'pending' ? `
                         <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
-                            <button class="btn btn-sm btn-primary" onclick="approveRecordBreak(${r.id})" style="font-size:12px;padding:5px 12px;background:#27ae60;border-color:#27ae60;">✓ 승인</button>
-                            <button class="btn btn-sm btn-outline" onclick="openRbRejectModal(${r.id})" style="font-size:12px;padding:5px 12px;color:#c0392b;border-color:#c0392b;">✗ 거부</button>
+                            <button class="btn btn-sm btn-primary" onclick="approveRecordBreak(${r.id})" style="font-size:12px;padding:5px 12px;background:#27ae60;border-color:#27ae60;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 승인</button>
+                            <button class="btn btn-sm btn-outline" onclick="openRbRejectModal(${r.id})" style="font-size:12px;padding:5px 12px;color:#c0392b;border-color:#c0392b;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 거부</button>
                         </div>` : ''}
                     </div>
                 </div>`;
@@ -9201,14 +9201,14 @@ POST /api/external/event-result-link/batch<br>
                 box.style.display = 'block';
                 box.innerHTML = `
                     <div style="border:2px solid #10b981;border-radius:8px;padding:14px;background:#ecfdf5;">
-                        <div style="font-weight:700;color:#047857;margin-bottom:8px;">✅ 키가 발급되었습니다 (이 값은 다시 표시되지 않습니다)</div>
+                        <div style="font-weight:700;color:#047857;margin-bottom:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 키가 발급되었습니다 (이 값은 다시 표시되지 않습니다)</div>
                         <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">라벨: ${_esc(data.label)} · ID #${data.id} · 분당 ${data.rate_limit_per_min}회${data.allowed_competition_id ? ' · 대회 #'+data.allowed_competition_id+' 전용' : ' · 모든 노출용 대회'}${data.expires_at ? ' · 만료 '+_esc(data.expires_at) : ''}</div>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <input id="ext-issued-key-text" readonly value="${_esc(data.api_key)}" style="flex:1;font-family:monospace;font-size:13px;font-weight:700;padding:10px;border:1.5px solid #10b981;border-radius:6px;background:#fff;">
                             <button class="btn btn-sm btn-primary" onclick="extCopyIssuedKey()">복사</button>
                             <button class="btn btn-sm btn-ghost" onclick="document.getElementById('ext-issued-result').style.display='none'">닫기</button>
                         </div>
-                        <div style="font-size:11px;color:#b45309;margin-top:8px;">⚠️ 이 페이지를 닫거나 새로고침하면 더 이상 표시되지 않습니다. 즉시 안전한 곳에 보관하세요.</div>
+                        <div style="font-size:11px;color:#b45309;margin-top:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 이 페이지를 닫거나 새로고침하면 더 이상 표시되지 않습니다. 즉시 안전한 곳에 보관하세요.</div>
                     </div>`;
                 document.getElementById('ext-new-label').value = '';
                 document.getElementById('ext-new-exp').value = '';
@@ -9410,7 +9410,7 @@ POST /api/external/event-result-link/batch<br>
                         <td style="padding:6px;">${_esc(t.name)}</td>
                         <td style="padding:6px;text-align:center;">${t.kind === 'finisher' ? '완주증' : t.kind === 'team' ? '단체상' : '시상장'}</td>
                         <td style="padding:6px;text-align:center;">${t.rank_label_style === 'numeric' ? '1위/2위' : t.rank_label_style === 'mixed' ? '혼합' : '우승/준우승'}</td>
-                        <td style="padding:6px;text-align:center;">${t.is_default ? '★' : ''}</td>
+                        <td style="padding:6px;text-align:center;">${t.is_default ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg>' : ''}</td>
                         <td style="padding:6px;text-align:center;white-space:nowrap;">
                             <button class="btn btn-xs btn-outline" onclick="openCertTemplateEditor(${t.id})">편집</button>
                             <button class="btn btn-xs btn-outline" onclick="previewCertById(${t.id})">미리보기</button>
@@ -9731,7 +9731,7 @@ POST /api/external/event-result-link/batch<br>
                 document.getElementById('sms-cfg-user-id').value = c.user_id || '';
                 document.getElementById('sms-cfg-api-key').value = '';
                 document.getElementById('sms-cfg-api-key').placeholder = c.api_key_set ? `(설정됨: ${c.api_key}) - 변경 시에만 입력` : 'API 키 입력';
-                document.getElementById('sms-cfg-apikey-status').textContent = c.api_key_set ? '✓ 설정됨' : '미설정';
+                document.getElementById('sms-cfg-apikey-status').textContent = c.api_key_set ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 설정됨' : '미설정';
                 document.getElementById('sms-cfg-sender-number').value = c.sender_number || '';
                 document.getElementById('sms-cfg-sender-name').value = c.sender_name || '';
                 document.getElementById('sms-cfg-monthly-quota').value = c.monthly_quota || 0;
@@ -9765,7 +9765,7 @@ POST /api/external/event-result-link/batch<br>
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'save failed');
                 const st = document.getElementById('sms-cfg-save-status');
-                st.textContent = '저장됨 ✓';
+                st.textContent = '저장됨 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>';
                 setTimeout(() => { st.textContent = ''; }, 3000);
                 loadSmsConfig();
             } catch (e) {
@@ -9829,7 +9829,7 @@ POST /api/external/event-result-link/batch<br>
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'send failed');
                 st.textContent = data.status === 'simulated' ? '시뮬레이션 완료 (실제 발송 안 됨)' :
-                                  data.status === 'sent' ? '발송 성공 ✓' :
+                                  data.status === 'sent' ? '발송 성공 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' :
                                   '실패: ' + data.error_message;
                 st.style.color = (data.status === 'sent') ? 'var(--green)' :
                                   (data.status === 'simulated') ? '#a05a00' : '#a00';

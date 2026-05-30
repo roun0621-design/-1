@@ -102,9 +102,9 @@ function renderRecordBreaksBanner(rows, el) {
         if (isWindAffected(r.event_name)) {
             if (r.wind != null && isFinite(r.wind)) {
                 const wColor = r.wind > 2.0 ? '#dc2626' : '#059669';
-                windHtml = `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;background:#f3f4f6;color:${wColor};font-size:10px;font-weight:600;font-family:var(--font-mono,monospace);">💨 ${fmtWind(r.wind)}</span>`;
+                windHtml = `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;background:#f3f4f6;color:${wColor};font-size:10px;font-weight:600;font-family:var(--font-mono,monospace);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M17.73 2.27A2.5 2.5 0 1 1 19.5 7H2"/><path d="M14.83 21.41A2 2 0 1 0 16.24 18H2"/></svg> ${fmtWind(r.wind)}</span>`;
             } else {
-                windHtml = `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;background:#f9fafb;color:#9ca3af;font-size:10px;">💨 무측정</span>`;
+                windHtml = `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;background:#f9fafb;color:#9ca3af;font-size:10px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M17.73 2.27A2.5 2.5 0 1 1 19.5 7H2"/><path d="M14.83 21.41A2 2 0 1 0 16.24 18H2"/></svg> 무측정</span>`;
             }
         }
         return `
@@ -121,7 +121,7 @@ function renderRecordBreaksBanner(rows, el) {
     el.innerHTML = `
         <div style="background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #f59e0b;border-radius:10px;padding:12px 16px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                <span style="font-size:18px;">🏆</span>
+                <span style="font-size:18px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg></span>
                 <strong style="font-size:14px;color:#92400e;">최근 갱신 기록</strong>
                 <span style="font-size:11px;color:#92400e;opacity:.8;">· 이 대회에서 인정된 NR/DR/CR</span>
             </div>
@@ -840,7 +840,7 @@ async function renderTrackResults(entries) {
             const broken = detectBrokenRecordsClient(r.time_seconds, window._currentEventRecords, window._currentEventDirection);
             recordBadges = broken.map(lbl => {
                 const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong>★</strong>${lbl}</span>`;
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
             }).join('');
         }
         // 비고: status_code(DNF/DQ 등), Q/q, 풍속 초과 시 참고기록
@@ -920,7 +920,7 @@ async function renderUnifiedTrackResults() {
             const broken = detectBrokenRecordsClient(r.time_seconds, window._currentEventRecords, window._currentEventDirection);
             recordBadges = broken.map(lbl => {
                 const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong>★</strong>${lbl}</span>`;
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
             }).join('');
         }
         const windCell = needsWind ? `<td style="font-size:11px;font-family:var(--font-mono);${heatW != null && heatW > 2.0 ? 'font-weight:700;' : ''}">${heatW != null ? formatWind(heatW) : ''}</td>` : '';
@@ -1034,7 +1034,7 @@ async function renderFieldDistanceResults(entries) {
             const broken = detectBrokenRecordsClient(r.best, window._currentEventRecords, window._currentEventDirection);
             recordBadges = broken.map(lbl => {
                 const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong>★</strong>${lbl}</span>`;
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
             }).join('');
         }
         // 비고: status_code(DNF/DQ/NM 등), 풍속 초과 시 참고기록
@@ -1112,7 +1112,7 @@ async function renderFieldHeightResults(entries) {
             const broken = detectBrokenRecordsClient(r.best, window._currentEventRecords, window._currentEventDirection);
             recordBadges = broken.map(lbl => {
                 const cc = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-                return `<span style="display:inline-block;background:${cc};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong>★</strong>${lbl}</span>`;
+                return `<span style="display:inline-block;background:${cc};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
             }).join('');
         }
         const rmk = r.isNM ? 'NM' : '';
@@ -1179,7 +1179,7 @@ async function renderCombinedResults() {
         tabsHtml += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">';
         subDefs.forEach(se => {
             const has = fresh.some(s => s.sub_event_order === se.order && s.raw_record > 0);
-            tabsHtml += `<button class="btn btn-sm ${has ? 'btn-outline' : 'btn-ghost'}" onclick="_showCombinedSubResult(${se.order})" id="csub-tab-${se.order}">${se.order}. ${se.name}${has ? ' ✓' : ''}</button>`;
+            tabsHtml += `<button class="btn btn-sm ${has ? 'btn-outline' : 'btn-ghost'}" onclick="_showCombinedSubResult(${se.order})" id="csub-tab-${se.order}">${se.order}. ${se.name}${has ? ' <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</button>`;
         });
         tabsHtml += '</div>';
         tabsHtml += '<div id="combined-sub-result-area"></div>';

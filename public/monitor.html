@@ -497,9 +497,9 @@
                 if (isWindAffected(r.event_name)) {
                     if (r.wind != null && isFinite(r.wind)) {
                         const wColor = r.wind > 2.0 ? '#dc2626' : '#059669';
-                        windHtml = `<span style="display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;background:#f3f4f6;color:${wColor};font-size:9px;font-weight:600;font-family:monospace;">💨 ${fmtWind(r.wind)}</span>`;
+                        windHtml = `<span style="display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;background:#f3f4f6;color:${wColor};font-size:9px;font-weight:600;font-family:monospace;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M17.73 2.27A2.5 2.5 0 1 1 19.5 7H2"/><path d="M14.83 21.41A2 2 0 1 0 16.24 18H2"/></svg> ${fmtWind(r.wind)}</span>`;
                     } else {
-                        windHtml = `<span style="display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;background:#f9fafb;color:#9ca3af;font-size:9px;">💨 무측정</span>`;
+                        windHtml = `<span style="display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;background:#f9fafb;color:#9ca3af;font-size:9px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M17.73 2.27A2.5 2.5 0 1 1 19.5 7H2"/><path d="M14.83 21.41A2 2 0 1 0 16.24 18H2"/></svg> 무측정</span>`;
                     }
                 }
                 return `
@@ -516,7 +516,7 @@
             el.innerHTML = `
                 <div style="background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #f59e0b;border-radius:10px;padding:10px 14px;">
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                        <span style="font-size:16px;">🏆</span>
+                        <span style="font-size:16px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg></span>
                         <strong style="font-size:13px;color:#92400e;">최근 갱신 기록</strong>
                     </div>
                     <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;">${cards}</div>
