@@ -442,6 +442,19 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competitio
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC)`); } catch(e) {}
 // ========== END SMS Schema ==========
 
+// ========== AUTH Phase 1: app_user / session_refresh / login_audit ==========
+// 신규 인증 시스템의 토대. 기존 admin_pw / operation_key 인증은 그대로 동작.
+// Phase 2 에서 로그인 API 가 추가될 때 사용됨.
+(async () => {
+    try {
+        const { runAuthMigrations } = require('./lib/auth/migrations');
+        await runAuthMigrations(db);
+        console.log('[auth-mig] OK — app_user/session_refresh/login_audit ready');
+    } catch (e) {
+        console.error('[auth-mig] FAILED (non-fatal):', e.message);
+    }
+})();
+
 // 기본 상장 템플릿 시드 (최초 1회) — 시상장 + 완주증
 // SQLite/PostgreSQL 양쪽에서 동작하도록 통합 db API 사용 (비동기)
 (async () => {
