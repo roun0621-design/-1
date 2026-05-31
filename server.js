@@ -447,13 +447,28 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete
 // ========== AUTH Phase 1: app_user / session_refresh / login_audit ==========
 // 신규 인증 시스템의 토대. 기존 admin_pw / operation_key 인증은 그대로 동작.
 // Phase 2 에서 로그인 API 가 추가될 때 사용됨.
+//
+// ⚠️ 실패 시 더 이상 silent skip 하지 않음:
+//   - 테이블이 없으면 JWT 로그인이 통째로 깨지므로(42P01 relation does not exist) 명확히 알아야 함
+//   - 로그에 [auth-mig] FATAL 로 강하게 표시
+//   - 글로벌 플래그 global.__authMigError 에 에러 메시지를 저장 → /api/_diag/auth-state 로 노출
+//   - 부팅 자체는 막지 않음 (legacy 로그인은 여전히 동작해야 하므로)
+global.__authMigError = null;
+global.__authMigOk = false;
 (async () => {
     try {
         const { runAuthMigrations } = require('./lib/auth/migrations');
         await runAuthMigrations(db);
+        global.__authMigOk = true;
         console.log('[auth-mig] OK — app_user/session_refresh/login_audit ready');
     } catch (e) {
-        console.error('[auth-mig] FAILED (non-fatal):', e.message);
+        global.__authMigError = String(e && e.message || e);
+        // PG의 경우 e.code / e.detail / e.query 도 함께 남김 — 진단 편의
+        const extras = [];
+        if (e && e.code) extras.push(`code=${e.code}`);
+        if (e && e.detail) extras.push(`detail=${e.detail}`);
+        console.error('[auth-mig] FATAL — JWT 로그인이 불가능한 상태입니다:', e.message, extras.join(' '));
+        if (e && e.query) console.error('[auth-mig] failing query:', String(e.query).substring(0, 500));
     }
 })();
 
@@ -1998,6 +2013,92 @@ require('./lib/routes/auth')(app, { db, authLimiter, bcrypt });
 // AUTH Phase 3 (B-5): 관리자 전용 사용자 관리 API
 // GET/POST/PUT/DELETE /api/admin/users + revoke-sessions
 require('./lib/routes/admin_users')(app, { db, bcrypt, jwtHelpers: require('./lib/auth/jwt') });
+
+// ============================================================
+// DIAG: auth-state 진단 + 복구 라우트 (운영 디버깅용)
+//   - GET  /api/_diag/auth-state   : app_user 테이블 존재여부 / row 수 / 마이그레이션 상태
+//   - POST /api/_diag/auth-init    : runAuthMigrations 재실행 (legacy admin key 헤더 필요)
+//   - POST /api/_diag/admin-reset  : ROUNKIM 등 관리자 비번을 system_config.admin_pw 와 동기화
+//     (사전조건: x-admin-key 헤더에 legacy admin key 일치)
+// ============================================================
+function diagRequireAdminKey(req, res) {
+    const k = req.headers['x-admin-key'] || req.query.adminKey;
+    if (!isAdminKey(String(k || ''))) {
+        res.status(403).json({ error: 'forbidden — admin key required (x-admin-key header)' });
+        return false;
+    }
+    return true;
+}
+
+app.get('/api/_diag/auth-state', async (req, res) => {
+    if (!diagRequireAdminKey(req, res)) return;
+    try {
+        const out = {
+            backend: db.getBackendName ? db.getBackendName() : (db.isAsync ? 'postgres' : 'sqlite'),
+            authMigOk: !!global.__authMigOk,
+            authMigError: global.__authMigError || null,
+        };
+        // app_user 테이블 존재 여부
+        try {
+            const cntRow = await db.get('SELECT COUNT(*) AS c FROM app_user');
+            out.app_user_count = cntRow ? Number(cntRow.c) : 0;
+            // 사용자 목록 (해시는 prefix 만)
+            const rows = await db.all('SELECT id, username, role, active, COALESCE(SUBSTRING(password_hash FROM 1 FOR 15), \'\') AS hash_prefix FROM app_user ORDER BY id');
+            out.app_users = rows;
+        } catch (e) {
+            out.app_user_error = String(e && e.message || e);
+        }
+        // system_config 핵심 키 (값은 prefix 만)
+        try {
+            const cfg = await db.all("SELECT key, COALESCE(SUBSTRING(value FROM 1 FOR 25), '') AS value_preview FROM system_config WHERE key IN ('admin_id','admin_pw','jwt_secret')");
+            out.system_config = cfg;
+        } catch (e) {
+            out.system_config_error = String(e && e.message || e);
+        }
+        res.json(out);
+    } catch (e) {
+        res.status(500).json({ error: String(e && e.message || e) });
+    }
+});
+
+app.post('/api/_diag/auth-init', async (req, res) => {
+    if (!diagRequireAdminKey(req, res)) return;
+    try {
+        const { runAuthMigrations } = require('./lib/auth/migrations');
+        await runAuthMigrations(db);
+        global.__authMigOk = true;
+        global.__authMigError = null;
+        console.log('[auth-mig] manual re-run OK via /api/_diag/auth-init');
+        res.json({ ok: true, message: 'runAuthMigrations 재실행 완료' });
+    } catch (e) {
+        global.__authMigError = String(e && e.message || e);
+        console.error('[auth-mig] manual re-run FAILED:', e.message, e.code || '', e.detail || '');
+        res.status(500).json({
+            ok: false,
+            error: String(e && e.message || e),
+            code: e && e.code || null,
+            detail: e && e.detail || null,
+            query: e && e.query ? String(e.query).substring(0, 500) : null
+        });
+    }
+});
+
+app.post('/api/_diag/admin-reset', async (req, res) => {
+    if (!diagRequireAdminKey(req, res)) return;
+    try {
+        const { runAuthMigrations } = require('./lib/auth/migrations');
+        await runAuthMigrations(db);
+        // 이 시점 후 app_user 의 관리자 row 가 system_config.admin_pw 와 동기화되어 있어야 함
+        const adminUsername = ADMIN_ID();
+        const row = await db.get('SELECT id, username, role, active FROM app_user WHERE username=?', adminUsername);
+        if (!row) {
+            return res.status(500).json({ ok: false, error: `app_user('${adminUsername}') 시드 실패 — migrations 결과 확인 필요` });
+        }
+        res.json({ ok: true, message: `관리자 계정 동기화 완료`, user: row });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: String(e && e.message || e), code: e && e.code || null });
+    }
+});
 
 app.post('/api/auth/verify', authLimiter, async (req, res) => {
     const { key, judge_name } = req.body;
