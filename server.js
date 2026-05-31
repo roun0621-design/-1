@@ -445,32 +445,10 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete
 // ========== END SMS Schema ==========
 
 // ========== AUTH Phase 1: app_user / session_refresh / login_audit ==========
-// 신규 인증 시스템의 토대. 기존 admin_pw / operation_key 인증은 그대로 동작.
-// Phase 2 에서 로그인 API 가 추가될 때 사용됨.
-//
-// ⚠️ 실패 시 더 이상 silent skip 하지 않음:
-//   - 테이블이 없으면 JWT 로그인이 통째로 깨지므로(42P01 relation does not exist) 명확히 알아야 함
-//   - 로그에 [auth-mig] FATAL 로 강하게 표시
-//   - 글로벌 플래그 global.__authMigError 에 에러 메시지를 저장 → /api/_diag/auth-state 로 노출
-//   - 부팅 자체는 막지 않음 (legacy 로그인은 여전히 동작해야 하므로)
+// (실제 호출은 SQLite-only 블록 종료 후 — 양쪽 백엔드에서 모두 실행되어야 함)
+// 이 위치에서는 글로벌 상태 플래그만 선언.
 global.__authMigError = null;
 global.__authMigOk = false;
-(async () => {
-    try {
-        const { runAuthMigrations } = require('./lib/auth/migrations');
-        await runAuthMigrations(db);
-        global.__authMigOk = true;
-        console.log('[auth-mig] OK — app_user/session_refresh/login_audit ready');
-    } catch (e) {
-        global.__authMigError = String(e && e.message || e);
-        // PG의 경우 e.code / e.detail / e.query 도 함께 남김 — 진단 편의
-        const extras = [];
-        if (e && e.code) extras.push(`code=${e.code}`);
-        if (e && e.detail) extras.push(`detail=${e.detail}`);
-        console.error('[auth-mig] FATAL — JWT 로그인이 불가능한 상태입니다:', e.message, extras.join(' '));
-        if (e && e.query) console.error('[auth-mig] failing query:', String(e.query).substring(0, 500));
-    }
-})();
 
 // 기본 상장 템플릿 시드 (최초 1회) — 시상장 + 완주증
 // SQLite/PostgreSQL 양쪽에서 동작하도록 통합 db API 사용 (비동기)
@@ -991,6 +969,32 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_record_breaking_status ON record_b
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_record_breaking_comp ON record_breaking_log(competition_id, status)`); } catch(e) {}
 
 } // end if (!db.isAsync) — SQLite-only 부트 마이그레이션 블록 종료
+
+// ========== AUTH Phase 1: app_user / session_refresh / login_audit ==========
+// ⚠️ 이 블록은 SQLite + PostgreSQL 양쪽 모두에서 실행되어야 한다.
+// (이전 버그: SQLite-only 블록 안쪽에 있어서 PG 모드에서 통째로 스킵되었음
+//   → JWT 로그인 시 'relation "app_user" does not exist' 42P01)
+//
+// 실패 처리:
+//   - 부팅 자체는 막지 않음 (legacy 로그인은 여전히 동작해야 하므로)
+//   - 글로벌 플래그 global.__authMigOk / __authMigError 로 상태 보관
+//   - 진단/복구는 /api/_diag/auth-state, /api/_diag/auth-init 으로 가능
+(async () => {
+    try {
+        const { runAuthMigrations } = require('./lib/auth/migrations');
+        await runAuthMigrations(db);
+        global.__authMigOk = true;
+        console.log('[auth-mig] OK — app_user/session_refresh/login_audit ready (backend=' + (db.isAsync ? 'postgres' : 'sqlite') + ')');
+    } catch (e) {
+        global.__authMigError = String(e && e.message || e);
+        // PG의 경우 e.code / e.detail / e.query 도 함께 남김 — 진단 편의
+        const extras = [];
+        if (e && e.code) extras.push(`code=${e.code}`);
+        if (e && e.detail) extras.push(`detail=${e.detail}`);
+        console.error('[auth-mig] FATAL — JWT 로그인이 불가능한 상태입니다:', e.message, extras.join(' '));
+        if (e && e.query) console.error('[auth-mig] failing query:', String(e.query).substring(0, 500));
+    }
+})();
 
 // ─── Records Management v4 — PostgreSQL 마이그레이션 (비동기, idempotent) ───
 // PG 모드에서는 schema.pg.sql 을 운영자가 한 번 실행하지만, 새 테이블/컬럼이
