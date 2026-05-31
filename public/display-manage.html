@@ -279,6 +279,8 @@ function toast(msg,type='success'){ const t=document.createElement('div');t.clas
 document.addEventListener('DOMContentLoaded', async()=>{
     if(!compId){alert('대회를 선택해주세요.');location.href='/';return;}
     renderPageNav('display-manage');
+    // [정책] 종료된 대회 + 운영진(operation) → 진입 차단
+    if (typeof guardEndedCompForOperation === 'function') await guardEndedCompForOperation('display-manage');
     await loadAll();
 });
 

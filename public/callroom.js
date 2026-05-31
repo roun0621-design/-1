@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Competition ended check removed — callroom stays accessible
     // so admin/ROUNKIM accounts can still operate after competition ends
     renderPageNav('callroom');
+    // [정책] 종료된 대회 + 운영진(operation) → 진입 차단
+    if (typeof guardEndedCompForOperation === 'function') await guardEndedCompForOperation('callroom');
     // Parallel: comp selector + info bar + events load simultaneously
     const [, , events] = await Promise.all([
         renderCompSelector('callroom'),

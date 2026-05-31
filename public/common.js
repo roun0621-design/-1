@@ -1039,8 +1039,53 @@ async function _adjustNavLinkVisibility(nav) {
 
         // (2) display-manage: 노출용 대회에서만 노출
         if (comp.mode !== 'display') hideLink('display-manage');
+
+        // ─────────────────────────────────────────────────────────────
+        // (3) [정책 2026-05] 종료된 대회 + 운영진(operation, can_manage=0)
+        //     → 홈/대시보드 외의 모든 메뉴 숨김
+        //     사유: 종료 대회에서 운영진은 작업 권한 없음. 메뉴/UI 노출 자체를 차단해
+        //           서버측 403 받기 전에 시각적으로도 분리.
+        //     - admin (can_manage=1 또는 JWT admin) 은 그대로 노출 (수정 가능)
+        // ─────────────────────────────────────────────────────────────
+        const role = localStorage.getItem('pace_role') || 'viewer';
+        if (isEnded && role === 'operation') {
+            // 종료된 대회에서 운영진에게는 작업 메뉴 전부 숨김
+            ['display-manage','monitor','callroom','record','admin'].forEach(hideLink);
+        }
     } catch(e) { /* silently ignore */ }
 }
+
+// ============================================================
+// guardEndedCompForOperation(currentPage)
+//   - record/admin/monitor/callroom/display-manage 페이지 본문 진입 시 호출
+//   - 종료 대회 + role='operation' 이면 → 안내 후 dashboard 로 리다이렉트
+//   - admin (pace_role='admin') 또는 viewer 는 통과 (viewer 는 어차피 다른 가드가 처리)
+//   - URL 직접 입력으로 들어와도 메뉴 숨김과 동일한 정책 강제
+// ============================================================
+async function guardEndedCompForOperation(currentPage) {
+    try {
+        const role = localStorage.getItem('pace_role') || 'viewer';
+        if (role !== 'operation') return; // admin/viewer 는 별도 정책
+        const compId = getCompetitionId();
+        if (!compId) return;
+        const comp = await API.getCompetition(compId);
+        if (!comp) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const isEnded = comp.status === 'completed' || (comp.end_date && comp.end_date < today);
+        if (!isEnded) return;
+        // 종료된 대회 + 운영진 → 진입 차단
+        const compName = comp.name || '대회';
+        // 한 번만 안내
+        if (!sessionStorage.getItem('_ended_alert_' + compId)) {
+            sessionStorage.setItem('_ended_alert_' + compId, '1');
+            alert(`종료된 대회입니다.\n\n[${compName}]\n운영진(심판) 권한으로는 종료된 대회의 작업 페이지에 접근할 수 없습니다.\n관리자만 수정 가능합니다.`);
+        }
+        const q = compId ? `?comp=${compId}` : '';
+        window.location.replace(`/dashboard.html${q}`);
+    } catch (e) { /* 가용성 우선: 가드 실패 시 통과 (서버측 가드가 backup) */ }
+}
+// 전역 노출 — 각 페이지 inline script 에서 호출 가능
+if (typeof window !== 'undefined') { window.guardEndedCompForOperation = guardEndedCompForOperation; }
 
 // ============================================================
 // Mobile hamburger menu

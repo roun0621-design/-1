@@ -128,6 +128,8 @@ const state = {
 document.addEventListener('DOMContentLoaded', async () => {
     if (!(await requireCompetition())) return;
     renderPageNav('record');
+    // [정책] 종료된 대회 + 운영진(operation) → 진입 차단, dashboard 로 리다이렉트
+    if (typeof guardEndedCompForOperation === 'function') await guardEndedCompForOperation('record');
 
     // ─── 오프라인 동기화 완료 시 현재 화면 데이터 다시 fetch (옵티미스틱 값을 서버 값으로 reconcile)
     window.onSyncComplete = async function() {

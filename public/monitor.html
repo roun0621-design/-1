@@ -209,6 +209,8 @@
     // Initialization
     // ============================================================
     renderPageNav('monitor');
+    // [정책] 종료된 대회 + 운영진(operation) → 진입 차단
+    if (typeof guardEndedCompForOperation === 'function') { guardEndedCompForOperation('monitor'); }
     let compId = getCompetitionId() || '1';
     let allData = [];
     let allCompetitions = [];

@@ -2501,6 +2501,8 @@ POST /api/external/event-result-link/batch<br>
     <script src="common.js?v=76"></script>
     <script>
         renderPageNav('admin');
+        // [정책] 종료된 대회 + 운영진(operation) → 진입 차단, dashboard 로 리다이렉트
+        if (typeof guardEndedCompForOperation === 'function') { guardEndedCompForOperation('admin'); }
         // Helper: display bib_number safely (null/undefined → '—')
         function bib(val) { return val != null && val !== '' ? val : '—'; }
         const AK = () => localStorage.getItem('pace_admin_key') || localStorage.getItem('accessKey') || '';
