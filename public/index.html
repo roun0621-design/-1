@@ -34,7 +34,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="P-R:Node">
-    <link rel="stylesheet" href="styles.css?v=65">
+    <link rel="stylesheet" href="styles.css?v=72">
+    <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
         .home-container { max-width: 900px; margin: 0 auto; padding: 20px; }
         .home-hero { text-align: left; padding: 40px 20px 20px; }
@@ -63,7 +64,7 @@
         .home-actions { display: flex; gap: 10px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
         .add-comp-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000; align-items: center; justify-content: center; }
         .add-comp-modal.show { display: flex; }
-        .add-comp-form { background: var(--white); border-radius: var(--radius); padding: 24px; width: 420px; max-width: 90vw; }
+        .add-comp-form { background: var(--white); border-radius: var(--radius); padding: 24px; width: 520px; max-width: 92vw; max-height: 92vh; overflow-y: auto; }
         .add-comp-form h3 { margin: 0 0 16px; font-size: 18px; }
         .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
         .form-group label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
@@ -168,22 +169,15 @@
         </div>
     </main>
 
-    <!-- Login Modal -->
-    <div class="login-modal" id="login-modal">
-        <div class="login-modal-inner">
-            <h3 style="font-size:18px;margin-bottom:10px;">운영진 전용 로그인</h3>
-            <div style="background:var(--warning-light);border:1.5px solid #e5a100;border-radius:8px;padding:12px 14px;margin-bottom:16px;text-align:left;">
-                <p style="font-size:13px;font-weight:700;color:#7a6400;margin-bottom:4px;">관리자 또는 심판 및 대회운영진만 로그인하세요.</p>
-                <p style="font-size:12px;color:#7a6400;line-height:1.6;">일반 관람자는 로그인 없이 대회를 선택하면<br>실시간 경기 결과를 확인할 수 있습니다.</p>
-            </div>
-            <input type="text" id="login-name" placeholder="심판명 또는 관리자 ID" autocomplete="off" style="margin-bottom:8px;">
-            <input type="password" id="login-key" placeholder="운영키 또는 관리자 비밀번호" autocomplete="off">
-            <div class="login-actions">
-                <button class="btn btn-ghost" onclick="closeLoginModal()">닫기</button>
-                <button class="btn btn-primary" onclick="doLogin()">로그인</button>
-            </div>
-            <div class="login-error" id="login-msg">심판명 또는 운영키가 일치하지 않습니다.</div>
-        </div>
+    <!--
+      [B-3 통합 — 2026-05] 로그인 모달 제거 완료.
+      모든 로그인 진입은 /login.html (탭 UI) 단일 페이지에서 처리합니다.
+      hidden inputs 는 jQuery/구 핸들러 호환 안전망일 뿐, 화면에 노출되지 않습니다.
+    -->
+    <div id="login-modal" style="display:none !important;" aria-hidden="true">
+        <input type="hidden" id="login-name" />
+        <input type="hidden" id="login-key" />
+        <span id="login-msg" style="display:none;"></span>
     </div>
 
     <!-- About Modal -->
@@ -347,13 +341,43 @@
                 <label>장소</label>
                 <input id="new-comp-venue" placeholder="예: 잠실 올림픽주경기장">
             </div>
-            <div class="form-group">
-                <label>연맹</label>
-                <select id="new-comp-federation" style="padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
-                    <option value="">없음 (미지정)</option>
-                    <!-- Dynamically populated from federation_list -->
-                </select>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>연맹</label>
+                    <select id="new-comp-federation" style="padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
+                        <option value="">없음 (미지정)</option>
+                        <!-- Dynamically populated from federation_list -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>운영 모드</label>
+                    <select id="new-comp-mode" style="padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
+                        <option value="operation">운영용</option>
+                        <option value="display">노출용</option>
+                    </select>
+                </div>
             </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>부 구분</label>
+                    <select id="new-comp-division" style="padding:8px 12px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:14px;">
+                        <option value="">없음 (미지정)</option>
+                        <option value="pro">실업부</option>
+                        <option value="univ">대학부</option>
+                        <option value="high">고등부</option>
+                        <option value="middle">중등부</option>
+                        <option value="general">일반부</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>대표 영상 URL</label>
+                    <input id="new-comp-video" placeholder="https://youtube.com/watch?v=...">
+                </div>
+            </div>
+            <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;line-height:1.6;">
+                ※ <strong>운영용</strong>: 실제 대회 운영 데이터 입력용 · <strong>노출용</strong>: 외부 결과/영상만 보여주는 홍보용<br>
+                ※ 생성 후 <strong>관리 → 대회 설정</strong>에서 더 자세하게 수정할 수 있습니다.
+            </p>
             <div class="modal-actions">
                 <button class="btn btn-ghost" onclick="closeAddComp()">취소</button>
                 <button class="btn btn-primary" onclick="createComp()">생성</button>
@@ -361,7 +385,8 @@
         </div>
     </div>
 
-    <script src="common.js?v=62"></script>
+    <script src="common.js?v=74"></script>
+    <script src="/lib/auth-client.js?v=1"></script>
     <script>
         renderPageNav('home');
 
@@ -378,12 +403,12 @@
             await loadRecentCompetitions();
             await loadSiteConfig();
             await showHomePopup();
-            // Auto-open login modal if redirected with ?action=login
+            // [B-3 통합] /?action=login 로 진입한 경우 → /login.html 로 단일 라우팅
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('action') === 'login' && currentRole === 'viewer') {
-                toggleLogin();
-                // Clean up URL
-                window.history.replaceState({}, '', '/');
+                const cur = '/';
+                window.location.replace(`/login.html?redirect=${encodeURIComponent(cur)}`);
+                return;
             }
         });
 
@@ -407,52 +432,52 @@
             return f ? `background:${f.badge_bg};color:${f.badge_color};` : 'background:#f5f5f5;color:#616161;';
         }
 
-        // ---- Login modal ----
+        // ─────────────────────────────────────────────────────────────
+        // [B-3 통합 — 2026-05] 로그인/로그아웃 핸들러
+        //   • 모달 사용 안 함. 로그인은 /login.html 단일 페이지로 라우팅.
+        //   • 호환을 위해 toggleLogin / doLogin / closeLoginModal 시그니처는 유지
+        //     (기존 onclick="toggleLogin()" 헤더 버튼 + 다른 페이지 호출 흡수).
+        // ─────────────────────────────────────────────────────────────
         window._headerLoginToggle = toggleLogin;
-        function toggleLogin() {
+        async function toggleLogin() {
+            // 1) legacy 로그인 상태 → 로그아웃
             if (currentRole !== 'viewer') {
-                doLogout();
+                if (!confirm('로그아웃하시겠습니까?')) return;
+                await doLogout();
                 return;
             }
-            document.getElementById('login-modal').classList.add('show');
-            document.getElementById('login-name').focus();
-            if (window.pushModalState) pushModalState(() => closeLoginModal());
-        }
-        function closeLoginModal() {
-            document.getElementById('login-modal').classList.remove('show');
-            document.getElementById('login-msg').style.display = 'none';
-            if (window.popModalState) popModalState();
-        }
-        async function doLogin() {
-            const judgeName = document.getElementById('login-name').value.trim();
-            const key = document.getElementById('login-key').value.trim();
-            if (!judgeName || !key) { document.getElementById('login-msg').textContent = '심판명과 운영키를 모두 입력하세요.'; document.getElementById('login-msg').style.display = 'block'; return; }
-            try {
-                const r = await fetch('/api/auth/verify', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ judge_name: judgeName, key }) }).then(res => { if (!res.ok) throw res; return res.json(); });
-                localStorage.setItem('pace_admin_key', key);
-                localStorage.setItem('pace_role', r.role);
-                localStorage.setItem('pace_judge_name', r.judge_name || judgeName);
-                currentRole = r.role;
-                currentKey = key;
-                document.getElementById('login-name').value = '';
-                document.getElementById('login-key').value = '';
-                closeLoginModal();
+            // 2) JWT 세션만 있는 경우 → 로그아웃
+            if (window.PaceAuth && PaceAuth.getCachedUser()) {
+                if (!confirm('로그아웃하시겠습니까?')) return;
+                try { await PaceAuth.logout(); } catch(_) {}
+                localStorage.removeItem('pr_auth_user');
                 updateRoleUI();
-                renderPageNav('home');
-                await loadCompetitions();
-            } catch (e) {
-                document.getElementById('login-msg').textContent = '심판명 또는 운영키가 일치하지 않습니다.';
-                document.getElementById('login-msg').style.display = 'block';
+                location.reload();
+                return;
             }
+            // 3) 미로그인 → /login.html 단일 진입점으로 이동
+            const cur = window.location.pathname + window.location.search + window.location.hash;
+            const redirect = encodeURIComponent(cur || '/');
+            window.location.href = `/login.html?redirect=${redirect}`;
         }
-        document.getElementById('login-key').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-        document.getElementById('login-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('login-key').focus(); });
-        document.getElementById('login-modal').addEventListener('click', e => { if (e.target === document.getElementById('login-modal')) closeLoginModal(); });
+        function closeLoginModal() { /* deprecated no-op */ }
+        async function doLogin() {
+            // deprecated — /login.html 로 이동
+            const redirect = encodeURIComponent('/');
+            window.location.href = `/login.html?redirect=${redirect}`;
+        }
 
-        function doLogout() {
+        async function doLogout() {
+            // legacy + JWT 동시 정리
+            try {
+                if (window.PaceAuth && PaceAuth.getCachedUser()) {
+                    await PaceAuth.logout();
+                }
+            } catch(_) {}
             localStorage.removeItem('pace_admin_key');
             localStorage.removeItem('pace_role');
             localStorage.removeItem('pace_judge_name');
+            localStorage.removeItem('pr_auth_user');
             currentRole = 'viewer';
             currentKey = '';
             updateRoleUI();
@@ -483,6 +508,39 @@
                 adminActions.style.display = 'none';
                 manualBtn.style.display = 'none';
             }
+
+            // B-3: 신규 JWT 세션도 인식 (legacy 로그인이 안 된 경우만)
+            if (currentRole === 'viewer' && window.PaceAuth) {
+                const cached = PaceAuth.getCachedUser();
+                if (cached && cached.id) {
+                    // 캐시 표시 (UI만, 권한은 별도)
+                    badge.className = 'role-badge ' + (cached.role === 'admin' ? 'admin' : 'operation');
+                    badge.textContent = (cached.display_name || cached.username) +
+                        (cached.role === 'admin' ? ' · 관리자' : ' · ' + (cached.role || ''));
+                    badge.style.display = 'inline-block';
+                    loginBtn.className = 'header-login-btn logged-in';
+                    loginLabel.textContent = '로그아웃 (新)';
+                    // 서버에 실제 살아있는지 백그라운드 확인
+                    PaceAuth.me().then(u => {
+                        if (!u) {
+                            PaceAuth.clearTokens();
+                            updateRoleUI();
+                        }
+                    }).catch(() => {});
+                }
+            }
+        }
+
+        // B-3: 헤더 로그아웃 클릭 시 — legacy 또는 JWT 둘 다 처리
+        async function _maybeJwtLogout() {
+            if (window.PaceAuth) {
+                const cached = PaceAuth.getCachedUser();
+                if (cached) {
+                    try { await PaceAuth.logout(); } catch(_) {}
+                    return true;
+                }
+            }
+            return false;
         }
 
         // ---- Modals ----
@@ -851,8 +909,15 @@
             const end = document.getElementById('new-comp-end').value;
             const venue = document.getElementById('new-comp-venue').value.trim();
             const federation = document.getElementById('new-comp-federation').value;
+            const mode = document.getElementById('new-comp-mode').value;
+            const division_type = document.getElementById('new-comp-division').value;
+            const video_url = document.getElementById('new-comp-video').value.trim();
             if (!name || !start || !end) { alert('대회명, 시작일, 종료일은 필수입니다.'); return; }
-            try { await API.createCompetition({ name, start_date: start, end_date: end, venue, federation }, currentKey); closeAddComp(); await loadCompetitions(); } catch (e) { alert(e.error || '생성 실패'); }
+            try {
+                await API.createCompetition({ name, start_date: start, end_date: end, venue, federation, mode, division_type, video_url }, currentKey);
+                closeAddComp();
+                await loadCompetitions();
+            } catch (e) { alert(e.error || '생성 실패'); }
         }
         document.getElementById('add-comp-modal').addEventListener('click', e => { if (e.target === document.getElementById('add-comp-modal')) closeAddComp(); });
 

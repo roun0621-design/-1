@@ -16,7 +16,8 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
     <meta name="theme-color" content="#b79f58">
     <title>PACE RISE : Node — 대시보드</title>
-    <link rel="stylesheet" href="styles.css?v=65">
+    <link rel="stylesheet" href="styles.css?v=72">
+    <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
         .comp-info-line { display:flex; align-items:center; gap:8px; padding:8px 16px; background:var(--bg-dark); border-radius:var(--radius); font-size:13px; flex-wrap:wrap; }
         .comp-info-name { font-weight:700; }
@@ -112,11 +113,11 @@
         .result-panel { background:var(--white); border-radius:var(--radius-lg); width:90vw; max-width:800px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,.18); }
         .result-panel-header { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:var(--white); border-bottom:2px solid var(--gray); flex-shrink:0; position:sticky; top:0; z-index:10; }
         .result-panel-header h3 { margin:0; font-size:16px; font-weight:800; letter-spacing:0.3px; }
-        .result-panel-close { width:42px; height:42px; border-radius:50%; border:none; background:var(--danger); font-size:22px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#fff; transition:all .15s; flex-shrink:0; box-shadow:0 2px 8px rgba(220,53,69,.35); line-height:1; padding:0; padding-bottom:3px; }
+        .result-panel-close { width:42px; height:42px; border-radius:50%; border:none; background:var(--danger); font-size:22px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#fff; transition:all .15s; flex-shrink:0; box-shadow:0 2px 8px rgba(220,53,69,.35); line-height:1; padding:0; font-family:Arial,sans-serif; }
         .result-panel-close:hover { background:#c82333; transform:scale(1.1); }
         .result-panel-body { flex:1; overflow-y:auto; overflow-x:auto; padding:14px 16px; -webkit-overflow-scrolling:touch; scrollbar-width:thin; max-width:100%; }
         @media (max-width:768px) {
-            .result-panel-close { width:38px; height:38px; font-size:20px; padding-bottom:2px; }
+            .result-panel-close { width:38px; height:38px; font-size:20px; }
             .result-panel-header { padding:10px 14px; }
             .result-panel-header h3 { font-size:13px; }
             .result-panel-body { padding:10px 8px; }
@@ -143,7 +144,7 @@
         <!-- Hero Schedule Card (large CTA above gender tabs) — 기존 openTimetable() 재사용 -->
         <div class="hero-schedule" id="hero-schedule" onclick="openTimetable()" style="flex-shrink:0;display:none;">
             <div class="hero-left">
-                <div class="hero-icon" id="hero-icon">📅</div>
+                <div class="hero-icon" id="hero-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
                 <div class="hero-text">
                     <div class="hero-title" id="hero-title">시간표</div>
                     <div class="hero-sub" id="hero-sub">불러오는 중…</div>
@@ -197,7 +198,7 @@
 
 
 
-    <script src="common.js?v=62"></script>
-    <script src="dashboard.js?v=46"></script>
+    <script src="common.js?v=77"></script>
+    <script src="dashboard.js?v=77"></script>
 </body>
 </html>

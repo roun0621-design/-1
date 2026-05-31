@@ -5,6 +5,12 @@
  */
 
 // ============================================================
+// Shared formatting helpers
+// (deduplicated from record.js / dashboard.js / results.js / callroom.js)
+// ============================================================
+function bib(val) { return val != null && val !== '' ? val : '—'; }
+
+// ============================================================
 // WA Scoring Tables
 // ============================================================
 const WA_TABLES = {
@@ -211,6 +217,65 @@ function fmtRoundShort(r) { return { preliminary: '예선', semifinal: '준결',
 function fmtSt(s) { return { registered: '미확인', checked_in: '출석', no_show: '결석' }[s] || s; }
 
 // ============================================================
+// Phase C: 신기록 비교 헬퍼 (브라우저용)
+// 서버 lib/recordCompare.js와 동일 로직을 클라이언트에 인라인
+// ============================================================
+function normalizeEventNameClient(name) {
+    if (!name) return '';
+    let s = String(name).trim();
+    s = s.replace(/\s*(예선|준결승|결승|preliminary|semifinal|final)\s*/gi, ' ').trim();
+    s = s.replace(/^(남자|여자|남|여|M|F)\s+/i, '').trim();
+    // 천단위 콤마/공백 제거: "10,000m" / "10 000m" → "10000m"
+    s = s.replace(/[,，]/g, '');
+    s = s.replace(/(\d)\s+(\d)/g, '$1$2');
+    s = s.replace(/미터\s*허들/g, 'mH')
+         .replace(/미터\s*장애물/g, 'mSC')
+         .replace(/미터\s*경보/g, 'mW')
+         .replace(/미터/g, 'm');
+    s = s.replace(/×/g, 'x').replace(/X/g, 'x');
+    s = s.replace(/(\d+)\s*x\s*(\d+)\s*m(?:\s*릴레이|\s*계주|\s*R)?/gi, '$1x$2mR');
+    // 숫자와 단위 사이 공백 제거
+    s = s.replace(/(\d)\s+(m\b|mH\b|mSC\b|mW\b|mR\b)/gi, '$1$2');
+    s = s.replace(/\s+/g, ' ').trim();
+    return s;
+}
+function parseRecordValueClient(v) {
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    const s = String(v).trim().replace(/m$/i, '').replace(/\s+/g, '');
+    if (s.includes(':')) {
+        const parts = s.split(':').map(parseFloat);
+        if (parts.some(isNaN)) return null;
+        if (parts.length === 2) return parts[0] * 60 + parts[1];
+        if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+        return null;
+    }
+    const n = parseFloat(s);
+    return isNaN(n) ? null : n;
+}
+// 결과 행이 NR/DR/CR을 동률/경신했는지 — direction = 'lower' or 'higher'
+// 반환: ['NR','DR','CR'] 배열 (해당되는 것만)
+function detectBrokenRecordsClient(newVal, records, direction) {
+    const broken = [];
+    if (newVal == null || !isFinite(newVal)) return broken;
+    const keys = [['national','NR'], ['division','DR'], ['competition','CR']];
+    for (const [k, label] of keys) {
+        const rec = records ? records[k] : null;
+        if (!rec) continue;
+        const oldVal = parseRecordValueClient(rec.record_value);
+        if (oldVal == null) continue;
+        if (direction === 'lower' && newVal < oldVal) broken.push(label);
+        else if (direction === 'higher' && newVal > oldVal) broken.push(label);
+    }
+    return broken;
+}
+function recordDirectionForCategoryClient(category) {
+    if (category === 'field_distance' || category === 'field_height') return 'higher';
+    if (category === 'track' || category === 'road' || category === 'relay') return 'lower';
+    return null;
+}
+
+// ============================================================
 // Competition context (localStorage = 전역 동기화)
 // ============================================================
 function getCompetitionId() {
@@ -240,6 +305,38 @@ function setCompetitionId(id) {
         url.searchParams.set('comp', id);
         window.history.replaceState({}, '', url);
     } catch(e) {}
+    // 🐛 BUGFIX: 대회 변경 시 네비게이션 링크의 ?comp=N 도 즉시 갱신
+    //   nav 링크는 페이지 로드 시점의 compId 가 박혀있어 다른 페이지로 이동 시
+    //   예전 대회로 돌아가는 문제가 있었음. 같은 함수에서 한꺼번에 처리해
+    //   모든 페이지에서 자동으로 동작하도록 함.
+    try {
+        const nav = document.getElementById('page-nav');
+        if (nav) {
+            nav.querySelectorAll('a[href]').forEach(a => {
+                try {
+                    const u = new URL(a.href, window.location.origin);
+                    // 대회 컨텍스트가 필요한 페이지만 (홈은 제외)
+                    if (u.pathname && u.pathname !== '/' && u.pathname !== '/index.html') {
+                        u.searchParams.set('comp', id);
+                        a.href = u.pathname + (u.search || '') + (u.hash || '');
+                    }
+                } catch(_) {}
+            });
+        }
+        // 모바일 메뉴도 같이 갱신
+        const mobileMenu = document.getElementById('mobile-menu');
+        if (mobileMenu) {
+            mobileMenu.querySelectorAll('a[href]').forEach(a => {
+                try {
+                    const u = new URL(a.href, window.location.origin);
+                    if (u.pathname && u.pathname !== '/' && u.pathname !== '/index.html') {
+                        u.searchParams.set('comp', id);
+                        a.href = u.pathname + (u.search || '') + (u.hash || '');
+                    }
+                } catch(_) {}
+            });
+        }
+    } catch(e) { console.warn('[setCompetitionId] nav sync failed:', e); }
 }
 
 // ============================================================
@@ -272,12 +369,12 @@ function _updateOfflineBanner() {
         banner.style.display = 'block';
         banner.style.background = '#e74c3c';
         banner.style.color = '#fff';
-        banner.textContent = `🔴 오프라인 — 기록은 로컬에 저장됩니다${_offlineState.pendingCount > 0 ? ` (대기 ${_offlineState.pendingCount}건)` : ''}`;
+        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 오프라인 — 기록은 로컬에 저장됩니다${_offlineState.pendingCount > 0 ? ` (대기 ${_offlineState.pendingCount}건)` : ''}`;
     } else if (_offlineState.pendingCount > 0) {
         banner.style.display = 'block';
         banner.style.background = '#f39c12';
         banner.style.color = '#fff';
-        banner.textContent = `🟡 동기화 중... (${_offlineState.pendingCount}건 대기)`;
+        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 동기화 중... (${_offlineState.pendingCount}건 대기)`;
     } else {
         banner.style.display = 'none';
     }
@@ -412,6 +509,13 @@ const API = {
     getHeatEntriesCheckedIn: hid => api('GET', `/api/heats/${hid}/entries?status=checked_in`),
     getResults: hid => api('GET', `/api/results?heat_id=${hid}`),
     upsertResult: body => api('POST', '/api/results/upsert', body),
+    // Phase C: 신기록 lookup (NR/DR/CR 정확 매칭, approved만)
+    lookupEventRecords: (eventName, gender, divisionCode, seriesId) => {
+        const p = new URLSearchParams({ event_name: eventName, gender });
+        if (divisionCode) p.set('division_code', divisionCode);
+        if (seriesId) p.set('series_id', String(seriesId));
+        return api('GET', '/api/event-records/lookup?' + p.toString());
+    },
     deleteResult: body => api('DELETE', '/api/results', body),
     resetSubEvent: eventId => api('POST', '/api/results/reset-sub-event', { event_id: eventId }),
     updateEntryStatus: (id, st) => api('PATCH', `/api/event-entries/${id}/status`, { status: st }),
@@ -426,6 +530,7 @@ const API = {
     saveCombinedScore: body => api('POST', '/api/combined-scores/save', body),
     getCombinedSubEvents: pid => api('GET', `/api/combined-sub-events?parent_event_id=${pid}`),
     syncCombinedScores: pid => api('POST', '/api/combined-scores/sync', { parent_event_id: pid }),
+    repairCombinedScores: (pid, admin_key) => api('POST', '/api/combined-scores/repair', { parent_event_id: pid, admin_key }),
     syncCombinedCheckin: eid => api('POST', '/api/combined/sync-checkin', { event_id: eid }),
     saveQualifications: (eid, sel) => api('POST', '/api/qualifications/save', { event_id: eid, selections: sel }),
     approveQualifications: eid => api('POST', '/api/qualifications/approve', { event_id: eid }),
@@ -576,6 +681,62 @@ function notifySSE(eventType, data) {
 }
 
 connectSSE();
+
+// ─── 신기록 감지 글로벌 알림 (모든 페이지 자동 적용) ───────────
+// 서버에서 record_break_detected SSE 가 broadcast 되면, 같은 대회 컨텍스트에 한해
+// 상단 알림 + 콘솔 로그 + 옵션 음향 알림을 표시한다.
+// admin / record / dashboard 등 어디서든 동작.
+let _recBreakNotifSeen = new Set();  // 중복 알림 방지 (동일 event_id+athlete+record_type)
+onSSE('record_break_detected', (data) => {
+    try {
+        // 현재 페이지의 대회 컨텍스트와 일치하는 경우에만 표시
+        const curCid = (typeof getCompetitionId === 'function') ? getCompetitionId() : null;
+        if (curCid && data.competition_id && Number(curCid) !== Number(data.competition_id)) return;
+        // 중복 dedup: 같은 (event_id + athlete_name + record_type 조합) 으로 묶음
+        const recTypes = (data.detected || []).map(d => d.record_type).join(',');
+        const dedupKey = `${data.event_id}|${data.athlete_name}|${recTypes}`;
+        if (_recBreakNotifSeen.has(dedupKey)) return;
+        _recBreakNotifSeen.add(dedupKey);
+        // 일정 시간 후 dedup 해제 (다른 시기에 다시 신기록 가능)
+        setTimeout(() => _recBreakNotifSeen.delete(dedupKey), 30000);
+        _showRecordBreakToast(data);
+    } catch (e) { console.error('[record_break_detected] handler error:', e); }
+});
+
+function _showRecordBreakToast(data) {
+    const labels = { national: 'NR · 한국기록', division: 'DR · 부별기록', competition: 'CR · 대회기록' };
+    const detected = (data.detected || []).map(d => labels[d.record_type] || d.record_type).join(' · ');
+    const valStr = (typeof data.value === 'number')
+        ? (data.value < 60 ? data.value.toFixed(2) : (() => {
+            const m = Math.floor(data.value / 60), s = (data.value - m * 60).toFixed(2);
+            return data.value < 3600 ? `${m}:${s.padStart(5, '0')}` : `${Math.floor(data.value/3600)}:${String(Math.floor((data.value%3600)/60)).padStart(2,'0')}:${(data.value%60).toFixed(2).padStart(5,'0')}`;
+        })())
+        : (data.value || '');
+    // Inject inline overlay (auto-dismiss after 8s, click to close)
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10000;max-width:420px;background:linear-gradient(135deg,#fff6dd,#fffbea);border:2px solid #d4a017;border-radius:12px;padding:14px 18px;box-shadow:0 8px 32px rgba(212,160,23,.35);cursor:pointer;animation:slideInRight .35s ease;font-family:var(--font-base,system-ui);';
+    overlay.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-size:24px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg></span>
+            <strong style="color:#7a4f00;font-size:14px;letter-spacing:.3px;">${detected} 갱신 감지</strong>
+        </div>
+        <div style="color:#5a3a00;font-size:13px;line-height:1.45;">
+            <strong>${data.event_name || ''}</strong> — ${data.athlete_name || ''}
+            ${data.athlete_team ? `<span style="color:#8a6500;">(${data.athlete_team})</span>` : ''}
+            <div style="font-family:var(--font-mono,monospace);font-size:16px;font-weight:700;margin-top:4px;color:#b87400;">${valStr}</div>
+            <div style="margin-top:8px;font-size:11px;color:#8a6500;">관리자 화면에서 승인하시면 기록이 갱신됩니다. 클릭하여 닫기.</div>
+        </div>`;
+    overlay.onclick = () => overlay.remove();
+    document.body.appendChild(overlay);
+    // Inject keyframe once
+    if (!document.getElementById('rec-break-anim-style')) {
+        const st = document.createElement('style');
+        st.id = 'rec-break-anim-style';
+        st.textContent = '@keyframes slideInRight{from{transform:translateX(120%);opacity:0;}to{transform:translateX(0);opacity:1;}}';
+        document.head.appendChild(st);
+    }
+    setTimeout(() => { try { overlay.remove(); } catch(e) {} }, 12000);
+}
 
 // ============================================================
 // Common UI
@@ -735,22 +896,48 @@ function renderPageNav(currentPage) {
         };
 
         // Login button
+        // ─────────────────────────────────────────────────────────────
+        // [B-3 통합] 로그인 버튼 정책 (2026-05 개편)
+        //   1) 미로그인:  /login.html?redirect=<현재URL> 로 이동 (모달 사용 안 함)
+        //   2) JWT 로그인 상태(pr_auth_user 존재): PaceAuth.logout() 호출 후 리로드
+        //   3) legacy 로그인 상태(pace_role !== 'viewer'): legacy 키/이름 삭제 후 리로드
+        //   4) 두 상태가 동시에 있을 수 있으므로 둘 다 정리
+        // ─────────────────────────────────────────────────────────────
+        const jwtUser = (function() {
+            try { return JSON.parse(localStorage.getItem('pr_auth_user') || 'null'); }
+            catch(_) { return null; }
+        })();
+        const isLoggedIn = (role !== 'viewer') || !!jwtUser;
         const loginBtn = document.createElement('button');
-        loginBtn.className = 'header-login-btn' + (role !== 'viewer' ? ' logged-in' : '');
+        loginBtn.className = 'header-login-btn' + (isLoggedIn ? ' logged-in' : '');
         loginBtn.id = 'header-login-btn';
-        loginBtn.innerHTML = `<span id="header-login-label">${role !== 'viewer' ? '\ub85c\uadf8\uc544\uc6c3' : '\ub85c\uadf8\uc778'}</span>`;
-        loginBtn.onclick = function() {
+        loginBtn.innerHTML = `<span id="header-login-label">${isLoggedIn ? '\ub85c\uadf8\uc544\uc6c3' : '\ub85c\uadf8\uc778'}</span>`;
+        loginBtn.onclick = async function() {
             const r = localStorage.getItem('pace_role') || 'viewer';
-            if (r !== 'viewer') {
-                // Logout
+            const ju = (function() {
+                try { return JSON.parse(localStorage.getItem('pr_auth_user') || 'null'); }
+                catch(_) { return null; }
+            })();
+            if (r !== 'viewer' || ju) {
+                // ── 통합 로그아웃 ──
+                // (1) JWT 세션 정리
+                if (ju && window.PaceAuth && typeof window.PaceAuth.logout === 'function') {
+                    try { await window.PaceAuth.logout(); } catch(_) {}
+                }
+                // (2) legacy 키/역할 정리
                 localStorage.removeItem('pace_admin_key');
                 localStorage.removeItem('pace_role');
                 localStorage.removeItem('pace_judge_name');
+                // (3) JWT 캐시 흔적 정리 (PaceAuth.logout이 처리하지 못한 경우 대비)
+                localStorage.removeItem('pr_auth_user');
                 location.reload();
-            } else if (window._headerLoginToggle) {
-                window._headerLoginToggle();
             } else {
-                window.location.href = '/?action=login';
+                // ── 통합 로그인 진입 ──
+                // 모든 페이지에서 동일하게 /login.html 로 이동.
+                // redirect 파라미터에 현재 경로(쿼리 포함) 보존해서 로그인 후 복귀.
+                const cur = window.location.pathname + window.location.search + window.location.hash;
+                const redirect = encodeURIComponent(cur || '/');
+                window.location.href = `/login.html?redirect=${redirect}`;
             }
         };
 
@@ -808,36 +995,97 @@ function renderPageNav(currentPage) {
     // ── Build mobile menu (once) ──
     _buildMobileMenu(pages, currentPage, role);
 
-    // ── Hide callroom link if competition period has ended ──
-    _hideCallroomIfCompleted(nav);
+    // ── Conditional nav-link visibility (callroom 종료, 노출관리 mode별) ──
+    _adjustNavLinkVisibility(nav);
 }
 
 // ============================================================
-// Hide callroom link when competition period has ended
+// Conditional nav-link visibility based on the currently selected competition
+//   • callroom        : 대회 종료(status=completed 또는 end_date 경과) 시 숨김
+//   • display-manage  : mode='display'(노출용) 대회일 때만 노출. operation 또는 미선택 시 숨김.
+//
+// 두 가지를 하나의 fetch 결과로 함께 처리해 추가 네트워크 비용 없음.
+// 정책: 대회 미선택(viewer 진입 등) 시 callroom은 노출 유지(viewer 자체가 의미있을 수 있음),
+//       display-manage는 안전하게 숨김(노출용 대회 컨텍스트가 없으면 의미 없음).
 // ============================================================
-async function _hideCallroomIfCompleted(nav) {
+async function _adjustNavLinkVisibility(nav) {
+    const hideLink = (key) => {
+        if (nav) {
+            const a = nav.querySelector(`a[data-page-key="${key}"]`);
+            if (a) a.style.display = 'none';
+        }
+        const mobileMenu = document.getElementById('mobile-menu');
+        if (mobileMenu) {
+            mobileMenu.querySelectorAll(`a[data-page-key="${key}"]`).forEach(l => l.style.display = 'none');
+        }
+    };
+
+    const compId = getCompetitionId();
+    if (!compId) {
+        // 대회 미선택: display-manage는 의미 없으므로 숨김. callroom은 그대로.
+        hideLink('display-manage');
+        return;
+    }
     try {
+        const comp = await API.getCompetition(compId);
+        if (!comp) {
+            hideLink('display-manage');
+            return;
+        }
+        // (1) callroom: 종료된 대회면 숨김
+        const today = new Date().toISOString().slice(0, 10);
+        const isEnded = comp.status === 'completed' || (comp.end_date && comp.end_date < today);
+        if (isEnded) hideLink('callroom');
+
+        // (2) display-manage: 노출용 대회에서만 노출
+        if (comp.mode !== 'display') hideLink('display-manage');
+
+        // ─────────────────────────────────────────────────────────────
+        // (3) [정책 2026-05] 종료된 대회 + 운영진(operation, can_manage=0)
+        //     → 홈/대시보드 외의 모든 메뉴 숨김
+        //     사유: 종료 대회에서 운영진은 작업 권한 없음. 메뉴/UI 노출 자체를 차단해
+        //           서버측 403 받기 전에 시각적으로도 분리.
+        //     - admin (can_manage=1 또는 JWT admin) 은 그대로 노출 (수정 가능)
+        // ─────────────────────────────────────────────────────────────
+        const role = localStorage.getItem('pace_role') || 'viewer';
+        if (isEnded && role === 'operation') {
+            // 종료된 대회에서 운영진에게는 작업 메뉴 전부 숨김
+            ['display-manage','monitor','callroom','record','admin'].forEach(hideLink);
+        }
+    } catch(e) { /* silently ignore */ }
+}
+
+// ============================================================
+// guardEndedCompForOperation(currentPage)
+//   - record/admin/monitor/callroom/display-manage 페이지 본문 진입 시 호출
+//   - 종료 대회 + role='operation' 이면 → 안내 후 dashboard 로 리다이렉트
+//   - admin (pace_role='admin') 또는 viewer 는 통과 (viewer 는 어차피 다른 가드가 처리)
+//   - URL 직접 입력으로 들어와도 메뉴 숨김과 동일한 정책 강제
+// ============================================================
+async function guardEndedCompForOperation(currentPage) {
+    try {
+        const role = localStorage.getItem('pace_role') || 'viewer';
+        if (role !== 'operation') return; // admin/viewer 는 별도 정책
         const compId = getCompetitionId();
         if (!compId) return;
         const comp = await API.getCompetition(compId);
         if (!comp) return;
-        // Check if competition status is completed OR end_date has passed
         const today = new Date().toISOString().slice(0, 10);
         const isEnded = comp.status === 'completed' || (comp.end_date && comp.end_date < today);
-        if (isEnded) {
-            // Hide callroom links in nav and mobile menu
-            if (nav) {
-                const crLink = nav.querySelector('a[data-page-key="callroom"]');
-                if (crLink) crLink.style.display = 'none';
-            }
-            const mobileMenu = document.getElementById('mobile-menu');
-            if (mobileMenu) {
-                const mmLinks = mobileMenu.querySelectorAll('a[data-page-key="callroom"]');
-                mmLinks.forEach(l => l.style.display = 'none');
-            }
+        if (!isEnded) return;
+        // 종료된 대회 + 운영진 → 진입 차단
+        const compName = comp.name || '대회';
+        // 한 번만 안내
+        if (!sessionStorage.getItem('_ended_alert_' + compId)) {
+            sessionStorage.setItem('_ended_alert_' + compId, '1');
+            alert(`종료된 대회입니다.\n\n[${compName}]\n운영진(심판) 권한으로는 종료된 대회의 작업 페이지에 접근할 수 없습니다.\n관리자만 수정 가능합니다.`);
         }
-    } catch(e) { /* silently ignore */ }
+        const q = compId ? `?comp=${compId}` : '';
+        window.location.replace(`/dashboard.html${q}`);
+    } catch (e) { /* 가용성 우선: 가드 실패 시 통과 (서버측 가드가 backup) */ }
 }
+// 전역 노출 — 각 페이지 inline script 에서 호출 가능
+if (typeof window !== 'undefined') { window.guardEndedCompForOperation = guardEndedCompForOperation; }
 
 // ============================================================
 // Mobile hamburger menu
@@ -864,8 +1112,14 @@ function _buildMobileMenu(pages, currentPage, role) {
         `<a href="${p.href}" class="${p.key === currentPage ? 'mm-active' : ''}" data-page-key="${p.key}">${p.label}</a>`
     ).join('');
 
-    const loginLabel = role !== 'viewer' ? '\ub85c\uadf8\uc544\uc6c3' : '\ub85c\uadf8\uc778';
-    const loginColor = role !== 'viewer' ? 'color:#E53935;' : '';
+    // [B-3 통합] JWT 상태도 함께 고려
+    const _ju = (function() {
+        try { return JSON.parse(localStorage.getItem('pr_auth_user') || 'null'); }
+        catch(_) { return null; }
+    })();
+    const _isLoggedIn = (role !== 'viewer') || !!_ju;
+    const loginLabel = _isLoggedIn ? '\ub85c\uadf8\uc544\uc6c3' : '\ub85c\uadf8\uc778';
+    const loginColor = _isLoggedIn ? 'color:#E53935;' : '';
 
     menu.innerHTML = `
         <div class="mobile-menu-header">
@@ -901,18 +1155,28 @@ function closeMobileMenu() {
     document.body.style.overflow = '';
 }
 
-function mobileMenuLogin() {
+async function mobileMenuLogin() {
     closeMobileMenu();
     const r = localStorage.getItem('pace_role') || 'viewer';
-    if (r !== 'viewer') {
+    const ju = (function() {
+        try { return JSON.parse(localStorage.getItem('pr_auth_user') || 'null'); }
+        catch(_) { return null; }
+    })();
+    if (r !== 'viewer' || ju) {
+        // ── 통합 로그아웃 (header 정책과 동일) ──
+        if (ju && window.PaceAuth && typeof window.PaceAuth.logout === 'function') {
+            try { await window.PaceAuth.logout(); } catch(_) {}
+        }
         localStorage.removeItem('pace_admin_key');
         localStorage.removeItem('pace_role');
         localStorage.removeItem('pace_judge_name');
+        localStorage.removeItem('pr_auth_user');
         location.reload();
-    } else if (window._headerLoginToggle) {
-        window._headerLoginToggle();
     } else {
-        window.location.href = '/?action=login';
+        // ── 통합 로그인 진입 (모달 X, /login.html 단일 진입점) ──
+        const cur = window.location.pathname + window.location.search + window.location.hash;
+        const redirect = encodeURIComponent(cur || '/');
+        window.location.href = `/login.html?redirect=${redirect}`;
     }
 }
 
@@ -1169,10 +1433,18 @@ if ('serviceWorker' in navigator) {
                     _updateOfflineBadge();
                 }
                 if (event.data.type === 'SYNC_COMPLETE') {
-                    const { synced, failed } = event.data;
-                    if (synced > 0) showToast(`Synced ${synced} offline changes`, 'success', 3000);
-                    if (failed > 0) showToast(`${failed} changes failed to sync`, 'error', 3000);
+                    const { synced, failed, conflicts } = event.data;
+                    if (synced > 0) showToast(`동기화 완료: ${synced}건`, 'success', 3000);
+                    if (failed > 0) showToast(`${failed}건 동기화 실패`, 'error', 3000);
+                    // ─── 운영진 기록과 충돌해서 거부된 항목 알림 ───
+                    if (Array.isArray(conflicts) && conflicts.length > 0) {
+                        _showConflictModal(conflicts);
+                    }
                     _updateOfflineBadge();
+                    // 페이지에 있는 record/results 데이터 갱신 트리거 (있을 때만)
+                    if (synced > 0 && typeof window.onSyncComplete === 'function') {
+                        try { window.onSyncComplete({ synced, failed, conflicts }); } catch(e) {}
+                    }
                 }
             });
         }).catch(() => {});
@@ -1287,18 +1559,64 @@ async function openTimetable(compId) {
         // Day tabs
         const tabContainer = document.getElementById('tt-day-tabs');
 
-        // Auto-detect current day based on competition start_date (KST)
+        // 일차의 마지막 경기 시작시각(분) 계산 헬퍼
+        function _ttModalLastEventMin(dayNum) {
+            const dd = data.days[dayNum];
+            if (!dd) return -1;
+            let last = -1;
+            ['track','field'].forEach(sec => {
+                (dd[sec] || []).forEach(it => {
+                    if (!it.time) return;
+                    const m = String(it.time).match(/^(\d{1,2}):(\d{2})/);
+                    if (!m) return;
+                    const mins = parseInt(m[1],10)*60 + parseInt(m[2],10);
+                    if (mins > last) last = mins;
+                });
+            });
+            return last;
+        }
+
+        // Auto-detect current day with 30-minute transition rule
+        // 규칙: 오늘이 N일차이고 (마지막 경기 시작 + 30분) 지나면 N+1일차 기본 활성.
+        //       대회 마지막 N일차 + 30분 지나면 1일차로 폴백(대회 종료 후 기본 표시).
+        const _TT_NEXT_DAY_OFFSET_MIN = 30;
         let activeDay = dayKeys[0]; // fallback: first day
+        let _allEnded = false; // 대회 전부 종료 여부 (정보용)
         if (data.start_date) {
             const now = new Date(); // browser local time (KST)
             const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
             const start = new Date(data.start_date + 'T00:00:00');
             const today = new Date(todayStr + 'T00:00:00');
             const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24)) + 1;
-            if (dayKeys.includes(diffDays)) {
-                activeDay = diffDays;
+            const nowMin = now.getHours()*60 + now.getMinutes();
+
+            if (diffDays < dayKeys[0]) {
+                // 대회 시작 전
+                activeDay = dayKeys[0];
+            } else if (dayKeys.includes(diffDays)) {
+                // 오늘이 대회 일차 범위 안
+                const lastMin = _ttModalLastEventMin(diffDays);
+                if (lastMin >= 0 && nowMin >= lastMin + _TT_NEXT_DAY_OFFSET_MIN) {
+                    // 오늘 + 30분 지남 → 다음 일차로
+                    const nextDay = dayKeys.find(d => d > diffDays);
+                    if (nextDay) {
+                        activeDay = nextDay;
+                    } else {
+                        // 마지막 날이었음 → 대회 종료, 1일차 기본 표시
+                        activeDay = dayKeys[0];
+                        _allEnded = true;
+                    }
+                } else {
+                    activeDay = diffDays;
+                }
             } else if (diffDays > dayKeys[dayKeys.length - 1]) {
-                activeDay = dayKeys[dayKeys.length - 1]; // last day if past
+                // 대회 마지막 일차도 지남 → 1일차 기본 표시
+                activeDay = dayKeys[0];
+                _allEnded = true;
+            } else {
+                // 사이의 휴식일 등 → 가장 가까운 미래 일차
+                const futureDay = dayKeys.find(d => d >= diffDays);
+                activeDay = futureDay || dayKeys[0];
             }
         }
         // Store current HH:MM for highlighting
@@ -1380,12 +1698,27 @@ async function openTimetable(compId) {
                     const _bracketMatch = _roundFull.match(/\(([^)]+)\)/);
                     const _roundBase = _roundFull.replace(/\([^)]*\)/g, '').trim();
                     const _eventFullName = `${item.category || ''} ${item.event_name}${_roundBase ? ' ' + _roundBase : ''}`.trim();
-                    // Right-aligned tags: result link badge + round badge + bracket info (color-coded)
+                    // Right-aligned tags: result link badge + status badge + round badge + bracket info (color-coded)
                     const _resultTag = item.result_url ? `<span style="color:#fff;font-size:9px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window.open('${(item.result_url||'').replace(/'/g,"\\'")}','_blank')">결과</span>` : '';
                     const _bracketTag = _bracketMatch ? `<span style="color:#8a7640;font-size:10px;font-weight:600;background:#f8f4ea;padding:1px 6px;border-radius:8px;white-space:nowrap;">(${_bracketMatch[1]})</span>` : '';
                     const _roundColorMap = { '예선': { color: '#1565c0', bg: '#e3f2fd' }, '준결승': { color: '#e65100', bg: '#fff3e0' }, '결승': { color: '#b71c1c', bg: '#ffebee' }, '기록경기': { color: '#4a148c', bg: '#f3e5f5' } };
                     const _rbc = _roundColorMap[_roundBase] || { color: '#555', bg: '#f0f0f0' };
                     const _roundBadge = _roundBase ? `<span style="color:${_rbc.color};font-size:10px;font-weight:600;background:${_rbc.bg};padding:1px 6px;border-radius:8px;white-space:nowrap;">${_roundBase}</span>` : '';
+                    // Status badge based on round_status (so operators can see at a glance whether records are entered)
+                    let _statusTag = '';
+                    if (item.event_id && item.round_status) {
+                        if (item.round_status === 'completed') {
+                            // 결과보기 — 진한 녹색, 클릭 시 결과 패널 또는 결과지 PDF
+                            _statusTag = `<span style="color:#fff;font-size:9px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="결과 보기">결과보기</span>`;
+                        } else if (item.round_status === 'in_progress') {
+                            // 진행중 — 골드 LIVE
+                            _statusTag = `<span style="color:#b79f58;font-size:9px;font-weight:700;background:#f8f4ea;border:1px solid #e8dfc0;padding:1px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="실시간 기록">LIVE</span>`;
+                        } else if (item.round_status === 'heats_generated') {
+                            // 명단 — 연한 회색
+                            _statusTag = `<span style="color:#666;font-size:9px;font-weight:600;background:#f5f5f5;border:1px dashed #bbb;padding:1px 6px;border-radius:8px;white-space:nowrap;">명단</span>`;
+                        }
+                        // 'created' (대기) → no badge (시간표가 너무 복잡해지지 않도록)
+                    }
                     // Click behavior: display mode → open result_url if exists, else do nothing
                     // Non-display mode → navigate to event
                     let clickAction = '';
@@ -1399,7 +1732,7 @@ async function openTimetable(compId) {
                     html += `<div id="tt-item-${item.id}" ${clickAction} style="display:flex;align-items:center;gap:8px;padding:9px 12px;${borderBottom}${defaultBg ? 'background:' + defaultBg + ';' : ''}${highlightStyle}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${restoreBg}'"` : ''}>
                         <span style="font-weight:700;color:#333;font-size:13px;font-variant-numeric:tabular-nums;min-width:48px;white-space:nowrap;">${item.time}${nowBadge}</span>
                         <span style="flex:1;font-weight:600;font-size:13px;color:#222;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_eventFullName}${crBadge}</span>
-                        <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;">${_resultTag}${_roundBadge}${_bracketTag}</div>
+                        <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;">${_resultTag}${_statusTag}${_roundBadge}${_bracketTag}</div>
                     </div>`;
                 });
 
@@ -1427,6 +1760,23 @@ async function openTimetable(compId) {
                 }
                 // No result_url → do nothing
             } catch(e) { /* silent */ }
+        };
+        // Open result for completed/in_progress events from timetable status badge
+        // - dashboard: openResult / openLiveResult (in-page modal)
+        // - results page: openResultDetail
+        // - other pages: navigate to dashboard with event hash
+        window._ttOpenResult = function(eventId) {
+            const overlay = document.getElementById('timetable-overlay');
+            if (overlay) overlay.remove();
+            if (typeof openResult === 'function') {
+                openResult(eventId);
+            } else if (typeof openLiveResult === 'function') {
+                openLiveResult(eventId);
+            } else if (typeof openResultDetail === 'function') {
+                openResultDetail(eventId);
+            } else {
+                window.location.href = '/dashboard.html?event=' + eventId;
+            }
         };
         window._ttGoToEvent = function(eventId) {
             // Close timetable overlay and navigate to event
@@ -1655,7 +2005,7 @@ async function openDocumentList() {
 async function docDownloadResultPNG(eventId, btn) {
     if (!eventId) return;
     const origText = btn.innerHTML;
-    btn.innerHTML = '⏳ 생성중...';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 생성중...';
     btn.disabled = true;
     try {
         const resp = await fetch('/api/documents/result-sheet/' + eventId + '/png');
@@ -1774,3 +2124,63 @@ window.prInitFontSize = function(targetSelector) {
 
     apply();
 };
+
+// ============================================================
+// OFFLINE SYNC CONFLICT MODAL — 운영진 기록과 충돌해서 거부된 항목 표시
+// ============================================================
+function _showConflictModal(conflicts) {
+    if (!Array.isArray(conflicts) || conflicts.length === 0) return;
+
+    // 기존 모달 있으면 제거
+    const existing = document.getElementById('pr-conflict-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'pr-conflict-modal';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 100000;
+        background: rgba(0,0,0,0.6); display: flex;
+        align-items: center; justify-content: center;
+        padding: 16px;
+    `;
+
+    const formatValue = (v) => {
+        if (!v) return '-';
+        if (v.result_mark) return `높이 ${v.bar_height || '?'}m ${v.attempt_number || '?'}차 → ${v.result_mark}`;
+        if (v.distance_meters != null) return `거리 ${v.distance_meters}m${v.attempt_number ? ` (${v.attempt_number}차)` : ''}`;
+        if (v.time_seconds != null) return `시간 ${v.time_seconds}초`;
+        if (v.status_code) return `상태 ${v.status_code}`;
+        return JSON.stringify(v);
+    };
+
+    const items = conflicts.map((c, i) => `
+        <div style="border:1px solid #e5e5e5; border-radius:8px; padding:12px; margin-bottom:10px; background:#fff;">
+            <div style="font-weight:600; color:#c62828; margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 항목 ${i+1}</div>
+            <div style="font-size:13px; color:#555; margin-bottom:4px;"><b>경로:</b> ${c.url || '-'}</div>
+            <div style="font-size:13px; color:#888; margin-bottom:4px;"><b>오프라인 입력값 (거부됨):</b> ${formatValue(c.rejected_offline_value)}</div>
+            <div style="font-size:13px; color:#2e7d32;"><b>운영진 기록 (유지됨):</b> ${formatValue(c.server_value)}</div>
+        </div>
+    `).join('');
+
+    overlay.innerHTML = `
+        <div style="background:#fff; border-radius:12px; max-width:560px; width:100%; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+            <div style="padding:18px 20px; background:#fff3cd; border-bottom:1px solid #ffe082;">
+                <div style="font-size:18px; font-weight:700; color:#856404;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 오프라인 동기화 — 충돌 알림</div>
+                <div style="font-size:13px; color:#856404; margin-top:6px; line-height:1.5;">
+                    아래 ${conflicts.length}건의 오프라인 입력값은 <b>운영진이 그 사이에 입력한 기록</b>이 우선되어 <b>적용되지 않았습니다.</b><br>
+                    필요시 운영진 기록을 확인하고 수동으로 다시 입력해주세요.
+                </div>
+            </div>
+            <div style="padding:14px 20px; overflow-y:auto; flex:1;">
+                ${items}
+            </div>
+            <div style="padding:14px 20px; border-top:1px solid #eee; text-align:right; background:#fafafa;">
+                <button type="button" id="pr-conflict-modal-close" style="padding:10px 24px; background:#2d9d78; color:#fff; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">확인</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+    document.getElementById('pr-conflict-modal-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}

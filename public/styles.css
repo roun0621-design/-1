@@ -36,6 +36,26 @@
     --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
     --font-brand: 'Audiowide', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
     --font-mono: 'SF Mono','Fira Code','Cascadia Code',Monaco,Consolas,monospace;
+    /* ── Motion tokens (UX polish v1) ──────────────────────────────
+       모든 트랜지션/애니메이션이 같은 ease + 시간 체계를 쓰도록 통일.
+       --ease-out : 메인 ease (cubic-bezier — 자연스럽게 감속)
+       --dur-fast : 작은 인터랙션 (버튼 hover/active)
+       --dur-base : 일반 트랜지션 (모달, 탭)
+       --dur-slow : 큰 레이아웃 변화 */
+    --ease-out: cubic-bezier(.16, 1, .3, 1);
+    --ease-in-out: cubic-bezier(.4, 0, .2, 1);
+    --dur-fast: 120ms;
+    --dur-base: 220ms;
+    --dur-slow: 360ms;
+}
+
+/* ── Reduced motion 사용자 배려 ──────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }
 
 
@@ -62,6 +82,28 @@ body {
     line-height: 1.5; min-height: 100vh; font-size: 14px;
     font-weight: 500;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* iOS Safari 관성 스크롤 + 모바일 탭 시 회색 박스 제거 */
+    -webkit-overflow-scrolling: touch;
+    -webkit-tap-highlight-color: transparent;
+    /* 모바일 입력 시 자동 줌인 방지 (font-size 16px 이상이면 줌 안 함, 14px 이라서 별도 설정 필요한 입력은 input 쪽에서 처리) */
+}
+
+/* 모든 스크롤 가능한 영역에 iOS 관성 스크롤 적용 */
+.modal-overlay, .result-detail-overlay, .result-detail-content,
+.modal, .modal-form, .result-detail-modal,
+.matrix-table-wrap, .data-table-wrap,
+.callroom-matrix-panel, .record-matrix-panel,
+.callroom-detail-panel, .record-detail-panel {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 링크/버튼 등 인터랙티브 요소 — 모바일 탭 회색박스 제거 */
+a, button, [role="button"], .btn, .tab, .nav-link,
+.matrix-cell, .heat-tab, .gender-tab, .round-btn,
+.event-name, .hero-schedule, .modal-overlay, .result-detail-overlay {
+    -webkit-tap-highlight-color: transparent;
 }
 
 /* ============================================================
@@ -199,9 +241,21 @@ body {
 .btn {
     padding: 7px 18px; border: none; border-radius: var(--radius);
     font-size: 13px; font-weight: 600; cursor: pointer;
-    transition: all 0.12s; display: inline-flex; align-items: center;
-    gap: 4px; line-height: 1.3;
+    transition: background-color var(--dur-fast) var(--ease-out),
+                border-color var(--dur-fast) var(--ease-out),
+                color var(--dur-fast) var(--ease-out),
+                transform var(--dur-fast) var(--ease-out),
+                box-shadow var(--dur-fast) var(--ease-out),
+                opacity var(--dur-fast) var(--ease-out);
+    display: inline-flex; align-items: center;
+    justify-content: center; gap: 4px; line-height: 1.3;
+    text-align: center; vertical-align: middle;
+    /* 모바일에서 더블탭 줌 방지 + 텍스트 선택 방지 (UX) */
+    touch-action: manipulation;
+    -webkit-user-select: none; user-select: none;
 }
+.btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.btn:active:not(:disabled) { transform: translateY(0) scale(0.97); transition-duration: 60ms; box-shadow: none; }
 .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .btn-primary { background: var(--green); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: #258a69; }
@@ -218,6 +272,29 @@ body {
 .btn-ghost:hover:not(:disabled) { background: var(--gray-light); }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
 .btn-xs { padding: 2px 8px; font-size: 10px; border-radius: 4px; }
+/* Document export buttons — semantic color coding */
+.btn-excel { background: #2d5016; color: #fff; }
+.btn-excel:hover:not(:disabled) { background: #1f3a0f; }
+.btn-pdf { background: #c0392b; color: #fff; }
+.btn-pdf:hover:not(:disabled) { background: #962f23; }
+/* Soft danger — for destructive secondary actions (e.g. delete logo) */
+.btn-danger-soft { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
+.btn-danger-soft:hover:not(:disabled) { background: #fecaca; border-color: #f87171; }
+
+/* ============================================================
+   TYPOGRAPHY UTILITIES — replaces repeated inline font-size:11px/12px patterns
+   ============================================================ */
+.t-xs    { font-size: 10px; }
+.t-sm    { font-size: 11px; }
+.t-md    { font-size: 12px; }
+.t-lg    { font-size: 13px; }
+.t-muted { color: var(--text-muted); }
+.t-bold  { font-weight: 600; }
+.t-label { font-size: 11px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 6px; }
+.t-help  { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.t-help-lg { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+.t-checkbox-row { font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.t-input-bare   { width: 100%; font-size: 11px; border: none; background: transparent; }
 
 /* ============================================================
    STATUS BADGES
@@ -225,6 +302,7 @@ body {
 .status-badge {
     display: inline-block; padding: 2px 10px;
     border-radius: 99px; font-size: 11px; font-weight: 600;
+    text-align: center; vertical-align: middle; line-height: 1.5;
 }
 .status-registered { background: var(--warning-light); color: #7a6400; }
 .status-checked_in { background: var(--green-light); color: #065f46; }
@@ -332,6 +410,7 @@ body {
     border-radius: 4px; font-size: 11px; font-weight: 700;
     text-decoration: none; cursor: pointer; border: none;
     transition: all 0.12s; margin: 1px;
+    text-align: center; vertical-align: middle; line-height: 1.4;
 }
 .round-btn.status-none { background: var(--gray-light); color: var(--text-muted); cursor: default; }
 .round-btn.status-created { background: var(--gray-light); color: var(--gray-dark); }
@@ -774,14 +853,16 @@ body {
     background: rgba(0,0,0,0.25); display: flex;
     align-items: center; justify-content: center;
     z-index: 1000; backdrop-filter: blur(2px);
+    animation: overlayIn var(--dur-base) var(--ease-out);
 }
+@keyframes overlayIn { from { opacity: 0; backdrop-filter: blur(0); } to { opacity: 1; backdrop-filter: blur(2px); } }
 .modal {
     background: var(--white); border-radius: var(--radius-lg);
     width: 420px; max-width: 95vw; box-shadow: var(--shadow-md);
-    overflow: hidden; animation: modalIn 0.15s ease;
+    overflow: hidden; animation: modalIn var(--dur-base) var(--ease-out);
 }
 .modal-sm { width: 360px; }
-@keyframes modalIn { from{opacity:0;transform:scale(0.97) translateY(-6px);} to{opacity:1;transform:scale(1) translateY(0);} }
+@keyframes modalIn { from{opacity:0;transform:scale(0.96) translateY(8px);} to{opacity:1;transform:scale(1) translateY(0);} }
 .modal-header { background: var(--gray-light); padding: 16px 20px; border-bottom: 1px solid var(--gray); }
 .modal-title { font-size: 15px; font-weight: 700; }
 .modal-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
@@ -866,6 +947,64 @@ body {
 }
 .loading-inline .loading-spinner {
     width: 20px; height: 20px; border-width: 2.5px; margin-bottom: 0;
+}
+
+/* ============================================================
+   SKELETON LOADER — 빈 화면 대신 회색 박스 + shimmer 애니메이션
+   ============================================================
+   사용법:
+     <div class="skeleton" style="width:100%;height:24px;"></div>
+     <div class="skeleton skeleton-text"></div>    (한 줄 짜리 텍스트)
+     <div class="skeleton skeleton-title"></div>   (제목)
+     <div class="skeleton skeleton-card"></div>    (카드형)
+     <div class="skeleton-block">                  (여러 줄 자동 묶음)
+       <div class="skeleton skeleton-title"></div>
+       <div class="skeleton skeleton-text"></div>
+       <div class="skeleton skeleton-text" style="width:80%;"></div>
+     </div>
+*/
+.skeleton {
+    display: block;
+    background: linear-gradient(90deg,
+        var(--gray-light) 0%,
+        #f8f9fb 50%,
+        var(--gray-light) 100%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    border-radius: 6px;
+    /* 사용자가 잘못 클릭 못 하도록 */
+    pointer-events: none;
+}
+@keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+.skeleton-text {
+    height: 12px; margin: 6px 0;
+}
+.skeleton-title {
+    height: 18px; width: 60%; margin: 8px 0 12px;
+}
+.skeleton-card {
+    height: 80px; margin: 10px 0; border-radius: 10px;
+}
+.skeleton-block {
+    padding: 16px; background: var(--white); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    animation: fadeIn var(--dur-base) var(--ease-out);
+}
+.skeleton-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 0;
+}
+.skeleton-row .skeleton { flex: 1; height: 16px; }
+.skeleton-row .skeleton-avatar { width: 36px; height: 36px; border-radius: 50%; flex: none; }
+
+/* 페이드 자연스러운 전환을 위해 사용 */
+.fade-in {
+    animation: fadeIn var(--dur-base) var(--ease-out);
+}
+.fade-in-slow {
+    animation: fadeIn var(--dur-slow) var(--ease-out);
 }
 
 /* ============================================================
@@ -1048,7 +1187,7 @@ body {
     background: rgba(0,0,0,0.35); display: flex;
     align-items: center; justify-content: center;
     z-index: 1000; backdrop-filter: blur(3px);
-    animation: fadeIn 0.15s ease;
+    animation: fadeIn var(--dur-base) var(--ease-out);
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
@@ -1057,7 +1196,8 @@ body {
     width: 90vw; max-width: 1100px; max-height: 90vh;
     box-shadow: var(--shadow-md); overflow: hidden;
     display: flex; flex-direction: column;
-    animation: modalIn 0.15s ease;
+    animation: modalIn var(--dur-base) var(--ease-out);
+    min-width: 0;
 }
 .callroom-detail-modal {
     max-width: 800px;
@@ -1066,16 +1206,93 @@ body {
     display: flex; justify-content: space-between; align-items: center;
     padding: 14px 20px; background: var(--gray-light);
     border-bottom: 1px solid var(--gray);
+    flex-shrink: 0;
 }
 .result-detail-header h3 { font-size: 15px; font-weight: 800; }
 .result-detail-content {
-    flex: 1; overflow-y: auto; padding: 16px 20px;
+    flex: 1; overflow-y: auto; overflow-x: auto;
+    padding: 16px 20px;
     max-height: calc(90vh - 120px);
+    -webkit-overflow-scrolling: touch;
+    min-width: 0;
 }
 .result-detail-footer {
     display: flex; justify-content: flex-end; gap: 8px;
     padding: 12px 20px; border-top: 1px solid #f0f2f5;
     background: var(--gray-light);
+    flex-shrink: 0;
+}
+
+/* ============================================================
+   [모바일 최적화] 결과 상세 모달 — 풀스크린 시트 + sticky 컬럼
+   ============================================================ */
+@media (max-width: 768px) {
+    .result-detail-overlay {
+        align-items: stretch;
+        justify-content: stretch;
+        padding: 0;
+    }
+    .result-detail-modal {
+        width: 100vw;
+        max-width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        animation: modalSlideUp var(--dur-base) var(--ease-out);
+    }
+    .result-detail-header {
+        padding: 10px 14px;
+        position: sticky; top: 0; z-index: 10;
+    }
+    .result-detail-header h3 { font-size: 14px; }
+    .result-detail-content {
+        padding: 10px 12px;
+        max-height: none;
+    }
+    .result-detail-footer { padding: 8px 12px; }
+
+    /* 모달 안의 표 — 가로 스크롤 활성화 & 모바일에서 적절한 폰트 */
+    .result-detail-content table { font-size: 11px; min-width: max-content; }
+    .result-detail-content .matrix-scroll-wrap {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -12px; /* 모달 padding 만큼 음수 마진으로 가로 풀폭 활용 */
+        padding: 0 12px;
+    }
+    /* 표 좌측 핵심 컬럼(순위/BIB/선수명/소속)을 가로 스크롤 시 sticky 고정 */
+    .result-detail-content table.sticky-leading th:nth-child(-n+4),
+    .result-detail-content table.sticky-leading td:nth-child(-n+4) {
+        position: sticky;
+        background: var(--white);
+        z-index: 2;
+        box-shadow: 1px 0 0 0 var(--gray);
+    }
+    .result-detail-content table.sticky-leading th:nth-child(1),
+    .result-detail-content table.sticky-leading td:nth-child(1) { left: 0; min-width: 30px; }
+    .result-detail-content table.sticky-leading th:nth-child(2),
+    .result-detail-content table.sticky-leading td:nth-child(2) { left: 30px; min-width: 38px; }
+    .result-detail-content table.sticky-leading th:nth-child(3),
+    .result-detail-content table.sticky-leading td:nth-child(3) { left: 68px; min-width: 64px; }
+    .result-detail-content table.sticky-leading th:nth-child(4),
+    .result-detail-content table.sticky-leading td:nth-child(4) {
+        left: 132px; min-width: 56px;
+        box-shadow: 2px 0 4px -1px rgba(0,0,0,0.08);
+    }
+    .result-detail-content table.sticky-leading thead th { background: var(--gray-light); }
+
+    /* 신기록 배너 — 모바일에서 자연스러운 줄바꿈 */
+    .record-banner-mobile {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 4px !important;
+    }
+    .record-banner-mobile > .record-chips {
+        display: flex; flex-wrap: wrap; gap: 4px; width: 100%;
+    }
+}
+@keyframes modalSlideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
 }
 
 /* ============================================================
@@ -1505,6 +1722,8 @@ body {
 .height-toggle-btn.mark-\\- { background: #f0f0f0; border-color: #6b6b6b; color: #6b6b6b; font-weight: 800; }
 .height-toggle-btn.mark-empty { color: var(--text-muted); font-size: 18px; }
 .height-toggle-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.height-toggle-btn.is-busy { opacity: 0.55; cursor: progress; animation: hbusy 0.8s ease-in-out infinite; }
+@keyframes hbusy { 0%,100% { transform: scale(1); } 50% { transform: scale(0.92); } }
 .row-eliminated { opacity: 0.6; }
 .row-dns { opacity: 0.45; background: #f5f5f5; }
 .btn-bar-delete { display:inline-block; width:16px; height:16px; line-height:14px; font-size:12px; border:none; background:#ffebee; color:var(--danger); border-radius:50%; cursor:pointer; margin-top:2px; padding:0; }

@@ -6,7 +6,8 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '..', 'db', 'competition.db');
+// 테스트 격리: SQLITE_PATH 환경변수가 있으면 그 경로를 사용 (운영 DB 와 충돌 방지)
+const DB_PATH = process.env.SQLITE_PATH || path.join(__dirname, '..', 'db', 'competition.db');
 const SCHEMA_PATH = path.join(__dirname, '..', 'db', 'schema.sql');
 
 function initDatabase() {

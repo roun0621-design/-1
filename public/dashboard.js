@@ -5,8 +5,7 @@
  * Video modal integration on event matrix + comp header
  */
 
-// Helper: display bib_number safely (null/undefined → '—')
-function bib(val) { return val != null && val !== '' ? val : '—'; }
+// Helper: bib() is shared from common.js (loaded before dashboard.js)
 
 let allEvents = [];
 let currentGender = 'M';
@@ -178,6 +177,55 @@ function _ttFlattenDay(dayNum) {
     return all;
 }
 
+// 일차의 마지막 경기 시작시각(분)을 반환 (없으면 -1)
+function _ttLastEventMin(dayNum) {
+    const items = _ttFlattenDay(dayNum);
+    let last = -1;
+    for (const it of items) {
+        const m = _ttToMin(it.time);
+        if (m > last) last = m;
+    }
+    return last;
+}
+
+// 히어로 카드 전환 임계값(분): 마지막 경기 시작시각 + 이 분만큼 지나면 다음 일차로
+const _HERO_NEXT_DAY_OFFSET_MIN = 30;
+
+// 현재 시각 기준 화면에 보여줄 day 번호 결정
+// 규칙: 오늘이 N일차이고 (오늘 마지막 경기 시작시각 + 30분)이 지났으면 N+1일차로 전환.
+//       마지막 N일차 + 30분이 지나면 null (대회 종료) 반환.
+// 대회 시작 전이면 1일차(또는 가장 빠른 일차).
+function _ttGetTargetDay() {
+    const days = _timetableFull.days || {};
+    const dayKeys = Object.keys(days).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+    if (dayKeys.length === 0) return null;
+
+    const todayDay = _ttGetTodayDay();
+    // 대회 시작 전 (todayDay == null 또는 dayKeys[0]보다 작음)
+    if (todayDay == null || todayDay < dayKeys[0]) return dayKeys[0];
+
+    // 오늘이 대회 일차 범위 안에 있는 경우
+    if (days[todayDay]) {
+        const now = new Date();
+        const nowMin = now.getHours()*60 + now.getMinutes();
+        const lastMin = _ttLastEventMin(todayDay);
+        // 마지막 경기 시작 + 30분이 지나면 다음 일차로
+        if (lastMin >= 0 && nowMin >= lastMin + _HERO_NEXT_DAY_OFFSET_MIN) {
+            // 다음 일차 찾기
+            const nextDay = dayKeys.find(d => d > todayDay);
+            if (nextDay) return nextDay;
+            // 다음 일차 없음 → 대회 종료
+            return null;
+        }
+        return todayDay;
+    }
+
+    // 오늘이 대회 일차에 없는 경우 (예: 휴식일 또는 대회 끝난 후)
+    // 오늘보다 큰 일차가 남아있으면 그걸 보여주고, 없으면 종료
+    const futureDay = dayKeys.find(d => d >= todayDay);
+    return futureDay || null;
+}
+
 // 히어로 시간표 카드 갱신
 function renderHeroSchedule() {
     const card = document.getElementById('hero-schedule');
@@ -189,15 +237,22 @@ function renderHeroSchedule() {
         card.style.display = 'none';
         return;
     }
+
+    // 4시간 전환 규칙으로 보여줄 일차 결정 (null이면 대회 종료)
+    const targetDay = _ttGetTargetDay();
+    if (targetDay == null) {
+        // 모든 경기 종료 → 히어로 카드 숨김
+        card.style.display = 'none';
+        return;
+    }
     card.style.display = 'flex';
 
-    const todayDay = _ttGetTodayDay();
-    const targetDay = (todayDay && days[todayDay]) ? todayDay : dayKeys[0];
     const dayItems = _ttFlattenDay(targetDay);
 
     // 현재 시각 기준 진행중/다음 종목 찾기
     const now = new Date();
     const nowMin = now.getHours()*60 + now.getMinutes();
+    const todayDay = _ttGetTodayDay();
     const isToday = (todayDay === targetDay);
 
     let liveItem = null, nextItem = null;
@@ -213,6 +268,7 @@ function renderHeroSchedule() {
             }
         }
     }
+    // 다음 경기 못 찾았으면(혹은 다음 날로 전환된 경우) 해당 일차 첫 경기
     if (!nextItem && dayItems.length > 0) nextItem = dayItems[0];
 
     const totalCount = dayItems.length;
@@ -222,20 +278,23 @@ function renderHeroSchedule() {
 
     if (liveItem) {
         card.classList.add('live');
-        iconEl.textContent = '🔴';
+        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>';
         titleEl.innerHTML = `<span class="hero-live-dot"></span> LIVE 진행중 <span class="hero-day-chip">DAY ${targetDay}</span>`;
         const nextTxt = nextItem ? ` · 다음 <strong>${_esc(nextItem.event_name)}</strong> ${nextItem.time}` : '';
         subEl.innerHTML = `<strong>${_esc(liveItem.event_name)}</strong> ${_esc(liveItem.round||'')} · ${liveItem.time}${nextTxt}`;
     } else if (isToday && nextItem) {
         card.classList.remove('live');
-        iconEl.textContent = '📅';
+        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
         titleEl.innerHTML = `오늘의 시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
         subEl.innerHTML = `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`;
     } else {
         card.classList.remove('live');
-        iconEl.textContent = '📅';
+        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
         titleEl.innerHTML = `시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
-        subEl.innerHTML = `총 ${totalCount}경기 예정`;
+        const subTxt = nextItem
+            ? `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`
+            : `총 ${totalCount}경기 예정`;
+        subEl.innerHTML = subTxt;
     }
 }
 
@@ -265,8 +324,13 @@ function renderCompVideoButton() {
 
 function switchGender(g, btn) {
     currentGender = g;
-    document.querySelectorAll('.gender-tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    // 성별 탭 active 표시는 #gender-tabs 안의 버튼에만 적용 (division-tabs 가 .gender-tab-btn 클래스를
+    // 재사용하므로 전역 querySelectorAll 로 잡으면 division 탭의 active 도 같이 풀려버림)
+    document.querySelectorAll('#gender-tabs .gender-tab-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 성별 변경 시 division 탭 목록도 새 성별에 맞게 다시 렌더링
+    //    (남자 탭에서 여자/혼성 division 이 보이던 버그 수정)
+    if (typeof renderDivisionTabs === 'function') renderDivisionTabs();
     renderMatrix();
 }
 
@@ -322,12 +386,24 @@ function renderDivisionTabs() {
         const genderTabs = document.getElementById('gender-tabs');
         if (genderTabs) genderTabs.after(divBar);
     }
-    const existingDivs = [...new Set(allEvents.filter(e => !e.parent_event_id).map(e => e.division).filter(Boolean))];
+    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 현재 성별 탭(M/F/X)에 해당하는 events 만 division 목록 추출
+    //    이전엔 모든 events 의 division 합집합을 보여줘서 "남자" 탭에서도 "선수권(여)" 등이 표시됨.
+    const existingDivs = [...new Set(
+        allEvents
+            .filter(e => !e.parent_event_id)
+            .filter(e => e.gender === currentGender)
+            .map(e => e.division)
+            .filter(Boolean)
+    )];
     if (existingDivs.length === 0) { divBar.style.display = 'none'; return; }
     divBar.style.display = 'flex';
     // 일반화된 정렬: 사전 정의 순서 → 연령군 점수 → 성별 점수
     const orderedDivs = existingDivs.slice().sort((a, b) => _divCompareKey(a) - _divCompareKey(b) || a.localeCompare(b));
     const all = ['전체', ...orderedDivs];
+    // 현재 활성 division 이 새 성별 탭의 목록에 없으면 '전체'로 폴백
+    if (_currentDivision !== '전체' && !orderedDivs.includes(_currentDivision)) {
+        _currentDivision = '전체';
+    }
     divBar.innerHTML = all.map(d => `<button class="gender-tab-btn${d===_currentDivision?' active':''}" style="flex:none;padding:6px 14px;font-size:12px;font-weight:700;color:#555;border-bottom:2px solid transparent;${d===_currentDivision?'color:#b79f58;border-bottom-color:#b79f58;background:#f8f4ea;':''}" onclick="switchDivision('${d.replace(/'/g,"\\'")}',this)">${d}</button>`).join('');
 }
 
@@ -381,7 +457,7 @@ function renderMatrix() {
         '높이뛰기','장대높이뛰기',
         '멀리뛰기','세단뛰기',
         '포환던지기','원반던지기','해머던지기','창던지기',
-        '7종경기','10종경기',
+        '5종경기','7종경기','10종경기',
         '4x100mR','4x400mR','4x400mR(혼성)','4x400mR(믹스)','4x800mR','4x1500mR'
     ];
     // 종목명 정규화 (공백·콤마 제거, ×→x, Mixed→혼성, 허들/경보/장애물 표기 통일)
@@ -565,7 +641,8 @@ function renderViewerBtn(evt) {
     const rc = _roundColors[evt.round_type] || { color: '#555', bg: '#f5f5f5', border: '#ccc' };
 
     if (evt.round_status === 'completed') {
-        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인" style="background:${rc.bg};color:${rc.color};border:1px solid ${rc.border};cursor:pointer;font-size:10px;padding:3px 6px;font-weight:700;">완료</span>`;
+        // 완료 라운드 — 클릭 시 결과 화면으로 이동하므로 라벨도 "결과"로 표기 (일관성)
+        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 결과</span>`;
     }
 
     // 소집 완료 또는 in_progress → LIVE (경기 진행 중)
@@ -579,9 +656,10 @@ function renderViewerBtn(evt) {
     }
 
     // 히트가 있고 아직 소집 전 → 명단 버튼
+    // 명단 — 연한(흰 배경 + 점선 테두리 + 일반 굵기) 스타일로 "준비만 됨, 기록 미입력" 시각 표현
     if (hasHeats) {
         const eName = (evt.name || '').replace(/'/g, "\\'");
-        return `<span class="round-btn" style="background:${rc.bg};color:${rc.color};border:1px solid ${rc.border};cursor:pointer;font-size:10px;padding:3px 6px;white-space:nowrap;" onclick="openRosterModal(${evt.id},'${eName}')" title="조편성 명단">명단</span>`;
+        return `<span class="round-btn" style="background:#fff;color:${rc.color};border:1px dashed ${rc.color};cursor:pointer;font-size:10px;padding:3px 6px;white-space:nowrap;font-weight:500;" onclick="openRosterModal(${evt.id},'${eName}')" title="조편성 명단 (기록 미입력)">명단</span>`;
     }
 
     // created — 대기
@@ -697,7 +775,16 @@ async function openDisplayRoster(eventId, eventName, division) {
 async function openResult(eventId) {
     const overlay = document.getElementById('result-overlay');
     const panel = document.getElementById('result-panel');
-    panel.innerHTML = '<div class="result-panel-header"><h3>결과 불러오는 중...</h3><button class="result-panel-close" onclick="closeResult()">&times;</button></div><div class="result-panel-body" style="text-align:center;padding:40px;">로딩 중...</div>';
+    panel.innerHTML = `<div class="result-panel-header"><h3>결과 불러오는 중…</h3><button class="result-panel-close" onclick="closeResult()">&times;</button></div>
+        <div class="result-panel-body" style="padding:20px;">
+            <div class="skeleton-block" style="box-shadow:none;padding:0;">
+                <div class="skeleton skeleton-title"></div>
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text" style="width:90%;"></div>
+                <div class="skeleton skeleton-text" style="width:75%;"></div>
+                <div class="skeleton skeleton-text" style="width:85%;"></div>
+            </div>
+        </div>`;
     overlay.classList.add('show');
     if (window.pushModalState) pushModalState(() => closeResult());
 
@@ -817,7 +904,15 @@ async function openLiveResult(eventId) {
     _liveEventId = eventId;
     const overlay = document.getElementById('result-overlay');
     const panel = document.getElementById('result-panel');
-    panel.innerHTML = '<div class="result-panel-header"><h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>로딩 중...</h3><button class="result-panel-close" onclick="closeLiveResult()">&times;</button></div><div class="result-panel-body" style="text-align:center;padding:40px;">실시간 기록 불러오는 중...</div>';
+    panel.innerHTML = `<div class="result-panel-header"><h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>로딩 중…</h3><button class="result-panel-close" onclick="closeLiveResult()">&times;</button></div>
+        <div class="result-panel-body" style="padding:20px;">
+            <div class="skeleton-block" style="box-shadow:none;padding:0;">
+                <div class="skeleton skeleton-title"></div>
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text" style="width:90%;"></div>
+                <div class="skeleton skeleton-text" style="width:75%;"></div>
+            </div>
+        </div>`;
     overlay.classList.add('show');
     if (window.pushModalState) pushModalState(() => closeLiveResult());
     await refreshLiveResult();
@@ -839,8 +934,26 @@ async function refreshLiveResult() {
         const _prevVideoEmbed = document.getElementById('modal-video-embed');
         const _videoWasClosed = _prevVideoEmbed && _prevVideoEmbed.style.display === 'none';
 
+        // ─── 신기록 비교용: NR/DR/CR 미리 로드 ─────────────────────
+        let liveRecords = null, liveRecDir = null;
+        try {
+            const normName = (typeof normalizeEventNameClient === 'function') ? normalizeEventNameClient(evt.name) : evt.name;
+            const compInfo = await API.getCompetitionInfo(getCompetitionId()).catch(() => ({}));
+            liveRecords = await API.lookupEventRecords(
+                normName, evt.gender,
+                evt.division || null,
+                compInfo?.series_id || null
+            ).catch(() => null);
+            liveRecDir = (typeof recordDirectionForCategoryClient === 'function')
+                ? recordDirectionForCategoryClient(evt.category) : null;
+        } catch(e) {}
+        window._liveRecords = liveRecords;
+        window._liveRecDir = liveRecDir;
+
         let bodyHtml = '';
         bodyHtml += buildEmbedVideoHTML(videoUrl);
+        // 기존 기록 배너 (NR/DR/CR 미리 보기)
+        bodyHtml += _buildRecordsBannerHTML(liveRecords);
 
         if (evt.category === 'track' || evt.category === 'relay' || evt.category === 'road') {
             let relayMembers = null;
@@ -885,6 +998,38 @@ function closeLiveResult() {
     if (window.popModalState) popModalState();
 }
 
+// ─── 신기록 배너 / 배지 헬퍼 (results.js 와 동일 디자인 톤) ─────
+function _buildRecordsBannerHTML(records) {
+    if (!records) return '';
+    const chip = (label, color, rec) => rec
+        ? `<span style="display:inline-flex;align-items:center;gap:4px;background:${color}15;border:1px solid ${color}55;color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;font-family:var(--font-mono);">
+               <strong>${label}</strong> ${(rec.record_value||'').toString()}
+               ${rec.holder_name ? `<span style="color:var(--text-muted);font-weight:400;">${rec.holder_name}</span>` : ''}
+               ${rec.record_year ? `<span style="color:var(--text-muted);font-weight:400;">${rec.record_year}</span>` : ''}
+           </span>` : '';
+    const parts = [
+        chip('NR', '#c0392b', records.national),
+        chip('DR', '#2980b9', records.division),
+        chip('CR', '#27ae60', records.competition)
+    ].filter(Boolean);
+    if (parts.length === 0) return '';
+    return `<div class="record-banner-mobile" style="margin:8px 0 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;padding:8px 12px;background:#fffbea;border:1px solid #f1d68a;border-radius:8px;">
+        <span style="color:var(--text-muted);font-weight:600;white-space:nowrap;">기존 기록</span>
+        <span class="record-chips" style="display:inline-flex;flex-wrap:wrap;gap:4px;">${parts.join('')}</span>
+    </div>`;
+}
+function _buildRecordBadgesHTML(newValNum) {
+    if (!window._liveRecords || !window._liveRecDir) return '';
+    if (newValNum == null || !isFinite(newValNum)) return '';
+    if (typeof detectBrokenRecordsClient !== 'function') return '';
+    const broken = detectBrokenRecordsClient(newValNum, window._liveRecords, window._liveRecDir);
+    if (!broken || broken.length === 0) return '';
+    return broken.map(lbl => {
+        const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
+        return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
+    }).join('');
+}
+
 function renderLiveTrackResults(data, relayMembers) {
     const isRelay = data.event?.category === 'relay';
     let html = '';
@@ -925,6 +1070,9 @@ function renderLiveTrackResults(data, relayMembers) {
             <thead><tr><th>순위</th><th>${smallNumLabel}</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th><th>기록</th><th>비고</th></tr></thead>
             <tbody>${rows.map(r => {
                 const wMark = (_isWindAided && !r.status_code && r.time_seconds != null) ? '<span class="wind-aided-mark">w</span>' : '';
+                // 신기록 배지 (풍속 초과 시 미표시 — 참고기록)
+                const recBadges = (!_isWindAided && !r.status_code && r.time_seconds != null)
+                    ? _buildRecordBadgesHTML(r.time_seconds) : '';
                 let memberHtml = '';
                 if (isRelay && relayMembers) {
                     const members = relayMembers.filter(m => m.event_entry_id === r.event_entry_id);
@@ -936,11 +1084,14 @@ function renderLiveTrackResults(data, relayMembers) {
                         </td></tr>`;
                     }
                 }
+                // 비고: 풍속 초과 → 참고기록, 그 외엔 remark
+                const remarkText = _isWindAided ? '참고기록' : (r.remark || '');
+                const remarkStyle = _isWindAided ? 'color:var(--accent);font-weight:600;' : '';
                 return `<tr style="${r.time_seconds != null ? 'background:#f0fff4;' : ''}">
                 <td>${r.rank}</td><td>${r.lane_number || '—'}</td><td><strong>${bib(r.bib_number)}</strong></td>
                 <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>
-                <td style="font-family:monospace;font-weight:600;">${r.status_code ? `<span class="sc-badge">${r.status_code}</span>` : (r.time_seconds != null ? formatTime(r.time_seconds) + wMark : '<span style="color:var(--text-muted);">—</span>')}</td>
-                <td style="font-size:11px;color:#666;">${r.remark || ''}</td>
+                <td style="font-family:monospace;font-weight:600;">${r.status_code ? `<span class="sc-badge">${r.status_code}</span>` : (r.time_seconds != null ? formatTime(r.time_seconds) + wMark + recBadges : '<span style="color:var(--text-muted);">—</span>')}</td>
+                <td style="font-size:11px;color:#666;${remarkStyle}">${remarkText}</td>
             </tr>${memberHtml}`;
             }).join('')}</tbody></table>`;
     });
@@ -1031,7 +1182,9 @@ function renderLiveFieldDistResults(data) {
                     const bestWindDisp = (r.bestWind != null) ? formatWind(r.bestWind) : '';
                     const _bestWindAided = needsWind && r.bestWind != null && parseFloat(r.bestWind) > 2.0 && r.best != null;
                     const bestWMark = _bestWindAided ? '<span class="wind-aided-mark">w</span>' : '';
-                    const bestDisp = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + bestWMark : '—');
+                    // 신기록 배지 (풍속 초과 시 미표시)
+                    const _recBadges = (!_bestWindAided && !r.status_code && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
+                    const bestDisp = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + bestWMark + _recBadges : '—');
                     const rankDisp = r.status_code ? '' : r.rank;
                     let remarkText = '';
                     if (r.status_code) remarkText = r.status_code;
@@ -1060,7 +1213,8 @@ function renderLiveFieldDistResults(data) {
                         const isPass = hasVal && v < 0;
                         distCells += `<td class="${attCls}" style="font-family:monospace;">${hasVal ? (isFoul ? '<span class="foul-mark">X</span>' : (isPass ? '<span class="pass-mark">-</span>' : formatHeight(v))) : ''}</td>`;
                     }
-                    const bestDisp2 = r.status_code ? '' : (r.best != null ? formatHeight(r.best) : '—');
+                    const _recBadges2 = (!r.status_code && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
+                    const bestDisp2 = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + _recBadges2 : '—');
                     const rankDisp2 = r.status_code ? '' : r.rank;
                     const remarkText2 = r.status_code || '';
                     const remarkStyle2 = r.status_code ? 'color:var(--danger);font-weight:600;' : '';
@@ -1125,7 +1279,8 @@ function renderLiveFieldHeightResults(data) {
                 let c = '';
                 hts.forEach(h2 => { const d = r.hd[h2] || {}; let m = ''; for (let i = 1; i <= 3; i++) { if (d[i]) { const mark = d[i] === 'PASS' ? '-' : d[i]; const cls = d[i] === 'O' ? 'color:var(--green)' : d[i] === 'X' ? 'color:var(--danger)' : 'color:var(--text-muted)'; m += `<span style="${cls};font-weight:700;">${mark}</span>`; } } c += `<td style="font-size:11px;">${m}</td>`; });
                 const _rkDisp = r.isNM ? '' : r.rank;
-                const _bestDisp = r.best != null ? formatHeight(r.best) : '';
+                const _hRecBadges = (!r.isNM && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
+                const _bestDisp = r.best != null ? (formatHeight(r.best) + _hRecBadges) : '';
                 const _rmk = r.isNM ? 'NM' : '';
                 const _rmkSt = r.isNM ? 'color:var(--danger);font-weight:600;' : '';
                 return `<tr style="${r.best != null ? 'background:#f0fff4;' : ''}"><td>${_rkDisp}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>${c}<td style="font-weight:700;">${_bestDisp}</td><td style="font-size:11px;${_rmkSt}">${_rmk}</td></tr>`;
@@ -1144,7 +1299,13 @@ function renderLiveCombinedResults(data) {
 
     // We need combined scores — make an inline fetch
     let html = `<div id="live-combined-content" style="padding:8px;">
-        <div style="text-align:center;padding:20px;color:var(--text-muted);"><div class="loading-spinner"></div> 혼성 경기 결과 불러오는 중...</div>
+        <div class="skeleton-block" style="margin:8px;">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-text"></div>
+            <div class="skeleton skeleton-text" style="width:85%;"></div>
+            <div class="skeleton skeleton-text" style="width:70%;"></div>
+            <div style="text-align:center;padding:8px 0 0;color:var(--text-muted);font-size:11px;">혼성 경기 결과 불러오는 중…</div>
+        </div>
     </div>`;
 
     // Async load combined data after rendering container
@@ -1165,7 +1326,8 @@ function renderLiveCombinedResults(data) {
                 subDefs.forEach(se => {
                     const sc = scores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
                     const p = sc ? (sc.wa_points || 0) : 0;
-                    pts[se.order] = { points: p, raw: sc ? sc.raw_record : null };
+                    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
+                    pts[se.order] = { points: p, raw: sc ? sc.raw_record : null, status_code: sc ? (sc.status_code || '') : '' };
                     total += p;
                 });
                 return { ...e, pts, total };
@@ -1197,6 +1359,13 @@ function renderLiveCombinedResults(data) {
                                 const p = r.pts[se.order];
                                 if (!p || p.raw == null)
                                     return `<td style="color:#ccc;font-size:10px;">—</td>`;
+                                // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 이 있으면 우선 표시.
+                                //     'X'/'PASS'/'-' 등 시도 마크 는 status_code 가 아닌 일부 레거시 데이터 이므로 화이트리스트만 채택.
+                                if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) {
+                                    const _sc = p.status_code;
+                                    const _scColor = (_sc === 'DQ') ? '#a02050' : 'var(--danger)';
+                                    return `<td style="font-size:10px;color:${_scColor};font-weight:700;"><div>${_sc}</div><div style="color:var(--text-muted);font-size:9px;font-weight:400;">${p.points}pt</div></td>`;
+                                }
                                 if (p.raw === 0 && p.points === 0)
                                     return `<td style="font-size:10px;color:var(--danger);font-weight:700;">NM</td>`;
                                 if (p.raw <= 0)
@@ -1213,7 +1382,7 @@ function renderLiveCombinedResults(data) {
                         }).join('')}</tbody>
                     </table>
                 </div>
-                <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">실시간 WA 점수 합산 | ${evt.gender === 'M' ? '10종경기' : '7종경기'}</p>`;
+                <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">실시간 WA 점수 합산 | ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')}</p>`;
         } catch (e) {
             const container = document.getElementById('live-combined-content');
             if (container) container.innerHTML = `<p style="color:var(--danger);">혼성 경기 데이터 로드 실패</p>`;
@@ -1227,7 +1396,13 @@ function renderLiveCombinedResults(data) {
 function renderCombinedResults(data) {
     const evt = data.event;
     return `<div id="combined-result-content" style="padding:8px;">
-        <div style="text-align:center;padding:20px;color:var(--text-muted);"><div class="loading-spinner"></div> ${evt.gender === 'M' ? '10종경기' : '7종경기'} 결과 불러오는 중...</div>
+        <div class="skeleton-block" style="margin:8px;">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-text"></div>
+            <div class="skeleton skeleton-text" style="width:85%;"></div>
+            <div class="skeleton skeleton-text" style="width:70%;"></div>
+            <div style="text-align:center;padding:8px 0 0;color:var(--text-muted);font-size:11px;">${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')} 결과 불러오는 중…</div>
+        </div>
     </div>`;
 }
 
@@ -1251,7 +1426,8 @@ async function _loadCombinedResultsAsync(evt) {
             subDefs.forEach(se => {
                 const sc = scores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
                 const p = sc ? (sc.wa_points || 0) : 0;
-                pts[se.order] = { points: p, raw: sc ? sc.raw_record : null };
+                // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
+                pts[se.order] = { points: p, raw: sc ? sc.raw_record : null, status_code: sc ? (sc.status_code || '') : '' };
                 total += p;
             });
             return { ...e, pts, total };
@@ -1276,8 +1452,8 @@ async function _loadCombinedResultsAsync(evt) {
         }).join('');
 
         container.innerHTML = `
-            <div class="matrix-scroll-wrap" style="overflow-x:auto;">
-                <table class="data-table" style="font-size:11px;">
+            <div class="matrix-scroll-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+                <table class="data-table sticky-leading" style="font-size:11px;">
                     <thead>
                     <tr>
                         <th colspan="4" style="border-bottom:none;"></th>
@@ -1296,6 +1472,12 @@ async function _loadCombinedResultsAsync(evt) {
                             const p = r.pts[se.order];
                             if (!p || p.raw == null)
                                 return `<td style="color:#ccc;font-size:10px;cursor:pointer;" onclick="_cResultShowSub(${se.order})">—</td>`;
+                            // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code 는 화이트리스트(DNS/DNF/DQ/NM)만 인정.
+                            if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) {
+                                const _sc = p.status_code;
+                                const _scColor = (_sc === 'DQ') ? '#a02050' : 'var(--danger)';
+                                return `<td style="font-size:10px;cursor:pointer;color:${_scColor};font-weight:700;" onclick="_cResultShowSub(${se.order})"><div>${_sc}</div><div style="color:var(--text-muted);font-size:9px;font-weight:400;">${p.points}pt</div></td>`;
+                            }
                             if (p.raw === 0 && p.points === 0)
                                 return `<td style="font-size:10px;cursor:pointer;color:var(--danger);font-weight:700;" onclick="_cResultShowSub(${se.order})">NM</td>`;
                             if (p.raw <= 0)
@@ -1313,7 +1495,7 @@ async function _loadCombinedResultsAsync(evt) {
                     }).join('')}</tbody>
                 </table>
             </div>
-            <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">☆ ${evt.gender === 'M' ? '10종경기' : '7종경기'} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
+            <p style="margin-top:6px;font-size:10px;color:var(--text-muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
             <div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border);">
                 <div style="font-weight:700;font-size:13px;margin-bottom:6px;">종목별 세부기록</div>
                 <div style="margin-bottom:4px;">
@@ -1347,7 +1529,11 @@ async function _cResultShowSub(order) {
         b.style.fontWeight = +b.dataset.order === order ? '800' : '';
     });
 
-    area.innerHTML = '<div style="text-align:center;padding:10px;color:var(--text-muted);"><div class="loading-spinner"></div></div>';
+    area.innerHTML = `<div class="skeleton-block" style="margin:0;">
+        <div class="skeleton skeleton-text"></div>
+        <div class="skeleton skeleton-text" style="width:90%;"></div>
+        <div class="skeleton skeleton-text" style="width:75%;"></div>
+    </div>`;
 
     try {
         // Find DB sub-event
@@ -1850,7 +2036,7 @@ function openPacingPopup(eventName) {
     }
 
     panel.innerHTML = `<div class="result-panel-header">
-        <h3>⌖ ${eventName} W/L Target</h3>
+        <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> ${eventName} W/L Target</h3>
         <button class="result-panel-close" onclick="closePacingPopup()">&times;</button>
     </div><div class="result-panel-body">${html}</div>`;
     overlay.classList.add('show');
@@ -1939,13 +2125,16 @@ async function loadRosterModalData(eventId) {
             const cntPending = entries.length - cntChecked - cntNoShow;
             const allChecked = cntChecked === entries.length && entries.length > 0;
 
+            // === 그룹(A/B) 분리: 5000m/10000m 등 장거리 그룹 결승은 같은 조 안에서 A/B 따로 출발 ===
+            const hasSubGroup = entries.some(e => e.sub_group);
+
             html += `<div style="border-bottom:1.5px solid #e8e8e8;">`;
             html += `<div style="padding:8px 14px;background:#fafafa;display:flex;align-items:center;justify-content:space-between;">`;
             html += `<span style="font-weight:700;font-size:13px;color:#333;">${hLabel}</span>`;
             // 소집 상태 뱃지
             if (showCallroomStatus) {
                 if (allChecked) {
-                    html += `<span style="font-size:10px;background:#b79f58;color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;">소집 완료 ✓</span>`;
+                    html += `<span style="font-size:10px;background:#b79f58;color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;">소집 완료 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg></span>`;
                 } else if (cntChecked > 0 || cntNoShow > 0) {
                     html += `<span style="font-size:10px;color:#555;">`;
                     html += `<span style="color:#b79f58;font-weight:700;">출석 ${cntChecked}</span>`;
@@ -1963,18 +2152,45 @@ async function loadRosterModalData(eventId) {
             html += `<thead><tr style="background:#f5f5f5;border-bottom:1px solid #e0e0e0;">`;
             html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">${isField ? '순서' : '레인'}</th>`;
             html += `<th style="padding:5px 8px;text-align:center;width:50px;font-weight:600;color:#777;">배번</th>`;
+            if (hasSubGroup) html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">그룹</th>`;
             html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">이름</th>`;
             html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">소속</th>`;
             if (showCallroomStatus) html += `<th style="padding:5px 8px;text-align:center;width:48px;font-weight:600;color:#777;">상태</th>`;
             html += `</tr></thead><tbody>`;
 
-            const sorted = [...entries].sort((a, b) => (a.lane_number || 999) - (b.lane_number || 999));
+            // 정렬: 그룹 있으면 A → B → null, 같은 그룹 안에선 레인 순
+            const sorted = [...entries].sort((a, b) => {
+                if (hasSubGroup) {
+                    const ga = a.sub_group || 'Z';
+                    const gb = b.sub_group || 'Z';
+                    if (ga !== gb) return ga.localeCompare(gb);
+                }
+                return (a.lane_number || 999) - (b.lane_number || 999);
+            });
+
+            // 그룹 경계 표시: 그룹이 바뀔 때마다 얇은 구분선
+            let prevGroup = null;
             for (const e of sorted) {
+                const curGroup = hasSubGroup ? (e.sub_group || '') : null;
+                // 그룹 경계 행 (A → B 사이)
+                if (hasSubGroup && prevGroup !== null && curGroup !== prevGroup) {
+                    html += `<tr><td colspan="${4 + (showCallroomStatus?1:0) + (hasSubGroup?1:0)}" style="padding:3px 8px;background:#fafafa;border-top:1.5px dashed #d0c89a;font-size:10px;color:#8b6914;text-align:left;font-weight:700;">${curGroup ? curGroup + ' 그룹' : '미지정'}</td></tr>`;
+                } else if (hasSubGroup && prevGroup === null) {
+                    // 첫 그룹도 라벨 표시
+                    html += `<tr><td colspan="${4 + (showCallroomStatus?1:0) + (hasSubGroup?1:0)}" style="padding:3px 8px;background:#fafafa;border-top:1.5px solid #d0c89a;font-size:10px;color:#8b6914;text-align:left;font-weight:700;">${curGroup ? curGroup + ' 그룹' : '미지정'}</td></tr>`;
+                }
+                prevGroup = curGroup;
+
                 // 상태별 행 배경색
                 const rowBg = e.status === 'no_show' ? 'background:#fff5f5;' : e.status === 'checked_in' ? 'background:#f1f8e9;' : '';
                 html += `<tr style="border-bottom:1px solid #f0f0f0;${rowBg}">`;
                 html += `<td style="padding:5px 8px;text-align:center;color:#555;">${e.lane_number || '-'}</td>`;
                 html += `<td style="padding:5px 8px;text-align:center;font-weight:700;">${e.bib_number || '-'}</td>`;
+                if (hasSubGroup) {
+                    const g = e.sub_group;
+                    const gColor = g === 'A' ? '#555' : g === 'B' ? '#8b1a2a' : '#999';
+                    html += `<td style="padding:5px 8px;text-align:center;font-weight:800;color:${gColor};">${g || '—'}</td>`;
+                }
                 html += `<td style="padding:5px 8px;text-align:left;font-weight:600;">${e.name}</td>`;
                 html += `<td style="padding:5px 8px;text-align:left;color:#666;">${e.team || ''}</td>`;
                 if (showCallroomStatus) {

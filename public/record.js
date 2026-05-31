@@ -5,11 +5,107 @@
  *     heat count for semi/final, manual heat edit, Q/q badges everywhere
  */
 
-// Helper: display bib_number safely (null/undefined → '—')
-function bib(val) { return val != null && val !== '' ? val : '—'; }
+// Helper: bib() is shared from common.js (loaded before record.js)
 
 // Helper: heat display label (custom name or "Heat N")
 function heatLabel(h) { return h.heat_name || ('Heat ' + h.heat_number); }
+
+// ─── 오프라인 응답 감지 헬퍼 ─────────────────────────────────
+// SW 가 오프라인 큐잉 응답을 줄 때 { queued: true, offline: true } 가 들어있음.
+// 옵티미스틱 업데이트 후 서버 fetch 가 의미없으므로 (캐시는 stale) 이 경우 skip.
+function isOfflineResp(r) { return r && (r.queued === true || r.offline === true); }
+
+// 옵티미스틱: state.results 배열에 임시 result 객체를 삽입/갱신.
+// 서버 응답을 못 받아도 화면이 즉시 입력값을 반영하도록.
+function _optimisticUpsertResult(eid, attempt, fields) {
+    const idx = state.results.findIndex(r =>
+        r.event_entry_id === eid &&
+        (attempt == null ? r.attempt_number == null : r.attempt_number === attempt)
+    );
+    const base = idx >= 0 ? { ...state.results[idx] } : {
+        event_entry_id: eid,
+        attempt_number: attempt ?? null,
+        heat_id: state.heatId,
+        distance_meters: null, time_seconds: null,
+        status_code: '', wind: null, remark: ''
+    };
+    Object.assign(base, fields, { _optimistic: true, updated_at: new Date().toISOString() });
+    if (idx >= 0) state.results[idx] = base;
+    else state.results.push(base);
+}
+
+// 옵티미스틱 (콤바인드 서브): _cSubFieldData.results 갱신
+function _cSubOptimisticUpsert(eid, attempt, fields) {
+    if (typeof _cSubFieldData === 'undefined' || !_cSubFieldData) return;
+    if (!Array.isArray(_cSubFieldData.results)) _cSubFieldData.results = [];
+    const idx = _cSubFieldData.results.findIndex(r =>
+        r.event_entry_id === eid &&
+        (attempt == null ? r.attempt_number == null : r.attempt_number === attempt)
+    );
+    const base = idx >= 0 ? { ..._cSubFieldData.results[idx] } : {
+        event_entry_id: eid,
+        attempt_number: attempt ?? null,
+        heat_id: _cSubFieldData.heatId,
+        distance_meters: null, time_seconds: null,
+        status_code: '', wind: null, remark: ''
+    };
+    Object.assign(base, fields, { _optimistic: true, updated_at: new Date().toISOString() });
+    if (idx >= 0) _cSubFieldData.results[idx] = base;
+    else _cSubFieldData.results.push(base);
+}
+
+// ============================================================
+// 장대높이뛰기 / 높이뛰기 (field_height) — 단순 모델 (2026-05 리빌드)
+// ============================================================
+// 설계 원칙:
+//   1. 단일 진실 공급원(SSOT): 서버 응답이 도착할 때까지 state 를 건드리지 않는다.
+//      옵티미스틱 머지는 race 의 근원이므로 모두 제거.
+//   2. 클릭 시: 즉시 버튼을 disabled + busy 표시 → 서버 호출 → 응답으로 통째 reload → 다시 렌더.
+//   3. 셀별 직렬화: 같은 셀에 대해 빠른 연속 클릭이 발생해도 큐로 순서 보장.
+//   4. WA Rule 30:
+//        시도 마크 cycle:  empty → X → O → '-' (pass) → empty
+//        3 X 이면 탈락,  O 이후 같은 높이의 남은 시도는 자동 건너뜀.
+//        모든 높이를 통과하지 못해 최고기록 없음 → NM.
+//   5. 호환성: 다른 곳에서 호출되던 옵티미스틱/플러시 헬퍼는 빈 stub 로 유지하여 깨지지 않게.
+
+// ─── 셀별 클릭 직렬화 락 ───────────────────────────────────────────────
+//     같은 셀(entry+bar+attempt) 에 대해서는 이전 요청이 끝나기 전까지 다음 클릭을 큐잉.
+//     렌더에서 진행 중인 버튼을 disabled 로 표시하므로 사실상 동시 클릭이 잘 들어오지 않지만,
+//     이중 클릭/터치 더블탭에 대한 안전망.
+const _heightCellLocks = new Map();  // cellKey → Promise(현재 진행 중 작업)
+function _heightCellKey(eid, barHeight, attemptNumber) {
+    return `${eid}|${barHeight}|${attemptNumber}`;
+}
+function _heightCellRunSerial(cellKey, op) {
+    const prev = _heightCellLocks.get(cellKey) || Promise.resolve();
+    const next = prev.catch(() => {}).then(() => op());
+    _heightCellLocks.set(cellKey, next);
+    next.finally(() => {
+        if (_heightCellLocks.get(cellKey) === next) _heightCellLocks.delete(cellKey);
+    });
+    return next;
+}
+
+// 진행 중인 클릭 추적 — 렌더에서 spinner / disabled 표시에 사용.
+//   key = cellKey, value = true (진행 중)
+const _heightCellBusy = new Set();
+function _heightCellMarkBusy(cellKey, busy) {
+    if (busy) _heightCellBusy.add(cellKey);
+    else _heightCellBusy.delete(cellKey);
+}
+function _heightCellIsBusy(cellKey) { return _heightCellBusy.has(cellKey); }
+
+// 다음 마크 계산 (WA Rule 30 cycle).
+//   empty → X → O → '-' (pass) → empty
+function _heightNextMark(currentMark) {
+    const cycle = { '': 'X', 'X': 'O', 'O': '-', '-': '', 'PASS': '' };
+    return currentMark in cycle ? cycle[currentMark] : 'X';
+}
+
+// ─── 호환성 stub (옵티미스틱 헬퍼는 더 이상 사용하지 않지만 호출 흔적이 남아있으므로 no-op 유지)
+function _cSubOptimisticHeight() { /* deprecated — no-op (height 는 서버 응답으로만 갱신) */ }
+function _optimisticUpsertHeightAttempt() { /* deprecated — no-op */ }
+async function waitForOptimisticHeightFlush() { return true; /* deprecated — 옵티미스틱 없으므로 항상 통과 */ }
 
 // ============================================================
 // State
@@ -32,6 +128,20 @@ const state = {
 document.addEventListener('DOMContentLoaded', async () => {
     if (!(await requireCompetition())) return;
     renderPageNav('record');
+    // [정책] 종료된 대회 + 운영진(operation) → 진입 차단, dashboard 로 리다이렉트
+    if (typeof guardEndedCompForOperation === 'function') await guardEndedCompForOperation('record');
+
+    // ─── 오프라인 동기화 완료 시 현재 화면 데이터 다시 fetch (옵티미스틱 값을 서버 값으로 reconcile)
+    window.onSyncComplete = async function() {
+        try {
+            if (state.selectedEvent) {
+                const cat = state.selectedEvent.category;
+                if (cat === 'track' || cat === 'relay' || cat === 'road') await loadTrackHeatData();
+                else if (cat === 'field_distance') await loadFieldDistanceData();
+                else if (cat === 'field_height') await loadFieldHeightData();
+            }
+        } catch(e) { console.warn('[sync] reload after sync failed:', e); }
+    };
 
     // Check if competition has ended and user is not admin - show lock banner
     let _compLocked = false;
@@ -44,7 +154,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 _compLocked = true;
                 const lockBanner = document.createElement('div');
                 lockBanner.style.cssText = 'background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 20px;margin-bottom:16px;display:flex;align-items:center;gap:10px;font-size:13px;color:#856404;';
-                lockBanner.innerHTML = '<span style="font-size:18px;">🔒</span> <strong>대회가 종료되었습니다.</strong> 기록 수정은 관리자 권한으로만 가능합니다.';
+                lockBanner.innerHTML = '<span style="font-size:18px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> <strong>대회가 종료되었습니다.</strong> 기록 수정은 관리자 권한으로만 가능합니다.';
                 document.querySelector('.main-content')?.insertBefore(lockBanner, document.querySelector('.main-content')?.children[1]);
             }
         }
@@ -102,8 +212,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     onSSE('height_update', async (data) => {
         if (state.heatId && state.selectedEvent && state.selectedEvent.category === 'field_height') {
-            state.heightAttempts = await API.getHeightAttempts(state.heatId);
-            renderHeightContent();
+            // ─── 옵티미스틱 우선 머지 (race 방지):
+            //     SSE 도착 시 통째 교체하면 직전에 클릭한 옵티미스틱 'O' 가 서버 응답에 아직 반영 안 된
+            //     이전 'X' 로 되돌아가는 race 가 발생. → 같은 키여도 옵티미스틱이 우선.
+            try {
+                const fresh = await API.getHeightAttempts(state.heatId);
+                const optimisticPending = (state.heightAttempts || []).filter(a => a && a._optimistic);
+                const key = a => `${a.event_entry_id}|${a.bar_height}|${a.attempt_number}`;
+                const freshMap = new Map(fresh.map(a => [key(a), a]));
+                for (const opt of optimisticPending) {
+                    freshMap.set(key(opt), opt); // 옵티미스틱 우선
+                }
+                state.heightAttempts = Array.from(freshMap.values());
+                renderHeightContent();
+            } catch (e) { console.error('SSE height_update merge error:', e); }
         }
     });
     onSSE('wind_update', async (data) => {
@@ -405,7 +527,7 @@ async function editEventVideoUrl() {
     try {
         const key = localStorage.getItem('accessKey') || '';
         await API.setEventVideoUrl(state.selectedEvent.id, url.trim(), key);
-        showToast(url.trim() ? '✓ 영상 URL 저장' : '영상 URL 삭제됨');
+        showToast(url.trim() ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 영상 URL 저장' : '영상 URL 삭제됨');
         await loadEventVideoButtons();
     } catch(e) { showToast('저장 실패: ' + (e.error||e.message), 'error'); }
 }
@@ -428,6 +550,155 @@ function buildJointInfoHTML() {
             <span style="margin-left:auto;">${memberBadges}</span>
         </div>
     </div>`;
+}
+
+// ============================================================
+// JOINT GROUP HELPERS (대회 합동 입력 지원)
+// ----------------------------------------------------------------
+// state._jointGroup 가 셋팅돼 있으면 (selectEvent 에서 fetch)
+// 트랙/필드/높이 화면에서 다른 대회 멤버의 entries/results/height_attempts
+// 도 모두 함께 로드해서 한 화면에 표시한다.
+// 각 entry/result/attempt 에 _sourceHeatId 를 부착해서
+// 저장 시 entry 의 원래 대회 heat 로 보내도록 한다.
+// ============================================================
+
+// 현재 selected event 가 속한 joint group 의 "다른 대회" 멤버들의
+// (current event 가 아닌) 멤버 리스트 반환. 합동 아니면 [].
+function _jointOtherMembers() {
+    const jg = state._jointGroup;
+    if (!jg || !Array.isArray(jg.members)) return [];
+    return jg.members.filter(m => m.event_id !== state.selectedEventId);
+}
+
+// 합동 모드인지 (= 다른 대회 멤버가 1개 이상 있는지)
+function isJointMode() {
+    return _jointOtherMembers().length > 0;
+}
+
+// 한 멤버 event 의 (heatIndex 순서에 맞는) heat_id 를 구한다.
+// 합동은 보통 같은 round_type / 같은 heat 구조이므로 heat_number 일치를 우선,
+// 없으면 정렬 순 첫 heat 사용.
+async function _getMemberHeatId(memberEventId, currentHeatNumber) {
+    const heats = await API.getHeats(memberEventId);
+    if (!heats || heats.length === 0) return null;
+    if (currentHeatNumber != null) {
+        const matched = heats.find(h => h.heat_number === currentHeatNumber);
+        if (matched) return matched.id;
+    }
+    return heats[0].id;
+}
+
+// 합동 모드일 때 다른 멤버 대회들의 heat_entries 를 fetch 해서
+// 각각 _sourceHeatId / _federation / _compName 부착 후 반환.
+// 합동 아니면 빈 배열.
+async function fetchJointExtraEntries() {
+    if (!isJointMode()) return [];
+    const currentHeat = state.heats?.find(h => h.id === state.heatId);
+    const curHeatNum = currentHeat ? currentHeat.heat_number : null;
+    const extra = [];
+    for (const m of _jointOtherMembers()) {
+        try {
+            const mHeatId = await _getMemberHeatId(m.event_id, curHeatNum);
+            if (!mHeatId) continue;
+            const entries = await API.getHeatEntries(mHeatId);
+            entries.forEach(e => {
+                e._sourceHeatId = mHeatId;
+                e._sourceEventId = m.event_id;
+                e._federation = m.federation || m.comp_name || '';
+                e._compName = m.comp_name || '';
+                e._compId = m.competition_id;
+            });
+            extra.push(...entries);
+        } catch (err) { console.warn('[joint] fetch entries failed for', m.event_id, err); }
+    }
+    return extra;
+}
+
+// 합동 모드일 때 다른 멤버 heat 들의 results 를 모아서 반환.
+// 각 result 에 _sourceHeatId 부착.
+async function fetchJointExtraResults() {
+    if (!isJointMode()) return [];
+    const currentHeat = state.heats?.find(h => h.id === state.heatId);
+    const curHeatNum = currentHeat ? currentHeat.heat_number : null;
+    const extra = [];
+    for (const m of _jointOtherMembers()) {
+        try {
+            const mHeatId = await _getMemberHeatId(m.event_id, curHeatNum);
+            if (!mHeatId) continue;
+            const results = await API.getResults(mHeatId);
+            results.forEach(r => { r._sourceHeatId = mHeatId; });
+            extra.push(...results);
+        } catch (err) { console.warn('[joint] fetch results failed for', m.event_id, err); }
+    }
+    return extra;
+}
+
+// 합동 모드일 때 다른 멤버 heat 들의 height_attempts 를 모아서 반환.
+async function fetchJointExtraHeightAttempts() {
+    if (!isJointMode()) return [];
+    const currentHeat = state.heats?.find(h => h.id === state.heatId);
+    const curHeatNum = currentHeat ? currentHeat.heat_number : null;
+    const extra = [];
+    for (const m of _jointOtherMembers()) {
+        try {
+            const mHeatId = await _getMemberHeatId(m.event_id, curHeatNum);
+            if (!mHeatId) continue;
+            const atts = await API.getHeightAttempts(mHeatId);
+            atts.forEach(a => { a._sourceHeatId = mHeatId; });
+            extra.push(...atts);
+        } catch (err) { console.warn('[joint] fetch height_attempts failed for', m.event_id, err); }
+    }
+    return extra;
+}
+
+// entry_id 로 해당 entry 가 어느 heat 에 속하는지 lookup.
+// state.heatEntries 에서 찾으면 _sourceHeatId 우선, 없으면 state.heatId.
+function getSaveHeatId(eid) {
+    const e = (state.heatEntries || []).find(x =>
+        x.event_entry_id === eid || x.event_entry_id === +eid
+    );
+    if (e && e._sourceHeatId) return e._sourceHeatId;
+    return state.heatId;
+}
+
+// 합동 모드용: entry 객체로 소속 대회 뱃지 HTML 생성
+function jointBadgeHTML(entry) {
+    if (!entry || !entry._federation) return '';
+    // 색상 팔레트 — federation 별 안정적 색상 (joint info bar 와 동일 색)
+    const palette = ['#6b6b6b', '#dc2626', '#9a8548', '#ea580c', '#8a7640', '#2563eb', '#059669'];
+    let idx = 0;
+    if (state._jointGroup && Array.isArray(state._jointGroup.members)) {
+        const m = state._jointGroup.members.find(mm => mm.event_id === entry._sourceEventId);
+        if (m) {
+            idx = state._jointGroup.members.indexOf(m);
+            if (idx < 0) idx = 0;
+        }
+    }
+    const color = palette[idx % palette.length];
+    return `<span class="joint-fed-badge" style="display:inline-block;background:${color};color:#fff;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-right:4px;vertical-align:middle;" title="${entry._compName || entry._federation}">${entry._federation}</span>`;
+}
+
+// 현재 selected event 의 federation/comp_name (current event 멤버용)
+function _currentMemberInfo() {
+    const jg = state._jointGroup;
+    if (!jg || !Array.isArray(jg.members)) return null;
+    return jg.members.find(m => m.event_id === state.selectedEventId);
+}
+
+// 현재 event 소속 entry 에 _federation 부착 (badge 표시 용)
+function _attachCurrentEventBadge(entries) {
+    if (!isJointMode()) return entries;
+    const me = _currentMemberInfo();
+    if (!me) return entries;
+    entries.forEach(e => {
+        if (e._federation) return; // 이미 다른 대회 entry 면 skip
+        e._sourceEventId = state.selectedEventId;
+        e._federation = me.federation || me.comp_name || '';
+        e._compName = me.comp_name || '';
+        e._compId = me.competition_id;
+        // _sourceHeatId 는 부착하지 않음 — 그래야 getSaveHeatId 에서 state.heatId 사용
+    });
+    return entries;
 }
 
 function showPlaceholder() {
@@ -500,16 +771,16 @@ async function renderTrackDetail(evt) {
             <button class="btn btn-sm btn-primary" onclick="saveHeatWind()" title="현재 히트 풍속 저장" style="padding:8px 16px;font-size:13px;">저장</button>
             <span id="wind-status" style="font-size:12px;margin-left:6px;"></span>
             <span id="wind-record-badge" style="font-size:12px;margin-left:6px;"></span>
-            <span id="wind-warning-inline" style="display:none;font-size:11px;color:#b79f58;font-weight:700;margin-left:6px;">⚠ 풍속 미입력</span>
+            <span id="wind-warning-inline" style="display:none;font-size:11px;color:#b79f58;font-weight:700;margin-left:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 풍속 미입력</span>
         </div>` : ''}
         <div class="heat-tabs">
             ${heatTabs}
-            <button class="btn btn-sm btn-outline" onclick="showHeatEditModal(state.selectedEvent)" style="margin-left:auto;font-size:11px;" title="조/레인 수동 수정">⚙ 조/레인 수정</button>
-            <button class="btn btn-sm btn-outline" onclick="validateWARegulations()" style="font-size:11px;" title="WA 규정 검증">✓ WA 검증</button>
+            <button class="btn btn-sm btn-outline" onclick="showHeatEditModal(state.selectedEvent)" style="margin-left:auto;font-size:11px;" title="조/레인 수동 수정"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> 조/레인 수정</button>
+            <button class="btn btn-sm btn-outline" onclick="validateWARegulations()" style="font-size:11px;" title="WA 규정 검증"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> WA 검증</button>
         </div>
         <div id="track-content"></div>
         <div class="track-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">
-            <button class="btn btn-primary btn-sm" id="track-save-all-btn" onclick="saveAllTrackInline()" title="현재 조의 모든 기록을 한번에 저장합니다">✓ 기록 저장</button>
+            <button class="btn btn-primary btn-sm" id="track-save-all-btn" onclick="saveAllTrackInline()" title="현재 조의 모든 기록을 한번에 저장합니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 기록 저장</button>
             <button class="btn btn-outline btn-sm" onclick="resetSubEventResults(${evt.id}, '${evt.name}')" title="이 종목의 모든 기록을 초기화합니다" style="color:#e53e3e;">기록 초기화</button>
             ${evt.round_type === 'preliminary' ? `
                 <button class="btn btn-outline btn-sm" onclick="openSemifinalQualification()" title="모든 조의 결과를 통합하여 준결승 진출자를 선택합니다">준결승 진출자 선택</button>
@@ -544,9 +815,22 @@ async function switchTrackHeat(heatId, btn) {
 
 async function loadTrackHeatData() {
     // Show checked_in athletes + no_show as DNS
-    const allEntries = await API.getHeatEntries(state.heatId);
+    let allEntries = await API.getHeatEntries(state.heatId);
+    // [JOINT] 합동 모드: 다른 대회 멤버 heat 의 entries 도 합치기
+    if (isJointMode()) {
+        _attachCurrentEventBadge(allEntries);
+        const extra = await fetchJointExtraEntries();
+        allEntries = allEntries.concat(extra);
+    }
     state.heatEntries = allEntries.filter(e => e.status === 'checked_in' || e.status === 'no_show');
-    state.results = await API.getResults(state.heatId);
+
+    let allResults = await API.getResults(state.heatId);
+    if (isJointMode()) {
+        const extraR = await fetchJointExtraResults();
+        allResults = allResults.concat(extraR);
+    }
+    state.results = allResults;
+
     state._pendingInlineTrack = {};
     clearUnsaved();
     await renderTrackTable();
@@ -648,7 +932,7 @@ async function renderTrackTable() {
                     <td>${r.status_code ? scBadge : (r.rank || '<span class="no-rank">—</span>')}</td>
                     <td>${r.lane_number || '—'}</td>
                     <td><strong>${bib(r.bib_number)}</strong></td>
-                    <td style="text-align:left;">${r.name}${qualBadge}${relayMemberHtml}</td>
+                    <td style="text-align:left;">${jointBadgeHTML(r)}${r.name}${qualBadge}${relayMemberHtml}</td>
                     <td style="font-size:12px;text-align:left;">${r.team || ''}</td>
                     <td><input class="track-time-input ${savedClass}" data-eid="${r.event_entry_id}" data-row="${idx}"
                         value="${displayVal}" placeholder="${placeholder}" ${r.status_code ? 'disabled' : ''}
@@ -712,6 +996,7 @@ function trackInlineKeydown(e, inp) {
 async function saveSingleTrackInline(inp, doRerender = true) {
     if (!confirmCompletedEdit()) return;
     const eid = +inp.dataset.eid;
+    const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
     const v = parseTimeInput(inp.value);
     // If input is empty and there was a saved result, DELETE the result
     if (v == null || v <= 0) {
@@ -721,8 +1006,8 @@ async function saveSingleTrackInline(inp, doRerender = true) {
             if (existingResult) {
                 inp.classList.add('saving'); inp.disabled = true;
                 try {
-                    await API.deleteResult({ heat_id: state.heatId, event_entry_id: eid });
-                    showToast('✓ 기록 삭제됨');
+                    await API.deleteResult({ heat_id: hid, event_entry_id: eid });
+                    showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 기록 삭제됨');
                     if (doRerender) await loadTrackHeatData();
                     if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
                     renderAuditLog();
@@ -736,16 +1021,23 @@ async function saveSingleTrackInline(inp, doRerender = true) {
     }
     inp.classList.add('saving'); inp.disabled = true;
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, time_seconds: v });
+        // ─── 옵티미스틱: 화면 state 에 먼저 반영 (오프라인에서도 보이게)
+        _optimisticUpsertResult(eid, null, { heat_id: hid, time_seconds: v, status_code: '' });
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, time_seconds: v });
         delete state._pendingInlineTrack[eid];
         if (Object.keys(state._pendingInlineTrack).length === 0) clearUnsaved();
         inp.classList.remove('saving'); inp.classList.add('has-value');
         inp.disabled = false;
-        showToast('✓ 저장 완료');
-        if (doRerender) {
-            await loadTrackHeatData();
-            const allInputs = document.querySelectorAll('.track-time-input');
-            for (const ni of allInputs) { if (!ni.value.trim()) { ni.focus(); break; } }
+        if (isOfflineResp(resp)) {
+            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 로컬 저장 (오프라인)');
+        } else {
+            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장 완료');
+            if (doRerender) {
+                await loadTrackHeatData();
+                const allInputs = document.querySelectorAll('.track-time-input');
+                for (const ni of allInputs) { if (!ni.value.trim()) { ni.focus(); break; } }
+            }
         }
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
@@ -759,14 +1051,15 @@ async function saveAllTrackInline() {
         const v = parseTimeInput(inp.value);
         if (v == null || v <= 0) continue;
         const eid = +inp.dataset.eid;
+        const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
         inp.classList.add('saving'); inp.disabled = true;
         try {
-            await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, time_seconds: v });
+            await API.upsertResult({ heat_id: hid, event_entry_id: eid, time_seconds: v });
             delete state._pendingInlineTrack[eid];
         } catch (err) { inp.classList.remove('saving'); inp.disabled = false; inp.classList.add('error'); showToast(err.error || '저장 실패', 'error'); }
     }
     if (Object.keys(state._pendingInlineTrack).length === 0) clearUnsaved();
-    showToast('✓ 전체 저장 완료');
+    showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 전체 저장 완료');
     await loadTrackHeatData();
     if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
     renderAuditLog();
@@ -791,7 +1084,7 @@ async function saveHeatWind() {
         else if (v === 0) inp.value = '';
         else inp.value = v.toFixed(1);
         const statusEl = document.getElementById('wind-status');
-        if (statusEl) { statusEl.textContent = '✓ 저장됨'; statusEl.style.color = 'var(--green)'; setTimeout(() => statusEl.textContent = '', 2000); }
+        if (statusEl) { statusEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; statusEl.style.color = 'var(--green)'; setTimeout(() => statusEl.textContent = '', 2000); }
         updateWindRecordBadge(v);
         // Show/hide + button
         const plusBtn = document.getElementById('wind-plus-btn');
@@ -862,9 +1155,16 @@ async function setStatusCode(sel) {
     if (!confirmCompletedEdit()) { sel.value = ''; return; }
     const eid = +sel.dataset.eid;
     const sc = sel.value;
+    const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, status_code: sc, time_seconds: sc ? null : undefined });
-        state.results = await API.getResults(state.heatId);
+        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, time_seconds: sc ? null : undefined });
+        // [JOINT] 합동모드면 현재 heat + joint extras 모두 재로딩, 아니면 기존 heat 만
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
+        }
+        state.results = allResults;
         renderTrackTable();
         // Sync combined scores when changing status in a sub-event (10종/7종)
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
@@ -875,8 +1175,9 @@ async function setStatusCode(sel) {
 async function saveRemark(inp) {
     if (!confirmCompletedEdit()) return;
     const eid = +inp.dataset.eid;
+    const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, remark: inp.value.trim() });
+        await API.upsertResult({ heat_id: hid, event_entry_id: eid, remark: inp.value.trim() });
     } catch (e) { console.error(e); }
 }
 
@@ -885,10 +1186,22 @@ async function setFieldDistStatusCode(sel) {
     if (!confirmCompletedEdit()) { sel.value = ''; return; }
     const eid = +sel.dataset.eid;
     const sc = sel.value;
+    const hid = getSaveHeatId(eid); // [JOINT]
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, status_code: sc, distance_meters: sc ? null : undefined });
-        state.results = await API.getResults(state.heatId);
+        // ─── 옵티미스틱: status_code 는 attempt 없는 세션으로 동작 → attempt_number null 으로 저장
+        _optimisticUpsertResult(eid, null, { heat_id: hid, status_code: sc, distance_meters: sc ? null : 0 });
         renderFieldDistanceContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, distance_meters: sc ? null : undefined });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+        }
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         }
@@ -900,12 +1213,26 @@ async function setFieldHeightStatusCode(sel) {
     if (!confirmCompletedEdit()) { sel.value = ''; return; }
     const eid = +sel.dataset.eid;
     const sc = sel.value;
+    const hid = getSaveHeatId(eid); // [JOINT]
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: eid, status_code: sc });
-        state.results = await API.getResults(state.heatId);
-        // Re-fetch height attempts and re-render
-        state.heightAttempts = await API.getHeightAttempts(state.heatId);
+        // ─── 옵티미스틱
+        _optimisticUpsertResult(eid, null, { heat_id: hid, status_code: sc });
         renderHeightContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                const extraH = await fetchJointExtraHeightAttempts();
+                allResults = allResults.concat(extraR);
+                allHeightAttempts = allHeightAttempts.concat(extraH);
+            }
+            state.results = allResults;
+            state.heightAttempts = allHeightAttempts;
+            renderHeightContent();
+        }
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         }
@@ -917,9 +1244,13 @@ async function _cSubHeightSetStatus(sel) {
     const eid = +sel.dataset.eid, hid = +sel.dataset.hid, pid = +sel.dataset.pid;
     const sc = sel.value;
     try {
-        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc });
-        _cSubHeightData.attempts = await API.getHeightAttempts(hid);
-        _cSubHeightRender();
+        // ─── 옵티미스틱: status_code 는 height_attempts 가 아닌 result 에 저장되지만
+        //                  화면은 height 영역이므로 그냥 reload 만 옵티미스틱하게 skip
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc });
+        if (!isOfflineResp(resp)) {
+            _cSubHeightData.attempts = await API.getHeightAttempts(hid);
+            _cSubHeightRender();
+        }
         await syncCombinedFromSubEvent(pid);
     } catch(e) { console.error('_cSubHeightSetStatus error:', e); }
 }
@@ -987,9 +1318,17 @@ function setFieldMode(mode) {
 }
 
 async function loadFieldDistanceData() {
-    const allEntries = await API.getHeatEntries(state.heatId);
+    let allEntries = await API.getHeatEntries(state.heatId);
+    let allResults = await API.getResults(state.heatId);
+    if (isJointMode()) {
+        _attachCurrentEventBadge(allEntries);
+        const extra = await fetchJointExtraEntries();
+        allEntries = allEntries.concat(extra);
+        const extraR = await fetchJointExtraResults();
+        allResults = allResults.concat(extraR);
+    }
     state.heatEntries = allEntries.filter(e => e.status === 'checked_in' || e.status === 'no_show');
-    state.results = await API.getResults(state.heatId);
+    state.results = allResults;
     renderFieldDistanceContent();
 }
 
@@ -1248,7 +1587,7 @@ function renderFieldDistanceContent() {
                             return `<tr class="field-row1 ${cls} ${windZebraCls} ${r.status_code ? 'row-status-code' : ''}">
                                 <td rowspan="2">${rankDisp}</td>
                                 <td rowspan="2">${r.lane_number || '—'}</td>
-                                <td class="name-cell"><strong>${r.name}</strong> <span class="bib-tag">#${bib(r.bib_number)}</span></td>
+                                <td class="name-cell">${jointBadgeHTML(r)}<strong>${r.name}</strong> <span class="bib-tag">#${bib(r.bib_number)}</span></td>
                                 ${distCells}
                                 <td rowspan="2" class="best-cell att-col-best">${bestDisp}<div class="best-wind">${bestWindDisp}</div></td>
                                 ${windScCell}
@@ -1261,7 +1600,7 @@ function renderFieldDistanceContent() {
                             return `<tr class="${cls} ${zebraCls} ${r.status_code ? 'row-status-code' : ''}">
                                 <td>${rankDisp}</td>
                                 <td>${r.lane_number || '—'}</td>
-                                <td class="name-cell"><strong>${r.name}</strong> <span class="bib-tag">#${bib(r.bib_number)}</span></td>
+                                <td class="name-cell">${jointBadgeHTML(r)}<strong>${r.name}</strong> <span class="bib-tag">#${bib(r.bib_number)}</span></td>
                                 <td class="team-cell">${r.team || ''}</td>
                                 ${distCells}
                                 <td class="best-cell att-col-best">${bestDisp}</td>
@@ -1538,11 +1877,17 @@ async function saveFieldWind(entryId, attempt, wind) {
     try {
         const existing = state.results.find(r => r.event_entry_id === entryId && r.attempt_number === attempt);
         if (existing) {
-            await API.upsertResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: existing.distance_meters, wind });
-            state.results = await API.getResults(state.heatId);
+            const hid = getSaveHeatId(entryId); // [JOINT]
+            await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: existing.distance_meters, wind });
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
             state._activeWindCell = null;
             state._activeFieldCell = null;
-            showToast('✓ 풍속 저장');
+            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 풍속 저장');
             renderFieldDistanceContent();
         }
     } catch (err) {
@@ -1558,12 +1903,27 @@ async function saveFieldInline(entryId, attempt, distance) {
     const wind = existingResult ? (existingResult.wind ?? null) : null;
 
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
-        state.results = await API.getResults(state.heatId);
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        // ─── 옵티미스틱: 서버 호출 전에 화면에 먼저 반영 (오프라인에서도 즉시 보이게)
+        _optimisticUpsertResult(entryId, attempt, { heat_id: hid, distance_meters: distance, wind, status_code: '' });
         state._activeFieldCell = null;
         state._activeWindCell = null;
-        showToast('✓ 기록 저장');
         renderFieldDistanceContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
+        if (isOfflineResp(resp)) {
+            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 로컬 저장 (오프라인)');
+        } else {
+            // 온라인: 서버에서 fresh 데이터로 reconcile
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 기록 저장');
+        }
         // If wind measurement needed and distance valid but no wind, auto-activate wind cell
         const needsWind = requiresWindMeasurement(state.selectedEvent?.name, 'field_distance');
         if (needsWind && distance > 0 && wind == null) {
@@ -1585,7 +1945,7 @@ function showWindWarning(entryId, attempt) {
         notice.id = 'wind-warning-notice';
         document.body.appendChild(notice);
     }
-    notice.textContent = '⚠ 풍속을 입력하세요!';
+    notice.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 풍속을 입력하세요!';
     notice.style.display = 'block';
     notice.style.opacity = '1';
     setTimeout(() => { notice.style.opacity = '0'; setTimeout(() => { notice.style.display = 'none'; }, 300); }, 1500);
@@ -1594,10 +1954,22 @@ function showWindWarning(entryId, attempt) {
 async function fieldInlineFoul(entryId, attempt) {
     if (!confirmCompletedEdit()) return;
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
-        state.results = await API.getResults(state.heatId);
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        // ─── 옵티미스틱: 0 = 파울
+        _optimisticUpsertResult(entryId, attempt, { heat_id: hid, distance_meters: 0, status_code: '' });
         state._activeFieldCell = null;
         renderFieldDistanceContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+        }
         showFoulNotice();
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
@@ -1610,10 +1982,22 @@ async function fieldInlineFoul(entryId, attempt) {
 async function fieldDblClickFoul(entryId, attempt) {
     if (state.fieldMode === 'view') return;
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
-        state.results = await API.getResults(state.heatId);
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        // ─── 옵티미스틱
+        _optimisticUpsertResult(entryId, attempt, { heat_id: hid, distance_meters: 0, status_code: '' });
         state._activeFieldCell = null;
         renderFieldDistanceContent();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+        }
         showFoulNotice();
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
@@ -1670,11 +2054,24 @@ function fieldInlineBlur(inp) {
 async function fieldInlineClear(entryId, attempt) {
     if (!confirmCompletedEdit()) return;
     try {
-        await API.deleteResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt });
-        state.results = await API.getResults(state.heatId);
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        // ─── 옵티미스틱: state 에서 해당 result 제거
+        const idx = state.results.findIndex(r => r.event_entry_id === entryId && r.attempt_number === attempt);
+        if (idx >= 0) state.results.splice(idx, 1);
         state._activeFieldCell = null;
         renderFieldDistanceContent();
-        showToast('✓ 기록 삭제');
+
+        const resp = await API.deleteResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+        }
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 기록 삭제');
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
     } catch (err) {
@@ -1688,11 +2085,23 @@ async function fieldInlineClear(entryId, attempt) {
 async function fieldInlinePass(entryId, attempt) {
     if (!confirmCompletedEdit()) return;
     try {
-        await API.upsertResult({ heat_id: state.heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: -1 });
-        state.results = await API.getResults(state.heatId);
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        // ─── 옵티미스틱: -1 = 패스
+        _optimisticUpsertResult(entryId, attempt, { heat_id: hid, distance_meters: -1, status_code: '' });
         state._activeFieldCell = null;
         renderFieldDistanceContent();
-        showToast('✓ 패스 처리');
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: -1 });
+        if (!isOfflineResp(resp)) {
+            let allResults = await API.getResults(state.heatId);
+            if (isJointMode()) {
+                const extraR = await fetchJointExtraResults();
+                allResults = allResults.concat(extraR);
+            }
+            state.results = allResults;
+            renderFieldDistanceContent();
+        }
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 패스 처리');
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
     } catch (err) {
@@ -1790,22 +2199,48 @@ async function deleteBarHeight(barHeight) {
         try {
             const key = localStorage.getItem('op_key') || prompt('운영키를 입력하세요');
             if (!key) return;
+            // [JOINT] 합동 모드면 모든 멤버 대회 heat 에서 동시에 삭제
             await api('POST', '/api/height-attempts/delete-bar', { heat_id: state.heatId, bar_height: h, admin_key: key });
+            if (isJointMode()) {
+                const currentHeat = state.heats?.find(hh => hh.id === state.heatId);
+                const curHeatNum = currentHeat ? currentHeat.heat_number : null;
+                for (const m of _jointOtherMembers()) {
+                    try {
+                        const mHeatId = await _getMemberHeatId(m.event_id, curHeatNum);
+                        if (mHeatId) await api('POST', '/api/height-attempts/delete-bar', { heat_id: mHeatId, bar_height: h, admin_key: key });
+                    } catch (err) { console.warn('[joint] delete-bar failed for', m.event_id, err); }
+                }
+            }
         } catch (err) { alert('삭제 실패: ' + (err.error || '')); return; }
     }
     // Remove from local bar list
     state._heightBarList = state._heightBarList.filter(x => x !== h);
-    state.heightAttempts = await API.getHeightAttempts(state.heatId);
+    let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+    if (isJointMode()) {
+        const extraH = await fetchJointExtraHeightAttempts();
+        allHeightAttempts = allHeightAttempts.concat(extraH);
+    }
+    state.heightAttempts = allHeightAttempts;
     renderHeightContent();
 }
 
 async function saveHeightAndReload() {
-    // Height attempts are saved on each toggle click. This button reloads and confirms.
-    state.heightAttempts = await API.getHeightAttempts(state.heatId);
-    renderHeightContent();
-    // Brief visual feedback
+    // ─── 단순 reload (2026-05 리빌드): 옵티미스틱 머지 없이 서버에서 통째 가져온다.
+    //     클릭마다 동기 저장이므로 진행 중인 요청이 끝났다는 가정 하에 호출.
+    //     셀별 직렬화 락에 의해 진행 중 요청은 이미 큐잉되어 차례로 끝나가는 중.
+    try {
+        let fresh = await API.getHeightAttempts(state.heatId);
+        if (isJointMode()) {
+            const extraH = await fetchJointExtraHeightAttempts();
+            fresh = fresh.concat(extraH);
+        }
+        state.heightAttempts = fresh;
+        renderHeightContent();
+    } catch (e) {
+        console.error('saveHeightAndReload error:', e);
+    }
     const btn = document.querySelector('.track-actions .btn-primary');
-    if (btn) { const orig = btn.textContent; btn.textContent = '✓ 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
+    if (btn) { const orig = btn.textContent; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
 }
 
 // Legacy compat
@@ -1819,11 +2254,26 @@ function raiseBar() {
 }
 
 async function loadFieldHeightData() {
-    const allEntries = await API.getHeatEntries(state.heatId);
+    // ─── 단순 reload (2026-05 리빌드):
+    //     옵티미스틱 머지를 완전히 제거. 서버 응답을 그대로 신뢰.
+    //     toggleHeightMark 가 셀별 직렬화 + 동기 reload 패턴으로 동작하므로,
+    //     이 함수가 호출되는 시점에는 직전 저장이 이미 끝나 있어 race 가 발생할 수 없음.
+    let allEntries = await API.getHeatEntries(state.heatId);
+    let allResults = await API.getResults(state.heatId);
+    let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+    if (isJointMode()) {
+        _attachCurrentEventBadge(allEntries);
+        const extra = await fetchJointExtraEntries();
+        allEntries = allEntries.concat(extra);
+        const extraR = await fetchJointExtraResults();
+        allResults = allResults.concat(extraR);
+        const extraH = await fetchJointExtraHeightAttempts();
+        allHeightAttempts = allHeightAttempts.concat(extraH);
+    }
     state.heatEntries = allEntries.filter(e => e.status === 'checked_in' || e.status === 'no_show');
-    state.heightAttempts = await API.getHeightAttempts(state.heatId);
-    state.results = await API.getResults(state.heatId);
-    // Build bar list from existing data
+    state.heightAttempts = allHeightAttempts;
+    state.results = allResults;
+
     const existingHeights = [...new Set(state.heightAttempts.map(a => a.bar_height))].sort((a, b) => a - b);
     state._heightBarList = [...new Set([...(state._heightBarList || []), ...existingHeights])].sort((a, b) => a - b);
     renderHeightContent();
@@ -1942,18 +2392,26 @@ function renderHeightContent() {
                 } else {
                     heights.forEach(h => {
                         const hd = r.heightData[h] || {};
-                        // Check if this height is already resolved: O found, or previous height failed 3X → skip remaining attempts
+                        // WA Rule 30 (단순화):
+                        //   · 같은 높이에 O 가 한 번이라도 있으면 → 남은 시도(빈칸)는 불필요 → 자동 비활성화
+                        //   · 3 X 이면 탈락(r.eliminated 로 별도 처리)
+                        //   · PASS('-') 는 그 차수만 포기 (다음 차수는 계속 활성화)
+                        //   · 이미 마크된 셀은 항상 활성화(되돌리기 위해)
                         const hasO = Object.values(hd).includes('O');
                         let cellContent = '<div class="height-attempt-row">';
                         for (let i = 1; i <= 3; i++) {
                             const mark = hd[i] || '';
-                            const markCls = mark === '-' ? 'mark-pass' : mark ? `mark-${mark}` : 'mark-empty';
-                            const disabled = r.eliminated && !mark ? 'disabled' : '';
-                            // Skip button if earlier attempt already succeeded or passed
-                            const prevResolved = (i > 1 && (hd[i-1] === 'O' || hd[i-1] === '-')) || (i > 2 && (hd[1] === 'O' || hd[1] === '-'));
-                            const shouldSkip = !mark && (hasO || prevResolved);
-                            const displayMark = mark === 'PASS' ? '-' : mark === '-' ? '-' : (mark || '\u00b7');
-                            cellContent += `<button class="height-toggle-btn ${markCls}" onclick="toggleHeightMark(${r.event_entry_id},${h},${i})" ${disabled || shouldSkip ? 'disabled' : ''} title="${i}차 시도">${displayMark}</button>`;
+                            const _normMark = mark === 'PASS' ? '-' : mark;
+                            const markCls = _normMark === '-' ? 'mark-pass' : _normMark ? `mark-${_normMark}` : 'mark-empty';
+                            // 비활성화: (a) 탈락자의 빈 셀, (b) 같은 높이에 이미 O 있는데 비어있는 셀
+                            const isEmpty = !mark;
+                            const shouldDisable = (r.eliminated && isEmpty) || (hasO && isEmpty);
+                            // busy 표시 (진행 중 클릭)
+                            const _busy = _heightCellIsBusy(_heightCellKey(r.event_entry_id, h, i));
+                            const busyAttr = _busy ? 'disabled data-busy="1"' : '';
+                            const busyCls = _busy ? ' is-busy' : '';
+                            const displayMark = _busy ? '…' : (_normMark === '-' ? '-' : (_normMark || '\u00b7'));
+                            cellContent += `<button class="height-toggle-btn ${markCls}${busyCls}" onclick="toggleHeightMark(${r.event_entry_id},${h},${i})" ${shouldDisable ? 'disabled' : ''} ${busyAttr} title="${i}차 시도">${displayMark}</button>`;
                         }
                         cellContent += '</div>';
                         cells += `<td class="height-toggle-cell">${cellContent}</td>`;
@@ -1963,10 +2421,11 @@ function renderHeightContent() {
                 const rankDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` :
                     (r.rank || '—');
                 // Status dropdown
-                const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" onchange="setFieldHeightStatusCode(this)" title="DNS=불출전, DNF=미완주, DQ=실격" ${r._isNoShow ? 'disabled' : ''}>
+                const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" onchange="setFieldHeightStatusCode(this)" title="DNS=불출전, DNF=미완주, DQ=실격, NM=기록없음" ${r._isNoShow ? 'disabled' : ''}>
                     <option value="">—</option><option value="DNS" ${r.status_code==='DNS'?'selected':''}>DNS</option>
                     <option value="DNF" ${r.status_code==='DNF'?'selected':''}>DNF</option>
                     <option value="DQ" ${r.status_code==='DQ'?'selected':''}>DQ</option>
+                    <option value="NM" ${r.status_code==='NM'?'selected':''}>NM</option>
                 </select>`;
                 const statusCell = r.status_code ? scDropdown
                     : r._isNoShow ? '<span class="sc-badge sc-DNS">DNS</span>'
@@ -1976,7 +2435,7 @@ function renderHeightContent() {
                 return `<tr class="${r.eliminated ? 'row-eliminated' : ''} ${r.status_code ? 'row-status-code' : ''} ${r._isNoShow ? 'row-dns' : ''}">
                     <td>${rankDisp}</td>
                     <td>${r.lane_number || '—'}</td>
-                    <td style="text-align:left;"><strong>${r.name}</strong> <span style="color:var(--text-muted);font-size:11px;">#${bib(r.bib_number)}</span></td>
+                    <td style="text-align:left;">${jointBadgeHTML(r)}<strong>${r.name}</strong> <span style="color:var(--text-muted);font-size:11px;">#${bib(r.bib_number)}</span></td>
                     ${cells}
                     <td>${r.bestHeight != null ? `<strong>${formatHeight(r.bestHeight)}</strong>` : '—'}</td>
                     <td>${statusCell}</td>
@@ -1991,30 +2450,80 @@ function setHeightMode(mode) {
     renderHeightContent();
 }
 
-// Toggle height mark: cycles O → X → - (pass) → empty
+// ─── toggleHeightMark (2026-05 리빌드 / WA Rule 30) ────────────────────
+//     · 셀별 직렬화 (같은 셀의 빠른 연속 클릭은 큐로 처리)
+//     · 옵티미스틱 머지 제거 → 서버 응답으로만 state 갱신 (race 의 근원 차단)
+//     · 클릭 시 즉시 버튼 disabled (busy 표시) → 서버 호출 → reload → 렌더
+//     · cycle: empty → X → O → '-' (pass) → empty
 async function toggleHeightMark(entryId, barHeight, attemptNumber) {
-    const current = state.heightAttempts.find(a => 
-        a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
-    );
-    const currentMark = current ? current.result_mark : '';
-    const cycle = { '': 'O', 'O': 'X', 'X': '-', '-': '', 'PASS': '' };
-    const newMark = currentMark in cycle ? cycle[currentMark] : 'O';
+    const cellKey = _heightCellKey(entryId, barHeight, attemptNumber);
+    return _heightCellRunSerial(cellKey, async () => {
+        // 직렬화 락 안에 들어왔으므로 직전 작업은 이미 완료 → state 최신.
+        const current = state.heightAttempts.find(a =>
+            a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
+        );
+        const currentMark = current ? current.result_mark : '';
+        const newMark = _heightNextMark(currentMark);
 
-    try {
-        await API.saveHeightAttempt({
-            heat_id: state.heatId,
-            event_entry_id: entryId,
-            bar_height: barHeight,
-            attempt_number: attemptNumber,
-            result_mark: newMark
-        });
-        state.heightAttempts = await API.getHeightAttempts(state.heatId);
-        renderHeightContent();
-        if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
-        renderAuditLog();
-    } catch (err) {
-        console.error('toggleHeightMark error:', err);
-    }
+        _heightCellMarkBusy(cellKey, true);
+        renderHeightContent(); // busy 표시 즉시 반영
+        try {
+            const hid = getSaveHeatId(entryId); // [JOINT]
+            const resp = await API.saveHeightAttempt({
+                heat_id: hid,
+                event_entry_id: entryId,
+                bar_height: barHeight,
+                attempt_number: attemptNumber,
+                result_mark: newMark
+            });
+            // 오프라인 응답이 아니면 서버에서 통째 재조회 → SSOT.
+            //   offline 인 경우는 sw.js / API 가 알아서 큐잉하므로 그냥 다음 reload 까지 기다림.
+            if (!isOfflineResp(resp)) {
+                let fresh = await API.getHeightAttempts(state.heatId);
+                if (isJointMode()) {
+                    const extraH = await fetchJointExtraHeightAttempts();
+                    fresh = fresh.concat(extraH);
+                }
+                state.heightAttempts = fresh;
+            } else {
+                // 오프라인: 응답이 큐잉된 상태. 최소한 화면이라도 newMark 반영.
+                const idx = state.heightAttempts.findIndex(a =>
+                    a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
+                );
+                if (!newMark) {
+                    if (idx >= 0) state.heightAttempts.splice(idx, 1);
+                } else {
+                    const norm = newMark === '-' ? 'PASS' : newMark;
+                    const base = idx >= 0 ? { ...state.heightAttempts[idx] } : {
+                        event_entry_id: entryId, bar_height: barHeight,
+                        attempt_number: attemptNumber, heat_id: state.heatId
+                    };
+                    base.result_mark = norm;
+                    if (idx >= 0) state.heightAttempts[idx] = base;
+                    else state.heightAttempts.push(base);
+                }
+            }
+            if (state.selectedEvent && state.selectedEvent.parent_event_id) {
+                // 부모 종합 점수 갱신 (실패해도 무시)
+                syncCombinedFromSubEvent(state.selectedEvent.parent_event_id).catch(()=>{});
+            }
+            renderAuditLog();
+        } catch (err) {
+            console.error('toggleHeightMark error:', err);
+            // 에러 시에는 상태가 어디까지 갔는지 모르므로 서버에서 재조회
+            try {
+                let fresh = await API.getHeightAttempts(state.heatId);
+                if (isJointMode()) {
+                    const extraH = await fetchJointExtraHeightAttempts();
+                    fresh = fresh.concat(extraH);
+                }
+                state.heightAttempts = fresh;
+            } catch(_) {}
+        } finally {
+            _heightCellMarkBusy(cellKey, false);
+            renderHeightContent();
+        }
+    });
 }
 
 // ============================================================
@@ -2030,14 +2539,21 @@ function setupHeightModal() {
     document.querySelectorAll('.height-mark-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             try {
+                const _hmEid = heightModalState.eventEntryId;
+                const _hmHid = getSaveHeatId(_hmEid); // [JOINT]
                 await API.saveHeightAttempt({
-                    heat_id: state.heatId, event_entry_id: heightModalState.eventEntryId,
+                    heat_id: _hmHid, event_entry_id: _hmEid,
                     bar_height: state.currentBarHeight,
                     attempt_number: +document.getElementById('hmodal-attempt-select').value,
                     result_mark: btn.dataset.mark
                 });
                 ov.style.display = 'none';
-                state.heightAttempts = await API.getHeightAttempts(state.heatId);
+                let allHeightAttempts = await API.getHeightAttempts(state.heatId);
+                if (isJointMode()) {
+                    const extraH = await fetchJointExtraHeightAttempts();
+                    allHeightAttempts = allHeightAttempts.concat(extraH);
+                }
+                state.heightAttempts = allHeightAttempts;
                 renderHeightContent();
                 if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
                 renderAuditLog();
@@ -2110,7 +2626,7 @@ async function renderCombinedDetail(evt) {
         subDefs.forEach(se => {
             const has = state.combinedScores.some(s => s.sub_event_order === se.order && s.raw_record > 0);
             const cls = (_combinedActiveTab === se.order ? ' active' : '') + (has ? ' tab-completed' : '');
-            const btn = `<button class="combined-tab-btn${cls}" data-order="${se.order}" onclick="switchCombinedTab(${se.order})">${se.order}. ${se.name}${has ? ' ✓' : ''}</button>`;
+            const btn = `<button class="combined-tab-btn${cls}" data-order="${se.order}" onclick="switchCombinedTab(${se.order})">${se.order}. ${se.name}${has ? ' <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</button>`;
             if (se.order <= day1Max) day1Html += btn; else day2Html += btn;
         });
 
@@ -2184,7 +2700,12 @@ async function _renderScoreboard(container) {
         subDefs.forEach(se => {
             const sc = state.combinedScores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
             const p = sc ? (sc.wa_points || 0) : 0;
-            pts[se.order] = { points: p, raw: sc ? sc.raw_record : null };
+            pts[se.order] = {
+                points: p,
+                raw: sc ? sc.raw_record : null,
+                // ─── 세부종목의 상태코드 (DNS/DNF/DQ/NM). 트랙 NM 은 서버에서 DNF 로 폴백되어 옴.
+                status_code: sc ? (sc.status_code || '') : ''
+            };
             total += p;
         });
         return { ...e, pts, total };
@@ -2204,11 +2725,19 @@ async function _renderScoreboard(container) {
                 <tbody>${rows.map(r => {
                     const cells = subDefs.map(se => {
                         const p = r.pts[se.order];
-                        if (!p || p.raw == null)
+                        const _validSc = p && p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code);
+                        if (!p || (p.raw == null && !_validSc))
                             return `<td style="cursor:pointer;color:var(--text-muted);" onclick="switchCombinedTab(${se.order})">—</td>`;
+                        // ─── 우선순위 1: 상태코드 (DNS/DNF/DQ/NM) 가 있으면 그것을 표시. 점수는 그대로(보통 0pt).
+                        //     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 'X'/'PASS'/'-' 등 시도 마크는 status_code 가 아니므로 무시 (화이트리스트만 채택).
+                        if (_validSc) {
+                            const scLabel = p.status_code;
+                            return `<td style="cursor:pointer;" onclick="switchCombinedTab(${se.order})"><div style="font-weight:600;font-size:11px;color:var(--danger);">${scLabel}</div><div style="font-size:10px;color:var(--text-muted);">${p.points}pt</div></td>`;
+                        }
+                        // 우선순위 2: 기존 fallback (raw=0 & points=0 인데 status_code 도 없는 옛 데이터) → NM 으로 표시
                         if (p.raw === 0 && p.points === 0)
                             return `<td style="cursor:pointer;" onclick="switchCombinedTab(${se.order})"><div style="font-weight:600;font-size:11px;color:var(--danger);">NM</div><div style="font-size:10px;color:var(--text-muted);">0pt</div></td>`;
-                        if (p.raw <= 0)
+                        if (p.raw == null || p.raw <= 0)
                             return `<td style="cursor:pointer;color:var(--text-muted);" onclick="switchCombinedTab(${se.order})">—</td>`;
                         const isHt = se.key && (se.key.includes('high_jump') || se.key.includes('pole_vault'));
                         const rec = se.unit === 's' ? formatTime(p.raw) : (isHt ? formatHeight(p.raw) : p.raw.toFixed(2) + 'm');
@@ -2222,12 +2751,36 @@ async function _renderScoreboard(container) {
             </table>
         </div>
         <p style="margin-top:6px;font-size:11px;color:var(--text-muted);">종목명을 클릭하면 해당 종목 기록 입력으로 이동합니다.</p>
-        <div class="track-actions" style="margin-top:12px;">
+        <div class="track-actions" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             ${evt.round_status === 'completed'
-                ? `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:13px;">✓ 경기 완료됨</div>
+                ? `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:13px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 경기 완료됨</div>
                    <button class="btn btn-warning btn-sm" onclick="revertCombinedComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`
-                : `<button class="btn btn-success" onclick="completeCombinedEvent()" title="모든 세부종목 기록을 최종 확정하고 경기를 완료합니다">⚑ 모든 경기 완료</button>`}
+                : `<button class="btn btn-success" onclick="completeCombinedEvent()" title="모든 세부종목 기록을 최종 확정하고 경기를 완료합니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> 모든 경기 완료</button>`}
+            <button class="btn btn-sm btn-outline" onclick="repairCombinedScoresAction()" title="점수가 이상하게 표시될 때 모든 세부기록을 재계산합니다 (이전 잘못된 매핑 자동 정리)" style="margin-left:auto;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 점수 재계산</button>
         </div>`;
+}
+
+// <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Force-repair combined scores when scoreboard shows wrong values
+async function repairCombinedScoresAction() {
+    const evt = _combinedParentEvt || state.selectedEvent;
+    if (!evt) return;
+    if (!confirm(`${evt.name} 종합 점수를 모두 지우고 세부기록에서 다시 계산합니다.\n\n(점수가 잘못 표시될 때만 사용)\n계속하시겠습니까?`)) return;
+    let adminKey = '';
+    try {
+        const stored = sessionStorage.getItem('admin_key') || localStorage.getItem('admin_key') || '';
+        adminKey = stored || prompt('운영 키를 입력하세요:') || '';
+    } catch(e) {
+        adminKey = prompt('운영 키를 입력하세요:') || '';
+    }
+    if (!adminKey) return;
+    try {
+        const result = await API.repairCombinedScores(evt.id, adminKey);
+        showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 재계산 완료 (삭제 ${result.wiped}건, 재구축 ${result.rebuilt}건)`, 'success', 3000);
+        // Reload scoreboard
+        _renderCombinedContent();
+    } catch (err) {
+        showToast('재계산 실패: ' + (err.message || err.error || err), 'error', 4000);
+    }
 }
 
 // ── Complete combined event (10종/7종 모든 경기 완료) ──────
@@ -2305,9 +2858,9 @@ async function doCompleteCombined() {
         }
         
         document.getElementById('complete-modal-overlay').remove();
-        showToast('✓ ' + evt.name + ' 경기 완료', 'success', 3000);
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ' + evt.name + ' 경기 완료', 'success', 3000);
         
-        // ★ Re-fetch fresh data from server (same pattern as doCompleteRound)
+        // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> Re-fetch fresh data from server (same pattern as doCompleteRound)
         state.events = await API.getAllEvents(getCompetitionId());
         const freshEvt = await API.getEvent(evt.id);
         state.selectedEvent = freshEvt;
@@ -2347,7 +2900,7 @@ async function revertCombinedComplete() {
                     }
                 }
             }
-            showToast('↩️ ' + evt.name + ' 경기 완료가 취소되었습니다.', 'success', 3000);
+            showToast('↩ ' + evt.name + ' 경기 완료가 취소되었습니다.', 'success', 3000);
             _adminUnlocked = true;
             // Re-fetch fresh data
             state.events = await API.getAllEvents(getCompetitionId());
@@ -2551,7 +3104,7 @@ async function _cSubTrackSaveWind(heatId) {
         const plusBtn = document.getElementById('csub-wind-plus-btn');
         if (plusBtn) plusBtn.style.display = (v === 0) ? 'inline-block' : 'none';
         const st = document.getElementById('csub-wind-status');
-        if (st) { st.textContent = '✓ 저장됨'; st.style.color = 'var(--green)'; setTimeout(() => st.textContent = '', 2000); }
+        if (st) { st.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; st.style.color = 'var(--green)'; setTimeout(() => st.textContent = '', 2000); }
         _cSubTrackUpdateWindBadge(v);
     } catch(e) { console.error('_cSubTrackSaveWind:', e); }
 }
@@ -2633,7 +3186,7 @@ async function _cSubTrackSaveAll(heatId, parentId) {
     const btn = document.querySelector('.track-actions .btn-outline');
     if (btn) {
         const orig = btn.textContent;
-        btn.textContent = `✓ 저장됨 (${saveCount}건)`; btn.disabled = true;
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨 (${saveCount}건)`; btn.disabled = true;
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
     }
 }
@@ -2669,6 +3222,9 @@ function _cSubFieldRender(area) {
     if (!area) area = document.getElementById('combined-sub-area');
     if (!area) return;
     const { entries, results, heatId, parentId, needsWind } = _cSubFieldData;
+    // WA Rules: Combined events (10종/7종) field sub-events have only 3 attempts (no 4th-6th, no finals).
+    // This function is invoked ONLY for combined sub-events (see _renderSubEvent caller).
+    const MAX_ATTEMPTS = 3;
 
     const rows = entries.map(e => {
         const er = results.filter(r => r.event_entry_id === e.event_entry_id);
@@ -2688,11 +3244,11 @@ function _cSubFieldRender(area) {
         // WA: later attempt is the official record for same distance
         let bestWind = null;
         if (best != null) {
-            for (let i = 6; i >= 1; i--) { if (att[i] === best) { bestWind = attWind[i]; break; } }
+            for (let i = MAX_ATTEMPTS; i >= 1; i--) { if (att[i] === best) { bestWind = attWind[i]; break; } }
         }
         // Build sorted valid distances (descending) for WA tie-breaking
         const sortedValid = [];
-        for (let i = 1; i <= 6; i++) { if (att[i] != null && att[i] > 0) sortedValid.push(att[i]); }
+        for (let i = 1; i <= MAX_ATTEMPTS; i++) { if (att[i] != null && att[i] > 0) sortedValid.push(att[i]); }
         sortedValid.sort((a, b) => b - a);
         return { ...e, attempts: att, attWind, best, bestWind, status_code, _isNoShow: isDNS, sortedValid };
     });
@@ -2737,21 +3293,19 @@ function _cSubFieldRender(area) {
                     <thead>
                         ${needsWind ? `<tr><th rowspan="2">RANK</th><th style="text-align:left;">NAME / BIB</th>
                             <th class="att-col-first att-col-odd" colspan="1">1</th><th class="att-col-even" colspan="1">2</th><th class="att-col-odd" colspan="1">3</th>
-                            <th class="att-col-even" colspan="1">4</th><th class="att-col-odd" colspan="1">5</th><th class="att-col-even" colspan="1">6</th>
                             <th class="att-col-best" rowspan="2">BEST</th><th rowspan="2" style="width:65px;" title="DNS/NM">상태</th>
                         </tr>
                         <tr><th style="text-align:left;">소속</th>
                             <th class="wind-header att-col-first att-col-odd">풍속</th><th class="wind-header att-col-even">풍속</th><th class="wind-header att-col-odd">풍속</th>
-                            <th class="wind-header att-col-even">풍속</th><th class="wind-header att-col-odd">풍속</th><th class="wind-header att-col-even">풍속</th>
                         </tr>` : `<tr><th>RANK</th><th>NAME / BIB</th>
-                            <th class="att-col-first att-col-odd">1</th><th class="att-col-even">2</th><th class="att-col-odd">3</th><th class="att-col-even">4</th><th class="att-col-odd">5</th><th class="att-col-even">6</th>
+                            <th class="att-col-first att-col-odd">1</th><th class="att-col-even">2</th><th class="att-col-odd">3</th>
                             <th class="att-col-best">BEST</th><th style="width:65px;" title="DNS/NM">상태</th>
                         </tr>`}
                     </thead>
                     <tbody>${sorted.map((r, rowIdx) => {
                         const isDisabled = !!r.status_code;
                         let distCells = '';
-                        for (let i = 1; i <= 6; i++) {
+                        for (let i = 1; i <= MAX_ATTEMPTS; i++) {
                             const attCls = (i === 1 ? 'att-col-first ' : '') + (i % 2 === 1 ? 'att-col-odd' : 'att-col-even');
                             const v = r.attempts[i];
                             const hasVal = v !== undefined && v !== null;
@@ -2780,7 +3334,7 @@ function _cSubFieldRender(area) {
                         // Wind row cells (if needed)
                         let windCells = '';
                         if (needsWind) {
-                            for (let i = 1; i <= 6; i++) {
+                            for (let i = 1; i <= MAX_ATTEMPTS; i++) {
                                 const wAttCls = (i === 1 ? 'att-col-first ' : '') + (i % 2 === 1 ? 'att-col-odd' : 'att-col-even');
                                 if (isDisabled) {
                                     windCells += `<td class="wind-cell ${wAttCls}" style="opacity:0.3;">—</td>`;
@@ -2932,20 +3486,32 @@ async function _cSubFieldSave(entryId, attempt, distance, heatId, parentId) {
         // Preserve existing wind value when saving distance
         const existingResult = _cSubFieldData.results.find(r => r.event_entry_id === entryId && r.attempt_number === attempt);
         const wind = existingResult ? (existingResult.wind ?? null) : null;
-        await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
-        _cSubFieldData.results = await API.getResults(heatId);
+        // ─── 옵티미스틱: _cSubFieldData.results 에 먼저 반영
+        _cSubOptimisticUpsert(entryId, attempt, { heat_id: heatId, distance_meters: distance, wind, status_code: '' });
         _cSubFieldActive = null;
         _cSubFieldRender();
+
+        const resp = await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
+        if (!isOfflineResp(resp)) {
+            _cSubFieldData.results = await API.getResults(heatId);
+            _cSubFieldRender();
+        }
         await syncCombinedFromSubEvent(parentId);
     } catch (err) { console.error('_cSubFieldSave error:', err); showBanner('저장 실패', 'error'); }
 }
 
 async function _cSubFieldFoul(entryId, attempt, heatId, parentId) {
     try {
-        await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
-        _cSubFieldData.results = await API.getResults(heatId);
+        // ─── 옵티미스틱
+        _cSubOptimisticUpsert(entryId, attempt, { heat_id: heatId, distance_meters: 0, status_code: '' });
         _cSubFieldActive = null;
         _cSubFieldRender();
+
+        const resp = await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: 0 });
+        if (!isOfflineResp(resp)) {
+            _cSubFieldData.results = await API.getResults(heatId);
+            _cSubFieldRender();
+        }
         showFoulNotice();
         await syncCombinedFromSubEvent(parentId);
     } catch (err) { console.error('_cSubFieldFoul error:', err); }
@@ -2980,9 +3546,15 @@ async function _cSubFieldSetStatus(sel) {
     const eid = +sel.dataset.eid, hid = +sel.dataset.hid, pid = +sel.dataset.pid;
     const sc = sel.value;
     try {
-        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, distance_meters: sc ? null : undefined });
-        _cSubFieldData.results = await API.getResults(hid);
+        // ─── 옵티미스틱: attempt null 에 저장 (status_code 는 세션 전체)
+        _cSubOptimisticUpsert(eid, null, { heat_id: hid, status_code: sc, distance_meters: sc ? null : 0 });
         _cSubFieldRender();
+
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, distance_meters: sc ? null : undefined });
+        if (!isOfflineResp(resp)) {
+            _cSubFieldData.results = await API.getResults(hid);
+            _cSubFieldRender();
+        }
         await syncCombinedFromSubEvent(pid);
     } catch(e) { console.error('_cSubFieldSetStatus error:', e); }
 }
@@ -3016,7 +3588,7 @@ async function _cSubFieldSaveAll() {
     await syncCombinedFromSubEvent(parentId);
     const btn = document.querySelector('.track-actions .btn-primary');
     if (btn) {
-        const msg = nmCount > 0 ? `✓ 저장됨 (NM ${nmCount}건 자동처리)` : '✓ 저장됨';
+        const msg = nmCount > 0 ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨 (NM ${nmCount}건 자동처리)` : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨';
         const orig = btn.textContent;
         btn.textContent = msg; btn.disabled = true;
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
@@ -3199,13 +3771,23 @@ function _cSubHeightRender(area) {
                     } else {
                     heights.forEach(h => {
                         const hd = r.heightData[h] || {};
+                        // WA Rule 30 (혼성, 단순화):
+                        //   · 같은 높이에 O 가 있으면 → 남은 빈 시도 자동 비활성화
+                        //   · 탈락(eliminated) 자의 빈 셀은 비활성화
+                        //   · PASS('-') 는 그 차수만 포기 — 다음 차수 활성화 유지
+                        const hasO = Object.values(hd).includes('O');
                         let cellContent = '<div class="height-attempt-row">';
                         for (let i = 1; i <= 3; i++) {
                             const mark = hd[i] || '';
-                            const markCls = mark === 'PASS' ? 'mark-pass' : mark ? `mark-${mark}` : 'mark-empty';
-                            const disabled = r.eliminated && !mark ? 'disabled' : '';
-                            const displayMark2 = mark === 'PASS' ? '-' : (mark || '·');
-                            cellContent += `<button class="height-toggle-btn ${markCls}" onclick="_cSubHeightToggle(${r.event_entry_id},${h},${i})" ${disabled} title="${i}차 시도">${displayMark2}</button>`;
+                            const _normMark = mark === 'PASS' ? '-' : mark;
+                            const markCls = _normMark === '-' ? 'mark-pass' : _normMark ? `mark-${_normMark}` : 'mark-empty';
+                            const isEmpty = !mark;
+                            const shouldDisable = (r.eliminated && isEmpty) || (hasO && isEmpty);
+                            const _busy = _heightCellIsBusy(_heightCellKey(r.event_entry_id, h, i));
+                            const busyAttr = _busy ? 'disabled data-busy="1"' : '';
+                            const busyCls = _busy ? ' is-busy' : '';
+                            const displayMark2 = _busy ? '…' : (_normMark === '-' ? '-' : (_normMark || '·'));
+                            cellContent += `<button class="height-toggle-btn ${markCls}${busyCls}" onclick="_cSubHeightToggle(${r.event_entry_id},${h},${i})" ${shouldDisable ? 'disabled' : ''} ${busyAttr} title="${i}차 시도">${displayMark2}</button>`;
                         }
                         cellContent += '</div>';
                         cells += `<td class="height-toggle-cell">${cellContent}</td>`;
@@ -3215,10 +3797,11 @@ function _cSubHeightRender(area) {
                     const rankDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` :
                         (r.rank || '—');
                     // Status dropdown
-                    const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" onchange="_cSubHeightSetStatus(this)" title="DNS=불출전, DNF=미완주, DQ=실격" ${r._isNoShow ? 'disabled' : ''}>
+                    const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" onchange="_cSubHeightSetStatus(this)" title="DNS=불출전, DNF=미완주, DQ=실격, NM=기록없음" ${r._isNoShow ? 'disabled' : ''}>
                         <option value="">—</option><option value="DNS" ${r.status_code==='DNS'?'selected':''}>DNS</option>
                         <option value="DNF" ${r.status_code==='DNF'?'selected':''}>DNF</option>
                         <option value="DQ" ${r.status_code==='DQ'?'selected':''}>DQ</option>
+                        <option value="NM" ${r.status_code==='NM'?'selected':''}>NM</option>
                     </select>`;
                     return `<tr class="${r.eliminated ? 'row-eliminated' : ''} ${r.status_code ? 'row-status-code' : ''} ${r._isNoShow ? 'row-dns' : ''}">
                         <td>${rankDisp}</td>
@@ -3263,35 +3846,78 @@ async function _cSubHeightDeleteBar(barHeight) {
 }
 
 async function _cSubHeightSave() {
-    _cSubHeightData.attempts = await API.getHeightAttempts(_cSubHeightData.heatId);
-    _cSubHeightRender();
+    // ─── 단순 reload (2026-05 리빌드): 옵티미스틱 머지 제거.
+    //     toggleHeightMark 와 동일하게, 셀별 직렬화 + 동기 reload 패턴이 끝난 시점에 호출되므로
+    //     서버 응답만 신뢰하면 race 없음.
+    try {
+        const fresh = await API.getHeightAttempts(_cSubHeightData.heatId);
+        _cSubHeightData.attempts = fresh;
+        _cSubHeightRender();
+    } catch (e) {
+        console.error('_cSubHeightSave error:', e);
+    }
     const btn = document.querySelector('.track-actions .btn-primary');
-    if (btn) { const orig = btn.textContent; btn.textContent = '✓ 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
+    if (btn) { const orig = btn.textContent; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 저장됨'; btn.disabled = true; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200); }
 }
 
 async function _cSubHeightToggle(entryId, barHeight, attemptNumber) {
-    const { heatId, parentId, attempts } = _cSubHeightData;
-    const current = attempts.find(a =>
-        a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
-    );
-    const currentMark = current ? current.result_mark : '';
-    const cycle = { '': 'O', 'O': 'X', 'X': '-', '-': '', 'PASS': '' };
-    const newMark = currentMark in cycle ? cycle[currentMark] : 'O';
+    const { heatId, parentId } = _cSubHeightData;
+    // ─── 2026-05 리빌드: toggleHeightMark 와 동일 패턴.
+    //     · 셀별 직렬화 (이중 클릭 차단)
+    //     · 옵티미스틱 머지 제거 (race 의 근원)
+    //     · 클릭 즉시 busy 표시 → 서버 호출 → 통째 reload → 렌더
+    //     · cycle: empty → X → O → '-' (pass) → empty (WA Rule 30)
+    const cellKey = _heightCellKey(entryId, barHeight, attemptNumber);
+    return _heightCellRunSerial(cellKey, async () => {
+        const attempts = _cSubHeightData.attempts || [];
+        const current = attempts.find(a =>
+            a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
+        );
+        const currentMark = current ? current.result_mark : '';
+        const newMark = _heightNextMark(currentMark);
 
-    try {
-        await API.saveHeightAttempt({
-            heat_id: heatId,
-            event_entry_id: entryId,
-            bar_height: barHeight,
-            attempt_number: attemptNumber,
-            result_mark: newMark
-        });
-        _cSubHeightData.attempts = await API.getHeightAttempts(heatId);
+        _heightCellMarkBusy(cellKey, true);
         _cSubHeightRender();
-        await syncCombinedFromSubEvent(parentId);
-    } catch (err) {
-        console.error('_cSubHeightToggle error:', err);
-    }
+        try {
+            const resp = await API.saveHeightAttempt({
+                heat_id: heatId,
+                event_entry_id: entryId,
+                bar_height: barHeight,
+                attempt_number: attemptNumber,
+                result_mark: newMark
+            });
+            if (!isOfflineResp(resp)) {
+                // 서버에서 통째 재조회
+                _cSubHeightData.attempts = await API.getHeightAttempts(heatId);
+            } else {
+                // 오프라인: 화면 업데이트만 로컬에서 반영
+                if (!Array.isArray(_cSubHeightData.attempts)) _cSubHeightData.attempts = [];
+                const idx = _cSubHeightData.attempts.findIndex(a =>
+                    a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
+                );
+                if (!newMark) {
+                    if (idx >= 0) _cSubHeightData.attempts.splice(idx, 1);
+                } else {
+                    const norm = newMark === '-' ? 'PASS' : newMark;
+                    const base = idx >= 0 ? { ..._cSubHeightData.attempts[idx] } : {
+                        event_entry_id: entryId, bar_height: barHeight,
+                        attempt_number: attemptNumber, heat_id: heatId
+                    };
+                    base.result_mark = norm;
+                    if (idx >= 0) _cSubHeightData.attempts[idx] = base;
+                    else _cSubHeightData.attempts.push(base);
+                }
+            }
+            // 부모 종합 점수 갱신 (실패해도 무시)
+            syncCombinedFromSubEvent(parentId).catch(()=>{});
+        } catch (err) {
+            console.error('_cSubHeightToggle error:', err);
+            try { _cSubHeightData.attempts = await API.getHeightAttempts(heatId); } catch(_) {}
+        } finally {
+            _heightCellMarkBusy(cellKey, false);
+            _cSubHeightRender();
+        }
+    });
 }
 
 // ── WA Summary ──────────────────────────────────────────────
@@ -3366,7 +3992,14 @@ function showAdminKeyModal(onSubmit) {
         <div class="modal-header"><div class="modal-title">관리자 인증 필요</div></div>
         <div class="modal-form">
             <p style="padding:8px 0;font-size:13px;">경기가 완료된 상태입니다. 수정하려면 관리자 키를 입력하세요.</p>
-            <input type="password" id="admin-key-modal-input" class="form-input" placeholder="관리자 키" style="width:100%;padding:8px 12px;margin-top:4px;">
+            <input type="password" id="admin-key-modal-input" class="form-input"
+                   placeholder="관리자 키 (영문/숫자)"
+                   autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                   lang="en" inputmode="text"
+                   style="width:100%;padding:8px 12px;margin-top:4px;ime-mode:disabled;">
+            <div id="admin-key-ime-warn" style="display:none;color:#d97706;font-size:12px;margin-top:6px;font-weight:600;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 한글이 입력되었습니다. 키보드 <b>한/영 키</b>를 눌러 영문 모드로 전환 후 다시 입력해 주세요.
+            </div>
             <div id="admin-key-modal-error" style="display:none;color:var(--danger);font-size:12px;margin-top:6px;"></div>
         </div>
         <div class="modal-footer">
@@ -3377,11 +4010,30 @@ function showAdminKeyModal(onSubmit) {
     document.body.appendChild(overlay);
     overlay.style.display = 'flex';
     const inp = document.getElementById('admin-key-modal-input');
+    const imeWarn = document.getElementById('admin-key-ime-warn');
     inp.value = '';
+    // 한글(가-힣) 또는 한글 자모(ㄱ-ㅣ) 감지 함수
+    const _hasHangul = (s) => /[\u3131-\u318E\uAC00-\uD7A3]/.test(s || '');
+    const _checkIme = () => {
+        if (_hasHangul(inp.value)) {
+            imeWarn.style.display = 'block';
+        } else {
+            imeWarn.style.display = 'none';
+        }
+    };
+    inp.addEventListener('input', _checkIme);
+    inp.addEventListener('compositionend', _checkIme);
     let submitted = false;
     const closeOverlay = () => { overlay.remove(); };
     const submit = () => {
         if (submitted) return;
+        // 한글 감지 시 제출 차단 + 경고 + 자동 클리어
+        if (_hasHangul(inp.value)) {
+            imeWarn.style.display = 'block';
+            inp.value = '';
+            setTimeout(() => inp.focus(), 50);
+            return;
+        }
         submitted = true;
         closeOverlay();
         onSubmit(inp.value);
@@ -3675,7 +4327,7 @@ async function showLaneAssignmentReview(finalEventId, athleteCount) {
         <div class="lane-review-overlay" id="lane-review-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;">
             <div style="background:white;border-radius:12px;max-width:800px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
                 <div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border-radius:12px 12px 0 0;">
-                    <h3 style="margin:0;font-size:16px;color:#166534;">✓ 결승 라운드 생성 완료</h3>
+                    <h3 style="margin:0;font-size:16px;color:#166534;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 결승 라운드 생성 완료</h3>
                     <p style="margin:4px 0 0;font-size:13px;color:#15803d;">${data.event_name} — ${athleteCount}명 진출 / WA ${data.pattern_label || '기본'} 레인 배정</p>
                 </div>
                 <div style="padding:16px 24px;">
@@ -3773,7 +4425,7 @@ async function saveLaneReview(finalEventId) {
             const err = await resp.json();
             throw new Error(err.error || 'Lane update failed');
         }
-        showToast('✓ 레인 배정 저장 완료', 'success', 2000);
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 레인 배정 저장 완료', 'success', 2000);
     } catch (e) {
         showToast('레인 저장 실패: ' + e.message, 'error', 3000);
     }
@@ -3813,34 +4465,12 @@ async function approveSemifinalQualification() {
 // COMPLETE UI BUILDER — unified for all event types
 // ============================================================
 function _buildCompleteUI(evt) {
-    const dlBtn = `<button class="btn btn-outline btn-sm" onclick="downloadResultImage(${evt.id})" title="1080x1350 결과 이미지 다운로드" style="margin-left:auto;">결과 이미지</button>`;
+    // NOTE: 한글 깨짐 이슈로 "결과 이미지" 다운로드 버튼은 제거함 (PDF 결과지로 대체)
     if (evt.round_status === 'completed') {
-        return `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:12px;">✓ 경기 완료됨</div>
-                <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>
-                ${dlBtn}`;
+        return `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:12px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 경기 완료됨</div>
+                <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`;
     }
-    return `<button class="btn btn-success btn-sm" onclick="completeRound()" title="모든 기록이 저장된 후 경기를 최종 완료 처리합니다">경기 완료</button>
-            ${dlBtn}`;
-}
-
-async function downloadResultImage(eventId) {
-    try {
-        showToast('이미지 생성 중...', 'info', 2000);
-        const resp = await fetch('/api/result-image/' + eventId);
-        if (!resp.ok) throw new Error('이미지 생성 실패');
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'result_' + eventId + '.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showToast('✓ 이미지 다운로드 완료', 'success', 2000);
-    } catch(e) {
-        showToast('이미지 다운로드 실패: ' + e.message, 'error', 3000);
-    }
+    return `<button class="btn btn-success btn-sm" onclick="completeRound()" title="모든 기록이 저장된 후 경기를 최종 완료 처리합니다">경기 완료</button>`;
 }
 
 // ============================================================
@@ -3861,7 +4491,7 @@ async function revertRoundComplete() {
         try {
             await API.revertComplete(evt.id, key);
             _adminUnlocked = true;
-            showToast('↩️ ' + evt.name + ' 경기 완료가 취소되었습니다.', 'success', 3000);
+            showToast('↩ ' + evt.name + ' 경기 완료가 취소되었습니다.', 'success', 3000);
             state.events = await API.getAllEvents(getCompetitionId());
             state.selectedEvent = await API.getEvent(evt.id);
             renderMatrix();
@@ -3887,6 +4517,17 @@ async function revertRoundComplete() {
 // ROUND COMPLETION — with registered judge dropdown
 // ============================================================
 async function completeRound() {
+    // ─── height_attempt 옵티미스틱이 아직 서버에 commit 안 된 게 있으면 대기.
+    //     이걸 안 하면 검증/완료 직후 loadFieldHeightData 가 stale 한 fresh 로 옵티미스틱을 덮어
+    //     "전부 X 처리" 가 됨.
+    const isHeightEvt = state.selectedEvent && state.selectedEvent.category === 'field_height';
+    if (isHeightEvt) {
+        const ok = await waitForOptimisticHeightFlush(2500);
+        if (!ok) {
+            const proceed = confirm('일부 시기 기록 저장이 아직 완료되지 않았습니다.\n그래도 경기를 완료하시겠습니까? (불완전한 데이터로 완료될 수 있음)');
+            if (!proceed) return;
+        }
+    }
     // Validate: all entries in all heats must have a result or status code
     try {
         const allHeats = await API.getHeats(state.selectedEventId);
@@ -3968,9 +4609,27 @@ async function doCompleteRound() {
     if (!adminKey) { errEl.textContent = '운영키를 입력하세요.'; errEl.style.display = 'block'; return; }
 
     try {
+        // [JOINT] 본 대회 종목 완료
         await API.completeEvent(state.selectedEventId, judgeName, adminKey);
+        // [JOINT] 합동 모드: 같은 그룹의 다른 대회 종목들도 함께 완료처리 시도
+        // (각 대회별 운영키가 다를 수 있어 실패 가능 — 실패해도 본 대회는 이미 완료됨)
+        let jointMsgs = [];
+        if (isJointMode()) {
+            for (const m of _jointOtherMembers()) {
+                try {
+                    await API.completeEvent(m.event_id, judgeName, adminKey);
+                    jointMsgs.push(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${m.comp_name || m.federation || '연합대회'} 동시 완료`);
+                } catch (err) {
+                    jointMsgs.push(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ${m.comp_name || m.federation || '연합대회'} 완료 실패 (운영키 다를 수 있음)`);
+                    console.warn('[joint] completeEvent failed for', m.event_id, err);
+                }
+            }
+        }
         document.getElementById('complete-modal-overlay').remove();
-        showToast('✓ ' + (state.selectedEvent?.name || '') + ' 경기 완료', 'success', 3000);
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ' + (state.selectedEvent?.name || '') + ' 경기 완료', 'success', 3000);
+        if (jointMsgs.length > 0) {
+            setTimeout(() => showToast(jointMsgs.join(' | '), 'info', 4000), 500);
+        }
         state.events = await API.getAllEvents(getCompetitionId());
         state.selectedEvent = await API.getEvent(state.selectedEventId);
         renderMatrix();
@@ -3983,10 +4642,12 @@ async function doCompleteRound() {
 }
 
 // ============================================================
-// 10종 경기 날짜별 분리 (Day 1 / Day 2)
+// 혼성경기 날짜별 분리 (Day 1 / Day 2) — 참고용 메모
 // ============================================================
-// Decathlon: Day 1 = events 1-5, Day 2 = events 6-10
-// Heptathlon: Day 1 = events 1-4, Day 2 = events 5-7
+// Decathlon (10종): Day 1 = events 1-5, Day 2 = events 6-10
+// Heptathlon (7종): Day 1 = events 1-4, Day 2 = events 5-7
+// Pentathlon (5종, 중학교): Day 1 = events 1-3 (100m,포환,허들), Day 2 = events 4-5 (높이뛰기,800m)
+//   ※ KAAF 규정: 1일 또는 연속 2일간 위 순서로 실시
 
 // ============================================================
 // MANUAL HEAT / LANE EDIT UI
@@ -4179,7 +4840,7 @@ function openFieldZoomModal() {
     overlay.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:#1a1f2b;color:#fff;flex-shrink:0;">
             <h3 style="margin:0;font-size:18px;font-family:var(--font-brand);letter-spacing:1px;">${title}</h3>
-            <button onclick="closeFieldZoomModal()" style="background:none;border:2px solid rgba(255,255,255,.3);color:#fff;font-size:16px;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:700;">✕ 닫기</button>
+            <button onclick="closeFieldZoomModal()" style="background:none;border:2px solid rgba(255,255,255,.3);color:#fff;font-size:16px;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:700;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 닫기</button>
         </div>
         <div id="field-zoom-body" style="flex:1;overflow:auto;padding:16px;background:#fff;"></div>`;
 
@@ -4231,13 +4892,13 @@ function closeFieldZoomModal() {
 // RESET EVENT RESULTS — 종목 기록 전체 초기화 (10종/7종 + 일반 종목)
 // ============================================================
 async function resetSubEventResults(eventId, eventName) {
-    if (!confirm(`⚠ [${eventName}] 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.\n정말 초기화하시겠습니까?`)) return;
+    if (!confirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.\n정말 초기화하시겠습니까?`)) return;
     if (!confirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
 
     try {
         showToast('기록 초기화 중...', 'info', 2000);
         const result = await API.resetSubEvent(eventId);
-        showToast(`✓ ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제)`, 'success', 4000);
+        showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제)`, 'success', 4000);
         // Reload the event list and current event data
         await loadEventsAndMatrix();
         if (state.selectedEventId) {
@@ -4247,4 +4908,111 @@ async function resetSubEventResults(eventId, eventName) {
         console.error('Reset error:', err);
         showToast('기록 초기화 실패: ' + (err.error || err.message || '서버 오류'), 'error', 4000);
     }
+}
+
+// ============================================================
+// PREFETCH ALL EVENTS — 오프라인 대비 사전 로딩
+// 대회의 모든 종목/히트/엔트리/결과/높이시기 데이터를 GET 으로 fetch 해서
+// Service Worker 의 IndexedDB 캐시에 채워둔다. 오프라인 상태에서도
+// 임의 종목 간 이동이 가능하도록 보장.
+// ============================================================
+let _prefetchCancelled = false;
+
+async function runPrefetchAllEvents() {
+    const compId = getCompetitionId();
+    if (!compId) { showToast('대회가 선택되지 않았습니다.', 'error', 3000); return; }
+    if (!navigator.onLine) {
+        showToast('현재 오프라인 상태입니다. 온라인 상태에서 실행해주세요.', 'error', 3500);
+        return;
+    }
+    const btn = document.getElementById('btn-prefetch-offline');
+    const box = document.getElementById('prefetch-progress');
+    const bar = document.getElementById('prefetch-progress-bar');
+    const txt = document.getElementById('prefetch-status-text');
+    if (!box || !bar || !txt) return;
+    _prefetchCancelled = false;
+    box.style.display = 'block';
+    bar.style.width = '0%';
+    txt.textContent = '대회 정보 로딩…';
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+
+    try {
+        // 1) 공용 컨텍스트
+        await Promise.allSettled([
+            API.getCompetition(compId),
+            API.getCompetitionInfo(compId),
+            API.getAllEvents(compId)
+        ]);
+
+        // 2) 모든 종목 목록
+        const events = await API.getAllEvents(compId);
+        if (!events || events.length === 0) {
+            txt.textContent = '캐시할 종목이 없습니다.';
+            setTimeout(() => { box.style.display = 'none'; }, 2000);
+            return;
+        }
+
+        // 3) 각 종목별로 heats / entries / results / heightAttempts(높이뛰기만) fetch
+        let done = 0;
+        const total = events.length;
+        const errors = [];
+        // 동시 4개씩 처리 (서버 부하 방지)
+        const concurrency = 4;
+        const queue = [...events];
+        const workers = Array.from({ length: concurrency }, async () => {
+            while (queue.length > 0 && !_prefetchCancelled) {
+                const evt = queue.shift();
+                if (!evt) break;
+                try {
+                    // heats
+                    const heats = await API.getHeats(evt.id).catch(() => []);
+                    // 각 heat 별 entries / results / heightAttempts
+                    for (const h of (heats || [])) {
+                        if (_prefetchCancelled) break;
+                        await Promise.allSettled([
+                            API.getHeatEntries(h.id),
+                            API.getResults(h.id),
+                            (evt.category === 'field_height')
+                                ? API.getHeightAttempts(h.id)
+                                : Promise.resolve(null)
+                        ]);
+                    }
+                } catch (e) {
+                    errors.push({ event: evt.name, error: e.message || String(e) });
+                } finally {
+                    done++;
+                    const pct = Math.round((done / total) * 100);
+                    bar.style.width = pct + '%';
+                    txt.textContent = `${done}/${total} 종목 (${pct}%) — ${evt.name}`;
+                }
+            }
+        });
+        await Promise.all(workers);
+
+        if (_prefetchCancelled) {
+            txt.textContent = `취소됨 (${done}/${total})`;
+            showToast(`사전로딩이 취소되었습니다 (${done}/${total} 완료).`, 'info', 3500);
+        } else {
+            txt.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 완료 ${done}/${total}${errors.length ? ` (실패 ${errors.length}건)` : ''}`;
+            const msg = errors.length === 0
+                ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 사전로딩 완료! ${total}개 종목의 데이터가 캐시되었습니다. 이제 오프라인에서도 종목 간 이동이 가능합니다.`
+                : `사전로딩 완료 — 성공 ${total - errors.length}/${total}, 실패 ${errors.length}건. 실패한 종목은 오프라인 이동이 안 될 수 있습니다.`;
+            showToast(msg, errors.length === 0 ? 'success' : 'info', 5000);
+            if (errors.length > 0) console.warn('[prefetch] errors:', errors);
+        }
+        // 3초 후 진행률 박스 숨김
+        setTimeout(() => { box.style.display = 'none'; }, 3000);
+    } catch (err) {
+        console.error('[prefetch] fatal:', err);
+        txt.textContent = '오류 발생: ' + (err.message || '알 수 없는 오류');
+        showToast('사전로딩 실패: ' + (err.message || '알 수 없는 오류'), 'error', 4000);
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    }
+}
+
+function cancelPrefetchAllEvents() {
+    _prefetchCancelled = true;
+    const txt = document.getElementById('prefetch-status-text');
+    if (txt) txt.textContent = '취소 중…';
 }

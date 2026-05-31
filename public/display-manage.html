@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PACE RISE : Node — 노출용 대회 관리</title>
-<link rel="stylesheet" href="styles.css?v=71">
+<link rel="stylesheet" href="styles.css?v=72">
+<link rel="stylesheet" href="/lib/responsive.css?v=1">
 <style>
 :root { --gold:#b79f58; --gold-bg:#f8f4ea; --gold-dark:#8a7640; --danger:#c62828; --success:#2e7d32; --border:#e5e7eb; --bg:#f9fafb; --text:#1a1f2b; --muted:#888; --blue:#1565c0; --radius:8px; }
 * { box-sizing:border-box; margin:0; padding:0; }
@@ -201,7 +202,7 @@
 <!-- Link Edit Modal (hidden) -->
 <div id="link-modal" style="display:none;"></div>
 
-<script src="common.js?v=71"></script>
+<script src="common.js?v=74"></script>
 <script>
 // ═══════════════════════════════════════════════════════════
 // STATE
@@ -278,6 +279,8 @@ function toast(msg,type='success'){ const t=document.createElement('div');t.clas
 document.addEventListener('DOMContentLoaded', async()=>{
     if(!compId){alert('대회를 선택해주세요.');location.href='/';return;}
     renderPageNav('display-manage');
+    // [정책] 종료된 대회 + 운영진(operation) → 진입 차단
+    if (typeof guardEndedCompForOperation === 'function') await guardEndedCompForOperation('display-manage');
     await loadAll();
 });
 
@@ -346,15 +349,21 @@ function renderTimetable(el){
         <div class="upload-row">
             <div class="upload-card" onclick="this.querySelector('input').click()">
                 <input type="file" accept=".xlsx,.xls" onchange="uploadTT(this)">
-                <div class="upload-icon">📅</div>
+                <div class="upload-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
                 <div class="upload-title">시간표 엑셀 업로드</div>
                 <div class="upload-sub">.xlsx / .xls — 업로드 시 종목 자동 생성</div>
             </div>
             <div class="upload-card" onclick="this.querySelector('input').click()">
                 <input type="file" accept=".pdf" multiple onchange="uploadRoster(this)">
-                <div class="upload-icon">📋</div>
+                <div class="upload-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="6" y="3" width="12" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg></div>
                 <div class="upload-title">참가명단 PDF 업로드 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(여러 개 동시 선택 가능)</span></div>
                 <div class="upload-sub">.pdf — 자동 파싱 + 종목 매칭 · 파일명에 부 라벨(꿈나무/선수권/U18/U20) 자동 인식</div>
+            </div>
+            <div class="upload-card" onclick="this.querySelector('input').click()" style="border:2px dashed #b79f58;background:#fffbf2;">
+                <input type="file" accept=".xlsx,.xls" onchange="uploadRosterExcel(this)">
+                <div class="upload-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg></div>
+                <div class="upload-title">참가명단 Excel 업로드 <span style="font-size:11px;color:#b79f58;font-weight:600;">(권장)</span></div>
+                <div class="upload-sub">.xlsx — 결정적 컬럼 매핑(일차/종목/라운드/조/레인/배번/성명/소속/부/성별)<br>PDF 추측 파싱이 실패하던 케이스를 사용자가 직접 정정 후 업로드</div>
             </div>
         </div>
         <div style="margin-top:12px;padding:10px 12px;background:#f8f4ea;border-radius:8px;font-size:12px;">
@@ -364,7 +373,7 @@ function renderTimetable(el){
             </label>
         </div>
         <div style="margin-top:10px;padding:10px 12px;background:#fff5f0;border:1px solid #fed7aa;border-radius:8px;font-size:12px;">
-            <div style="font-weight:600;margin-bottom:6px;color:#9a3412;">🧹 종목 정리 도구</div>
+            <div style="font-weight:600;margin-bottom:6px;color:#9a3412;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M19.4 2.6l2 2L9 17H7v-2L19.4 2.6z"/><path d="M9 17l-3 5 5-3"/><path d="M3 22l3-3"/></svg> 종목 정리 도구</div>
             <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">
                 옛날 코드로 시간표를 올렸을 때 잘못된 division/gender로 만들어진 <b>고아 종목</b>(시간표·엔트리·조·결과 모두 없음)을 안전하게 삭제합니다.<br>
                 미리보기로 대상 확인 후 삭제하세요. 결과/영상 링크가 있는 종목은 절대 삭제되지 않습니다.
@@ -372,6 +381,9 @@ function renderTimetable(el){
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button class="btn btn-sm btn-ghost" onclick="previewOrphanEvents()">고아 종목 미리보기</button>
                 <button class="btn btn-sm btn-ghost" onclick="relinkTimetable()">시간표 재링크</button>
+                <button class="btn btn-sm btn-ghost" onclick="relinkRoster()">명단 재매칭</button>
+                <button class="btn btn-sm btn-ghost" onclick="showUnmatchedRoster()">미매칭 명단 리포트</button>
+                <button class="btn btn-sm" style="background:#b79f58;color:#fff;" onclick="openMatchEditor()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 매칭 수동 수정</button>
                 <button class="btn btn-sm" style="background:#dc2626;color:#fff;" onclick="cleanupOrphanEvents()">고아 종목 삭제 실행</button>
             </div>
             <div id="orphan-result" style="margin-top:10px;font-size:12px;"></div>
@@ -386,7 +398,7 @@ function renderTimetable(el){
     </div>`;
 
     if(dayNums.length===0){
-        h += '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">시간표가 없습니다. 엑셀을 업로드하세요.</div></div>';
+        h += '<div class="empty-state"><div class="empty-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div class="empty-text">시간표가 없습니다. 엑셀을 업로드하세요.</div></div>';
         el.innerHTML=h; return;
     }
 
@@ -468,7 +480,7 @@ function renderTimetable(el){
                 <td class="time-cell">${g.time||'—'}</td>
                 <td class="event-cell"><span>${esc(eventLabel)}</span><span style="display:flex;gap:2px;flex-shrink:0;">${rightTags}</span></td>
                 <td style="text-align:center;white-space:nowrap;">${linkBadge}${resultBtn}</td>
-                <td style="text-align:center;"><span style="color:var(--gold);font-size:14px;">✏️</span></td>
+                <td style="text-align:center;"><span style="color:var(--gold);font-size:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></span></td>
             </tr>`;
         });
         h += '</tbody></table>';
@@ -541,7 +553,7 @@ function openTTEdit(ids){
 
                 ${isMulti ? `
                 <div style="background:#fff8e1;border:1px solid #ffd54f;border-radius:6px;padding:10px;margin-bottom:12px;">
-                    <div style="font-size:11px;font-weight:700;color:#bf8f00;margin-bottom:6px;">⚠️ 부(종별) 일괄 수정 — 같은 시간/종목/라운드 묶음 ${entries.length}건</div>
+                    <div style="font-size:11px;font-weight:700;color:#bf8f00;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 부(종별) 일괄 수정 — 같은 시간/종목/라운드 묶음 ${entries.length}건</div>
                     <div style="display:grid;grid-template-columns:repeat(${Math.min(entries.length,3)},1fr);gap:8px;">
                         ${entries.map((e,i)=>`
                             <div>
@@ -576,7 +588,7 @@ function openTTEdit(ids){
                 </div>` : ''}
 
                 <div style="display:flex;justify-content:space-between;gap:8px;border-top:1px solid #eee;padding-top:12px;">
-                    <button class="btn-outline" style="color:var(--danger);border-color:var(--danger);" onclick="deleteTTEntries(${JSON.stringify(ids).replace(/"/g,'&quot;')})">🗑 ${isMulti?'전체':'행'} 삭제</button>
+                    <button class="btn-outline" style="color:var(--danger);border-color:var(--danger);" onclick="deleteTTEntries(${JSON.stringify(ids).replace(/"/g,'&quot;')})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> ${isMulti?'전체':'행'} 삭제</button>
                     <div style="display:flex;gap:8px;">
                         <button class="btn-outline" onclick="closeLinkEdit()">취소</button>
                         <button class="btn-gold" onclick="saveTTEdit(${JSON.stringify(ids).replace(/"/g,'&quot;')}, ${linkedEvId||'null'})">저장</button>
@@ -754,7 +766,7 @@ function renderRoster(el){
     const rDays = [...new Set(_roster.map(r=>r.day))].sort((a,b)=>a-b);
 
     if(_roster.length===0){
-        el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">참가명단이 없습니다. PDF를 업로드하세요.</div></div>';
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="6" y="3" width="12" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg></div><div class="empty-text">참가명단이 없습니다. PDF를 업로드하세요.</div></div>';
         return;
     }
 
@@ -1060,7 +1072,7 @@ function renderEvents(el){
         h += '</div></div>';
     });
     
-    if(list.length===0) h += '<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-text">조건에 맞는 종목이 없습니다.</div></div>';
+    if(list.length===0) h += '<div class="empty-state"><div class="empty-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg></div><div class="empty-text">조건에 맞는 종목이 없습니다.</div></div>';
     el.innerHTML = h;
 }
 
@@ -1104,7 +1116,7 @@ function renderMatch(el){
         });
         h += '</div>';
     } else {
-        h += '<div class="empty-state" style="padding:30px;"><div class="empty-icon">✅</div><div class="empty-text">모든 선수가 매칭되었습니다!</div></div>';
+        h += '<div class="empty-state" style="padding:30px;"><div class="empty-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg></div><div class="empty-text">모든 선수가 매칭되었습니다!</div></div>';
     }
     el.innerHTML = h;
 }
@@ -1123,14 +1135,14 @@ async function uploadTT(inp){
     const file=inp.files[0]; if(!file)return;
     const forceMode = document.getElementById('upload-force')?.checked;
     if(forceMode){
-        if(!confirm('⚠️ 강제 덮어쓰기 모드입니다.\n\n과거 일차의 시간표도 모두 삭제 후 새로 등록되며, 결과 링크나 수동 수정 사항이 사라질 수 있습니다.\n\n계속하시겠습니까?')){
+        if(!confirm('[경고] 강제 덮어쓰기 모드입니다.\n\n과거 일차의 시간표도 모두 삭제 후 새로 등록되며, 결과 링크나 수동 수정 사항이 사라질 수 있습니다.\n\n계속하시겠습니까?')){
             inp.value=''; return;
         }
     }
     const fd=new FormData();
     fd.append('file',file); fd.append('competition_id',compId); fd.append('admin_key',getKey());
     fd.append('overwrite_mode', forceMode ? 'force' : 'smart');
-    document.getElementById('upload-msg').innerHTML='<span style="color:var(--gold);">⏳ 업로드 중...</span>';
+    document.getElementById('upload-msg').innerHTML='<span style="color:var(--gold);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 업로드 중...</span>';
     const r=await fetch('/api/display/timetable/upload',{method:'POST',body:fd}).then(r=>r.json()).catch(e=>({error:e.message}));
     if(r.success){
         // Detailed result message
@@ -1138,12 +1150,12 @@ async function uploadTT(inp){
         if(r.skippedPastDays && r.skippedPastDays.length>0){
             detail += ` (과거 ${r.skippedPastDays.map(d=>d+'일차').join('·')} 보존됨)`;
         }
-        document.getElementById('upload-msg').innerHTML=`<span style="color:var(--success,#2e7d32);">✅ ${esc(detail)}</span>`;
+        document.getElementById('upload-msg').innerHTML=`<span style="color:var(--success,#2e7d32);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${esc(detail)}</span>`;
         toast('시간표 업로드 완료');
         inp.value='';
         await loadAll();
     } else {
-        document.getElementById('upload-msg').innerHTML=`<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+        document.getElementById('upload-msg').innerHTML=`<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(r.error||'실패')}</span>`;
     }
 }
 
@@ -1151,12 +1163,12 @@ async function uploadTT(inp){
 // 미리보기 (삭제하지 않고 대상만 조회)
 async function previewOrphanEvents(){
     const box = document.getElementById('orphan-result');
-    box.innerHTML = '<span style="color:var(--gold);">⏳ 조회 중...</span>';
+    box.innerHTML = '<span style="color:var(--gold);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 조회 중...</span>';
     try {
         const url = `/api/display/cleanup-orphan-events/${compId}?admin_key=${encodeURIComponent(getKey())}`;
         const r = await fetch(url).then(r=>r.json());
         if(!r.success){
-            box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+            box.innerHTML = `<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(r.error||'실패')}</span>`;
             return;
         }
         const buckets = r.by_bucket || {};
@@ -1167,7 +1179,7 @@ async function previewOrphanEvents(){
             .join('');
         box.innerHTML = `
             <div style="background:#fff;border:1px solid var(--gray);border-radius:6px;padding:10px;">
-                <div style="font-weight:600;margin-bottom:6px;">📋 고아 종목 미리보기</div>
+                <div style="font-weight:600;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="6" y="3" width="12" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg> 고아 종목 미리보기</div>
                 <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">
                     전체 종목 ${r.total_events}개 중 <b style="color:#dc2626;">${r.orphan_count}개 삭제 후보</b>
                 </div>
@@ -1177,7 +1189,7 @@ async function previewOrphanEvents(){
                 ${sampleHtml ? `<details style="font-size:11px;"><summary style="cursor:pointer;">상세 목록 (최대 30건 표시)</summary><ul style="margin:4px 0 0 16px;padding:0;max-height:200px;overflow:auto;">${sampleHtml}</ul></details>` : ''}
             </div>`;
     } catch(e){
-        box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(e.message)}</span>`;
+        box.innerHTML = `<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(e.message)}</span>`;
     }
 }
 
@@ -1185,7 +1197,7 @@ async function previewOrphanEvents(){
 async function relinkTimetable(){
     if(!confirm('시간표의 모든 행을 다시 링크합니다.\n\n잘못된 라벨로 매칭되었던 행이 올바른 종목으로 재매핑되며, 누락된 종목은 자동 생성됩니다.\n\n진행하시겠습니까?')) return;
     const box = document.getElementById('orphan-result');
-    box.innerHTML = '<span style="color:var(--gold);">⏳ 재링크 중...</span>';
+    box.innerHTML = '<span style="color:var(--gold);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 재링크 중...</span>';
     try {
         const r = await fetch(`/api/display/timetable/relink/${compId}`, {
             method: 'POST',
@@ -1193,22 +1205,92 @@ async function relinkTimetable(){
             body: JSON.stringify({ admin_key: getKey() })
         }).then(r=>r.json());
         if(!r.success){
-            box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+            box.innerHTML = `<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(r.error||'실패')}</span>`;
             return;
         }
-        box.innerHTML = `<span style="color:var(--success,#2e7d32);">✅ 재링크 완료 — 전체 ${r.total}건 / 링크됨 ${r.linked}건 / 미매칭 ${r.unlinked}건 (이전 ${r.before}건)</span>`;
+        box.innerHTML = `<span style="color:var(--success,#2e7d32);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 재링크 완료 — 전체 ${r.total}건 / 링크됨 ${r.linked}건 / 미매칭 ${r.unlinked}건 (이전 ${r.before}건)</span>`;
         toast('시간표 재링크 완료');
     } catch(e){
-        box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(e.message)}</span>`;
+        box.innerHTML = `<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(e.message)}</span>`;
+    }
+}
+
+// 명단 재매칭 — PDF 재업로드 없이 매칭 로직만 다시 돌림
+async function relinkRoster(){
+    if(!confirm('명단 전체를 다시 매칭합니다.\n\n현재 명단 데이터는 그대로 두고, 시간표 종목과의 연결만 재계산합니다.\n매칭 로직 개선·시간표 변경 후 사용하세요.\n\n진행하시겠습니까?')) return;
+    const box = document.getElementById('orphan-result');
+    box.innerHTML = '<span style="color:var(--gold);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 명단 재매칭 중...</span>';
+    try {
+        const r = await fetch(`/api/display/roster/relink/${compId}`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ admin_key: getKey() })
+        }).then(r=>r.json());
+        if(!r.success){
+            box.innerHTML = `<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(r.error||'실패')}</span>`;
+            return;
+        }
+        box.innerHTML = `<span style="color:var(--success,#2e7d32);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 명단 재매칭 완료 — 전체 ${r.total}명 / 매칭 ${r.matched}명 / 미매칭 ${r.unmatched}명 (이전 ${r.before}명)</span>`;
+        toast(`명단 재매칭: ${r.matched}/${r.total}`);
+        if(typeof loadAll==='function') await loadAll();
+    } catch(e){
+        box.innerHTML = `<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(e.message)}</span>`;
+    }
+}
+
+// 미매칭 명단 리포트 — 어떤 (종목,라운드,부,성별) 조합이 시간표에 없어서 매칭 실패했는지 표시
+async function showUnmatchedRoster(){
+    const box = document.getElementById('orphan-result');
+    box.innerHTML = '<span style="color:var(--gold);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 미매칭 리포트 조회 중...</span>';
+    try {
+        const r = await fetch(`/api/display/roster/unmatched/${compId}`).then(r=>r.json());
+        if(!r.success){
+            box.innerHTML = `<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(r.error||'실패')}</span>`;
+            return;
+        }
+        if(r.total_unmatched===0){
+            box.innerHTML = `<span style="color:var(--success,#2e7d32);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 미매칭 명단 없음 — 모든 명단이 시간표 종목에 연결되어 있습니다.</span>`;
+            return;
+        }
+        const rowsHtml = (r.groups||[]).map(g => `
+            <tr>
+                <td style="padding:4px 8px;border-bottom:1px solid #eee;">${esc(g.event_name||'')}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #eee;">${esc(g.round||'')}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #eee;">${esc(g.division||'(빈값)')}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #eee;">${esc(g.gender||'(빈값)')}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:600;">${g.cnt}명</td>
+            </tr>
+        `).join('');
+        box.innerHTML = `
+            <div style="background:#fff;border:1px solid #fed7aa;border-radius:6px;padding:10px;">
+                <div style="color:#c62828;font-weight:600;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 미매칭 명단: 총 ${r.total_unmatched}명 (${r.groups.length}개 그룹)</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">아래 (종목·라운드·부·성별) 조합이 시간표에 없거나 표기가 달라서 매칭에 실패했습니다. 시간표 엑셀의 종별/라운드 컬럼 값을 확인하세요.</div>
+                <div style="max-height:300px;overflow:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                        <thead>
+                            <tr style="background:#fff5f0;">
+                                <th style="padding:4px 8px;text-align:left;border-bottom:1px solid #fed7aa;">종목</th>
+                                <th style="padding:4px 8px;text-align:left;border-bottom:1px solid #fed7aa;">라운드</th>
+                                <th style="padding:4px 8px;text-align:left;border-bottom:1px solid #fed7aa;">부</th>
+                                <th style="padding:4px 8px;text-align:left;border-bottom:1px solid #fed7aa;">성별</th>
+                                <th style="padding:4px 8px;text-align:right;border-bottom:1px solid #fed7aa;">인원</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    } catch(e){
+        box.innerHTML = `<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(e.message)}</span>`;
     }
 }
 
 // 실제 삭제 — 미리보기 후 진행 권장
 async function cleanupOrphanEvents(){
-    if(!confirm('⚠️ 고아 종목을 삭제합니다.\n\n시간표·엔트리·조·결과(result_url/video_url)가 모두 없는 종목만 삭제됩니다.\n부모 종목으로 참조되는 10종/7종 sub-event 도 보호됩니다.\n\n계속하시겠습니까?')) return;
+    if(!confirm('[경고] 고아 종목을 삭제합니다.\n\n시간표·엔트리·조·결과(result_url/video_url)가 모두 없는 종목만 삭제됩니다.\n부모 종목으로 참조되는 10종/7종 sub-event 도 보호됩니다.\n\n계속하시겠습니까?')) return;
     if(!confirm('한번 더 확인합니다. 정말 삭제하시겠습니까?')) return;
     const box = document.getElementById('orphan-result');
-    box.innerHTML = '<span style="color:var(--gold);">⏳ 삭제 중...</span>';
+    box.innerHTML = '<span style="color:var(--gold);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 삭제 중...</span>';
     try {
         const r = await fetch(`/api/display/cleanup-orphan-events/${compId}`, {
             method: 'POST',
@@ -1216,19 +1298,19 @@ async function cleanupOrphanEvents(){
             body: JSON.stringify({ admin_key: getKey() })
         }).then(r=>r.json());
         if(!r.success){
-            box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(r.error||'실패')}</span>`;
+            box.innerHTML = `<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(r.error||'실패')}</span>`;
             return;
         }
         const sampleHtml = (r.sample||[]).map(o => `<li>#${o.id} ${esc(o.name)} | ${esc(o.gender)} | ${esc(o.division||'(빈값)')} | ${esc(o.round_type)}</li>`).join('');
         box.innerHTML = `
             <div style="background:#fff;border:1px solid var(--gray);border-radius:6px;padding:10px;">
-                <div style="color:var(--success,#2e7d32);font-weight:600;">✅ ${r.deleted}개 종목 삭제 완료</div>
+                <div style="color:var(--success,#2e7d32);font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${r.deleted}개 종목 삭제 완료</div>
                 ${sampleHtml ? `<details style="font-size:11px;margin-top:6px;"><summary style="cursor:pointer;">삭제된 종목 샘플 (최대 20건)</summary><ul style="margin:4px 0 0 16px;padding:0;">${sampleHtml}</ul></details>` : ''}
             </div>`;
         toast(`고아 종목 ${r.deleted}개 삭제됨`);
         await loadAll();
     } catch(e){
-        box.innerHTML = `<span style="color:var(--danger);">❌ ${esc(e.message)}</span>`;
+        box.innerHTML = `<span style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(e.message)}</span>`;
     }
 }
 
@@ -1275,6 +1357,294 @@ async function _uploadOneRoster(file, day){
     }
 }
 
+// ── Excel 명단 업로드 (결정적 컬럼 매핑) ──
+async function uploadRosterExcel(inp){
+    const file = inp.files && inp.files[0];
+    if(!file) return;
+    const msgEl = document.getElementById('upload-msg');
+    msgEl.innerHTML = `<div style="border:1px solid var(--gold);border-radius:8px;padding:10px;background:#fffbf0;">
+        <div style="font-weight:700;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> Excel 명단 업로드 중...</div>
+        <div style="font-size:12px;margin-top:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg> ${esc(file.name)}</div>
+    </div>`;
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('competition_id', compId);
+    fd.append('admin_key', getKey());
+    try{
+        const r = await fetch('/api/display/roster/upload-excel', { method:'POST', body: fd }).then(r=>r.json());
+        if(r.success){
+            msgEl.innerHTML = `<div style="border:1.5px solid var(--green);border-radius:8px;padding:10px;background:#f0fdf4;">
+                <div style="font-weight:700;color:var(--green);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> Excel 명단 업로드 완료</div>
+                <div style="font-size:12px;margin-top:4px;">총 ${r.count}명 등록 (일차: ${(r.days||[]).join(', ')})</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">매칭이 잘못된 항목은 아래 "참가명단" 탭에서 직접 수정 가능합니다.</div>
+            </div>`;
+            toast(`Excel 명단 ${r.count}명 등록`);
+            await loadAll();
+        } else {
+            msgEl.innerHTML = `<div style="border:1.5px solid var(--danger);border-radius:8px;padding:10px;background:#fef2f2;">
+                <div style="font-weight:700;color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 업로드 실패</div>
+                <div style="font-size:12px;margin-top:4px;">${esc(r.error || '알 수 없는 오류')}</div>
+            </div>`;
+        }
+    }catch(e){
+        msgEl.innerHTML = `<div style="color:var(--danger);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> ${esc(e.message)}</div>`;
+    }
+    inp.value = '';
+}
+
+// ── 매칭 수동 수정 모달 ──
+let _matchEditCache = { events: [], rows: [] };
+
+async function openMatchEditor(){
+    const overlay = document.createElement('div');
+    overlay.id = 'match-editor-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;';
+    overlay.onclick = (e) => { if(e.target === overlay) closeMatchEditor(); };
+    overlay.innerHTML = `
+        <div style="background:#fff;border-radius:12px;max-width:1200px;width:100%;padding:0;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+            <div style="padding:16px 20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:1;">
+                <div>
+                    <h3 style="margin:0;font-size:16px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 명단 매칭 수동 수정</h3>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">잘못 매칭된 항목을 종목별로 일괄 또는 개별 변경</div>
+                </div>
+                <button class="btn-outline" onclick="closeMatchEditor()" style="padding:4px 12px;">닫기</button>
+            </div>
+            <div style="padding:16px 20px;">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:12px;">
+                    <label><input type="checkbox" id="me-only-unmatched" style="margin-right:4px;"> 미매칭만 보기</label>
+                    <select id="me-day-filter" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;">
+                        <option value="">전체 일차</option>
+                        <option value="1">1일차</option><option value="2">2일차</option><option value="3">3일차</option>
+                        <option value="4">4일차</option><option value="5">5일차</option>
+                    </select>
+                    <input type="text" id="me-search" placeholder="종목/부/성명 검색..." style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;flex:1;min-width:160px;">
+                    <button class="btn btn-sm btn-ghost" onclick="loadMatchEditor()">새로고침</button>
+                </div>
+                <div id="me-content" style="max-height:65vh;overflow:auto;"></div>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    document.getElementById('me-only-unmatched').addEventListener('change', renderMatchEditor);
+    document.getElementById('me-day-filter').addEventListener('change', renderMatchEditor);
+    document.getElementById('me-search').addEventListener('input', renderMatchEditor);
+
+    await loadMatchEditor();
+}
+
+function closeMatchEditor(){
+    const ov = document.getElementById('match-editor-overlay');
+    if(ov) ov.remove();
+}
+
+async function loadMatchEditor(){
+    const container = document.getElementById('me-content');
+    if(!container) return;
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);">불러오는 중...</div>';
+    try{
+        const [evRes, rowRes] = await Promise.all([
+            fetch('/api/display/roster/events/'+compId).then(r=>r.json()),
+            fetch('/api/display/roster/list/'+compId).then(r=>r.json()),
+        ]);
+        _matchEditCache.events = evRes.events || [];
+        _matchEditCache.rows = rowRes.rows || [];
+        renderMatchEditor();
+    }catch(e){
+        container.innerHTML = `<div style="color:var(--danger);padding:20px;">로딩 실패: ${esc(e.message)}</div>`;
+    }
+}
+
+function renderMatchEditor(){
+    const container = document.getElementById('me-content');
+    if(!container) return;
+    const onlyUnmatched = document.getElementById('me-only-unmatched').checked;
+    const dayF = document.getElementById('me-day-filter').value;
+    const q = (document.getElementById('me-search').value || '').toLowerCase().trim();
+
+    let rows = _matchEditCache.rows.slice();
+    if(onlyUnmatched) rows = rows.filter(r => !r.event_id);
+    if(dayF) rows = rows.filter(r => String(r.day) === dayF);
+    if(q){
+        rows = rows.filter(r =>
+            (r.event_name||'').toLowerCase().includes(q) ||
+            (r.division||'').toLowerCase().includes(q) ||
+            (r.athlete_name||'').toLowerCase().includes(q) ||
+            (r.team||'').toLowerCase().includes(q) ||
+            (r.round||'').toLowerCase().includes(q));
+    }
+
+    // 그룹핑: (event_name, division, gender, round, day) 기준
+    const groups = {};
+    rows.forEach(r => {
+        const key = `${r.day}|${r.event_name}|${r.division||''}|${r.gender||''}|${r.round||''}`;
+        if(!groups[key]) groups[key] = { day: r.day, event_name: r.event_name, division: r.division, gender: r.gender, round: r.round, items: [], matched: 0, total: 0 };
+        groups[key].items.push(r);
+        groups[key].total++;
+        if(r.event_id) groups[key].matched++;
+    });
+
+    const groupList = Object.values(groups).sort((a,b) => a.day-b.day || (a.event_name||'').localeCompare(b.event_name||'') || (a.division||'').localeCompare(b.division||''));
+
+    if(groupList.length === 0){
+        container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);">표시할 명단이 없습니다.</div>';
+        return;
+    }
+
+    const events = _matchEditCache.events;
+    const evOptions = events.map(e =>
+        `<option value="${e.id}">${esc(e.name)} | ${esc(e.division||'-')} | ${e.gender||'-'} | ${e.round_type||'-'}</option>`
+    ).join('');
+
+    let h = '';
+    groupList.forEach((g, gi) => {
+        const fullyMatched = g.matched === g.total;
+        const partlyMatched = g.matched > 0 && g.matched < g.total;
+        const headColor = fullyMatched ? '#10b981' : (partlyMatched ? '#f59e0b' : '#ef4444');
+        const headBg = fullyMatched ? '#f0fdf4' : (partlyMatched ? '#fffbeb' : '#fef2f2');
+        // 이 그룹에서 가장 많이 매칭된 event_id 를 추천 기본값
+        const evCounts = {};
+        g.items.forEach(it => { if(it.event_id){ evCounts[it.event_id] = (evCounts[it.event_id]||0)+1; } });
+        const recId = Object.entries(evCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || '';
+
+        h += `
+        <div style="border:1px solid #eee;border-radius:8px;margin-bottom:12px;overflow:hidden;">
+            <div style="padding:10px 14px;background:${headBg};border-bottom:1px solid #eee;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <div style="font-weight:700;font-size:13px;">
+                        <span style="color:${headColor};">${g.matched}/${g.total}</span>
+                        ${esc(g.event_name)} <span style="color:var(--text-muted);font-weight:500;">| ${esc(g.division||'(부 미지정)')} | ${g.gender||'-'} | ${esc(g.round||'-')} | ${g.day}일차</span>
+                    </div>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        <select id="me-bulk-${gi}" style="padding:3px 6px;border:1px solid #ddd;border-radius:4px;font-size:11px;max-width:280px;">
+                            <option value="">— 일괄 매칭 종목 선택 —</option>
+                            ${evOptions}
+                        </select>
+                        <button class="btn btn-sm" onclick="bulkAssignGroup(${gi})" style="font-size:11px;padding:3px 10px;">일괄 적용</button>
+                        <button class="btn btn-sm btn-ghost" onclick="bulkClearGroup(${gi})" style="font-size:11px;padding:3px 10px;">매칭 해제</button>
+                    </div>
+                </div>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                    <tr style="background:#fafafa;">
+                        <th style="padding:6px 10px;text-align:center;width:60px;border-bottom:1px solid #eee;">조/레인</th>
+                        <th style="padding:6px 10px;text-align:center;width:60px;border-bottom:1px solid #eee;">배번</th>
+                        <th style="padding:6px 10px;text-align:left;width:100px;border-bottom:1px solid #eee;">성명</th>
+                        <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #eee;">소속</th>
+                        <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #eee;">현재 매칭 종목</th>
+                        <th style="padding:6px 10px;text-align:center;width:90px;border-bottom:1px solid #eee;">개별 변경</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        g.items.forEach(r => {
+            const matchLabel = r.event_id
+                ? `<span style="color:var(--green);font-weight:600;">${esc(r.matched_event_name||'')} | ${esc(r.matched_event_division||'-')} | ${r.matched_event_gender||'-'} | ${r.matched_event_round||'-'}</span>`
+                : '<span style="color:var(--danger);font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 미매칭</span>';
+            h += `
+                <tr>
+                    <td style="padding:5px 10px;text-align:center;border-bottom:1px solid #f5f5f5;">${r.heat||'-'}/${r.lane||'-'}</td>
+                    <td style="padding:5px 10px;text-align:center;font-weight:700;border-bottom:1px solid #f5f5f5;">${esc(r.bib_number||'')}</td>
+                    <td style="padding:5px 10px;border-bottom:1px solid #f5f5f5;">${esc(r.athlete_name||'')}</td>
+                    <td style="padding:5px 10px;border-bottom:1px solid #f5f5f5;color:#666;">${esc(r.team||'')}</td>
+                    <td style="padding:5px 10px;border-bottom:1px solid #f5f5f5;font-size:11px;">${matchLabel}</td>
+                    <td style="padding:5px 10px;text-align:center;border-bottom:1px solid #f5f5f5;">
+                        <button class="btn btn-sm btn-ghost" onclick="openSingleAssign(${r.id})" style="font-size:10px;padding:2px 8px;">변경</button>
+                    </td>
+                </tr>`;
+        });
+        h += `</tbody></table></div>`;
+
+        // 추천 기본값 적용
+        setTimeout(() => {
+            const sel = document.getElementById(`me-bulk-${gi}`);
+            if(sel && recId) sel.value = recId;
+        }, 0);
+    });
+
+    container.innerHTML = h;
+}
+
+async function bulkAssignGroup(gi){
+    const groupList = (function(){
+        const onlyUnmatched = document.getElementById('me-only-unmatched').checked;
+        const dayF = document.getElementById('me-day-filter').value;
+        const q = (document.getElementById('me-search').value || '').toLowerCase().trim();
+        let rows = _matchEditCache.rows.slice();
+        if(onlyUnmatched) rows = rows.filter(r => !r.event_id);
+        if(dayF) rows = rows.filter(r => String(r.day) === dayF);
+        if(q) rows = rows.filter(r => (r.event_name||'').toLowerCase().includes(q) || (r.division||'').toLowerCase().includes(q) || (r.athlete_name||'').toLowerCase().includes(q) || (r.team||'').toLowerCase().includes(q) || (r.round||'').toLowerCase().includes(q));
+        const groups = {};
+        rows.forEach(r => { const key = `${r.day}|${r.event_name}|${r.division||''}|${r.gender||''}|${r.round||''}`; if(!groups[key]) groups[key] = { day: r.day, event_name: r.event_name, division: r.division, gender: r.gender, round: r.round, items: [] }; groups[key].items.push(r); });
+        return Object.values(groups).sort((a,b) => a.day-b.day || (a.event_name||'').localeCompare(b.event_name||'') || (a.division||'').localeCompare(b.division||''));
+    })();
+    const g = groupList[gi];
+    if(!g) return;
+    const sel = document.getElementById(`me-bulk-${gi}`);
+    if(!sel || !sel.value) { toast('매칭할 종목을 선택하세요'); return; }
+    const evId = parseInt(sel.value);
+    const ev = _matchEditCache.events.find(e => e.id === evId);
+    if(!confirm(`${g.event_name} | ${g.division||'-'} | ${g.gender||'-'} | ${g.round||'-'} (${g.items.length}명)\n→ ${ev.name} | ${ev.division||'-'} | ${ev.gender||'-'} | ${ev.round_type||'-'}\n\n위 ${g.items.length}명을 일괄 매칭합니다. 진행할까요?`)) return;
+    try{
+        const r = await fetch('/api/display/roster/assign-bulk', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                admin_key: getKey(), competition_id: compId, event_id: evId,
+                filter: { event_name: g.event_name, division: g.division||'', gender: g.gender||'', round: g.round||'', day: g.day }
+            })
+        }).then(r=>r.json());
+        if(r.success){ toast(`${r.updated}명 매칭 적용`); await loadMatchEditor(); }
+        else alert('실패: ' + (r.error || ''));
+    }catch(e){ alert(e.message); }
+}
+
+async function bulkClearGroup(gi){
+    const groupList = (function(){
+        const onlyUnmatched = document.getElementById('me-only-unmatched').checked;
+        const dayF = document.getElementById('me-day-filter').value;
+        const q = (document.getElementById('me-search').value || '').toLowerCase().trim();
+        let rows = _matchEditCache.rows.slice();
+        if(onlyUnmatched) rows = rows.filter(r => !r.event_id);
+        if(dayF) rows = rows.filter(r => String(r.day) === dayF);
+        if(q) rows = rows.filter(r => (r.event_name||'').toLowerCase().includes(q) || (r.division||'').toLowerCase().includes(q) || (r.athlete_name||'').toLowerCase().includes(q) || (r.team||'').toLowerCase().includes(q) || (r.round||'').toLowerCase().includes(q));
+        const groups = {};
+        rows.forEach(r => { const key = `${r.day}|${r.event_name}|${r.division||''}|${r.gender||''}|${r.round||''}`; if(!groups[key]) groups[key] = { day: r.day, event_name: r.event_name, division: r.division, gender: r.gender, round: r.round, items: [] }; groups[key].items.push(r); });
+        return Object.values(groups).sort((a,b) => a.day-b.day || (a.event_name||'').localeCompare(b.event_name||'') || (a.division||'').localeCompare(b.division||''));
+    })();
+    const g = groupList[gi];
+    if(!g) return;
+    if(!confirm(`${g.event_name} | ${g.division||'-'} (${g.items.length}명) 의 매칭을 모두 해제하시겠습니까?`)) return;
+    try{
+        const r = await fetch('/api/display/roster/assign-bulk', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                admin_key: getKey(), competition_id: compId, event_id: null,
+                filter: { event_name: g.event_name, division: g.division||'', gender: g.gender||'', round: g.round||'', day: g.day }
+            })
+        }).then(r=>r.json());
+        if(r.success){ toast(`${r.updated}명 매칭 해제`); await loadMatchEditor(); }
+    }catch(e){ alert(e.message); }
+}
+
+async function openSingleAssign(rosterId){
+    const row = _matchEditCache.rows.find(r => r.id === rosterId);
+    if(!row) return;
+    const events = _matchEditCache.events;
+    const evList = events.map(e => `${e.id}: ${e.name} | ${e.division||'-'} | ${e.gender||'-'} | ${e.round_type||'-'}`).join('\n');
+    const cur = row.event_id || '없음';
+    const ans = prompt(`현재 매칭 ID: ${cur}\n${row.event_name} | ${row.division||'-'} | ${row.gender||'-'} | ${row.round||'-'} 의 ${row.athlete_name}\n\n새 매칭할 event_id를 입력하세요 (해제는 0):\n\n[가능한 종목 목록]\n${evList}`);
+    if(ans === null) return;
+    const evId = parseInt(ans);
+    const newId = (isNaN(evId) || evId === 0) ? null : evId;
+    try{
+        const r = await fetch('/api/display/roster/assign', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ admin_key: getKey(), roster_id: rosterId, event_id: newId })
+        }).then(r=>r.json());
+        if(r.success){ toast('매칭 변경 완료'); await loadMatchEditor(); }
+        else alert('실패: ' + (r.error || ''));
+    }catch(e){ alert(e.message); }
+}
+
 async function uploadRoster(inp){
     const files = Array.from(inp.files || []);
     if(!files.length) return;
@@ -1295,12 +1665,12 @@ async function uploadRoster(inp){
     // 파일명 힌트 미리보기로 사용자 안심 효과
     const previews = files.map(f => {
         const hint = _extractDivisionHintFromName(f.name);
-        return `<div style="font-size:12px;margin:2px 0;">📄 ${esc(f.name)} ${hint ? `<span style="color:var(--gold);">→ 부 힌트: ${esc(hint)}</span>` : '<span style="color:var(--text-muted);">(파일명 힌트 없음, PDF 안의 부 마커 사용)</span>'}</div>`;
+        return `<div style="font-size:12px;margin:2px 0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${esc(f.name)} ${hint ? `<span style="color:var(--gold);">→ 부 힌트: ${esc(hint)}</span>` : '<span style="color:var(--text-muted);">(파일명 힌트 없음, PDF 안의 부 마커 사용)</span>'}</div>`;
     }).join('');
 
     msgEl.innerHTML = `
         <div style="border:1px solid var(--gold);border-radius:8px;padding:10px;background:#fffbf0;">
-            <div style="font-weight:700;margin-bottom:6px;">⏳ ${files.length}개 파일 순차 업로드 중...</div>
+            <div style="font-weight:700;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> ${files.length}개 파일 순차 업로드 중...</div>
             ${previews}
             <div id="roster-progress" style="margin-top:8px;font-size:12px;font-weight:700;color:var(--gold);">진행률: 0 / ${files.length}</div>
         </div>`;
@@ -1319,9 +1689,9 @@ async function uploadRoster(inp){
     const okCnt = results.filter(r => r.ok).length;
     const failCnt = results.length - okCnt;
     const summaryColor = failCnt === 0 ? 'var(--green)' : (okCnt === 0 ? 'var(--danger)' : 'var(--gold)');
-    const summaryIcon = failCnt === 0 ? '✅' : (okCnt === 0 ? '❌' : '⚠️');
+    const summaryIcon = failCnt === 0 ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' : (okCnt === 0 ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ');
     const items = results.map(r => {
-        const icon = r.ok ? '✅' : '❌';
+        const icon = r.ok ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
         const color = r.ok ? 'var(--green)' : 'var(--danger)';
         return `<div style="font-size:12px;margin:3px 0;color:${color};">${icon} ${esc(r.file)}${r.hint ? ` <span style="color:var(--text-muted);">(힌트: ${esc(r.hint)})</span>` : ''} — ${esc(r.message || '')}</div>`;
     }).join('');

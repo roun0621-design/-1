@@ -1,0 +1,218 @@
+/*
+ * PACE RISE — 공용 반응형 CSS (모바일 1차)
+ *
+ * 사용법: 각 HTML <head> 안 마지막에 추가
+ *   <link rel="stylesheet" href="/lib/responsive.css">
+ *
+ * 정책:
+ *  - 데스크탑 기준 스타일은 그대로 유지 (회귀 없음)
+ *  - @media (max-width: 768px) 만 추가 ─ 모바일 화면에서만 활성화
+ *  - !important 최소화. 단, 인라인 폭/패딩 덮을 때만 사용.
+ *  - 클래스가 없는 페이지에도 영향이 가도록 element selector + 일반 패턴
+ *
+ * 적용 우선순위:
+ *   P0 → index.html (홈)
+ *   P1 → results.html, record.html, dashboard.html
+ *   P2 → 그 외
+ */
+
+/* ─────────────────────────────────────────────
+ * 1) 글로벌 — 모든 페이지 공통
+ * ───────────────────────────────────────────── */
+
+/* viewport 가 누락된 페이지를 위한 안전 최소치 */
+html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* 반응형 이미지 (모든 이미지가 부모 폭 넘지 않게) */
+img, video, iframe {
+    max-width: 100%;
+    height: auto;
+}
+
+/* ─────────────────────────────────────────────
+ * 2) 모바일 (≤768px) 공통
+ * ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+
+    /* 본문 기본 여백 정리 */
+    body {
+        font-size: 15px;
+        line-height: 1.5;
+    }
+
+    /* 큰 헤딩 자동 축소 */
+    h1 { font-size: 22px; }
+    h2 { font-size: 20px; }
+    h3 { font-size: 18px; }
+    h4 { font-size: 16px; }
+
+    /* 폼 요소 — 손가락 친화 (최소 44x44px) */
+    button,
+    .btn,
+    input[type="button"],
+    input[type="submit"],
+    input[type="text"],
+    input[type="number"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="email"],
+    input[type="password"],
+    input[type="date"],
+    select,
+    textarea {
+        min-height: 44px;
+        font-size: 16px; /* iOS 자동 줌 방지 — 반드시 16px 이상 */
+        box-sizing: border-box;
+    }
+
+    /* 테이블 가로 스크롤 패턴 — 가장 흔한 모바일 깨짐 원인 해결 */
+    .table-wrap,
+    .table-scroll,
+    table {
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        display: block;  /* table을 block으로 만들어 스크롤 가능 */
+    }
+    table {
+        width: max-content;
+        min-width: 100%;
+    }
+    /* th/td 패딩 축소 */
+    table th, table td {
+        padding: 6px 8px !important;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    /* 너무 큰 컨테이너의 좌우 패딩 축소 */
+    .container,
+    .wrap,
+    .content,
+    main {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+
+    /* 모달/팝업 — 화면 꽉 차게 */
+    .modal,
+    .popup,
+    .dialog {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .modal-content,
+    .popup-content {
+        padding: 14px !important;
+    }
+
+    /* 카드/박스 패딩 축소 */
+    .card,
+    .box,
+    .panel,
+    .admin-card {
+        padding: 12px !important;
+        margin: 8px 0 !important;
+    }
+
+    /* 2~3 컬럼 grid → 1 컬럼 */
+    .grid-2,
+    .grid-3,
+    .grid-4,
+    .two-col,
+    .three-col {
+        display: block !important;
+    }
+    .grid-2 > *,
+    .grid-3 > *,
+    .grid-4 > * {
+        width: 100% !important;
+        margin-bottom: 12px;
+    }
+
+    /* flex row → 줄바꿈 허용 */
+    .row,
+    .flex-row,
+    .toolbar {
+        flex-wrap: wrap;
+    }
+
+    /* 가로 너비를 고정픽셀로 잡은 인라인 박스 회피 (휴리스틱) */
+    [style*="width:600"],
+    [style*="width:700"],
+    [style*="width:800"],
+    [style*="width:900"],
+    [style*="width:1000"],
+    [style*="width:1200"],
+    [style*="width: 600"],
+    [style*="width: 700"],
+    [style*="width: 800"],
+    [style*="width: 900"],
+    [style*="width: 1000"],
+    [style*="width: 1200"] {
+        max-width: 100% !important;
+    }
+}
+
+/* ─────────────────────────────────────────────
+ * 3) 초소형 (≤480px, 폰 세로) — 더 압축
+ * ───────────────────────────────────────────── */
+@media (max-width: 480px) {
+
+    body { font-size: 14px; }
+    h1 { font-size: 20px; }
+    h2 { font-size: 18px; }
+    h3 { font-size: 16px; }
+
+    table th, table td {
+        padding: 4px 6px !important;
+        font-size: 12px;
+    }
+
+    /* 버튼 그룹 — 세로 정렬 */
+    .btn-group,
+    .button-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .btn-group > button,
+    .button-group > button {
+        width: 100%;
+    }
+}
+
+/* ─────────────────────────────────────────────
+ * 4) 큰 화면 (≥1200px) — 가독성 보조
+ * ───────────────────────────────────────────── */
+@media (min-width: 1200px) {
+    /* 최대 폭 제한이 없는 본문 가독성을 위해 */
+    .reading-width {
+        max-width: 960px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+/* ─────────────────────────────────────────────
+ * 5) 접근성 — reduced motion 존중
+ * ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+}
+
+/* ─────────────────────────────────────────────
+ * 6) 다크 모드 자동 — 시스템 따라가기 (기본 페이지에만, 화이트라벨용 대시보드/오버레이 제외)
+ * ───────────────────────────────────────────── */
+/* 의도적으로 미적용 — 디자인 토큰이 통일된 뒤 점진 도입 */

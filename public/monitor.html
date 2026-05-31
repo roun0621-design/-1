@@ -16,7 +16,8 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
     <meta name="theme-color" content="#b79f58">
     <title>PACE RISE : Node - 소집 모니터</title>
-    <link rel="stylesheet" href="styles.css?v=65">
+    <link rel="stylesheet" href="styles.css?v=72">
+    <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
         /* ── Monitor-specific styles ── */
         .monitor-body { background: #F8F9FA; min-height: 100vh; }
@@ -177,6 +178,9 @@
     <!-- Competition selector tabs -->
     <div class="mon-comp-bar" id="comp-bar" style="display:none;"></div>
 
+    <!-- Phase C: 신기록 배너 (선택된 대회 기준) -->
+    <div id="record-breaks-banner" style="display:none;margin:8px 16px;"></div>
+
     <!-- Gender tabs -->
     <div class="mon-gender-tabs" id="gender-tabs">
         <button class="active" data-g="ALL" onclick="setGender('ALL',this)">전체</button>
@@ -199,12 +203,14 @@
     <div class="mon-refresh-bar" id="refresh-bar">로딩 중...</div>
     <div class="mon-events" id="event-list"></div>
 
-    <script src="common.js?v=62"></script>
+    <script src="common.js?v=74"></script>
     <script>
     // ============================================================
     // Initialization
     // ============================================================
     renderPageNav('monitor');
+    // [정책] 종료된 대회 + 운영진(operation) → 진입 차단
+    if (typeof guardEndedCompForOperation === 'function') { guardEndedCompForOperation('monitor'); }
     let compId = getCompetitionId() || '1';
     let allData = [];
     let allCompetitions = [];
@@ -452,6 +458,77 @@
         } catch(e) {
             document.getElementById('refresh-bar').textContent = '데이터 로드 실패';
         }
+        // Phase C: 신기록 배너도 함께 갱신 (별도 try 블록)
+        try { loadRecordBreaksBanner(); } catch(e) {}
+    }
+
+    // ============================================================
+    // Phase C: 신기록 배너 (선택된 대회의 승인된 NR/DR/CR)
+    // ============================================================
+    async function loadRecordBreaksBanner() {
+        const el = document.getElementById('record-breaks-banner');
+        if (!el || !compId) return;
+        try {
+            const res = await fetch(`/api/record-breaks/recent?limit=5&competition_id=${compId}`);
+            if (!res.ok) { el.style.display = 'none'; return; }
+            const data = await res.json();
+            const rows = data.rows || [];
+            if (rows.length === 0) { el.style.display = 'none'; return; }
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            const isWindAffected = (name) => {
+                if (!name) return false;
+                const n = String(name).trim().toLowerCase();
+                if (/^100m$|^200m$/.test(n)) return true;
+                if (/^100mh$|^110mh$/.test(n)) return true;
+                if (n === '멀리뛰기' || n === '세단뛰기' || n === 'long jump' || n === 'triple jump') return true;
+                return false;
+            };
+            const fmtWind = (w) => {
+                if (w == null || !isFinite(w)) return '';
+                const sign = w >= 0 ? '+' : '';
+                return `${sign}${Number(w).toFixed(1)} m/s`;
+            };
+            const cards = rows.map(r => {
+                const rt = r.record_type;
+                const color = rt === 'national' ? '#c0392b' : rt === 'division' ? '#2980b9' : '#27ae60';
+                const label = rt === 'national' ? 'NR' : rt === 'division' ? 'DR' : 'CR';
+                const ctx = rt === 'division' ? (r.division_label || r.division_code || '')
+                          : rt === 'competition' ? (r.series_name || '시리즈')
+                          : '한국';
+                const gender = r.gender === 'M' ? '남' : r.gender === 'F' ? '여' : '혼성';
+                let windHtml = '';
+                if (isWindAffected(r.event_name)) {
+                    if (r.wind != null && isFinite(r.wind)) {
+                        const wColor = r.wind > 2.0 ? '#dc2626' : '#059669';
+                        windHtml = `<span style="display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;background:#f3f4f6;color:${wColor};font-size:9px;font-weight:600;font-family:monospace;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M17.73 2.27A2.5 2.5 0 1 1 19.5 7H2"/><path d="M14.83 21.41A2 2 0 1 0 16.24 18H2"/></svg> ${fmtWind(r.wind)}</span>`;
+                    } else {
+                        windHtml = `<span style="display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;background:#f9fafb;color:#9ca3af;font-size:9px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M17.73 2.27A2.5 2.5 0 1 1 19.5 7H2"/><path d="M14.83 21.41A2 2 0 1 0 16.24 18H2"/></svg> 무측정</span>`;
+                    }
+                }
+                return `
+                    <div style="flex:0 0 auto;min-width:220px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid ${color};border-radius:8px;padding:9px 12px;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                            <span style="background:${color};color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;">${label}</span>
+                            <span style="font-size:10px;color:#6b7280;">${gender} · ${esc(ctx)}</span>
+                        </div>
+                        <div style="font-weight:700;font-size:13px;color:#1f2937;">${esc(r.event_name)} <span style="color:${color};font-family:monospace;">${esc(r.new_value)}</span>${windHtml}</div>
+                        <div style="font-size:11px;color:#4b5563;margin-top:2px;">${esc(r.athlete_name || '')}${r.athlete_team ? ' · ' + esc(r.athlete_team) : ''}</div>
+                    </div>
+                `;
+            }).join('');
+            el.innerHTML = `
+                <div style="background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #f59e0b;border-radius:10px;padding:10px 14px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                        <span style="font-size:16px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg></span>
+                        <strong style="font-size:13px;color:#92400e;">최근 갱신 기록</strong>
+                    </div>
+                    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;">${cards}</div>
+                </div>
+            `;
+            el.style.display = 'block';
+        } catch(e) {
+            el.style.display = 'none';
+        }
     }
 
     // ============================================================
@@ -463,6 +540,8 @@
     onSSE('event_completed', () => loadData());
     onSSE('event_reverted', () => loadData());
     onSSE('event_status_changed', () => loadData());
+    // Phase C: 신기록 승인/거부 시 배너 새로고침
+    onSSE('record_break_resolved', () => { try { loadRecordBreaksBanner(); } catch(e) {} });
     // Refresh on SSE reconnect (stale data)
     onSSEReconnect(() => loadData());
 

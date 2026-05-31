@@ -4,8 +4,7 @@
  * Added: all-groups unified download, SSE real-time, improved UI
  */
 
-// Helper: display bib_number safely (null/undefined → '—')
-function bib(val) { return val != null && val !== '' ? val : '—'; }
+// Helper: bib() is shared from common.js (loaded before results.js)
 
 let allEvents = [];
 let rSelectedEvent = null;
@@ -22,6 +21,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     allEvents = events;
     renderResultsMatrix();
     renderAuditLog();
+    // Phase C: 신기록 배너 로드 (실패해도 전체 페이지 영향 X)
+    try { loadRecordBreaksBanner(); } catch(e) {}
 
     // If event_id in URL, auto-open
     const urlEventId = getParam('event_id');
@@ -49,7 +50,86 @@ document.addEventListener('DOMContentLoaded', async () => {
         allEvents = await API.getAllEvents(getCompetitionId());
         renderResultsMatrix();
     });
+    // Phase C: 신기록 승인/거부 시 배너 새로고침
+    onSSE('record_break_resolved', () => { try { loadRecordBreaksBanner(); } catch(e) {} });
 });
+
+// ============================================================
+// Phase C: 신기록 배너 (최근 승인된 NR/DR/CR)
+// ============================================================
+async function loadRecordBreaksBanner() {
+    const el = document.getElementById('record-breaks-banner');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/record-breaks/recent?limit=5&competition_id=' + encodeURIComponent(getCompetitionId()));
+        if (!res.ok) { el.style.display = 'none'; return; }
+        const data = await res.json();
+        const rows = data.rows || [];
+        if (rows.length === 0) { el.style.display = 'none'; return; }
+        renderRecordBreaksBanner(rows, el);
+    } catch (e) {
+        el.style.display = 'none';
+    }
+}
+
+function renderRecordBreaksBanner(rows, el) {
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    // 풍속 규제 대상 종목 판별 (lib/recordCompare.js의 isWindAffectedEvent와 동기)
+    const isWindAffected = (name) => {
+        if (!name) return false;
+        const n = String(name).trim().toLowerCase();
+        // 100m / 200m (단 100mH/200mH 같은 허들은 별도)
+        if (/^100m$|^200m$/.test(n)) return true;
+        if (/^100mh$|^110mh$/.test(n)) return true;
+        if (n === '멀리뛰기' || n === '세단뛰기' || n === 'long jump' || n === 'triple jump') return true;
+        return false;
+    };
+    const fmtWind = (w) => {
+        if (w == null || !isFinite(w)) return '';
+        const sign = w >= 0 ? '+' : '';
+        return `${sign}${Number(w).toFixed(1)} m/s`;
+    };
+    const cards = rows.map(r => {
+        const rt = r.record_type;
+        const color = rt === 'national' ? '#c0392b' : rt === 'division' ? '#2980b9' : '#27ae60';
+        const label = rt === 'national' ? 'NR' : rt === 'division' ? 'DR' : 'CR';
+        const ctx = rt === 'division' ? (r.division_label || r.division_code || '')
+                  : rt === 'competition' ? (r.series_name || '시리즈')
+                  : '한국';
+        const gender = r.gender === 'M' ? '남' : r.gender === 'F' ? '여' : '혼성';
+        // 풍속: 풍속 규제 대상 종목에만 표시
+        let windHtml = '';
+        if (isWindAffected(r.event_name)) {
+            if (r.wind != null && isFinite(r.wind)) {
+                const wColor = r.wind > 2.0 ? '#dc2626' : '#059669';
+                windHtml = `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;background:#f3f4f6;color:${wColor};font-size:10px;font-weight:600;font-family:var(--font-mono,monospace);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M17.73 2.27A2.5 2.5 0 1 1 19.5 7H2"/><path d="M14.83 21.41A2 2 0 1 0 16.24 18H2"/></svg> ${fmtWind(r.wind)}</span>`;
+            } else {
+                windHtml = `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;background:#f9fafb;color:#9ca3af;font-size:10px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M17.73 2.27A2.5 2.5 0 1 1 19.5 7H2"/><path d="M14.83 21.41A2 2 0 1 0 16.24 18H2"/></svg> 무측정</span>`;
+            }
+        }
+        return `
+            <div style="flex:0 0 auto;min-width:240px;background:#fff;border:1px solid #e5e7eb;border-left:4px solid ${color};border-radius:8px;padding:10px 14px;">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                    <span style="background:${color};color:#fff;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700;">${label}</span>
+                    <span style="font-size:11px;color:#6b7280;">${gender} · ${esc(ctx)}</span>
+                </div>
+                <div style="font-weight:700;font-size:14px;color:#1f2937;">${esc(r.event_name)} <span style="color:${color};font-family:var(--font-mono,monospace);">${esc(r.new_value)}</span>${windHtml}</div>
+                <div style="font-size:12px;color:#4b5563;margin-top:2px;">${esc(r.athlete_name || '')}${r.athlete_team ? ' · ' + esc(r.athlete_team) : ''}</div>
+            </div>
+        `;
+    }).join('');
+    el.innerHTML = `
+        <div style="background:linear-gradient(135deg,#fff8e1,#ffecb3);border:1px solid #f59e0b;border-radius:10px;padding:12px 16px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span style="font-size:18px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg></span>
+                <strong style="font-size:14px;color:#92400e;">최근 갱신 기록</strong>
+                <span style="font-size:11px;color:#92400e;opacity:.8;">· 이 대회에서 인정된 NR/DR/CR</span>
+            </div>
+            <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;">${cards}</div>
+        </div>
+    `;
+    el.style.display = 'block';
+}
 
 // ============================================================
 // Side-by-side Matrix
@@ -481,7 +561,45 @@ async function loadResultsData() {
             }
         }
     }
-    document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date().toLocaleDateString('ko-KR')}</p>${windInfoHtml}${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
+    // Phase C: 신기록 배너 (해당 종목/성별의 NR/DR/CR 미리 보기)
+    let recordsBannerHtml = '';
+    try {
+        const normName = normalizeEventNameClient(rSelectedEvent.name);
+        const recs = await API.lookupEventRecords(
+            normName, rSelectedEvent.gender,
+            rSelectedEvent.division || null,
+            compInfo.series_id || null
+        ).catch(() => null);
+        if (recs && (recs.national || recs.division || recs.competition)) {
+            const chip = (label, color, rec) => rec
+                ? `<span style="display:inline-flex;align-items:center;gap:4px;background:${color}15;border:1px solid ${color}55;color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;font-family:var(--font-mono);">
+                       <strong>${label}</strong> ${(rec.record_value||'').toString()}
+                       ${rec.holder_name ? `<span style="color:var(--text-muted);font-weight:400;">${rec.holder_name}</span>` : ''}
+                       ${rec.record_year ? `<span style="color:var(--text-muted);font-weight:400;">${rec.record_year}</span>` : ''}
+                   </span>` : '';
+            const parts = [
+                chip('NR', '#c0392b', recs.national),
+                chip('DR', '#2980b9', recs.division),
+                chip('CR', '#27ae60', recs.competition)
+            ].filter(Boolean);
+            if (parts.length > 0) {
+                recordsBannerHtml = `<div class="record-banner-mobile" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;">
+                    <span style="color:var(--text-muted);font-weight:600;white-space:nowrap;">기존 기록</span>
+                    <span class="record-chips" style="display:inline-flex;flex-wrap:wrap;gap:4px;">${parts.join('')}</span>
+                </div>`;
+            }
+            // 캐시 (행 렌더링 시 사용)
+            window._currentEventRecords = recs;
+            window._currentEventDirection = recordDirectionForCategoryClient(rSelectedEvent.category);
+        } else {
+            window._currentEventRecords = null;
+            window._currentEventDirection = null;
+        }
+    } catch(e) {
+        window._currentEventRecords = null;
+        window._currentEventDirection = null;
+    }
+    document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date().toLocaleDateString('ko-KR')}</p>${recordsBannerHtml}${windInfoHtml}${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
 
     const allArea = document.getElementById('results-all-area');
     const tableEl = document.getElementById('results-table');
@@ -716,6 +834,15 @@ async function renderTrackResults(entries) {
         // WA: wind > +2.0 → append 'w' to performance (valid but not record-eligible)
         const isWA = isWindOverLimit && !r.status_code && r.time_seconds != null;
         const wMark = isWA ? '<span class="wind-aided-mark">w</span>' : '';
+        // Phase C: 신기록 배지 (풍속 초과 시엔 신기록 인정 안 됨 → 배지 미표시)
+        let recordBadges = '';
+        if (!r.status_code && !isWA && r.time_seconds != null && window._currentEventRecords && window._currentEventDirection) {
+            const broken = detectBrokenRecordsClient(r.time_seconds, window._currentEventRecords, window._currentEventDirection);
+            recordBadges = broken.map(lbl => {
+                const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
+            }).join('');
+        }
         // 비고: status_code(DNF/DQ 등), Q/q, 풍속 초과 시 참고기록
         let remarkText = '';
         if (r.status_code) remarkText = r.status_code;
@@ -729,7 +856,7 @@ async function renderTrackResults(entries) {
         return `<tr>
             <td>${medal}</td><td>${r.lane_number || '—'}</td><td><strong>${bib(r.bib_number)}</strong></td>
             <td style="text-align:left;">${r.name}</td><td style="font-size:12px;">${r.team || ''}</td>
-            <td style="font-family:var(--font-mono);font-weight:600;">${display}${wMark}</td>
+            <td style="font-family:var(--font-mono);font-weight:600;">${display}${wMark}${recordBadges}</td>
             <td style="${remarkStyle}">${remarkText}</td>
         </tr>`;
     }).join('');
@@ -787,6 +914,15 @@ async function renderUnifiedTrackResults() {
         const heatW = heatWindMap[r.heat_id];
         const isWindAided = needsWind && heatW != null && heatW > 2.0 && !r.status_code && r.time_seconds != null;
         const wMark = isWindAided ? '<span class="wind-aided-mark">w</span>' : '';
+        // Phase C: 신기록 배지 (풍속 초과 시엔 인정 안 됨)
+        let recordBadges = '';
+        if (!r.status_code && !isWindAided && r.time_seconds != null && window._currentEventRecords && window._currentEventDirection) {
+            const broken = detectBrokenRecordsClient(r.time_seconds, window._currentEventRecords, window._currentEventDirection);
+            recordBadges = broken.map(lbl => {
+                const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
+            }).join('');
+        }
         const windCell = needsWind ? `<td style="font-size:11px;font-family:var(--font-mono);${heatW != null && heatW > 2.0 ? 'font-weight:700;' : ''}">${heatW != null ? formatWind(heatW) : ''}</td>` : '';
         // 비고: status_code(DNF/DQ 등), 풍속 초과 시 참고기록
         let allRemarkText = '';
@@ -799,7 +935,7 @@ async function renderUnifiedTrackResults() {
         return `<tr>
             <td>${medal}</td><td style="font-size:11px;color:var(--text-muted);">${r.heat_number}조</td><td>${r.lane_number || '—'}</td><td><strong>${bib(r.bib_number)}</strong></td>
             <td style="text-align:left;">${r.name}</td><td style="font-size:12px;">${r.team || ''}</td>
-            <td style="font-family:var(--font-mono);font-weight:600;">${display}${wMark}</td>${windCell}
+            <td style="font-family:var(--font-mono);font-weight:600;">${display}${wMark}${recordBadges}</td>${windCell}
             <td style="${allRemarkStyle}">${allRemarkText}</td>
         </tr>`;
     }).join('');
@@ -892,6 +1028,15 @@ async function renderFieldDistanceResults(entries) {
         const bestWindOver = needsWind && r.bestWind != null && parseFloat(r.bestWind) > 2.0 && r.best != null;
         const bestWMark = bestWindOver ? '<span class="wind-aided-mark">w</span>' : '';
         const bestColor = bestWindOver ? '' : 'color:var(--green);';
+        // Phase C: 신기록 배지 (풍속 초과 시엔 인정 안 됨)
+        let recordBadges = '';
+        if (!r.status_code && !bestWindOver && r.best != null && window._currentEventRecords && window._currentEventDirection) {
+            const broken = detectBrokenRecordsClient(r.best, window._currentEventRecords, window._currentEventDirection);
+            recordBadges = broken.map(lbl => {
+                const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
+                return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
+            }).join('');
+        }
         // 비고: status_code(DNF/DQ/NM 등), 풍속 초과 시 참고기록
         let remark = '';
         if (r.status_code) remark = r.status_code;
@@ -904,7 +1049,7 @@ async function renderFieldDistanceResults(entries) {
             return `<tr class="field-row1">
                 <td rowspan="2">${medal}</td><td rowspan="2">${r.lane_number || '—'}</td>
                 <td style="text-align:left;"><strong>${r.name}</strong></td><td rowspan="2"><strong>${bib(r.bib_number)}</strong></td>
-                ${distCells}<td rowspan="2" class="best-cell" style="font-weight:700;font-family:var(--font-mono);${bestColor}">${bestDisp}${bestWMark}<div class="best-wind" style="color:#555;font-weight:400;">${bestWindDisp}</div></td>
+                ${distCells}<td rowspan="2" class="best-cell" style="font-weight:700;font-family:var(--font-mono);${bestColor}">${bestDisp}${bestWMark}${recordBadges}<div class="best-wind" style="color:#555;font-weight:400;">${bestWindDisp}</div></td>
                 <td rowspan="2" style="${remarkStyle}">${remark}</td>
             </tr><tr class="field-row2">
                 <td class="team-cell" style="font-size:11px;text-align:left;color:#666;">${r.team || ''}</td>${windCells}
@@ -913,7 +1058,7 @@ async function renderFieldDistanceResults(entries) {
             return `<tr>
                 <td>${medal}</td><td>${r.lane_number || '—'}</td>
                 <td style="text-align:left;"><strong>${r.name}</strong></td><td style="text-align:left;font-size:11px;color:#666;">${r.team || ''}</td><td><strong>${bib(r.bib_number)}</strong></td>
-                ${distCells}<td class="best-cell" style="font-weight:700;font-family:var(--font-mono);color:var(--green);">${bestDisp}</td>
+                ${distCells}<td class="best-cell" style="font-weight:700;font-family:var(--font-mono);color:var(--green);">${bestDisp}${recordBadges}</td>
                 <td style="${remarkStyle}">${remark}</td>
             </tr>`;
         }
@@ -961,9 +1106,18 @@ async function renderFieldHeightResults(entries) {
         const medal = r.best == null ? '' : getMedal(r.rank, rSelectedEvent?.round_type);
         let c = ''; hts.forEach(h2 => { const d = r.hd[h2] || {}; let m = ''; for (let i = 1; i <= 3; i++) { if (d[i]) { const mark = d[i] === 'PASS' ? '-' : d[i]; const cls = d[i] === 'O' ? 'mark-O' : d[i] === 'X' ? 'mark-X' : 'mark-PASS'; m += `<span class="height-mark ${cls}">${mark}</span>`; } } c += `<td style="font-size:11px;">${m}</td>`; });
         const bestDisp = r.best != null ? formatHeight(r.best) : '';
+        // Phase C: 신기록 배지 (높이뛰기는 풍속 영향 없음)
+        let recordBadges = '';
+        if (!r.isNM && r.best != null && window._currentEventRecords && window._currentEventDirection) {
+            const broken = detectBrokenRecordsClient(r.best, window._currentEventRecords, window._currentEventDirection);
+            recordBadges = broken.map(lbl => {
+                const cc = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
+                return `<span style="display:inline-block;background:${cc};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
+            }).join('');
+        }
         const rmk = r.isNM ? 'NM' : '';
         const rmkStyle = r.isNM ? 'color:var(--danger);font-weight:600;font-size:11px;' : 'font-size:11px;';
-        return `<tr><td>${medal}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td><td style="font-size:12px;">${r.team || ''}</td>${c}<td style="font-weight:700;">${bestDisp}</td><td style="${rmkStyle}">${rmk}</td></tr>`;
+        return `<tr><td>${medal}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td><td style="font-size:12px;">${r.team || ''}</td>${c}<td style="font-weight:700;">${bestDisp}${recordBadges}</td><td style="${rmkStyle}">${rmk}</td></tr>`;
     }).join('');
 }
 
@@ -1025,7 +1179,7 @@ async function renderCombinedResults() {
         tabsHtml += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">';
         subDefs.forEach(se => {
             const has = fresh.some(s => s.sub_event_order === se.order && s.raw_record > 0);
-            tabsHtml += `<button class="btn btn-sm ${has ? 'btn-outline' : 'btn-ghost'}" onclick="_showCombinedSubResult(${se.order})" id="csub-tab-${se.order}">${se.order}. ${se.name}${has ? ' ✓' : ''}</button>`;
+            tabsHtml += `<button class="btn btn-sm ${has ? 'btn-outline' : 'btn-ghost'}" onclick="_showCombinedSubResult(${se.order})" id="csub-tab-${se.order}">${se.order}. ${se.name}${has ? ' <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</button>`;
         });
         tabsHtml += '</div>';
         tabsHtml += '<div id="combined-sub-result-area"></div>';
@@ -1052,7 +1206,11 @@ async function _showCombinedSubResult(subOrder) {
     
     const area = document.getElementById('combined-sub-result-area');
     if (!area) return;
-    area.innerHTML = '<div class="loading-inline"><div class="loading-spinner"></div></div>';
+    area.innerHTML = `<div class="skeleton-block" style="box-shadow:none;padding:8px 0;">
+        <div class="skeleton skeleton-text"></div>
+        <div class="skeleton skeleton-text" style="width:88%;"></div>
+        <div class="skeleton skeleton-text" style="width:70%;"></div>
+    </div>`;
     
     // Find the DB sub-event
     let dbSub = subEvents.find(s => s.sort_order === subOrder);
@@ -1257,888 +1415,6 @@ async function exportPDF() {
     try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const w = window.open('', '_blank'); w.document.write(`<html><head><title>Results</title></head><body style="margin:0;padding:20px;"><img src="${c.toDataURL('image/png')}" style="max-width:100%;"><script>window.onload=function(){window.print();}<\/script></body></html>`); w.document.close(); } catch (e) { alert('PDF 생성 실패'); }
 }
 
-// ============================================================
-// IO (아이오) — 1080×1350 PNG Result Image Generator
-// ============================================================
-const IO = (() => {
-    const W = 1080, H = 1350;
-    const MARGIN = 40;
-    const MAX_PER_PAGE = 12;
+// IO 1080x1350 PNG generator removed — was 882 lines of unreachable code.
+// Re-introduce via git history if Instagram-style result cards are needed.
 
-    // Colors
-    const C = {
-        bg: '#ffffff',
-        headerBg: '#f8fafc',
-        headerBorder: '#e2e8f0',
-        green: '#b79f58',
-        greenDark: '#029a47',
-        text: '#1a202c',
-        textMuted: '#6b7280',
-        textLight: '#9ca3af',
-        border: '#e5e7eb',
-        rowEven: '#f9fafb',
-        rowOdd: '#ffffff',
-        gold: '#FFD700',
-        silver: '#C0C0C0',
-        bronze: '#CD7F32',
-        medalGoldBg: 'rgba(255,215,0,0.12)',
-        medalSilverBg: 'rgba(192,192,192,0.10)',
-        medalBronzeBg: 'rgba(205,127,50,0.10)',
-        danger: '#ef4444',
-        accent: '#6b6b6b',
-        wind: '#0369a1',
-    };
-
-    // Font helpers (using system fonts — html2canvas captures from DOM)
-    function font(size, weight = '400') {
-        return `${weight} ${size}px "Noto Sans KR", "Pretendard", -apple-system, BlinkMacSystemFont, sans-serif`;
-    }
-    function monoFont(size, weight = '400') {
-        return `${weight} ${size}px "SF Mono", "Fira Code", "Consolas", monospace`;
-    }
-
-    // Round rect helper
-    function roundRect(ctx, x, y, w, h, r) {
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.lineTo(x + w - r, y);
-        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-        ctx.lineTo(x + w, y + h - r);
-        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        ctx.lineTo(x + r, y + h);
-        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.closePath();
-    }
-
-    // Truncate text to fit width
-    function truncate(ctx, text, maxW) {
-        if (!text) return '';
-        if (ctx.measureText(text).width <= maxW) return text;
-        let t = text;
-        while (t.length > 1 && ctx.measureText(t + '...').width > maxW) t = t.slice(0, -1);
-        return t + '...';
-    }
-
-    // Draw medal circle
-    function drawMedal(ctx, x, y, rank) {
-        const r = 15;
-        ctx.save();
-        if (rank === 1) { ctx.fillStyle = C.gold; }
-        else if (rank === 2) { ctx.fillStyle = C.silver; }
-        else if (rank === 3) { ctx.fillStyle = C.bronze; }
-        else { ctx.restore(); return false; }
-        ctx.beginPath();
-        ctx.arc(x + r, y + r, r, 0, Math.PI * 2);
-        ctx.fill();
-        // Medal number
-        ctx.fillStyle = rank === 1 ? '#7c5e00' : rank === 2 ? '#4a4a4a' : '#5c3600';
-        ctx.font = font(16, '700');
-        ctx.textAlign = 'center';
-        ctx.fillText(String(rank), x + r, y + r + 5.5);
-        ctx.textAlign = 'left';
-        ctx.restore();
-        return true;
-    }
-
-    // Format time for display
-    function fmtTime(s, isRoad) {
-        if (s == null) return '—';
-        if (isRoad || s >= 3600) {
-            const h = Math.floor(s / 3600);
-            const m = Math.floor((s - h * 3600) / 60);
-            const r = s - h * 3600 - m * 60;
-            return `${h}:${m < 10 ? '0' : ''}${m}:${r < 10 ? '0' : ''}${r.toFixed(2)}`;
-        }
-        if (s >= 60) {
-            const m = Math.floor(s / 60);
-            const r = s - m * 60;
-            return `${m}:${r < 10 ? '0' : ''}${r.toFixed(2)}`;
-        }
-        return s.toFixed(2);
-    }
-
-    // Determine if event needs wind display for image
-    function needsWindForImage(eventName, category) {
-        return requiresWindMeasurement(eventName, category);
-    }
-
-    // Build filename
-    function buildFileName(evt, compInfo, roundLabel, pageIdx, totalPages, format) {
-        const ext = format === 'jpg' ? 'jpg' : 'png';
-        const gL = { M: '남자', F: '여자', X: '혼성' }[evt.gender] || '';
-        const today = new Date().toISOString().slice(0, 10);
-        const base = `${evt.name}${gL}_${roundLabel}_${today}`;
-        if (totalPages > 1) return `${base}_${pageIdx + 1}.${ext}`;
-        return `${base}.${ext}`;
-    }
-
-    // ============================================================
-    // Draw Header (common for all pages)
-    // ============================================================
-    function drawHeader(ctx, evt, compInfo, roundLabel, heatLabel, windInfo) {
-        const gL = { M: '남자', F: '여자', X: '혼성' }[evt.gender] || '';
-
-        // Top accent bar
-        const grad = ctx.createLinearGradient(0, 0, W, 0);
-        grad.addColorStop(0, C.green);
-        grad.addColorStop(1, C.greenDark);
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, W, 6);
-
-        let y = 32;
-
-        // Competition name
-        ctx.fillStyle = C.textMuted;
-        ctx.font = font(20, '500');
-        ctx.fillText(truncate(ctx, compInfo.name || '', W - MARGIN * 2), MARGIN, y + 20);
-        y += 36;
-
-        // Event name (large)
-        ctx.fillStyle = C.text;
-        ctx.font = font(38, '800');
-        ctx.fillText(truncate(ctx, `${evt.name} ${gL}`, W - MARGIN * 2), MARGIN, y + 38);
-        y += 56;
-
-        // Round + date line
-        const today = new Date();
-        const dateStr = `${today.getFullYear()}. ${today.getMonth() + 1}. ${today.getDate()}.`;
-        ctx.fillStyle = C.textMuted;
-        ctx.font = font(18, '500');
-        let infoLine = roundLabel;
-        if (heatLabel) infoLine += ` ${heatLabel}`;
-        infoLine += `  |  ${dateStr}`;
-        ctx.fillText(infoLine, MARGIN, y + 18);
-
-        // Wind info (right-aligned on same line)
-        if (windInfo) {
-            ctx.save();
-            ctx.font = font(17, '600');
-            ctx.fillStyle = C.wind;
-            const wText = `Wind: ${windInfo} m/s`;
-            const ww = ctx.measureText(wText).width;
-            ctx.fillText(wText, W - MARGIN - ww, y + 18);
-            ctx.restore();
-        }
-        y += 36;
-
-        // Separator line
-        ctx.strokeStyle = C.border;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(MARGIN, y);
-        ctx.lineTo(W - MARGIN, y);
-        ctx.stroke();
-
-        return y + 12;
-    }
-
-    // ============================================================
-    // Draw Footer
-    // ============================================================
-    function drawFooter(ctx, pageIdx, totalPages) {
-        const footerY = H - 50;
-        ctx.fillStyle = '#f1f5f9';
-        ctx.fillRect(0, footerY, W, 50);
-        ctx.strokeStyle = C.border;
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(0, footerY); ctx.lineTo(W, footerY); ctx.stroke();
-
-        // PACE RISE branding
-        ctx.fillStyle = C.green;
-        ctx.font = font(14, '700');
-        ctx.fillText('PACE RISE', MARGIN, footerY + 30);
-
-        // Page indicator
-        if (totalPages > 1) {
-            ctx.fillStyle = C.textMuted;
-            ctx.font = font(13, '500');
-            const pageTxt = `${pageIdx + 1} / ${totalPages} 페이지`;
-            const pw = ctx.measureText(pageTxt).width;
-            ctx.fillText(pageTxt, W / 2 - pw / 2, footerY + 30);
-        }
-
-        // URL
-        ctx.fillStyle = C.textLight;
-        ctx.font = font(11, '400');
-        const url = 'pace-rise-node.com';
-        const uw = ctx.measureText(url).width;
-        ctx.fillText(url, W - MARGIN - uw, footerY + 30);
-    }
-
-    // ============================================================
-    // Track Table Drawing
-    // ============================================================
-    function drawTrackTable(ctx, rows, startY, showWind, windValue, isFinal) {
-        const tableLeft = MARGIN;
-        const tableRight = W - MARGIN;
-        const tableW = tableRight - tableLeft;
-        // Columns: RANK / NO. / BIB / 선수명 / 소속 / 기록 / 비고
-        const cols = showWind
-            ? [
-                { key: 'rank', label: 'RANK', w: 0.07, align: 'center' },
-                { key: 'lane', label: 'NO.', w: 0.05, align: 'center' },
-                { key: 'bib', label: 'BIB', w: 0.07, align: 'center' },
-                { key: 'name', label: '선수명', w: 0.25, align: 'left' },
-                { key: 'team', label: '소속', w: 0.22, align: 'left' },
-                { key: 'record', label: '기록', w: 0.19, align: 'center' },
-                { key: 'remark', label: '비고', w: 0.15, align: 'center' },
-            ]
-            : [
-                { key: 'rank', label: 'RANK', w: 0.07, align: 'center' },
-                { key: 'lane', label: 'NO.', w: 0.05, align: 'center' },
-                { key: 'bib', label: 'BIB', w: 0.08, align: 'center' },
-                { key: 'name', label: '선수명', w: 0.27, align: 'left' },
-                { key: 'team', label: '소속', w: 0.24, align: 'left' },
-                { key: 'record', label: '기록', w: 0.18, align: 'center' },
-                { key: 'remark', label: '비고', w: 0.11, align: 'center' },
-            ];
-
-        let y = startY;
-        const headerH = 40;
-        const rowH = 58;
-
-        // Column positions
-        let cx = tableLeft;
-        const colPos = cols.map(c => { const pos = { ...c, x: cx, pw: tableW * c.w }; cx += pos.pw; return pos; });
-
-        // Header row
-        ctx.fillStyle = '#edf2f7';
-        roundRect(ctx, tableLeft, y, tableW, headerH, 8);
-        ctx.fill();
-        ctx.font = font(14, '700');
-        ctx.fillStyle = '#475569';
-        for (const cp of colPos) {
-            const tx = cp.align === 'center' ? cp.x + cp.pw / 2 : cp.x + 8;
-            ctx.textAlign = cp.align === 'center' ? 'center' : 'left';
-            ctx.fillText(cp.label, tx, y + headerH / 2 + 5);
-        }
-        ctx.textAlign = 'left';
-        y += headerH + 2;
-
-        // Data rows
-        for (let i = 0; i < rows.length; i++) {
-            const r = rows[i];
-            const isSpecial = ['DNS', 'DNF', 'DQ', 'NM'].includes(r.status_code);
-            const rank = r.rank;
-            const isMedal = isFinal && typeof rank === 'number' && rank >= 1 && rank <= 3;
-
-            // Row background
-            if (isMedal) {
-                ctx.fillStyle = rank === 1 ? C.medalGoldBg : rank === 2 ? C.medalSilverBg : C.medalBronzeBg;
-            } else {
-                ctx.fillStyle = i % 2 === 0 ? C.rowOdd : C.rowEven;
-            }
-            roundRect(ctx, tableLeft, y, tableW, rowH, i === 0 ? 0 : 0);
-            ctx.fill();
-
-            // Row border bottom
-            ctx.strokeStyle = '#f0f0f0';
-            ctx.lineWidth = 0.5;
-            ctx.beginPath(); ctx.moveTo(tableLeft, y + rowH); ctx.lineTo(tableRight, y + rowH); ctx.stroke();
-
-            const cellY = y + rowH / 2 + 6;
-
-            for (const cp of colPos) {
-                const tx = cp.align === 'center' ? cp.x + cp.pw / 2 : cp.x + 8;
-                ctx.textAlign = cp.align === 'center' ? 'center' : 'left';
-
-                switch (cp.key) {
-                    case 'rank':
-                        if (isSpecial) {
-                            ctx.fillStyle = C.danger;
-                            ctx.font = font(16, '700');
-                            ctx.fillText(r.status_code, tx, cellY);
-                        } else if (isMedal) {
-                            drawMedal(ctx, cp.x + cp.pw / 2 - 15, y + rowH / 2 - 15, rank);
-                        } else if (typeof rank === 'number') {
-                            ctx.fillStyle = C.text;
-                            ctx.font = font(18, '700');
-                            ctx.fillText(String(rank), tx, cellY);
-                        } else {
-                            ctx.fillStyle = C.textLight;
-                            ctx.font = font(16, '400');
-                            ctx.fillText('—', tx, cellY);
-                        }
-                        break;
-                    case 'lane':
-                        ctx.fillStyle = C.textMuted;
-                        ctx.font = font(15, '500');
-                        ctx.fillText(r.lane_number || '—', tx, cellY);
-                        break;
-                    case 'bib':
-                        ctx.fillStyle = C.text;
-                        ctx.font = font(16, '700');
-                        ctx.fillText(r.bib_number || '—', tx, cellY);
-                        break;
-                    case 'name':
-                        ctx.fillStyle = isSpecial ? C.textLight : C.text;
-                        ctx.font = font(17, '600');
-                        ctx.fillText(truncate(ctx, r.name || '', cp.pw - 12), tx, cellY);
-                        break;
-                    case 'team':
-                        ctx.fillStyle = C.textMuted;
-                        ctx.font = font(14, '400');
-                        ctx.fillText(truncate(ctx, r.team || '', cp.pw - 12), tx, cellY);
-                        break;
-                    case 'record':
-                        if (isSpecial) {
-                            ctx.fillStyle = C.danger;
-                            ctx.font = font(17, '700');
-                            ctx.fillText(r.status_code, tx, cellY);
-                        } else if (r.time_seconds != null) {
-                            ctx.fillStyle = isMedal ? C.greenDark : C.text;
-                            ctx.font = monoFont(18, '700');
-                            ctx.fillText(fmtTime(r.time_seconds, r._isRoad), tx, cellY);
-                        } else {
-                            ctx.fillStyle = C.textLight;
-                            ctx.font = font(15, '400');
-                            ctx.fillText('—', tx, cellY);
-                        }
-                        break;
-                    case 'remark':
-                        ctx.fillStyle = C.textLight;
-                        ctx.font = font(12, '400');
-                        ctx.fillText(truncate(ctx, r.remark || '', cp.pw - 8), tx, cellY);
-                        break;
-                }
-            }
-            ctx.textAlign = 'left';
-            y += rowH;
-        }
-        return y;
-    }
-
-    // ============================================================
-    // Field Distance Table Drawing
-    // ============================================================
-    function drawFieldDistTable(ctx, rows, startY, showWind, isFinal) {
-        const tableLeft = MARGIN;
-        const tableRight = W - MARGIN;
-        const tableW = tableRight - tableLeft;
-        const cols = [
-            { key: 'rank', label: 'RANK', w: 0.07, align: 'center' },
-            { key: 'bib', label: 'BIB', w: 0.07, align: 'center' },
-            { key: 'name', label: '선수명', w: 0.22, align: 'left' },
-            { key: 'team', label: '소속', w: 0.20, align: 'left' },
-            { key: 'best', label: '최고기록', w: 0.15, align: 'center' },
-            { key: 'remark', label: '비고', w: 0.29, align: 'center' },
-        ];
-
-        let y = startY;
-        const headerH = 40;
-        const rowH = 58;
-
-        let cx = tableLeft;
-        const colPos = cols.map(c => { const pos = { ...c, x: cx, pw: tableW * c.w }; cx += pos.pw; return pos; });
-
-        // Header
-        ctx.fillStyle = '#edf2f7';
-        roundRect(ctx, tableLeft, y, tableW, headerH, 8);
-        ctx.fill();
-        ctx.font = font(14, '700');
-        ctx.fillStyle = '#475569';
-        for (const cp of colPos) {
-            const tx = cp.align === 'center' ? cp.x + cp.pw / 2 : cp.x + 8;
-            ctx.textAlign = cp.align === 'center' ? 'center' : 'left';
-            ctx.fillText(cp.label, tx, y + headerH / 2 + 5);
-        }
-        ctx.textAlign = 'left';
-        y += headerH + 2;
-
-        for (let i = 0; i < rows.length; i++) {
-            const r = rows[i];
-            const isSpecial = ['DNS', 'DNF', 'DQ', 'NM'].includes(r.status_code);
-            const rank = r.rank;
-            const isMedal = isFinal && typeof rank === 'number' && rank >= 1 && rank <= 3;
-
-            if (isMedal) {
-                ctx.fillStyle = rank === 1 ? C.medalGoldBg : rank === 2 ? C.medalSilverBg : C.medalBronzeBg;
-            } else {
-                ctx.fillStyle = i % 2 === 0 ? C.rowOdd : C.rowEven;
-            }
-            roundRect(ctx, tableLeft, y, tableW, rowH, 0);
-            ctx.fill();
-            ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 0.5;
-            ctx.beginPath(); ctx.moveTo(tableLeft, y + rowH); ctx.lineTo(tableRight, y + rowH); ctx.stroke();
-
-            const cellY = y + rowH / 2 + 6;
-
-            for (const cp of colPos) {
-                const tx = cp.align === 'center' ? cp.x + cp.pw / 2 : cp.x + 8;
-                ctx.textAlign = cp.align === 'center' ? 'center' : 'left';
-                switch (cp.key) {
-                    case 'rank':
-                        if (isSpecial) { ctx.fillStyle = C.danger; ctx.font = font(16, '700'); ctx.fillText(r.status_code, tx, cellY); }
-                        else if (isMedal) { drawMedal(ctx, cp.x + cp.pw / 2 - 15, y + rowH / 2 - 15, rank); }
-                        else if (typeof rank === 'number') { ctx.fillStyle = C.text; ctx.font = font(18, '700'); ctx.fillText(String(rank), tx, cellY); }
-                        else { ctx.fillStyle = C.textLight; ctx.font = font(16, '400'); ctx.fillText('—', tx, cellY); }
-                        break;
-                    case 'bib': ctx.fillStyle = C.text; ctx.font = font(16, '700'); ctx.fillText(r.bib_number || '—', tx, cellY); break;
-                    case 'name': ctx.fillStyle = isSpecial ? C.textLight : C.text; ctx.font = font(17, '600'); ctx.fillText(truncate(ctx, r.name || '', cp.pw - 12), tx, cellY); break;
-                    case 'team': ctx.fillStyle = C.textMuted; ctx.font = font(14, '400'); ctx.fillText(truncate(ctx, r.team || '', cp.pw - 12), tx, cellY); break;
-                    case 'best':
-                        if (isSpecial) { ctx.fillStyle = C.danger; ctx.font = font(17, '700'); ctx.fillText(r.status_code, tx, cellY); }
-                        else if (r.best != null) {
-                            ctx.fillStyle = isMedal ? C.greenDark : C.text;
-                            ctx.font = monoFont(18, '700');
-                            ctx.fillText(formatHeight(r.best), tx, cellY);
-                            // Wind of best (if applicable)
-                            if (showWind && r.bestWind != null) {
-                                ctx.fillStyle = C.wind;
-                                ctx.font = font(11, '500');
-                                ctx.fillText(`(${formatWind(r.bestWind)})`, tx, cellY + 16);
-                            }
-                        } else { ctx.fillStyle = C.textLight; ctx.font = font(15, '400'); ctx.fillText('—', tx, cellY); }
-                        break;
-                    case 'remark':
-                        ctx.fillStyle = C.textLight; ctx.font = font(12, '400');
-                        // Show attempt summary
-                        if (r.attempts) {
-                            let attStr = '';
-                            for (let a = 1; a <= 6; a++) {
-                                const v = r.attempts[a];
-                                if (v === undefined || v === null) continue;
-                                if (v === 0) attStr += 'X ';
-                                else if (v < 0) attStr += '- ';
-                                else attStr += formatHeight(v) + ' ';
-                            }
-                            ctx.fillText(truncate(ctx, attStr.trim(), cp.pw - 8), tx, cellY);
-                        }
-                        break;
-                }
-            }
-            ctx.textAlign = 'left';
-            y += rowH;
-        }
-        return y;
-    }
-
-    // ============================================================
-    // Field Height Table Drawing
-    // ============================================================
-    function drawFieldHeightTable(ctx, rows, heights, startY, isFinal) {
-        const tableLeft = MARGIN;
-        const tableRight = W - MARGIN;
-        const tableW = tableRight - tableLeft;
-        
-        // Dynamic columns based on number of heights
-        const fixedW = 0.07 + 0.07 + 0.20 + 0.18 + 0.12; // rank+bib+name+team+best = 0.64
-        const remainW = 1.0 - fixedW;
-        const barW = heights.length > 0 ? Math.min(remainW / heights.length, 0.08) : 0.06;
-        
-        const cols = [
-            { key: 'rank', label: 'RANK', w: 0.07, align: 'center' },
-            { key: 'bib', label: 'BIB', w: 0.07, align: 'center' },
-            { key: 'name', label: '선수명', w: 0.20, align: 'left' },
-            { key: 'team', label: '소속', w: 0.18, align: 'left' },
-        ];
-        for (const h of heights) {
-            cols.push({ key: `h_${h}`, label: formatHeight(h), w: barW, align: 'center' });
-        }
-        cols.push({ key: 'best', label: '최고', w: 0.12, align: 'center' });
-
-        let y = startY;
-        const headerH = 40;
-        const rowH = 50;
-
-        let cx = tableLeft;
-        const colPos = cols.map(c => { const pos = { ...c, x: cx, pw: tableW * c.w }; cx += pos.pw; return pos; });
-
-        // Header
-        ctx.fillStyle = '#edf2f7';
-        roundRect(ctx, tableLeft, y, tableW, headerH, 8);
-        ctx.fill();
-        ctx.font = font(heights.length > 6 ? 10 : 12, '700');
-        ctx.fillStyle = '#475569';
-        for (const cp of colPos) {
-            const tx = cp.align === 'center' ? cp.x + cp.pw / 2 : cp.x + 6;
-            ctx.textAlign = cp.align === 'center' ? 'center' : 'left';
-            ctx.fillText(cp.label, tx, y + headerH / 2 + 4);
-        }
-        ctx.textAlign = 'left';
-        y += headerH + 2;
-
-        for (let i = 0; i < rows.length; i++) {
-            const r = rows[i];
-            const rank = r.rank;
-            const isMedal = isFinal && typeof rank === 'number' && rank >= 1 && rank <= 3;
-
-            if (isMedal) {
-                ctx.fillStyle = rank === 1 ? C.medalGoldBg : rank === 2 ? C.medalSilverBg : C.medalBronzeBg;
-            } else {
-                ctx.fillStyle = i % 2 === 0 ? C.rowOdd : C.rowEven;
-            }
-            roundRect(ctx, tableLeft, y, tableW, rowH, 0);
-            ctx.fill();
-            ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 0.5;
-            ctx.beginPath(); ctx.moveTo(tableLeft, y + rowH); ctx.lineTo(tableRight, y + rowH); ctx.stroke();
-
-            const cellY = y + rowH / 2 + 5;
-
-            for (const cp of colPos) {
-                const tx = cp.align === 'center' ? cp.x + cp.pw / 2 : cp.x + 6;
-                ctx.textAlign = cp.align === 'center' ? 'center' : 'left';
-                if (cp.key === 'rank') {
-                    if (isMedal) { drawMedal(ctx, cp.x + cp.pw / 2 - 15, y + rowH / 2 - 15, rank); }
-                    else if (typeof rank === 'number') { ctx.fillStyle = C.text; ctx.font = font(16, '700'); ctx.fillText(String(rank), tx, cellY); }
-                    else { ctx.fillStyle = C.textLight; ctx.font = font(14, '400'); ctx.fillText('—', tx, cellY); }
-                } else if (cp.key === 'bib') {
-                    ctx.fillStyle = C.text; ctx.font = font(14, '700'); ctx.fillText(r.bib_number || '—', tx, cellY);
-                } else if (cp.key === 'name') {
-                    ctx.fillStyle = C.text; ctx.font = font(15, '600'); ctx.fillText(truncate(ctx, r.name || '', cp.pw - 10), tx, cellY);
-                } else if (cp.key === 'team') {
-                    ctx.fillStyle = C.textMuted; ctx.font = font(12, '400'); ctx.fillText(truncate(ctx, r.team || '', cp.pw - 10), tx, cellY);
-                } else if (cp.key === 'best') {
-                    if (r.bestHeight != null) {
-                        ctx.fillStyle = isMedal ? C.greenDark : C.text;
-                        ctx.font = monoFont(16, '700');
-                        ctx.fillText(formatHeight(r.bestHeight), tx, cellY);
-                    } else { ctx.fillStyle = C.textLight; ctx.font = font(13, '400'); ctx.fillText('—', tx, cellY); }
-                } else if (cp.key.startsWith('h_')) {
-                    const bh = parseFloat(cp.key.substring(2));
-                    const marks = r.heightMarks?.[bh] || '';
-                    if (marks) {
-                        ctx.font = font(heights.length > 8 ? 10 : 12, '700');
-                        // Color-code marks
-                        let markX = cp.x + 2;
-                        for (const ch of marks) {
-                            ctx.fillStyle = ch === 'O' ? C.green : ch === 'X' ? C.danger : C.accent;
-                            const display = ch === 'PASS' ? '-' : ch;
-                            ctx.textAlign = 'left';
-                            ctx.fillText(display, markX, cellY);
-                            markX += ctx.measureText(display).width + 1;
-                        }
-                    }
-                }
-            }
-            ctx.textAlign = 'left';
-            y += rowH;
-        }
-        return y;
-    }
-
-    // ============================================================
-    // Combined (10종/7종) Table Drawing
-    // ============================================================
-    function drawCombinedTable(ctx, rows, subDefs, startY, isFinal) {
-        const tableLeft = MARGIN;
-        const tableRight = W - MARGIN;
-        const tableW = tableRight - tableLeft;
-
-        const cols = [
-            { key: 'rank', label: 'RANK', w: 0.06, align: 'center' },
-            { key: 'bib', label: 'BIB', w: 0.06, align: 'center' },
-            { key: 'name', label: '선수명', w: 0.17, align: 'left' },
-            { key: 'team', label: '소속', w: 0.15, align: 'left' },
-        ];
-        const subW = Math.min(0.06, (0.45 / Math.max(subDefs.length, 1)));
-        for (const se of subDefs) {
-            const shortName = se.name.length > 4 ? se.name.substring(0, 4) : se.name;
-            cols.push({ key: `sub_${se.order}`, label: shortName, w: subW, align: 'center' });
-        }
-        cols.push({ key: 'total', label: '총점', w: 0.10, align: 'center' });
-
-        let y = startY;
-        const headerH = 38;
-        const rowH = 55;
-
-        let cx = tableLeft;
-        const colPos = cols.map(c => { const pos = { ...c, x: cx, pw: tableW * c.w }; cx += pos.pw; return pos; });
-
-        // Header
-        ctx.fillStyle = '#edf2f7';
-        roundRect(ctx, tableLeft, y, tableW, headerH, 8);
-        ctx.fill();
-        ctx.font = font(subDefs.length > 8 ? 9 : 11, '700');
-        ctx.fillStyle = '#475569';
-        for (const cp of colPos) {
-            const tx = cp.align === 'center' ? cp.x + cp.pw / 2 : cp.x + 4;
-            ctx.textAlign = cp.align === 'center' ? 'center' : 'left';
-            ctx.fillText(cp.label, tx, y + headerH / 2 + 4);
-        }
-        ctx.textAlign = 'left';
-        y += headerH + 2;
-
-        for (let i = 0; i < rows.length; i++) {
-            const r = rows[i];
-            const rank = r.rank;
-            const isMedal = isFinal && typeof rank === 'number' && rank >= 1 && rank <= 3;
-
-            if (isMedal) {
-                ctx.fillStyle = rank === 1 ? C.medalGoldBg : rank === 2 ? C.medalSilverBg : C.medalBronzeBg;
-            } else {
-                ctx.fillStyle = i % 2 === 0 ? C.rowOdd : C.rowEven;
-            }
-            roundRect(ctx, tableLeft, y, tableW, rowH, 0);
-            ctx.fill();
-            ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 0.5;
-            ctx.beginPath(); ctx.moveTo(tableLeft, y + rowH); ctx.lineTo(tableRight, y + rowH); ctx.stroke();
-
-            const cellY = y + rowH / 2 + 4;
-
-            for (const cp of colPos) {
-                const tx = cp.align === 'center' ? cp.x + cp.pw / 2 : cp.x + 4;
-                ctx.textAlign = cp.align === 'center' ? 'center' : 'left';
-                if (cp.key === 'rank') {
-                    if (isMedal) { drawMedal(ctx, cp.x + cp.pw / 2 - 13, y + rowH / 2 - 13, rank); }
-                    else if (typeof rank === 'number') { ctx.fillStyle = C.text; ctx.font = font(16, '700'); ctx.fillText(String(rank), tx, cellY); }
-                    else { ctx.fillStyle = C.textLight; ctx.font = font(14, '400'); ctx.fillText('—', tx, cellY); }
-                } else if (cp.key === 'bib') {
-                    ctx.fillStyle = C.text; ctx.font = font(14, '700'); ctx.fillText(r.bib_number || '—', tx, cellY);
-                } else if (cp.key === 'name') {
-                    ctx.fillStyle = C.text; ctx.font = font(14, '600'); ctx.fillText(truncate(ctx, r.name || '', cp.pw - 8), tx, cellY);
-                } else if (cp.key === 'team') {
-                    ctx.fillStyle = C.textMuted; ctx.font = font(12, '400'); ctx.fillText(truncate(ctx, r.team || '', cp.pw - 8), tx, cellY);
-                } else if (cp.key === 'total') {
-                    ctx.fillStyle = isMedal ? C.greenDark : C.text;
-                    ctx.font = font(18, '800');
-                    ctx.fillText(r.total > 0 ? String(r.total) : '—', tx, cellY);
-                } else if (cp.key.startsWith('sub_')) {
-                    const order = parseInt(cp.key.substring(4));
-                    const pts = r.pts?.[order];
-                    if (pts && pts > 0) {
-                        ctx.fillStyle = C.green; ctx.font = font(11, '700');
-                        ctx.fillText(String(pts), tx, cellY);
-                    } else {
-                        ctx.fillStyle = C.textLight; ctx.font = font(10, '400');
-                        ctx.fillText('—', tx, cellY);
-                    }
-                }
-            }
-            ctx.textAlign = 'left';
-            y += rowH;
-        }
-        return y;
-    }
-
-    // ============================================================
-    // Main Generate Function
-    // ============================================================
-    async function generate(format) {
-        format = format || 'png';
-        if (!rSelectedEvent) { alert('종목을 선택하세요.'); return; }
-        const evt = rSelectedEvent;
-        const cat = evt.category;
-        const compInfo = await API.getCompetitionInfo(getCompetitionId()).catch(() => ({ name: '', venue: '' }));
-        const gL = { M: '남자', F: '여자', X: '혼성' }[evt.gender] || '';
-        const roundLabel = fmtRound(evt.round_type);
-        const isFinal = evt.round_type === 'final';
-        const isRoad = isRoadEvent(evt.name);
-        const showWind = needsWindForImage(evt.name, cat);
-
-        // Collect data based on category
-        let allRows = [];
-        let heights = []; // for field_height
-        let windValue = null;
-        let heatLabel = '';
-        let subDefs = []; // for combined
-
-        if (cat === 'combined') {
-            // Combined event
-            await API.syncCombinedScores(evt.id);
-            const scores = await API.getCombinedScores(evt.id);
-            subDefs = evt.gender === 'M' ? DECATHLON_EVENTS : HEPTATHLON_EVENTS;
-            const allEntries = await API.getEventEntries(evt.id);
-
-            allRows = allEntries.map(e => {
-                let t = 0; const pts = {};
-                subDefs.forEach(se => {
-                    const sc = scores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
-                    pts[se.order] = sc ? (sc.wa_points || 0) : 0;
-                    t += pts[se.order];
-                });
-                return { ...e, pts, total: t };
-            }).sort((a, b) => b.total - a.total);
-            let rk = 1;
-            allRows.forEach((r, i) => { r.rank = (i > 0 && allRows[i - 1].total === r.total) ? allRows[i - 1].rank : rk; rk = i + 2; });
-
-        } else if (cat === 'field_height') {
-            const heats = await API.getHeats(evt.id);
-            const heat = heats[0];
-            if (!heat) { alert('히트 데이터가 없습니다.'); return; }
-            const entries = await API.getHeatEntries(heat.id);
-            const ha = await API.getHeightAttempts(heat.id);
-            heights = [...new Set(ha.map(a => a.bar_height))].sort((a, b) => a - b);
-
-            allRows = entries.map(e => {
-                const ea = ha.filter(a => a.event_entry_id === e.event_entry_id);
-                const hd = {};
-                ea.forEach(a => { if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
-                let bestHeight = null;
-                const heightMarks = {};
-                for (const h of heights) {
-                    const d = hd[h];
-                    if (d) {
-                        let marks = '';
-                        for (let i = 1; i <= 3; i++) { if (d[i]) marks += d[i] === 'PASS' ? '-' : d[i]; }
-                        heightMarks[h] = marks;
-                        if (Object.values(d).includes('O')) bestHeight = h;
-                    }
-                }
-                // WA tie-break: failsAtBest, totalFails
-                let totalFails = 0, failsAtBest = 0;
-                for (const h of heights) {
-                    const d = hd[h]; if (!d) continue;
-                    const xCount = Object.values(d).filter(m => m === 'X').length;
-                    totalFails += xCount;
-                    if (Object.values(d).includes('O')) failsAtBest = xCount;
-                }
-                return { ...e, bestHeight, heightMarks, totalFails, failsAtBest };
-            }).sort((a, b) => {
-                if (a.bestHeight == null && b.bestHeight == null) return 0;
-                if (a.bestHeight == null) return 1;
-                if (b.bestHeight == null) return -1;
-                if (b.bestHeight !== a.bestHeight) return b.bestHeight - a.bestHeight;
-                if (a.failsAtBest !== b.failsAtBest) return a.failsAtBest - b.failsAtBest;
-                return a.totalFails - b.totalFails;
-            });
-            let rk = 1;
-            allRows.forEach((r, i) => {
-                if (r.bestHeight == null) { r.rank = null; rk = i + 2; return; }
-                let isTied = i > 0 && allRows[i-1].bestHeight === r.bestHeight && allRows[i-1].failsAtBest === r.failsAtBest && allRows[i-1].totalFails === r.totalFails;
-                r.rank = isTied ? allRows[i-1].rank : rk;
-                rk = i + 2;
-            });
-
-        } else if (cat === 'field_distance') {
-            const heats = await API.getHeats(evt.id);
-            const heat = heats[0];
-            if (!heat) { alert('히트 데이터가 없습니다.'); return; }
-            const entries = await API.getHeatEntries(heat.id);
-            const results = await API.getResults(heat.id);
-
-            allRows = entries.map(e => {
-                const er = results.filter(r => r.event_entry_id === e.event_entry_id);
-                const att = {}, attWind = {};
-                er.forEach(r => { if (r.attempt_number) { att[r.attempt_number] = r.distance_meters; attWind[r.attempt_number] = r.wind; } });
-                const valid = Object.values(att).filter(d => d > 0);
-                const best = valid.length > 0 ? Math.max(...valid) : null;
-                let bestWind = null;
-                if (best != null) { for (let i = 6; i >= 1; i--) { if (att[i] === best) { bestWind = attWind[i]; break; } } }
-                let status = er.find(r => r.status_code && ['DNS', 'DNF', 'NM', 'DQ'].includes(r.status_code))?.status_code || '';
-                if (!status && e.status === 'no_show') status = 'DNS';
-                return { ...e, attempts: att, best, bestWind, status_code: status };
-            }).sort((a, b) => {
-                const aS = ['DNS', 'DNF', 'DQ', 'NM'].includes(a.status_code);
-                const bS = ['DNS', 'DNF', 'DQ', 'NM'].includes(b.status_code);
-                if (aS && !bS) return 1; if (!aS && bS) return -1;
-                if (a.best == null && b.best == null) return 0;
-                if (a.best == null) return 1; if (b.best == null) return -1;
-                return b.best - a.best;
-            });
-            let rk = 1;
-            allRows.forEach((r, i) => {
-                if (r.best == null || ['DNS', 'DNF', 'DQ', 'NM'].includes(r.status_code)) { r.rank = null; rk = i + 2; return; }
-                r.rank = (i > 0 && allRows[i - 1].best === r.best) ? allRows[i - 1].rank : rk;
-                rk = i + 2;
-            });
-
-        } else {
-            // Track / Relay / Road — gather from all heats (unified ranking)
-            const heats = await API.getHeats(evt.id);
-            const heatWindMap = {};
-            if (showWind) {
-                heats.forEach(h => { if (h.wind != null) { const w = parseFloat(h.wind); if (!isNaN(w)) heatWindMap[h.id] = w; } });
-            }
-            for (const heat of heats) {
-                const entries = await API.getHeatEntries(heat.id);
-                const results = await API.getResults(heat.id);
-                entries.forEach(e => {
-                    const r = results.find(r => r.event_entry_id === e.event_entry_id);
-                    allRows.push({
-                        ...e,
-                        time_seconds: r ? r.time_seconds : null,
-                        status_code: r ? (r.status_code || '') : '',
-                        remark: r ? (r.remark || '') : '',
-                        heat_number: heat.heat_number,
-                        heat_id: heat.id,
-                        _isRoad: isRoad,
-                    });
-                });
-                if (heats.length === 1 && heatWindMap[heat.id] != null) {
-                    windValue = formatWind(heatWindMap[heat.id]);
-                }
-                if (heats.length === 1) {
-                    heatLabel = '';
-                } else if (heats.length > 1) {
-                    heatLabel = `${heats.length}개 조 통합`;
-                }
-            }
-
-            allRows.sort((a, b) => {
-                const aS = a.status_code && ['DNS', 'DNF', 'DQ', 'NM'].includes(a.status_code);
-                const bS = b.status_code && ['DNS', 'DNF', 'DQ', 'NM'].includes(b.status_code);
-                if (aS && !bS) return 1; if (!aS && bS) return -1;
-                if (a.time_seconds == null && b.time_seconds == null) return 0;
-                if (a.time_seconds == null) return 1; if (b.time_seconds == null) return -1;
-                return a.time_seconds - b.time_seconds;
-            });
-            let rk = 1;
-            allRows.forEach((r, i) => {
-                if (r.status_code && ['DNS', 'DNF', 'DQ', 'NM'].includes(r.status_code)) { r.rank = r.status_code; return; }
-                r.rank = r.time_seconds == null ? null : ((i > 0 && allRows[i - 1].time_seconds === r.time_seconds && !allRows[i - 1].status_code) ? allRows[i - 1].rank : rk);
-                rk = i + 2;
-            });
-        }
-
-        if (allRows.length === 0) { alert('데이터가 없습니다.'); return; }
-
-        // Paginate
-        const totalPages = Math.ceil(allRows.length / MAX_PER_PAGE);
-        const canvases = [];
-
-        for (let page = 0; page < totalPages; page++) {
-            const pageRows = allRows.slice(page * MAX_PER_PAGE, (page + 1) * MAX_PER_PAGE);
-            const canvas = document.createElement('canvas');
-            canvas.width = W;
-            canvas.height = H;
-            const ctx = canvas.getContext('2d');
-
-            // White background
-            ctx.fillStyle = C.bg;
-            ctx.fillRect(0, 0, W, H);
-
-            // Header
-            let y = drawHeader(ctx, evt, compInfo, roundLabel, heatLabel, showWind ? windValue : null);
-
-            // Table
-            if (cat === 'combined') {
-                y = drawCombinedTable(ctx, pageRows, subDefs, y, isFinal);
-            } else if (cat === 'field_height') {
-                y = drawFieldHeightTable(ctx, pageRows, heights, y, isFinal);
-            } else if (cat === 'field_distance') {
-                y = drawFieldDistTable(ctx, pageRows, y, showWind, isFinal);
-            } else {
-                y = drawTrackTable(ctx, pageRows, y, showWind, windValue, isFinal);
-            }
-
-            // Footer
-            drawFooter(ctx, page, totalPages);
-
-            canvases.push(canvas);
-        }
-
-        // Download
-        for (let i = 0; i < canvases.length; i++) {
-            const fname = buildFileName(evt, compInfo, roundLabel, i, canvases.length, format);
-            const a = document.createElement('a');
-            a.download = fname;
-            if (format === 'jpg') {
-                a.href = canvases[i].toDataURL('image/jpeg', 0.95);
-            } else {
-                a.href = canvases[i].toDataURL('image/png');
-            }
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            // Small delay between multiple downloads
-            if (canvases.length > 1 && i < canvases.length - 1) {
-                await new Promise(r => setTimeout(r, 300));
-            }
-        }
-    }
-
-    return { generate };
-})();
