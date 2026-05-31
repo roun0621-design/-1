@@ -48,45 +48,7 @@
         .login-header .brand .accent { color: var(--brand-gold); }
         .login-header .sub { font-size: 13px; color: #7a7066; letter-spacing: 1px; }
 
-        /* Mode tabs */
-        .mode-tabs {
-            display: flex;
-            background: #f0eee5;
-            border-radius: 10px;
-            padding: 4px;
-            margin-bottom: 20px;
-            gap: 4px;
-        }
-        .mode-tab {
-            flex: 1;
-            padding: 10px 12px;
-            background: transparent;
-            color: #7a7066;
-            border: none;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.18s;
-            min-height: 40px;
-        }
-        .mode-tab.active {
-            background: #fff;
-            color: var(--brand-dark);
-            box-shadow: 0 2px 6px rgba(26,31,43,0.08);
-        }
-        .mode-tab .badge-new {
-            display: inline-block;
-            font-size: 9px;
-            background: var(--brand-gold);
-            color: #fff;
-            padding: 1px 5px;
-            border-radius: 6px;
-            margin-left: 4px;
-            letter-spacing: 0.5px;
-            vertical-align: 1px;
-        }
-
+        /* ── 패널 (운영진/심판 메인) ── */
         .panel { display: none; flex-direction: column; gap: 13px; }
         .panel.active { display: flex; }
 
@@ -135,6 +97,7 @@
             border-radius: 8px;
             display: none;
             line-height: 1.5;
+            margin-bottom: 4px;
         }
         .msg.error   { display: block; background: #fff2f0; color: #c0392b; border: 1px solid #f5cdc6; }
         .msg.success { display: block; background: #f0f9ed; color: #2d7a2d; border: 1px solid #c6e3b8; }
@@ -151,12 +114,108 @@
         }
         .help-text strong { color: #4a4035; }
 
+        /* ── 관리자 진입점 (하단 작게) ── */
+        .admin-toggle-row {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px dashed #e0d8c8;
+            text-align: center;
+        }
+        .admin-toggle-btn {
+            background: none;
+            border: 1px solid transparent;
+            color: #8a7e6f;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+            letter-spacing: 0.2px;
+        }
+        .admin-toggle-btn:hover {
+            color: var(--brand-dark);
+            background: rgba(26,31,43,0.04);
+            border-color: rgba(26,31,43,0.08);
+        }
+        .admin-toggle-btn .chev {
+            display: inline-block;
+            transition: transform 0.2s;
+            margin-left: 3px;
+            font-size: 9px;
+            vertical-align: 1px;
+        }
+        .admin-toggle-btn.open .chev { transform: rotate(180deg); }
+        .admin-toggle-btn .badge-new {
+            display: inline-block;
+            font-size: 8.5px;
+            background: var(--brand-gold);
+            color: #fff;
+            padding: 1px 5px;
+            border-radius: 5px;
+            margin-left: 4px;
+            letter-spacing: 0.5px;
+            vertical-align: 1px;
+            font-weight: 700;
+        }
+
+        /* ── 관리자 패널 (접힘 영역) ── */
+        .admin-panel {
+            display: none;
+            margin-top: 12px;
+            padding: 14px;
+            background: linear-gradient(180deg, rgba(183,159,88,0.06) 0%, rgba(183,159,88,0.02) 100%);
+            border: 1px solid rgba(183,159,88,0.25);
+            border-radius: 10px;
+            flex-direction: column;
+            gap: 12px;
+            animation: slideDown 0.25s ease-out;
+        }
+        .admin-panel.open { display: flex; }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .admin-panel .field label { font-size: 12px; color: #5a4d3f; }
+        .admin-panel .field input {
+            padding: 10px 12px;
+            font-size: 15px;
+            background: #fff;
+        }
+        .admin-panel .btn-login {
+            background: linear-gradient(135deg, var(--brand-gold) 0%, #c8b06e 100%);
+            color: #fff;
+            padding: 11px 18px;
+            font-size: 13.5px;
+            min-height: 42px;
+        }
+        .admin-panel .btn-login:hover { box-shadow: 0 4px 14px rgba(183,159,88,0.35); }
+        .admin-panel .panel-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #7a6400;
+            letter-spacing: 0.5px;
+            margin-bottom: -4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .admin-panel .panel-title::before {
+            content: '';
+            display: inline-block;
+            width: 5px;
+            height: 5px;
+            background: var(--brand-gold);
+            border-radius: 50%;
+        }
+
         .login-footer {
             margin-top: 18px;
             padding-top: 14px;
             border-top: 1px dashed #e0d8c8;
             text-align: center;
-            font-size: 12px;
+            font-size: 11.5px;
             color: #8a7e6f;
             line-height: 1.7;
         }
@@ -179,7 +238,6 @@
         @media (max-width: 480px) {
             .login-card { padding: 26px 20px 22px; }
             .login-header .brand { font-size: 24px; }
-            .mode-tab { font-size: 12px; padding: 9px 8px; }
         }
     </style>
 </head>
@@ -191,76 +249,71 @@
                 <div class="sub">로그인</div>
             </div>
 
-            <!-- 모드 탭: 관리자 (JWT) ↔ 운영진/심판 (legacy) -->
-            <div class="mode-tabs" role="tablist">
-                <button class="mode-tab active" data-mode="jwt" id="tab-jwt" type="button">
-                    관리자·매니저
-                    <span class="badge-new">NEW</span>
-                </button>
-                <button class="mode-tab" data-mode="legacy" id="tab-legacy" type="button">
-                    운영진·심판
-                </button>
-            </div>
-
-            <!-- 메시지 -->
+            <!-- 메시지 (공통) -->
             <div class="msg" id="msg"></div>
 
-            <!-- JWT 패널 (관리자/매니저) -->
-            <form class="panel active" id="panel-jwt" onsubmit="return false;" autocomplete="on">
+            <!-- ─────────── 메인: 운영진·심판 (legacy judge_name + key) ─────────── -->
+            <form class="panel active" id="panel-legacy" onsubmit="return false;" autocomplete="off">
                 <div class="field">
-                    <label for="jwt-username">아이디</label>
-                    <input
-                        type="text"
-                        id="jwt-username"
-                        name="username"
-                        autocomplete="username"
-                        placeholder="아이디 입력"
-                        autocapitalize="off"
-                        autocorrect="off"
-                        spellcheck="false">
-                </div>
-                <div class="field">
-                    <label for="jwt-password">비밀번호</label>
-                    <input
-                        type="password"
-                        id="jwt-password"
-                        name="password"
-                        autocomplete="current-password"
-                        placeholder="비밀번호 입력">
-                </div>
-                <button type="submit" class="btn-login" id="btn-jwt-login">로그인</button>
-                <div class="help-text">
-                    <strong>관리자가 발급한 계정</strong>을 사용하세요.<br>
-                    계정이 없으면 대회 운영 관리자에게 문의하세요.
-                </div>
-            </form>
-
-            <!-- Legacy 패널 (심판/운영) -->
-            <form class="panel" id="panel-legacy" onsubmit="return false;" autocomplete="off">
-                <div class="field">
-                    <label for="legacy-name">심판명 또는 운영 ID</label>
+                    <label for="legacy-name">심판명</label>
                     <input
                         type="text"
                         id="legacy-name"
                         autocomplete="off"
-                        placeholder="홍길동 또는 admin"
+                        placeholder="예: 홍길동"
                         autocapitalize="off"
                         autocorrect="off"
                         spellcheck="false">
                 </div>
                 <div class="field">
-                    <label for="legacy-key">운영 키 또는 비밀번호</label>
+                    <label for="legacy-key">운영 키</label>
                     <input
                         type="password"
                         id="legacy-key"
                         autocomplete="off"
-                        placeholder="키 입력">
+                        placeholder="운영자에게서 발급받은 키">
                 </div>
                 <button type="submit" class="btn-login" id="btn-legacy-login">로그인</button>
                 <div class="help-text">
                     심판/운영진은 대회 운영자가 알려준 <strong>심판명 + 운영 키</strong>를 입력하세요.
                 </div>
             </form>
+
+            <!-- ─────────── 하단: 관리자·매니저 진입점 (작게) ─────────── -->
+            <div class="admin-toggle-row">
+                <button type="button" class="admin-toggle-btn" id="admin-toggle-btn" aria-expanded="false" aria-controls="panel-jwt">
+                    관리자·매니저 로그인
+                    <span class="badge-new">NEW</span>
+                    <span class="chev">▼</span>
+                </button>
+
+                <!-- 관리자 패널 (접힘) -->
+                <form class="admin-panel" id="panel-jwt" onsubmit="return false;" autocomplete="on" aria-hidden="true">
+                    <div class="panel-title">관리자·매니저 전용 로그인</div>
+                    <div class="field">
+                        <label for="jwt-username">아이디</label>
+                        <input
+                            type="text"
+                            id="jwt-username"
+                            name="username"
+                            autocomplete="username"
+                            placeholder="관리자 아이디"
+                            autocapitalize="off"
+                            autocorrect="off"
+                            spellcheck="false">
+                    </div>
+                    <div class="field">
+                        <label for="jwt-password">비밀번호</label>
+                        <input
+                            type="password"
+                            id="jwt-password"
+                            name="password"
+                            autocomplete="current-password"
+                            placeholder="비밀번호">
+                    </div>
+                    <button type="submit" class="btn-login" id="btn-jwt-login">관리자 로그인</button>
+                </form>
+            </div>
 
             <div class="login-footer">
                 일반 관람자는 로그인 없이 대회를 선택해<br>
@@ -284,65 +337,35 @@
             $msg.textContent = '';
         }
 
-        // ─────────── 모드 탭 ───────────
-        function switchMode(mode) {
-            clearMsg();
-            document.querySelectorAll('.mode-tab').forEach(t => {
-                t.classList.toggle('active', t.dataset.mode === mode);
-            });
-            $('panel-jwt').classList.toggle('active', mode === 'jwt');
-            $('panel-legacy').classList.toggle('active', mode === 'legacy');
-            // 마지막 사용 모드 기억
-            try { localStorage.setItem('pace_last_login_mode', mode); } catch(e) {}
-            // 첫 필드 포커스
-            setTimeout(() => {
-                if (mode === 'jwt') {
+        // ─────────── 관리자 패널 토글 ───────────
+        function toggleAdminPanel(forceOpen) {
+            const btn = $('admin-toggle-btn');
+            const panel = $('panel-jwt');
+            const willOpen = (typeof forceOpen === 'boolean')
+                ? forceOpen
+                : !panel.classList.contains('open');
+            panel.classList.toggle('open', willOpen);
+            btn.classList.toggle('open', willOpen);
+            btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            panel.setAttribute('aria-hidden', willOpen ? 'false' : 'true');
+            try { localStorage.setItem('pace_admin_panel_open', willOpen ? '1' : '0'); } catch(e) {}
+            if (willOpen) {
+                setTimeout(() => {
                     if (!$('jwt-username').value) $('jwt-username').focus();
                     else $('jwt-password').focus();
-                } else {
-                    if (!$('legacy-name').value) $('legacy-name').focus();
-                    else $('legacy-key').focus();
-                }
-            }, 30);
-        }
-        document.querySelectorAll('.mode-tab').forEach(t => {
-            t.addEventListener('click', () => switchMode(t.dataset.mode));
-        });
-
-        // ─────────── JWT 로그인 ───────────
-        async function doJwtLogin(ev) {
-            if (ev) ev.preventDefault();
-            clearMsg();
-            const username = $('jwt-username').value.trim();
-            const password = $('jwt-password').value;
-            if (!username || !password) {
-                return showMsg('error', '아이디와 비밀번호를 입력하세요.');
-            }
-            const btn = $('btn-jwt-login');
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span>로그인 중...';
-            try {
-                const data = await PaceAuth.login(username, password);
-                showMsg('success', `${data.user.display_name || data.user.username} 으로 로그인되었습니다. 이동합니다...`);
-                redirectAfterLogin();
-            } catch (e) {
-                showMsg('error', e.message || '로그인 실패');
-                btn.disabled = false;
-                btn.innerHTML = '로그인';
-                $('jwt-password').focus();
-                $('jwt-password').select();
+                }, 80);
             }
         }
-        $('panel-jwt').addEventListener('submit', doJwtLogin);
+        $('admin-toggle-btn').addEventListener('click', () => toggleAdminPanel());
 
-        // ─────────── Legacy 로그인 (심판명 + 키) ───────────
+        // ─────────── Legacy 로그인 (심판명 + 키, 메인) ───────────
         async function doLegacyLogin(ev) {
             if (ev) ev.preventDefault();
             clearMsg();
             const judgeName = $('legacy-name').value.trim();
             const key = $('legacy-key').value.trim();
             if (!judgeName || !key) {
-                return showMsg('error', '심판명/ID 와 키를 모두 입력하세요.');
+                return showMsg('error', '심판명과 운영 키를 모두 입력하세요.');
             }
             const btn = $('btn-legacy-login');
             btn.disabled = true;
@@ -355,7 +378,7 @@
                 });
                 if (!r.ok) {
                     const errText = await r.json().catch(() => ({}));
-                    throw new Error(errText.error || '심판명 또는 키가 일치하지 않습니다.');
+                    throw new Error(errText.error || '심판명 또는 운영 키가 일치하지 않습니다.');
                 }
                 const data = await r.json();
                 // legacy localStorage 키 저장
@@ -374,6 +397,32 @@
         }
         $('panel-legacy').addEventListener('submit', doLegacyLogin);
 
+        // ─────────── JWT 로그인 (관리자/매니저, 하단) ───────────
+        async function doJwtLogin(ev) {
+            if (ev) ev.preventDefault();
+            clearMsg();
+            const username = $('jwt-username').value.trim();
+            const password = $('jwt-password').value;
+            if (!username || !password) {
+                return showMsg('error', '아이디와 비밀번호를 입력하세요.');
+            }
+            const btn = $('btn-jwt-login');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>로그인 중...';
+            try {
+                const data = await PaceAuth.login(username, password);
+                showMsg('success', `${data.user.display_name || data.user.username} 으로 로그인되었습니다. 이동합니다...`);
+                redirectAfterLogin();
+            } catch (e) {
+                showMsg('error', e.message || '관리자 로그인 실패');
+                btn.disabled = false;
+                btn.innerHTML = '관리자 로그인';
+                $('jwt-password').focus();
+                $('jwt-password').select();
+            }
+        }
+        $('panel-jwt').addEventListener('submit', doJwtLogin);
+
         // ─────────── 공통: 로그인 후 리다이렉트 ───────────
         function redirectAfterLogin() {
             const params = new URLSearchParams(location.search);
@@ -385,7 +434,7 @@
 
         // ─────────── 초기화 ───────────
         (function init() {
-            // 이미 로그인 상태면 안내
+            // 1) 이미 로그인 상태면 안내
             const legacyRole = localStorage.getItem('pace_role') || 'viewer';
             if (legacyRole !== 'viewer') {
                 const judgeName = localStorage.getItem('pace_judge_name') || '';
@@ -398,16 +447,27 @@
                 }).catch(() => {});
             }
 
-            // 마지막 사용 모드 복원
-            let lastMode = 'jwt';
-            try { lastMode = localStorage.getItem('pace_last_login_mode') || 'jwt'; } catch(e) {}
-            if (lastMode !== 'jwt' && lastMode !== 'legacy') lastMode = 'jwt';
-            switchMode(lastMode);
-
-            // ?mode= 쿼리로 강제 지정 가능
+            // 2) 관리자 패널 자동 펼침 조건:
+            //    - ?mode=admin / ?mode=jwt 쿼리 파라미터
+            //    - 이전에 열어둔 적이 있으면 (localStorage)
+            //    - URL 해시 #admin
             const params = new URLSearchParams(location.search);
             const forced = params.get('mode');
-            if (forced === 'jwt' || forced === 'legacy') switchMode(forced);
+            const hashAdmin = location.hash === '#admin';
+            let lastOpen = false;
+            try { lastOpen = localStorage.getItem('pace_admin_panel_open') === '1'; } catch(e) {}
+
+            if (forced === 'jwt' || forced === 'admin' || hashAdmin) {
+                toggleAdminPanel(true);
+            } else if (lastOpen) {
+                toggleAdminPanel(true);
+            }
+            // 그 외엔 기본 운영진·심판 화면이 우선
+
+            // 3) 첫 필드 포커스 (자동 펼침이 아닌 경우만)
+            if (!$('panel-jwt').classList.contains('open')) {
+                setTimeout(() => $('legacy-name').focus(), 100);
+            }
         })();
     </script>
 </body>

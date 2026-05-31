@@ -1331,11 +1331,22 @@ async function requireAdminAfterCompEnd(competitionId, adminKey, res) {
 }
 
 async function verifyJudgeLogin(judgeName, key) {
-    // Admin login: id + password (bcrypt)
-    if (judgeName === ADMIN_ID() && bcrypt.compareSync(key, ACCESS_KEYS.adminHash)) {
-        return { role: 'admin', judge_name: '관리자' };
-    }
-    // Judge login: judge_name + key_value must both match
+    // ─────────────────────────────────────────────────────────────
+    // [보안 정책 — 2026-05] 관리자 자격증명 분리
+    //   - admin_id(ADMIN_ID()) + admin_pw 조합은 운영진·심판 폼에서 절대 통과 금지
+    //   - 관리자 로그인은 반드시 /login.html 의 "관리자·매니저(NEW)" 탭 → /api/auth/login (JWT) 으로
+    //   - 이유: 관리자 키는 시스템 전체 권한을 가지므로 legacy judge_name+key 폼과 분리해야 안전
+    // 관리자 자격증명이 입력된 경우엔 즉시 reject (operation_key 테이블 조회조차 하지 않음)
+    // ─────────────────────────────────────────────────────────────
+    try {
+        if (judgeName === ADMIN_ID() || (ACCESS_KEYS && ACCESS_KEYS.adminHash && bcrypt.compareSync(String(key || ''), ACCESS_KEYS.adminHash))) {
+            // admin id 가 들어왔거나, admin password 가 입력된 경우 — 운영진 로그인 거부
+            // (정상 admin 은 /api/auth/login 으로 가야 함)
+            return null;
+        }
+    } catch(_) { /* compareSync 실패 시 그냥 진행 */ }
+
+    // Judge login: judge_name + key_value 둘 다 일치해야 통과
     const dbKey = await db.get('SELECT * FROM operation_key WHERE judge_name=? AND key_value=? AND active=1', judgeName, key);
     if (dbKey) return { role: dbKey.can_manage ? 'admin' : 'operation', judge_name: dbKey.judge_name };
     return null;
