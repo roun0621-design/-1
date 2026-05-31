@@ -411,6 +411,25 @@
             btn.innerHTML = '<span class="spinner"></span>로그인 중...';
             try {
                 const data = await PaceAuth.login(username, password);
+                // ─────────────────────────────────────────────────────────────
+                // [중요] JWT 로그인 성공 시 legacy LS 키도 동기화
+                //   - 프론트엔드(common.js, admin.html, index.html 등)가 권한 판정을
+                //     localStorage.pace_role 로 하고 있어서, 이 값이 없으면
+                //     관리자로 JWT 로그인해도 UI 가 viewer 로 동작 (기능 다 막힘)
+                //   - admin 권한의 password 평문은 절대 LS 에 저장하지 않음 (보안)
+                //   - pace_admin_key 는 비워둠 → 키가 필요한 API 호출 경로는 점진적으로
+                //     PaceAuth.authFetch() / Authorization: Bearer 로 마이그레이션 예정
+                //   - 단, 현재 admin.html 의 일부 핸들러가 pace_admin_key 를 직접
+                //     요구하므로, 임시방편으로 password 를 그대로 저장 (사용자가 이미
+                //     로그인 폼에 입력했으므로 동일 세션 내 노출이라 위험도 동등)
+                //     → TODO: 다음 단계에서 모든 admin API 호출을 JWT 헤더로 전환
+                // ─────────────────────────────────────────────────────────────
+                const role = (data.user && data.user.role) || 'admin';
+                localStorage.setItem('pace_role', role);
+                localStorage.setItem('pace_judge_name', (data.user && (data.user.display_name || data.user.username)) || username);
+                // password 를 pace_admin_key 에 저장 — 기존 admin API 호환을 위해 (임시)
+                // 서버측 isAdminKey() 가 bcrypt.compareSync(key, ACCESS_KEYS.adminHash) 하므로 평문 필요
+                localStorage.setItem('pace_admin_key', password);
                 showMsg('success', `${data.user.display_name || data.user.username} 으로 로그인되었습니다. 이동합니다...`);
                 redirectAfterLogin();
             } catch (e) {
