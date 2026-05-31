@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 계정 — PACE RISE</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+    <meta name="theme-color" content="#b79f58">
+    <link rel="stylesheet" href="styles.css?v=72">
+    <link rel="stylesheet" href="/lib/responsive.css?v=1">
+    <style>
+        :root { --brand-gold: #b79f58; --brand-dark: #1a1f2b; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(ellipse 800px 600px at 0% 0%, rgba(183,159,88,0.06), transparent),
+                #f7f5f0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+            padding: 20px;
+        }
+        .container { max-width: 720px; margin: 0 auto; }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 22px;
+        }
+        .top-bar h1 {
+            font-family: var(--font-brand, 'Audiowide', sans-serif);
+            font-size: 22px;
+            margin: 0;
+            color: var(--brand-dark);
+            letter-spacing: 2px;
+        }
+        .top-bar .accent { color: var(--brand-gold); }
+        .top-bar .back {
+            font-size: 13px;
+            color: #6a5e50;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: rgba(0,0,0,0.04);
+            transition: background .15s;
+        }
+        .top-bar .back:hover { background: rgba(0,0,0,0.08); }
+        .card {
+            background: #fff;
+            border: 1px solid rgba(183,159,88,0.18);
+            border-radius: 14px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 16px rgba(26,31,43,0.04);
+        }
+        .card h2 {
+            font-size: 16px;
+            margin: 0 0 16px;
+            color: var(--brand-dark);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card h2::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 18px;
+            background: var(--brand-gold);
+            border-radius: 2px;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0e9dd;
+            font-size: 14px;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-row .label {
+            color: #7a7066;
+            font-size: 13px;
+        }
+        .info-row .value {
+            color: var(--brand-dark);
+            font-weight: 600;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .badge.admin { background: #fdf0e0; color: #9a5500; }
+        .badge.operation { background: #e6f3fb; color: #1f6791; }
+        .badge.viewer { background: #f0eee5; color: #6a5e50; }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+        .field label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #4a4035;
+        }
+        .field input {
+            width: 100%;
+            padding: 11px 14px;
+            border: 1.5px solid #e0d8c8;
+            border-radius: 10px;
+            font-size: 16px;
+            background: #fafaf7;
+            box-sizing: border-box;
+            transition: border-color .15s, background .15s;
+        }
+        .field input:focus {
+            outline: none;
+            border-color: var(--brand-gold);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(183,159,88,0.15);
+        }
+        .btn-primary {
+            padding: 12px 20px;
+            background: var(--brand-dark);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            min-height: 44px;
+            min-width: 120px;
+        }
+        .btn-primary:hover { background: #2a3340; }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-ghost {
+            padding: 10px 18px;
+            background: transparent;
+            color: #6a5e50;
+            border: 1.5px solid #e0d8c8;
+            border-radius: 10px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .btn-ghost:hover { background: rgba(0,0,0,0.04); }
+        .btn-danger {
+            padding: 10px 16px;
+            background: #fff;
+            color: #c0392b;
+            border: 1.5px solid #e8b5ad;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-danger:hover { background: #fef5f3; }
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            margin-top: 12px;
+        }
+        .msg {
+            font-size: 13px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            display: none;
+            line-height: 1.5;
+            margin-top: 8px;
+        }
+        .msg.error { display: block; background: #fff2f0; color: #c0392b; border: 1px solid #f5cdc6; }
+        .msg.success { display: block; background: #f0f9ed; color: #2d7a2d; border: 1px solid #c6e3b8; }
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #8a7e6f;
+            font-size: 14px;
+        }
+        .empty-state a {
+            color: var(--brand-gold);
+            font-weight: 600;
+            text-decoration: none;
+        }
+        @media (max-width: 480px) {
+            .card { padding: 18px; }
+            .info-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h1>PACE <span class="accent">RISE</span> · 내 계정</h1>
+            <a href="/" class="back">← 메인</a>
+        </div>
+
+        <!-- 로딩/비로그인 안내 -->
+        <div id="loading" class="card" style="text-align:center;color:#8a7e6f;">
+            계정 정보를 불러오는 중...
+        </div>
+
+        <div id="empty" class="card" style="display:none;">
+            <div class="empty-state">
+                로그인이 필요합니다.<br><br>
+                <a href="/login.html?redirect=/account.html">로그인 페이지로 이동 →</a>
+            </div>
+        </div>
+
+        <!-- 계정 정보 -->
+        <div id="account-info" class="card" style="display:none;">
+            <h2>계정 정보</h2>
+            <div class="info-row">
+                <span class="label">아이디</span>
+                <span class="value" id="acc-username">—</span>
+            </div>
+            <div class="info-row">
+                <span class="label">표시 이름</span>
+                <span class="value" id="acc-display">—</span>
+            </div>
+            <div class="info-row">
+                <span class="label">권한</span>
+                <span class="value"><span class="badge" id="acc-role">—</span></span>
+            </div>
+            <div class="info-row">
+                <span class="label">이메일</span>
+                <span class="value" id="acc-email">—</span>
+            </div>
+            <div class="info-row">
+                <span class="label">소속 조직</span>
+                <span class="value" id="acc-org">—</span>
+            </div>
+            <div class="info-row">
+                <span class="label">마지막 로그인</span>
+                <span class="value" id="acc-last-login">—</span>
+            </div>
+            <div class="info-row">
+                <span class="label">마지막 IP</span>
+                <span class="value" id="acc-last-ip" style="font-family:monospace;font-size:12px;">—</span>
+            </div>
+            <div class="info-row">
+                <span class="label">계정 생성일</span>
+                <span class="value" id="acc-created" style="font-size:12px;color:#8a7e6f;">—</span>
+            </div>
+        </div>
+
+        <!-- 비밀번호 변경 -->
+        <div id="pw-card" class="card" style="display:none;">
+            <h2>비밀번호 변경</h2>
+            <p style="font-size:12px;color:#8a7e6f;line-height:1.6;margin:-6px 0 14px;">
+                변경 후 모든 기기에서 자동 로그아웃됩니다. 새 비밀번호로 다시 로그인해 주세요.
+            </p>
+            <form id="pwForm" onsubmit="return false;">
+                <!-- 접근성: 비밀번호 폼은 username 필드를 함께 두는 것을 권장 -->
+                <input type="text" id="pw-username-hidden" autocomplete="username" tabindex="-1"
+                       aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
+                <div class="field">
+                    <label for="pw-cur">현재 비밀번호</label>
+                    <input type="password" id="pw-cur" autocomplete="current-password" required>
+                </div>
+                <div class="field">
+                    <label for="pw-new">새 비밀번호 (6자 이상)</label>
+                    <input type="password" id="pw-new" autocomplete="new-password" minlength="6" required>
+                </div>
+                <div class="field">
+                    <label for="pw-new2">새 비밀번호 확인</label>
+                    <input type="password" id="pw-new2" autocomplete="new-password" required>
+                </div>
+                <div class="msg" id="pw-msg"></div>
+                <div class="actions">
+                    <button type="button" class="btn-ghost" onclick="resetPwForm()">초기화</button>
+                    <button type="submit" class="btn-primary" id="pwBtn">비밀번호 변경</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 세션 관리 -->
+        <div id="session-card" class="card" style="display:none;">
+            <h2>세션</h2>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div style="font-size:14px;font-weight:600;color:var(--brand-dark);">현재 세션</div>
+                    <div style="font-size:12px;color:#8a7e6f;margin-top:2px;">JWT 1시간 / Refresh 30일</div>
+                </div>
+                <button class="btn-danger" id="logoutBtn">이 기기에서 로그아웃</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/lib/auth-client.js?v=1"></script>
+    <script>
+        const $ = (id) => document.getElementById(id);
+
+        const ROLE_LABEL = {
+            'admin': '관리자',
+            'operation': '운영(심판)',
+            'manager': '매니저',
+            'record_officer': '기록위원',
+            'viewer': '뷰어',
+        };
+
+        function fmtDate(iso) {
+            if (!iso) return '—';
+            try {
+                const d = new Date(iso);
+                if (isNaN(d.getTime())) return iso;
+                return d.toLocaleString('ko-KR', { hour12: false });
+            } catch(e) { return iso; }
+        }
+
+        async function load() {
+            try {
+                const user = await PaceAuth.me();
+                if (!user || !user.id) {
+                    $('loading').style.display = 'none';
+                    $('empty').style.display = 'block';
+                    return;
+                }
+                $('loading').style.display = 'none';
+                $('account-info').style.display = 'block';
+                $('pw-card').style.display = 'block';
+                $('session-card').style.display = 'block';
+
+                $('acc-username').textContent = user.username || '—';
+                const hidU = $('pw-username-hidden');
+                if (hidU) hidU.value = user.username || '';
+                $('acc-display').textContent = user.display_name || user.username || '—';
+                const roleEl = $('acc-role');
+                roleEl.textContent = ROLE_LABEL[user.role] || user.role || '뷰어';
+                roleEl.className = 'badge ' + (user.role === 'admin' ? 'admin'
+                                                : (user.role === 'viewer' ? 'viewer' : 'operation'));
+                $('acc-email').textContent = user.email || '—';
+                $('acc-org').textContent = user.organization_id ? '#' + user.organization_id : '—';
+                $('acc-last-login').textContent = fmtDate(user.last_login_at);
+                $('acc-last-ip').textContent = user.last_login_ip || '—';
+                $('acc-created').textContent = fmtDate(user.created_at);
+            } catch (e) {
+                $('loading').textContent = '계정 정보를 불러올 수 없습니다. (' + e.message + ')';
+            }
+        }
+
+        function showPwMsg(type, text) {
+            const m = $('pw-msg');
+            m.className = 'msg ' + type;
+            m.textContent = text;
+        }
+        function clearPwMsg() { $('pw-msg').className = 'msg'; $('pw-msg').textContent = ''; }
+        function resetPwForm() {
+            $('pw-cur').value = '';
+            $('pw-new').value = '';
+            $('pw-new2').value = '';
+            clearPwMsg();
+        }
+
+        $('pwForm').addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            clearPwMsg();
+            const cur = $('pw-cur').value;
+            const nw  = $('pw-new').value;
+            const nw2 = $('pw-new2').value;
+            if (!cur || !nw || !nw2) return showPwMsg('error', '모든 항목을 입력하세요.');
+            if (nw.length < 6) return showPwMsg('error', '새 비밀번호는 6자 이상이어야 합니다.');
+            if (nw !== nw2)   return showPwMsg('error', '새 비밀번호 확인이 일치하지 않습니다.');
+            if (cur === nw)   return showPwMsg('error', '현재 비밀번호와 동일합니다.');
+
+            const btn = $('pwBtn');
+            btn.disabled = true;
+            btn.textContent = '변경 중...';
+            try {
+                await PaceAuth.changePassword(cur, nw);
+                showPwMsg('success', '비밀번호가 변경되었습니다. 곧 로그인 페이지로 이동합니다...');
+                setTimeout(() => { location.href = '/login.html'; }, 1500);
+            } catch (e) {
+                showPwMsg('error', e.message || '비밀번호 변경 실패');
+                btn.disabled = false;
+                btn.textContent = '비밀번호 변경';
+            }
+        });
+
+        $('logoutBtn').addEventListener('click', async () => {
+            if (!confirm('로그아웃하시겠습니까?')) return;
+            try { await PaceAuth.logout(); } catch(_) {}
+            location.href = '/';
+        });
+
+        load();
+    </script>
+</body>
+</html>

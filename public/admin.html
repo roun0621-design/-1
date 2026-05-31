@@ -17,6 +17,7 @@
     <meta name="theme-color" content="#b79f58">
     <title>PACE RISE : Node — 관리자</title>
     <link rel="stylesheet" href="styles.css?v=72">
+    <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
         .admin-tabs { display:flex; gap:0; border-bottom:2px solid var(--gray); margin-bottom:20px; flex-wrap:wrap; }
         .admin-tab { padding:10px 18px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none; color:var(--text-muted); border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; }
@@ -284,6 +285,35 @@
         @media (max-width: 900px) {
             .admin-shell { flex-direction:column; }
             .admin-sidebar { width:100%; min-width:0; position:static; max-height:none; }
+        }
+        /* C-3: 모바일 추가 보강 */
+        @media (max-width: 768px) {
+            .admin-shell { gap: 12px; padding: 8px; }
+            .admin-sidebar { max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+            .admin-content { padding: 12px !important; }
+            .admin-tabs { flex-wrap: wrap; gap: 6px; }
+            .admin-tabs button { font-size: 13px; padding: 8px 12px; min-height: 40px; }
+            .admin-section-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+            .admin-section-header h2,
+            .admin-section-header h3 { font-size: 16px; }
+            .admin-form-row { flex-direction: column; gap: 8px; }
+            .admin-form-row > * { width: 100%; }
+            /* 버튼 그룹 줄바꿈 */
+            .btn-group, .button-row { flex-wrap: wrap; gap: 6px; }
+            /* 입력 필드 iOS 자동 확대 방지 */
+            input[type="text"], input[type="number"], input[type="search"],
+            input[type="email"], input[type="password"], input[type="tel"],
+            input[type="date"], input[type="time"], input[type="datetime-local"],
+            select, textarea {
+                font-size: 16px !important;
+            }
+            /* 표 가로 스크롤 */
+            .admin-content table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            /* 작은 화면에서 사이드바 아이템 더 큰 터치 영역 */
+            .admin-sidebar a, .admin-sidebar button {
+                min-height: 44px;
+                padding: 10px 12px;
+            }
         }
     </style>
 </head>

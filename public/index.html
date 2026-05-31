@@ -184,6 +184,11 @@
                 <button class="btn btn-primary" onclick="doLogin()">로그인</button>
             </div>
             <div class="login-error" id="login-msg">심판명 또는 운영키가 일치하지 않습니다.</div>
+            <!-- B-3: 신규 계정 로그인(JWT) 안내 -->
+            <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #e0d8c8;font-size:11px;color:#8a7e6f;line-height:1.7;text-align:center;">
+                <span style="display:inline-block;padding:2px 8px;background:rgba(183,159,88,0.12);color:#7a6400;border-radius:10px;font-weight:700;font-size:10px;letter-spacing:0.5px;margin-bottom:4px;">NEW</span><br>
+                <a href="/login.html" style="color:#b79f58;font-weight:600;text-decoration:none;">아이디·비밀번호로 로그인하기 →</a>
+            </div>
         </div>
     </div>
 
@@ -393,6 +398,7 @@
     </div>
 
     <script src="common.js?v=74"></script>
+    <script src="/lib/auth-client.js?v=1"></script>
     <script>
         renderPageNav('home');
 
@@ -440,9 +446,18 @@
 
         // ---- Login modal ----
         window._headerLoginToggle = toggleLogin;
-        function toggleLogin() {
+        async function toggleLogin() {
+            // legacy role 또는 JWT 세션이 있으면 로그아웃 처리
             if (currentRole !== 'viewer') {
                 doLogout();
+                return;
+            }
+            // JWT 세션만 있는 경우 (legacy 없음)
+            if (window.PaceAuth && PaceAuth.getCachedUser()) {
+                if (confirm('로그아웃하시겠습니까?')) {
+                    try { await PaceAuth.logout(); } catch(_) {}
+                    updateRoleUI();
+                }
                 return;
             }
             document.getElementById('login-modal').classList.add('show');
@@ -514,6 +529,39 @@
                 adminActions.style.display = 'none';
                 manualBtn.style.display = 'none';
             }
+
+            // B-3: 신규 JWT 세션도 인식 (legacy 로그인이 안 된 경우만)
+            if (currentRole === 'viewer' && window.PaceAuth) {
+                const cached = PaceAuth.getCachedUser();
+                if (cached && cached.id) {
+                    // 캐시 표시 (UI만, 권한은 별도)
+                    badge.className = 'role-badge ' + (cached.role === 'admin' ? 'admin' : 'operation');
+                    badge.textContent = (cached.display_name || cached.username) +
+                        (cached.role === 'admin' ? ' · 관리자' : ' · ' + (cached.role || ''));
+                    badge.style.display = 'inline-block';
+                    loginBtn.className = 'header-login-btn logged-in';
+                    loginLabel.textContent = '로그아웃 (新)';
+                    // 서버에 실제 살아있는지 백그라운드 확인
+                    PaceAuth.me().then(u => {
+                        if (!u) {
+                            PaceAuth.clearTokens();
+                            updateRoleUI();
+                        }
+                    }).catch(() => {});
+                }
+            }
+        }
+
+        // B-3: 헤더 로그아웃 클릭 시 — legacy 또는 JWT 둘 다 처리
+        async function _maybeJwtLogout() {
+            if (window.PaceAuth) {
+                const cached = PaceAuth.getCachedUser();
+                if (cached) {
+                    try { await PaceAuth.logout(); } catch(_) {}
+                    return true;
+                }
+            }
+            return false;
         }
 
         // ---- Modals ----
