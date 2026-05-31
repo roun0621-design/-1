@@ -4,6 +4,41 @@
  * v5: WebSocket scoreboard, PDF documents, broadcast overlay, security enhancements
  */
 require('dotenv').config();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [Deploy 하드닝 — 2026-05] 필수 npm 패키지 self-check
+//   - 프로덕션에서 `npm install --omit=dev` 누락으로 502 가 났던 적이 있음
+//     (cookie-parser, jsonwebtoken, bcryptjs 미설치)
+//   - require() 가 실패하면 PM2 가 crash loop 에 빠지고 원인을 알기 힘듦
+//   - 부팅 시 명시적으로 모든 필수 모듈을 체크하고, 누락된 게 있으면
+//     명확한 한 줄 에러로 종료 (PM2 logs 첫 줄에 바로 보이도록)
+// ─────────────────────────────────────────────────────────────────────────────
+(function selfCheckRequiredModules() {
+    const required = [
+        'express', 'compression', 'multer', 'xlsx', 'helmet', 'ws',
+        'pdfkit', 'canvas', 'express-rate-limit',
+        // Auth Phase 1+2 핵심
+        'bcryptjs', 'jsonwebtoken', 'cookie-parser',
+        // DB
+        'better-sqlite3', 'pg',
+        // dotenv 는 위에서 이미 로드됨
+    ];
+    const missing = [];
+    for (const name of required) {
+        try { require.resolve(name); }
+        catch (_) { missing.push(name); }
+    }
+    if (missing.length) {
+        const msg = `[FATAL] 필수 npm 패키지 누락: ${missing.join(', ')}\n` +
+                    `        해결: npm ci --omit=dev  (또는 npm install --omit=dev ${missing.join(' ')})\n` +
+                    `        프로덕션에선 ${process.cwd()} 에서 실행하세요.`;
+        console.error('\n' + '='.repeat(70));
+        console.error(msg);
+        console.error('='.repeat(70) + '\n');
+        process.exit(1);
+    }
+})();
+// ─────────────────────────────────────────────────────────────────────────────
 const express = require('express');
 const compression = require('compression');
 const path = require('path');
@@ -301,6 +336,22 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 // Serve favicon from icons
 app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.ico')));
+
+// ─── Health check — scripts/deploy.sh 및 nginx/외부 모니터링 용도 ──────────
+//   정상: 200 + 상태 JSON
+//   서버는 살아있지만 auth 마이그 실패: 200 (legacy 로그인은 정상 동작하므로)
+//   완전 장애: Express 자체가 응답 못 함 → connection refused / 502
+app.get('/api/health', (req, res) => {
+    res.json({
+        ok: true,
+        backend: db.isAsync ? 'postgres' : 'sqlite',
+        authMig: global.__authMigOk ? 'ok' : (global.__authMigError ? 'failed' : 'pending'),
+        authMigError: global.__authMigError || null,
+        uptime_sec: Math.floor(process.uptime()),
+        node: process.version,
+        ts: new Date().toISOString(),
+    });
+});
 
 // /open — Android intent:// 중간 리다이렉트 페이지 (카카오톡/인스타 인앱브라우저 대응)
 app.get('/open', (req, res) => res.sendFile(path.join(__dirname, 'public', 'open.html')));
@@ -14485,7 +14536,17 @@ server.listen(PORT, '0.0.0.0', async () => {
         console.log(`  http://localhost:${PORT}/`);
         console.log(`  WebSocket Scoreboard: ws://localhost:${PORT}/ws/scoreboard`);
         console.log(`  DB backend: ${db.isAsync ? 'PostgreSQL' : 'SQLite'}`);
-        console.log(`  DB: ${compCount} competitions, ${evtCount} events, ${athCount} athletes\n`);
+        console.log(`  DB: ${compCount} competitions, ${evtCount} events, ${athCount} athletes`);
+        // Auth Phase 1 마이그레이션 상태 (부팅 IIFE 결과)
+        if (global.__authMigOk) {
+            console.log(`  Auth: app_user/session_refresh/login_audit ready ✓`);
+        } else if (global.__authMigError) {
+            console.log(`  Auth: ⚠ MIGRATION FAILED — ${global.__authMigError}`);
+            console.log(`  Auth: JWT 로그인이 동작하지 않을 수 있음. /api/_diag/auth-init 로 재시도 가능`);
+        } else {
+            console.log(`  Auth: (마이그레이션 결과 대기 중 — 비동기 진행 중일 수 있음)`);
+        }
+        console.log('');
     } catch(e) {
         console.log(`\n  Pace Rise Competition OS v5 — port ${PORT}\n  http://localhost:${PORT}/\n  (DB count failed: ${e.message})\n`);
     }
