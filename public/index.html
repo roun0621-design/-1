@@ -169,27 +169,15 @@
         </div>
     </main>
 
-    <!-- Login Modal -->
-    <div class="login-modal" id="login-modal">
-        <div class="login-modal-inner">
-            <h3 style="font-size:18px;margin-bottom:10px;">운영진 전용 로그인</h3>
-            <div style="background:var(--warning-light);border:1.5px solid #e5a100;border-radius:8px;padding:12px 14px;margin-bottom:16px;text-align:left;">
-                <p style="font-size:13px;font-weight:700;color:#7a6400;margin-bottom:4px;">관리자 또는 심판 및 대회운영진만 로그인하세요.</p>
-                <p style="font-size:12px;color:#7a6400;line-height:1.6;">일반 관람자는 로그인 없이 대회를 선택하면<br>실시간 경기 결과를 확인할 수 있습니다.</p>
-            </div>
-            <input type="text" id="login-name" placeholder="심판명 또는 관리자 ID" autocomplete="off" style="margin-bottom:8px;">
-            <input type="password" id="login-key" placeholder="운영키 또는 관리자 비밀번호" autocomplete="off">
-            <div class="login-actions">
-                <button class="btn btn-ghost" onclick="closeLoginModal()">닫기</button>
-                <button class="btn btn-primary" onclick="doLogin()">로그인</button>
-            </div>
-            <div class="login-error" id="login-msg">심판명 또는 운영키가 일치하지 않습니다.</div>
-            <!-- B-3: 신규 계정 로그인(JWT) 안내 -->
-            <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #e0d8c8;font-size:11px;color:#8a7e6f;line-height:1.7;text-align:center;">
-                <span style="display:inline-block;padding:2px 8px;background:rgba(183,159,88,0.12);color:#7a6400;border-radius:10px;font-weight:700;font-size:10px;letter-spacing:0.5px;margin-bottom:4px;">NEW</span><br>
-                <a href="/login.html" style="color:#b79f58;font-weight:600;text-decoration:none;">아이디·비밀번호로 로그인하기 →</a>
-            </div>
-        </div>
+    <!--
+      [B-3 통합 — 2026-05] 로그인 모달 제거 완료.
+      모든 로그인 진입은 /login.html (탭 UI) 단일 페이지에서 처리합니다.
+      hidden inputs 는 jQuery/구 핸들러 호환 안전망일 뿐, 화면에 노출되지 않습니다.
+    -->
+    <div id="login-modal" style="display:none !important;" aria-hidden="true">
+        <input type="hidden" id="login-name" />
+        <input type="hidden" id="login-key" />
+        <span id="login-msg" style="display:none;"></span>
     </div>
 
     <!-- About Modal -->
@@ -415,12 +403,12 @@
             await loadRecentCompetitions();
             await loadSiteConfig();
             await showHomePopup();
-            // Auto-open login modal if redirected with ?action=login
+            // [B-3 통합] /?action=login 로 진입한 경우 → /login.html 로 단일 라우팅
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('action') === 'login' && currentRole === 'viewer') {
-                toggleLogin();
-                // Clean up URL
-                window.history.replaceState({}, '', '/');
+                const cur = '/';
+                window.location.replace(`/login.html?redirect=${encodeURIComponent(cur)}`);
+                return;
             }
         });
 
@@ -444,61 +432,52 @@
             return f ? `background:${f.badge_bg};color:${f.badge_color};` : 'background:#f5f5f5;color:#616161;';
         }
 
-        // ---- Login modal ----
+        // ─────────────────────────────────────────────────────────────
+        // [B-3 통합 — 2026-05] 로그인/로그아웃 핸들러
+        //   • 모달 사용 안 함. 로그인은 /login.html 단일 페이지로 라우팅.
+        //   • 호환을 위해 toggleLogin / doLogin / closeLoginModal 시그니처는 유지
+        //     (기존 onclick="toggleLogin()" 헤더 버튼 + 다른 페이지 호출 흡수).
+        // ─────────────────────────────────────────────────────────────
         window._headerLoginToggle = toggleLogin;
         async function toggleLogin() {
-            // legacy role 또는 JWT 세션이 있으면 로그아웃 처리
+            // 1) legacy 로그인 상태 → 로그아웃
             if (currentRole !== 'viewer') {
-                doLogout();
+                if (!confirm('로그아웃하시겠습니까?')) return;
+                await doLogout();
                 return;
             }
-            // JWT 세션만 있는 경우 (legacy 없음)
+            // 2) JWT 세션만 있는 경우 → 로그아웃
             if (window.PaceAuth && PaceAuth.getCachedUser()) {
-                if (confirm('로그아웃하시겠습니까?')) {
-                    try { await PaceAuth.logout(); } catch(_) {}
-                    updateRoleUI();
-                }
+                if (!confirm('로그아웃하시겠습니까?')) return;
+                try { await PaceAuth.logout(); } catch(_) {}
+                localStorage.removeItem('pr_auth_user');
+                updateRoleUI();
+                location.reload();
                 return;
             }
-            document.getElementById('login-modal').classList.add('show');
-            document.getElementById('login-name').focus();
-            if (window.pushModalState) pushModalState(() => closeLoginModal());
+            // 3) 미로그인 → /login.html 단일 진입점으로 이동
+            const cur = window.location.pathname + window.location.search + window.location.hash;
+            const redirect = encodeURIComponent(cur || '/');
+            window.location.href = `/login.html?redirect=${redirect}`;
         }
-        function closeLoginModal() {
-            document.getElementById('login-modal').classList.remove('show');
-            document.getElementById('login-msg').style.display = 'none';
-            if (window.popModalState) popModalState();
-        }
+        function closeLoginModal() { /* deprecated no-op */ }
         async function doLogin() {
-            const judgeName = document.getElementById('login-name').value.trim();
-            const key = document.getElementById('login-key').value.trim();
-            if (!judgeName || !key) { document.getElementById('login-msg').textContent = '심판명과 운영키를 모두 입력하세요.'; document.getElementById('login-msg').style.display = 'block'; return; }
-            try {
-                const r = await fetch('/api/auth/verify', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ judge_name: judgeName, key }) }).then(res => { if (!res.ok) throw res; return res.json(); });
-                localStorage.setItem('pace_admin_key', key);
-                localStorage.setItem('pace_role', r.role);
-                localStorage.setItem('pace_judge_name', r.judge_name || judgeName);
-                currentRole = r.role;
-                currentKey = key;
-                document.getElementById('login-name').value = '';
-                document.getElementById('login-key').value = '';
-                closeLoginModal();
-                updateRoleUI();
-                renderPageNav('home');
-                await loadCompetitions();
-            } catch (e) {
-                document.getElementById('login-msg').textContent = '심판명 또는 운영키가 일치하지 않습니다.';
-                document.getElementById('login-msg').style.display = 'block';
-            }
+            // deprecated — /login.html 로 이동
+            const redirect = encodeURIComponent('/');
+            window.location.href = `/login.html?redirect=${redirect}`;
         }
-        document.getElementById('login-key').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-        document.getElementById('login-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('login-key').focus(); });
-        document.getElementById('login-modal').addEventListener('click', e => { if (e.target === document.getElementById('login-modal')) closeLoginModal(); });
 
-        function doLogout() {
+        async function doLogout() {
+            // legacy + JWT 동시 정리
+            try {
+                if (window.PaceAuth && PaceAuth.getCachedUser()) {
+                    await PaceAuth.logout();
+                }
+            } catch(_) {}
             localStorage.removeItem('pace_admin_key');
             localStorage.removeItem('pace_role');
             localStorage.removeItem('pace_judge_name');
+            localStorage.removeItem('pr_auth_user');
             currentRole = 'viewer';
             currentKey = '';
             updateRoleUI();

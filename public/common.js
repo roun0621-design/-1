@@ -305,6 +305,38 @@ function setCompetitionId(id) {
         url.searchParams.set('comp', id);
         window.history.replaceState({}, '', url);
     } catch(e) {}
+    // 🐛 BUGFIX: 대회 변경 시 네비게이션 링크의 ?comp=N 도 즉시 갱신
+    //   nav 링크는 페이지 로드 시점의 compId 가 박혀있어 다른 페이지로 이동 시
+    //   예전 대회로 돌아가는 문제가 있었음. 같은 함수에서 한꺼번에 처리해
+    //   모든 페이지에서 자동으로 동작하도록 함.
+    try {
+        const nav = document.getElementById('page-nav');
+        if (nav) {
+            nav.querySelectorAll('a[href]').forEach(a => {
+                try {
+                    const u = new URL(a.href, window.location.origin);
+                    // 대회 컨텍스트가 필요한 페이지만 (홈은 제외)
+                    if (u.pathname && u.pathname !== '/' && u.pathname !== '/index.html') {
+                        u.searchParams.set('comp', id);
+                        a.href = u.pathname + (u.search || '') + (u.hash || '');
+                    }
+                } catch(_) {}
+            });
+        }
+        // 모바일 메뉴도 같이 갱신
+        const mobileMenu = document.getElementById('mobile-menu');
+        if (mobileMenu) {
+            mobileMenu.querySelectorAll('a[href]').forEach(a => {
+                try {
+                    const u = new URL(a.href, window.location.origin);
+                    if (u.pathname && u.pathname !== '/' && u.pathname !== '/index.html') {
+                        u.searchParams.set('comp', id);
+                        a.href = u.pathname + (u.search || '') + (u.hash || '');
+                    }
+                } catch(_) {}
+            });
+        }
+    } catch(e) { console.warn('[setCompetitionId] nav sync failed:', e); }
 }
 
 // ============================================================
@@ -864,22 +896,48 @@ function renderPageNav(currentPage) {
         };
 
         // Login button
+        // ─────────────────────────────────────────────────────────────
+        // [B-3 통합] 로그인 버튼 정책 (2026-05 개편)
+        //   1) 미로그인:  /login.html?redirect=<현재URL> 로 이동 (모달 사용 안 함)
+        //   2) JWT 로그인 상태(pr_auth_user 존재): PaceAuth.logout() 호출 후 리로드
+        //   3) legacy 로그인 상태(pace_role !== 'viewer'): legacy 키/이름 삭제 후 리로드
+        //   4) 두 상태가 동시에 있을 수 있으므로 둘 다 정리
+        // ─────────────────────────────────────────────────────────────
+        const jwtUser = (function() {
+            try { return JSON.parse(localStorage.getItem('pr_auth_user') || 'null'); }
+            catch(_) { return null; }
+        })();
+        const isLoggedIn = (role !== 'viewer') || !!jwtUser;
         const loginBtn = document.createElement('button');
-        loginBtn.className = 'header-login-btn' + (role !== 'viewer' ? ' logged-in' : '');
+        loginBtn.className = 'header-login-btn' + (isLoggedIn ? ' logged-in' : '');
         loginBtn.id = 'header-login-btn';
-        loginBtn.innerHTML = `<span id="header-login-label">${role !== 'viewer' ? '\ub85c\uadf8\uc544\uc6c3' : '\ub85c\uadf8\uc778'}</span>`;
-        loginBtn.onclick = function() {
+        loginBtn.innerHTML = `<span id="header-login-label">${isLoggedIn ? '\ub85c\uadf8\uc544\uc6c3' : '\ub85c\uadf8\uc778'}</span>`;
+        loginBtn.onclick = async function() {
             const r = localStorage.getItem('pace_role') || 'viewer';
-            if (r !== 'viewer') {
-                // Logout
+            const ju = (function() {
+                try { return JSON.parse(localStorage.getItem('pr_auth_user') || 'null'); }
+                catch(_) { return null; }
+            })();
+            if (r !== 'viewer' || ju) {
+                // ── 통합 로그아웃 ──
+                // (1) JWT 세션 정리
+                if (ju && window.PaceAuth && typeof window.PaceAuth.logout === 'function') {
+                    try { await window.PaceAuth.logout(); } catch(_) {}
+                }
+                // (2) legacy 키/역할 정리
                 localStorage.removeItem('pace_admin_key');
                 localStorage.removeItem('pace_role');
                 localStorage.removeItem('pace_judge_name');
+                // (3) JWT 캐시 흔적 정리 (PaceAuth.logout이 처리하지 못한 경우 대비)
+                localStorage.removeItem('pr_auth_user');
                 location.reload();
-            } else if (window._headerLoginToggle) {
-                window._headerLoginToggle();
             } else {
-                window.location.href = '/?action=login';
+                // ── 통합 로그인 진입 ──
+                // 모든 페이지에서 동일하게 /login.html 로 이동.
+                // redirect 파라미터에 현재 경로(쿼리 포함) 보존해서 로그인 후 복귀.
+                const cur = window.location.pathname + window.location.search + window.location.hash;
+                const redirect = encodeURIComponent(cur || '/');
+                window.location.href = `/login.html?redirect=${redirect}`;
             }
         };
 
@@ -1009,8 +1067,14 @@ function _buildMobileMenu(pages, currentPage, role) {
         `<a href="${p.href}" class="${p.key === currentPage ? 'mm-active' : ''}" data-page-key="${p.key}">${p.label}</a>`
     ).join('');
 
-    const loginLabel = role !== 'viewer' ? '\ub85c\uadf8\uc544\uc6c3' : '\ub85c\uadf8\uc778';
-    const loginColor = role !== 'viewer' ? 'color:#E53935;' : '';
+    // [B-3 통합] JWT 상태도 함께 고려
+    const _ju = (function() {
+        try { return JSON.parse(localStorage.getItem('pr_auth_user') || 'null'); }
+        catch(_) { return null; }
+    })();
+    const _isLoggedIn = (role !== 'viewer') || !!_ju;
+    const loginLabel = _isLoggedIn ? '\ub85c\uadf8\uc544\uc6c3' : '\ub85c\uadf8\uc778';
+    const loginColor = _isLoggedIn ? 'color:#E53935;' : '';
 
     menu.innerHTML = `
         <div class="mobile-menu-header">
@@ -1046,18 +1110,28 @@ function closeMobileMenu() {
     document.body.style.overflow = '';
 }
 
-function mobileMenuLogin() {
+async function mobileMenuLogin() {
     closeMobileMenu();
     const r = localStorage.getItem('pace_role') || 'viewer';
-    if (r !== 'viewer') {
+    const ju = (function() {
+        try { return JSON.parse(localStorage.getItem('pr_auth_user') || 'null'); }
+        catch(_) { return null; }
+    })();
+    if (r !== 'viewer' || ju) {
+        // ── 통합 로그아웃 (header 정책과 동일) ──
+        if (ju && window.PaceAuth && typeof window.PaceAuth.logout === 'function') {
+            try { await window.PaceAuth.logout(); } catch(_) {}
+        }
         localStorage.removeItem('pace_admin_key');
         localStorage.removeItem('pace_role');
         localStorage.removeItem('pace_judge_name');
+        localStorage.removeItem('pr_auth_user');
         location.reload();
-    } else if (window._headerLoginToggle) {
-        window._headerLoginToggle();
     } else {
-        window.location.href = '/?action=login';
+        // ── 통합 로그인 진입 (모달 X, /login.html 단일 진입점) ──
+        const cur = window.location.pathname + window.location.search + window.location.hash;
+        const redirect = encodeURIComponent(cur || '/');
+        window.location.href = `/login.html?redirect=${redirect}`;
     }
 }
 

@@ -1984,6 +1984,10 @@ async function autoCorrectWALanes(eventId, db) {
 // 기존 /api/auth/verify 는 그대로 둠 (legacy ?key= 호환)
 require('./lib/routes/auth')(app, { db, authLimiter, bcrypt });
 
+// AUTH Phase 3 (B-5): 관리자 전용 사용자 관리 API
+// GET/POST/PUT/DELETE /api/admin/users + revoke-sessions
+require('./lib/routes/admin_users')(app, { db, bcrypt, jwtHelpers: require('./lib/auth/jwt') });
+
 app.post('/api/auth/verify', authLimiter, async (req, res) => {
     const { key, judge_name } = req.body;
     // New: judge_name + key login

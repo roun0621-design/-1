@@ -376,6 +376,7 @@
                 <button class="admin-tab" data-tab="records" onclick="switchTab('records',this)">기록 관리</button>
                 <button class="admin-tab" data-tab="documents" onclick="switchTab('documents',this)">문서·다운로드</button>
                 <button class="admin-tab" data-tab="judges" onclick="switchTab('judges',this)">심판·운영키</button>
+                <button class="admin-tab" data-tab="users" onclick="switchTab('users',this)">사용자 관리</button>
                 <button class="admin-tab" data-tab="scoreboard" onclick="switchTab('scoreboard',this)">스코어보드</button>
                 <button class="admin-tab" data-tab="pacing" onclick="switchTab('pacing',this)">페이싱</button>
                 <button class="admin-tab" data-tab="settings" onclick="switchTab('settings',this)">시스템</button>
@@ -503,6 +504,73 @@
                         <table class="crud-table" id="judge-keys-table">
                             <thead><tr><th style="width:40px">ID</th><th>심판명</th><th>키</th><th style="width:60px">권한</th><th style="width:60px">상태</th><th style="width:50px">생성일</th><th style="width:80px">작업</th></tr></thead>
                             <tbody id="judge-keys-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: User Management (B-5) — 관리자 전용 JWT 기반 계정 관리 -->
+            <div id="tab-users" class="admin-tab-panel">
+                <div class="admin-card" style="scroll-margin-top:20px;">
+                    <h4 style="display:flex;align-items:center;gap:8px;">
+                        <span class="css-icon" style="background:#b79f58;color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">U</span>
+                        사용자 계정 관리 (JWT)
+                    </h4>
+                    <p class="t-help-lg">
+                        새로운 로그인 시스템 계정을 관리합니다.<br>
+                        ⚠️ <strong>본인이 관리자(admin)로 로그인되어 있어야</strong> 이 탭의 기능을 사용할 수 있습니다.
+                        로그인은 <a href="/login.html" style="color:#b79f58;font-weight:600;">/login.html</a> 의 "관리자·매니저 (NEW)" 탭에서 진행하세요.
+                    </p>
+                    <div id="users-auth-warning" style="display:none;background:#fff3cd;border:1.5px solid #e5a100;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#7a6400;font-weight:600;">
+                        JWT 로그인 정보가 없습니다. <a href="/login.html?redirect=/admin.html" style="color:#b79f58;font-weight:700;">로그인 페이지</a> 로 이동하세요.
+                    </div>
+
+                    <!-- 신규 계정 추가 폼 -->
+                    <div style="background:#fafafa;border:1px solid #e0d8c8;border-radius:8px;padding:14px;margin-bottom:14px;">
+                        <h5 style="margin:0 0 10px;font-size:14px;">+ 새 계정 추가</h5>
+                        <div class="admin-form-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
+                            <div class="admin-form-group"><label>아이디 *</label><input id="new-user-username" placeholder="3-32자, 영문/숫자/._-"></div>
+                            <div class="admin-form-group"><label>비밀번호 *</label><input id="new-user-password" type="password" placeholder="6자 이상"></div>
+                            <div class="admin-form-group"><label>표시 이름</label><input id="new-user-display" placeholder="예: 홍길동"></div>
+                            <div class="admin-form-group"><label>이메일</label><input id="new-user-email" type="email" placeholder="optional"></div>
+                            <div class="admin-form-group">
+                                <label>역할 *</label>
+                                <select id="new-user-role" style="width:100%;padding:8px;border:1.5px solid #ddd;border-radius:6px;">
+                                    <option value="viewer">viewer (조회)</option>
+                                    <option value="operator">operator (운영)</option>
+                                    <option value="record_officer">record_officer (기록)</option>
+                                    <option value="manager">manager (매니저)</option>
+                                    <option value="admin">admin (관리자)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="margin-top:10px;text-align:right;">
+                            <button class="btn btn-primary" onclick="adminUsers_create()">계정 생성</button>
+                        </div>
+                        <div id="new-user-msg" style="margin-top:8px;font-size:12px;display:none;"></div>
+                    </div>
+
+                    <!-- 사용자 목록 -->
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <h5 style="margin:0;font-size:14px;">전체 사용자 목록</h5>
+                        <button class="btn btn-sm btn-ghost" onclick="adminUsers_reload()">새로고침</button>
+                    </div>
+                    <div class="crud-scroll" style="max-height:520px;">
+                        <table class="crud-table" id="users-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px;">ID</th>
+                                    <th>아이디</th>
+                                    <th>표시명</th>
+                                    <th style="width:120px;">역할</th>
+                                    <th style="width:60px;">상태</th>
+                                    <th style="width:140px;">마지막 로그인</th>
+                                    <th style="width:200px;">작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-tbody">
+                                <tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">로딩 중...</td></tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -2429,7 +2497,8 @@ POST /api/external/event-result-link/batch<br>
     </div>
 
     <script src="lib/xlsx.full.min.js"></script>
-    <script src="common.js?v=75"></script>
+    <script src="/lib/auth-client.js?v=1"></script>
+    <script src="common.js?v=76"></script>
     <script>
         renderPageNav('admin');
         // Helper: display bib_number safely (null/undefined → '—')
@@ -2632,6 +2701,12 @@ POST /api/external/event-result-link/batch<br>
             updateCompStatusUI();
             // Sync to global localStorage for all pages
             if (_selectedCompId) setCompetitionId(_selectedCompId);
+            // 🐛 BUGFIX: 대회 변경 시 네비게이션 링크의 ?comp=N 도 갱신
+            //   기존: nav 링크는 페이지 로드 시점의 compId 가 박혀있어, 다른 페이지로 이동 시
+            //         예전 대회로 돌아가는 문제가 있었음.
+            if (typeof renderPageNav === 'function') {
+                try { renderPageNav('admin'); } catch(e) { console.warn('renderPageNav 실패:', e); }
+            }
             // Reload current tab
             const activeTab = document.querySelector('.admin-tab.active');
             if (activeTab) switchTab(activeTab.dataset.tab, activeTab);
@@ -2686,6 +2761,7 @@ POST /api/external/event-result-link/batch<br>
             if (name === 'athletes') loadAthletes();
             if (name === 'events') loadEvents();
             if (name === 'judges') loadJudgeKeys();
+            if (name === 'users') adminUsers_reload();
             if (name === 'competition') { loadCompEdit(); loadFederations(); loadQuickJudgeLogo(); }
             if (name === 'upload') { loadTimetableInfo(); ttLoadMatching(); }
             if (name === 'scoreboard') { jgLoadGroups(); }
@@ -2697,6 +2773,216 @@ POST /api/external/event-result-link/batch<br>
             if (name === 'extapi') { extLoadCompetitions(); extLoadKeys(); extLoadLogs(); }
             // [대 리뉴얼] 사이드바 활성 항목 동기화
             try { syncSidebarActive(name); } catch(_) {}
+        }
+
+        // ============================================================
+        // B-5: 사용자 관리 (JWT 인증)
+        // ============================================================
+        const ROLE_LABEL = {
+            admin: '관리자',
+            manager: '매니저',
+            record_officer: '기록관',
+            operator: '운영자',
+            viewer: '조회자'
+        };
+        const ROLE_BADGE_COLOR = {
+            admin: '#d32f2f',
+            manager: '#f57c00',
+            record_officer: '#1976d2',
+            operator: '#388e3c',
+            viewer: '#757575'
+        };
+
+        function _adminUsersAuthFetch(url, init) {
+            // PaceAuth.authFetch 가 있으면 그것을 사용. 없으면 cookie 기반 fetch.
+            if (window.PaceAuth && typeof PaceAuth.authFetch === 'function') {
+                return PaceAuth.authFetch(url, init || {});
+            }
+            return fetch(url, Object.assign({ credentials: 'include' }, init || {}));
+        }
+
+        function _adminUsersJwtUser() {
+            try {
+                const raw = localStorage.getItem('pr_auth_user');
+                return raw ? JSON.parse(raw) : null;
+            } catch(_) { return null; }
+        }
+
+        async function adminUsers_reload() {
+            const tbody = document.getElementById('users-tbody');
+            const warn = document.getElementById('users-auth-warning');
+            if (!tbody) return;
+            // JWT 캐시 사전 체크 — 빠른 UX
+            const cached = _adminUsersJwtUser();
+            if (warn) warn.style.display = (cached && cached.role === 'admin') ? 'none' : 'block';
+
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">로딩 중...</td></tr>';
+            try {
+                const r = await _adminUsersAuthFetch('/api/admin/users');
+                if (r.status === 401) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#e53935;padding:20px;">JWT 로그인이 필요합니다. <a href="/login.html?redirect=/admin.html">로그인</a></td></tr>';
+                    if (warn) warn.style.display = 'block';
+                    return;
+                }
+                if (r.status === 403) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#e53935;padding:20px;">관리자(admin) 권한이 필요합니다.</td></tr>';
+                    return;
+                }
+                if (!r.ok) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#e53935;padding:20px;">불러오기 실패 (HTTP ' + r.status + ')</td></tr>';
+                    return;
+                }
+                const data = await r.json();
+                const users = data.users || [];
+                if (users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">등록된 사용자가 없습니다.</td></tr>';
+                    return;
+                }
+                const meId = (cached && cached.id) || null;
+                tbody.innerHTML = users.map(u => {
+                    const isSelf = (meId === u.id);
+                    const roleColor = ROLE_BADGE_COLOR[u.role] || '#757575';
+                    const roleLabel = ROLE_LABEL[u.role] || u.role;
+                    const statusBadge = u.active
+                        ? '<span style="display:inline-block;padding:2px 8px;background:#e8f5e9;color:#2e7d32;border-radius:10px;font-size:11px;font-weight:600;">활성</span>'
+                        : '<span style="display:inline-block;padding:2px 8px;background:#fafafa;color:#999;border-radius:10px;font-size:11px;font-weight:600;">비활성</span>';
+                    const lastLogin = u.last_login_at
+                        ? new Date(u.last_login_at).toLocaleString('ko-KR', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
+                        : '<span style="color:#bbb;">-</span>';
+                    const roleSelect = `<select onchange="adminUsers_changeRole(${u.id}, this.value, this)" ${isSelf?'disabled':''} style="padding:3px 4px;font-size:11px;border:1px solid #ddd;border-radius:4px;background:${roleColor}22;color:${roleColor};font-weight:600;">
+                        ${Object.keys(ROLE_LABEL).map(r => `<option value="${r}" ${r===u.role?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
+                    </select>`;
+                    const actionBtns = `
+                        <button class="btn btn-xs btn-ghost" onclick="adminUsers_resetPassword(${u.id}, '${u.username.replace(/'/g,'\\\'')}')" title="비밀번호 재설정">🔑</button>
+                        <button class="btn btn-xs btn-ghost" onclick="adminUsers_toggleActive(${u.id}, ${u.active?0:1})" ${isSelf?'disabled':''} title="${u.active?'비활성화':'활성화'}">${u.active?'⏸':'▶'}</button>
+                        <button class="btn btn-xs btn-ghost" onclick="adminUsers_revokeSessions(${u.id}, '${u.username.replace(/'/g,'\\\'')}')" title="세션 회수">⎋</button>
+                        ${isSelf ? '<span style="font-size:10px;color:#b79f58;font-weight:700;margin-left:4px;">(나)</span>' : ''}
+                    `;
+                    return `<tr>
+                        <td style="text-align:center;color:#999;">${u.id}</td>
+                        <td><strong>${u.username}</strong></td>
+                        <td>${u.display_name || '<span style="color:#bbb;">-</span>'}</td>
+                        <td>${roleSelect}</td>
+                        <td style="text-align:center;">${statusBadge}</td>
+                        <td style="font-size:11px;color:#666;">${lastLogin}</td>
+                        <td style="text-align:center;">${actionBtns}</td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                console.error('[adminUsers] reload error:', e);
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#e53935;padding:20px;">네트워크 오류: ' + (e.message || e) + '</td></tr>';
+            }
+        }
+
+        async function adminUsers_create() {
+            const u = document.getElementById('new-user-username').value.trim();
+            const p = document.getElementById('new-user-password').value;
+            const d = document.getElementById('new-user-display').value.trim();
+            const e = document.getElementById('new-user-email').value.trim();
+            const r = document.getElementById('new-user-role').value;
+            const msg = document.getElementById('new-user-msg');
+
+            const showMsg = (text, color) => {
+                if (!msg) return;
+                msg.style.display = 'block';
+                msg.style.color = color;
+                msg.textContent = text;
+            };
+
+            if (!u || !p) { showMsg('아이디와 비밀번호는 필수입니다.', '#e53935'); return; }
+            if (!/^[A-Za-z0-9_.\-]{3,32}$/.test(u)) { showMsg('아이디는 3-32자 영문/숫자/._- 만 허용됩니다.', '#e53935'); return; }
+            if (p.length < 6) { showMsg('비밀번호는 6자 이상이어야 합니다.', '#e53935'); return; }
+
+            try {
+                const res = await _adminUsersAuthFetch('/api/admin/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p, display_name: d || null, email: e || null, role: r })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) { showMsg('생성 실패: ' + (data.error || ('HTTP ' + res.status)), '#e53935'); return; }
+                showMsg(`✓ 계정 '${u}' 생성됨 (역할: ${ROLE_LABEL[r]})`, '#2e7d32');
+                // 폼 리셋
+                document.getElementById('new-user-username').value = '';
+                document.getElementById('new-user-password').value = '';
+                document.getElementById('new-user-display').value = '';
+                document.getElementById('new-user-email').value = '';
+                document.getElementById('new-user-role').value = 'viewer';
+                await adminUsers_reload();
+            } catch (err) {
+                showMsg('네트워크 오류: ' + (err.message || err), '#e53935');
+            }
+        }
+
+        async function adminUsers_changeRole(id, newRole, selectEl) {
+            const oldVal = selectEl.getAttribute('data-prev') || '';
+            try {
+                const res = await _adminUsersAuthFetch(`/api/admin/users/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: newRole })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alert('역할 변경 실패: ' + (data.error || ('HTTP ' + res.status)));
+                    await adminUsers_reload();
+                    return;
+                }
+                // 색상/세션 회수 안내
+                await adminUsers_reload();
+            } catch (e) {
+                alert('네트워크 오류: ' + (e.message || e));
+                await adminUsers_reload();
+            }
+        }
+
+        async function adminUsers_toggleActive(id, nextActive) {
+            const action = nextActive ? '활성화' : '비활성화';
+            if (!confirm(`이 계정을 ${action}하시겠습니까?\n(${action} 시 해당 사용자의 모든 로그인 세션이 회수됩니다)`)) return;
+            try {
+                const res = await _adminUsersAuthFetch(`/api/admin/users/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ active: nextActive })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) { alert(action + ' 실패: ' + (data.error || ('HTTP ' + res.status))); return; }
+                await adminUsers_reload();
+            } catch (e) {
+                alert('네트워크 오류: ' + (e.message || e));
+            }
+        }
+
+        async function adminUsers_resetPassword(id, uname) {
+            const newPw = prompt(`'${uname}' 계정의 새 비밀번호를 입력하세요 (6자 이상):`);
+            if (!newPw) return;
+            if (newPw.length < 6) { alert('6자 이상이어야 합니다.'); return; }
+            try {
+                const res = await _adminUsersAuthFetch(`/api/admin/users/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: newPw })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) { alert('비밀번호 재설정 실패: ' + (data.error || ('HTTP ' + res.status))); return; }
+                alert(`✓ '${uname}' 비밀번호가 재설정되었습니다.\n(해당 사용자의 모든 세션이 회수됨)`);
+            } catch (e) {
+                alert('네트워크 오류: ' + (e.message || e));
+            }
+        }
+
+        async function adminUsers_revokeSessions(id, uname) {
+            if (!confirm(`'${uname}' 계정의 모든 로그인 세션을 강제 종료하시겠습니까?`)) return;
+            try {
+                const res = await _adminUsersAuthFetch(`/api/admin/users/${id}/revoke-sessions`, {
+                    method: 'POST'
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) { alert('세션 회수 실패: ' + (data.error || ('HTTP ' + res.status))); return; }
+                alert(`✓ '${uname}' 의 모든 세션이 회수되었습니다.`);
+            } catch (e) {
+                alert('네트워크 오류: ' + (e.message || e));
+            }
         }
 
         // ============================================================
