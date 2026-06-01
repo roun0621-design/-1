@@ -350,16 +350,20 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    ============================================================ */
 .matrix-section {
     margin-bottom: 20px;
-    overflow: hidden;
+    /* overflow:hidden 을 제거 — 자식 .matrix-scroll-wrap 의 가로 스크롤이
+       부모에 의해 잘리는 문제를 막는다. (mobile right-cut 픽스) */
     max-width: 100%;
 }
 .matrix-scroll-wrap {
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     /* Always show scrollbar on PC */
     scrollbar-width: thin;
     scrollbar-color: #b0b0b0 #f0f0f0;
     max-width: 100%;
+    /* iOS 관성 스크롤 활성화를 위한 보조 */
+    touch-action: pan-x pan-y;
 }
 .matrix-scroll-wrap::-webkit-scrollbar { height: 10px; }
 .matrix-scroll-wrap::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 5px; }
@@ -377,10 +381,15 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     border-bottom: 2px solid var(--gray);
 }
 .matrix-table {
-    width: 100%; border-collapse: collapse;
+    /* width:100% 가 강제되면 모바일에서 마지막 컬럼이 잘리고 가로 스크롤이
+       활성화되지 않음. min-width:100% 로 풀어주면 데스크톱에서는 전체 폭을
+       채우고, 컬럼 합계가 화면을 넘는 모바일에서는 자연스럽게 스크롤됨. */
+    min-width: 100%;
+    width: max-content;
+    border-collapse: collapse;
     background: var(--white); box-shadow: var(--shadow);
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    overflow: hidden; margin-bottom: 0;
+    margin-bottom: 0;
 }
 .matrix-table th {
     background: var(--gray-light); color: var(--gray-dark);
@@ -390,6 +399,9 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     white-space: nowrap;
 }
 .matrix-table th:first-child { text-align: left; }
+/* 모바일에서 마지막 컬럼이 화면 가장자리에 닿지 않도록 우측 안전 여백 확보 */
+.matrix-table th:last-child,
+.matrix-table td:last-child { padding-right: 16px; }
 .matrix-table .event-name {
     white-space: normal;
     word-break: keep-all;

@@ -94,8 +94,9 @@
         .dashboard-layout { display:flex; flex-direction:column; height:calc(100vh - 60px); overflow:hidden; }
         .matrix-section { margin-bottom:16px; }
         .matrix-section-title { font-size:12px; font-weight:800; color:var(--text-muted); padding:6px 10px; background:var(--bg); border-radius:4px; margin-bottom:6px; letter-spacing:1.2px; }
-        .matrix-scroll-wrap { overflow-x:auto; }
-        .matrix-table { width:100%; border-collapse:collapse; font-size:13px; table-layout:auto; }
+        /* matrix-scroll-wrap / matrix-table 의 폭·overflow 는 styles.css 에서 통합 관리.
+           여기서 width:100% 를 덮어쓰면 모바일에서 마지막 컬럼이 잘림. */
+        .matrix-table { border-collapse:collapse; font-size:13px; table-layout:auto; }
         .matrix-table th { padding:6px 4px; text-align:center; font-size:11px; font-weight:700; color:var(--text-muted); border-bottom:1px solid var(--gray); white-space:nowrap; }
         .matrix-table td { padding:8px 6px; text-align:center; border-bottom:1px solid #f0f0f0; white-space:nowrap; }
         .matrix-table td.event-name { text-align:left; font-weight:700; white-space:nowrap; font-size:14px; }
