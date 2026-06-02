@@ -1289,6 +1289,18 @@ function renderLiveFieldHeightResults(data) {
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
 }
 
+// ── Helper: format API error for display ─────────────────────
+// api() in common.js throws plain objects: { status, error, ... } — NOT Error instances.
+// Template-literal `${e}` on plain objects yields "[object Object]".
+// This helper extracts a human-readable message from any thrown value.
+function _formatApiError(e) {
+    if (e == null) return '알 수 없는 오류';
+    if (typeof e === 'string') return e;
+    if (e.error) return String(e.error) + (e.status ? ` (HTTP ${e.status})` : '');
+    if (e.message) return String(e.message);
+    try { return JSON.stringify(e); } catch (_) { return String(e); }
+}
+
 function renderLiveCombinedResults(data) {
     // For combined events, fetch and show real-time scoreboard
     const evt = data.event;
@@ -1384,8 +1396,9 @@ function renderLiveCombinedResults(data) {
                 </div>
                 <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">실시간 WA 점수 합산 | ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')}</p>`;
         } catch (e) {
+            console.error('[combined live] 데이터 로드 실패:', e);
             const container = document.getElementById('live-combined-content');
-            if (container) container.innerHTML = `<p style="color:var(--danger);">혼성 경기 데이터 로드 실패</p>`;
+            if (container) container.innerHTML = `<p style="color:var(--danger);padding:12px;">혼성 경기 데이터 로드 실패: ${_formatApiError(e)}</p>`;
         }
     }, 100);
 
@@ -1510,8 +1523,9 @@ async function _loadCombinedResultsAsync(evt) {
         // Store data for sub-event detail rendering
         window._crSubData = { evt, subEvents, subDefs, entries, scores };
     } catch (e) {
+        console.error('[combined result] 데이터 로드 실패:', e);
         const container = document.getElementById('combined-result-content');
-        if (container) container.innerHTML = `<p style="color:var(--danger);">혼성 경기 데이터 로드 실패: ${e.message || e}</p>`;
+        if (container) container.innerHTML = `<p style="color:var(--danger);padding:12px;">혼성 경기 데이터 로드 실패: ${_formatApiError(e)}</p>`;
     }
 }
 
