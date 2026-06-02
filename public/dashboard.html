@@ -137,7 +137,7 @@
         <nav class="page-nav" id="page-nav"></nav>
     </header>
 
-    <main class="main-content dashboard-layout">
+    <main class="main-content dashboard-layout" data-active-gender="M">
         <!-- Single-line competition info -->
         <div class="comp-info-line" id="comp-info-bar" style="flex-shrink:0;"></div>
 
@@ -157,7 +157,7 @@
         </div>
 
         <!-- Gender tabs (fixed at top) -->
-        <div class="gender-tabs-bar" id="gender-tabs" style="flex-shrink:0;position:static;">
+        <div class="gender-tabs-bar" id="gender-tabs" data-active-gender="M" style="flex-shrink:0;position:static;">
             <button class="gender-tab-btn active" data-gender="M" onclick="switchGender('M',this)">남자</button>
             <button class="gender-tab-btn" data-gender="F" onclick="switchGender('F',this)">여자</button>
             <button class="gender-tab-btn" data-gender="X" onclick="switchGender('X',this)">혼성</button>

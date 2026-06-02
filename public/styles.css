@@ -2242,3 +2242,29 @@ body.viewer-mode .footer { display: none; }
 .admin-tabs-content.pacing-zoom-active {
     overflow: visible;
 }
+
+/* ============================================================
+   대시보드 성별별 배경 톤 (직관적 시각 구분)
+   - 선택된 성별 탭의 배경색과 동일한 매우 옅은 톤을 종목 영역 전체에 적용
+   - 남자(M): 연한 라벤더 #e8eaf0
+   - 여자(F): 연한 버건디 #f0e0e4
+   - 혼성(X): 연한 골드   #f8f4ea
+   ============================================================ */
+body.dashboard-mode main.main-content[data-active-gender="M"] {
+    background: #e8eaf0;
+}
+body.dashboard-mode main.main-content[data-active-gender="F"] {
+    background: #f0e0e4;
+}
+body.dashboard-mode main.main-content[data-active-gender="X"] {
+    background: #f8f4ea;
+}
+/* gender-tabs-bar 자체는 inline-style 의 background:var(--white) 가 있어
+   data-active-gender 가 변해도 흰색으로 남아 있으면 위쪽만 흰색 띠가 보임.
+   active 탭 색과 동일한 톤으로 채워서 연속감 부여. */
+.gender-tabs-bar[data-active-gender="M"] { background: #e8eaf0; }
+.gender-tabs-bar[data-active-gender="F"] { background: #f0e0e4; }
+.gender-tabs-bar[data-active-gender="X"] { background: #f8f4ea; }
+/* events-scroll / comp-info-line / hero-schedule / dashboard-footer 등 자식 요소에
+   별도 background 가 지정되어 있지 않으면 자연스럽게 메인 톤을 상속 (투명) */
+

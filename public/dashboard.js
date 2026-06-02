@@ -328,6 +328,14 @@ function switchGender(g, btn) {
     // 재사용하므로 전역 querySelectorAll 로 잡으면 division 탭의 active 도 같이 풀려버림)
     document.querySelectorAll('#gender-tabs .gender-tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
+    // 선택된 성별을 data-active-gender 속성으로 노출 → CSS 가 메인 컨텐츠 영역의 배경 톤을 결정
+    // (남:연한 라벤더, 여:연한 버건디, 혼성:연한 골드 — active 탭의 배경 톤과 동일하게 매우 옅게)
+    try {
+        const tabsEl = document.getElementById('gender-tabs');
+        if (tabsEl) tabsEl.setAttribute('data-active-gender', g);
+        const mainEl = document.querySelector('main.main-content');
+        if (mainEl) mainEl.setAttribute('data-active-gender', g);
+    } catch (_) { /* noop */ }
     // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 성별 변경 시 division 탭 목록도 새 성별에 맞게 다시 렌더링
     //    (남자 탭에서 여자/혼성 division 이 보이던 버그 수정)
     if (typeof renderDivisionTabs === 'function') renderDivisionTabs();
@@ -642,7 +650,7 @@ function renderViewerBtn(evt) {
 
     if (evt.round_status === 'completed') {
         // 완료 라운드 — 클릭 시 결과 화면으로 이동하므로 라벨도 "결과"로 표기 (일관성)
-        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 결과</span>`;
+        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);">결과</span>`;
     }
 
     // 소집 완료 또는 in_progress → LIVE (경기 진행 중)
