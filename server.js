@@ -2498,7 +2498,10 @@ app.post('/api/height-attempts/delete-bar', async (req, res) => {
 // COMBINED SCORES — lib/routes/combined_scores.js 로 추출
 // ============================================================
 require("./lib/routes/combined_scores")(app, {
-    db, isAdminKey, isOperationKey, opLog, broadcastSSE
+    db, isAdminKey, isOperationKey, opLog, broadcastSSE,
+    // WA 점수 계산용 상수/함수 — combined_scores.js 의 /sync /repair 가 필요로 함.
+    // 누락 시 ReferenceError: DECATHLON_KEYS is not defined 로 500 떨어짐 (2026-06 fix)
+    DECATHLON_KEYS, HEPTATHLON_KEYS, WA_TABLES, calcWAPoints
 });
 
 // ============================================================

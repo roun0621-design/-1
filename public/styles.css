@@ -218,14 +218,22 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 /* ─── Result panel tables (모달 내부 결과 표) ─────────────────────────
    원칙 (UX): "스크롤 없이 한 화면" 우선 — 모바일에서는 패딩/폰트를 줄여
    최대한 한 화면에 들어오게 하고, 그래도 넘치면 가로 스크롤로 폴백.
-   ⚠️ width:100% 를 강제하면 max-content 보다 작아져서 컬럼이 잘리고도
-   스크롤이 트리거되지 않으므로 width:max-content + min-width:100% 패턴 사용.
-   (matrix-table 와 동일한 안티패턴 회피 — 2026-06 fix) */
+
+   ⚠️ ★ 진짜 근본 원인 (2026-06 재수정):
+       `.data-table { width:100%; overflow:hidden }` 가 table 자체를 클립.
+       width 는 max-content 로 덮어써도 overflow:hidden 은 .data-table 의
+       0,1,0 specificity 가 살아남아 셀이 table 박스 밖으로 못 나가고,
+       그 결과 .result-panel-body 의 scrollWidth === clientWidth 되어
+       가로 스크롤이 트리거되지 않음.
+       → table.overflow 도 visible 로 명시적 복원 필요. */
 .result-panel .data-table,
 .result-panel .field-table {
     width: max-content;       /* 내용에 맞춰 자연스럽게 확장 */
     min-width: 100%;          /* 좁은 표는 모달 폭을 채워 빈공간 방지 */
     table-layout: auto;
+    overflow: visible !important;  /* ★ .data-table 의 overflow:hidden 무력화 */
+    box-shadow: none;         /* 잘림 방지 — 둥근 모서리 효과는 모달이 담당 */
+    border-radius: 0;
 }
 /* 결과 모달 본문: 양축 스크롤 컨테이너 */
 .result-panel-body,
@@ -235,55 +243,74 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     max-width: 100%;
     -webkit-overflow-scrolling: touch;
 }
-/* ⚠️ 과거에 .result-panel td 전체에 max-width:200px + overflow:hidden 을 걸어
-   숫자 컬럼(시도 기록)이 잘리고도 스크롤이 안 잡히는 버그를 유발했음.
-   이름/소속처럼 가변 길이 텍스트 컬럼만 텍스트 truncate 적용. */
-.result-panel .data-table td[style*="text-align:left"],
-.result-panel .field-table td[style*="text-align:left"] {
-    max-width: 180px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+
+/* ─── 컬럼별 너비 전략 (자연스러움 + 한 화면 우선) ──────────────────────
+   원칙:
+   1. 이름/팀 같은 한글 단어는 한 줄로 유지 — 글자 단위 줄바꿈 절대 금지
+   2. 길면 차라리 table 이 넓어져 가로 스크롤이 일어나도록 (셀이 짤리는 것보다 자연스러움)
+   3. 비고(remark) 는 어절 단위로 줄바꿈 허용 (긴 문구가 보이도록)
+   4. .data-table 기본은 white-space:nowrap — 이를 유지하되 비고만 normal */
+
+/* 비고/remark 컬럼: 어절 단위 자연스러운 줄바꿈 — 잘려서 안 보이는 문제 해결 */
+.result-panel .data-table tbody td:last-child,
+.result-panel .field-table tbody td:last-child {
+    white-space: normal;
+    word-break: keep-all;       /* 한글: 어절(공백/구두점) 단위로만 줄바꿈 */
+    line-height: 1.3;
+    max-width: 110px;
+    min-width: 50px;
 }
 
-/* 모바일에서 한 화면에 최대한 들어오도록 압축 — 그래도 넘치면 위 스크롤로 폴백 */
+/* ─── 모바일 (≤480px) — 한 화면 우선 + 가독성 균형 ────────────────────
+   이전 버전 (폰트 10px, max-width 60px) 에서 "너무 촘촘" + "한글 글자단위 줄바꿈"
+   피드백 받음. → 폰트 11px 유지, 한글은 무조건 nowrap, 짤리면 가로 스크롤로 폴백 */
 @media (max-width: 480px) {
     .result-panel .data-table th,
     .result-panel .field-table th {
-        padding: 4px 2px;
-        font-size: 10px;
-        letter-spacing: 0.1px;
+        padding: 6px 4px;
+        font-size: 11px;
+        letter-spacing: 0;
+        line-height: 1.25;
+        white-space: nowrap;        /* 헤더는 무조건 한 줄 — "선/수/명" 같은 글자 분리 방지 */
     }
     .result-panel .data-table td,
     .result-panel .field-table td {
-        padding: 4px 2px;
-        font-size: 10px;
+        padding: 6px 4px;
+        font-size: 11px;
+        line-height: 1.3;
     }
-    /* 이름/소속 컬럼: 가변 폭 축소 — 시도 기록(숫자)이 더 우선이므로 텍스트는 ellipsis 허용 */
+    /* 이름/소속: 한글은 한 줄 유지 — 글자 단위 줄바꿈 차단.
+       긴 팀명(예: "대전광역시청") 은 표가 넓어져 가로 스크롤로 폴백. */
     .result-panel .data-table td[style*="text-align:left"],
     .result-panel .field-table td[style*="text-align:left"] {
-        max-width: 60px;
-        font-size: 10px !important;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        font-size: 11px;
+        white-space: nowrap;       /* ★ 한글 글자 분리 방지 */
+        max-width: none;           /* 폭 제한 제거 — nowrap 으로 자연 폭 사용 */
     }
     .result-panel .data-table th[style*="text-align:left"],
     .result-panel .field-table th[style*="text-align:left"] {
-        max-width: 60px;
+        white-space: nowrap;
     }
-    /* 시도 기록 셀: 최소 폭만 보장 — 가독성과 압축 사이 균형 */
+    /* 시도 기록 셀: 압축은 적당히 — 17m95 같은 5자 기록이 한 줄에 들어가도록 */
     .result-panel .field-table td.attempt-cell,
     .result-panel .field-table .att-col-first,
     .result-panel .field-table .att-col-odd,
     .result-panel .field-table .att-col-even,
     .result-panel .field-table .att-col-best {
-        min-width: 34px;
-        padding: 4px 1px;
-        font-size: 10px;
+        min-width: 42px;
+        padding: 6px 3px;
+        font-size: 11px;
+        white-space: nowrap;
     }
-    /* foul-mark / pass-mark / status badge 폰트도 따라가도록 */
-    .result-panel .field-table .foul-mark,
-    .result-panel .field-table .pass-mark { font-size: 10px; }
+    /* 비고 컬럼: 모바일에서도 어절 단위 줄바꿈 허용 — 긴 비고가 다 보이도록 */
+    .result-panel .data-table tbody td:last-child,
+    .result-panel .field-table tbody td:last-child {
+        max-width: 90px;
+        white-space: normal;
+        word-break: keep-all;
+        font-size: 10px;
+        line-height: 1.3;
+    }
 }
 
 /* ============================================================
