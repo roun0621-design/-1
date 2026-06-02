@@ -2244,37 +2244,59 @@ body.viewer-mode .footer { display: none; }
 }
 
 /* ============================================================
-   대시보드 성별별 배경 톤 (직관적 시각 구분)
-   - 종목 매트릭스 박스(.matrix-table)의 내부 흰색 배경을 성별 톤으로 변경
-   - 바깥 영역(main-content, gender-tabs-bar)은 흰색 그대로 유지
-   - 남자(M): 연한 라벤더 #e8eaf0
-   - 여자(F): 연한 버건디 #f0e0e4
-   - 혼성(X): 연한 골드   #f8f4ea
-
-   적용 대상:
-   - .matrix-table       : 표 본체 배경 (행 배경)
-   - .matrix-table th    : 헤더(종목/W·L/예선/준결승/결승) 배경
-   - tbody tr:hover      : 호버 시 살짝 더 진한 톤 (구분감 유지)
+   대시보드 행(row)별 성별 표시 — 좌측 컬러 막대 + 배지
+   - 안쪽 매트릭스 박스는 흰색 그대로 유지
+   - 각 <tr data-row-gender="M|F|X"> 에 좌측 4px 막대 + 종목명 앞 배지로
+     성별을 표시 → "전체" 탭에서도, 개별 성별 탭에서도 동일하게 적용
+   - 남자(M): 네이비 #1a2a5e
+   - 여자(F): 버건디 #8b1a2a
+   - 혼성(X): 골드   #b79f58
    ============================================================ */
-body.dashboard-mode main.main-content[data-active-gender="M"] .matrix-table,
-body.dashboard-mode main.main-content[data-active-gender="M"] .matrix-table th {
-    background: #e8eaf0;
+.matrix-table tbody tr[data-row-gender] td:first-child {
+    position: relative;
+    padding-left: 16px; /* 4px 막대 + 8px 여백 + 기존 padding 보정 */
 }
-body.dashboard-mode main.main-content[data-active-gender="M"] .matrix-table tbody tr:hover {
-    background: #dadfeb;
+.matrix-table tbody tr[data-row-gender] td:first-child::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--row-gender-color, transparent);
 }
-body.dashboard-mode main.main-content[data-active-gender="F"] .matrix-table,
-body.dashboard-mode main.main-content[data-active-gender="F"] .matrix-table th {
-    background: #f0e0e4;
+.matrix-table tbody tr[data-row-gender="M"] { --row-gender-color: #1a2a5e; }
+.matrix-table tbody tr[data-row-gender="F"] { --row-gender-color: #8b1a2a; }
+.matrix-table tbody tr[data-row-gender="X"] { --row-gender-color: #b79f58; }
+
+/* 종목명 앞 성별 배지 (남/여/혼) */
+.gender-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 6px;
+    vertical-align: middle;
+    line-height: 1.4;
+    letter-spacing: 0.5px;
+    color: #fff;
 }
-body.dashboard-mode main.main-content[data-active-gender="F"] .matrix-table tbody tr:hover {
-    background: #e8d0d7;
+.gender-badge[data-g="M"] { background: #1a2a5e; }
+.gender-badge[data-g="F"] { background: #8b1a2a; }
+.gender-badge[data-g="X"] { background: #b79f58; }
+
+/* 결과 버튼 성별색 (행의 data-row-gender 를 상속받아 결정) */
+.matrix-table tbody tr[data-row-gender="M"] .round-btn.round-btn-result {
+    background: #1a2a5e !important;
+    border-color: #1a2a5e !important;
 }
-body.dashboard-mode main.main-content[data-active-gender="X"] .matrix-table,
-body.dashboard-mode main.main-content[data-active-gender="X"] .matrix-table th {
-    background: #f8f4ea;
+.matrix-table tbody tr[data-row-gender="F"] .round-btn.round-btn-result {
+    background: #8b1a2a !important;
+    border-color: #8b1a2a !important;
 }
-body.dashboard-mode main.main-content[data-active-gender="X"] .matrix-table tbody tr:hover {
-    background: #efe7d2;
+.matrix-table tbody tr[data-row-gender="X"] .round-btn.round-btn-result {
+    background: #b79f58 !important;
+    border-color: #b79f58 !important;
 }
 

@@ -8,7 +8,7 @@
 // Helper: bib() is shared from common.js (loaded before dashboard.js)
 
 let allEvents = [];
-let currentGender = 'M';
+let currentGender = 'ALL'; // 'ALL' | 'M' | 'F' | 'X'  (기본탭: 전체)
 let callroomCompletedIds = new Set();
 let currentRole = localStorage.getItem('pace_role') || 'viewer';
 let _compVideoUrl = ''; // Competition-level video URL
@@ -328,8 +328,8 @@ function switchGender(g, btn) {
     // 재사용하므로 전역 querySelectorAll 로 잡으면 division 탭의 active 도 같이 풀려버림)
     document.querySelectorAll('#gender-tabs .gender-tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    // 선택된 성별을 data-active-gender 속성으로 노출 → CSS 가 메인 컨텐츠 영역의 배경 톤을 결정
-    // (남:연한 라벤더, 여:연한 버건디, 혼성:연한 골드 — active 탭의 배경 톤과 동일하게 매우 옅게)
+    // 선택된 성별을 data-active-gender 속성으로 노출 (ALL | M | F | X)
+    // CSS 가 직접 사용하진 않지만 디버깅 / 통합 테스트에서 유용하게 활용
     try {
         const tabsEl = document.getElementById('gender-tabs');
         if (tabsEl) tabsEl.setAttribute('data-active-gender', g);
@@ -396,10 +396,11 @@ function renderDivisionTabs() {
     }
     // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 현재 성별 탭(M/F/X)에 해당하는 events 만 division 목록 추출
     //    이전엔 모든 events 의 division 합집합을 보여줘서 "남자" 탭에서도 "선수권(여)" 등이 표시됨.
+    //    'ALL' 탭은 전 성별 합집합으로 보여줌 (사용자가 전체 division 을 한눈에 볼 수 있게)
     const existingDivs = [...new Set(
         allEvents
             .filter(e => !e.parent_event_id)
-            .filter(e => e.gender === currentGender)
+            .filter(e => currentGender === 'ALL' ? true : e.gender === currentGender)
             .map(e => e.division)
             .filter(Boolean)
     )];
@@ -424,7 +425,11 @@ function switchDivision(div, btn) {
 
 function renderMatrix() {
     const container = document.getElementById('events-container');
-    let events = allEvents.filter(e => e.gender === currentGender && !e.parent_event_id);
+    // 'ALL' 탭이면 성별 필터 해제 → 남/여/혼성 모든 종목을 종목순으로 통합 표시
+    let events = allEvents.filter(e => !e.parent_event_id);
+    if (currentGender !== 'ALL') {
+        events = events.filter(e => e.gender === currentGender);
+    }
     // FIX: 노출(display) 모드에서는 부별이 비어있는 "미지정" 종목을 화면에서 제외
     // (단, 혼성 릴레이처럼 의도적으로 gender='X'인 종목은 division이 채워져 있으므로 영향 없음)
     if (_isDisplayMode) {
@@ -443,11 +448,14 @@ function renderMatrix() {
         { key: 'road', label: 'ROAD', match: c => c === 'road' },
     ];
 
-    // Group events by name (+ division for display mode)
+    // Group events by name + gender (+ division for display mode)
+    // gender 를 그룹키에 포함해야 '전체' 탭에서 남자 100m / 여자 100m 가 서로 다른 행으로 분리됨
     const eventGroups = {};
     events.forEach(e => {
-        const gKey = _isDisplayMode ? (e.name + '|' + e.category + '|' + (e.division||'')) : (e.name + '|' + e.category);
-        if (!eventGroups[gKey]) eventGroups[gKey] = { name: e.name, category: e.category, division: e.division || '', rounds: [] };
+        const gKey = _isDisplayMode
+            ? (e.name + '|' + e.category + '|' + e.gender + '|' + (e.division||''))
+            : (e.name + '|' + e.category + '|' + e.gender);
+        if (!eventGroups[gKey]) eventGroups[gKey] = { name: e.name, category: e.category, gender: e.gender, division: e.division || '', rounds: [] };
         eventGroups[gKey].rounds.push(e);
     });
 
@@ -510,10 +518,17 @@ function renderMatrix() {
         return 999;
     }
     function _divSortIdx(div) { return _divCompareKey(div); }
+    // 성별 정렬 점수: 남(0) < 여(1) < 혼성(2)
+    function _genderSortIdx(g) { return g === 'M' ? 0 : g === 'F' ? 1 : g === 'X' ? 2 : 3; }
     categories.forEach(cat => {
         const groups = Object.values(eventGroups).filter(g => cat.match(g.category));
-        // Sort groups by event standard order, then division
-        groups.sort((a,b) => _evSortIdx(a.name) - _evSortIdx(b.name) || _divSortIdx(a.division) - _divSortIdx(b.division) || a.name.localeCompare(b.name));
+        // 종목순 → 성별순(M<F<X) → 부별순  ('전체' 탭에서 남100m → 여100m → 남200m → 여200m ... 흐름)
+        groups.sort((a,b) =>
+            _evSortIdx(a.name) - _evSortIdx(b.name)
+            || _genderSortIdx(a.gender) - _genderSortIdx(b.gender)
+            || _divSortIdx(a.division) - _divSortIdx(b.division)
+            || a.name.localeCompare(b.name)
+        );
         groups.forEach(g => allGroups.push({ ...g, catKey: cat.key, catLabel: cat.label }));
     });
 
@@ -537,7 +552,10 @@ function renderMatrix() {
         html += renderCategoryTable(groups, cat.label);
     });
 
-    if (!html) html = '<div style="text-align:center;padding:40px;color:var(--text-muted);">해당 성별의 종목이 없습니다.</div>';
+    if (!html) {
+        const emptyMsg = currentGender === 'ALL' ? '등록된 종목이 없습니다.' : '해당 성별의 종목이 없습니다.';
+        html = `<div style="text-align:center;padding:40px;color:var(--text-muted);">${emptyMsg}</div>`;
+    }
     container.innerHTML = html;
 }
 
@@ -560,7 +578,12 @@ function renderCategoryTable(groups, label, isLive) {
         const prelim = g.rounds.find(r => r.round_type === 'preliminary');
         const semi = g.rounds.find(r => r.round_type === 'semifinal');
         const fin = g.rounds.find(r => r.round_type === 'final');
-        const _gLabel = currentGender === 'M' ? '남' : currentGender === 'F' ? '여' : '혼성';
+        // 행 단위 성별 — 그룹의 gender(M/F/X) 를 우선, 폴백으로 currentGender (개별 탭일 때 동일값)
+        const _rowGender = g.gender || (currentGender !== 'ALL' ? currentGender : 'X');
+        const _gLabel = _rowGender === 'M' ? '남' : _rowGender === 'F' ? '여' : '혼성';
+        // 종목명 앞 작은 성별 배지 (남/여/혼)
+        const _badgeText = _rowGender === 'M' ? '남' : _rowGender === 'F' ? '여' : '혼';
+        const genderBadge = `<span class="gender-badge" data-g="${_rowGender}" aria-label="${_gLabel}">${_badgeText}</span>`;
         const pacingCfg = _pacingMap[g.name + ' (' + _gLabel + ')'] || _pacingMap[g.name];
         const _pacingKey = pacingCfg ? pacingCfg.event_name : g.name;
         const wlCell = pacingCfg ? `<span class="round-btn" style="background:#f0f9ff;color:#6b6b6b;border:1px solid #c0c0c0;cursor:pointer;font-size:9px;padding:3px 6px;white-space:nowrap;" onclick="openPacingPopup('${_pacingKey.replace(/'/g, "\\'")}')">Target</span>` : '';
@@ -617,8 +640,8 @@ function renderCategoryTable(groups, label, isLive) {
         const _dc = _divColorOf(g.division);
         const divBadge = (_isDisplayMode && g.division && _currentDivision === '전체') ? `<span style="font-size:9px;color:${_dc.color};background:${_dc.bg};padding:1px 5px;border-radius:6px;margin-left:4px;font-weight:600;">${g.division}</span>` : '';
 
-        html += `<tr>
-            <td class="event-name">${g.name}${divBadge}${timeBadge}</td>
+        html += `<tr data-row-gender="${_rowGender}">
+            <td class="event-name">${genderBadge}${g.name}${divBadge}${timeBadge}</td>
             <td>${_isDisplayMode ? rosterCell : wlCell}</td>
             <td>${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>
             <td>${_isDisplayMode ? renderDisplayBtn(semi) : renderViewerBtn(semi)}</td>
@@ -650,7 +673,8 @@ function renderViewerBtn(evt) {
 
     if (evt.round_status === 'completed') {
         // 완료 라운드 — 클릭 시 결과 화면으로 이동하므로 라벨도 "결과"로 표기 (일관성)
-        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);">결과</span>`;
+        // round-btn-result 클래스가 부모 tr[data-row-gender] 에 따라 성별색(네이비/버건디/골드)으로 override됨
+        return `<span class="round-btn round-btn-result" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);">결과</span>`;
     }
 
     // 소집 완료 또는 in_progress → LIVE (경기 진행 중)
@@ -706,12 +730,16 @@ async function openDisplayRoster(eventId, eventName, division) {
 
     // Get all roster entries for this event and related rounds
     const evtRoster = _displayRoster.filter(dr => dr.event_id === eventId);
+    // 'ALL' 탭에서도 정확한 sibling 그룹을 찾기 위해 클릭된 event 자체의 gender 를 사용
+    // (currentGender === 'ALL' 일 때 e.gender === 'ALL' 필터는 모든 행을 제외시켜 빈 명단 버그 유발)
+    const _clickedEvt = allEvents.find(e => e.id === eventId);
+    const _evtGender = _clickedEvt ? _clickedEvt.gender : currentGender;
     // Also try to find roster for sibling events (same name + division but different rounds)
-    const siblingEvents = allEvents.filter(e => e.name === eventName && (e.division || '') === (division || '') && e.gender === currentGender);
+    const siblingEvents = allEvents.filter(e => e.name === eventName && (e.division || '') === (division || '') && e.gender === _evtGender);
     const siblingIds = siblingEvents.map(e => e.id);
     const allRoster = _displayRoster.filter(dr => siblingIds.includes(dr.event_id));
 
-    const gLabel = currentGender === 'M' ? '남자' : currentGender === 'F' ? '여자' : '혼성';
+    const gLabel = _evtGender === 'M' ? '남자' : _evtGender === 'F' ? '여자' : '혼성';
     const divLabel = division ? ` ${division}` : '';
 
     let bodyHtml = '';

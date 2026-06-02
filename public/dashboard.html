@@ -84,9 +84,11 @@
 
         .gender-tabs-bar { display:flex; gap:0; background:var(--white); padding:8px 0; border-bottom:2px solid var(--gray); }
         .gender-tab-btn { flex:1; padding:10px 0; text-align:center; font-size:14px; font-weight:800; border:none; cursor:pointer; border-bottom:3px solid transparent; transition:all .15s; background:none; letter-spacing:0.5px; }
+        .gender-tab-btn[data-gender="ALL"] { color:#374151; }
         .gender-tab-btn[data-gender="M"] { color:#1a2a5e; }
         .gender-tab-btn[data-gender="F"] { color:#8b1a2a; }
         .gender-tab-btn[data-gender="X"] { color:#b79f58; }
+        .gender-tab-btn.active[data-gender="ALL"] { border-bottom-color:#374151; background:#eef0f2; }
         .gender-tab-btn.active[data-gender="M"] { border-bottom-color:#1a2a5e; background:#e8eaf0; }
         .gender-tab-btn.active[data-gender="F"] { border-bottom-color:#8b1a2a; background:#f0e0e4; }
         .gender-tab-btn.active[data-gender="X"] { border-bottom-color:#b79f58; background:#f8f4ea; }
@@ -137,7 +139,7 @@
         <nav class="page-nav" id="page-nav"></nav>
     </header>
 
-    <main class="main-content dashboard-layout" data-active-gender="M">
+    <main class="main-content dashboard-layout" data-active-gender="ALL">
         <!-- Single-line competition info -->
         <div class="comp-info-line" id="comp-info-bar" style="flex-shrink:0;"></div>
 
@@ -157,8 +159,9 @@
         </div>
 
         <!-- Gender tabs (fixed at top) -->
-        <div class="gender-tabs-bar" id="gender-tabs" data-active-gender="M" style="flex-shrink:0;position:static;">
-            <button class="gender-tab-btn active" data-gender="M" onclick="switchGender('M',this)">남자</button>
+        <div class="gender-tabs-bar" id="gender-tabs" data-active-gender="ALL" style="flex-shrink:0;position:static;">
+            <button class="gender-tab-btn active" data-gender="ALL" onclick="switchGender('ALL',this)">전체</button>
+            <button class="gender-tab-btn" data-gender="M" onclick="switchGender('M',this)">남자</button>
             <button class="gender-tab-btn" data-gender="F" onclick="switchGender('F',this)">여자</button>
             <button class="gender-tab-btn" data-gender="X" onclick="switchGender('X',this)">혼성</button>
         </div>

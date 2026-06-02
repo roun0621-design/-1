@@ -1416,7 +1416,7 @@ function showToast(message, type = 'success', duration = 2000) {
 // ============================================================
 // PWA Service Worker Registration + Offline Sync
 // ============================================================
-const _EXPECTED_SW_VERSION = 'pacerise-v130';
+const _EXPECTED_SW_VERSION = 'pacerise-v131';
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         // Force update: clear old caches that don't match current version
