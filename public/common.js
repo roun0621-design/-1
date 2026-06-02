@@ -1371,25 +1371,44 @@ function showToast(message, type = 'success', duration = 2000) {
 // ============================================================
 (function() {
     let _modalStack = [];
+    // 🐛 BUGFIX (2026-06): popstate 와 popModalState 가 서로를 트리거하면서
+    // history.back() 이 한 번 더 호출되어 페이지 자체를 떠나거나
+    // iframe navigation 과 충돌해 about:blank 새 창이 뜨는 문제 발생.
+    // → "프로그램에 의해 호출된 history.back()" 인지 "사용자의 뒤로가기" 인지 구분 필요.
+    let _suppressNextPopstate = false;
 
     // Push a modal state: call this when opening any overlay/modal
     window.pushModalState = function(closeCallback) {
         _modalStack.push(closeCallback);
-        history.pushState({ modal: true, depth: _modalStack.length }, '');
+        try { history.pushState({ modal: true, depth: _modalStack.length }, ''); } catch(e) {}
     };
-    // Pop a modal state: call this when closing a modal normally
+    // Pop a modal state: call this when closing a modal normally (X 버튼 등)
     window.popModalState = function() {
         if (_modalStack.length > 0) {
             _modalStack.pop();
-            // Silently go back to remove the history entry we pushed
-            try { history.back(); } catch(e) {}
+            // 우리가 history.back() 을 호출하면 popstate 가 자동 발생.
+            // 그 popstate 는 "닫기 콜백을 다시 호출하지 말아야" 한다 (이미 닫는 중).
+            _suppressNextPopstate = true;
+            try { history.back(); } catch(e) { _suppressNextPopstate = false; }
         }
     };
 
     window.addEventListener('popstate', function(e) {
+        // 우리가 직접 history.back() 호출해서 발생한 popstate 는 무시
+        // (modal 은 이미 닫혀 있음, 또 닫으면 한 단계 더 뒤로 가서 페이지 이탈)
+        if (_suppressNextPopstate) {
+            _suppressNextPopstate = false;
+            return;
+        }
+        // 사용자가 직접 뒤로가기 (Android 하드웨어 / iOS 스와이프) — modal 닫기
         if (_modalStack.length > 0) {
             const closeFn = _modalStack.pop();
-            if (closeFn) closeFn();
+            if (closeFn) {
+                // closeFn 안에서 또 popModalState 가 호출될 수 있으므로 가드
+                _suppressNextPopstate = true;  // 이번 pop 으로 인한 추가 history.back 차단
+                try { closeFn(); } catch(err) { console.error('[modal] close error:', err); }
+                _suppressNextPopstate = false;
+            }
         }
     });
 })();
@@ -1397,7 +1416,7 @@ function showToast(message, type = 'success', duration = 2000) {
 // ============================================================
 // PWA Service Worker Registration + Offline Sync
 // ============================================================
-const _EXPECTED_SW_VERSION = 'pacerise-v46';
+const _EXPECTED_SW_VERSION = 'pacerise-v128';
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         // Force update: clear old caches that don't match current version

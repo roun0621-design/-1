@@ -261,29 +261,29 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     min-width: 50px;
 }
 
-/* ─── 모바일 (≤480px) — 한 화면 우선 + 가독성 균형 ────────────────────
-   이전 버전 (폰트 10px, max-width 60px) 에서 "너무 촘촘" + "한글 글자단위 줄바꿈"
-   피드백 받음. → 폰트 11px 유지, 한글은 무조건 nowrap, 짤리면 가로 스크롤로 폴백 */
+/* ─── 모바일 (≤480px) — 가독성 최우선 (3차 피드백 반영) ─────────────────
+   사용자 요구: "글씨 너무 작음, 우측으로 스크롤 해서 보더라도 가독성 떨어지면 안됨"
+   → 폰트 13px, 패딩 8px 로 키움. 한 화면에 안 들어오면 자연스럽게 가로 스크롤. */
 @media (max-width: 480px) {
     .result-panel .data-table th,
     .result-panel .field-table th {
-        padding: 6px 4px;
-        font-size: 11px;
+        padding: 8px 6px;
+        font-size: 12px;
         letter-spacing: 0;
-        line-height: 1.25;
+        line-height: 1.3;
         white-space: nowrap;        /* 헤더는 무조건 한 줄 — "선/수/명" 같은 글자 분리 방지 */
     }
     .result-panel .data-table td,
     .result-panel .field-table td {
-        padding: 6px 4px;
-        font-size: 11px;
-        line-height: 1.3;
+        padding: 8px 6px;
+        font-size: 13px;            /* ★ 11 → 13 (가독성 우선) */
+        line-height: 1.35;
     }
     /* 이름/소속: 한글은 한 줄 유지 — 글자 단위 줄바꿈 차단.
        긴 팀명(예: "대전광역시청") 은 표가 넓어져 가로 스크롤로 폴백. */
     .result-panel .data-table td[style*="text-align:left"],
     .result-panel .field-table td[style*="text-align:left"] {
-        font-size: 11px;
+        font-size: 13px;
         white-space: nowrap;       /* ★ 한글 글자 분리 방지 */
         max-width: none;           /* 폭 제한 제거 — nowrap 으로 자연 폭 사용 */
     }
@@ -291,26 +291,46 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .result-panel .field-table th[style*="text-align:left"] {
         white-space: nowrap;
     }
-    /* 시도 기록 셀: 압축은 적당히 — 17m95 같은 5자 기록이 한 줄에 들어가도록 */
+    /* 시도 기록 셀: 가독성 우선 — 17m95 같은 기록이 한 줄에 들어가도록 */
     .result-panel .field-table td.attempt-cell,
     .result-panel .field-table .att-col-first,
     .result-panel .field-table .att-col-odd,
     .result-panel .field-table .att-col-even,
     .result-panel .field-table .att-col-best {
-        min-width: 42px;
-        padding: 6px 3px;
-        font-size: 11px;
+        min-width: 50px;
+        padding: 8px 5px;
+        font-size: 13px;            /* ★ 11 → 13 */
         white-space: nowrap;
     }
     /* 비고 컬럼: 모바일에서도 어절 단위 줄바꿈 허용 — 긴 비고가 다 보이도록 */
     .result-panel .data-table tbody td:last-child,
     .result-panel .field-table tbody td:last-child {
-        max-width: 90px;
+        max-width: 110px;
         white-space: normal;
         word-break: keep-all;
-        font-size: 10px;
-        line-height: 1.3;
+        font-size: 12px;
+        line-height: 1.35;
     }
+}
+
+/* ─── 결과 모달 내 필드 테이블: 검은 세로선 제거 ────────────────────────
+   .field-table 의 .att-col-first / .att-col-best 는 기록입력 페이지에서
+   "시도 시작" / "기록 컬럼" 을 강조하려고 border-left: 2px solid #000 임.
+   → 결과 모달에서는 시각적으로 거슬리고 가독성 해침. 가벼운 회색선으로 대체. */
+.result-panel .field-table th.att-col-first,
+.result-panel .field-table td.att-col-first,
+.result-panel .field-table th.att-col-best,
+.result-panel .field-table td.att-col-best {
+    border-left: 1px solid #e0e0e0 !important;  /* 검정 2px → 옅은 회색 1px */
+}
+/* 결과 모달 셀 경계: 기록입력 페이지의 1px solid #333 도 결과보기에선 옅게 */
+.result-panel .field-table th,
+.result-panel .field-table td {
+    border: 1px solid #e8e8e8 !important;
+}
+/* 단, 선수와 선수 사이 가로 구분선은 살짝 진하게 (구분 명확하게) */
+.result-panel .field-table.field-2row-table .field-row2 td {
+    border-bottom: 2px solid #bbb !important;
 }
 
 /* ============================================================

@@ -834,9 +834,17 @@ async function openResult(eventId) {
 }
 
 function closeResult() {
-    const iframe = document.querySelector('#result-panel iframe');
-    if (iframe) iframe.src = '';
-    document.getElementById('result-overlay').classList.remove('show');
+    // 🐛 BUGFIX (2026-06): iframe.src='' 가 iOS Safari 에서 about:blank 새 창처럼
+    // 보이는 문제 → iframe 자체를 DOM 에서 제거하여 navigation 이벤트 자체를 차단.
+    // (이전 코드: if (iframe) iframe.src = '';)
+    const iframes = document.querySelectorAll('#result-panel iframe');
+    iframes.forEach(f => f.parentNode && f.parentNode.removeChild(f));
+
+    const overlay = document.getElementById('result-overlay');
+    if (overlay) overlay.classList.remove('show');
+
+    // 중복 호출 방지: overlay 가 이미 안 보이면 popModalState 도 skip.
+    // popstate 로 인해 closeResult 가 호출된 경우 _modalStack 은 이미 pop 됨.
     if (window.popModalState) popModalState();
 }
 
