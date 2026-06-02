@@ -215,24 +215,75 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .data-table tbody tr:hover { background: var(--gray-light); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 
-/* Result panel — tables fill modal width, scroll if wider */
+/* ─── Result panel tables (모달 내부 결과 표) ─────────────────────────
+   원칙 (UX): "스크롤 없이 한 화면" 우선 — 모바일에서는 패딩/폰트를 줄여
+   최대한 한 화면에 들어오게 하고, 그래도 넘치면 가로 스크롤로 폴백.
+   ⚠️ width:100% 를 강제하면 max-content 보다 작아져서 컬럼이 잘리고도
+   스크롤이 트리거되지 않으므로 width:max-content + min-width:100% 패턴 사용.
+   (matrix-table 와 동일한 안티패턴 회피 — 2026-06 fix) */
 .result-panel .data-table,
 .result-panel .field-table {
-    width: 100%;
+    width: max-content;       /* 내용에 맞춰 자연스럽게 확장 */
+    min-width: 100%;          /* 좁은 표는 모달 폭을 채워 빈공간 방지 */
     table-layout: auto;
 }
-/* Prevent text overflow in result panels */
+/* 결과 모달 본문: 양축 스크롤 컨테이너 */
 .result-panel-body,
 .result-detail-content {
     overflow-x: auto;
     overflow-y: auto;
     max-width: 100%;
+    -webkit-overflow-scrolling: touch;
 }
-.result-panel .data-table td,
-.result-panel .field-table td {
+/* ⚠️ 과거에 .result-panel td 전체에 max-width:200px + overflow:hidden 을 걸어
+   숫자 컬럼(시도 기록)이 잘리고도 스크롤이 안 잡히는 버그를 유발했음.
+   이름/소속처럼 가변 길이 텍스트 컬럼만 텍스트 truncate 적용. */
+.result-panel .data-table td[style*="text-align:left"],
+.result-panel .field-table td[style*="text-align:left"] {
+    max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 200px;
+}
+
+/* 모바일에서 한 화면에 최대한 들어오도록 압축 — 그래도 넘치면 위 스크롤로 폴백 */
+@media (max-width: 480px) {
+    .result-panel .data-table th,
+    .result-panel .field-table th {
+        padding: 4px 2px;
+        font-size: 10px;
+        letter-spacing: 0.1px;
+    }
+    .result-panel .data-table td,
+    .result-panel .field-table td {
+        padding: 4px 2px;
+        font-size: 10px;
+    }
+    /* 이름/소속 컬럼: 가변 폭 축소 — 시도 기록(숫자)이 더 우선이므로 텍스트는 ellipsis 허용 */
+    .result-panel .data-table td[style*="text-align:left"],
+    .result-panel .field-table td[style*="text-align:left"] {
+        max-width: 60px;
+        font-size: 10px !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .result-panel .data-table th[style*="text-align:left"],
+    .result-panel .field-table th[style*="text-align:left"] {
+        max-width: 60px;
+    }
+    /* 시도 기록 셀: 최소 폭만 보장 — 가독성과 압축 사이 균형 */
+    .result-panel .field-table td.attempt-cell,
+    .result-panel .field-table .att-col-first,
+    .result-panel .field-table .att-col-odd,
+    .result-panel .field-table .att-col-even,
+    .result-panel .field-table .att-col-best {
+        min-width: 34px;
+        padding: 4px 1px;
+        font-size: 10px;
+    }
+    /* foul-mark / pass-mark / status badge 폰트도 따라가도록 */
+    .result-panel .field-table .foul-mark,
+    .result-panel .field-table .pass-mark { font-size: 10px; }
 }
 
 /* ============================================================
@@ -350,16 +401,20 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    ============================================================ */
 .matrix-section {
     margin-bottom: 20px;
-    overflow: hidden;
+    /* overflow:hidden 을 제거 — 자식 .matrix-scroll-wrap 의 가로 스크롤이
+       부모에 의해 잘리는 문제를 막는다. (mobile right-cut 픽스) */
     max-width: 100%;
 }
 .matrix-scroll-wrap {
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     /* Always show scrollbar on PC */
     scrollbar-width: thin;
     scrollbar-color: #b0b0b0 #f0f0f0;
     max-width: 100%;
+    /* iOS 관성 스크롤 활성화를 위한 보조 */
+    touch-action: pan-x pan-y;
 }
 .matrix-scroll-wrap::-webkit-scrollbar { height: 10px; }
 .matrix-scroll-wrap::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 5px; }
@@ -377,10 +432,15 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     border-bottom: 2px solid var(--gray);
 }
 .matrix-table {
-    width: 100%; border-collapse: collapse;
+    /* width:100% 가 강제되면 모바일에서 마지막 컬럼이 잘리고 가로 스크롤이
+       활성화되지 않음. min-width:100% 로 풀어주면 데스크톱에서는 전체 폭을
+       채우고, 컬럼 합계가 화면을 넘는 모바일에서는 자연스럽게 스크롤됨. */
+    min-width: 100%;
+    width: max-content;
+    border-collapse: collapse;
     background: var(--white); box-shadow: var(--shadow);
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    overflow: hidden; margin-bottom: 0;
+    margin-bottom: 0;
 }
 .matrix-table th {
     background: var(--gray-light); color: var(--gray-dark);
@@ -390,6 +450,9 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     white-space: nowrap;
 }
 .matrix-table th:first-child { text-align: left; }
+/* 모바일에서 마지막 컬럼이 화면 가장자리에 닿지 않도록 우측 안전 여백 확보 */
+.matrix-table th:last-child,
+.matrix-table td:last-child { padding-right: 16px; }
 .matrix-table .event-name {
     white-space: normal;
     word-break: keep-all;
