@@ -28,9 +28,10 @@
 
 'use strict';
 
-require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+// cron 은 cwd 가 프로젝트 폴더가 아닐 수 있으므로 .env 경로를 명시적으로 지정
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const zlib = require('zlib');
 const { spawn } = require('child_process');
 const backupS3 = require('../lib/backupS3');
