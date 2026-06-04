@@ -108,20 +108,43 @@ function parseDbTimestampMs(v) {
 }
 
 // ---- Auto Backup System ----
+const backupS3 = require('./lib/backupS3');   // 오프사이트(S3) 복제 — 미설정 시 no-op
 const BACKUP_DIR = path.join(__dirname, 'backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 const BACKUP_MAX_DAYS = 7;
 
-function performBackup(tag = 'daily') {
+/**
+ * 로컬 일관성 백업 + 오프사이트(S3) 업로드.
+ *   - SQLite: better-sqlite3 의 .backup() 온라인 백업 API 사용 → WAL 까지 병합된
+ *     "단일 .db 파일"로 떨어진다. (기존 copyFileSync 3-파일 방식은 .db/-wal 복사 사이에
+ *     체크포인트가 끼면 깨질 수 있어 폐기)
+ *   - PostgreSQL(db.isAsync): 파일 백업이 무의미 → 건너뜀(RDS 자동 백업이 담당).
+ *   - 백업 직후 S3 로 fire-and-forget 업로드 → 인스턴스 소실 시에도 백업 보존.
+ */
+async function performBackup(tag = 'daily') {
     try {
+        if (db.isAsync) {
+            // PG 모드: 파일 스냅샷 무의미. (RDS 자동 백업/스냅샷으로 대체)
+            return null;
+        }
         const ts = kstNow().replace(/[: ]/g, '-');
         const backupFile = path.join(BACKUP_DIR, `backup_${tag}_${ts}.db`);
-        fs.copyFileSync(DB_PATH, backupFile);
-        // WAL 파일도 함께 백업
-        if (fs.existsSync(DB_PATH + '-wal')) fs.copyFileSync(DB_PATH + '-wal', backupFile + '-wal');
-        if (fs.existsSync(DB_PATH + '-shm')) fs.copyFileSync(DB_PATH + '-shm', backupFile + '-shm');
+
+        // 일관성 보장 온라인 백업: WAL 병합된 단일 파일 생성
+        if (db.raw && typeof db.raw.backup === 'function') {
+            await db.raw.backup(backupFile);
+        } else {
+            // 폴백(부팅 초기 등 raw 핸들 미가용): 기존 파일 복사 방식
+            fs.copyFileSync(DB_PATH, backupFile);
+            if (fs.existsSync(DB_PATH + '-wal')) fs.copyFileSync(DB_PATH + '-wal', backupFile + '-wal');
+            if (fs.existsSync(DB_PATH + '-shm')) fs.copyFileSync(DB_PATH + '-shm', backupFile + '-shm');
+        }
         console.log(`[Backup] ${tag} 백업 완료: ${path.basename(backupFile)}`);
         cleanOldBackups();
+
+        // 오프사이트 업로드(설정 시에만 동작). 실패해도 로컬 백업 흐름은 막지 않음.
+        backupS3.uploadBackup(backupFile, tag).catch(e => console.error('[Backup] S3 업로드 오류:', e.message));
+
         return backupFile;
     } catch (e) {
         console.error('[Backup] 백업 실패:', e.message);

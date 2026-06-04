@@ -18,6 +18,7 @@
   "author": "Pace Rise",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1061.0",
     "adm-zip": "^0.5.16",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",
