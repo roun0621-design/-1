@@ -59,11 +59,19 @@ function pruneLocal() {
     } catch (e) { /* 디렉토리 없으면 무시 */ }
 }
 
+/**
+ * node-postgres 는 sslmode=no-verify 를 이해하지만 libpq(pg_dump)는 거부한다.
+ * SSL 연결은 유지하되 인증서 검증만 생략하는 libpq 등가값은 'require'.
+ */
+function sanitizeUrlForPgDump(url) {
+    return url.replace(/sslmode=no-verify/gi, 'sslmode=require');
+}
+
 /** pg_dump → gzip → 파일. 성공 시 파일 경로 반환(Promise). */
 function dumpToFile(filePath) {
     return new Promise((resolve, reject) => {
         // --no-owner / --no-privileges: 다른 DB·롤로 복원해도 깨지지 않게
-        const args = [DATABASE_URL, '--no-owner', '--no-privileges'];
+        const args = [sanitizeUrlForPgDump(DATABASE_URL), '--no-owner', '--no-privileges'];
         const dump = spawn('pg_dump', args, { env: process.env });
 
         const gzip = zlib.createGzip();
