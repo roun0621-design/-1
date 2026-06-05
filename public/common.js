@@ -994,8 +994,15 @@ function renderPageNav(currentPage) {
         `<a href="${p.href}" class="nav-link ${p.key === currentPage ? 'active' : ''}" data-page-key="${p.key}" data-i18n="nav.${p.key}">${p.label}</a>`
     ).join('');
 
-    // ── i18n: 동적으로 그린 메뉴를 현재 언어로 번역 (PaceI18n 로드된 페이지만) ──
-    try { if (window.PaceI18n) window.PaceI18n.apply(); } catch (e) {}
+    // ── i18n: 동적 메뉴 번역 + 헤더 로그인 버튼 앞에 언어 스위처 마운트 ──
+    // (index 처럼 로그인 버튼이 정적 HTML 이라 header 빌드 블록을 건너뛰는 페이지 대응)
+    try {
+        if (window.PaceI18n) {
+            window.PaceI18n.apply();
+            var _lb = document.getElementById('header-login-btn');
+            if (_lb) window.PaceI18n.mountSwitcherBefore(_lb);
+        }
+    } catch (e) {}
 
     // ── Build mobile menu (once) ──
     _buildMobileMenu(pages, currentPage, role);

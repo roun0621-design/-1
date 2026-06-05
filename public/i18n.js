@@ -130,7 +130,8 @@
         }
         applyAttr('[data-i18n-ph]', 'data-i18n-ph', 'placeholder', lang);
         applyAttr('[data-i18n-title]', 'data-i18n-title', 'title', lang);
-        try { document.documentElement.setAttribute('lang', lang); } catch (e) {}
+        // 주의: documentElement 의 lang 을 바꾸면 크롬 자동번역이 우리 번역을
+        // 다시 덮어써(이중 번역) 깨지므로 건드리지 않는다.
         updateSwitcherActive(lang);
         // 다른 스크립트가 반응할 수 있게 이벤트 발행
         try { window.dispatchEvent(new CustomEvent('pace:langchange', { detail: { lang: lang } })); } catch (e) {}
@@ -208,6 +209,16 @@
             updateSwitcherActive(getLang());
         } catch (e) { /* 무시 */ }
     }
+    // refNode 바로 앞(같은 부모)에 인라인 스위처 삽입 (예: 로그인 버튼 왼쪽)
+    function mountSwitcherBefore(refNode) {
+        if (switcherEl || !refNode || !refNode.parentNode) return;
+        try {
+            switcherEl = createSwitcher(true);
+            switcherEl.style.marginRight = '8px';
+            refNode.parentNode.insertBefore(switcherEl, refNode);
+            updateSwitcherActive(getLang());
+        } catch (e) { /* 무시 */ }
+    }
     function floatFallback() {
         if (switcherEl) return;
         switcherEl = createSwitcher(false);
@@ -238,7 +249,8 @@
         getLang: getLang,
         t: function (key) { return translate(key, getLang()); },
         apply: function () { harvest(); apply(getLang()); }, // 동적 콘텐츠 추가 후 재적용
-        mountSwitcher: mountSwitcher,                         // 헤더에 스위처 끼워넣기
+        mountSwitcher: mountSwitcher,                         // 컨테이너에 append
+        mountSwitcherBefore: mountSwitcherBefore,             // 특정 노드 앞에 삽입(로그인 버튼 등)
         extend: function (obj) {
             if (obj && obj.en) Object.assign(DICT.en, obj.en);
             if (obj && obj.ja) Object.assign(DICT.ja, obj.ja);
