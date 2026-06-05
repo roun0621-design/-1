@@ -38,13 +38,15 @@ warn()   { printf "${C_YELLOW}[WARN]${C_OFF}   %s\n" "$*"; }
 err()    { printf "${C_RED}[ERR]${C_OFF}    %s\n" "$*" >&2; }
 
 # ─── 1. 작업트리 dirty 검사 ───────────────────────────────────────────
-log "1/7 작업트리 상태 확인..."
-if [[ -n "$(git status --porcelain)" ]]; then
-    err "uncommitted 변경 사항이 있습니다. 먼저 처리하세요:"
-    git status --short
+# untracked 파일(복구 스크립트 등)은 git pull 에 영향을 주지 않으므로 제외.
+# 추적 중인 파일의 uncommitted 수정만 배포를 막는다.
+log "1/7 작업트리 상태 확인 (추적 파일만)..."
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+    err "추적 중인 파일에 uncommitted 변경 사항이 있습니다. 먼저 처리하세요:"
+    git status --short --untracked-files=no
     exit 1
 fi
-ok "작업트리 깨끗함"
+ok "작업트리 깨끗함 (추적 파일 기준)"
 
 # ─── 2. fetch + 변경 표시 ────────────────────────────────────────────
 log "2/7 git fetch + 변경 사항 표시..."

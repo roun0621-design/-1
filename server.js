@@ -364,16 +364,26 @@ app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'public'
 //   정상: 200 + 상태 JSON
 //   서버는 살아있지만 auth 마이그 실패: 200 (legacy 로그인은 정상 동작하므로)
 //   완전 장애: Express 자체가 응답 못 함 → connection refused / 502
-app.get('/api/health', (req, res) => {
-    res.json({
-        ok: true,
+app.get('/api/health', async (req, res) => {
+    const mem = process.memoryUsage();
+    const base = {
         backend: db.isAsync ? 'postgres' : 'sqlite',
         authMig: global.__authMigOk ? 'ok' : (global.__authMigError ? 'failed' : 'pending'),
         authMigError: global.__authMigError || null,
         uptime_sec: Math.floor(process.uptime()),
         node: process.version,
+        rss_mb: Math.round(mem.rss / 1048576),
+        heap_used_mb: Math.round(mem.heapUsed / 1048576),
         ts: new Date().toISOString(),
-    });
+    };
+    // 실제 DB 연결 확인 — 가벼운 SELECT 1 (SQLite/PG 양쪽 호환).
+    // DB 가 죽으면 503 을 반환해 모니터/배포 헬스체크가 장애를 감지하게 한다.
+    try {
+        await db.get('SELECT 1 AS ok');
+        res.json({ ok: true, db: 'up', ...base });
+    } catch (e) {
+        res.status(503).json({ ok: false, db: 'down', dbError: e.message, ...base });
+    }
 });
 
 // /open — Android intent:// 중간 리다이렉트 페이지 (카카오톡/인스타 인앱브라우저 대응)
