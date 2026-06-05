@@ -183,13 +183,13 @@
     <!-- About Modal -->
     <div class="info-modal" id="about-modal">
         <div class="info-modal-inner">
-            <h3>P-R : Node에 관하여</h3>
+            <h3 data-i18n="about.title">P-R : Node에 관하여</h3>
             <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Sport Competition Operation Platform for Excellence</p>
 
-            <h4>실시간 대회 결과 확인</h4>
+            <h4 data-i18n="about.h1">실시간 대회 결과 확인</h4>
             <p>P-R : Node를 통해 육상 대회의 실시간 경기 결과를 확인할 수 있습니다. 대회를 선택한 후 대시보드에서 종목별 진행 상황과 결과를 바로 확인하세요.</p>
 
-            <h4>주요 기능</h4>
+            <h4 data-i18n="about.features">주요 기능</h4>
             <ul>
                 <li><strong>대시보드</strong> — 전 종목의 진행 상황을 한눈에 확인, 영상 링크 바로가기</li>
                 <li><strong>실시간 결과</strong> — 경기가 끝나는 즉시 기록과 순위 확인 가능</li>
@@ -200,10 +200,10 @@
                 <li><strong>관리자 패널</strong> — 선수/종목 관리, 조편성, 엑셀 업로드, 데이터 백업</li>
             </ul>
 
-            <h4>즐겨찾기</h4>
+            <h4 data-i18n="about.favorites">즐겨찾기</h4>
             <p>대시보드에서 관심 종목 옆의 별 아이콘을 눌러 즐겨찾기에 추가하면, 해당 종목이 상단에 고정되어 빠르게 확인할 수 있습니다.</p>
 
-            <button class="btn btn-ghost close-modal-btn" onclick="closeModal('about-modal')">닫기</button>
+            <button class="btn btn-ghost close-modal-btn" data-i18n="common.close" onclick="closeModal('about-modal')">닫기</button>
         </div>
     </div>
 
@@ -966,5 +966,6 @@
         };
     })();
     </script>
+    <script src="/i18n.js?v=1"></script>
 </body>
 </html>
