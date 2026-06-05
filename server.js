@@ -364,10 +364,27 @@ app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'public'
 //   정상: 200 + 상태 JSON
 //   서버는 살아있지만 auth 마이그 실패: 200 (legacy 로그인은 정상 동작하므로)
 //   완전 장애: Express 자체가 응답 못 함 → connection refused / 502
+// ---- 보안 자가점검 (부팅 1회, 경고만) ----
+try {
+    const { runSecuritySelfCheck } = require('./lib/securityCheck');
+    global.__securityWarnings = runSecuritySelfCheck();
+    if (global.__securityWarnings.length) {
+        console.warn(`\n[보안 자가점검] ⚠️  약한 설정 ${global.__securityWarnings.length}건 감지:`);
+        global.__securityWarnings.forEach(m => console.warn('  - ' + m));
+        console.warn('  → 운영 환경이면 .env 의 해당 값을 강하게 바꾸고 재시작하세요.\n');
+    } else {
+        console.log('[보안 자가점검] ✅ 기본 자격증명 점검 통과');
+    }
+} catch (e) {
+    global.__securityWarnings = [];
+    console.warn('[보안 자가점검] 실행 실패:', e.message);
+}
+
 app.get('/api/health', async (req, res) => {
     const mem = process.memoryUsage();
     const base = {
         backend: db.isAsync ? 'postgres' : 'sqlite',
+        security_warnings: (global.__securityWarnings || []).length,
         authMig: global.__authMigOk ? 'ok' : (global.__authMigError ? 'failed' : 'pending'),
         authMigError: global.__authMigError || null,
         uptime_sec: Math.floor(process.uptime()),
