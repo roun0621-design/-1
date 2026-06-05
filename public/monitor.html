@@ -183,19 +183,19 @@
 
     <!-- Gender tabs -->
     <div class="mon-gender-tabs" id="gender-tabs">
-        <button class="active" data-g="ALL" onclick="setGender('ALL',this)">전체</button>
-        <button data-g="M" onclick="setGender('M',this)">남자</button>
-        <button data-g="F" onclick="setGender('F',this)">여자</button>
-        <button data-g="X" onclick="setGender('X',this)">혼성</button>
+        <button class="active" data-g="ALL" data-i18n="common.all" onclick="setGender('ALL',this)">전체</button>
+        <button data-g="M" data-i18n="common.male" onclick="setGender('M',this)">남자</button>
+        <button data-g="F" data-i18n="common.female" onclick="setGender('F',this)">여자</button>
+        <button data-g="X" data-i18n="common.mixed" onclick="setGender('X',this)">혼성</button>
     </div>
 
     <!-- Filter tabs -->
     <div class="mon-filter-tabs" id="filter-tabs">
-        <button class="active" data-f="all" onclick="setFilter('all',this)">전체</button>
-        <button data-f="callroom_done" onclick="setFilter('callroom_done',this)">소집 완료</button>
-        <button data-f="progress" onclick="setFilter('progress',this)">소집 진행</button>
-        <button data-f="waiting" onclick="setFilter('waiting',this)">대기</button>
-        <button data-f="race_done" onclick="setFilter('race_done',this)">경기 완료</button>
+        <button class="active" data-f="all" data-i18n="common.all" onclick="setFilter('all',this)">전체</button>
+        <button data-f="callroom_done" data-i18n="filter.callroom_done" onclick="setFilter('callroom_done',this)">소집 완료</button>
+        <button data-f="progress" data-i18n="filter.progress" onclick="setFilter('progress',this)">소집 진행</button>
+        <button data-f="waiting" data-i18n="filter.waiting" onclick="setFilter('waiting',this)">대기</button>
+        <button data-f="race_done" data-i18n="filter.race_done" onclick="setFilter('race_done',this)">경기 완료</button>
     </div>
 
     <!-- Summary + refresh + event list -->
@@ -203,7 +203,8 @@
     <div class="mon-refresh-bar" id="refresh-bar">로딩 중...</div>
     <div class="mon-events" id="event-list"></div>
 
-    <script src="common.js?v=74"></script>
+    <script src="/i18n.js?v=3"></script>
+    <script src="common.js?v=76"></script>
     <script>
     // ============================================================
     // Initialization
