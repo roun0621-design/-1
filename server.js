@@ -2981,7 +2981,7 @@ app.post('/api/events/:id/create-final', async (req, res) => {
     // SSE broadcast so dashboard/results pages pick up the new final event
     broadcastSSE('event_status_changed', { event_id: finalEventId, round_status: 'heats_generated' });
     // 시간표 자동 재매칭 (결승 라운드가 새로 생겼으므로 시간표의 "결승" 행과 연결 가능)
-    try { await autoLinkTimetable(event.competition_id); } catch(autoErr) { console.warn('[autoLink after final] ', autoErr.message); }
+    try { await autoLinkDisplayTimetable(event.competition_id); } catch(autoErr) { console.warn('[autoLink after final] ', autoErr.message); }
     res.json({ success: true, final_event_id: finalEventId, count: qualified.length });
 });
 
@@ -3163,7 +3163,7 @@ app.post('/api/events/:id/create-semifinal', async (req, res) => {
     // SSE broadcast so dashboard/results pages pick up the new semifinal event
     broadcastSSE('event_status_changed', { event_id: semiEventId, round_status: 'heats_generated' });
     // 시간표 자동 재매칭 (준결승 라운드가 새로 생겼으므로 시간표의 "준결승" 행과 연결 가능)
-    try { await autoLinkTimetable(event.competition_id); } catch(autoErr) { console.warn('[autoLink after semifinal] ', autoErr.message); }
+    try { await autoLinkDisplayTimetable(event.competition_id); } catch(autoErr) { console.warn('[autoLink after semifinal] ', autoErr.message); }
     res.json({ success: true, semi_event_id: semiEventId, count: qualifiedIds.length });
 });
 app.delete('/api/events/:id', async (req, res) => {
@@ -4050,7 +4050,7 @@ app.post('/api/admin/events', async (req, res) => {
         const evt = await db.get('SELECT * FROM event WHERE id=?', info.lastInsertRowid);
         await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,1)', evt.id);
         // 시간표 자동 재매칭 (새 종목이 생겼으므로 시간표의 매칭되지 않은 행과 연결 가능)
-        try { await autoLinkTimetable(competition_id); } catch(autoErr) { console.warn('[autoLink after event create] ', autoErr.message); }
+        try { await autoLinkDisplayTimetable(competition_id); } catch(autoErr) { console.warn('[autoLink after event create] ', autoErr.message); }
         res.json(evt);
     } catch (e) { res.status(400).json({ error: '추가 오류: ' + e.message }); }
 });
@@ -4062,7 +4062,7 @@ app.put('/api/admin/events/:id', async (req, res) => {
     await db.run('UPDATE event SET name=?,category=?,gender=?,round_type=?,sort_order=?,round_status=?,video_url=?,division=?,result_url=? WHERE id=?', name || old.name, category || old.category, gender || old.gender, round_type || old.round_type, sort_order ?? old.sort_order, round_status || old.round_status, video_url ?? old.video_url ?? '', division ?? old.division ?? '', result_url ?? old.result_url ?? '', old.id);
     // 종목 이름/성별/라운드가 바뀌었을 가능성이 있으므로 시간표 재매칭 시도 (단 수동 매칭은 보호)
     if (name !== old.name || gender !== old.gender || round_type !== old.round_type) {
-        try { await autoLinkTimetable(old.competition_id); } catch(autoErr) { console.warn('[autoLink after event update] ', autoErr.message); }
+        try { await autoLinkDisplayTimetable(old.competition_id); } catch(autoErr) { console.warn('[autoLink after event update] ', autoErr.message); }
     }
     res.json(await db.get('SELECT * FROM event WHERE id=?', old.id));
 });
