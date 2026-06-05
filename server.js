@@ -2335,7 +2335,7 @@ app.get('/api/heats/:id/entries', async (req, res) => {
 // RESULTS
 // ============================================================
 // RESULTS 라우트들은 lib/routes/results.js 로 추출됨 (10차)
-require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd });
+require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit });
 // ============================================================
 app.post('/api/heats/:id/wind', async (req, res) => {
     const { wind } = req.body;
@@ -13843,8 +13843,9 @@ function migrateNormalizeDivisionAndRound() {
 }
 
 // Export app/server for tests; only auto-listen when run directly (node server.js)
+// db 도 노출 — 테스트에서 격리 DB에 픽스처를 직접 삽입하기 위함 (운영에선 미사용)
 if (require.main !== module) {
-    module.exports = { app, server };
+    module.exports = { app, server, db };
 } else
 server.listen(PORT, '0.0.0.0', async () => {
     // PG 모드: boot 시 1회 async 캐시 로드 (SQLite는 boot 직후 sync 로드 완료됨)
