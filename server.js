@@ -2352,7 +2352,7 @@ app.get('/api/heats/:id/entries', async (req, res) => {
 // RESULTS
 // ============================================================
 // RESULTS 라우트들은 lib/routes/results.js 로 추출됨 (10차)
-require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit });
+require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit, parseDbTimestampMs });
 // ============================================================
 app.post('/api/heats/:id/wind', async (req, res) => {
     const { wind } = req.body;
@@ -2551,7 +2551,9 @@ require("./lib/routes/combined_scores")(app, {
     db, isAdminKey, isOperationKey, opLog, broadcastSSE,
     // WA 점수 계산용 상수/함수 — combined_scores.js 의 /sync /repair 가 필요로 함.
     // 누락 시 ReferenceError: DECATHLON_KEYS is not defined 로 500 떨어짐 (2026-06 fix)
-    DECATHLON_KEYS, HEPTATHLON_KEYS, WA_TABLES, calcWAPoints
+    DECATHLON_KEYS, HEPTATHLON_KEYS, WA_TABLES, calcWAPoints,
+    // 종료된 대회 혼성점수 잠금 — 누락 시 try/catch에 삼켜져 잠금이 무력화됨 (2026-06 fix)
+    requireAdminAfterCompEnd
 });
 
 // ============================================================
@@ -8234,7 +8236,7 @@ if (!db.isAsync) try {
 // TIMETABLE — 대회 일정 관리 (Excel 업로드, 자동 매칭, 일별 조회)
 // ============================================================
 // TIMETABLE 라우트들은 lib/routes/timetable.js 로 추출됨
-require('./lib/routes/timetable')(app, { db, isAdminKey, isOperationKey, opLog, upload, XLSX });
+require('./lib/routes/timetable')(app, { db, isAdminKey, isOperationKey, opLog, upload, XLSX, excelTimeToHHMM, cleanTimetableEventName });
 
 // ============================================================
 // PDF DOCUMENT GENERATION — WA-Style Professional Layout
