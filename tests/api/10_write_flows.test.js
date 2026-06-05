@@ -86,9 +86,14 @@ describe('POST /api/height-attempts/save', () => {
     });
 
     it('필수 필드 누락 시 400', async () => {
+        // 종료 안 된 픽스처 heat 사용 — 시드(종료) 대회의 전역 잠금(403)과 얽히지 않게
+        const c = await comp();
+        const ev = await eventOf(c, 'field_height');
+        const r = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)', ev);
+        const heatId = r.lastInsertRowid;
         const res = await request(app)
             .post('/api/height-attempts/save')
-            .send({ heat_id: 1 })
+            .send({ heat_id: heatId }) // event_entry_id/bar_height/attempt_number 누락
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(400);
     });
