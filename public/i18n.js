@@ -28,7 +28,9 @@
     var DICT = {
         en: {
             'app.name': 'Pace Rise',
+            'nav.home': 'Home',
             'nav.dashboard': 'Dashboard',
+            'nav.display-manage': 'Display',
             'nav.results': 'Results',
             'nav.callroom': 'Call Room',
             'nav.monitor': 'Monitor',
@@ -47,10 +49,17 @@
             'about.h1': 'Live competition results',
             'about.features': 'Key features',
             'about.favorites': 'Favorites',
+            'home.about_btn': 'About P-R : Node',
+            'home.install_btn': 'Install app',
+            'home.manual_btn': 'Operations manual',
+            'home.add_comp': '+ Add competition',
+            'footer.privacy': 'Privacy policy',
         },
         ja: {
             'app.name': 'Pace Rise',
+            'nav.home': 'ホーム',
             'nav.dashboard': 'ダッシュボード',
+            'nav.display-manage': '表示管理',
             'nav.results': '結果',
             'nav.callroom': '招集所',
             'nav.monitor': 'モニター',
@@ -69,6 +78,11 @@
             'about.h1': 'リアルタイム大会結果',
             'about.features': '主な機能',
             'about.favorites': 'お気に入り',
+            'home.about_btn': 'P-R : Node について',
+            'home.install_btn': 'アプリ設置案内',
+            'home.manual_btn': '運営マニュアル',
+            'home.add_comp': '+ 大会追加',
+            'footer.privacy': 'プライバシー方針',
         },
     };
 
@@ -135,25 +149,37 @@
         apply(code);
     }
 
-    // ── 플로팅 언어 스위처 UI ──
+    // ── 언어 스위처 UI ──
+    // 우선 헤더(common.js)가 mountSwitcher(container)로 끼워넣음(자연스러운 배치).
+    // 아무도 안 끼우면 잠시 후 우하단 플로팅으로 폴백(데모 등 단독 페이지용).
     var switcherEl = null;
-    function buildSwitcher() {
-        if (switcherEl) return;
+
+    function createSwitcher(inline) {
         var box = document.createElement('div');
         box.id = 'pace-lang-switcher';
         box.setAttribute('aria-label', 'Language / 언어');
-        box.style.cssText = [
-            'position:fixed', 'top:10px', 'right:10px', 'z-index:99999',
-            'display:flex', 'align-items:center', 'gap:2px',
-            'background:rgba(26,31,43,.82)', 'backdrop-filter:blur(6px)',
-            'border:1px solid rgba(183,159,88,.45)', 'border-radius:999px',
-            'padding:3px 6px', 'font-family:system-ui,sans-serif', 'font-size:12px',
-            'box-shadow:0 2px 8px rgba(0,0,0,.25)', 'user-select:none'
-        ].join(';');
+        if (inline) {
+            // 헤더에 녹아드는 밝은 톤 인라인 스타일
+            box.style.cssText = [
+                'display:inline-flex', 'align-items:center', 'gap:1px', 'vertical-align:middle',
+                'border:1px solid rgba(0,0,0,.12)', 'border-radius:999px',
+                'padding:2px 5px', 'font-family:system-ui,sans-serif', 'user-select:none',
+                'line-height:1'
+            ].join(';');
+        } else {
+            box.style.cssText = [
+                'position:fixed', 'bottom:14px', 'right:14px', 'z-index:99999',
+                'display:inline-flex', 'align-items:center', 'gap:1px',
+                'background:rgba(26,31,43,.9)', 'border:1px solid rgba(183,159,88,.5)',
+                'border-radius:999px', 'padding:4px 8px', 'font-family:system-ui,sans-serif',
+                'box-shadow:0 2px 10px rgba(0,0,0,.25)', 'user-select:none'
+            ].join(';');
+        }
+        box._inline = inline;
 
         var globe = document.createElement('span');
         globe.textContent = '🌐';
-        globe.style.cssText = 'margin-right:2px;font-size:12px;line-height:1';
+        globe.style.cssText = 'font-size:11px;line-height:1;margin-right:2px;opacity:.7';
         box.appendChild(globe);
 
         LANGS.forEach(function (l) {
@@ -163,30 +189,47 @@
             b.setAttribute('data-lang', l.code);
             b.setAttribute('title', l.label);
             b.style.cssText = [
-                'border:0', 'background:transparent', 'color:#cdd3df', 'cursor:pointer',
-                'font-size:12px', 'font-weight:700', 'padding:2px 6px', 'border-radius:999px',
-                'line-height:1.4', 'transition:all .15s'
+                'border:0', 'background:transparent', 'cursor:pointer',
+                'font-size:11px', 'font-weight:700', 'padding:2px 6px',
+                'border-radius:999px', 'line-height:1.3', 'transition:all .15s',
+                'color:' + (inline ? '#6b7280' : '#cdd3df')
             ].join(';');
             b.addEventListener('click', function () { setLang(l.code); });
             box.appendChild(b);
         });
-        document.body.appendChild(box);
-        switcherEl = box;
+        return box;
+    }
+
+    function mountSwitcher(container) {
+        if (switcherEl || !container) return;
+        try {
+            switcherEl = createSwitcher(true);
+            container.appendChild(switcherEl);
+            updateSwitcherActive(getLang());
+        } catch (e) { /* 무시 */ }
+    }
+    function floatFallback() {
+        if (switcherEl) return;
+        switcherEl = createSwitcher(false);
+        document.body.appendChild(switcherEl);
+        updateSwitcherActive(getLang());
     }
     function updateSwitcherActive(lang) {
         if (!switcherEl) return;
+        var inline = switcherEl._inline;
         var btns = switcherEl.querySelectorAll('button[data-lang]');
         for (var i = 0; i < btns.length; i++) {
             var on = btns[i].getAttribute('data-lang') === lang;
             btns[i].style.background = on ? '#b79f58' : 'transparent';
-            btns[i].style.color = on ? '#1a1f2b' : '#cdd3df';
+            btns[i].style.color = on ? '#1a1f2b' : (inline ? '#6b7280' : '#cdd3df');
         }
     }
 
     function init() {
         harvest();
-        buildSwitcher();
         apply(getLang());
+        // 헤더가 끼워넣지 않으면 플로팅 폴백
+        setTimeout(function () { if (!switcherEl) floatFallback(); }, 400);
     }
 
     // 공개 API
@@ -195,6 +238,7 @@
         getLang: getLang,
         t: function (key) { return translate(key, getLang()); },
         apply: function () { harvest(); apply(getLang()); }, // 동적 콘텐츠 추가 후 재적용
+        mountSwitcher: mountSwitcher,                         // 헤더에 스위처 끼워넣기
         extend: function (obj) {
             if (obj && obj.en) Object.assign(DICT.en, obj.en);
             if (obj && obj.ja) Object.assign(DICT.ja, obj.ja);

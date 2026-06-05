@@ -944,6 +944,8 @@ function renderPageNav(currentPage) {
         btnGroup.appendChild(backBtn);
         btnGroup.appendChild(fwdBtn);
         btnGroup.appendChild(refreshBtn);
+        // ── i18n 언어 스위처를 헤더 버튼그룹에 끼워넣음 (PaceI18n 로드된 페이지만) ──
+        try { if (window.PaceI18n) window.PaceI18n.mountSwitcher(btnGroup); } catch (e) {}
         btnGroup.appendChild(loginBtn);
         headerInner.appendChild(btnGroup);
 
@@ -989,8 +991,11 @@ function renderPageNav(currentPage) {
         ];
     }
     nav.innerHTML = pages.map(p =>
-        `<a href="${p.href}" class="nav-link ${p.key === currentPage ? 'active' : ''}" data-page-key="${p.key}">${p.label}</a>`
+        `<a href="${p.href}" class="nav-link ${p.key === currentPage ? 'active' : ''}" data-page-key="${p.key}" data-i18n="nav.${p.key}">${p.label}</a>`
     ).join('');
+
+    // ── i18n: 동적으로 그린 메뉴를 현재 언어로 번역 (PaceI18n 로드된 페이지만) ──
+    try { if (window.PaceI18n) window.PaceI18n.apply(); } catch (e) {}
 
     // ── Build mobile menu (once) ──
     _buildMobileMenu(pages, currentPage, role);

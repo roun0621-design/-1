@@ -141,9 +141,9 @@
 
         <!-- Quick links (visible to all) -->
         <div class="home-quick">
-            <button class="home-quick-btn" onclick="openAbout()">P-R : Node에 관하여</button>
-            <button class="home-quick-btn" onclick="openInstallGuide()">앱 설치 안내</button>
-            <button class="home-quick-btn" id="btn-manual" style="display:none;" onclick="openManual()">운영 매뉴얼</button>
+            <button class="home-quick-btn" data-i18n="home.about_btn" onclick="openAbout()">P-R : Node에 관하여</button>
+            <button class="home-quick-btn" data-i18n="home.install_btn" onclick="openInstallGuide()">앱 설치 안내</button>
+            <button class="home-quick-btn" id="btn-manual" data-i18n="home.manual_btn" style="display:none;" onclick="openManual()">운영 매뉴얼</button>
         </div>
 
         <!-- Role indicator (small, subtle) -->
@@ -165,7 +165,7 @@
         </div>
 
         <div class="home-actions" id="admin-actions" style="display:none;">
-            <button class="btn btn-primary" onclick="openAddComp()">+ 대회 추가</button>
+            <button class="btn btn-primary" data-i18n="home.add_comp" onclick="openAddComp()">+ 대회 추가</button>
         </div>
     </main>
 
@@ -385,6 +385,7 @@
         </div>
     </div>
 
+    <script src="/i18n.js?v=2"></script>
     <script src="common.js?v=74"></script>
     <script src="/lib/auth-client.js?v=1"></script>
     <script>
@@ -966,6 +967,5 @@
         };
     })();
     </script>
-    <script src="/i18n.js?v=1"></script>
 </body>
 </html>
