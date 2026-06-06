@@ -1022,12 +1022,12 @@
                     </div>
                     <div id="federation-list" style="display:flex;flex-direction:column;gap:6px;"></div>
                 </div>
-                <div class="danger-zone">
+                <div class="danger-zone" id="card-comp-reset" style="scroll-margin-top:20px;">
                     <h4>대회 데이터 초기화</h4>
                     <p class="t-help-lg">이 대회의 모든 선수, 종목, 기록을 삭제합니다.</p>
                     <button class="btn btn-danger" onclick="resetCompDB()">대회 데이터 초기화</button>
                 </div>
-                <div class="danger-zone" style="margin-top:12px;">
+                <div class="danger-zone" id="card-comp-delete" style="margin-top:12px;scroll-margin-top:20px;">
                     <h4>대회 삭제</h4>
                     <p class="t-help-lg">이 대회를 완전히 삭제합니다. 관련된 모든 데이터(선수, 종목, 기록, 조편성, 로그)가 영구 삭제되며 복구할 수 없습니다.</p>
                     <button class="btn btn-danger" onclick="deleteCompetition()">대회 완전 삭제</button>
@@ -3025,6 +3025,7 @@ POST /api/external/event-result-link/batch<br>
             // 결과/오버뷰
             check:      '<polyline points="20 6 9 17 4 12"/>',
             close:      '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+            trash:      '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
         };
         function ICON(name, opts) {
             opts = opts || {};
@@ -3051,6 +3052,8 @@ POST /api/external/event-result-link/batch<br>
 
             // ───── 대회 운영 ─────
             { group:'op', label:'대회 정보 수정',       tab:'competition', anchor:'card-comp-edit', icon:'stadium', desc:'대회명·기간·연맹·시리즈·운영 모드 등 기본 정보', keywords:'competition 대회 정보 수정 기간 연맹 시리즈 mode' },
+            { group:'op', label:'대회 데이터 초기화',   tab:'competition', anchor:'card-comp-reset',  icon:'trash', desc:'이 대회의 선수·종목·기록만 삭제 (대회는 유지)', keywords:'초기화 reset clear 데이터 삭제 비우기' },
+            { group:'op', label:'대회 삭제',             tab:'competition', anchor:'card-comp-delete', icon:'trash', desc:'대회 전체를 영구 삭제 (복구 불가, 관리자키 필요)', keywords:'대회 삭제 delete remove 제거 영구 완전삭제' },
             { group:'op', label:'업로드 · 시간표',     tab:'upload',      icon:'upload',  desc:'엑셀 업로드, 시간표, 매칭', keywords:'upload xlsx timetable' },
             { group:'op', label:'선수 관리',           tab:'athletes',    icon:'user',    desc:'선수 추가/수정/삭제, 배번', keywords:'athlete 선수 배번 bib' },
             { group:'op', label:'종목 관리',           tab:'events',      icon:'list',    desc:'종목 추가/수정, 조편성, 부 매칭', keywords:'event 종목 heat 조' },
