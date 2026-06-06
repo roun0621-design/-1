@@ -2726,8 +2726,10 @@ POST /api/external/event-result-link/batch<br>
             });
             // popup-editor-wrap, sb-keys-area 등 wrapper 들도 anchor 격리 시 일관되게 숨김
             panel.querySelectorAll(':scope > div:not(.admin-card)').forEach(wrap => {
-                // 활성 상태(display 명시)인 wrap은 그대로 두되, 카드 격리 모드에선 숨김
-                if (wrap.id !== anchorId) wrap.dataset._prevDisplay = wrap.style.display || '';
+                // anchor 대상이 .admin-card 가 아닌 wrapper(예: danger-zone)인 경우에도 단독 표시
+                if (wrap.id === anchorId) { wrap.style.display = ''; return; }
+                // 그 외 wrapper 는 카드 격리 모드에서 숨김 (복원용 이전 display 보관)
+                wrap.dataset._prevDisplay = wrap.style.display || '';
                 wrap.style.display = 'none';
             });
         }
