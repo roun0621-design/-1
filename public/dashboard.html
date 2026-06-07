@@ -144,27 +144,27 @@
                 display:flex;
                 flex-wrap:wrap;
                 align-items:stretch;
-                gap:8px 4px;
+                gap:4px 4px;
                 background:var(--white);
                 border:1px solid #e8e8e8;
                 border-radius:12px;
                 box-shadow:0 1px 3px rgba(0,0,0,.05);
                 margin-bottom:6px;
-                padding:7px 10px;
+                padding:6px 10px;
             }
             /* 종목명 = 헤더(전체폭, 가운데 정렬). display:block 로 배지들이 가로로 흐름
                (일반 td 의 flex column 을 반드시 덮어써야 세로쌓임 방지) */
             .matrix-table td.event-name {
                 display:block;
                 flex:0 0 100%;
-                text-align:center;
+                text-align:left;
                 font-size:15px;
                 font-weight:700;
                 white-space:normal;
-                padding:0 0 5px;
+                padding:0 0 4px;
                 margin-bottom:0;
                 border-bottom:1px solid #f0f0f0;
-                line-height:1.4;
+                line-height:1.35;
             }
             .matrix-table td.event-name::before { content:none; }
             /* 라운드/영상/명단 = 동일폭(flex:1) 컬럼, 라벨 위·버튼 아래, 가운데 정렬
@@ -175,7 +175,7 @@
                 display:flex;
                 flex-direction:column;
                 align-items:center;
-                justify-content:flex-end;
+                justify-content:center;
                 gap:3px;
                 padding:0;
                 border:none;
