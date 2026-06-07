@@ -315,6 +315,40 @@
                 padding: 10px 12px;
             }
         }
+
+        /* ── 상장 발급: 종목 선택 필터 UI ───────────────────────────── */
+        .cert-filter-row { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:7px; }
+        .cert-filter-btn {
+            padding:4px 11px; font-size:12px; font-weight:600; cursor:pointer;
+            border:1px solid var(--gray); border-radius:999px; background:#fff; color:#555;
+            transition:all .12s;
+        }
+        .cert-filter-btn:hover { border-color:#b79f58; color:#8a7640; }
+        .cert-filter-btn.active { background:#b79f58; border-color:#b79f58; color:#fff; }
+        .cert-evt-group-title {
+            font-size:11px; font-weight:800; color:#8a7640; letter-spacing:1px;
+            margin:8px 0 3px; padding-bottom:2px; border-bottom:1px solid #eee;
+        }
+        .cert-evt-group-title:first-child { margin-top:0; }
+        .cert-evt-list { max-height:300px; overflow-y:auto; }
+        .cert-evt-item {
+            display:flex; align-items:center; gap:6px; padding:4px 4px; border-radius:5px;
+            cursor:pointer; font-size:13px;
+        }
+        .cert-evt-item:hover { background:#f3eee0; }
+        .cert-evt-item input { width:15px; height:15px; flex-shrink:0; cursor:pointer; }
+        .cert-evt-g {
+            display:inline-block; font-size:10px; font-weight:700; color:#fff;
+            padding:1px 5px; border-radius:3px; flex-shrink:0; min-width:24px; text-align:center;
+        }
+        .cert-evt-g-M { background:#1a2a5e; }
+        .cert-evt-g-F { background:#8b1a2a; }
+        .cert-evt-g-X { background:#b79f58; }
+        .cert-evt-name { font-weight:600; }
+        .cert-evt-selinfo {
+            margin-top:8px; padding-top:7px; border-top:1px dashed #ddd;
+            font-size:12px; color:#555;
+        }
     </style>
 </head>
 <body>
@@ -2179,7 +2213,7 @@ POST /api/external/event-result-link/batch<br>
 
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">발급 대상 종목 (미선택 시 대회 전체 결승)</label>
-                        <div id="cert-event-list" style="max-height:240px;overflow-y:auto;border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#fafafa;">
+                        <div id="cert-event-list" style="border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#fafafa;">
                             대회를 선택하면 종목이 표시됩니다.
                         </div>
                         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
@@ -9927,6 +9961,19 @@ POST /api/external/event-result-link/batch<br>
         // ====================================================================
         let _certTemplates = [];
         let _certEvents = [];
+        let _certGenderFilter = 'ALL';
+        let _certTypeFilter = 'ALL';
+        let _certSelectedIds = new Set();   // 필터 전환에도 선택 유지
+        // 종목 종류 분류 (대시보드와 동일한 category 매핑)
+        const CERT_TYPE_DEFS = [
+            { key: 'track', label: '트랙', match: c => c === 'track' },
+            { key: 'field', label: '필드', match: c => c === 'field_distance' || c === 'field_height' },
+            { key: 'relay', label: '릴레이', match: c => c === 'relay' },
+            { key: 'road',  label: '로드',  match: c => c === 'road' },
+            { key: 'combined', label: '혼성', match: c => c === 'combined' },
+        ];
+        function _certTypeOf(cat) { const d = CERT_TYPE_DEFS.find(t => t.match(cat)); return d ? d.key : 'track'; }
+        function _certTypeLabel(key) { const d = CERT_TYPE_DEFS.find(t => t.key === key); return d ? d.label : key; }
 
         async function loadCertTemplates() {
             try {
@@ -10003,27 +10050,80 @@ POST /api/external/event-result-link/batch<br>
                 _certEvents = [];
                 return;
             }
+            // 대회 새로 불러올 때 필터·선택 초기화
+            _certGenderFilter = 'ALL'; _certTypeFilter = 'ALL'; _certSelectedIds = new Set();
             try {
                 const res = await fetch(`/api/events?competition_id=${_selectedCompId}`);
                 const data = await res.json();
-                const events = (data.events || data || []).filter(e => !e.parent_event_id);
-                _certEvents = events;
-                root.innerHTML = events.length === 0 ? '<span class="t-muted">종목이 없습니다.</span>' :
-                    events.map(e => `
-                        <label style="display:block;padding:3px 0;">
-                            <input type="checkbox" class="cert-event-cb" value="${e.id}" data-name="${_esc(e.name)}">
-                            ${e.gender === 'M' ? '남' : e.gender === 'F' ? '여' : '혼'} ${_esc(e.name)}
-                            <span class="t-muted t-xs">[${e.round_type || ''}]</span>
-                        </label>
-                    `).join('');
+                _certEvents = (data.events || data || []).filter(e => !e.parent_event_id);
+                renderCertEventUI();
             } catch (e) {
                 console.error('[cert] events load:', e);
                 root.innerHTML = '<span class="t-muted">종목 로드 실패</span>';
             }
         }
 
+        // 현재 화면(필터된)에 보이는 체크박스 상태를 선택 Set 에 반영 (숨겨진 선택은 유지)
+        function _certSyncSel() {
+            document.querySelectorAll('#cert-event-list .cert-event-cb').forEach(cb => {
+                if (cb.checked) _certSelectedIds.add(cb.value); else _certSelectedIds.delete(cb.value);
+            });
+        }
+        function setCertGenderFilter(g) { _certSyncSel(); _certGenderFilter = g; renderCertEventUI(); }
+        function setCertTypeFilter(t) { _certSyncSel(); _certTypeFilter = t; renderCertEventUI(); }
+
+        function renderCertEventUI() {
+            const root = document.getElementById('cert-event-list');
+            if (!root) return;
+            if (!_certEvents.length) { root.innerHTML = '<span class="t-muted">종목이 없습니다.</span>'; return; }
+            _certSyncSel();
+
+            const gLabel = { ALL: '전체', M: '남자', F: '여자', X: '혼성' };
+            const genders = ['ALL', ...['M', 'F', 'X'].filter(g => _certEvents.some(e => e.gender === g))];
+            const types = ['ALL', ...CERT_TYPE_DEFS.filter(t => _certEvents.some(e => _certTypeOf(e.category) === t.key)).map(t => t.key)];
+
+            const fbtn = (active, label, fn) => `<button type="button" class="cert-filter-btn${active ? ' active' : ''}" onclick="${fn}">${label}</button>`;
+            let html = '<div class="cert-filter-row">' +
+                genders.map(g => fbtn(_certGenderFilter === g, gLabel[g], `setCertGenderFilter('${g}')`)).join('') + '</div>';
+            html += '<div class="cert-filter-row">' +
+                types.map(t => fbtn(_certTypeFilter === t, t === 'ALL' ? '전체' : _certTypeLabel(t), `setCertTypeFilter('${t}')`)).join('') + '</div>';
+
+            const filtered = _certEvents.filter(e =>
+                (_certGenderFilter === 'ALL' || e.gender === _certGenderFilter) &&
+                (_certTypeFilter === 'ALL' || _certTypeOf(e.category) === _certTypeFilter));
+
+            if (!filtered.length) {
+                root.innerHTML = html + '<div class="t-muted" style="padding:10px 2px;">해당 조건의 종목이 없습니다.</div>';
+                return;
+            }
+
+            const groups = {};
+            filtered.forEach(e => { const k = _certTypeOf(e.category); (groups[k] = groups[k] || []).push(e); });
+            html += '<div class="cert-evt-list">';
+            CERT_TYPE_DEFS.forEach(def => {
+                const list = groups[def.key];
+                if (!list || !list.length) return;
+                html += `<div class="cert-evt-group-title">${def.label} <span class="t-muted t-xs">(${list.length})</span></div>`;
+                html += list.map(e => `
+                    <label class="cert-evt-item">
+                        <input type="checkbox" class="cert-event-cb" value="${e.id}" data-name="${_esc(e.name)}" ${_certSelectedIds.has(String(e.id)) ? 'checked' : ''}>
+                        <span class="cert-evt-g cert-evt-g-${e.gender}">${e.gender === 'M' ? '남' : e.gender === 'F' ? '여' : '혼'}</span>
+                        <span class="cert-evt-name">${_esc(e.name)}</span>
+                        <span class="t-muted t-xs">${e.round_type || ''}</span>
+                    </label>`).join('');
+            });
+            html += '</div>';
+
+            const selCount = _certSelectedIds.size;
+            html += `<div class="cert-evt-selinfo">선택 <b>${selCount}</b>종목${selCount === 0 ? ' (미선택 시 대회 전체 결승)' : ''}</div>`;
+            root.innerHTML = html;
+        }
+
+        // 현재 필터에 보이는 종목만 전체선택/해제
         function certSelectAllEvents(on) {
-            document.querySelectorAll('.cert-event-cb').forEach(cb => cb.checked = !!on);
+            document.querySelectorAll('#cert-event-list .cert-event-cb').forEach(cb => cb.checked = !!on);
+            _certSyncSel();
+            renderCertEventUI();
         }
 
         async function generateCertificates() {
@@ -10035,7 +10135,8 @@ POST /api/external/event-result-link/batch<br>
             const rankFrom = parseInt(document.getElementById('cert-rank-from').value || 1, 10);
             const rankTo = parseInt(document.getElementById('cert-rank-to').value || 3, 10);
             const includeFinishers = document.getElementById('cert-include-finishers').checked;
-            const selectedIds = Array.from(document.querySelectorAll('.cert-event-cb:checked')).map(cb => parseInt(cb.value, 10));
+            _certSyncSel();
+            const selectedIds = Array.from(_certSelectedIds).map(v => parseInt(v, 10));
 
             const status = document.getElementById('cert-gen-status');
             if (status) status.textContent = '생성 중...';
