@@ -190,6 +190,17 @@
             }
             .matrix-table td .round-btn { font-size:12px; padding:5px 6px; }
         }
+
+        /* ── 모바일: 성별/부별 탭 위아래 여백 축소 (스크롤 영역 확보) ─────────
+           PC/태블릿(>640px)은 기존 높이 유지. 부별 탭은 JS 인라인 스타일이라
+           !important 로만 덮어쓸 수 있음. */
+        @media (max-width:640px) {
+            .gender-tabs-bar { padding:1px 0; }
+            .gender-tab-btn { padding:7px 0; font-size:13px; }
+            #division-tabs { padding:2px 0 !important; }
+            #division-tabs .gender-tab-btn { padding:5px 12px !important; font-size:12px; }
+            .events-scroll { padding:4px 0; }
+        }
     </style>
 </head>
 <body class="dashboard-mode">
