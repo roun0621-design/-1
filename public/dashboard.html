@@ -149,8 +149,8 @@
                 border:1px solid #e8e8e8;
                 border-radius:12px;
                 box-shadow:0 1px 3px rgba(0,0,0,.05);
-                margin-bottom:8px;
-                padding:10px;
+                margin-bottom:6px;
+                padding:7px 10px;
             }
             /* 종목명 = 헤더(전체폭, 가운데 정렬). display:block 로 배지들이 가로로 흐름
                (일반 td 의 flex column 을 반드시 덮어써야 세로쌓임 방지) */
@@ -161,10 +161,10 @@
                 font-size:15px;
                 font-weight:700;
                 white-space:normal;
-                padding:0 0 7px;
-                margin-bottom:1px;
+                padding:0 0 5px;
+                margin-bottom:0;
                 border-bottom:1px solid #f0f0f0;
-                line-height:1.5;
+                line-height:1.4;
             }
             .matrix-table td.event-name::before { content:none; }
             /* 라운드/영상/명단 = 동일폭(flex:1) 컬럼, 라벨 위·버튼 아래, 가운데 정렬
@@ -176,7 +176,7 @@
                 flex-direction:column;
                 align-items:center;
                 justify-content:flex-end;
-                gap:4px;
+                gap:3px;
                 padding:0;
                 border:none;
                 white-space:nowrap;
@@ -195,11 +195,19 @@
            PC/태블릿(>640px)은 기존 높이 유지. 부별 탭은 JS 인라인 스타일이라
            !important 로만 덮어쓸 수 있음. */
         @media (max-width:640px) {
+            /* 탭 */
             .gender-tabs-bar { padding:1px 0; }
-            .gender-tab-btn { padding:7px 0; font-size:13px; }
+            .gender-tab-btn { padding:6px 0; font-size:13px; }
             #division-tabs { padding:2px 0 !important; }
             #division-tabs .gender-tab-btn { padding:5px 12px !important; font-size:12px; }
-            .events-scroll { padding:4px 0; }
+            .events-scroll { padding:2px 0; }
+            /* 상단: 대회정보 박스 */
+            .comp-info-line { padding:6px 12px; font-size:12px; gap:6px; margin-bottom:0; }
+            /* 상단: 시간표 히어로 카드 — 위아래 여백·내부 패딩 축소 */
+            .hero-schedule { margin:6px 0 7px; padding:10px 12px; gap:8px; }
+            /* 섹션(TRACK/FIELD) 제목·간격 */
+            .matrix-section { margin-bottom:8px; }
+            .matrix-section-title { padding:3px 8px; margin-bottom:3px; font-size:11px; }
         }
     </style>
 </head>
