@@ -652,13 +652,15 @@ function renderCategoryTable(groups, label, isLive) {
         const _dc = _divColorOf(g.division);
         const divBadge = (_isDisplayMode && g.division && _currentDivision === '전체') ? `<span style="font-size:9px;color:${_dc.color};background:${_dc.bg};padding:1px 5px;border-radius:6px;margin-left:4px;font-weight:600;">${g.division}</span>` : '';
 
+        // data-label: 모바일 카드 레이아웃(@media max-width:640px)에서 각 칸 앞에
+        // "예선/준결승/결승" 라벨을 붙이기 위함. PC(표 모드)에서는 사용되지 않음.
         html += `<tr data-row-gender="${_rowGender}">
             <td class="event-name">${genderBadge}${g.name}${divBadge}${timeBadge}</td>
-            ${_isDisplayMode ? `<td>${videoCell}</td>` : ''}
-            <td>${_isDisplayMode ? rosterCell : wlCell}</td>
-            <td>${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>
-            <td>${_isDisplayMode ? renderDisplayBtn(semi) : renderViewerBtn(semi)}</td>
-            <td>${_isDisplayMode ? renderDisplayBtn(fin) : renderViewerBtn(fin)}</td>
+            ${_isDisplayMode ? `<td data-label="영상">${videoCell}</td>` : ''}
+            <td data-label="${_isDisplayMode ? '명단' : 'W/L'}">${_isDisplayMode ? rosterCell : wlCell}</td>
+            <td data-label="예선">${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>
+            <td data-label="준결승">${_isDisplayMode ? renderDisplayBtn(semi) : renderViewerBtn(semi)}</td>
+            <td data-label="결승">${_isDisplayMode ? renderDisplayBtn(fin) : renderViewerBtn(fin)}</td>
         </tr>`;
     });
 

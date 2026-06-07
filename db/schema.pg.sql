@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS "athlete" (
     "federation" TEXT DEFAULT '',
     "personal_best" TEXT DEFAULT '',
     "date_of_birth" TEXT DEFAULT '',
+    "phone" TEXT NOT NULL DEFAULT '',
     CHECK (gender IN ('M','F'))
 );
 
@@ -552,9 +553,92 @@ DO $$ BEGIN ALTER TABLE "result" ADD CONSTRAINT "fk_result_event_entry_id" FOREI
 DO $$ BEGIN ALTER TABLE "result" ADD CONSTRAINT "fk_result_heat_id" FOREIGN KEY ("heat_id") REFERENCES "heat" ("id"); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================================
+-- 상장(Certificate) 시스템 — 양식 저장 + 발행 로그
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "certificate_template" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "competition_id" BIGINT,
+    "name" TEXT NOT NULL,
+    "kind" TEXT NOT NULL DEFAULT 'award',
+    "title_text" TEXT NOT NULL DEFAULT '상  장',
+    "body_template" TEXT NOT NULL,
+    "rank_label_style" TEXT NOT NULL DEFAULT 'ordinal',
+    "signer_org" TEXT NOT NULL DEFAULT '',
+    "signer_title" TEXT NOT NULL DEFAULT '회장',
+    "signer_name" TEXT NOT NULL DEFAULT '',
+    "logo_left_path" TEXT NOT NULL DEFAULT '',
+    "logo_right_path" TEXT NOT NULL DEFAULT '',
+    "seal_image_path" TEXT NOT NULL DEFAULT '',
+    "paper_orientation" TEXT NOT NULL DEFAULT 'portrait',
+    "show_record_value" BIGINT NOT NULL DEFAULT 1,
+    "show_athlete_team" BIGINT NOT NULL DEFAULT 1,
+    "show_date" BIGINT NOT NULL DEFAULT 1,
+    "background_color" TEXT NOT NULL DEFAULT '#fffdf6',
+    "border_style" TEXT NOT NULL DEFAULT 'double-gold',
+    "font_family" TEXT NOT NULL DEFAULT 'NanumSquare',
+    "is_default" BIGINT NOT NULL DEFAULT 0,
+    "sort_order" BIGINT NOT NULL DEFAULT 0,
+    "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "updated_at" TEXT NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "certificate_issue_log" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "competition_id" BIGINT NOT NULL,
+    "template_id" BIGINT NOT NULL,
+    "event_id" BIGINT,
+    "athlete_id" BIGINT NOT NULL,
+    "rank_value" BIGINT,
+    "record_value" TEXT NOT NULL DEFAULT '',
+    "issued_at" TEXT NOT NULL DEFAULT NOW(),
+    "issued_by" TEXT NOT NULL DEFAULT '',
+    "note" TEXT NOT NULL DEFAULT ''
+);
+
+-- ============================================================
+-- 문자(SMS) 시스템 — Aligo + Simulation
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "sms_config" (
+    "id" BIGINT PRIMARY KEY CHECK (id = 1),
+    "provider" TEXT NOT NULL DEFAULT 'aligo',
+    "api_key" TEXT NOT NULL DEFAULT '',
+    "user_id" TEXT NOT NULL DEFAULT '',
+    "sender_number" TEXT NOT NULL DEFAULT '',
+    "sender_name" TEXT NOT NULL DEFAULT '',
+    "sim_mode" BIGINT NOT NULL DEFAULT 1,
+    "default_template" TEXT NOT NULL DEFAULT '안녕하세요 {athlete_name}님,
+{competition_name} {event_name} 결과:
+{rank_label} {record_value}
+상장 다운로드: {cert_url}',
+    "monthly_quota" BIGINT NOT NULL DEFAULT 0,
+    "sent_this_month" BIGINT NOT NULL DEFAULT 0,
+    "last_reset_month" TEXT NOT NULL DEFAULT '',
+    "updated_at" TEXT NOT NULL DEFAULT NOW()
+);
+INSERT INTO "sms_config" (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS "sms_log" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "competition_id" BIGINT,
+    "athlete_id" BIGINT,
+    "phone_number" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "provider" TEXT NOT NULL DEFAULT 'aligo',
+    "provider_msg_id" TEXT NOT NULL DEFAULT '',
+    "error_message" TEXT NOT NULL DEFAULT '',
+    "cost" BIGINT NOT NULL DEFAULT 0,
+    "sent_at" TEXT NOT NULL DEFAULT NOW(),
+    "triggered_by" TEXT NOT NULL DEFAULT ''
+);
+
+-- ============================================================
 -- Indexes
 -- ============================================================
 
+CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue_log(competition_id, issued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_athlete_comp_bib ON athlete(competition_id, bib_number);
 CREATE INDEX IF NOT EXISTS idx_athlete_comp_name ON athlete(competition_id, name);
 CREATE INDEX IF NOT EXISTS idx_athlete_competition ON athlete(competition_id);

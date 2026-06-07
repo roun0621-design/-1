@@ -127,6 +127,59 @@
         }
         /* ⚠️ result-panel 내부 표 폭·overflow 규칙은 styles.css 에서 통합 관리.
            여기서 width:100% 를 덮어쓰면 6차 시도/BEST 컬럼이 잘리고도 스크롤이 트리거되지 않음. */
+
+        /* ── 모바일: 종목 매트릭스 표를 "세로 카드"로 재배치 ───────────────
+           좁은 화면에서 가로로 늘어선 칸(종목|예선|준결승|결승)이 화면을 넘어
+           가로 스크롤되는 문제 해결. 640px 초과(PC/태블릿)는 기존 표 그대로 유지.
+           각 종목 행 → 카드, 각 라운드 칸 → "라벨 : 버튼" 한 줄(data-label 사용). */
+        @media (max-width:640px) {
+            /* 세로로 흐르므로 가로 스크롤·헤더 불필요 */
+            .matrix-scroll-wrap { overflow-x:visible; }
+            .matrix-table { display:block; width:100%; min-width:0; box-shadow:none; background:transparent; }
+            .matrix-table thead { display:none; }
+            .matrix-table tbody { display:block; }
+            .matrix-table tr {
+                display:block;
+                background:var(--white);
+                border:1px solid #e8e8e8;
+                border-radius:10px;
+                box-shadow:0 1px 4px rgba(0,0,0,.06);
+                margin-bottom:10px;
+                padding:6px 12px;
+                overflow:hidden;
+            }
+            .matrix-table td {
+                display:flex;
+                align-items:center;
+                justify-content:space-between;
+                gap:10px;
+                padding:7px 0;
+                border-bottom:1px solid #f2f2f2;
+                white-space:normal;       /* 자연 줄바꿈 허용 */
+                text-align:right;
+            }
+            .matrix-table tr td:last-child { border-bottom:none; }
+            /* 라운드/명단 칸 앞에 라벨 표시 */
+            .matrix-table td::before {
+                content:attr(data-label);
+                font-size:12px;
+                font-weight:700;
+                color:var(--text-muted);
+                text-align:left;
+                flex-shrink:0;
+            }
+            /* 종목명 칸 = 카드 헤더(라벨 없이 전체폭, 왼쪽 정렬) */
+            .matrix-table td.event-name {
+                display:block;
+                text-align:left;
+                font-size:15px;
+                white-space:normal;
+                padding:6px 0 9px;
+                border-bottom:2px solid #eee;
+                margin-bottom:2px;
+            }
+            .matrix-table td.event-name::before { content:none; }
+        }
     </style>
 </head>
 <body class="dashboard-mode">
@@ -202,6 +255,6 @@
 
 
     <script src="common.js?v=77"></script>
-    <script src="dashboard.js?v=78"></script>
+    <script src="dashboard.js?v=79"></script>
 </body>
 </html>

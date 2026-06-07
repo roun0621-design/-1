@@ -1206,6 +1206,86 @@ if (db.isAsync) {
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_record_breaking_status ON record_breaking_log(status, detected_at)`); } catch(e) {}
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_record_breaking_comp ON record_breaking_log(competition_id, status)`); } catch(e) {}
             console.log('[DB Migration v4 PG] records management tables ready');
+
+            // ============================================================
+            // 상장(Certificate) + 문자(SMS) 시스템 — PG 멱등 생성
+            // (SQLite 부트 블록 server.js:467~545 의 PG 포팅. schema.pg.sql 누락 대비)
+            // ============================================================
+            try { await db.run(`CREATE TABLE IF NOT EXISTS certificate_template (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                competition_id BIGINT,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'award',
+                title_text TEXT NOT NULL DEFAULT '상  장',
+                body_template TEXT NOT NULL,
+                rank_label_style TEXT NOT NULL DEFAULT 'ordinal',
+                signer_org TEXT NOT NULL DEFAULT '',
+                signer_title TEXT NOT NULL DEFAULT '회장',
+                signer_name TEXT NOT NULL DEFAULT '',
+                logo_left_path TEXT NOT NULL DEFAULT '',
+                logo_right_path TEXT NOT NULL DEFAULT '',
+                seal_image_path TEXT NOT NULL DEFAULT '',
+                paper_orientation TEXT NOT NULL DEFAULT 'portrait',
+                show_record_value BIGINT NOT NULL DEFAULT 1,
+                show_athlete_team BIGINT NOT NULL DEFAULT 1,
+                show_date BIGINT NOT NULL DEFAULT 1,
+                background_color TEXT NOT NULL DEFAULT '#fffdf6',
+                border_style TEXT NOT NULL DEFAULT 'double-gold',
+                font_family TEXT NOT NULL DEFAULT 'NanumSquare',
+                is_default BIGINT NOT NULL DEFAULT 0,
+                sort_order BIGINT NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT NOW(),
+                updated_at TEXT NOT NULL DEFAULT NOW()
+            )`); } catch(e) { console.error('[PG migration] certificate_template error:', e.message); }
+
+            try { await db.run(`CREATE TABLE IF NOT EXISTS certificate_issue_log (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                competition_id BIGINT NOT NULL,
+                template_id BIGINT NOT NULL,
+                event_id BIGINT,
+                athlete_id BIGINT NOT NULL,
+                rank_value BIGINT,
+                record_value TEXT NOT NULL DEFAULT '',
+                issued_at TEXT NOT NULL DEFAULT NOW(),
+                issued_by TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            )`); } catch(e) { console.error('[PG migration] certificate_issue_log error:', e.message); }
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue_log(competition_id, issued_at DESC)`); } catch(e) {}
+
+            try { await db.run(`CREATE TABLE IF NOT EXISTS sms_config (
+                id BIGINT PRIMARY KEY CHECK (id = 1),
+                provider TEXT NOT NULL DEFAULT 'aligo',
+                api_key TEXT NOT NULL DEFAULT '',
+                user_id TEXT NOT NULL DEFAULT '',
+                sender_number TEXT NOT NULL DEFAULT '',
+                sender_name TEXT NOT NULL DEFAULT '',
+                sim_mode BIGINT NOT NULL DEFAULT 1,
+                default_template TEXT NOT NULL DEFAULT '안녕하세요 {athlete_name}님,\n{competition_name} {event_name} 결과:\n{rank_label} {record_value}\n상장 다운로드: {cert_url}',
+                monthly_quota BIGINT NOT NULL DEFAULT 0,
+                sent_this_month BIGINT NOT NULL DEFAULT 0,
+                last_reset_month TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT NOW()
+            )`); } catch(e) { console.error('[PG migration] sms_config error:', e.message); }
+            // 단일 row 보장
+            try { await db.run(`INSERT INTO sms_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`); } catch(e) {}
+
+            try { await db.run(`CREATE TABLE IF NOT EXISTS sms_log (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                competition_id BIGINT,
+                athlete_id BIGINT,
+                phone_number TEXT NOT NULL,
+                message TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                provider TEXT NOT NULL DEFAULT 'aligo',
+                provider_msg_id TEXT NOT NULL DEFAULT '',
+                error_message TEXT NOT NULL DEFAULT '',
+                cost BIGINT NOT NULL DEFAULT 0,
+                sent_at TEXT NOT NULL DEFAULT NOW(),
+                triggered_by TEXT NOT NULL DEFAULT ''
+            )`); } catch(e) { console.error('[PG migration] sms_log error:', e.message); }
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC)`); } catch(e) {}
+            console.log('[DB Migration v4 PG] certificate/sms tables ready');
         } catch (e) {
             console.error('[DB Migration v4 PG] error:', e.message);
         }
@@ -1247,10 +1327,11 @@ if (db.isAsync) {
             await pgIdempotentAddCol('competition', 'federation', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'division_type', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'video_url', `TEXT DEFAULT ''`);
-            // athlete: federation, personal_best, date_of_birth
+            // athlete: federation, personal_best, date_of_birth, phone(SMS 발송용)
             await pgIdempotentAddCol('athlete', 'federation', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'personal_best', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'date_of_birth', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('athlete', 'phone', `TEXT NOT NULL DEFAULT ''`);
             // qualification_selection: qualification_type
             await pgIdempotentAddCol('qualification_selection', 'qualification_type', `TEXT DEFAULT ''`);
             // record_breaking_log: wind
