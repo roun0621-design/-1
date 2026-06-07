@@ -345,6 +345,13 @@
         .cert-evt-g-F { background:#8b1a2a; }
         .cert-evt-g-X { background:#b79f58; }
         .cert-evt-name { font-weight:600; }
+        .cert-rounds { display:inline-flex; gap:4px; margin-left:auto; flex-shrink:0; }
+        .cert-round-chip {
+            font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; cursor:pointer;
+            border:1px solid #ccc; color:#777; background:#fff; user-select:none; transition:all .12s;
+        }
+        .cert-round-chip:hover { border-color:#b79f58; color:#8a7640; }
+        .cert-round-chip.active { background:#b79f58; border-color:#b79f58; color:#fff; }
         .cert-evt-selinfo {
             margin-top:8px; padding-top:7px; border-top:1px dashed #ddd;
             font-size:12px; color:#555;
@@ -2217,7 +2224,7 @@ POST /api/external/event-result-link/batch<br>
                             대회를 선택하면 종목이 표시됩니다.
                         </div>
                         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
-                            <button class="btn btn-xs btn-outline" onclick="certSelectAllEvents(true)">전체 선택</button>
+                            <button class="btn btn-xs btn-outline" onclick="certSelectAllEvents(true)">결승 전체선택</button>
                             <button class="btn btn-xs btn-outline" onclick="certSelectAllEvents(false)">전체 해제</button>
                             <button class="btn btn-xs btn-outline" onclick="loadCertEvents()">목록 새로고침</button>
                         </div>
@@ -9974,6 +9981,50 @@ POST /api/external/event-result-link/batch<br>
         ];
         function _certTypeOf(cat) { const d = CERT_TYPE_DEFS.find(t => t.match(cat)); return d ? d.key : 'track'; }
         function _certTypeLabel(key) { const d = CERT_TYPE_DEFS.find(t => t.key === key); return d ? d.label : key; }
+        // 라운드 표기
+        function _certRoundLabel(rt) { return { preliminary: '예선', semifinal: '준결승', final: '결승' }[rt] || (rt || '결승'); }
+        function _certRoundRank(rt) { return { preliminary: 0, semifinal: 1, final: 2 }[rt] != null ? { preliminary: 0, semifinal: 1, final: 2 }[rt] : 3; }
+        // WA 표준 종목 정렬 (대시보드 dashboard.js 와 동일 규칙)
+        const CERT_EVENT_SORT_ORDER = [
+            '60m','100m','200m','400m','800m','1500m','3000m','5000m','10000m',
+            '60mH','100mH','110mH','400mH','2000mSC','3000mSC',
+            '3000mW','5000mW','10000mW','10kmW','20kmW','35kmW','50kmW',
+            '하프마라톤','마라톤','높이뛰기','장대높이뛰기','멀리뛰기','세단뛰기',
+            '포환던지기','원반던지기','해머던지기','창던지기','5종경기','7종경기','10종경기',
+            '4x100mR','4x400mR','4x400mR(혼성)','4x400mR(믹스)','4x800mR','4x1500mR'
+        ];
+        function _certNormEv(s) {
+            if (!s) return '';
+            let t = String(s).trim().toLowerCase().replace(/[\s　,]/g,'').replace(/[×✕✖＊*]/g,'x');
+            t = t.replace(/(\d+)x(\d+)m?릴레이/g, '$1x$2mr').replace(/(\d+)x(\d+)r(?![a-z0-9])/g, '$1x$2mr');
+            t = t.replace(/mixed/g, '혼성').replace(/\(mix\)/g, '(혼성)').replace(/혼성(\d+x\d+mr)/g, '$1(혼성)');
+            t = t.replace(/(\d+)\s*km\s*(?:경보|w)\b/gi, '$1kmw').replace(/(\d+)\s*m\s*(?:경보|w)\b/gi, '$1mw');
+            t = t.replace(/(\d+)m?허들/g, '$1mh').replace(/허들/g, 'h');
+            t = t.replace(/(\d+)m?장애물/g, '$1msc').replace(/장애물/g, 'sc');
+            t = t.replace(/하프\s*마라톤|halfmarathon/g, '하프마라톤').replace(/marathon/g, '마라톤');
+            return t;
+        }
+        function _certEvSortIdx(name) {
+            const target = _certNormEv(name);
+            if (!target) return 999;
+            for (let i = 0; i < CERT_EVENT_SORT_ORDER.length; i++) { if (_certNormEv(CERT_EVENT_SORT_ORDER[i]) === target) return i; }
+            const patterns = [
+                { re: /^(\d+)mw$/, probe: m => `${m[1]}mw` },
+                { re: /^(\d+)kmw$/, probe: m => `${m[1]}kmw` },
+                { re: /^(\d+)mh$/, probe: m => `${m[1]}mh` },
+                { re: /^(\d+)msc$/, probe: m => `${m[1]}msc` },
+                { re: /^(\d+)x(\d+)mr(\(혼성\))?$/, probe: m => `${m[1]}x${m[2]}mr${m[3]||''}` },
+                { re: /^(\d+)m$/, probe: m => `${m[1]}m` },
+            ];
+            for (const p of patterns) {
+                const mt = target.match(p.re); if (!mt) continue;
+                const probe = p.probe(mt);
+                for (let i = 0; i < CERT_EVENT_SORT_ORDER.length; i++) { if (_certNormEv(CERT_EVENT_SORT_ORDER[i]) === probe) return i; }
+            }
+            return 999;
+        }
+        function _certGenderRank(g) { return g === 'M' ? 0 : g === 'F' ? 1 : g === 'X' ? 2 : 3; }
+        let _certRenderedGroups = [];   // 현재 필터로 화면에 보이는 종목 그룹
 
         async function loadCertTemplates() {
             try {
@@ -10063,20 +10114,29 @@ POST /api/external/event-result-link/batch<br>
             }
         }
 
-        // 현재 화면(필터된)에 보이는 체크박스 상태를 선택 Set 에 반영 (숨겨진 선택은 유지)
-        function _certSyncSel() {
-            document.querySelectorAll('#cert-event-list .cert-event-cb').forEach(cb => {
-                if (cb.checked) _certSelectedIds.add(cb.value); else _certSelectedIds.delete(cb.value);
+        // 종목(이름+성별+부) 단위로 묶고 라운드를 모음
+        function _certBuildGroups() {
+            const map = {};
+            _certEvents.forEach(e => {
+                const key = e.name + '|' + e.gender + '|' + (e.division || '');
+                if (!map[key]) map[key] = { key, name: e.name, gender: e.gender, division: e.division || '', category: e.category, rounds: [] };
+                map[key].rounds.push({ id: String(e.id), round_type: e.round_type });
+            });
+            return Object.values(map).map(g => {
+                g.rounds.sort((a, b) => _certRoundRank(a.round_type) - _certRoundRank(b.round_type));
+                // 대표 라운드(결승>준결승>예선) — '전체 선택' 시 기본 선택 대상
+                g.primaryId = g.rounds.length ? g.rounds[g.rounds.length - 1].id : null;
+                return g;
             });
         }
-        function setCertGenderFilter(g) { _certSyncSel(); _certGenderFilter = g; renderCertEventUI(); }
-        function setCertTypeFilter(t) { _certSyncSel(); _certTypeFilter = t; renderCertEventUI(); }
+
+        function setCertGenderFilter(g) { _certGenderFilter = g; renderCertEventUI(); }
+        function setCertTypeFilter(t) { _certTypeFilter = t; renderCertEventUI(); }
 
         function renderCertEventUI() {
             const root = document.getElementById('cert-event-list');
             if (!root) return;
             if (!_certEvents.length) { root.innerHTML = '<span class="t-muted">종목이 없습니다.</span>'; return; }
-            _certSyncSel();
 
             const gLabel = { ALL: '전체', M: '남자', F: '여자', X: '혼성' };
             const genders = ['ALL', ...['M', 'F', 'X'].filter(g => _certEvents.some(e => e.gender === g))];
@@ -10088,41 +10148,61 @@ POST /api/external/event-result-link/batch<br>
             html += '<div class="cert-filter-row">' +
                 types.map(t => fbtn(_certTypeFilter === t, t === 'ALL' ? '전체' : _certTypeLabel(t), `setCertTypeFilter('${t}')`)).join('') + '</div>';
 
-            const filtered = _certEvents.filter(e =>
-                (_certGenderFilter === 'ALL' || e.gender === _certGenderFilter) &&
-                (_certTypeFilter === 'ALL' || _certTypeOf(e.category) === _certTypeFilter));
+            // 종목 그룹 → 필터 → WA 정렬(종목순 → 성별 M<F<X → 부별)
+            let groups = _certBuildGroups().filter(g =>
+                (_certGenderFilter === 'ALL' || g.gender === _certGenderFilter) &&
+                (_certTypeFilter === 'ALL' || _certTypeOf(g.category) === _certTypeFilter));
+            groups.sort((a, b) =>
+                _certEvSortIdx(a.name) - _certEvSortIdx(b.name) ||
+                _certGenderRank(a.gender) - _certGenderRank(b.gender) ||
+                (a.division || '').localeCompare(b.division || '') ||
+                a.name.localeCompare(b.name));
+            _certRenderedGroups = groups;
 
-            if (!filtered.length) {
+            if (!groups.length) {
                 root.innerHTML = html + '<div class="t-muted" style="padding:10px 2px;">해당 조건의 종목이 없습니다.</div>';
                 return;
             }
 
-            const groups = {};
-            filtered.forEach(e => { const k = _certTypeOf(e.category); (groups[k] = groups[k] || []).push(e); });
+            const byType = {};
+            groups.forEach(g => { const k = _certTypeOf(g.category); (byType[k] = byType[k] || []).push(g); });
             html += '<div class="cert-evt-list">';
             CERT_TYPE_DEFS.forEach(def => {
-                const list = groups[def.key];
+                const list = byType[def.key];
                 if (!list || !list.length) return;
                 html += `<div class="cert-evt-group-title">${def.label} <span class="t-muted t-xs">(${list.length})</span></div>`;
-                html += list.map(e => `
-                    <label class="cert-evt-item">
-                        <input type="checkbox" class="cert-event-cb" value="${e.id}" data-name="${_esc(e.name)}" ${_certSelectedIds.has(String(e.id)) ? 'checked' : ''}>
-                        <span class="cert-evt-g cert-evt-g-${e.gender}">${e.gender === 'M' ? '남' : e.gender === 'F' ? '여' : '혼'}</span>
-                        <span class="cert-evt-name">${_esc(e.name)}</span>
-                        <span class="t-muted t-xs">${e.round_type || ''}</span>
-                    </label>`).join('');
+                html += list.map(g => {
+                    const gtxt = g.gender === 'M' ? '남' : g.gender === 'F' ? '여' : '혼';
+                    const div = g.division ? `<span class="t-muted t-xs">${_esc(g.division)}</span>` : '';
+                    const chips = g.rounds.map(r =>
+                        `<span class="cert-round-chip${_certSelectedIds.has(r.id) ? ' active' : ''}" onclick="toggleCertRound('${r.id}')">${_certRoundLabel(r.round_type)}</span>`
+                    ).join('');
+                    return `<div class="cert-evt-item">
+                        <span class="cert-evt-g cert-evt-g-${g.gender}">${gtxt}</span>
+                        <span class="cert-evt-name">${_esc(g.name)}</span>${div}
+                        <span class="cert-rounds">${chips}</span>
+                    </div>`;
+                }).join('');
             });
             html += '</div>';
 
             const selCount = _certSelectedIds.size;
-            html += `<div class="cert-evt-selinfo">선택 <b>${selCount}</b>종목${selCount === 0 ? ' (미선택 시 대회 전체 결승)' : ''}</div>`;
+            html += `<div class="cert-evt-selinfo">선택 <b>${selCount}</b>개 라운드${selCount === 0 ? ' (미선택 시 대회 전체 결승)' : ''}</div>`;
             root.innerHTML = html;
         }
 
-        // 현재 필터에 보이는 종목만 전체선택/해제
+        // 라운드 칩 토글 (선택/해제)
+        function toggleCertRound(id) {
+            if (_certSelectedIds.has(id)) _certSelectedIds.delete(id); else _certSelectedIds.add(id);
+            renderCertEventUI();
+        }
+
+        // 현재 필터에 보이는 종목의 결승(대표 라운드)을 일괄 선택/해제
         function certSelectAllEvents(on) {
-            document.querySelectorAll('#cert-event-list .cert-event-cb').forEach(cb => cb.checked = !!on);
-            _certSyncSel();
+            _certRenderedGroups.forEach(g => {
+                if (on) { if (g.primaryId) _certSelectedIds.add(g.primaryId); }
+                else { g.rounds.forEach(r => _certSelectedIds.delete(r.id)); }
+            });
             renderCertEventUI();
         }
 
@@ -10135,7 +10215,6 @@ POST /api/external/event-result-link/batch<br>
             const rankFrom = parseInt(document.getElementById('cert-rank-from').value || 1, 10);
             const rankTo = parseInt(document.getElementById('cert-rank-to').value || 3, 10);
             const includeFinishers = document.getElementById('cert-include-finishers').checked;
-            _certSyncSel();
             const selectedIds = Array.from(_certSelectedIds).map(v => parseInt(v, 10));
 
             const status = document.getElementById('cert-gen-status');
