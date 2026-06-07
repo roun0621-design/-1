@@ -128,57 +128,59 @@
         /* ⚠️ result-panel 내부 표 폭·overflow 규칙은 styles.css 에서 통합 관리.
            여기서 width:100% 를 덮어쓰면 6차 시도/BEST 컬럼이 잘리고도 스크롤이 트리거되지 않음. */
 
-        /* ── 모바일: 종목 매트릭스 표를 "세로 카드"로 재배치 ───────────────
-           좁은 화면에서 가로로 늘어선 칸(종목|예선|준결승|결승)이 화면을 넘어
-           가로 스크롤되는 문제 해결. 640px 초과(PC/태블릿)는 기존 표 그대로 유지.
-           각 종목 행 → 카드, 각 라운드 칸 → "라벨 : 버튼" 한 줄(data-label 사용). */
+        /* ── 모바일: 종목 매트릭스 표를 "컴팩트 카드"로 재배치 ───────────────
+           좁은 화면에서 가로로 넘쳐 옆스크롤되던 문제 해결. 단, 카드가 너무
+           길어 무한스크롤이 되지 않도록 종목당 ~2줄로 압축:
+             1줄 = 종목명 + 시간/부 (헤더)
+             2줄 = 예선/준결승/결승(+영상/명단) 버튼을 한 줄에 나란히
+           640px 초과(PC/태블릿)는 기존 표 그대로 유지. */
         @media (max-width:640px) {
-            /* 세로로 흐르므로 가로 스크롤·헤더 불필요 */
             .matrix-scroll-wrap { overflow-x:visible; }
             .matrix-table { display:block; width:100%; min-width:0; box-shadow:none; background:transparent; }
             .matrix-table thead { display:none; }
             .matrix-table tbody { display:block; }
+            /* 행 = 카드. flex-wrap 로 헤더(전체폭) 아래에 버튼들이 한 줄로 흐름 */
             .matrix-table tr {
-                display:block;
+                display:flex;
+                flex-wrap:wrap;
+                align-items:center;
+                gap:6px 8px;
                 background:var(--white);
                 border:1px solid #e8e8e8;
                 border-radius:10px;
-                box-shadow:0 1px 4px rgba(0,0,0,.06);
-                margin-bottom:10px;
-                padding:6px 12px;
-                overflow:hidden;
+                box-shadow:0 1px 3px rgba(0,0,0,.05);
+                margin-bottom:7px;
+                padding:8px 12px;
             }
-            .matrix-table td {
-                display:flex;
-                align-items:center;
-                justify-content:space-between;
-                gap:10px;
-                padding:7px 0;
-                border-bottom:1px solid #f2f2f2;
-                white-space:normal;       /* 자연 줄바꿈 허용 */
-                text-align:right;
-            }
-            .matrix-table tr td:last-child { border-bottom:none; }
-            /* 라운드/명단 칸 앞에 라벨 표시 */
-            .matrix-table td::before {
-                content:attr(data-label);
-                font-size:12px;
-                font-weight:700;
-                color:var(--text-muted);
-                text-align:left;
-                flex-shrink:0;
-            }
-            /* 종목명 칸 = 카드 헤더(라벨 없이 전체폭, 왼쪽 정렬) */
+            /* 종목명 = 헤더 한 줄(전체폭) */
             .matrix-table td.event-name {
-                display:block;
+                flex:0 0 100%;
                 text-align:left;
-                font-size:15px;
+                font-size:14px;
+                font-weight:700;
                 white-space:normal;
-                padding:6px 0 9px;
-                border-bottom:2px solid #eee;
-                margin-bottom:2px;
+                padding:0 0 5px;
+                border-bottom:1px solid #f0f0f0;
             }
             .matrix-table td.event-name::before { content:none; }
+            /* 라운드/영상/명단 = 작은 칩(라벨 위, 버튼 아래) 한 줄 나열 */
+            .matrix-table td {
+                display:inline-flex;
+                flex-direction:column;
+                align-items:center;
+                gap:2px;
+                padding:2px 0;
+                border:none;
+                white-space:nowrap;
+            }
+            .matrix-table td::before {
+                content:attr(data-label);
+                font-size:9px;
+                font-weight:700;
+                color:var(--text-muted);
+                letter-spacing:0.2px;
+            }
+            .matrix-table td .round-btn { font-size:11px; padding:4px 8px; }
         }
     </style>
 </head>
