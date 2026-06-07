@@ -567,7 +567,7 @@ function renderCategoryTable(groups, label, isLive) {
         <table class="matrix-table">
             <thead><tr>
                 <th style="text-align:left;">종목</th>
-                ${_isDisplayMode ? '<th style="width:60px;">명단</th>' : '<th style="width:52px;">W/L</th>'}
+                ${_isDisplayMode ? '<th style="width:64px;">영상</th><th style="width:60px;">명단</th>' : '<th style="width:52px;">W/L</th>'}
                 <th style="width:72px;"><span style="color:#1565c0;">예선</span></th>
                 <th style="width:72px;"><span style="color:#e65100;">준결승</span></th>
                 <th style="width:72px;"><span style="color:#b71c1c;">결승</span></th>
@@ -587,6 +587,18 @@ function renderCategoryTable(groups, label, isLive) {
         const pacingCfg = _pacingMap[g.name + ' (' + _gLabel + ')'] || _pacingMap[g.name];
         const _pacingKey = pacingCfg ? pacingCfg.event_name : g.name;
         const wlCell = pacingCfg ? `<span class="round-btn" style="background:#f0f9ff;color:#6b6b6b;border:1px solid #c0c0c0;cursor:pointer;font-size:9px;padding:3px 6px;white-space:nowrap;" onclick="openPacingPopup('${_pacingKey.replace(/'/g, "\\'")}')">Target</span>` : '';
+
+        // Display mode: video button (종목당 1개, 결승 > 준결승 > 예선 우선순위)
+        let videoCell = '';
+        if (_isDisplayMode) {
+            const vidEvt = [fin, semi, prelim].find(r => r && r.video_url && String(r.video_url).trim());
+            if (vidEvt) {
+                const _vName = (g.name || '').replace(/'/g, "\\'");
+                videoCell = `<span class="round-btn" style="background:#f3e8ff;color:#7c3aed;border:1px solid #d8b4fe;cursor:pointer;font-size:10px;padding:3px 6px;font-weight:700;white-space:nowrap;" onclick="openEventVideoModal(${vidEvt.id},'${_vName}')">▶ 영상</span>`;
+            } else {
+                videoCell = '<span class="round-btn btn-disabled" style="font-size:10px;">—</span>';
+            }
+        }
 
         // Display mode: roster button + external link buttons
         let rosterCell = '';
@@ -642,6 +654,7 @@ function renderCategoryTable(groups, label, isLive) {
 
         html += `<tr data-row-gender="${_rowGender}">
             <td class="event-name">${genderBadge}${g.name}${divBadge}${timeBadge}</td>
+            ${_isDisplayMode ? `<td>${videoCell}</td>` : ''}
             <td>${_isDisplayMode ? rosterCell : wlCell}</td>
             <td>${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>
             <td>${_isDisplayMode ? renderDisplayBtn(semi) : renderViewerBtn(semi)}</td>
@@ -800,6 +813,25 @@ async function openDisplayRoster(eventId, eventName, division) {
         <h3>${eventName} ${gLabel}${divLabel} — 참가선수 명단</h3>
         <button class="result-panel-close" onclick="closeResult()">&times;</button>
     </div><div class="result-panel-body">${bodyHtml}</div>`;
+    overlay.classList.add('show');
+    if (window.pushModalState) pushModalState(() => closeResult());
+}
+
+// ============================================================
+// Event video modal (노출 모드 — 종목별 영상 보기)
+// ============================================================
+async function openEventVideoModal(eventId, title) {
+    const overlay = document.getElementById('result-overlay');
+    const panel = document.getElementById('result-panel');
+    if (!overlay || !panel) return;
+    let videoUrl = '';
+    try { const vr = await API.getEventVideoUrl(eventId); videoUrl = vr.video_url || ''; } catch (e) {}
+    const embed = buildEmbedVideoHTML(videoUrl);
+    const body = embed || '<div style="text-align:center;padding:30px;color:#888;">등록된 영상이 없습니다.</div>';
+    panel.innerHTML = `<div class="result-panel-header">
+        <h3>${title} — 영상</h3>
+        <button class="result-panel-close" onclick="closeResult()">&times;</button>
+    </div><div class="result-panel-body">${body}</div>`;
     overlay.classList.add('show');
     if (window.pushModalState) pushModalState(() => closeResult());
 }
