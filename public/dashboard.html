@@ -139,51 +139,56 @@
             .matrix-table { display:block; width:100%; min-width:0; box-shadow:none; background:transparent; }
             .matrix-table thead { display:none; }
             .matrix-table tbody { display:block; }
-            /* 행 = 카드. flex-wrap 로 헤더(전체폭) 아래에 버튼들이 한 줄로 흐름 */
+            /* 행 = 카드. 헤더(전체폭) 아래에 라운드 칸들이 균등폭으로 한 줄 */
             .matrix-table tr {
                 display:flex;
                 flex-wrap:wrap;
-                align-items:center;
-                gap:6px 8px;
+                align-items:stretch;
+                gap:8px 4px;
                 background:var(--white);
                 border:1px solid #e8e8e8;
-                border-radius:10px;
+                border-radius:12px;
                 box-shadow:0 1px 3px rgba(0,0,0,.05);
-                margin-bottom:7px;
-                padding:8px 12px;
+                margin-bottom:8px;
+                padding:10px;
             }
-            /* 종목명 = 헤더(전체폭). display:block 로 배지들이 가로로 흐르게
-               (일반 td 의 inline-flex column 을 반드시 덮어써야 세로쌓임 방지) */
+            /* 종목명 = 헤더(전체폭, 가운데 정렬). display:block 로 배지들이 가로로 흐름
+               (일반 td 의 flex column 을 반드시 덮어써야 세로쌓임 방지) */
             .matrix-table td.event-name {
                 display:block;
                 flex:0 0 100%;
-                text-align:left;
-                font-size:14px;
+                text-align:center;
+                font-size:15px;
                 font-weight:700;
                 white-space:normal;
-                padding:0 0 5px;
+                padding:0 0 7px;
+                margin-bottom:1px;
                 border-bottom:1px solid #f0f0f0;
                 line-height:1.5;
             }
             .matrix-table td.event-name::before { content:none; }
-            /* 라운드/영상/명단 = 작은 칩(라벨 위, 버튼 아래) 한 줄 나열 */
+            /* 라운드/영상/명단 = 동일폭(flex:1) 컬럼, 라벨 위·버튼 아래, 가운데 정렬
+               → 빈 공간 없이 꽉 차고 표처럼 정렬돼 가독성↑ */
             .matrix-table td {
-                display:inline-flex;
+                flex:1;
+                min-width:0;
+                display:flex;
                 flex-direction:column;
                 align-items:center;
-                gap:2px;
-                padding:2px 0;
+                justify-content:flex-end;
+                gap:4px;
+                padding:0;
                 border:none;
                 white-space:nowrap;
             }
             .matrix-table td::before {
                 content:attr(data-label);
-                font-size:9px;
+                font-size:10px;
                 font-weight:700;
                 color:var(--text-muted);
                 letter-spacing:0.2px;
             }
-            .matrix-table td .round-btn { font-size:11px; padding:4px 8px; }
+            .matrix-table td .round-btn { font-size:12px; padding:5px 6px; }
         }
     </style>
 </head>
