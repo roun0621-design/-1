@@ -10004,7 +10004,7 @@ POST /api/external/event-result-link/batch<br>
                 return;
             }
             try {
-                const res = await fetch(`/api/competitions/${_selectedCompId}/events`);
+                const res = await fetch(`/api/events?competition_id=${_selectedCompId}`);
                 const data = await res.json();
                 const events = (data.events || data || []).filter(e => !e.parent_event_id);
                 _certEvents = events;
@@ -10420,7 +10420,7 @@ POST /api/external/event-result-link/batch<br>
             if (!root) return;
             if (!_selectedCompId) { root.innerHTML = '<span class="t-muted">대회를 먼저 선택하세요.</span>'; return; }
             try {
-                const res = await fetch(`/api/competitions/${_selectedCompId}/events`);
+                const res = await fetch(`/api/events?competition_id=${_selectedCompId}`);
                 const data = await res.json();
                 const events = (data.events || data || []).filter(e => !e.parent_event_id);
                 root.innerHTML = events.length === 0 ? '<span class="t-muted">종목이 없습니다.</span>' :
