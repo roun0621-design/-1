@@ -10107,6 +10107,8 @@ POST /api/external/event-result-link/batch<br>
                 const res = await fetch(`/api/events?competition_id=${_selectedCompId}`);
                 const data = await res.json();
                 _certEvents = (data.events || data || []).filter(e => !e.parent_event_id);
+                // 기본값: 각 종목의 결승을 자동 선택 (시상은 보통 결승 기준)
+                _certEvents.forEach(e => { if (e.round_type === 'final') _certSelectedIds.add(String(e.id)); });
                 renderCertEventUI();
             } catch (e) {
                 console.error('[cert] events load:', e);
