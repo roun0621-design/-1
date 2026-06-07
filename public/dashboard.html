@@ -188,6 +188,10 @@
                 color:var(--text-muted);
                 letter-spacing:0.2px;
             }
+            /* 노출 모드: 버튼에 이미 라운드명(▶영상/명단/예선…)이 있어 라벨 중복
+               → 라벨 숨겨 카드 한 줄 더 낮춤. 일반(뷰어) 모드는 버튼이 상태(대기/
+               LIVE/결과)만 보여주므로 라벨 유지(어떤 라운드인지 식별 필요). */
+            .matrix-table.matrix-display td::before { content:none; }
             .matrix-table td .round-btn { font-size:12px; padding:5px 6px; }
         }
 
@@ -284,6 +288,6 @@
 
 
     <script src="common.js?v=77"></script>
-    <script src="dashboard.js?v=79"></script>
+    <script src="dashboard.js?v=80"></script>
 </body>
 </html>

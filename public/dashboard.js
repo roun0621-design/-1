@@ -564,7 +564,7 @@ function renderCategoryTable(groups, label, isLive) {
     let html = `<div class="matrix-section">
         <div class="matrix-section-title">${label}</div>
         <div class="matrix-scroll-wrap">
-        <table class="matrix-table">
+        <table class="matrix-table${_isDisplayMode ? ' matrix-display' : ''}">
             <thead><tr>
                 <th style="text-align:left;">종목</th>
                 ${_isDisplayMode ? '<th style="width:64px;">영상</th><th style="width:60px;">명단</th>' : '<th style="width:52px;">W/L</th>'}
