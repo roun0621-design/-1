@@ -152,8 +152,10 @@
                 margin-bottom:7px;
                 padding:8px 12px;
             }
-            /* 종목명 = 헤더 한 줄(전체폭) */
+            /* 종목명 = 헤더(전체폭). display:block 로 배지들이 가로로 흐르게
+               (일반 td 의 inline-flex column 을 반드시 덮어써야 세로쌓임 방지) */
             .matrix-table td.event-name {
+                display:block;
                 flex:0 0 100%;
                 text-align:left;
                 font-size:14px;
@@ -161,6 +163,7 @@
                 white-space:normal;
                 padding:0 0 5px;
                 border-bottom:1px solid #f0f0f0;
+                line-height:1.5;
             }
             .matrix-table td.event-name::before { content:none; }
             /* 라운드/영상/명단 = 작은 칩(라벨 위, 버튼 아래) 한 줄 나열 */
