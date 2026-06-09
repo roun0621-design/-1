@@ -1,5 +1,11 @@
 node_modules/
 .env
+.env.*
+# Firebase 서비스계정/비공개 키 — 절대 커밋 금지
+*firebase*adminsdk*.json
+firebase-sa.json
+*-service-account*.json
+secrets/
 db/competition.db
 db/competition.db-shm
 db/competition.db-wal
