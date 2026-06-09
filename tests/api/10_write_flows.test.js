@@ -42,6 +42,7 @@ describe('POST /api/qualifications/save', () => {
         const res = await request(app)
             .post('/api/qualifications/save')
             .send({ event_id: ev, selections: [{ event_entry_id: e1, selected: 1, qualification_type: 'Q' }] })
+            .set('x-admin-key', process.env.OPERATION_KEY)
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(200);
 
@@ -56,6 +57,7 @@ describe('POST /api/qualifications/save', () => {
         const e1 = await entryOf(c, ev, 1);
         const send = (sel) => request(app).post('/api/qualifications/save')
             .send({ event_id: ev, selections: [{ event_entry_id: e1, selected: sel, qualification_type: 'q' }] })
+            .set('x-admin-key', process.env.OPERATION_KEY)
             .set('Content-Type', 'application/json');
         await send(1);
         await send(0);

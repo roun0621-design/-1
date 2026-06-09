@@ -2502,6 +2502,8 @@ app.get('/api/heats/:id/entries', async (req, res) => {
 require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit, parseDbTimestampMs });
 // ============================================================
 app.post('/api/heats/:id/wind', async (req, res) => {
+    const _wkey = req.body.admin_key || req.headers['x-admin-key'] || '';
+    if (!isOperationKey(_wkey)) return res.status(403).json({ error: '인증 필요' });
     const { wind } = req.body;
     const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
@@ -2913,6 +2915,8 @@ async function syncCombinedSubEventCheckin(parentEventId, athleteId, status) {
 
 // Bulk sync: set all sub-event entries to match parent checked_in status
 app.post('/api/combined/sync-checkin', async (req, res) => {
+    const _sckey = req.body.admin_key || req.headers['x-admin-key'] || '';
+    if (!isOperationKey(_sckey)) return res.status(403).json({ error: '인증 필요' });
     const { event_id } = req.body;
     if (!event_id) return res.status(400).json({ error: 'event_id required' });
     const evt = await db.get('SELECT * FROM event WHERE id=?', event_id);
@@ -2935,32 +2939,9 @@ app.post('/api/combined/sync-checkin', async (req, res) => {
 });
 
 // ============================================================
-// QUALIFICATIONS
+// QUALIFICATIONS — lib/routes/qualifications.js 로 추출
 // ============================================================
-app.get('/api/qualifications', async (req, res) => {
-    if (!req.query.event_id) return res.status(400).json({ error: 'event_id required' });
-    res.json(await db.all(`SELECT qs.*, a.name, a.bib_number, a.team FROM qualification_selection qs
-        JOIN event_entry ee ON ee.id=qs.event_entry_id JOIN athlete a ON a.id=ee.athlete_id WHERE qs.event_id=?`, req.query.event_id));
-});
-app.post('/api/qualifications/save', async (req, res) => {
-    const { event_id, selections } = req.body;
-    if (!event_id || !selections) return res.status(400).json({ error: 'Missing fields' });
-    await db.transaction(async () => {
-        for (const s of selections) {
-            await db.run(`INSERT INTO qualification_selection (event_id,event_entry_id,selected,qualification_type) VALUES (?,?,?,?)
-                ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=excluded.selected, qualification_type=excluded.qualification_type, updated_at=${db.isAsync ? 'NOW()' : "datetime('now')"}`,
-                event_id, s.event_entry_id, s.selected ? 1 : 0, s.qualification_type || '');
-        }
-    })();
-    res.json({ success: true });
-});
-app.post('/api/qualifications/approve', async (req, res) => {
-    const { event_id } = req.body;
-    if (!event_id) return res.status(400).json({ error: 'event_id required' });
-    const _nowFQ = db.isAsync ? 'NOW()' : "datetime('now')";
-    await db.run(`UPDATE qualification_selection SET approved=1,approved_by='admin',updated_at=${_nowFQ} WHERE event_id=? AND selected=1`, event_id);
-    res.json({ success: true });
-});
+require('./lib/routes/qualifications')(app, { db, isOperationKey });
 
 // ============================================================
 // ROUND MANAGEMENT
@@ -3046,6 +3027,8 @@ app.post('/api/events/:id/callroom-complete', async (req, res) => {
     res.json({ success: true, dns_auto: dnsCount });
 });
 app.post('/api/events/:id/create-final', async (req, res) => {
+    const _cfkey = req.body.admin_key || req.headers['x-admin-key'] || '';
+    if (!isOperationKey(_cfkey)) return res.status(403).json({ error: '인증 필요' });
     const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     const existingFinal = await db.get("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND round_type='final' AND competition_id=? AND parent_event_id IS NULL AND id!=?", event.name, event.gender, event.category, event.competition_id, event.id);
@@ -3260,6 +3243,8 @@ app.get('/api/events/:id/lane-assignments', async (req, res) => {
 });
 
 app.post('/api/events/:id/create-semifinal', async (req, res) => {
+    const _cskey = req.body.admin_key || req.headers['x-admin-key'] || '';
+    if (!isOperationKey(_cskey)) return res.status(403).json({ error: '인증 필요' });
     const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     const existingSemi = await db.get("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND round_type='semifinal' AND competition_id=? AND parent_event_id IS NULL", event.name, event.gender, event.category, event.competition_id);
@@ -3538,6 +3523,8 @@ app.post('/api/events/:id/sub-events/sync-athletes', async (req, res) => {
 
 // POST /api/lanes/bulk-update — Update lane assignments by heat_entry_id
 app.post('/api/lanes/bulk-update', async (req, res) => {
+    const _lbkey = req.body.admin_key || req.headers['x-admin-key'] || '';
+    if (!isOperationKey(_lbkey)) return res.status(403).json({ error: '인증 필요' });
     const { assignments } = req.body;
     if (!assignments || !Array.isArray(assignments)) return res.status(400).json({ error: 'assignments array required' });
 
@@ -7758,6 +7745,8 @@ app.get('/api/wa-validate/:id', async (req, res) => {
     res.json(result);
 });
 app.post('/api/wa-correct/:id', async (req, res) => {
+    const _wckey = (req.body && req.body.admin_key) || req.headers['x-admin-key'] || '';
+    if (!isOperationKey(_wckey)) return res.status(403).json({ error: '인증 필요' });
     const result = await autoCorrectWALanes(parseInt(req.params.id), db);
     res.json(result);
 });

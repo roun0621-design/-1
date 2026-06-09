@@ -439,11 +439,14 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================
 async function api(method, path, body) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
-    // Auto-inject admin_key for write operations to result/height endpoints
-    if (body && (method === 'POST' || method === 'PUT' || method === 'DELETE') &&
-        (path.includes('/api/results') || path.includes('/api/height-attempts'))) {
+    // Auto-inject admin_key for all write operations (body + x-admin-key header —
+    // header covers body-less POSTs like /api/wa-correct/:id)
+    if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
         const storedKey = localStorage.getItem('pace_admin_key') || '';
-        if (storedKey && !body.admin_key) body.admin_key = storedKey;
+        if (storedKey) {
+            opts.headers['x-admin-key'] = storedKey;
+            if (body && !body.admin_key) body.admin_key = storedKey;
+        }
     }
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(path, opts);

@@ -6,12 +6,23 @@ import os, sys, urllib.parse
 
 SERVE_DIR = os.getcwd()
 
+def _safe_resolve(url_path):
+    """SERVE_DIR 밖으로 나가는 경로(../, 심볼릭 링크 등)는 None 반환"""
+    file_path = os.path.realpath(os.path.join(SERVE_DIR, url_path))
+    base = os.path.realpath(SERVE_DIR)
+    if file_path != base and not file_path.startswith(base + os.sep):
+        return None
+    return file_path
+
 class DownloadHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         # URL path → 파일 경로
         url_path = urllib.parse.unquote(self.path).lstrip('/')
-        file_path = os.path.join(SERVE_DIR, url_path)
-        
+        file_path = _safe_resolve(url_path)
+        if file_path is None:
+            self.send_error(403, "Forbidden")
+            return
+
         if not os.path.isfile(file_path):
             self.send_error(404, "File not found")
             return
@@ -32,8 +43,11 @@ class DownloadHandler(BaseHTTPRequestHandler):
     
     def do_HEAD(self):
         url_path = urllib.parse.unquote(self.path).lstrip('/')
-        file_path = os.path.join(SERVE_DIR, url_path)
-        
+        file_path = _safe_resolve(url_path)
+        if file_path is None:
+            self.send_error(403, "Forbidden")
+            return
+
         if not os.path.isfile(file_path):
             self.send_error(404, "File not found")
             return

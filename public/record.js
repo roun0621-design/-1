@@ -4418,7 +4418,10 @@ async function saveLaneReview(finalEventId) {
         // Save all lane assignments
         const resp = await fetch('/api/lanes/bulk-update', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-key': localStorage.getItem('pace_admin_key') || ''
+            },
             body: JSON.stringify({ assignments })
         });
         if (!resp.ok) {
