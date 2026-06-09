@@ -39,6 +39,7 @@
     async function _registerToken(requestPermission) {
         var cfg = await getConfig();
         if (!cfg || !cfg.configured) return { ok: false, reason: 'not-configured' };
+        if (!window.isSecureContext) return { ok: false, reason: 'insecure' };  // http면 푸시 불가
         if (!('serviceWorker' in navigator) || !('Notification' in window)) return { ok: false, reason: 'unsupported' };
 
         var perm = Notification.permission;
@@ -49,16 +50,19 @@
         await loadScript('https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-messaging-compat.js');
         if (!window.firebase) return { ok: false, reason: 'sdk-failed' };
         if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(cfg.config);
+        if (!firebase.messaging.isSupported || !firebase.messaging.isSupported()) return { ok: false, reason: 'unsupported' };
         var messaging = firebase.messaging();
 
         var swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        await navigator.serviceWorker.ready;
         var token = await messaging.getToken({ vapidKey: cfg.vapidKey, serviceWorkerRegistration: swReg });
         if (!token) return { ok: false, reason: 'no-token' };
 
-        await fetch('/api/push/register', {
+        var rr = await fetch('/api/push/register', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: token, audience: currentAudience(), competition_id: currentCompId() })
         });
+        if (!rr.ok) return { ok: false, reason: 'register-failed-' + rr.status };
         // 포그라운드 메시지 — 간단 알림
         try {
             messaging.onMessage(function (payload) {
@@ -71,16 +75,18 @@
         return { ok: true, token: token };
     }
 
-    // 버튼에서 호출 — 권한 요청 포함
+    // 버튼에서 호출 — 권한 요청 포함. 결과를 alert로 명확히 보여줌(모바일 디버깅).
     async function enable() {
         try {
             var r = await _registerToken(true);
-            if (r.ok) { _toast('알림이 켜졌습니다 🔔'); }
-            else if (r.reason === 'denied') { _toast('브라우저에서 알림이 차단되어 있어요. 설정에서 허용해 주세요.'); }
-            else if (r.reason === 'not-configured') { _toast('알림 설정이 아직 준비되지 않았습니다.'); }
-            else { _toast('알림을 켤 수 없습니다 (' + r.reason + ')'); }
+            if (r.ok) { alert('✅ 알림이 켜졌습니다! 이제 공지를 받을 수 있어요.'); }
+            else if (r.reason === 'insecure') { alert('⚠️ 보안(https) 주소가 아니라서 알림을 켤 수 없어요.\n주소창이 https:// 로 시작하는지 확인해 주세요. (http/IP 접속은 불가)'); }
+            else if (r.reason === 'unsupported') { alert('⚠️ 이 브라우저에서는 웹푸시를 지원하지 않아요.\n• 아이폰은 사파리에서 "홈 화면에 추가" 후 그 아이콘으로 열어야 해요.\n• 안드로이드는 크롬을 권장합니다.'); }
+            else if (r.reason === 'denied') { alert('🔕 알림이 차단되어 있어요.\n브라우저 주소창 자물쇠 → 사이트 설정 → 알림 "허용"으로 바꿔주세요.'); }
+            else if (r.reason === 'not-configured') { alert('서버 알림 설정이 아직 안 됐어요.'); }
+            else { alert('알림을 켤 수 없습니다 (' + r.reason + ')'); }
             return r;
-        } catch (e) { _toast('알림 설정 실패: ' + e.message); return { ok: false }; }
+        } catch (e) { alert('알림 설정 중 오류: ' + (e && e.message ? e.message : e)); return { ok: false }; }
     }
 
     // 이미 허용한 사용자는 자동 재등록(권한 요청 없음)
