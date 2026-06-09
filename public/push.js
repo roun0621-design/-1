@@ -7,6 +7,7 @@
 (function () {
     var FB_VER = '10.12.2';
     var _cfg = null;
+    var _token = null;
 
     function loadScript(src) {
         return new Promise(function (resolve, reject) {
@@ -65,10 +66,24 @@
             body: JSON.stringify({ token: token, audience: currentAudience(), competition_id: currentCompId() })
         });
         if (!rr.ok) return { ok: false, reason: 'register-failed-' + rr.status };
+        _token = token;
+        syncFavorites();  // 관심 종목(즐겨찾기) 서버 동기화
         // 표시는 서비스워커의 push 리스너가 전담(포그라운드/백그라운드 모두) → 중복 방지.
         // 여기서는 따로 표시하지 않음(로그만).
         try { messaging.onMessage(function () { /* SW가 표시 */ }); } catch (e) {}
         return { ok: true, token: token };
+    }
+
+    // 관심 종목(즐겨찾기)을 서버에 동기화 — 토큰이 있을 때만
+    function syncFavorites() {
+        if (!_token) return;
+        var keys = [];
+        try { if (window.getFavorites) keys = window.getFavorites() || []; } catch (e) {}
+        var compId = currentCompId();
+        fetch('/api/push/interests', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: _token, competition_id: compId, keys: keys })
+        }).catch(function () {});
     }
 
     // 버튼에서 호출 — 권한 요청 포함. 결과를 alert로 명확히 보여줌(모바일 디버깅).
@@ -104,7 +119,7 @@
         try { console.log('[push]', msg); } catch (e) {}
     }
 
-    window.PaceRisePush = { enable: enable, autoInit: autoInit };
+    window.PaceRisePush = { enable: enable, autoInit: autoInit, syncFavorites: syncFavorites };
     // 페이지 로드 후 자동 재등록(이미 허용한 경우만)
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
         setTimeout(autoInit, 1500);

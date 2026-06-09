@@ -651,11 +651,21 @@ CREATE TABLE IF NOT EXISTS "push_token" (
     "updated_at" TEXT NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS "push_interest" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "token" TEXT NOT NULL,
+    "competition_id" BIGINT,
+    "fav_key" TEXT NOT NULL,
+    "created_at" TEXT NOT NULL DEFAULT NOW()
+);
+
 -- ============================================================
 -- Indexes
 -- ============================================================
 
 CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience);
+CREATE INDEX IF NOT EXISTS idx_push_interest_lookup ON push_interest(competition_id, fav_key);
+CREATE INDEX IF NOT EXISTS idx_push_interest_token ON push_interest(token);
 CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue_log(competition_id, issued_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC);

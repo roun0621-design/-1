@@ -28,12 +28,16 @@ function setFavorites(favs) {
     const compId = getCompetitionId();
     localStorage.setItem(`pace_favorites_${compId}`, JSON.stringify(favs));
 }
-function toggleFavorite(eventName) {
-    const favKey = currentGender + '|' + eventName;
+function toggleFavorite(eventName, gender) {
+    // gender 는 행의 실제 성별(M/F/X) — 서버 트리거의 'event.gender|name' 키와 일치시키기 위함
+    const g = gender || (currentGender !== 'ALL' ? currentGender : 'X');
+    const favKey = g + '|' + eventName;
     let favs = getFavorites();
     if (favs.includes(favKey)) { favs = favs.filter(f => f !== favKey); }
     else { favs.push(favKey); }
     setFavorites(favs);
+    // 관심 종목 변경 → 푸시 서버에 동기화(알림 받기 켠 경우만 실제 반영)
+    try { if (window.PaceRisePush && window.PaceRisePush.syncFavorites) window.PaceRisePush.syncFavorites(); } catch (e) {}
     renderMatrix();
 }
 
@@ -654,8 +658,10 @@ function renderCategoryTable(groups, label, isLive) {
 
         // data-label: 모바일 카드 레이아웃(@media max-width:640px)에서 각 칸 앞에
         // "예선/준결승/결승" 라벨을 붙이기 위함. PC(표 모드)에서는 사용되지 않음.
+        const _isFav = favs.includes(_rowGender + '|' + g.name);
+        const favStar = `<span class="fav-star${_isFav ? ' on' : ''}" onclick="event.stopPropagation();toggleFavorite('${g.name.replace(/'/g, "\\'")}','${_rowGender}')" title="관심 종목(알림)">${_isFav ? '★' : '☆'}</span>`;
         html += `<tr data-row-gender="${_rowGender}">
-            <td class="event-name">${genderBadge}${g.name}${divBadge}${timeBadge}</td>
+            <td class="event-name">${favStar}${genderBadge}${g.name}${divBadge}${timeBadge}</td>
             ${_isDisplayMode ? `<td data-label="영상">${videoCell}</td>` : ''}
             <td data-label="${_isDisplayMode ? '명단' : 'W/L'}">${_isDisplayMode ? rosterCell : wlCell}</td>
             <td data-label="예선">${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>

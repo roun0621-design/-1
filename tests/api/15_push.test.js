@@ -53,4 +53,17 @@ describe('웹푸시(FCM)', () => {
         const res = await request(app).post('/api/admin/push/send').send({ body: 'x' });
         expect(res.status).toBe(403);
     });
+
+    it('관심 종목 동기화 — 토큰+키 저장 200', async () => {
+        const res = await request(app).post('/api/push/interests')
+            .send({ token: 'test-token-' + Date.now(), competition_id: 1, keys: ['M|100m', 'F|200m'] });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.count).toBe(2);
+    });
+
+    it('관심 종목 동기화 — 토큰 없으면 400', async () => {
+        const res = await request(app).post('/api/push/interests').send({ keys: ['M|100m'] });
+        expect(res.status).toBe(400);
+    });
 });

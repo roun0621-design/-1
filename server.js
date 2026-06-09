@@ -569,6 +569,16 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS push_token (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`); } catch(e) { console.error('[DB] push_token error:', e.message); }
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience)`); } catch(e) {}
+// 관심 종목(즐겨찾기) — fav_key = '성별|종목명' (예: 'M|100m')
+try { db.exec(`CREATE TABLE IF NOT EXISTS push_interest (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL,
+    competition_id INTEGER,
+    fav_key TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) { console.error('[DB] push_interest error:', e.message); }
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_push_interest_lookup ON push_interest(competition_id, fav_key)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_push_interest_token ON push_interest(token)`); } catch(e) {}
 // ========== END Push Schema ==========
 
 // ========== AUTH Phase 1: app_user / session_refresh / login_audit ==========
@@ -1326,6 +1336,15 @@ if (db.isAsync) {
                 updated_at TEXT NOT NULL DEFAULT NOW()
             )`); } catch(e) { console.error('[PG migration] push_token error:', e.message); }
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience)`); } catch(e) {}
+            try { await db.run(`CREATE TABLE IF NOT EXISTS push_interest (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                token TEXT NOT NULL,
+                competition_id BIGINT,
+                fav_key TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT NOW()
+            )`); } catch(e) { console.error('[PG migration] push_interest error:', e.message); }
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_push_interest_lookup ON push_interest(competition_id, fav_key)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_push_interest_token ON push_interest(token)`); } catch(e) {}
             console.log('[DB Migration v4 PG] certificate/sms/push tables ready');
         } catch (e) {
             console.error('[DB Migration v4 PG] error:', e.message);
@@ -2958,6 +2977,8 @@ app.post('/api/events/:id/complete', async (req, res) => {
     broadcastSSE('event_completed', { event_id: event.id, judge_name });
     const gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
+    // 관심 종목 알림 — 경기완료(결과 확정)
+    notifyEventInterest(event, { kind: 'result', title: `${gL} ${event.name} 결과 발표`, body: `${roundL} 경기가 완료되어 결과가 올라왔습니다.` }).catch(() => {});
     opLog(`${event.name} ${roundL} 경기완료 - ${judge_name}`, 'completion', judge_name, event.competition_id);
     res.json({ success: true, event: await db.get('SELECT * FROM event WHERE id=?', event.id) });
 });
@@ -3018,6 +3039,9 @@ app.post('/api/events/:id/callroom-complete', async (req, res) => {
 
     audit('event', event.id, 'UPDATE', { round_status: event.round_status }, { action: 'callroom_complete', round_status: 'in_progress', heat_id: heat_id || null }, performer, event.competition_id, req);
     broadcastSSE('callroom_complete', { event_id: event.id, judge_name: performer, heat_id: heat_id || null });
+    // 관심 종목 알림 — 소집 완료
+    { const _gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
+      notifyEventInterest(event, { kind: 'callroom', title: `${_gL} ${event.name} 소집 완료`, body: `소집이 완료되어 곧 경기가 시작됩니다.` }).catch(() => {}); }
     opLog(`${event.name} ${roundL}${heatLabel} 소집 완료 - ${performer}`, 'callroom', performer, event.competition_id);
     res.json({ success: true, dns_auto: dnsCount });
 });
@@ -10805,7 +10829,8 @@ require('./lib/routes/sms')(app, { db, isAdminKey, SMS, getEventResultsForCert }
 
 // ========== Push(FCM 웹푸시) System ==========
 const Push = require('./lib/pushSender');
-require('./lib/routes/push')(app, { db, isAdminKey, Push });
+const _pushMod = require('./lib/routes/push')(app, { db, isAdminKey, Push });
+const notifyEventInterest = (_pushMod && _pushMod.notifyEventInterest) || (async () => {});
 // FCM 백그라운드 서비스워커 — 설정값을 주입해 동적 서빙(루트 스코프)
 app.get('/firebase-messaging-sw.js', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
