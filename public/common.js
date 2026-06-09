@@ -1141,6 +1141,9 @@ function _buildMobileMenu(pages, currentPage, role) {
         <div class="mobile-menu-nav">${navLinks}</div>
         <div class="mobile-menu-footer">
             <div class="mobile-menu-divider"></div>
+            <button class="mm-action" onclick="mobileMenuPush()">
+                <span>🔔 경기 알림 받기</span>
+            </button>
             <button class="mm-action" style="${loginColor}" onclick="mobileMenuLogin()">
                 <span>${loginLabel}</span>
             </button>
@@ -1165,6 +1168,16 @@ function closeMobileMenu() {
     if (menu) menu.classList.remove('open');
     if (overlay) { overlay.classList.remove('open'); setTimeout(() => { overlay.style.display = ''; }, 250); }
     document.body.style.overflow = '';
+}
+
+function mobileMenuPush() {
+    closeMobileMenu();
+    if (window.PaceRisePush && window.PaceRisePush.enable) {
+        window.PaceRisePush.enable();
+    } else {
+        // 푸시 모듈이 없는 페이지 → 대시보드(홈)로 이동해서 알림 받기
+        location.href = '/dashboard.html';
+    }
 }
 
 async function mobileMenuLogin() {

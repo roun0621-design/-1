@@ -159,12 +159,6 @@
                 padding:6px 10px;
                 position:relative;   /* 알림 토글 우상단 고정 기준 */
             }
-            /* 알림 토글: 칩 흐름에서 빼서 카드 우상단에 배치 */
-            .matrix-table td.fav-cell {
-                position:absolute; top:8px; right:10px;
-                flex:0 0 auto; width:auto; padding:0; border:none;
-            }
-            .matrix-table td.fav-cell::before { content:none; }
             /* 종목명 = 헤더(전체폭, 가운데 정렬). display:block 로 배지들이 가로로 흐름
                (일반 td 의 flex column 을 반드시 덮어써야 세로쌓임 방지) */
             .matrix-table td.event-name {
@@ -206,6 +200,13 @@
                LIVE/결과)만 보여주므로 라벨 유지(어떤 라운드인지 식별 필요). */
             .matrix-table.matrix-display td::before { content:none; }
             .matrix-table td .round-btn { font-size:12px; padding:5px 6px; }
+            /* 알림 토글 — 칩 흐름에서 완전히 빼서 카드 우상단 고정(높이 안 늘림). 일반 td 규칙 뒤에 !important 로 확실히 적용 */
+            .matrix-table td.fav-cell {
+                position:absolute !important; top:7px; right:10px;
+                display:block !important; flex:0 0 auto !important;
+                width:auto !important; padding:0 !important; border:none !important; margin:0 !important;
+            }
+            .matrix-table td.fav-cell::before { content:none !important; }
         }
 
         /* ── 모바일: 성별/부별 탭 위아래 여백 축소 (스크롤 영역 확보) ─────────
@@ -273,9 +274,6 @@
         <!-- 종합기록지 기능 삭제됨 -->
 
         <div class="dashboard-footer" style="flex-shrink:0;text-align:center;padding:10px 8px 8px;border-top:1px solid var(--gray);background:var(--white);">
-            <div style="margin-bottom:8px;">
-                <button onclick="window.PaceRisePush && window.PaceRisePush.enable()" style="font-size:12px;font-weight:700;padding:7px 16px;border:1px solid #b79f58;background:#fff;color:#8a7640;border-radius:999px;cursor:pointer;">🔔 알림 받기</button>
-            </div>
             <div style="font-family:'Audiowide','Noto Sans KR',sans-serif;font-size:11px;color:#9ca3af;letter-spacing:1.5px;text-transform:uppercase;">Competition Operating System</div>
             <div style="font-size:10px;color:#b0b8c4;margin:2px 0 4px;">Powered by <span style="font-family:'Audiowide','Noto Sans KR',sans-serif;font-size:12px;color:#6b7280;letter-spacing:2px;">PACE RISE</span></div>
             <div style="font-size:10px;color:#9ca3af;">
@@ -303,8 +301,8 @@
 
 
 
-    <script src="common.js?v=77"></script>
-    <script src="dashboard.js?v=84"></script>
+    <script src="common.js?v=78"></script>
+    <script src="dashboard.js?v=85"></script>
     <script src="push.js?v=7"></script>
 </body>
 </html>
