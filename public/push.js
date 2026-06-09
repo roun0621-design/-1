@@ -119,11 +119,85 @@
         try { console.log('[push]', msg); } catch (e) {}
     }
 
-    window.PaceRisePush = { enable: enable, autoInit: autoInit, syncFavorites: syncFavorites };
-    // 페이지 로드 후 자동 재등록(이미 허용한 경우만)
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        setTimeout(autoInit, 1500);
-    } else {
-        window.addEventListener('DOMContentLoaded', function () { setTimeout(autoInit, 1500); });
+    // ── 일주일 보지 않기(dismiss) 헬퍼 ──
+    function _dismissed(key) {
+        try { return Date.now() < (parseInt(localStorage.getItem(key) || '0', 10) || 0); } catch (e) { return false; }
     }
+    function _dismissWeek(key) {
+        try { localStorage.setItem(key, String(Date.now() + 7 * 24 * 60 * 60 * 1000)); } catch (e) {}
+    }
+
+    function _injectPromptStyle() {
+        if (document.getElementById('pr-push-style')) return;
+        var s = document.createElement('style'); s.id = 'pr-push-style';
+        s.textContent =
+            '.pr-push-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;animation:prPushFade .15s ease;}' +
+            '@keyframes prPushFade{from{opacity:0}to{opacity:1}}' +
+            '.pr-push-card{background:#fff;border-radius:18px;max-width:340px;width:100%;padding:24px 22px 16px;box-shadow:0 14px 44px rgba(0,0,0,.28);text-align:center;}' +
+            '.pr-push-ico{font-size:38px;margin-bottom:8px;}' +
+            '.pr-push-ttl{font-size:17px;font-weight:800;color:#1a1a1a;margin-bottom:6px;}' +
+            '.pr-push-msg{font-size:13px;color:#666;line-height:1.55;margin-bottom:16px;word-break:keep-all;}' +
+            '.pr-push-acts{display:flex;gap:8px;}' +
+            '.pr-push-acts button{flex:1;padding:11px 0;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:none;}' +
+            '.pr-push-primary{background:#b79f58;color:#fff;}' +
+            '.pr-push-ghost{background:#f0f0f0;color:#555;}' +
+            '.pr-push-dismiss{display:inline-flex;align-items:center;gap:6px;margin-top:13px;font-size:12px;color:#9aa0a6;cursor:pointer;user-select:none;}' +
+            '.pr-push-dismiss input{width:14px;height:14px;}';
+        document.head.appendChild(s);
+    }
+
+    // 알림 허용 유도 팝업 (일주일 보지 않기 포함)
+    function showPushPrompt(opts) {
+        opts = opts || {};
+        if (!('Notification' in window) || Notification.permission === 'granted') return; // 이미 허용이면 안 띄움
+        if (document.getElementById('pr-push-ov')) return; // 중복 방지
+        _injectPromptStyle();
+        var ov = document.createElement('div'); ov.className = 'pr-push-ov'; ov.id = 'pr-push-ov';
+        ov.innerHTML =
+            '<div class="pr-push-card">' +
+            '<div class="pr-push-ico">🔔</div>' +
+            '<div class="pr-push-ttl">' + (opts.title || '경기 알림 받기') + '</div>' +
+            '<div class="pr-push-msg">' + (opts.message || '관심 종목의 소집·결과를 휴대폰 알림으로 받아보세요.') + '</div>' +
+            '<div class="pr-push-acts">' +
+            '<button class="pr-push-ghost" data-act="close">닫기</button>' +
+            '<button class="pr-push-primary" data-act="enable">알림 받기</button>' +
+            '</div>' +
+            '<label class="pr-push-dismiss"><input type="checkbox" id="pr-push-week"> 일주일 동안 보지 않기</label>' +
+            '</div>';
+        function dismissIfChecked() {
+            var wk = ov.querySelector('#pr-push-week');
+            if (wk && wk.checked && opts.dismissKey) _dismissWeek(opts.dismissKey);
+        }
+        ov.addEventListener('click', function (e) { if (e.target === ov) { dismissIfChecked(); ov.remove(); } });
+        ov.querySelector('[data-act="close"]').onclick = function () { dismissIfChecked(); ov.remove(); };
+        ov.querySelector('[data-act="enable"]').onclick = function () { ov.remove(); enable(); };
+        document.body.appendChild(ov);
+    }
+
+    // 홈(대시보드) 진입 시 1회 유도
+    async function maybeShowHomePrompt() {
+        try {
+            if (!('Notification' in window) || Notification.permission === 'granted') return;
+            if (_dismissed('pace_push_home_dismiss')) return;
+            var cfg = await getConfig();
+            if (!cfg || !cfg.configured) return;
+            showPushPrompt({ title: '경기 알림 받기', message: '관심 종목의 소집·결과를 휴대폰 알림으로 받아보세요.', dismissKey: 'pace_push_home_dismiss' });
+        } catch (e) {}
+    }
+
+    // 종목 토글을 켤 때 유도(아직 알림 미허용일 때만)
+    function promptToggle() {
+        if (!('Notification' in window) || Notification.permission === 'granted') return;
+        if (_dismissed('pace_push_toggle_dismiss')) return;
+        showPushPrompt({ title: '경기 알림 켜기', message: '이 종목의 소집·결과 알림을 받으려면 알림을 켜주세요.', dismissKey: 'pace_push_toggle_dismiss' });
+    }
+
+    window.PaceRisePush = { enable: enable, autoInit: autoInit, syncFavorites: syncFavorites, maybeShowHomePrompt: maybeShowHomePrompt, promptToggle: promptToggle };
+    // 페이지 로드 후: 자동 재등록(이미 허용 시) + 홈 유도 팝업(미허용 시)
+    function _onReady() {
+        setTimeout(autoInit, 1500);
+        setTimeout(maybeShowHomePrompt, 2500);
+    }
+    if (document.readyState === 'complete' || document.readyState === 'interactive') { _onReady(); }
+    else { window.addEventListener('DOMContentLoaded', _onReady); }
 })();

@@ -33,11 +33,14 @@ function toggleFavorite(eventName, gender) {
     const g = gender || (currentGender !== 'ALL' ? currentGender : 'X');
     const favKey = g + '|' + eventName;
     let favs = getFavorites();
-    if (favs.includes(favKey)) { favs = favs.filter(f => f !== favKey); }
+    const wasOn = favs.includes(favKey);
+    if (wasOn) { favs = favs.filter(f => f !== favKey); }
     else { favs.push(favKey); }
     setFavorites(favs);
     // 관심 종목 변경 → 푸시 서버에 동기화(알림 받기 켠 경우만 실제 반영)
     try { if (window.PaceRisePush && window.PaceRisePush.syncFavorites) window.PaceRisePush.syncFavorites(); } catch (e) {}
+    // 토글을 '켤 때' + 아직 알림 미허용이면 → 알림 켜기 유도 팝업(일주일 보지않기 포함)
+    if (!wasOn) { try { window.PaceRisePush && window.PaceRisePush.promptToggle && window.PaceRisePush.promptToggle(); } catch (e) {} }
     renderMatrix();
 }
 
