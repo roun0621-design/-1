@@ -102,9 +102,12 @@
         .matrix-table th { padding:6px 4px; text-align:center; font-size:11px; font-weight:700; color:var(--text-muted); border-bottom:1px solid var(--gray); white-space:nowrap; }
         .matrix-table td { padding:8px 6px; text-align:center; border-bottom:1px solid #f0f0f0; white-space:nowrap; }
         .matrix-table td.event-name { text-align:left; font-weight:700; white-space:nowrap; font-size:14px; }
-        .fav-chip { display:inline-block; cursor:pointer; margin-right:7px; vertical-align:middle; font-size:11px; font-weight:700; line-height:1; padding:3px 9px; border-radius:999px; border:1px solid #d8d2c2; color:#9a8f78; background:#fff; user-select:none; transition:all .12s; white-space:nowrap; }
-        .fav-chip:hover { border-color:#b79f58; color:#8a7640; }
-        .fav-chip.on { background:#b79f58; border-color:#b79f58; color:#fff; }
+        .fav-th { width:54px; font-size:11px; }
+        .matrix-table td.fav-cell { text-align:center; white-space:nowrap; }
+        .fav-toggle { display:inline-block; width:34px; height:18px; border-radius:999px; background:#d3cdbe; position:relative; cursor:pointer; transition:background .15s; vertical-align:middle; }
+        .fav-toggle .fav-knob { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:left .15s; box-shadow:0 1px 2px rgba(0,0,0,.25); }
+        .fav-toggle.on { background:#b79f58; }
+        .fav-toggle.on .fav-knob { left:18px; }
         .round-btn { display:inline-block; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; text-decoration:none; cursor:pointer; transition:all .12s; }
         .round-btn.btn-wait { background:#f5f5f5; color:#9e9e9e; cursor:default; }
         .round-btn.btn-summon { background:#f8f4ea; color:#b79f58; }
@@ -154,7 +157,14 @@
                 box-shadow:0 1px 3px rgba(0,0,0,.05);
                 margin-bottom:6px;
                 padding:6px 10px;
+                position:relative;   /* 알림 토글 우상단 고정 기준 */
             }
+            /* 알림 토글: 칩 흐름에서 빼서 카드 우상단에 배치 */
+            .matrix-table td.fav-cell {
+                position:absolute; top:8px; right:10px;
+                flex:0 0 auto; width:auto; padding:0; border:none;
+            }
+            .matrix-table td.fav-cell::before { content:none; }
             /* 종목명 = 헤더(전체폭, 가운데 정렬). display:block 로 배지들이 가로로 흐름
                (일반 td 의 flex column 을 반드시 덮어써야 세로쌓임 방지) */
             .matrix-table td.event-name {
@@ -164,7 +174,7 @@
                 font-size:15px;
                 font-weight:700;
                 white-space:normal;
-                padding:0 0 4px;
+                padding:0 46px 4px 0;   /* 우측: 우상단 알림 토글과 겹침 방지 */
                 margin-bottom:0;
                 border-bottom:1px solid #f0f0f0;
                 line-height:1.35;
@@ -294,7 +304,7 @@
 
 
     <script src="common.js?v=77"></script>
-    <script src="dashboard.js?v=83"></script>
+    <script src="dashboard.js?v=84"></script>
     <script src="push.js?v=7"></script>
 </body>
 </html>
