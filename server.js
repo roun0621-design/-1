@@ -270,6 +270,7 @@ const COMP_END_GUARD_EXEMPT = [
     /^\/api\/admin\/login$/,
     /^\/api\/operation-log/,
     /^\/api\/audit-log/,
+    /^\/api\/push\//,   // 푸시 토큰 등록/해제는 대회 데이터 수정이 아님 — 종료 대회에서도 허용
 ];
 async function _extractCompetitionIdFromRequest(req) {
     try {
