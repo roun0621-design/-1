@@ -10113,7 +10113,7 @@ POST /api/external/event-result-link/batch<br>
                 _certTemplates.map(t => `
                     <tr style="border-bottom:1px solid #eee;">
                         <td style="padding:6px;">${_esc(t.name)}</td>
-                        <td style="padding:6px;text-align:center;">${t.kind === 'finisher' ? '완주증' : t.kind === 'team' ? '단체상' : '시상장'}</td>
+                        <td style="padding:6px;text-align:center;">${t.kind === 'finisher' ? '완주증' : t.kind === 'record' ? '기록증' : t.kind === 'team' ? '단체상' : '시상장'}</td>
                         <td style="padding:6px;text-align:center;">${t.rank_label_style === 'numeric' ? '1위/2위' : t.rank_label_style === 'mixed' ? '혼합' : '우승/준우승'}</td>
                         <td style="padding:6px;text-align:center;">${t.is_default ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg>' : ''}</td>
                         <td style="padding:6px;text-align:center;white-space:nowrap;">
