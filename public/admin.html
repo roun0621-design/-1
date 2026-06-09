@@ -2198,6 +2198,7 @@ POST /api/external/event-result-link/batch<br>
                             <select id="cert-mode-select" style="width:100%;padding:6px 8px;border:1px solid var(--gray);border-radius:6px;">
                                 <option value="award">시상장 (순위별)</option>
                                 <option value="finisher">완주증 (등수 없이 완주자 전원)</option>
+                                <option value="record">기록증 (기록 있는 출전자 전원)</option>
                             </select>
                         </div>
                         <div id="cert-rank-range-wrap">
@@ -2270,6 +2271,7 @@ POST /api/external/event-result-link/batch<br>
                             <select id="cert-edit-kind" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
                                 <option value="award">시상장</option>
                                 <option value="finisher">완주증</option>
+                                <option value="record">기록증</option>
                                 <option value="team">단체상</option>
                             </select>
                         </div>
@@ -10088,7 +10090,7 @@ POST /api/external/event-result-link/batch<br>
         function toggleCertRankRangeWrap() {
             const mode = document.getElementById('cert-mode-select').value;
             const wrap = document.getElementById('cert-rank-range-wrap');
-            if (wrap) wrap.style.display = (mode === 'finisher') ? 'none' : '';
+            if (wrap) wrap.style.display = (mode === 'finisher' || mode === 'record') ? 'none' : '';
         }
 
         function renderCertTemplateList() {
