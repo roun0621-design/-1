@@ -2,7 +2,7 @@
 // Offline-first PWA: cache app shell, queue API mutations for sync
 // v3: auto version sync, IndexedDB offline queue, background sync
 
-const CACHE_NAME = 'pacerise-v131';
+const CACHE_NAME = 'pacerise-v132';
 const OFFLINE_URL = '/';
 
 // App shell — version-free paths (actual files are network-first, cache updated on every fetch)
@@ -137,6 +137,11 @@ self.addEventListener('activate', (event) => {
 // ---- Fetch: network-first for API, cache-first for static ----
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
+
+    // 외부 도메인(FCM/구글 등) 요청은 절대 가로채지 않음 — getToken 의
+    // fcmregistrations.googleapis.com 호출이 'Failed to fetch(token-subscribe-failed)'
+    // 로 깨지는 것 방지. (오프라인 SW 의 알려진 함정)
+    if (url.origin !== self.location.origin) return;
 
     // Skip SSE connections entirely
     if (url.pathname === '/api/sse') return;
