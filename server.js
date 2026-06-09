@@ -10810,6 +10810,7 @@ require('./lib/routes/push')(app, { db, isAdminKey, Push });
 app.get('/firebase-messaging-sw.js', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
     res.setHeader('Service-Worker-Allowed', '/');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // 항상 최신 SW
     const { configured, config } = Push.webConfig();
     if (!configured) { res.send('// firebase 미설정 — 푸시 비활성\nself.addEventListener("install",()=>self.skipWaiting());\n'); return; }
     res.send(`self.addEventListener('install', function(){ self.skipWaiting(); });
@@ -10817,14 +10818,17 @@ self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim())
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 firebase.initializeApp(${JSON.stringify(config)});
-// firebase-messaging 로드(토큰/구독용). 표시는 아래 raw push 리스너 하나로만 처리해 중복 방지.
-firebase.messaging();
+// firebase-messaging 로드(토큰/구독용). 표시는 아래 raw push 리스너 하나로만 처리.
+try { firebase.messaging(); } catch(e) {}
+// 모든 푸시를 직접 표시 — 페이로드 구조가 무엇이든 title/body 를 최대한 찾아 항상 표시
 self.addEventListener('push', function(event){
-  let d = {};
-  try { d = (event.data && event.data.json().data) || {}; } catch(e) {}
-  if (!d.title && !d.body) return;
-  event.waitUntil(self.registration.showNotification(d.title || '알림', {
-    body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: d
+  let p = {};
+  try { p = event.data ? event.data.json() : {}; } catch(e) { try { p = { body: event.data && event.data.text() }; } catch(_) {} }
+  var d = p.data || p.notification || p || {};
+  var title = d.title || (p.notification && p.notification.title) || '알림';
+  var body = d.body || (p.notification && p.notification.body) || '';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: d
   }));
 });
 // 알림 클릭 시 사이트 열기/포커스
