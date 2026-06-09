@@ -53,10 +53,11 @@
         if (!firebase.messaging.isSupported || !firebase.messaging.isSupported()) return { ok: false, reason: 'unsupported' };
         var messaging = firebase.messaging();
 
-        // serviceWorkerRegistration 을 넘기지 않음 → FCM SDK 가 firebase-messaging-sw.js 를
-        // 자기 전용 scope(/firebase-cloud-messaging-push-scope)에 등록.
-        // (앱 sw.js 와 scope '/' 충돌 방지 → 푸시가 알림핸들러 있는 SW로 정확히 전달됨)
-        var token = await messaging.getToken({ vapidKey: cfg.vapidKey });
+        // firebase SW 를 전용 scope 에 명시적 등록(앱 sw.js scope '/' 와 충돌 방지).
+        // 토큰도 확실히 받고, 푸시가 알림핸들러 있는 이 SW로 정확히 전달됨.
+        var swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/firebase-cloud-messaging-push-scope' });
+        try { await swReg.update(); } catch (e) {}
+        var token = await messaging.getToken({ vapidKey: cfg.vapidKey, serviceWorkerRegistration: swReg });
         if (!token) return { ok: false, reason: 'no-token' };
 
         var rr = await fetch('/api/push/register', {
@@ -81,7 +82,12 @@
             else if (r.reason === 'not-configured') { alert('서버 알림 설정이 아직 안 됐어요.'); }
             else { alert('알림을 켤 수 없습니다 (' + r.reason + ')'); }
             return r;
-        } catch (e) { alert('알림 설정 중 오류: ' + (e && e.message ? e.message : e)); return { ok: false }; }
+        } catch (e) {
+            var detail = (e && (e.code ? e.code + ' / ' : '') + (e.message || e)) || String(e);
+            alert('알림 설정 중 오류:\n' + detail);
+            try { console.error('[push] enable error', e); } catch (_) {}
+            return { ok: false };
+        }
     }
 
     // 이미 허용한 사용자는 자동 재등록(권한 요청 없음)
