@@ -638,9 +638,24 @@ CREATE TABLE IF NOT EXISTS "sms_log" (
 );
 
 -- ============================================================
+-- 푸시(FCM 웹푸시) 토큰
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "push_token" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "token" TEXT NOT NULL UNIQUE,
+    "audience" TEXT NOT NULL DEFAULT 'public',
+    "competition_id" BIGINT,
+    "user_agent" TEXT NOT NULL DEFAULT '',
+    "active" BIGINT NOT NULL DEFAULT 1,
+    "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "updated_at" TEXT NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
 -- Indexes
 -- ============================================================
 
+CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience);
 CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue_log(competition_id, issued_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC);

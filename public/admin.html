@@ -2410,6 +2410,42 @@ POST /api/external/event-result-link/batch<br>
 
             <!-- ========== tab-sms : 문자 발송 ========== -->
             <div id="tab-sms" class="admin-tab-panel">
+                <!-- 푸시(앱 알림) 공지 -->
+                <div class="admin-card" style="border-left:4px solid #b79f58;">
+                    <h4 style="color:#8a7640;margin-bottom:8px;">📱 앱 푸시 알림 (공지 보내기)</h4>
+                    <div id="push-status-box" style="font-size:12px;color:#666;margin-bottom:10px;">상태 확인 중…</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+                        <div>
+                            <label class="t-xs" style="font-weight:600;">받는 대상</label>
+                            <select id="push-audience" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="all">전체</option>
+                                <option value="public">관람객(선수·가족)</option>
+                                <option value="staff">심판·운영진</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="t-xs" style="font-weight:600;">대회 한정(선택)</label>
+                            <select id="push-comp-scope" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="">전체 대회</option>
+                                <option value="current">현재 선택 대회만</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label class="t-xs" style="font-weight:600;">제목</label>
+                        <input type="text" id="push-title" placeholder="예: 소집 안내" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                    </div>
+                    <div style="margin-top:8px;">
+                        <label class="t-xs" style="font-weight:600;">내용</label>
+                        <textarea id="push-body" rows="2" placeholder="예: 남자 100m 결승 곧 시작합니다." style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></textarea>
+                    </div>
+                    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="sendPushNotice()">공지 발송</button>
+                        <span id="push-send-status" style="font-size:12px;font-weight:600;"></span>
+                    </div>
+                    <div class="t-xs t-muted" style="margin-top:8px;">※ Firebase 설정(환경변수) 전에는 발송이 비활성(미설정) 상태로 표시됩니다.</div>
+                </div>
+
                 <!-- A. 발송 설정 -->
                 <div class="admin-card" style="border-left:4px solid #2d5016;">
                     <h4 style="color:#2d5016;margin-bottom:8px;">알리고(Aligo) SMS 설정</h4>
@@ -10800,11 +10836,56 @@ POST /api/external/event-result-link/batch<br>
                         loadSmsBatchEvents();
                         loadSmsLog();
                         setTimeout(toggleSmsBatchRankWrap, 50);
+                        loadPushStatus();
                     }
                 };
             }
         })();
 
+        // ===== 푸시(앱 알림) 공지 =====
+        async function loadPushStatus() {
+            const box = document.getElementById('push-status-box');
+            if (!box) return;
+            try {
+                const res = await fetch(`/api/admin/push/status?admin_key=${encodeURIComponent(AK())}`);
+                const d = await res.json();
+                if (!res.ok) throw new Error(d.error || 'status 실패');
+                if (d.enabled && d.web_configured) {
+                    box.innerHTML = `<span style="color:#2e7d32;font-weight:700;">● 활성</span> · 구독 기기 ${d.tokens || 0}대`;
+                } else {
+                    const reason = !d.web_configured ? '웹 설정(Firebase) 미입력' : (d.error || '서버 키 미설정');
+                    box.innerHTML = `<span style="color:#b26a00;font-weight:700;">● 미설정</span> — ${_esc(reason)} (환경변수 입력 후 활성화)`;
+                }
+            } catch (e) { box.textContent = '상태 확인 실패: ' + e.message; }
+        }
+
+        async function sendPushNotice() {
+            const title = document.getElementById('push-title').value.trim();
+            const body = document.getElementById('push-body').value.trim();
+            const audience = document.getElementById('push-audience').value;
+            const scope = document.getElementById('push-comp-scope').value;
+            const status = document.getElementById('push-send-status');
+            if (!body) { toast('내용을 입력하세요', 'error'); return; }
+            if (status) { status.style.color = '#666'; status.textContent = '발송 중…'; }
+            try {
+                const res = await fetch('/api/admin/push/send', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        admin_key: AK(), title, body, audience,
+                        competition_id: scope === 'current' ? _selectedCompId : null,
+                    })
+                });
+                const d = await res.json();
+                if (!res.ok) throw new Error(d.error || '발송 실패');
+                if (d.skipped) { if (status) { status.style.color = '#b26a00'; status.textContent = '미설정 — Firebase 키 입력 후 발송됩니다'; } }
+                else if (d.success) { if (status) { status.style.color = '#2e7d32'; status.textContent = '발송 완료 (' + d.topic + ')'; } toast('공지를 발송했습니다', 'success'); }
+                else { if (status) { status.style.color = '#c62828'; status.textContent = '실패: ' + (d.error || ''); } }
+            } catch (e) {
+                if (status) { status.style.color = '#c62828'; status.textContent = '실패: ' + e.message; }
+                toast('발송 실패: ' + e.message, 'error');
+            }
+        }
     </script>
+    <script src="push.js?v=1"></script>
 </body>
 </html>

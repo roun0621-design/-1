@@ -556,6 +556,20 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competitio
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC)`); } catch(e) {}
 // ========== END SMS Schema ==========
 
+// ========== Push(FCM 웹푸시) 토큰 ==========
+try { db.exec(`CREATE TABLE IF NOT EXISTS push_token (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,
+    audience TEXT NOT NULL DEFAULT 'public',   -- 'public' | 'staff'
+    competition_id INTEGER,
+    user_agent TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) { console.error('[DB] push_token error:', e.message); }
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience)`); } catch(e) {}
+// ========== END Push Schema ==========
+
 // ========== AUTH Phase 1: app_user / session_refresh / login_audit ==========
 // (실제 호출은 SQLite-only 블록 종료 후 — 양쪽 백엔드에서 모두 실행되어야 함)
 // 이 위치에서는 글로벌 상태 플래그만 선언.
@@ -1299,7 +1313,19 @@ if (db.isAsync) {
             )`); } catch(e) { console.error('[PG migration] sms_log error:', e.message); }
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC)`); } catch(e) {}
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC)`); } catch(e) {}
-            console.log('[DB Migration v4 PG] certificate/sms tables ready');
+
+            try { await db.run(`CREATE TABLE IF NOT EXISTS push_token (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                token TEXT NOT NULL UNIQUE,
+                audience TEXT NOT NULL DEFAULT 'public',
+                competition_id BIGINT,
+                user_agent TEXT NOT NULL DEFAULT '',
+                active BIGINT NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT NOW(),
+                updated_at TEXT NOT NULL DEFAULT NOW()
+            )`); } catch(e) { console.error('[PG migration] push_token error:', e.message); }
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience)`); } catch(e) {}
+            console.log('[DB Migration v4 PG] certificate/sms/push tables ready');
         } catch (e) {
             console.error('[DB Migration v4 PG] error:', e.message);
         }
@@ -10775,6 +10801,28 @@ const getEventResultsForCert = _certMod.getEventResultsForCert;
 //   _resetSmsCounterIfNeeded 헬퍼는 모듈 내부로 이동.
 //   getEventResultsForCert 는 server.js 의 함수를 그대로 주입 (certificate 추출 시 함께 이동).
 require('./lib/routes/sms')(app, { db, isAdminKey, SMS, getEventResultsForCert });
+
+// ========== Push(FCM 웹푸시) System ==========
+const Push = require('./lib/pushSender');
+require('./lib/routes/push')(app, { db, isAdminKey, Push });
+// FCM 백그라운드 서비스워커 — 설정값을 주입해 동적 서빙(루트 스코프)
+app.get('/firebase-messaging-sw.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Service-Worker-Allowed', '/');
+    const { configured, config } = Push.webConfig();
+    if (!configured) { res.send('// firebase 미설정 — 푸시 비활성\nself.addEventListener("install",()=>self.skipWaiting());\n'); return; }
+    res.send(`importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
+firebase.initializeApp(${JSON.stringify(config)});
+const messaging = firebase.messaging();
+messaging.onBackgroundMessage(function(payload){
+  const n = (payload && payload.notification) || {};
+  self.registration.showNotification(n.title || '알림', {
+    body: n.body || '', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png'
+  });
+});`);
+});
+// ========== END Push System ==========
 
 // Document listing — available documents for a competition
 app.get('/api/documents/:compId', async (req, res) => {
