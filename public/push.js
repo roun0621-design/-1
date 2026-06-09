@@ -53,9 +53,10 @@
         if (!firebase.messaging.isSupported || !firebase.messaging.isSupported()) return { ok: false, reason: 'unsupported' };
         var messaging = firebase.messaging();
 
-        var swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        await navigator.serviceWorker.ready;
-        var token = await messaging.getToken({ vapidKey: cfg.vapidKey, serviceWorkerRegistration: swReg });
+        // serviceWorkerRegistration 을 넘기지 않음 → FCM SDK 가 firebase-messaging-sw.js 를
+        // 자기 전용 scope(/firebase-cloud-messaging-push-scope)에 등록.
+        // (앱 sw.js 와 scope '/' 충돌 방지 → 푸시가 알림핸들러 있는 SW로 정확히 전달됨)
+        var token = await messaging.getToken({ vapidKey: cfg.vapidKey });
         if (!token) return { ok: false, reason: 'no-token' };
 
         var rr = await fetch('/api/push/register', {
