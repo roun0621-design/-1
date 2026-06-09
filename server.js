@@ -10817,12 +10817,23 @@ self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim())
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 firebase.initializeApp(${JSON.stringify(config)});
-const messaging = firebase.messaging();
-messaging.onBackgroundMessage(function(payload){
-  const n = (payload && payload.notification) || {};
-  self.registration.showNotification(n.title || '알림', {
-    body: n.body || '', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png'
-  });
+// firebase-messaging 로드(토큰/구독용). 표시는 아래 raw push 리스너 하나로만 처리해 중복 방지.
+firebase.messaging();
+self.addEventListener('push', function(event){
+  let d = {};
+  try { d = (event.data && event.data.json().data) || {}; } catch(e) {}
+  if (!d.title && !d.body) return;
+  event.waitUntil(self.registration.showNotification(d.title || '알림', {
+    body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: d
+  }));
+});
+// 알림 클릭 시 사이트 열기/포커스
+self.addEventListener('notificationclick', function(event){
+  event.notification.close();
+  event.waitUntil(self.clients.matchAll({ type:'window', includeUncontrolled:true }).then(function(cl){
+    for (const c of cl) { if ('focus' in c) return c.focus(); }
+    if (self.clients.openWindow) return self.clients.openWindow('/');
+  }));
 });`);
 });
 // ========== END Push System ==========

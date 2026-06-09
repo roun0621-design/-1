@@ -63,16 +63,9 @@
             body: JSON.stringify({ token: token, audience: currentAudience(), competition_id: currentCompId() })
         });
         if (!rr.ok) return { ok: false, reason: 'register-failed-' + rr.status };
-        // 포그라운드 메시지 — 안드로이드는 page의 new Notification 불가 → SW로 표시
-        try {
-            messaging.onMessage(function (payload) {
-                var n = (payload && payload.notification) || {};
-                if (Notification.permission !== 'granted') return;
-                navigator.serviceWorker.ready.then(function (reg) {
-                    reg.showNotification(n.title || '알림', { body: n.body || '', icon: '/icons/icon-192.png' });
-                }).catch(function () {});
-            });
-        } catch (e) {}
+        // 표시는 서비스워커의 push 리스너가 전담(포그라운드/백그라운드 모두) → 중복 방지.
+        // 여기서는 따로 표시하지 않음(로그만).
+        try { messaging.onMessage(function () { /* SW가 표시 */ }); } catch (e) {}
         return { ok: true, token: token };
     }
 
