@@ -659,9 +659,9 @@ function renderCategoryTable(groups, label, isLive) {
         // data-label: 모바일 카드 레이아웃(@media max-width:640px)에서 각 칸 앞에
         // "예선/준결승/결승" 라벨을 붙이기 위함. PC(표 모드)에서는 사용되지 않음.
         const _isFav = favs.includes(_rowGender + '|' + g.name);
-        const favBell = `<span class="fav-bell${_isFav ? ' on' : ''}" role="button" aria-label="관심 알림" title="${_isFav ? '관심 알림 켜짐' : '이 종목 알림 받기'}" onclick="event.stopPropagation();toggleFavorite('${g.name.replace(/'/g, "\\'")}','${_rowGender}')"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>`;
+        const favChip = `<span class="fav-chip${_isFav ? ' on' : ''}" role="button" title="${_isFav ? '관심 알림 켜짐 (눌러서 해제)' : '이 종목 알림 받기'}" onclick="event.stopPropagation();toggleFavorite('${g.name.replace(/'/g, "\\'")}','${_rowGender}')">알림${_isFav ? ' ✓' : ''}</span>`;
         html += `<tr data-row-gender="${_rowGender}">
-            <td class="event-name">${favBell}${genderBadge}${g.name}${divBadge}${timeBadge}</td>
+            <td class="event-name">${favChip}${genderBadge}${g.name}${divBadge}${timeBadge}</td>
             ${_isDisplayMode ? `<td data-label="영상">${videoCell}</td>` : ''}
             <td data-label="${_isDisplayMode ? '명단' : 'W/L'}">${_isDisplayMode ? rosterCell : wlCell}</td>
             <td data-label="예선">${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>
