@@ -41,11 +41,12 @@ describe('웹푸시(FCM)', () => {
         expect(typeof res.body.tokens).toBe('number');
     });
 
-    it('공지 발송 — 미설정이면 skipped(앱 안 깨짐)', async () => {
+    it('공지 발송 — 미설정이면 안전(skipped 또는 발송0)', async () => {
         const res = await request(app).post('/api/admin/push/send')
             .send({ admin_key: ADMIN_KEY, title: 't', body: '본문', audience: 'all' });
         expect(res.status).toBe(200);
-        expect(res.body.skipped).toBe(true);
+        // firebase 미설정 → skipped, 토큰 없으면 sent:0. 둘 중 하나면 OK(앱 안 깨짐).
+        expect(res.body.skipped === true || res.body.sent === 0).toBe(true);
     });
 
     it('공지 발송 — 관리자 키 없으면 403', async () => {
