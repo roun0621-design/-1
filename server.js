@@ -10812,7 +10812,9 @@ app.get('/firebase-messaging-sw.js', (req, res) => {
     res.setHeader('Service-Worker-Allowed', '/');
     const { configured, config } = Push.webConfig();
     if (!configured) { res.send('// firebase 미설정 — 푸시 비활성\nself.addEventListener("install",()=>self.skipWaiting());\n'); return; }
-    res.send(`importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+    res.send(`self.addEventListener('install', function(){ self.skipWaiting(); });
+self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()); });
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 firebase.initializeApp(${JSON.stringify(config)});
 const messaging = firebase.messaging();

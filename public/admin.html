@@ -10878,7 +10878,11 @@ POST /api/external/event-result-link/batch<br>
                 const d = await res.json();
                 if (!res.ok) throw new Error(d.error || '발송 실패');
                 if (d.skipped) { if (status) { status.style.color = '#b26a00'; status.textContent = '미설정 — Firebase 키 입력 후 발송됩니다'; } }
-                else if (d.success) { if (status) { status.style.color = '#2e7d32'; status.textContent = '발송 완료 (' + d.topic + ')'; } toast('공지를 발송했습니다', 'success'); }
+                else if (d.success) {
+                    const note = d.note ? d.note : `대상 ${d.targeted || 0}대 · 성공 ${d.sent || 0} · 실패 ${d.failed || 0}`;
+                    if (status) { status.style.color = (d.sent ? '#2e7d32' : '#b26a00'); status.textContent = note; }
+                    toast('공지 발송: ' + note, 'success');
+                }
                 else { if (status) { status.style.color = '#c62828'; status.textContent = '실패: ' + (d.error || ''); } }
             } catch (e) {
                 if (status) { status.style.color = '#c62828'; status.textContent = '실패: ' + e.message; }

@@ -63,13 +63,14 @@
             body: JSON.stringify({ token: token, audience: currentAudience(), competition_id: currentCompId() })
         });
         if (!rr.ok) return { ok: false, reason: 'register-failed-' + rr.status };
-        // 포그라운드 메시지 — 간단 알림
+        // 포그라운드 메시지 — 안드로이드는 page의 new Notification 불가 → SW로 표시
         try {
             messaging.onMessage(function (payload) {
                 var n = (payload && payload.notification) || {};
-                if (Notification.permission === 'granted') {
-                    new Notification(n.title || '알림', { body: n.body || '', icon: '/icons/icon-192.png' });
-                }
+                if (Notification.permission !== 'granted') return;
+                navigator.serviceWorker.ready.then(function (reg) {
+                    reg.showNotification(n.title || '알림', { body: n.body || '', icon: '/icons/icon-192.png' });
+                }).catch(function () {});
             });
         } catch (e) {}
         return { ok: true, token: token };
