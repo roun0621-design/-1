@@ -487,9 +487,16 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_template (
     font_family TEXT NOT NULL DEFAULT 'NanumSquare',
     is_default INTEGER NOT NULL DEFAULT 0,                -- 기본 양식 1개만 ON
     sort_order INTEGER NOT NULL DEFAULT 0,
+    watermark_image_path TEXT NOT NULL DEFAULT '',        -- 중앙 워터마크 이미지(비우면 없음)
+    watermark_opacity REAL NOT NULL DEFAULT 0.07,         -- 0.02~0.5
+    watermark_scale REAL NOT NULL DEFAULT 0.45,           -- 페이지폭 대비 0.1~0.9
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`); } catch(e) { console.error('[DB] certificate_template create error:', e.message); }
+// 기존 SQLite DB 대비 멱등 컬럼 추가 (워터마크)
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN watermark_image_path TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN watermark_opacity REAL NOT NULL DEFAULT 0.07`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN watermark_scale REAL NOT NULL DEFAULT 0.45`); } catch(e) {}
 
 try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_issue_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1234,6 +1241,9 @@ if (db.isAsync) {
                 font_family TEXT NOT NULL DEFAULT 'NanumSquare',
                 is_default BIGINT NOT NULL DEFAULT 0,
                 sort_order BIGINT NOT NULL DEFAULT 0,
+                watermark_image_path TEXT NOT NULL DEFAULT '',
+                watermark_opacity DOUBLE PRECISION NOT NULL DEFAULT 0.07,
+                watermark_scale DOUBLE PRECISION NOT NULL DEFAULT 0.45,
                 created_at TEXT NOT NULL DEFAULT NOW(),
                 updated_at TEXT NOT NULL DEFAULT NOW()
             )`); } catch(e) { console.error('[PG migration] certificate_template error:', e.message); }
@@ -1332,6 +1342,10 @@ if (db.isAsync) {
             await pgIdempotentAddCol('athlete', 'personal_best', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'date_of_birth', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'phone', `TEXT NOT NULL DEFAULT ''`);
+            // certificate_template: 워터마크 (중앙 로고 이미지)
+            await pgIdempotentAddCol('certificate_template', 'watermark_image_path', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('certificate_template', 'watermark_opacity', `DOUBLE PRECISION NOT NULL DEFAULT 0.07`);
+            await pgIdempotentAddCol('certificate_template', 'watermark_scale', `DOUBLE PRECISION NOT NULL DEFAULT 0.45`);
             // qualification_selection: qualification_type
             await pgIdempotentAddCol('qualification_selection', 'qualification_type', `TEXT DEFAULT ''`);
             // record_breaking_log: wind

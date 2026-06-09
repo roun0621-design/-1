@@ -2356,6 +2356,28 @@ POST /api/external/event-result-link/batch<br>
                                     <button type="button" class="btn btn-xs" style="background:#fee;color:#a00;" onclick="deleteCertImage('seal')">제거</button>
                                 </div>
                             </div>
+                            <div>
+                                <label class="t-xs" style="font-weight:600;">워터마크 (배경)</label>
+                                <div id="cert-img-preview-watermark" class="cert-img-slot"></div>
+                                <input type="file" id="cert-img-input-watermark" accept="image/*" style="display:none;" onchange="uploadCertImage('watermark', this.files[0])">
+                                <div style="display:flex;gap:4px;margin-top:4px;">
+                                    <button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('cert-img-input-watermark').click()">선택</button>
+                                    <button type="button" class="btn btn-xs" style="background:#fee;color:#a00;" onclick="deleteCertImage('watermark')">제거</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;align-items:center;">
+                            <label class="t-xs" style="display:flex;flex-direction:column;gap:2px;">
+                                워터마크 투명도 <b><span id="cert-edit-wm-opacity-val">0.07</span></b>
+                                <input type="range" id="cert-edit-wm-opacity" min="0.02" max="0.30" step="0.01" value="0.07"
+                                       oninput="document.getElementById('cert-edit-wm-opacity-val').textContent=this.value" style="width:160px;">
+                            </label>
+                            <label class="t-xs" style="display:flex;flex-direction:column;gap:2px;">
+                                워터마크 크기(%) <b><span id="cert-edit-wm-scale-val">45</span></b>
+                                <input type="range" id="cert-edit-wm-scale" min="15" max="90" step="5" value="45"
+                                       oninput="document.getElementById('cert-edit-wm-scale-val').textContent=this.value" style="width:160px;">
+                            </label>
+                            <span class="t-xs t-muted">옅을수록 본문 가독성↑ · 중앙 배치</span>
                         </div>
                     </div>
                     <div id="cert-images-section-disabled" style="margin-top:14px;border-top:1px solid #eee;padding-top:12px;font-size:11px;color:var(--text-muted);">
@@ -10298,12 +10320,20 @@ POST /api/external/event-result-link/batch<br>
             // 이미지 섹션 — 기존 양식만
             const imgSec = document.getElementById('cert-images-section');
             const imgSecDis = document.getElementById('cert-images-section-disabled');
+            // 워터마크 슬라이더 (신규/기존 모두 세팅)
+            const wmOp = (t && t.watermark_opacity != null) ? Number(t.watermark_opacity) : 0.07;
+            const wmSc = Math.round(((t && t.watermark_scale != null) ? Number(t.watermark_scale) : 0.45) * 100);
+            document.getElementById('cert-edit-wm-opacity').value = wmOp;
+            document.getElementById('cert-edit-wm-opacity-val').textContent = wmOp;
+            document.getElementById('cert-edit-wm-scale').value = wmSc;
+            document.getElementById('cert-edit-wm-scale-val').textContent = wmSc;
             if (t) {
                 imgSec.style.display = '';
                 imgSecDis.style.display = 'none';
                 renderCertImagePreview('logo_left', t.logo_left_path);
                 renderCertImagePreview('logo_right', t.logo_right_path);
                 renderCertImagePreview('seal', t.seal_image_path);
+                renderCertImagePreview('watermark', t.watermark_image_path);
             } else {
                 imgSec.style.display = 'none';
                 imgSecDis.style.display = '';
@@ -10386,6 +10416,14 @@ POST /api/external/event-result-link/batch<br>
                 show_date: document.getElementById('cert-edit-show-date').checked ? 1 : 0,
                 paper_orientation: 'portrait',
                 font_family: 'NanumSquare',
+                watermark_opacity: parseFloat(document.getElementById('cert-edit-wm-opacity').value) || 0.07,
+                watermark_scale: (parseInt(document.getElementById('cert-edit-wm-scale').value, 10) || 45) / 100,
+                // 워터마크 이미지 경로는 업로드 시 DB에 저장됨 — 미리보기/저장에 현재 값 동봉
+                watermark_image_path: (function () {
+                    const eid = document.getElementById('cert-edit-id').value;
+                    const cur = eid && _certTemplates.find(x => String(x.id) === String(eid));
+                    return cur ? (cur.watermark_image_path || '') : '';
+                })(),
             };
         }
 

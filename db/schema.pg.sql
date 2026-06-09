@@ -578,6 +578,9 @@ CREATE TABLE IF NOT EXISTS "certificate_template" (
     "font_family" TEXT NOT NULL DEFAULT 'NanumSquare',
     "is_default" BIGINT NOT NULL DEFAULT 0,
     "sort_order" BIGINT NOT NULL DEFAULT 0,
+    "watermark_image_path" TEXT NOT NULL DEFAULT '',
+    "watermark_opacity" DOUBLE PRECISION NOT NULL DEFAULT 0.07,
+    "watermark_scale" DOUBLE PRECISION NOT NULL DEFAULT 0.45,
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "updated_at" TEXT NOT NULL DEFAULT NOW()
 );
