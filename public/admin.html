@@ -2317,6 +2317,14 @@ POST /api/external/event-result-link/batch<br>
                             <input type="color" id="cert-edit-bg" value="#fffdf6" style="width:100%;padding:2px;border:1px solid var(--gray);border-radius:6px;height:32px;">
                         </div>
                         <div>
+                            <label class="t-xs">테두리/포인트 색</label>
+                            <input type="color" id="cert-edit-border-color" value="#b8945a" style="width:100%;padding:2px;border:1px solid var(--gray);border-radius:6px;height:32px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">기록 패널 색 <span class="t-muted">(기록증)</span></label>
+                            <input type="color" id="cert-edit-panel-color" value="#faf8f2" style="width:100%;padding:2px;border:1px solid var(--gray);border-radius:6px;height:32px;">
+                        </div>
+                        <div>
                             <label class="t-xs">표시 옵션</label>
                             <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;padding-top:4px;">
                                 <label><input type="checkbox" id="cert-edit-show-record" checked> 기록값</label>
@@ -10316,6 +10324,8 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('cert-edit-signer-name').value = t ? (t.signer_name || '') : '';
             document.getElementById('cert-edit-border').value = t ? (t.border_style || 'double-gold') : 'double-gold';
             document.getElementById('cert-edit-bg').value = t ? (t.background_color || '#fffdf6') : '#fffdf6';
+            document.getElementById('cert-edit-border-color').value = (t && t.border_color) ? t.border_color : '#b8945a';
+            document.getElementById('cert-edit-panel-color').value = (t && t.panel_color) ? t.panel_color : '#faf8f2';
             document.getElementById('cert-edit-show-record').checked = t ? !!t.show_record_value : true;
             document.getElementById('cert-edit-show-team').checked = t ? !!t.show_athlete_team : true;
             document.getElementById('cert-edit-show-date').checked = t ? !!t.show_date : true;
@@ -10413,6 +10423,8 @@ POST /api/external/event-result-link/batch<br>
                 signer_name: document.getElementById('cert-edit-signer-name').value.trim(),
                 border_style: document.getElementById('cert-edit-border').value,
                 background_color: document.getElementById('cert-edit-bg').value,
+                border_color: document.getElementById('cert-edit-border-color').value,
+                panel_color: document.getElementById('cert-edit-panel-color').value,
                 show_record_value: document.getElementById('cert-edit-show-record').checked ? 1 : 0,
                 show_athlete_team: document.getElementById('cert-edit-show-team').checked ? 1 : 0,
                 show_date: document.getElementById('cert-edit-show-date').checked ? 1 : 0,
@@ -10420,11 +10432,17 @@ POST /api/external/event-result-link/batch<br>
                 font_family: 'NanumSquare',
                 watermark_opacity: parseFloat(document.getElementById('cert-edit-wm-opacity').value) || 0.07,
                 watermark_scale: (parseInt(document.getElementById('cert-edit-wm-scale').value, 10) || 45) / 100,
-                // 워터마크 이미지 경로는 업로드 시 DB에 저장됨 — 미리보기/저장에 현재 값 동봉
-                watermark_image_path: (function () {
+                // 이미지 경로(로고/인장/워터마크)는 업로드 시 DB에 저장됨 —
+                // 미리보기/저장에 현재 저장된 값 동봉(없으면 미리보기에서 이미지가 안 보임)
+                ...(function () {
                     const eid = document.getElementById('cert-edit-id').value;
                     const cur = eid && _certTemplates.find(x => String(x.id) === String(eid));
-                    return cur ? (cur.watermark_image_path || '') : '';
+                    return {
+                        logo_left_path: cur ? (cur.logo_left_path || '') : '',
+                        logo_right_path: cur ? (cur.logo_right_path || '') : '',
+                        seal_image_path: cur ? (cur.seal_image_path || '') : '',
+                        watermark_image_path: cur ? (cur.watermark_image_path || '') : '',
+                    };
                 })(),
             };
         }

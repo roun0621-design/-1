@@ -581,6 +581,8 @@ CREATE TABLE IF NOT EXISTS "certificate_template" (
     "watermark_image_path" TEXT NOT NULL DEFAULT '',
     "watermark_opacity" DOUBLE PRECISION NOT NULL DEFAULT 0.07,
     "watermark_scale" DOUBLE PRECISION NOT NULL DEFAULT 0.45,
+    "border_color" TEXT NOT NULL DEFAULT '#b8945a',
+    "panel_color" TEXT NOT NULL DEFAULT '#faf8f2',
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "updated_at" TEXT NOT NULL DEFAULT NOW()
 );
