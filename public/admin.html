@@ -937,6 +937,22 @@
                                 <div><label class="t-xs">포인트색</label><br><input type="color" id="comp-edit-brand-point" value="#b79f58" style="width:54px;height:32px;border:1px solid var(--gray);border-radius:6px;"></div>
                                 <div><label class="t-xs">강조색</label><br><input type="color" id="comp-edit-brand-accent" value="#b79f58" style="width:54px;height:32px;border:1px solid var(--gray);border-radius:6px;"></div>
                             </div>
+                            <div style="display:flex;gap:24px;margin-top:12px;flex-wrap:wrap;">
+                                <div>
+                                    <label class="t-xs" style="font-weight:600;">성별 탭 노출</label>
+                                    <div class="t-xs t-muted" style="margin-bottom:3px;">아무것도 안 고르면 자동(전체 한 화면, 탭 숨김)</div>
+                                    <label class="t-xs" style="margin-right:10px;"><input type="checkbox" class="ev-gender-cb" value="M"> 남자</label>
+                                    <label class="t-xs" style="margin-right:10px;"><input type="checkbox" class="ev-gender-cb" value="F"> 여자</label>
+                                    <label class="t-xs"><input type="checkbox" class="ev-gender-cb" value="X"> 혼성</label>
+                                </div>
+                                <div>
+                                    <label class="t-xs" style="font-weight:600;">라운드 열 노출</label>
+                                    <div class="t-xs t-muted" style="margin-bottom:3px;">아무것도 안 고르면 자동(데이터 있는 라운드만)</div>
+                                    <label class="t-xs" style="margin-right:10px;"><input type="checkbox" class="ev-round-cb" value="preliminary"> 예선</label>
+                                    <label class="t-xs" style="margin-right:10px;"><input type="checkbox" class="ev-round-cb" value="semifinal"> 준결승</label>
+                                    <label class="t-xs"><input type="checkbox" class="ev-round-cb" value="final"> 결승</label>
+                                </div>
+                            </div>
                             <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;">
                                 <div>
                                     <label class="t-xs" style="font-weight:600;">브랜드 로고 (좌상단)</label>
@@ -4187,6 +4203,11 @@ POST /api/external/event-result-link/batch<br>
                 const _ac = document.getElementById('comp-edit-brand-accent'); if (_ac) _ac.value = c.brand_color_accent || '#b79f58';
                 _brandPrev('comp-brand-logo-prev', c.brand_logo_path);
                 _brandPrev('comp-brand-wm-prev', c.brand_watermark_path);
+                // 노출 override 체크박스 — 'auto'/빈값이면 모두 해제
+                const _gSet = (c.event_show_genders && c.event_show_genders !== 'auto') ? c.event_show_genders.split(',') : [];
+                const _rSet = (c.event_show_rounds && c.event_show_rounds !== 'auto') ? c.event_show_rounds.split(',') : [];
+                document.querySelectorAll('.ev-gender-cb').forEach(cb => { cb.checked = _gSet.includes(cb.value); });
+                document.querySelectorAll('.ev-round-cb').forEach(cb => { cb.checked = _rSet.includes(cb.value); });
                 updateSlugPreview(); toggleEventBranding();
                 // Populate federation dropdown from DB
                 const fedSelect = document.getElementById('comp-edit-federation');
@@ -4245,6 +4266,8 @@ POST /api/external/event-result-link/batch<br>
                             event_slug: document.getElementById('comp-edit-event-slug').value,
                             brand_color_point: document.getElementById('comp-edit-brand-point').value,
                             brand_color_accent: document.getElementById('comp-edit-brand-accent').value,
+                            show_genders: Array.from(document.querySelectorAll('.ev-gender-cb:checked')).map(cb => cb.value),
+                            show_rounds: Array.from(document.querySelectorAll('.ev-round-cb:checked')).map(cb => cb.value),
                         })
                     });
                     const d = await r.json();

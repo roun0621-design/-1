@@ -958,6 +958,9 @@ try { db.exec(`ALTER TABLE competition ADD COLUMN brand_logo_path TEXT NOT NULL 
 try { db.exec(`ALTER TABLE competition ADD COLUMN brand_watermark_path TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE competition ADD COLUMN brand_color_point TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE competition ADD COLUMN brand_color_accent TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+// 행사모드 노출 override: 'auto' 또는 쉼표목록(genders: 'M,F' / rounds: 'preliminary,final')
+try { db.exec(`ALTER TABLE competition ADD COLUMN event_show_genders TEXT NOT NULL DEFAULT 'auto'`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN event_show_rounds TEXT NOT NULL DEFAULT 'auto'`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
 // competition.home_visibility: 홈 노출 강제 설정 — 'auto'(±3일 윈도우) | 'pinned'(항상 상단 고정) | 'hidden'(홈에서 숨김)
 try { db.exec(`ALTER TABLE competition ADD COLUMN home_visibility TEXT NOT NULL DEFAULT 'auto'`); } catch(e) {}
@@ -1437,6 +1440,8 @@ if (db.isAsync) {
             await pgIdempotentAddCol('competition', 'brand_watermark_path', `TEXT NOT NULL DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'brand_color_point', `TEXT NOT NULL DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'brand_color_accent', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'event_show_genders', `TEXT NOT NULL DEFAULT 'auto'`);
+            await pgIdempotentAddCol('competition', 'event_show_rounds', `TEXT NOT NULL DEFAULT 'auto'`);
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
             // competition: 홈 노출 강제 설정 (auto | pinned | hidden)
             await pgIdempotentAddCol('competition', 'home_visibility', `TEXT NOT NULL DEFAULT 'auto'`);
