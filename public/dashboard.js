@@ -530,19 +530,21 @@ function switchDivision(div, btn) {
 
 // ── 행사(event) 모드 레이아웃 제어 — 노출 라운드 열 / 성별 탭 ──
 // 우선순위: 관리자 override(window.__EVENT_ROUNDS / __EVENT_GENDERS) > 자동(데이터 기반)
-let _colRounds = { preliminary: true, semifinal: true, final: true };
+let _colRounds = { wl: true, preliminary: true, semifinal: true, final: true };
 function _computeColRounds(allGroups) {
-    // 일반/노출 모드는 항상 3개 열 유지(기존 동작 불변)
-    if (!window.__EVENT_MODE) return { preliminary: true, semifinal: true, final: true };
-    const ov = window.__EVENT_ROUNDS; // 예: ['preliminary','final'] / undefined=자동
+    // 일반/노출 모드는 모든 열 유지(기존 동작 불변)
+    if (!window.__EVENT_MODE) return { wl: true, preliminary: true, semifinal: true, final: true };
+    const ov = window.__EVENT_ROUNDS; // 예: ['wl','final'] / undefined=자동
     if (Array.isArray(ov) && ov.length) {
-        return { preliminary: ov.includes('preliminary'), semifinal: ov.includes('semifinal'), final: ov.includes('final') };
+        return { wl: ov.includes('wl'), preliminary: ov.includes('preliminary'), semifinal: ov.includes('semifinal'), final: ov.includes('final') };
     }
     // 자동: 실제 데이터에 존재하는 라운드 열만 노출
     const has = { preliminary: false, semifinal: false, final: false };
     (allGroups || []).forEach(g => (g.rounds || []).forEach(r => { if (r.round_type in has) has[r.round_type] = true; }));
     if (!has.preliminary && !has.semifinal && !has.final) has.final = true; // 안전장치
-    return has;
+    // W/L 자동: 페이싱(Target) 설정이 하나라도 있으면 노출(트레드밀 행사 등은 없음 → 숨김)
+    const wlAuto = !!(typeof _pacingMap === 'object' && _pacingMap && Object.keys(_pacingMap).length);
+    return { wl: wlAuto, preliminary: has.preliminary, semifinal: has.semifinal, final: has.final };
 }
 function _applyEventGenderBar() {
     if (!window.__EVENT_MODE) return;
@@ -713,7 +715,7 @@ function renderCategoryTable(groups, label, isLive) {
             <thead><tr>
                 <th class="fav-th">알림</th>
                 <th style="text-align:left;">종목</th>
-                ${_isDisplayMode ? '<th style="width:64px;">영상</th><th style="width:60px;">명단</th>' : '<th style="width:52px;">W/L</th>'}
+                ${_isDisplayMode ? '<th style="width:64px;">영상</th><th style="width:60px;">명단</th>' : (_colRounds.wl ? '<th style="width:52px;">W/L</th>' : '')}
                 ${_colRounds.preliminary ? '<th style="width:72px;"><span style="color:#1565c0;">예선</span></th>' : ''}
                 ${_colRounds.semifinal ? '<th style="width:72px;"><span style="color:#e65100;">준결승</span></th>' : ''}
                 ${_colRounds.final ? '<th style="width:72px;"><span style="color:#b71c1c;">결승</span></th>' : ''}
@@ -806,7 +808,7 @@ function renderCategoryTable(groups, label, isLive) {
             ${favCell}
             <td class="event-name">${genderBadge}${g.name}${divBadge}${timeBadge}</td>
             ${_isDisplayMode ? `<td data-label="영상">${videoCell}</td>` : ''}
-            <td data-label="${_isDisplayMode ? '명단' : 'W/L'}">${_isDisplayMode ? rosterCell : wlCell}</td>
+            ${(_isDisplayMode || _colRounds.wl) ? `<td data-label="${_isDisplayMode ? '명단' : 'W/L'}">${_isDisplayMode ? rosterCell : wlCell}</td>` : ''}
             ${_colRounds.preliminary ? `<td data-label="예선">${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>` : ''}
             ${_colRounds.semifinal ? `<td data-label="준결승">${_isDisplayMode ? renderDisplayBtn(semi) : renderViewerBtn(semi)}</td>` : ''}
             ${_colRounds.final ? `<td data-label="결승">${_isDisplayMode ? renderDisplayBtn(fin) : renderViewerBtn(fin)}</td>` : ''}
