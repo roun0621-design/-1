@@ -525,7 +525,44 @@ function switchDivision(div, btn) {
     renderMatrix();
 }
 
+// ── 행사(event) 모드 레이아웃 제어 — 노출 라운드 열 / 성별 탭 ──
+// 우선순위: 관리자 override(window.__EVENT_ROUNDS / __EVENT_GENDERS) > 자동(데이터 기반)
+let _colRounds = { preliminary: true, semifinal: true, final: true };
+function _computeColRounds(allGroups) {
+    // 일반/노출 모드는 항상 3개 열 유지(기존 동작 불변)
+    if (!window.__EVENT_MODE) return { preliminary: true, semifinal: true, final: true };
+    const ov = window.__EVENT_ROUNDS; // 예: ['preliminary','final'] / undefined=자동
+    if (Array.isArray(ov) && ov.length) {
+        return { preliminary: ov.includes('preliminary'), semifinal: ov.includes('semifinal'), final: ov.includes('final') };
+    }
+    // 자동: 실제 데이터에 존재하는 라운드 열만 노출
+    const has = { preliminary: false, semifinal: false, final: false };
+    (allGroups || []).forEach(g => (g.rounds || []).forEach(r => { if (r.round_type in has) has[r.round_type] = true; }));
+    if (!has.preliminary && !has.semifinal && !has.final) has.final = true; // 안전장치
+    return has;
+}
+function _applyEventGenderBar() {
+    if (!window.__EVENT_MODE) return;
+    const bar = document.getElementById('gender-tabs');
+    const gv = window.__EVENT_GENDERS; // 예: ['M','F'] subset / undefined / ['ALL']=자동(숨김)
+    const explicit = Array.isArray(gv) && gv.length && !(gv.length === 1 && gv[0] === 'ALL');
+    if (explicit) {
+        if (bar) {
+            bar.style.display = '';
+            bar.querySelectorAll('.gender-tab-btn').forEach(btn => {
+                const g = btn.getAttribute('data-gender');
+                btn.style.display = (g === 'ALL' || gv.includes(g)) ? '' : 'none';
+            });
+        }
+    } else {
+        // 자동/전체만 → 성별 탭 바 숨김, '전체' 고정 (깔끔)
+        if (bar) bar.style.display = 'none';
+        currentGender = 'ALL';
+    }
+}
+
 function renderMatrix() {
+    _applyEventGenderBar();
     const container = document.getElementById('events-container');
     // 'ALL' 탭이면 성별 필터 해제 → 남/여/혼성 모든 종목을 종목순으로 통합 표시
     let events = allEvents.filter(e => !e.parent_event_id);
@@ -636,6 +673,9 @@ function renderMatrix() {
 
     let html = '';
 
+    // 행사모드: 노출할 라운드 열 계산(자동 또는 override) — 렌더 전에 1회
+    _colRounds = _computeColRounds(allGroups);
+
     // 종합기록지 버튼 삭제됨 — 관리자 문서 탭에서 다운로드
 
     // Render LIVE (in_progress) section pinned at top
@@ -671,9 +711,9 @@ function renderCategoryTable(groups, label, isLive) {
                 <th class="fav-th">알림</th>
                 <th style="text-align:left;">종목</th>
                 ${_isDisplayMode ? '<th style="width:64px;">영상</th><th style="width:60px;">명단</th>' : '<th style="width:52px;">W/L</th>'}
-                <th style="width:72px;"><span style="color:#1565c0;">예선</span></th>
-                <th style="width:72px;"><span style="color:#e65100;">준결승</span></th>
-                <th style="width:72px;"><span style="color:#b71c1c;">결승</span></th>
+                ${_colRounds.preliminary ? '<th style="width:72px;"><span style="color:#1565c0;">예선</span></th>' : ''}
+                ${_colRounds.semifinal ? '<th style="width:72px;"><span style="color:#e65100;">준결승</span></th>' : ''}
+                ${_colRounds.final ? '<th style="width:72px;"><span style="color:#b71c1c;">결승</span></th>' : ''}
             </tr></thead>
             <tbody>`;
 
@@ -764,9 +804,9 @@ function renderCategoryTable(groups, label, isLive) {
             <td class="event-name">${genderBadge}${g.name}${divBadge}${timeBadge}</td>
             ${_isDisplayMode ? `<td data-label="영상">${videoCell}</td>` : ''}
             <td data-label="${_isDisplayMode ? '명단' : 'W/L'}">${_isDisplayMode ? rosterCell : wlCell}</td>
-            <td data-label="예선">${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>
-            <td data-label="준결승">${_isDisplayMode ? renderDisplayBtn(semi) : renderViewerBtn(semi)}</td>
-            <td data-label="결승">${_isDisplayMode ? renderDisplayBtn(fin) : renderViewerBtn(fin)}</td>
+            ${_colRounds.preliminary ? `<td data-label="예선">${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>` : ''}
+            ${_colRounds.semifinal ? `<td data-label="준결승">${_isDisplayMode ? renderDisplayBtn(semi) : renderViewerBtn(semi)}</td>` : ''}
+            ${_colRounds.final ? `<td data-label="결승">${_isDisplayMode ? renderDisplayBtn(fin) : renderViewerBtn(fin)}</td>` : ''}
         </tr>`;
     });
 
