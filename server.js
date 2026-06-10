@@ -349,6 +349,15 @@ app.get('/results.html', (req, res) => {
     res.redirect(`/dashboard.html${comp}`);
 });
 
+// 행사(event) 간편 기록입력 — /e/<slug>/입력 (또는 /record) → 전용 입력 페이지
+//   ※ /e/:slug (대시보드)보다 먼저 등록할 필요는 없으나(세그먼트 수가 달라 충돌 없음) 가독성상 위에 둠
+app.get('/e/:slug/:page', (req, res, next) => {
+    let p = req.params.page;
+    try { p = decodeURIComponent(p); } catch (e) {}
+    if (p === '입력' || p === 'record') return res.sendFile(path.join(__dirname, 'public', 'event-record.html'));
+    return next();
+});
+
 // 행사(event) 화이트라벨 — /e/<brand-slug> → 대시보드(클라이언트가 slug로 브랜딩 적용)
 app.get('/e/:slug', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
@@ -10861,6 +10870,9 @@ const getEventResultsForCert = _certMod.getEventResultsForCert;
 //   _resetSmsCounterIfNeeded 헬퍼는 모듈 내부로 이동.
 //   getEventResultsForCert 는 server.js 의 함수를 그대로 주입 (certificate 추출 시 함께 이동).
 require('./lib/routes/sms')(app, { db, isAdminKey, SMS, getEventResultsForCert });
+
+// ========== 행사(event) 간편 기록입력 ==========
+require('./lib/routes/eventRecord')(app, { db, isAdminKey, isOperationKey, SMS });
 
 // ========== Push(FCM 웹푸시) System ==========
 const Push = require('./lib/pushSender');

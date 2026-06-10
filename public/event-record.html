@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<base href="/">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#b79f58">
+<title>간편 기록입력</title>
+<link rel="stylesheet" href="/styles.css?v=72">
+<style>
+    body { background: var(--bg); }
+    #ev-watermark { position:fixed; inset:0; z-index:0; pointer-events:none; background-repeat:no-repeat; background-position:center 50%; background-size:min(60vw,460px); opacity:.06; }
+    .er-wrap { position:relative; z-index:1; max-width:720px; margin:0 auto; padding:14px 16px 60px; }
+    .er-head { display:flex; align-items:center; gap:12px; padding:10px 4px 14px; }
+    .er-logo { height:34px; max-width:240px; object-fit:contain; }
+    .er-title { font-family:var(--font-brand); font-size:18px; font-weight:700; color:var(--text); }
+    .er-card { background:rgba(255,255,255,.86); border:1px solid var(--gray); border-radius:var(--radius-lg); padding:16px; margin-bottom:14px; box-shadow:var(--shadow); }
+    .er-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+    .er-field { flex:1; min-width:130px; }
+    .er-field label { display:block; font-size:12px; font-weight:700; color:var(--gray-dark); margin-bottom:3px; }
+    .er-field input { width:100%; padding:10px; border:1px solid var(--gray); border-radius:8px; font-size:15px; box-sizing:border-box; }
+    .er-gender { display:flex; gap:6px; }
+    .er-gbtn { flex:1; padding:10px 0; border:1.5px solid var(--gray); border-radius:8px; background:#fff; font-weight:700; cursor:pointer; font-size:14px; }
+    .er-gbtn.on { background:var(--green); color:#fff; border-color:var(--green); }
+    .er-dist { display:flex; gap:8px; align-items:flex-end; }
+    .er-dist input { font-size:22px; font-weight:800; text-align:center; }
+    .er-save { width:100%; padding:14px; border:none; border-radius:10px; background:var(--green); color:#fff; font-size:17px; font-weight:800; cursor:pointer; margin-top:4px; }
+    .er-save:active { transform:scale(.99); }
+    .er-list { width:100%; border-collapse:collapse; font-size:14px; }
+    .er-list th { text-align:left; font-size:11px; color:var(--gray-dark); border-bottom:2px solid var(--gray); padding:6px 8px; text-transform:uppercase; letter-spacing:.5px; }
+    .er-list td { padding:8px; border-bottom:1px solid var(--gray-light); }
+    .er-rank { font-weight:800; color:var(--green); width:34px; text-align:center; }
+    .er-best { font-weight:800; font-variant-numeric:tabular-nums; }
+    .er-cert { padding:5px 10px; border:1px solid var(--green); color:var(--green); background:#fff; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .er-cert:disabled { opacity:.4; cursor:default; }
+    .er-sub { font-size:12px; color:var(--gray-dark); }
+    .er-badge { display:inline-block; min-width:18px; text-align:center; font-size:10px; font-weight:800; padding:1px 5px; border-radius:8px; color:#fff; }
+    .er-badge[data-g="M"]{ background:#1a2a5e; } .er-badge[data-g="F"]{ background:#8b1a2a; }
+    .er-toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#222; color:#fff; padding:12px 20px; border-radius:10px; font-weight:700; z-index:50; opacity:0; transition:opacity .2s; pointer-events:none; }
+    .er-toast.show { opacity:.95; }
+    .er-foot { text-align:center; font-size:11px; color:var(--gray-dark); margin-top:18px; letter-spacing:.5px; }
+</style>
+</head>
+<body>
+<div id="ev-watermark" style="display:none;"></div>
+<div class="er-wrap">
+    <div class="er-head">
+        <span id="er-brand" class="er-title">간편 기록입력</span>
+    </div>
+
+    <div class="er-card">
+        <div class="er-row">
+            <div class="er-field" style="flex:2;">
+                <label>종목</label>
+                <select id="er-event" style="width:100%;padding:10px;border:1px solid var(--gray);border-radius:8px;font-size:15px;"></select>
+            </div>
+        </div>
+        <div class="er-row">
+            <div class="er-field"><label>이름 *</label><input id="er-name" autocomplete="off"></div>
+            <div class="er-field"><label>소속</label><input id="er-team" autocomplete="off"></div>
+        </div>
+        <div class="er-row">
+            <div class="er-field" style="max-width:160px;">
+                <label>성별</label>
+                <div class="er-gender">
+                    <button type="button" class="er-gbtn on" data-g="M" onclick="erSetGender('M')">남</button>
+                    <button type="button" class="er-gbtn" data-g="F" onclick="erSetGender('F')">여</button>
+                </div>
+            </div>
+            <div class="er-field"><label>전화번호</label><input id="er-phone" inputmode="numeric" placeholder="010..." autocomplete="off"></div>
+        </div>
+        <div class="er-row">
+            <div class="er-field er-dist">
+                <div style="flex:1;"><label>거리 (m) *</label><input id="er-dist" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></div>
+            </div>
+        </div>
+        <button class="er-save" onclick="erSave()">저장 (최고기록만 반영)</button>
+    </div>
+
+    <div class="er-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <strong id="er-list-title">참가자 순위</strong>
+            <span class="er-sub" id="er-count"></span>
+        </div>
+        <table class="er-list">
+            <thead><tr><th>순위</th><th>이름</th><th>소속</th><th>기록</th><th></th></tr></thead>
+            <tbody id="er-tbody"><tr><td colspan="5" class="er-sub">종목을 선택하세요.</td></tr></tbody>
+        </table>
+    </div>
+
+    <div class="er-foot">Powered by PACE RISE</div>
+</div>
+<div class="er-toast" id="er-toast"></div>
+
+<script>
+const ER_SLUG = (location.pathname.match(/^\/e\/([^\/?#]+)/) || [])[1] || '';
+let ER_KEY = localStorage.getItem('pace_event_key') || '';
+let ER_GENDER = 'M';
+
+function erToast(msg, ms){ const t=document.getElementById('er-toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'), ms||2200); }
+function erSetGender(g){ ER_GENDER=g; document.querySelectorAll('.er-gbtn').forEach(b=>b.classList.toggle('on', b.getAttribute('data-g')===g)); }
+
+// ── 색 자동 팔레트(대시보드와 동일 규칙) ──
+function _hexToRgb(hex){ let h=String(hex||'').trim().replace('#',''); if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; const n=parseInt(h,16); if(isNaN(n)||h.length!==6)return null; return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; }
+function _tint(rgb,w){ const m=c=>Math.round(c+(255-c)*w); const hx=c=>('0'+m(c).toString(16)).slice(-2); return '#'+hx(rgb.r)+hx(rgb.g)+hx(rgb.b); }
+function erApplyBrand(ev){
+    const b=(ev&&ev.brand)||{}; const P=b.point&&_hexToRgb(b.point)?b.point:null; let css='';
+    if(P){ const rgb=_hexToRgb(P); const v={'--green':P,'--green-light':_tint(rgb,.90),'--green-soft':_tint(rgb,.74),'--gray':_tint(rgb,.82),'--gray-light':_tint(rgb,.93),'--bg':_tint(rgb,.955),'--bg-dark':_tint(rgb,.88),'--accent':P,'--accent-light':_tint(rgb,.90)};
+        css=':root{'+Object.keys(v).map(k=>k+':'+v[k]+';').join('')+'}'; const meta=document.querySelector('meta[name="theme-color"]'); if(meta)meta.content=P; }
+    if(b.watermark){ const wm=document.getElementById('ev-watermark'); wm.style.display=''; wm.style.backgroundImage='url("'+b.watermark+'")'; }
+    if(css){ const s=document.createElement('style'); s.textContent=css; document.head.appendChild(s); }
+    const brand=document.getElementById('er-brand');
+    if(b.logo){ brand.outerHTML='<img class="er-logo" src="'+b.logo+'" alt="">'; }
+    else if(ev&&ev.name){ brand.textContent=ev.name; }
+    if(ev&&ev.name) document.title=ev.name+' · 기록입력';
+}
+
+async function erEnsureKey(){
+    if(ER_KEY) return true;
+    const k=prompt('운영 접근키를 입력하세요 (스태프용)');
+    if(!k){ erToast('접근키가 필요합니다.'); return false; }
+    ER_KEY=k.trim(); localStorage.setItem('pace_event_key', ER_KEY); return true;
+}
+
+async function erInit(){
+    try{
+        const ev=await (await fetch('/api/event/'+encodeURIComponent(ER_SLUG))).json();
+        if(ev&&ev.id){ window.__ER_COMP=ev.id; erApplyBrand(ev); }
+        // 종목 목록
+        const evs=await (await fetch('/api/events?competition_id='+ev.id)).json();
+        const sel=document.getElementById('er-event');
+        sel.innerHTML=(evs||[]).map(e=>`<option value="${e.id}">${e.name}${e.gender==='F'?' (여)':e.gender==='M'?' (남)':''}</option>`).join('');
+        sel.onchange=erLoadList;
+        await erEnsureKey();
+        erLoadList();
+    }catch(e){ erToast('초기화 실패: '+e.message); }
+}
+
+async function erLoadList(){
+    const eid=document.getElementById('er-event').value;
+    if(!eid) return;
+    const tb=document.getElementById('er-tbody');
+    try{
+        const r=await fetch('/api/event/'+encodeURIComponent(ER_SLUG)+'/records?event_id='+eid+'&key='+encodeURIComponent(ER_KEY));
+        if(r.status===403){ ER_KEY=''; localStorage.removeItem('pace_event_key'); tb.innerHTML='<tr><td colspan="5" class="er-sub">접근키가 올바르지 않습니다. 새로고침 후 다시 입력하세요.</td></tr>'; return; }
+        const rows=await r.json();
+        document.getElementById('er-count').textContent=(rows.length||0)+'명';
+        if(!rows.length){ tb.innerHTML='<tr><td colspan="5" class="er-sub">아직 기록이 없습니다.</td></tr>'; return; }
+        tb.innerHTML=rows.map(x=>{
+            const best=(x.best==null)?'-':(x.best+' m');
+            const rank=(x.rank==null)?'-':x.rank;
+            const canCert=!!(x.phone&&String(x.phone).trim());
+            return `<tr>
+                <td class="er-rank">${rank}</td>
+                <td><span class="er-badge" data-g="${x.gender}">${x.gender==='F'?'여':'남'}</span> ${x.name}</td>
+                <td class="er-sub">${x.team||''}</td>
+                <td class="er-best">${best}</td>
+                <td><button class="er-cert" ${canCert?'':'disabled'} onclick="erSendCert(${x.entry_id}, this)">기록증</button></td>
+            </tr>`;
+        }).join('');
+    }catch(e){ tb.innerHTML='<tr><td colspan="5" class="er-sub">목록 로드 실패</td></tr>'; }
+}
+
+async function erSave(){
+    if(!await erEnsureKey()) return;
+    const eid=document.getElementById('er-event').value;
+    const name=document.getElementById('er-name').value.trim();
+    const dist=document.getElementById('er-dist').value;
+    if(!eid){ erToast('종목을 선택하세요.'); return; }
+    if(!name){ erToast('이름을 입력하세요.'); return; }
+    if(dist===''||isNaN(parseFloat(dist))){ erToast('거리를 입력하세요.'); return; }
+    try{
+        const r=await fetch('/api/event/'+encodeURIComponent(ER_SLUG)+'/record',{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ key:ER_KEY, event_id:eid, name, team:document.getElementById('er-team').value.trim(), gender:ER_GENDER, phone:document.getElementById('er-phone').value.trim(), distance_meters:parseFloat(dist) })
+        });
+        const d=await r.json();
+        if(!r.ok){ erToast(d.error||'저장 실패'); return; }
+        erToast(d.improved ? `저장! ${name} 최고기록 ${d.best} m` : `${name} 기존 최고기록 유지 (${d.best} m)`);
+        // 입력값 초기화(이름/소속/전화/거리), 종목·성별 유지
+        ['er-name','er-team','er-phone','er-dist'].forEach(id=>document.getElementById(id).value='');
+        document.getElementById('er-name').focus();
+        erLoadList();
+    }catch(e){ erToast('저장 오류: '+e.message); }
+}
+
+async function erSendCert(entryId, btn){
+    if(!await erEnsureKey()) return;
+    if(!confirm('이 참가자에게 기록증 문자를 보낼까요?')) return;
+    btn.disabled=true; const old=btn.textContent; btn.textContent='발송중';
+    try{
+        const r=await fetch('/api/event/'+encodeURIComponent(ER_SLUG)+'/send-cert',{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ key:ER_KEY, entry_id:entryId })
+        });
+        const d=await r.json();
+        if(!r.ok){ erToast(d.error||'발송 실패'); btn.disabled=false; btn.textContent=old; return; }
+        erToast(d.status==='simulated'?'발송(시뮬레이션) 완료':'기록증 문자 발송 완료');
+        btn.textContent='완료';
+    }catch(e){ erToast('발송 오류: '+e.message); btn.disabled=false; btn.textContent=old; }
+}
+
+document.addEventListener('DOMContentLoaded', erInit);
+</script>
+</body>
+</html>
