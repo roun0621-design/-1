@@ -149,7 +149,8 @@
     // 알림 허용 유도 팝업 (일주일 보지 않기 포함)
     function showPushPrompt(opts) {
         opts = opts || {};
-        if (!('Notification' in window) || Notification.permission === 'granted') return; // 이미 허용이면 안 띄움
+        // force(테스트)면 허용 상태여도 표시. 평소엔 이미 허용이면 안 띄움
+        if (!opts.force && (!('Notification' in window) || Notification.permission === 'granted')) return;
         if (document.getElementById('pr-push-ov')) return; // 중복 방지
         _injectPromptStyle();
         var ov = document.createElement('div'); ov.className = 'pr-push-ov'; ov.id = 'pr-push-ov';
@@ -177,6 +178,9 @@
     // 홈(대시보드) 진입 시 1회 유도
     async function maybeShowHomePrompt() {
         try {
+            // 테스트: 주소에 ?pushprompt=1 붙이면 이미 허용했어도 강제로 한번 보여줌
+            var force = /[?&]pushprompt=1/.test(location.search);
+            if (force) { showPushPrompt({ title: '경기 알림 받기', message: '관심 종목의 소집·결과를 휴대폰 알림으로 받아보세요. (테스트 표시)', force: true }); return; }
             if (!('Notification' in window) || Notification.permission === 'granted') return;
             if (_dismissed('pace_push_home_dismiss')) return;
             var cfg = await getConfig();
