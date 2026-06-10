@@ -93,6 +93,5 @@ require('./lib/routes/<domain>')(app, { db, isAdminKey, opLog });
 |------|---------|--------|
 | qualifications.js | 3 | db, isOperationKey |
 
-- 추출과 동시에 `save`/`approve`에 운영키 인증 추가 (보안 점검 후속)
-- GET `/api/qualifications`는 공개 유지 (dashboard/results 조회용)
-- 테스트: 95개 통과 (`tests/api/14_auth_locks.test.js` 회귀 테스트 포함)
+- 동작 동일 추출 (인증 없음 — 심판 화면용, 운영 정책상 키 미요구)
+- GET `/api/qualifications`는 dashboard/results 조회용

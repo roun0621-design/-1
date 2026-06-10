@@ -44,7 +44,6 @@ describe('POST /api/events/:id/create-final — WA 시딩/레인', () => {
         const res = await request(app)
             .post(`/api/events/${eventId}/create-final`)
             .send({})
-            .set('x-admin-key', process.env.OPERATION_KEY)
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(200);
 
@@ -69,7 +68,6 @@ describe('POST /api/events/:id/create-final — WA 시딩/레인', () => {
         const res = await request(app)
             .post(`/api/events/${eventId}/create-final`)
             .send({})
-            .set('x-admin-key', process.env.OPERATION_KEY)
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(400);
     });

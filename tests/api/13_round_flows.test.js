@@ -36,7 +36,7 @@ describe('POST /api/events/:id/create-semifinal', () => {
             selections.push({ event_entry_id: entry, selected: 1 });
         }
         const res = await request(app).post(`/api/events/${ev}/create-semifinal`)
-            .send({ group_count: 1, selections }).set('x-admin-key', process.env.OPERATION_KEY).set('Content-Type', 'application/json');
+            .send({ group_count: 1, selections }).set('Content-Type', 'application/json');
         expect(res.status).not.toBe(500);
         expect(res.status).toBe(200);
         const semi = await db.get("SELECT * FROM event WHERE competition_id=? AND round_type='semifinal' AND id!=?", c, ev);
@@ -47,7 +47,7 @@ describe('POST /api/events/:id/create-semifinal', () => {
         const c = await comp();
         const r = await db.run("INSERT INTO event (competition_id, name, category, gender, round_type, round_status) VALUES (?,?, 'track', 'M', 'preliminary', 'in_progress')", c, '200m');
         const res = await request(app).post(`/api/events/${r.lastInsertRowid}/create-semifinal`)
-            .send({ group_count: 1, selections: [{ event_entry_id: 1, selected: 0 }] }).set('x-admin-key', process.env.OPERATION_KEY).set('Content-Type', 'application/json');
+            .send({ group_count: 1, selections: [{ event_entry_id: 1, selected: 0 }] }).set('Content-Type', 'application/json');
         expect(res.status).toBe(400);
     });
 });

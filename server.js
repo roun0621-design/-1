@@ -2502,8 +2502,6 @@ app.get('/api/heats/:id/entries', async (req, res) => {
 require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit, parseDbTimestampMs });
 // ============================================================
 app.post('/api/heats/:id/wind', async (req, res) => {
-    const _wkey = req.body.admin_key || req.headers['x-admin-key'] || '';
-    if (!isOperationKey(_wkey)) return res.status(403).json({ error: '인증 필요' });
     const { wind } = req.body;
     const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
@@ -2915,8 +2913,6 @@ async function syncCombinedSubEventCheckin(parentEventId, athleteId, status) {
 
 // Bulk sync: set all sub-event entries to match parent checked_in status
 app.post('/api/combined/sync-checkin', async (req, res) => {
-    const _sckey = req.body.admin_key || req.headers['x-admin-key'] || '';
-    if (!isOperationKey(_sckey)) return res.status(403).json({ error: '인증 필요' });
     const { event_id } = req.body;
     if (!event_id) return res.status(400).json({ error: 'event_id required' });
     const evt = await db.get('SELECT * FROM event WHERE id=?', event_id);
@@ -2941,7 +2937,7 @@ app.post('/api/combined/sync-checkin', async (req, res) => {
 // ============================================================
 // QUALIFICATIONS — lib/routes/qualifications.js 로 추출
 // ============================================================
-require('./lib/routes/qualifications')(app, { db, isOperationKey });
+require('./lib/routes/qualifications')(app, { db });
 
 // ============================================================
 // ROUND MANAGEMENT
@@ -3027,8 +3023,6 @@ app.post('/api/events/:id/callroom-complete', async (req, res) => {
     res.json({ success: true, dns_auto: dnsCount });
 });
 app.post('/api/events/:id/create-final', async (req, res) => {
-    const _cfkey = req.body.admin_key || req.headers['x-admin-key'] || '';
-    if (!isOperationKey(_cfkey)) return res.status(403).json({ error: '인증 필요' });
     const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     const existingFinal = await db.get("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND round_type='final' AND competition_id=? AND parent_event_id IS NULL AND id!=?", event.name, event.gender, event.category, event.competition_id, event.id);
@@ -3243,8 +3237,6 @@ app.get('/api/events/:id/lane-assignments', async (req, res) => {
 });
 
 app.post('/api/events/:id/create-semifinal', async (req, res) => {
-    const _cskey = req.body.admin_key || req.headers['x-admin-key'] || '';
-    if (!isOperationKey(_cskey)) return res.status(403).json({ error: '인증 필요' });
     const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     const existingSemi = await db.get("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND round_type='semifinal' AND competition_id=? AND parent_event_id IS NULL", event.name, event.gender, event.category, event.competition_id);
@@ -3523,8 +3515,6 @@ app.post('/api/events/:id/sub-events/sync-athletes', async (req, res) => {
 
 // POST /api/lanes/bulk-update — Update lane assignments by heat_entry_id
 app.post('/api/lanes/bulk-update', async (req, res) => {
-    const _lbkey = req.body.admin_key || req.headers['x-admin-key'] || '';
-    if (!isOperationKey(_lbkey)) return res.status(403).json({ error: '인증 필요' });
     const { assignments } = req.body;
     if (!assignments || !Array.isArray(assignments)) return res.status(400).json({ error: 'assignments array required' });
 
@@ -7745,8 +7735,6 @@ app.get('/api/wa-validate/:id', async (req, res) => {
     res.json(result);
 });
 app.post('/api/wa-correct/:id', async (req, res) => {
-    const _wckey = (req.body && req.body.admin_key) || req.headers['x-admin-key'] || '';
-    if (!isOperationKey(_wckey)) return res.status(403).json({ error: '인증 필요' });
     const result = await autoCorrectWALanes(parseInt(req.params.id), db);
     res.json(result);
 });
