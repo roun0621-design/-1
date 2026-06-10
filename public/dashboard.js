@@ -49,7 +49,15 @@ async function _eventBrandBootstrap() {
     const m = location.pathname.match(/^\/e\/([^\/?#]+)/);
     if (!m) return;
     try {
-        const res = await fetch('/api/event/' + encodeURIComponent(decodeURIComponent(m[1])));
+        // 어떤 경우에도(서비스워커/네트워크 hang 포함) 대시보드 전체가
+        // '로딩 중' 에서 멈추지 않도록 5초 타임아웃을 건다.
+        const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        const timer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, 5000) : null;
+        let res;
+        try {
+            res = await fetch('/api/event/' + encodeURIComponent(decodeURIComponent(m[1])),
+                ctrl ? { signal: ctrl.signal } : undefined);
+        } finally { if (timer) clearTimeout(timer); }
         if (!res.ok) return;
         const ev = await res.json();
         if (ev && ev.id) {
