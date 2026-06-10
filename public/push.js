@@ -133,8 +133,9 @@
         s.textContent =
             '.pr-push-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;animation:prPushFade .15s ease;}' +
             '@keyframes prPushFade{from{opacity:0}to{opacity:1}}' +
-            '.pr-push-card{background:#fff;border-radius:18px;max-width:340px;width:100%;padding:24px 22px 16px;box-shadow:0 14px 44px rgba(0,0,0,.28);text-align:center;}' +
-            '.pr-push-ico{font-size:38px;margin-bottom:8px;}' +
+            '.pr-push-card{background:#fff;border-radius:18px;max-width:340px;width:100%;padding:26px 22px 16px;box-shadow:0 14px 44px rgba(0,0,0,.28);text-align:center;}' +
+            '.pr-push-ico{width:62px;height:62px;margin:0 auto 14px;border-radius:50%;background:linear-gradient(135deg,#f8f1de,#efe4c4);display:flex;align-items:center;justify-content:center;}' +
+            '.pr-push-ico svg{fill:none;stroke:#b79f58;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}' +
             '.pr-push-ttl{font-size:17px;font-weight:800;color:#1a1a1a;margin-bottom:6px;}' +
             '.pr-push-msg{font-size:13px;color:#666;line-height:1.55;margin-bottom:16px;word-break:keep-all;}' +
             '.pr-push-acts{display:flex;gap:8px;}' +
@@ -156,7 +157,7 @@
         var ov = document.createElement('div'); ov.className = 'pr-push-ov'; ov.id = 'pr-push-ov';
         ov.innerHTML =
             '<div class="pr-push-card">' +
-            '<div class="pr-push-ico">🔔</div>' +
+            '<div class="pr-push-ico"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>' +
             '<div class="pr-push-ttl">' + (opts.title || '경기 알림 받기') + '</div>' +
             '<div class="pr-push-msg">' + (opts.message || '관심 종목의 소집·결과를 휴대폰 알림으로 받아보세요.') + '</div>' +
             '<div class="pr-push-acts">' +
