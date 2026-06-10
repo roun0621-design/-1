@@ -913,10 +913,38 @@
                             </select>
                         </div>
                         <div class="admin-form-group"><label>운영 모드</label>
-                            <select id="comp-edit-mode">
+                            <select id="comp-edit-mode" onchange="toggleEventBranding()">
                                 <option value="operation">운영용</option>
                                 <option value="display">노출용</option>
+                                <option value="event">행사용 (화이트라벨)</option>
                             </select>
+                        </div>
+                        <div class="admin-form-group" id="comp-event-branding" style="flex-basis:100%;display:none;border-top:1px dashed #ddd;padding-top:12px;margin-top:6px;">
+                            <label style="font-weight:700;color:#8a7640;">🎟️ 행사(화이트라벨) 브랜딩</label>
+                            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:6px;">
+                                <div>
+                                    <label class="t-xs">행사 주소(slug)</label>
+                                    <input id="comp-edit-event-slug" placeholder="ooo-challenge" oninput="updateSlugPreview()" style="padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                    <div class="t-xs t-muted" style="margin-top:2px;">접속 주소: <span style="color:#8a7640;">/e/<span id="comp-slug-preview">슬러그</span></span></div>
+                                </div>
+                                <div><label class="t-xs">포인트색</label><br><input type="color" id="comp-edit-brand-point" value="#b79f58" style="width:54px;height:32px;border:1px solid var(--gray);border-radius:6px;"></div>
+                                <div><label class="t-xs">강조색</label><br><input type="color" id="comp-edit-brand-accent" value="#b79f58" style="width:54px;height:32px;border:1px solid var(--gray);border-radius:6px;"></div>
+                            </div>
+                            <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;">
+                                <div>
+                                    <label class="t-xs" style="font-weight:600;">브랜드 로고 (좌상단)</label>
+                                    <div id="comp-brand-logo-prev" class="cert-img-slot" style="width:160px;"></div>
+                                    <input type="file" id="comp-brand-logo-input" accept="image/*" style="display:none;" onchange="uploadBrandImage('logo', this.files[0])">
+                                    <button type="button" class="btn btn-xs btn-outline" style="margin-top:4px;" onclick="document.getElementById('comp-brand-logo-input').click()">로고 업로드</button>
+                                </div>
+                                <div>
+                                    <label class="t-xs" style="font-weight:600;">배경 워터마크</label>
+                                    <div id="comp-brand-wm-prev" class="cert-img-slot" style="width:160px;"></div>
+                                    <input type="file" id="comp-brand-wm-input" accept="image/*" style="display:none;" onchange="uploadBrandImage('watermark', this.files[0])">
+                                    <button type="button" class="btn btn-xs btn-outline" style="margin-top:4px;" onclick="document.getElementById('comp-brand-wm-input').click()">워터마크 업로드</button>
+                                </div>
+                            </div>
+                            <div class="t-xs t-muted" style="margin-top:8px;">※ 이미지 업로드는 먼저 <b>저장</b> 후 가능. 슬러그·색 변경도 저장을 눌러야 반영됩니다.</div>
                         </div>
                         <div class="admin-form-group"><label>부 구분</label>
                             <select id="comp-edit-division">
@@ -4145,6 +4173,13 @@ POST /api/external/event-result-link/batch<br>
                 // Set mode
                 const modeSelect = document.getElementById('comp-edit-mode');
                 if (modeSelect) modeSelect.value = c.mode || 'operation';
+                // 행사(event) 브랜딩 필드 채우기
+                const _sl = document.getElementById('comp-edit-event-slug'); if (_sl) _sl.value = c.event_slug || '';
+                const _pt = document.getElementById('comp-edit-brand-point'); if (_pt) _pt.value = c.brand_color_point || '#b79f58';
+                const _ac = document.getElementById('comp-edit-brand-accent'); if (_ac) _ac.value = c.brand_color_accent || '#b79f58';
+                _brandPrev('comp-brand-logo-prev', c.brand_logo_path);
+                _brandPrev('comp-brand-wm-prev', c.brand_watermark_path);
+                updateSlugPreview(); toggleEventBranding();
                 // Populate federation dropdown from DB
                 const fedSelect = document.getElementById('comp-edit-federation');
                 const feds = await API.getFederations();
@@ -4192,9 +4227,50 @@ POST /api/external/event-result-link/batch<br>
                     mode: document.getElementById('comp-edit-mode').value,
                     series_id: sIdRaw === '' ? null : parseInt(sIdRaw, 10),
                 }, AK());
+                // 행사(event) 모드면 슬러그·색 별도 저장
+                if (document.getElementById('comp-edit-mode').value === 'event') {
+                    const r = await fetch('/api/admin/competitions/' + _selectedCompId + '/event-settings', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            admin_key: AK(), set_event_mode: true,
+                            event_slug: document.getElementById('comp-edit-event-slug').value,
+                            brand_color_point: document.getElementById('comp-edit-brand-point').value,
+                            brand_color_accent: document.getElementById('comp-edit-brand-accent').value,
+                        })
+                    });
+                    const d = await r.json();
+                    if (!r.ok) { toast('행사 설정 실패: ' + (d.error || ''), 'error'); return; }
+                }
                 toast('대회 정보 저장 완료');
                 await loadCompetitionSelector();
             } catch (e) { toast(e.error || e.message || '저장 실패', 'error'); }
+        }
+        function toggleEventBranding() {
+            const m = document.getElementById('comp-edit-mode');
+            const box = document.getElementById('comp-event-branding');
+            if (box && m) box.style.display = (m.value === 'event') ? 'block' : 'none';
+        }
+        function updateSlugPreview() {
+            const v = (document.getElementById('comp-edit-event-slug').value || '').trim().toLowerCase()
+                .replace(/[^a-z0-9가-힣\-\s]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
+            const el = document.getElementById('comp-slug-preview'); if (el) el.textContent = v || '슬러그';
+        }
+        function _brandPrev(id, url) {
+            const root = document.getElementById(id); if (!root) return;
+            root.innerHTML = url ? `<img src="${_esc(url)}?v=${Date.now()}" alt="">` : '<span class="empty">없음</span>';
+        }
+        async function uploadBrandImage(position, file) {
+            if (!file) return;
+            if (!_selectedCompId) { toast('대회를 먼저 선택/저장하세요', 'error'); return; }
+            const fd = new FormData();
+            fd.append('admin_key', AK()); fd.append('position', position); fd.append('image', file);
+            try {
+                const res = await fetch('/api/admin/competitions/' + _selectedCompId + '/brand-image', { method: 'POST', body: fd });
+                const d = await res.json();
+                if (!res.ok) throw new Error(d.error || '업로드 실패');
+                _brandPrev(position === 'logo' ? 'comp-brand-logo-prev' : 'comp-brand-wm-prev', d.path);
+                toast('업로드 완료', 'success');
+            } catch (e) { toast('업로드 실패: ' + e.message, 'error'); }
         }
         function previewCompVideo() {
             const url = document.getElementById('comp-edit-video').value.trim();

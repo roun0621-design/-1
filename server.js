@@ -354,6 +354,32 @@ app.get('/e/:slug', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
+// 행사 브랜드 이미지 업로드 (로고/워터마크) — 관리자
+app.post('/api/admin/competitions/:id/brand-image', upload.single('image'), async (req, res) => {
+    try {
+        if (!isAdminKey(req.body && req.body.admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        if (!req.file) return res.status(400).json({ error: '파일이 업로드되지 않았습니다.' });
+        const position = req.body.position;
+        if (!['logo', 'watermark'].includes(position)) return res.status(400).json({ error: 'position(logo|watermark) 필요' });
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.id);
+        if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
+        const destDir = path.join(__dirname, 'public', 'uploads', 'brand');
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        for (const oe of ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']) {
+            const op = path.join(destDir, `brand_${position}_${comp.id}${oe}`);
+            try { if (fs.existsSync(op)) fs.unlinkSync(op); } catch (e) {}
+        }
+        const ext = (path.extname(req.file.originalname) || '.png').toLowerCase();
+        const filename = `brand_${position}_${comp.id}${ext}`;
+        fs.copyFileSync(req.file.path, path.join(destDir, filename));
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        const publicUrl = `/uploads/brand/${filename}`;
+        const col = position === 'logo' ? 'brand_logo_path' : 'brand_watermark_path';
+        await db.run(`UPDATE competition SET ${col}=? WHERE id=?`, publicUrl, comp.id);
+        res.json({ success: true, url: publicUrl + '?v=' + Date.now(), path: publicUrl });
+    } catch (e) { console.error('[BRAND][upload]', e); res.status(500).json({ error: e.message }); }
+});
+
 // TWA(안드로이드 앱) Digital Asset Links — /.well-known/* 는 dotfile 이라 기본 static 이
 // 무시하므로 별도 마운트로 서빙. (assetlinks.json 채우면 앱에서 주소창 숨김 검증됨)
 app.use('/.well-known', express.static(path.join(__dirname, 'public', '.well-known')));

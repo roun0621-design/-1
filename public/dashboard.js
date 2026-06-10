@@ -44,7 +44,41 @@ function toggleFavorite(eventName, gender) {
     renderMatrix();
 }
 
+// ── 행사(event) 화이트라벨 — /e/<slug> 진입 시 대회 세팅 + 브랜딩 적용 ──
+async function _eventBrandBootstrap() {
+    const m = location.pathname.match(/^\/e\/([^\/?#]+)/);
+    if (!m) return;
+    try {
+        const res = await fetch('/api/event/' + encodeURIComponent(decodeURIComponent(m[1])));
+        if (!res.ok) return;
+        const ev = await res.json();
+        if (ev && ev.id) {
+            if (typeof setCompetitionId === 'function') setCompetitionId(ev.id);
+            else localStorage.setItem('pace_competition_id', ev.id);
+            window.__EVENT_MODE = true;
+            _applyEventBrand(ev);
+        }
+    } catch (e) { /* 조용히 무시 */ }
+}
+function _applyEventBrand(ev) {
+    const b = (ev && ev.brand) || {};
+    let inner = '';
+    if (b.point) inner += '--green:' + b.point + ';';
+    const acc = b.accent || b.point;
+    if (acc) inner += '--accent:' + acc + ';';
+    let css = inner ? (':root{' + inner + '}') : '';
+    if (b.point) { const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = b.point; }
+    if (b.watermark) css += 'body{background-image:url("' + b.watermark + '");background-repeat:no-repeat;background-position:center 34%;background-size:min(58vw,420px);background-attachment:fixed;}';
+    if (css) { const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s); }
+    if (b.logo) {
+        const h = document.querySelector('.header-title');
+        if (h) h.innerHTML = '<img src="' + b.logo + '" alt="" style="height:30px;max-width:220px;vertical-align:middle;object-fit:contain;">';
+    }
+    if (ev.name) document.title = ev.name;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+    await _eventBrandBootstrap();
     if (!(await requireCompetition())) return;
     renderPageNav('dashboard');
     await renderCompInfoBar();
