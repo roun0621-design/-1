@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS "competition" (
     "brand_watermark_path" TEXT NOT NULL DEFAULT '',
     "brand_color_point" TEXT NOT NULL DEFAULT '',
     "brand_color_accent" TEXT NOT NULL DEFAULT '',
+    "home_visibility" TEXT NOT NULL DEFAULT 'auto',
     CHECK (status IN ('upcoming','active','completed'))
 );
 

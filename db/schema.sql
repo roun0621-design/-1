@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS competition (
     federation TEXT DEFAULT '',
     division_type TEXT DEFAULT '',
     mode TEXT NOT NULL DEFAULT 'operation',         -- 'operation' | 'display'
-    series_id INTEGER REFERENCES competition_series(id)
+    series_id INTEGER REFERENCES competition_series(id),
+    home_visibility TEXT NOT NULL DEFAULT 'auto'    -- 'auto' | 'pinned'(홈 고정) | 'hidden'(홈 숨김)
 );
 
 -- Events (종목) — linked to competition

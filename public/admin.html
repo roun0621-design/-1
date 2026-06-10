@@ -906,6 +906,13 @@
                         <div class="admin-form-group"><label>상태</label>
                             <select id="comp-edit-status"><option value="upcoming">예정</option><option value="active">진행중</option><option value="completed">종료</option></select>
                         </div>
+                        <div class="admin-form-group"><label>홈 노출</label>
+                            <select id="comp-edit-home-vis">
+                                <option value="auto">자동 (진행중 ±3일)</option>
+                                <option value="pinned">홈 상단 고정</option>
+                                <option value="hidden">홈에서 숨김</option>
+                            </select>
+                        </div>
                         <div class="admin-form-group"><label>연맹</label>
                             <select id="comp-edit-federation">
                                 <option value="">없음</option>
@@ -4169,6 +4176,7 @@ POST /api/external/event-result-link/batch<br>
                 document.getElementById('comp-edit-end').value = c.end_date || '';
                 document.getElementById('comp-edit-venue').value = c.venue || '';
                 document.getElementById('comp-edit-status').value = c.status || 'upcoming';
+                const _hv = document.getElementById('comp-edit-home-vis'); if (_hv) _hv.value = c.home_visibility || 'auto';
                 document.getElementById('comp-edit-video').value = c.video_url || '';
                 // Set mode
                 const modeSelect = document.getElementById('comp-edit-mode');
@@ -4226,6 +4234,7 @@ POST /api/external/event-result-link/batch<br>
                     division_type: document.getElementById('comp-edit-division').value,
                     mode: document.getElementById('comp-edit-mode').value,
                     series_id: sIdRaw === '' ? null : parseInt(sIdRaw, 10),
+                    home_visibility: document.getElementById('comp-edit-home-vis')?.value || 'auto',
                 }, AK());
                 // 행사(event) 모드면 슬러그·색 별도 저장
                 if (document.getElementById('comp-edit-mode').value === 'event') {

@@ -721,9 +721,10 @@
         function _renderCompCard(c) {
             const isLive = c.status === 'active';
             const fedBadge = c.federation ? getFedBadge(c.federation) : '';
-            const statusBadge = isLive
+            const pinBadge = c.home_visibility === 'pinned' ? '<span class="comp-card-dday" style="background:#eef2ff;color:#3730a3;">📌 고정</span>' : '';
+            const statusBadge = (isLive
                 ? '<span class="comp-card-dday active">LIVE</span>'
-                : `<span class="comp-card-dday ${c.status}">${{upcoming:'예정',completed:'종료'}[c.status]||c.status}</span>`;
+                : `<span class="comp-card-dday ${c.status}">${{upcoming:'예정',completed:'종료'}[c.status]||c.status}</span>`) + pinBadge;
             return `<div class="comp-card" onclick="selectCompetition(${c.id})" style="${isLive?'border-color:#b79f58;':''}">
                 <div class="comp-card-status ${c.status}"></div>
                 <div class="comp-card-info">

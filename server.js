@@ -959,6 +959,8 @@ try { db.exec(`ALTER TABLE competition ADD COLUMN brand_watermark_path TEXT NOT 
 try { db.exec(`ALTER TABLE competition ADD COLUMN brand_color_point TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE competition ADD COLUMN brand_color_accent TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
+// competition.home_visibility: 홈 노출 강제 설정 — 'auto'(±3일 윈도우) | 'pinned'(항상 상단 고정) | 'hidden'(홈에서 숨김)
+try { db.exec(`ALTER TABLE competition ADD COLUMN home_visibility TEXT NOT NULL DEFAULT 'auto'`); } catch(e) {}
 // event.division: 중등부/고등부/대학부/일반부/국제/U20
 try { db.exec(`ALTER TABLE event ADD COLUMN division TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 // event.result_url: 외부 결과 링크 URL (노출용 대회에서 사용)
@@ -1436,6 +1438,8 @@ if (db.isAsync) {
             await pgIdempotentAddCol('competition', 'brand_color_point', `TEXT NOT NULL DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'brand_color_accent', `TEXT NOT NULL DEFAULT ''`);
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
+            // competition: 홈 노출 강제 설정 (auto | pinned | hidden)
+            await pgIdempotentAddCol('competition', 'home_visibility', `TEXT NOT NULL DEFAULT 'auto'`);
             // athlete: federation, personal_best, date_of_birth, phone(SMS 발송용)
             await pgIdempotentAddCol('athlete', 'federation', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'personal_best', `TEXT DEFAULT ''`);

@@ -85,4 +85,60 @@ describe('Competition API — 회귀', () => {
         expect(comp.name).toBe('TEST_REGRESSION_COMP_UPDATED');
         expect(comp.venue).toBe('수정 경기장');
     });
+
+    // ---- 홈 노출 강제 설정 (home_visibility: auto | pinned | hidden) ----
+    describe('home_visibility — 홈 노출 강제 설정', () => {
+        const today = new Date().toISOString().slice(0, 10);
+
+        async function createComp(payload) {
+            const res = await request(app).post('/api/competitions')
+                .send({ admin_key: ADMIN_KEY, venue: '', ...payload })
+                .set('Content-Type', 'application/json');
+            expect(res.status).toBe(200);
+            return res.body.id;
+        }
+
+        async function setVisibility(id, home_visibility) {
+            const res = await request(app).put(`/api/competitions/${id}`)
+                .send({ admin_key: ADMIN_KEY, home_visibility })
+                .set('Content-Type', 'application/json');
+            expect(res.status).toBe(200);
+            return res.body;
+        }
+
+        it('PUT 으로 home_visibility 저장 + 잘못된 값은 기존값 유지', async () => {
+            const id = await createComp({ name: 'HV_PUT_' + Date.now(), start_date: today, end_date: today });
+            const updated = await setVisibility(id, 'pinned');
+            expect(updated.home_visibility).toBe('pinned');
+
+            // 허용되지 않는 값 → 기존값(pinned) 유지
+            const bad = await setVisibility(id, 'bogus');
+            expect(bad.home_visibility).toBe('pinned');
+        });
+
+        it('pinned — 윈도우 밖 과거 대회도 /recent 에 항상 노출 + 최상단', async () => {
+            const id = await createComp({ name: 'HV_PINNED_OLD_' + Date.now(), start_date: '2020-01-01', end_date: '2020-01-02' });
+            await setVisibility(id, 'pinned');
+
+            const res = await request(app).get('/api/competitions/recent?window=active');
+            expect(res.status).toBe(200);
+            const items = res.body.items || res.body;
+            expect(items.length).toBeGreaterThan(0);
+            expect(items.some(c => c.id === id)).toBe(true);
+            expect(items[0].home_visibility).toBe('pinned'); // 고정이 최상단
+        });
+
+        it('hidden — 진행중(active) 대회여도 /recent 에서 제외', async () => {
+            const id = await createComp({ name: 'HV_HIDDEN_LIVE_' + Date.now(), start_date: today, end_date: today });
+            await setVisibility(id, 'hidden');
+
+            const res = await request(app).get('/api/competitions/recent?window=active');
+            const items = res.body.items || res.body;
+            expect(items.some(c => c.id === id)).toBe(false);
+
+            // 전체 펼침(window=all)에는 표시 유지
+            const all = await request(app).get('/api/competitions/recent?window=all');
+            expect(all.body.some(c => c.id === id)).toBe(true);
+        });
+    });
 });
