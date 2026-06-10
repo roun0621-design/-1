@@ -349,6 +349,10 @@ app.get('/results.html', (req, res) => {
     res.redirect(`/dashboard.html${comp}`);
 });
 
+// TWA(안드로이드 앱) Digital Asset Links — /.well-known/* 는 dotfile 이라 기본 static 이
+// 무시하므로 별도 마운트로 서빙. (assetlinks.json 채우면 앱에서 주소창 숨김 검증됨)
+app.use('/.well-known', express.static(path.join(__dirname, 'public', '.well-known')));
+
 app.use(express.static(path.join(__dirname, 'public'), {
     etag: false,
     setHeaders: (res, filePath) => {

@@ -1,20 +1,28 @@
 {
+    "id": "/",
     "name": "PACE RISE : Node",
-    "short_name": "P-R:Node",
-    "description": "Sport Competition Operation Platform for Excellence",
+    "short_name": "PACE RISE",
+    "description": "육상 경기 운영 플랫폼 — 실시간 기록·소집·결과·알림. Sport Competition Operation Platform for Excellence.",
     "start_url": "/",
+    "scope": "/",
     "display": "standalone",
+    "display_override": ["standalone", "minimal-ui"],
     "background_color": "#262324",
     "theme_color": "#b79f58",
     "orientation": "any",
+    "lang": "ko",
+    "dir": "ltr",
+    "categories": ["sports", "productivity"],
     "icons": [
         { "src": "/icons/icon-72.png", "sizes": "72x72", "type": "image/png" },
         { "src": "/icons/icon-96.png", "sizes": "96x96", "type": "image/png" },
         { "src": "/icons/icon-128.png", "sizes": "128x128", "type": "image/png" },
         { "src": "/icons/icon-144.png", "sizes": "144x144", "type": "image/png" },
         { "src": "/icons/icon-152.png", "sizes": "152x152", "type": "image/png" },
-        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
         { "src": "/icons/icon-384.png", "sizes": "384x384", "type": "image/png" },
-        { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+        { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+        { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
     ]
 }
