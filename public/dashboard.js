@@ -68,15 +68,67 @@ async function _eventBrandBootstrap() {
         }
     } catch (e) { /* 조용히 무시 */ }
 }
+// 포인트 컬러 한 개에서 전체 팔레트(배경/라인/소프트 틴트/강조)를 자동 생성한다.
+// 사용자가 색 하나만 고르면 대시보드 톤이 통째로 그 색에 맞춰지도록.
+function _hexToRgb(hex) {
+    let h = String(hex || '').trim().replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    const n = parseInt(h, 16);
+    if (isNaN(n) || h.length !== 6) return null;
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+// w = 흰색 쪽으로 섞는 비율(0=원색, 1=흰색). 옅은 틴트 생성용.
+function _tint(rgb, w) {
+    const m = (c) => Math.round(c + (255 - c) * w);
+    const hx = (c) => ('0' + m(c).toString(16)).slice(-2);
+    return '#' + hx(rgb.r) + hx(rgb.g) + hx(rgb.b);
+}
 function _applyEventBrand(ev) {
     const b = (ev && ev.brand) || {};
-    let inner = '';
-    if (b.point) inner += '--green:' + b.point + ';';
-    const acc = b.accent || b.point;
-    if (acc) inner += '--accent:' + acc + ';';
-    let css = inner ? (':root{' + inner + '}') : '';
-    if (b.point) { const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = b.point; }
-    if (b.watermark) css += 'body{background-image:url("' + b.watermark + '");background-repeat:no-repeat;background-position:center 34%;background-size:min(58vw,420px);background-attachment:fixed;}';
+    const P = b.point && _hexToRgb(b.point) ? b.point : null;
+    const rgb = P ? _hexToRgb(P) : null;
+    let css = '';
+    if (rgb) {
+        // 단일 포인트 → 조화 팔레트. 강조는 원색, 라인/배경은 옅은 틴트로 밸런스.
+        const vars = {
+            '--green':        P,                 // 핵심 강조(활성 탭/LIVE/주요 버튼)
+            '--green-light':  _tint(rgb, 0.90),  // 아주 옅은 채움/hover
+            '--green-soft':   _tint(rgb, 0.74),  // 소프트 보더
+            '--gray':         _tint(rgb, 0.82),  // 일반 라인/테두리 — 은은한 톤
+            '--gray-light':   _tint(rgb, 0.93),  // 옅은 채움
+            '--bg':           _tint(rgb, 0.955), // 페이지 배경(금색기 제거, 거의 흰색의 미세 틴트)
+            '--bg-dark':      _tint(rgb, 0.88),
+            '--accent':       P,                 // 보조 강조도 브랜드 색으로
+            '--accent-light': _tint(rgb, 0.90)
+        };
+        css += ':root{' + Object.keys(vars).map(k => k + ':' + vars[k] + ';').join('') + '}';
+        // 인라인/하드코딩된 금색(#b79f58) 잔재도 전부 브랜드 색으로 (색 자동화)
+        css += '.header-colon,.header-scope{color:' + P + ';}'
+            + 'body.event-brand .fav-toggle.on{background:' + P + '!important;}'
+            + 'body.event-brand .round-btn.btn-summon{background:' + _tint(rgb, 0.90) + '!important;color:' + P + '!important;}'
+            + 'body.event-brand .gender-tab-btn[data-gender="X"]{color:' + P + '!important;}'
+            + 'body.event-brand .gender-tab-btn.active[data-gender="X"]{border-bottom-color:' + P + '!important;background:' + _tint(rgb, 0.90) + '!important;}';
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = P;
+    }
+    // 워터마크: 콘텐츠 뒤 고정 레이어 + 본문/카드를 살짝 투과시켜 은은하게 보이게.
+    if (b.watermark) {
+        let wm = document.getElementById('event-watermark');
+        if (!wm) {
+            wm = document.createElement('div');
+            wm.id = 'event-watermark';
+            document.body.insertBefore(wm, document.body.firstChild);
+        }
+        wm.style.cssText = 'position:fixed;inset:0;z-index:0;pointer-events:none;'
+            + 'background-image:url("' + b.watermark + '");background-repeat:no-repeat;'
+            + 'background-position:center 48%;background-size:min(62vw,500px);opacity:.09;';
+        // 본문은 워터마크 위, 카드 배경은 반투명으로 워터마크가 비쳐 보이도록(행사 모드 한정)
+        css += '.header,.main-content{position:relative;z-index:1;}'
+            + 'body.event-brand .matrix-table{background:rgba(255,255,255,.78)!important;}'
+            + 'body.event-brand .matrix-table th,body.event-brand .matrix-section-title{background:rgba(255,255,255,.55)!important;}'
+            + 'body.event-brand .matrix-table tbody tr:hover{background:rgba(255,255,255,.45)!important;}';
+    }
+    document.body.classList.add('event-brand');
     if (css) { const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s); }
     if (b.logo) {
         const h = document.querySelector('.header-title');
