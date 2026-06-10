@@ -64,6 +64,7 @@ async function _eventBrandBootstrap() {
             if (typeof setCompetitionId === 'function') setCompetitionId(ev.id);
             else localStorage.setItem('pace_competition_id', ev.id);
             window.__EVENT_MODE = true;
+            window.__EVENT_SLUG = ev.event_slug || '';
             // 노출 override(관리자 설정) — 없으면 자동
             if (Array.isArray(ev.genders)) window.__EVENT_GENDERS = ev.genders;
             if (Array.isArray(ev.rounds)) window.__EVENT_ROUNDS = ev.rounds;

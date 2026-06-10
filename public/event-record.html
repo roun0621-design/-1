@@ -11,9 +11,12 @@
     body { background: var(--bg); }
     #ev-watermark { position:fixed; inset:0; z-index:0; pointer-events:none; background-repeat:no-repeat; background-position:center 50%; background-size:min(60vw,460px); opacity:.06; }
     .er-wrap { position:relative; z-index:1; max-width:720px; margin:0 auto; padding:14px 16px 60px; }
-    .er-head { display:flex; align-items:center; gap:12px; padding:10px 4px 14px; }
+    .er-head { display:flex; align-items:center; gap:12px; padding:10px 4px 6px; }
     .er-logo { height:34px; max-width:240px; object-fit:contain; }
     .er-title { font-family:var(--font-brand); font-size:18px; font-weight:700; color:var(--text); }
+    .er-nav { display:flex; gap:0; border-bottom:2px solid var(--gray); margin-bottom:14px; }
+    .er-tab { flex:1; text-align:center; padding:11px 0; font-weight:800; font-size:15px; text-decoration:none; color:var(--gray-dark); border-bottom:3px solid transparent; }
+    .er-tab.active { color:var(--green); border-bottom-color:var(--green); }
     .er-card { background:rgba(255,255,255,.86); border:1px solid var(--gray); border-radius:var(--radius-lg); padding:16px; margin-bottom:14px; box-shadow:var(--shadow); }
     .er-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
     .er-field { flex:1; min-width:130px; }
@@ -46,6 +49,10 @@
 <div class="er-wrap">
     <div class="er-head">
         <span id="er-brand" class="er-title">간편 기록입력</span>
+    </div>
+    <div class="er-nav">
+        <a id="er-nav-dash" class="er-tab" href="#">대시보드</a>
+        <a class="er-tab active">기록입력</a>
     </div>
 
     <div class="er-card">
@@ -94,8 +101,10 @@
 
 <script>
 const ER_SLUG = (location.pathname.match(/^\/e\/([^\/?#]+)/) || [])[1] || '';
-let ER_KEY = localStorage.getItem('pace_event_key') || '';
+// 운영진으로 로그인한 키(pace_admin_key)를 우선 재사용 → 따로 키를 또 묻지 않음
+let ER_KEY = localStorage.getItem('pace_admin_key') || localStorage.getItem('pace_event_key') || '';
 let ER_GENDER = 'M';
+document.getElementById('er-nav-dash').href = '/e/' + encodeURIComponent(ER_SLUG);
 
 function erToast(msg, ms){ const t=document.getElementById('er-toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'), ms||2200); }
 function erSetGender(g){ ER_GENDER=g; document.querySelectorAll('.er-gbtn').forEach(b=>b.classList.toggle('on', b.getAttribute('data-g')===g)); }

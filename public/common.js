@@ -971,6 +971,21 @@ function renderPageNav(currentPage) {
         headerTitle.dataset.linked = '1';
     }
 
+    // ── 행사(event) 모드: 화이트라벨 전용 최소 네비 ──
+    //   일반 운영 메뉴(노출관리/모니터/소집실/관리)는 숨겨 전문 운영과 분리 유지.
+    //   viewer = 대시보드만, 운영진(operation/admin) = 대시보드 + 기록입력.
+    if (window.__EVENT_MODE) {
+        const slug = encodeURIComponent(window.__EVENT_SLUG || '');
+        const evPages = [{ key: 'dashboard', label: '대시보드', href: '/e/' + slug }];
+        if (role === 'admin' || role === 'operation') {
+            evPages.push({ key: 'record', label: '기록입력', href: '/e/' + slug + '/record' });
+        }
+        nav.innerHTML = evPages.map(p =>
+            `<a href="${p.href}" class="nav-link ${p.key === currentPage ? 'active' : ''}" data-page-key="${p.key}">${p.label}</a>`
+        ).join('');
+        return;
+    }
+
     let pages;
     if (currentPage === 'home' && role !== 'admin' && role !== 'operation') {
         // Home (viewer): only show home — no other nav links
