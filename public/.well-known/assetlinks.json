@@ -1,10 +1,8 @@
-[
-  {
-    "relation": ["delegate_permission/common.handle_all_urls"],
-    "target": {
-      "namespace": "android_app",
-      "package_name": "REPLACE_WITH_ANDROID_PACKAGE_NAME",
-      "sha256_cert_fingerprints": ["REPLACE_WITH_SHA256_FINGERPRINT_FROM_PWABUILDER"]
-    }
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.pacerise.node",
+    "sha256_cert_fingerprints": ["33:76:BC:72:58:59:F9:A1:C3:99:BA:88:09:01:A2:15:35:F6:DD:65:AF:D6:9C:8B:2A:6F:77:18:AA:FF:5C:F9"]
   }
-]
+}]
