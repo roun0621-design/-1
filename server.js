@@ -349,6 +349,11 @@ app.get('/results.html', (req, res) => {
     res.redirect(`/dashboard.html${comp}`);
 });
 
+// 행사(event) 화이트라벨 — /e/<brand-slug> → 대시보드(클라이언트가 slug로 브랜딩 적용)
+app.get('/e/:slug', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
 // TWA(안드로이드 앱) Digital Asset Links — /.well-known/* 는 dotfile 이라 기본 static 이
 // 무시하므로 별도 마운트로 서빙. (assetlinks.json 채우면 앱에서 주소창 숨김 검증됨)
 app.use('/.well-known', express.static(path.join(__dirname, 'public', '.well-known')));
@@ -919,8 +924,15 @@ try {
 // — 스키마 정의에서 UNIQUE 제약. 별도 인덱스 불필요.
 
 // ---- Display-mode (노출용) migrations ----
-// competition.mode: 'operation' (운영용) or 'display' (노출용)
+// competition.mode: 'operation' (운영용) | 'display' (노출용) | 'event' (행사용 화이트라벨)
 try { db.exec(`ALTER TABLE competition ADD COLUMN mode TEXT NOT NULL DEFAULT 'operation'`); } catch(e) {}
+// 행사(event) 화이트라벨: /e/<slug> 경로 + 브랜드 로고·워터마크·포인트색
+try { db.exec(`ALTER TABLE competition ADD COLUMN event_slug TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN brand_logo_path TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN brand_watermark_path TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN brand_color_point TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN brand_color_accent TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
 // event.division: 중등부/고등부/대학부/일반부/국제/U20
 try { db.exec(`ALTER TABLE event ADD COLUMN division TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 // event.result_url: 외부 결과 링크 URL (노출용 대회에서 사용)
@@ -1391,6 +1403,13 @@ if (db.isAsync) {
             await pgIdempotentAddCol('competition', 'federation', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'division_type', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'video_url', `TEXT DEFAULT ''`);
+            // competition: 행사(event) 화이트라벨 — slug + 브랜드 로고/워터마크/색
+            await pgIdempotentAddCol('competition', 'event_slug', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'brand_logo_path', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'brand_watermark_path', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'brand_color_point', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'brand_color_accent', `TEXT NOT NULL DEFAULT ''`);
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
             // athlete: federation, personal_best, date_of_birth, phone(SMS 발송용)
             await pgIdempotentAddCol('athlete', 'federation', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'personal_best', `TEXT DEFAULT ''`);

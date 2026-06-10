@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS "competition" (
     "division_type" TEXT DEFAULT '',
     "mode" TEXT NOT NULL DEFAULT 'operation',
     "series_id" BIGINT,
+    "event_slug" TEXT NOT NULL DEFAULT '',
+    "brand_logo_path" TEXT NOT NULL DEFAULT '',
+    "brand_watermark_path" TEXT NOT NULL DEFAULT '',
+    "brand_color_point" TEXT NOT NULL DEFAULT '',
+    "brand_color_accent" TEXT NOT NULL DEFAULT '',
     CHECK (status IN ('upcoming','active','completed'))
 );
 
