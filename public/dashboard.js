@@ -124,6 +124,7 @@ function _applyEventBrand(ev) {
             + 'background-position:center 48%;background-size:min(62vw,500px);opacity:.09;';
         // 본문은 워터마크 위, 카드 배경은 반투명으로 워터마크가 비쳐 보이도록(행사 모드 한정)
         css += '.header,.main-content{position:relative;z-index:1;}'
+            + 'body.event-brand .live-pin{background:rgba(255,255,255,.62)!important;}'
             + 'body.event-brand .matrix-table{background:rgba(255,255,255,.78)!important;}'
             + 'body.event-brand .matrix-table th,body.event-brand .matrix-section-title{background:rgba(255,255,255,.55)!important;}'
             + 'body.event-brand .matrix-table tbody tr:hover{background:rgba(255,255,255,.45)!important;}';
@@ -640,8 +641,8 @@ function renderMatrix() {
     // Render LIVE (in_progress) section pinned at top
     const liveGroups = allGroups.filter(g => g.rounds.some(r => r.round_status === 'in_progress'));
     if (liveGroups.length > 0) {
-        html += `<div style="margin-bottom:16px;padding:12px;background:linear-gradient(135deg,#f8f4ea,#fbe9e7);border:1.5px solid #b79f58;border-radius:var(--radius);">
-            <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#b79f58;letter-spacing:1px;margin-bottom:8px;">● LIVE • 진행중인 경기</div>`;
+        html += `<div class="live-pin" style="margin-bottom:16px;padding:12px;background:linear-gradient(135deg,var(--green-light),var(--green-soft));border:1.5px solid var(--green);border-radius:var(--radius);">
+            <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:var(--green);letter-spacing:1px;margin-bottom:8px;">● LIVE • 진행중인 경기</div>`;
         html += renderCategoryTable(liveGroups, 'LIVE', true);
         html += `</div>`;
     }
