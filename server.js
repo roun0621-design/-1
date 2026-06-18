@@ -11857,6 +11857,12 @@ function parseJongbyul(jb) {
     if (/남자일반/.test(s)) return { gender: 'M', division: '일반부' };
     if (/여자일반/.test(s)) return { gender: 'F', division: '일반부' };
 
+    // ── 5.5) 마스터즈/생활체육 연령부 코드: M35 / M40~M50 / W40 / W55~W65 ──
+    //    M=남자, W=여자. 영문 대문자 + 숫자(범위 '~' 포함). division 은 원본 보존(예: "M35~M40").
+    //    ※ 콤마 구분("W40,W55~W65")은 호출부(upload)에서 이미 분리되어 단일 성별 토큰으로 들어옴.
+    if (/^M\d/.test(s) && !/W\d/.test(s)) return { gender: 'M', division: raw };
+    if (/^W\d/.test(s) && !/M\d/.test(s)) return { gender: 'F', division: raw };
+
     // ── 6) 마지막 fallback: 절대 임의 division 부여 금지 ──
     //    원본 라벨을 그대로 division 으로 보존하여 신규 라벨도 표시되도록 함.
     if (s.startsWith('남')) return { gender: 'M', division: raw };
