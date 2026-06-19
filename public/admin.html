@@ -10788,11 +10788,13 @@ POST /api/external/event-result-link/batch<br>
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'send failed');
-                st.textContent = data.status === 'simulated' ? '시뮬레이션 완료 (실제 발송 안 됨)' :
+                st.innerHTML = data.status === 'simulated' ? '시뮬레이션 완료 (실제 발송 안 됨)' :
                                   data.status === 'sent' ? '발송 성공 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg>' :
-                                  '실패: ' + data.error_message;
+                                  data.status === 'skipped' ? '건너뜀: ' + (data.error_message || '수신번호 없음') :
+                                  '실패: ' + (data.error_message || '알 수 없는 오류');
                 st.style.color = (data.status === 'sent') ? 'var(--green)' :
-                                  (data.status === 'simulated') ? '#a05a00' : '#a00';
+                                  (data.status === 'simulated') ? '#a05a00' :
+                                  (data.status === 'skipped') ? '#888' : '#a00';
                 loadSmsLog();
             } catch (e) {
                 st.textContent = '오류: ' + e.message;
@@ -10881,7 +10883,7 @@ POST /api/external/event-result-link/batch<br>
                         <tr style="border-bottom:1px solid #eee;">
                             <td style="padding:4px;">${_esc(r.athlete_name||'')}</td>
                             <td style="padding:4px;text-align:center;">${_esc(r.phone||'(없음)')}</td>
-                            <td style="padding:4px;text-align:center;color:${r.status==='sent'?'var(--green)':r.status==='simulated'?'#a05a00':'#a00'};">${r.status}</td>
+                            <td style="padding:4px;text-align:center;color:${r.status==='sent'?'var(--green)':r.status==='simulated'?'#a05a00':r.status==='skipped'?'#888':'#a00'};">${r.status==='skipped'?'건너뜀':r.status}</td>
                             <td style="padding:4px;">${_esc(r.error||'')}</td>
                         </tr>
                     `).join('') + '</tbody></table>';
@@ -10909,7 +10911,7 @@ POST /api/external/event-result-link/batch<br>
                             <td style="padding:4px;white-space:nowrap;">${_fmtDate(l.sent_at)}</td>
                             <td style="padding:4px;text-align:center;">${_esc(l.athlete_name||'-')}</td>
                             <td style="padding:4px;text-align:center;">${_esc(l.phone_number||'-')}</td>
-                            <td style="padding:4px;text-align:center;color:${l.status==='sent'?'var(--green)':l.status==='simulated'?'#a05a00':'#a00'};">${l.status}</td>
+                            <td style="padding:4px;text-align:center;color:${l.status==='sent'?'var(--green)':l.status==='simulated'?'#a05a00':l.status==='skipped'?'#888':'#a00'};">${l.status==='skipped'?'건너뜀':l.status}</td>
                             <td style="padding:4px;text-align:center;">${l.cost || 0}원</td>
                             <td style="padding:4px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc((l.message||'').replace(/\n/g,' / '))}${l.error_message?' <span style="color:#a00;">['+_esc(l.error_message)+']</span>':''}</td>
                         </tr>
