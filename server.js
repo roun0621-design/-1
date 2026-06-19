@@ -12153,26 +12153,34 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
                     }
                 }
 
-                // Build unique event key (eventName + gender + division)
-                // Combined sub-events (10종, 7종, 5종) should map to parent combined event
-                let parentEventName = eventName;
-                let isCombinedSub = false;
-                if (/^\d+종\(\d+\)/.test(rawRound)) {
-                    isCombinedSub = true;
-                    const combMatch = rawRound.match(/^(\d+)종/);
-                    if (combMatch) parentEventName = combMatch[1] + '종경기';
-                    category = 'combined';
-                }
+                // ── 결합경기(10종/7종/5종) 감지 ──
+                //   · 종목명에 "(N종)" 표기: "100m(10종)", "멀리뛰기(7종)" (라운드=기록경기)  ← 그린·코리아오픈 양식
+                //   · 또는 라운드에 "N종(..)" 표기: 레거시 양식
+                //   → 부모("N종경기") 1개 + 각 세부종목을 자식(parent_event_id)으로 생성.
+                const nameComb = eventName.match(/\((\d+)종\)/);
+                const roundComb = rawRound.match(/^(\d+)종/);
+                const combinedN = nameComb ? nameComb[1] : (roundComb ? roundComb[1] : null);
 
-                const eventKey = `${isCombinedSub ? parentEventName : eventName}|${gender}|${division}`;
-                if (!eventMap[eventKey]) {
-                    eventMap[eventKey] = {
-                        name: isCombinedSub ? parentEventName : eventName,
-                        gender, division, category,
-                        rounds: new Set(),
-                    };
-                }
-                if (!isCombinedSub) {
+                if (combinedN) {
+                    const parentName = `${combinedN}종경기`;
+                    const pKey = `${parentName}|${gender}|${division || ''}`;
+                    if (!eventMap[pKey]) {
+                        eventMap[pKey] = { name: parentName, gender, division, category: 'combined', rounds: new Set(['final']), isParent: true };
+                    }
+                    // 자식: 종목명 그대로(마커 포함)로 저장 → 일반 단일종목과 충돌 방지 + 시간표 자동링크 일치
+                    const cKey = `${eventName}|${gender}|${division || ''}`;
+                    if (!eventMap[cKey]) {
+                        eventMap[cKey] = {
+                            name: eventName, gender, division,
+                            category: (category === 'combined' ? 'track' : category),
+                            rounds: new Set(['final']), isChild: true, parentKey: pKey,
+                        };
+                    }
+                } else {
+                    const eventKey = `${eventName}|${gender}|${division || ''}`;
+                    if (!eventMap[eventKey]) {
+                        eventMap[eventKey] = { name: eventName, gender, division, category, rounds: new Set() };
+                    }
                     eventMap[eventKey].rounds.add(parsedRound.round_type);
                 }
 
@@ -12318,10 +12326,22 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
             const existingSet = new Set(existingEvents.map(e => `${e.name}|${e.gender}|${e.division || ''}|${e.round_type}`));
 
             const INS_EVENT_SQL = 'INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)';
+            const INS_CHILD_SQL = 'INSERT INTO event (competition_id, name, category, gender, round_type, division, parent_event_id, sort_order) VALUES (?,?,?,?,?,?,?,?)';
             let eventCount = 0;
             let sortIdx = existingEvents.length;
 
+            // 결합경기 자식 링크용: (name|gender|division) → final 라운드 event id
+            const finalIdByKey = {};
+            for (const e of existingEvents) {
+                if (e.round_type === 'final') {
+                    const k = `${e.name}|${e.gender}|${e.division || ''}`;
+                    if (finalIdByKey[k] == null) finalIdByKey[k] = e.id;
+                }
+            }
+
+            // 1) 일반 + 결합 부모 먼저 생성 (자식 제외)
             for (const ev of Object.values(eventMap)) {
+                if (ev.isChild) continue;
                 const rounds = ev.rounds.size > 0 ? [...ev.rounds] : ['final'];
                 const hasP = rounds.includes('preliminary');
                 const hasS = rounds.includes('semifinal');
@@ -12334,10 +12354,23 @@ app.post('/api/display/timetable/upload', upload.single('file'), async (req, res
                 for (const rt of uniqueRounds) {
                     const key = `${ev.name}|${ev.gender}|${ev.division || ''}|${rt}`;
                     if (!existingSet.has(key)) {
-                        await db.run(INS_EVENT_SQL, parseInt(competition_id), ev.name, ev.category, ev.gender, rt, ev.division || '', sortIdx++);
+                        const r = await db.run(INS_EVENT_SQL, parseInt(competition_id), ev.name, ev.category, ev.gender, rt, ev.division || '', sortIdx++);
                         existingSet.add(key);
                         eventCount++;
+                        if (rt === 'final') finalIdByKey[`${ev.name}|${ev.gender}|${ev.division || ''}`] = r.lastInsertRowid;
                     }
+                }
+            }
+
+            // 2) 결합경기 자식 생성 — parent_event_id 로 부모에 연결
+            for (const ev of Object.values(eventMap)) {
+                if (!ev.isChild) continue;
+                const parentId = finalIdByKey[ev.parentKey] || null;
+                const key = `${ev.name}|${ev.gender}|${ev.division || ''}|final`;
+                if (!existingSet.has(key)) {
+                    await db.run(INS_CHILD_SQL, parseInt(competition_id), ev.name, ev.category, ev.gender, 'final', ev.division || '', parentId, sortIdx++);
+                    existingSet.add(key);
+                    eventCount++;
                 }
             }
 
