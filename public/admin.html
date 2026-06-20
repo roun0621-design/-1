@@ -5618,7 +5618,7 @@ POST /api/external/event-result-link/batch<br>
                         <div style="display:flex;gap:8px;">
                             <div class="admin-form-group" style="flex:1;"><label>부(Division)</label>
                                 <select id="em-division">
-                                    ${['','중등부','고등부','대학부','일반부','U20','국제'].map(d=>`<option value="${d}" ${(e.division||'')===d?'selected':''}>${d||'미지정'}</option>`).join('')}
+                                    ${(() => { const base=['','중등부','고등부','대학부','일반부','U20','국제']; const cur=(e.division||''); if(cur && !base.includes(cur)) base.push(cur); return base.map(d=>`<option value="${d}" ${cur===d?'selected':''}>${d||'미지정'}</option>`).join(''); })()}
                                 </select>
                             </div>
                             <div class="admin-form-group"><label>정렬순서</label><input type="number" id="em-sort" value="${e.sort_order||0}" style="width:80px;"></div>
