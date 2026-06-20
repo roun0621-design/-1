@@ -13243,11 +13243,22 @@ app.post('/api/display/roster/upload', upload.single('file'), async (req, res) =
             rosterEntries.length = 0;
             for (const e of dedupedEntries) rosterEntries.push(e);
 
-            // Delete existing roster for this day
-            await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=?', parseInt(competition_id), dayNum);
+            // ⚠️ 부분 교체: 이번 PDF에 들어있는 (부·성별·종목) 조합만 삭제 후 재삽입.
+            //   예전엔 day 전체를 지워서, 같은 날 코리아오픈 PDF → 초중고 PDF 순으로 올리면
+            //   먼저 올린 명단(예: 코리아오픈 100m)이 통째로 사라졌음.
+            //   이제 다른 부/종목(다른 PDF)은 보존되고, 같은 PDF 재업로드만 해당 종목을 갱신.
+            const delKeys = new Map();
+            for (const e of rosterEntries) {
+                const k = `${e.division || ''}${e.gender || ''}${e.event_name || ''}`;
+                if (!delKeys.has(k)) delKeys.set(k, { division: e.division || '', gender: e.gender || '', event_name: e.event_name || '' });
+            }
 
-            // Insert parsed roster
+            // Insert parsed roster (해당 부·성별·종목만 교체)
             await db.transaction(async () => {
+                for (const { division, gender, event_name } of delKeys.values()) {
+                    await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=? AND division=? AND gender=? AND event_name=?',
+                        parseInt(competition_id), dayNum, division, gender, event_name);
+                }
                 for (const e of rosterEntries) {
                     await db.run('INSERT INTO display_roster (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, heat, lane) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
                         e.competition_id, e.day, e.event_name, e.round, e.division, e.gender, e.bib_number, e.athlete_name, e.team, e.sort_order, e.heat || null, e.lane || null);
@@ -13383,10 +13394,17 @@ app.post('/api/display/roster/upload-excel', upload.single('file'), async (req, 
             return res.status(400).json({ error: '유효한 명단 행이 없습니다.' });
         }
 
-        // 트랜잭션: day별 삭제 후 INSERT
+        // 트랜잭션: (일차·부·성별·종목) 단위로만 교체 후 INSERT
+        //   day 전체를 지우면 다른 PDF/엑셀로 올린 다른 부·종목이 사라지므로 부분 교체.
+        const delKeysX = new Map();
+        for (const e of entries) {
+            const k = `${e.day}${e.division || ''}${e.gender || ''}${e.event_name || ''}`;
+            if (!delKeysX.has(k)) delKeysX.set(k, { day: e.day, division: e.division || '', gender: e.gender || '', event_name: e.event_name || '' });
+        }
         await db.transaction(async () => {
-            for (const d of [...daysSeen]) {
-                await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=?', parseInt(competition_id), d);
+            for (const { day, division, gender, event_name } of delKeysX.values()) {
+                await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=? AND division=? AND gender=? AND event_name=?',
+                    parseInt(competition_id), day, division, gender, event_name);
             }
             for (const e of entries) {
                 await db.run('INSERT INTO display_roster (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, heat, lane) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
