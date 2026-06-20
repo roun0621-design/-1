@@ -764,7 +764,9 @@ function renderCategoryTable(groups, label, isLive) {
         }
 
         // Time badge from schedule (show time for first available round: final > semifinal > preliminary)
-        const schedEvt = fin ? _scheduleMap[fin.id] : (semi ? _scheduleMap[semi.id] : (prelim ? _scheduleMap[prelim.id] : null));
+        // 스케줄이 '있는' 라운드를 결승→준결승→예선 순으로 선택.
+        // (결승 이벤트가 자동생성됐지만 시간표에 결승이 없을 때, 준결승/예선 시간으로 폴백)
+        const schedEvt = (fin && _scheduleMap[fin.id]) || (semi && _scheduleMap[semi.id]) || (prelim && _scheduleMap[prelim.id]) || null;
         let timeBadge = '';
         if (schedEvt && schedEvt.time) {
             const tColor = schedEvt.is_today ? '#b79f58' : '#999';
