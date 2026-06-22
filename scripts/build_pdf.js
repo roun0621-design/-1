@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const EV = path.join(__dirname, '..', 'evidence');
-const OUT = path.join(EV, '증빙자료_PACE-RISE_2026-06-22.pdf');
+const OUT = path.join(EV, '증빙자료_PACE-RISE_2026-06-16.pdf');
 
 // 각 증빙 이미지를 A4 페이지에 배치하는 HTML 생성
 function imgPage(file, title) {

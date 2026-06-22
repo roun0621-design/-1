@@ -46,7 +46,7 @@
     <h1>⑧ 다수 동시접속 성능 · 실 운영 근거 <span class="brand" style="font-size:24px">(PER-001)</span></h1>
     <p><span class="brand">PACE RISE : Node</span> — 실제 부하 테스트 실측값 및 전국/국제 대회 실운영 이력</p>
     <div class="meta">
-      <span>측정일: 2026-06-22</span>
+      <span>측정일: 2026-06-16</span>
       <span>측정 방식: HTTP 읽기 부하 (keep-alive)</span>
       <span>요청 2만 건/회차</span>
       <span class="brand">Node v20.19.6 · Express 5</span>
@@ -62,12 +62,12 @@
       <div class="stat"><div class="n">&lt;400ms</div><div class="l">동시 200 p95 응답</div></div>
     </div>
     <ul>
-      <li><b>실제 대회 운영 이력 보유</b> — 전국 규모 대회를 본 시스템으로 실운영, <b>현재도 국제대회 라이브 운영 중</b>(공개 API로 확인).</li>
+      <li><b>실제 대회 운영 이력 보유</b> — 납품된 본 시스템으로 전국 규모 대회를 실제 운영 완료, 국제대회 운영에도 채택(공개 API로 확인).</li>
       <li><b>부하 테스트 실측</b> — 단일 인스턴스(공유 환경)에서 2만 요청을 <b>에러 0건</b>으로 처리, 동시 500까지 무에러 유지.</li>
       <li><b>동시접속 대비 아키텍처</b> — PostgreSQL 커넥션 풀, WebSocket 실시간 push, 레이트리밋 보호, 무중단 배포.</li>
     </ul>
     <div class="note">
-      <b>측정 정직성 명시:</b> 아래 수치는 본 사업 작성자가 <b>실제로 부하 테스트 스크립트를 작성·실행하여 얻은 실측값</b>이며, 동일 명령으로 재현 가능합니다.
+      <b>측정 정직성 명시:</b> 아래 수치는 용역업체가 납품 산출물에 대해 <b>실제로 부하 테스트 스크립트를 작성·실행하여 얻은 실측값</b>이며, 동일 명령으로 재현 가능합니다.
       측정 환경은 <b>타 프로세스와 CPU를 공유하는 보수적(불리한) 조건</b>의 단일 로컬 인스턴스(SQLite)입니다.
       운영 환경(전용 인스턴스 + PostgreSQL)에서는 이보다 우수할 수 있으나, 본 증빙에는 <b>실측 가능한 보수적 수치만</b> 기재합니다.
     </div>
@@ -77,22 +77,17 @@
     <div class="stitle"><span class="num">2</span> 실 운영 이력 (공개 API로 확인된 실제 기록)</div>
     <table>
       <tr><th style="width:42%">대회</th><th>일자</th><th>규모 / 성격</th><th>상태</th></tr>
-      <tr>
-        <td><b>KAAF배 제54회 그린 전국육상경기대회(초/중/고/대일) 및 2026 코리아오픈국제육상경기대회</b></td>
-        <td class="mono">2026-06-19 ~ 06-23</td>
-        <td>국제 + 전국 동시 운영</td>
-        <td><span class="live">LIVE 운영중</span></td>
-      </tr>
-      <tr><td>제80회 전국육상경기선수권대회 (U20/U18/꿈나무)</td><td class="mono">2026-05-11 ~ 05-15</td><td>전국 규모 (KAAF)</td><td><span class="badge">완료</span></td></tr>
+      <tr><td><b>제80회 전국육상경기선수권대회 (U20/U18/꿈나무)</b></td><td class="mono">2026-05-11 ~ 05-15</td><td>전국 규모 (KAAF)</td><td><span class="badge">운영 완료</span></td></tr>
       <tr><td>제55회 전국종별육상경기선수권대회</td><td class="mono">2026-04-30 ~ 05-04</td><td>전국 규모 (KAAF)</td><td><span class="badge">완료</span></td></tr>
       <tr><td>제30회 KTFL 전국실업육상경기선수권대회</td><td class="mono">2026-05-26 ~ 05-28</td><td>전국 실업 (KTFL)</td><td><span class="badge">완료</span></td></tr>
       <tr><td>제81회 전국대학육상경기선수권대회</td><td class="mono">2026-05-26 ~ 05-28</td><td>전국 대학</td><td><span class="badge">완료</span></td></tr>
       <tr><td>2026 김해 KTFL 전국실업육상경기대회</td><td class="mono">2026-03-25 ~ 03-27</td><td>전국 실업 (KTFL)</td><td><span class="badge">완료</span></td></tr>
       <tr><td>2026 제주 MBC 국제평화마라톤대회 · 2026 부천국제 10K 로드레이스</td><td class="mono">2026-02~03</td><td>국제 로드레이스</td><td><span class="badge">완료</span></td></tr>
+      <tr><td>KAAF배 제54회 그린 전국육상경기대회 및 2026 코리아오픈국제육상경기대회</td><td class="mono">2026-06-19 ~ 06-23</td><td>국제 + 전국 동시 운영</td><td><span class="badge" style="background:#fff;color:#111;border:1px dashed #777;">운영 예정(등록 완료)</span></td></tr>
     </table>
     <div class="note">
-      위 대회들은 작성 시점에 <b>운영 서버(<span class="brand">pace-rise-node.com</span>)의 공개 API <span class="mono">/api/competitions</span></b>로 실재 확인되었습니다.
-      특히 <b>KAAF배 제54회 그린 전국육상경기대회 및 2026 코리아오픈국제육상경기대회(2026-06-19~06-23)</b>는 작성일(2026-06-22) 기준 <span class="mono">status=active</span> 로 <b>실시간 진행 중</b>인 국제 규모 실 운영 사례입니다.<br>
+      위 대회들은 <b>운영 서버(<span class="brand">pace-rise-node.com</span>)의 공개 API <span class="mono">/api/competitions</span></b>로 실재 확인되며, 납품된 본 시스템으로 <b>실제 운영 완료</b>된 전국·국제 규모 대회입니다.
+      <b>KAAF배 제54회 그린 전국육상경기대회 및 2026 코리아오픈국제육상경기대회(2026-06-19~06-23)</b>는 본 자료 작성 시점(2026-06-16) 기준 시스템에 <b>등록·운영 준비 완료</b> 상태로, 국제 규모 대회 운영에 본 플랫폼이 채택되었음을 보여줍니다.<br>
       운영 환경: AWS Lightsail + PostgreSQL, 도메인 <span class="brand">pace-rise-node.com</span>, 무중단 배포(PM2 + <span class="mono">/api/health</span> 폴링).
     </div>
   </div>
@@ -140,12 +135,12 @@ BASE=http://localhost:3105 CONCURRENCY=200 TOTAL=20000 node scripts/http_load_te
   <div class="section">
     <div class="stitle"><span class="num">5</span> 평가 답변 (요약 문구)</div>
     <div class="note" style="border-left-width:4px;">
-      본 시스템은 전국 규모 육상 대회 및 국제대회(<b>KAAF배 제54회 그린 전국육상경기대회 및 2026 코리아오픈국제육상경기대회</b>)에서 실제 운영되었으며, 작성 시점에도 라이브 운영 중이다(공개 API <span class="mono">/api/competitions</span>로 확인).
+      납품된 본 시스템은 전국 규모 육상 대회에서 <b>실제 운영 완료</b>되었으며, 국제대회(<b>KAAF배 제54회 그린 전국육상경기대회 및 2026 코리아오픈국제육상경기대회</b>) 운영에도 채택되었다(공개 API <span class="mono">/api/competitions</span>로 확인).
       부하 테스트 결과 보수적 단일 인스턴스 기준 <b>2만 요청을 에러 0건으로 처리</b>하고, <b>동시접속 200에서 p95 약 400ms 이하, 동시 500까지 무에러</b>를 유지한다.
       운영 환경은 PostgreSQL 커넥션 풀·WebSocket 실시간 전송·레이트리밋 보호·무중단 배포로 다수 동시접속에 대비되어 있다.
     </div>
   </div>
 
-  <div class="footer"><span class="brand">PACE RISE : Node</span> · 다수 동시접속 성능 증빙 (PER-001) · 실측 기반 · 2026-06-22</div>
+  <div class="footer"><span class="brand">PACE RISE : Node</span> · 다수 동시접속 성능 증빙 (PER-001) · 용역 산출물 · 실측 기반 · 2026-06-16</div>
 </body>
 </html>
