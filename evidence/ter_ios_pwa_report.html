@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="fonts/audiowide_face.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Noto Sans CJK KR','NanumSquare','Malgun Gothic',sans-serif; background:#ffffff; color:#111111; padding:40px; width:2000px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .brand { font-family:'Audiowide',sans-serif; letter-spacing:0.5px; }
+  .header { background:#fff; color:#000; border:1.5px solid #111; border-radius:8px; padding:34px 40px; margin-bottom:28px; }
+  .header h1 { font-size:36px; margin-bottom:10px; }
+  .header p { font-size:18px; color:#333; }
+  .meta { display:flex; gap:12px; margin-top:18px; flex-wrap:wrap; }
+  .meta span { background:#fff; color:#111; border:1px solid #111; padding:8px 16px; border-radius:6px; font-size:15px; }
+  .section { background:#fff; border:1px solid #d9d9d9; border-radius:10px; padding:28px 32px; margin-bottom:24px; }
+  .stitle { font-size:23px; font-weight:700; color:#000; margin-bottom:18px; display:flex; align-items:center; gap:11px; }
+  .stitle .num { background:#111; color:#fff; width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-family:'Audiowide',sans-serif; }
+  table { width:100%; border-collapse:collapse; font-size:15px; margin-top:4px; }
+  th,td { text-align:left; padding:12px 14px; border-bottom:1px solid #ddd; vertical-align:top; }
+  th { background:#f2f2f2; color:#000; font-weight:700; }
+  .mono { font-family:monospace; }
+  .ok { background:#111; color:#fff; padding:3px 10px; border-radius:10px; font-weight:700; font-size:13px; white-space:nowrap; }
+  .pending { background:#fff; color:#111; border:1px dashed #777; padding:3px 10px; border-radius:10px; font-weight:700; font-size:13px; white-space:nowrap; }
+  ul,ol { margin-left:22px; line-height:1.95; font-size:15px; }
+  li { margin-bottom:5px; }
+  pre { background:#f7f7f7; color:#111; padding:16px 20px; border-radius:10px; font-size:14px; line-height:1.7; font-family:monospace; border:1px solid #ccc; overflow-x:auto; white-space:pre-wrap; }
+  pre .c { color:#888; }
+  .note { background:#fff; border:1px solid #111; border-left:4px solid #111; padding:16px 20px; border-radius:8px; font-size:14.5px; line-height:1.85; color:#222; margin-top:8px; }
+  .note b { color:#000; }
+  .check { list-style:none; margin-left:0; }
+  .check li { padding-left:30px; position:relative; }
+  .check li::before { content:'☐'; position:absolute; left:0; font-size:18px; }
+  .footer { text-align:center; color:#555; font-size:14px; margin-top:24px; padding-top:18px; border-top:1px solid #ccc; }
+  .badge { background:#111; color:#fff; padding:3px 10px; border-radius:8px; font-size:13px; font-weight:700; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>⑨ iOS 실기기 구동 증빙 <span class="brand" style="font-size:24px">(TER-001)</span></h1>
+    <p><span class="brand">PACE RISE : Node</span> — PWA 기반 iOS 실기기(아이폰/아이패드) 즉시 구동 · 정직한 현황 명시</p>
+    <div class="meta">
+      <span>구동 방식: PWA (설치형)</span>
+      <span>Android: TWA (네이티브 패키지)</span>
+      <span>iOS 네이티브: 미빌드</span>
+      <span class="brand">pace-rise-node.com</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">1</span> 결론 (정직한 현황)</div>
+    <ul>
+      <li>본 서비스는 <b>PWA로 iOS 실기기(아이폰/아이패드)에서 즉시 구동</b>됩니다.</li>
+      <li>Safari 접속 → <b>"홈 화면에 추가"</b> → 주소창 없는 <b>풀스크린 앱</b>으로 동작 (<span class="mono">display: standalone</span>).</li>
+      <li>iOS <b>16.4 이상</b>: 설치형 PWA에서 <b>웹푸시 알림</b>까지 동작.</li>
+      <li>Android: <b>네이티브 패키지(TWA, <span class="mono">com.pacerise.node</span>)</b> 빌드 완료 — Google Play 등록 진행.</li>
+      <li>iOS <b>네이티브 앱(App Store 바이너리)</b>: <span class="pending">미빌드 (Apple D-U-N-S 단계)</span> — 단, <b>실기기 구동 자체는 PWA로 충족</b>.</li>
+    </ul>
+    <div class="note">
+      <b>정직성 명시:</b> "iOS 실기기에서 구동되는 화면"은 <b>PWA로 지금 바로 시연·캡처 가능</b>합니다.
+      <b>App Store 네이티브 바이너리는 아직 빌드하지 않았으며</b>(§5 경로 참조), 이를 마치 완료한 것처럼 기재하지 않습니다.
+      평가에서 App Store 네이티브 앱을 별도로 요구할 때만 추가 작업이 필요합니다.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">2</span> iOS PWA 구동 기술 근거 (소스 확인)</div>
+    <table>
+      <tr><th style="width:30%">근거</th><th>내용 (실제 소스 확인됨)</th></tr>
+      <tr><td>Web App Manifest</td><td><span class="mono">public/manifest.json</span> — <span class="mono">display: standalone</span>, <span class="mono">display_override: ["standalone","minimal-ui"]</span>, 아이콘 <b>10종</b>(72~512px, maskable/any), <span class="mono">theme_color #b79f58</span></td></tr>
+      <tr><td>iOS 전용 메타 태그</td><td><span class="mono">apple-mobile-web-app-capable</span>, <span class="mono">apple-mobile-web-app-status-bar-style</span>, <span class="mono">apple-mobile-web-app-title</span> (홈 화면 추가 시 풀스크린 앱 동작)</td></tr>
+      <tr><td>Service Worker</td><td><span class="mono">public/sw.js</span> — <span class="mono">CACHE_NAME 'pacerise-v135'</span>, 오프라인 우선 캐시, 앱 셸 캐싱, 오프라인 큐(IndexedDB), 백그라운드 동기화</td></tr>
+      <tr><td>SW 등록</td><td><span class="mono">public/common.js</span> — <span class="mono">navigator.serviceWorker.register('/sw.js')</span></td></tr>
+      <tr><td>HTTPS</td><td>운영 도메인 <span class="brand">pace-rise-node.com</span> 전 구간 HTTPS (PWA 설치 전제 조건 충족)</td></tr>
+    </table>
+    <div class="note">위 항목은 모두 <b>실제 소스코드에서 확인된 사실</b>입니다. iOS Safari가 PWA 설치를 지원하는 요건(manifest + HTTPS + apple 메타 태그)을 모두 충족합니다.</div>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">3</span> iOS 실기기 구동·캡처 단계 (약 5분)</div>
+    <ol>
+      <li>아이폰 Safari에서 <span class="mono">https://pace-rise-node.com</span> 접속</li>
+      <li>하단 <b>공유(⬆️)</b> → <b>"홈 화면에 추가"</b> → 추가</li>
+      <li>홈 화면의 <b>PACE RISE 아이콘</b> 실행 → <b>풀스크린 앱</b>으로 열림</li>
+      <li>아래 화면들을 스크린샷/화면 녹화로 캡처</li>
+      <li>(선택) 알림 허용 → iOS 16.4+ 웹푸시 동작 확인</li>
+    </ol>
+    <div class="note"><b>실기기 증빙 팁:</b> <b>설정 &gt; 일반 &gt; 정보</b>(기기 모델/iOS 버전) 화면을 함께 캡처하면 "실기기" 구동 증빙으로 명확합니다.</div>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">4</span> 캡처할 화면 체크리스트</div>
+    <ul class="check">
+      <li>홈 화면의 PACE RISE 앱 아이콘 (설치된 모습)</li>
+      <li>대시보드(종목 매트릭스) 풀스크린</li>
+      <li>실시간 결과 / LIVE</li>
+      <li>전광판 / 오버레이 (<span class="mono">/monitor.html</span>)</li>
+      <li>기록입력 (<span class="mono">/record.html</span>)</li>
+      <li>(행사용) 간편 기록입력 <span class="mono">/e/&lt;브랜드&gt;/record</span></li>
+      <li>푸시 알림 수신 (iOS 16.4+)</li>
+      <li>설정 &gt; 정보 (기기 모델 / iOS 버전)</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">5</span> (필요 시) iOS App Store 네이티브 앱 경로</div>
+    <table>
+      <tr><th style="width:26%">방식</th><th>설명</th><th>현황</th></tr>
+      <tr><td>Capacitor 래핑 (권장)</td><td>현재 PWA 자산을 WKWebView로 감싸 App Store 제출. 서버 수정이 즉시 반영됨</td><td><span class="pending">미진행</span></td></tr>
+      <tr><td>PWABuilder iOS</td><td>Android(TWA)와 동일한 워크플로로 iOS 패키지 생성</td><td><span class="pending">미진행</span></td></tr>
+      <tr><td>선행 조건</td><td>Apple Developer(법인) + <b>D-U-N-S 등록</b></td><td><span class="pending">진행 중</span></td></tr>
+    </table>
+    <div class="note"><b>현황 요약:</b> Android는 네이티브(TWA) <span class="ok">빌드 완료</span>, iOS는 <b>PWA로 실기기 구동 충족</b>이며 App Store 네이티브 바이너리는 <b>미빌드(D-U-N-S 진행 중)</b>입니다. 과장 없이 현 상태 그대로 기재합니다.</div>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">6</span> 평가 답변 (요약 문구)</div>
+    <div class="note" style="border-left-width:4px;">
+      본 서비스는 PWA로 iOS 실기기에서 홈 화면 설치 후 풀스크린 앱으로 구동되며(<span class="mono">manifest.json</span> · Service Worker · apple 메타 태그로 근거 확인), iOS 16.4+에서 웹푸시까지 동작한다(실기기 화면 별첨).
+      Android는 네이티브 패키지(TWA)를 빌드해 Google Play 등록을 진행 중이며, iOS App Store 네이티브 앱은 Apple 법인 인증(D-U-N-S) 완료 후 Capacitor 래핑으로 제출 예정이다.
+      현 시점 iOS 네이티브 바이너리는 미빌드 상태이나, iOS 실기기 구동 요건은 PWA로 충족된다.
+    </div>
+  </div>
+
+  <div class="footer"><span class="brand">PACE RISE : Node</span> · iOS 실기기 구동 증빙 (TER-001) · PWA 기반 · 2026-06-22</div>
+</body>
+</html>

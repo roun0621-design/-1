@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="fonts/audiowide_face.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif; background:#eef1f5; color:#1a2233; padding:40px; width:2000px; }
+  .header { background:linear-gradient(135deg,#1b5e20,#2e7d32); color:#fff; padding:38px 44px; border-radius:16px; margin-bottom:30px; }
+  .header h1 { font-size:38px; margin-bottom:10px; }
+  .header p { font-size:18px; color:#c8e6c9; }
+  .meta { display:flex; gap:14px; margin-top:18px; flex-wrap:wrap; }
+  .meta span { background:rgba(255,255,255,0.15); padding:8px 16px; border-radius:20px; font-size:15px; }
+  .section { background:#fff; border-radius:16px; padding:28px 32px; box-shadow:0 2px 14px rgba(20,40,80,0.07); margin-bottom:26px; }
+  .stitle { font-size:23px; font-weight:700; color:#1b5e20; margin-bottom:18px; display:flex; align-items:center; gap:11px; }
+  .stitle .num { background:#2e7d32; color:#fff; width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:16px; }
+  table { width:100%; border-collapse:collapse; font-size:15px; }
+  th,td { text-align:left; padding:12px 14px; border-bottom:1px solid #e4e9f0; }
+  th { background:#f1f8f2; color:#1b5e20; }
+  td .ok { background:#e8f5e9; color:#2e7d32; padding:3px 10px; border-radius:10px; font-weight:700; font-size:13px; }
+  .lock { color:#2e7d32; font-weight:700; }
+  .shots { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .shot { border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; }
+  .shot .cap { background:#2e7d32; color:#fff; padding:10px 14px; font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .shot .cap .url { background:rgba(255,255,255,0.2); padding:2px 10px; border-radius:8px; font-family:monospace; font-size:13px; }
+  .shot img { width:100%; display:block; }
+  pre { background:#0f1a2b; color:#9fe3b4; padding:16px 20px; border-radius:10px; font-size:14px; line-height:1.7; font-family:monospace; overflow-x:auto; }
+  pre .lbl { color:#7aa5d6; }
+  .guide { background:#fff8e1; border-left:4px solid #f9a825; padding:18px 22px; border-radius:8px; font-size:15px; line-height:1.9; }
+  .guide b { color:#e65100; }
+  .guide ol { margin-left:22px; }
+  .footer { text-align:center; color:#7a8aa0; font-size:14px; margin-top:24px; padding-top:18px; border-top:1px solid #d5dde8; }
+
+  /* ===== WHITE/BLACK THEME OVERRIDE (회사 표준) ===== */
+  body { background:#ffffff !important; color:#111111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:'Noto Sans CJK KR','NanumSquare','Malgun Gothic',sans-serif !important; }
+  .brand, .mono-bd { font-family:'Audiowide',sans-serif !important; letter-spacing:0.5px; }
+  .header { background:#ffffff !important; color:#000000 !important; border:1.5px solid #111111 !important; border-radius:8px !important; }
+  .header h1 { color:#000000 !important; }
+  .header p { color:#333333 !important; }
+  .header .meta span { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  .header::before { content:''; display:block; position:absolute; }
+  .section, .stat, .wrap { background:#ffffff !important; color:#111111 !important; border:1px solid #d9d9d9 !important; box-shadow:none !important; }
+  .stitle, .section-title, .stitle .num, .section-title .num { color:#000000 !important; }
+  .stitle .num, .section-title .num, .toc .no, .no { background:#111111 !important; color:#ffffff !important; font-family:'Audiowide',sans-serif !important; }
+  th { background:#f2f2f2 !important; color:#000000 !important; }
+  td, th { border-color:#dddddd !important; }
+  .chip { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  pre, .health { background:#f7f7f7 !important; color:#111111 !important; border:1px solid #cccccc !important; }
+  pre .c { color:#888888 !important; }
+  pre .k { color:#000000 !important; font-weight:700; }
+  .health .lbl { color:#555555 !important; }
+  .note { background:#ffffff !important; border-left:4px solid #111111 !important; border:1px solid #111111 !important; color:#222222 !important; }
+  .footer { color:#555555 !important; border-top:1px solid #cccccc !important; }
+  .shot { border:1px solid #cccccc !important; }
+  .shot .cap, .ba-label, .ba-label.before, .ba-label.after, .imp-head .badge,
+  .cloud-label, .region-tag, .tag.real, .tag.guide, .badge {
+     background:#111111 !important; color:#ffffff !important; border-color:#111111 !important; }
+  .ba-label.before { background:#777777 !important; }
+  .imp-head { background:#f2f2f2 !important; color:#000000 !important; }
+  .stat .num, .stat-num { color:#000000 !important; }
+  td .ok, .ok { background:#111111 !important; color:#ffffff !important; }
+  .arch { background:#fafafa !important; border:1.5px dashed #999999 !important; }
+  /* 잔여 컬러 토큰 무력화: AWS/HTTPS/전후비교 등 */
+  .header h1 .aws { color:#000000 !important; }
+  .box, .box.ec2, .box.db, .box.user { background:#ffffff !important; border:1.5px solid #111111 !important; box-shadow:none !important; }
+  .box .svc { color:#000000 !important; }
+  .box .desc { color:#444444 !important; }
+  .region { border:1.5px solid #111111 !important; }
+  .region-tag { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  .cloud-label { background:#111111 !important; color:#ffffff !important; }
+  .arrow { color:#111111 !important; }
+  .guide { background:#ffffff !important; border-left:4px solid #111111 !important; border:1px solid #111111 !important; }
+  .guide b { color:#000000 !important; }
+  .ok { background:#111111 !important; color:#ffffff !important; }
+  .flow { background:#f7f7f7 !important; color:#222222 !important; }
+  .head { background:#ffffff !important; color:#000000 !important; border-bottom:1.5px solid #111111 !important; }
+  tfoot td { background:#f2f2f2 !important; color:#000000 !important; border-top:1.5px solid #111111 !important; }
+  td.t { color:#000000 !important; }
+  .ba-label.after, .imp-head .badge, .badge { background:#111111 !important; color:#ffffff !important; }
+
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>④ HTTPS(SSL/TLS) 적용 증빙</h1>
+    <p>실제 운영 도메인에 유효한 SSL 인증서 적용 — 전 구간 암호화 통신 확인</p>
+    <div class="meta">
+      <span>검증일: 2026-06-19</span>
+      <span>인증기관: Let's Encrypt</span>
+      <span>호스팅: AWS (서울 리전)</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">1</span> SSL 인증서 검증 결과 (실측)</div>
+    <table>
+      <tr><th>도메인</th><th>HTTPS 응답</th><th>SSL 검증</th><th>발급기관</th><th>유효기간</th><th>서버 IP (AWS)</th></tr>
+      <tr>
+        <td><b><span class="brand">pace-rise.com</span></b></td>
+        <td>HTTP 200</td>
+        <td><span class="ok">✓ 유효 (verify=0)</span></td>
+        <td>Let's Encrypt (CN=YE2)</td>
+        <td>2026-06-06 ~ 2026-09-04</td>
+        <td>13.125.200.206</td>
+      </tr>
+      <tr>
+        <td><b><span class="brand">pace-rise-node.com</span></b></td>
+        <td>HTTP 200</td>
+        <td><span class="ok">✓ 유효 (verify=0)</span></td>
+        <td>Let's Encrypt (CN=R12)</td>
+        <td>2026-05-02 ~ 2026-07-31</td>
+        <td>52.79.132.6</td>
+      </tr>
+    </table>
+    <pre><span class="lbl"># openssl 인증서 검증 (<span class="brand">pace-rise.com</span>)</span>
+$ echo | openssl s_client -servername <span class="brand">pace-rise.com</span> -connect <span class="brand">pace-rise.com</span>:443 | openssl x509 -noout -issuer -subject -dates
+issuer  = C=US, O=Let's Encrypt, CN=YE2
+subject = CN=<span class="brand">pace-rise.com</span>
+notBefore = Jun  6 14:32:30 2026 GMT
+notAfter  = Sep  4 14:32:29 2026 GMT
+
+<span class="lbl"># curl SSL 검증 결과</span>
+$ curl -o /dev/null -w "HTTP %{http_code} | SSL verify: %{ssl_verify_result}\n" https://<span class="brand">pace-rise.com</span>/
+HTTP 200 | SSL verify: 0   <span class="lbl"># 0 = 검증 성공</span></pre>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">2</span> HTTPS 적용 사이트 화면 (실제 운영)</div>
+    <div class="shots">
+      <div class="shot">
+        <div class="cap">🔒 공식 홈페이지 <span class="url">https://<span class="brand">pace-rise.com</span></span></div>
+        <img src="https/pace-rise.png">
+      </div>
+      <div class="shot">
+        <div class="cap">🔒 운영 시스템 <span class="url">https://<span class="brand">pace-rise-node.com</span></span></div>
+        <img src="https/pace-rise-node.png">
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">3</span> 브라우저 자물쇠 캡처 가이드 (직접 캡처용)</div>
+    <div class="guide">
+      위 검증은 서버 측 SSL 적용을 증명합니다. 정부지원 사업 증빙용 <b>"브라우저 주소창 자물쇠 + 인증서 상세"</b> 화면은
+      <b>실제 사용 환경에서 직접 캡처</b>하시는 것을 권장합니다(가장 확실한 증빙).
+      <ol>
+        <li>Chrome/Edge에서 <b>https://<span class="brand">pace-rise-node.com</span></b> 접속</li>
+        <li>주소창 왼쪽 <b>🔒 자물쇠(또는 "사이트 정보") 아이콘 클릭</b> → "이 연결은 안전합니다" 표시 캡처</li>
+        <li>"인증서가 유효함" 클릭 → 인증서 상세(발급자 Let's Encrypt, 유효기간) 팝업 캡처</li>
+        <li>전체 화면(주소창 자물쇠가 보이도록) + 인증서 팝업, 2장을 캡처하여 제출</li>
+      </ol>
+      <b>Tip:</b> 주소창 자물쇠가 함께 보이도록 <b>브라우저 전체 창</b>을 캡처(Alt+PrintScreen / 윈도우+Shift+S)하세요.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">4</span> 증빙 범위 명시 (정직성)</div>
+    <div class="guide">
+      <b>본 항목의 증빙 범위는 "HTTPS(SSL/TLS) 적용"까지입니다.</b>
+      <ul style="margin-left:22px; line-height:1.9;">
+        <li>✅ <b>적용 완료:</b> 운영 도메인 전 구간 HTTPS 암호화, 유효한 SSL 인증서(Let's Encrypt), HSTS 등 보안 헤더 적용.</li>
+        <li>❌ <b>미수행:</b> 별도의 <b>보안 취약점 점검(취약점 스캔·모의해킹·진단 보고서)은 수행하지 않았습니다.</b> 따라서 "취약점 점검 완료"로 기재하지 않습니다.</li>
+      </ul>
+      <b>요약:</b> 전송 구간 암호화(HTTPS/SSL)는 적용·검증되었으나, 취약점 진단은 본 사업 범위에서 수행하지 않았으므로 그 사실을 명확히 기재합니다. (필요 시 별도 취약점 진단을 추가 수행할 수 있음)
+    </div>
+  </div>
+
+  <div class="footer">
+    본 자료의 인증서 정보·SSL 검증 결과·사이트 화면은 실제 운영 도메인에 대해 직접 측정·캡처한 결과입니다. 임의 합성·편집 없음. 보안 취약점 점검은 미수행(범위 외)임을 명시함. &nbsp;|&nbsp; <span class="brand">PACE RISE : Node</span>
+  </div>
+</body>
+</html>

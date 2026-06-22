@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="fonts/audiowide_face.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif; background:#eef1f5; color:#1a2233; padding:40px; width:2000px; }
+  .header { background:linear-gradient(135deg,#1e3a5f,#2c5282); color:#fff; padding:38px 44px; border-radius:16px; margin-bottom:30px; }
+  .header h1 { font-size:38px; margin-bottom:10px; }
+  .header p { font-size:18px; color:#b9d0e8; }
+  .meta { display:flex; gap:14px; margin-top:18px; flex-wrap:wrap; }
+  .meta span { background:rgba(255,255,255,0.13); padding:8px 16px; border-radius:20px; font-size:15px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:26px; margin-bottom:26px; }
+  .section { background:#fff; border-radius:16px; padding:28px 32px; box-shadow:0 2px 14px rgba(20,40,80,0.07); }
+  .section.full { margin-bottom:26px; }
+  .stitle { font-size:22px; font-weight:700; color:#1e3a5f; margin-bottom:16px; display:flex; align-items:center; gap:11px; }
+  .stitle .num { background:#2c5282; color:#fff; width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:17px; }
+  pre { background:#0f1a2b; color:#d6e4f5; padding:18px 20px; border-radius:10px; font-size:15px; line-height:1.7; overflow-x:auto; font-family:'D2Coding','Consolas',monospace; }
+  pre .c { color:#6b8cae; }
+  pre .k { color:#82d6a3; }
+  table { width:100%; border-collapse:collapse; font-size:15px; }
+  th,td { text-align:left; padding:10px 12px; border-bottom:1px solid #e4e9f0; }
+  th { background:#f5f8fc; color:#1e3a5f; }
+  .stack { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { background:#eaf2fb; color:#1e3a5f; padding:6px 13px; border-radius:16px; font-size:14px; font-weight:600; }
+  .health { background:#0f1a2b; border-radius:10px; padding:16px 20px; font-family:monospace; font-size:14px; color:#9fe3b4; margin-top:10px; }
+  .health .lbl { color:#7aa5d6; }
+  .shot { border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; }
+  .shot .cap { background:#2c5282; color:#fff; padding:9px 14px; font-size:14px; font-weight:600; }
+  .shot img { width:100%; display:block; }
+  .shots-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .shots-grid .wide { grid-column:1 / -1; }
+  .mobshot { display:flex; gap:18px; align-items:flex-start; }
+  .mobshot .shot.m { flex:0 0 26%; }
+  .footer { text-align:center; color:#7a8aa0; font-size:14px; margin-top:24px; padding-top:18px; border-top:1px solid #d5dde8; }
+  .note { background:#f0f7ff; border-left:4px solid #2c5282; padding:14px 18px; border-radius:8px; font-size:14px; line-height:1.7; margin-top:14px; }
+
+  /* ===== WHITE/BLACK THEME OVERRIDE (회사 표준) ===== */
+  body { background:#ffffff !important; color:#111111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:'Noto Sans CJK KR','NanumSquare','Malgun Gothic',sans-serif !important; }
+  .brand, .mono-bd { font-family:'Audiowide',sans-serif !important; letter-spacing:0.5px; }
+  .header { background:#ffffff !important; color:#000000 !important; border:1.5px solid #111111 !important; border-radius:8px !important; }
+  .header h1 { color:#000000 !important; }
+  .header p { color:#333333 !important; }
+  .header .meta span { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  .header::before { content:''; display:block; position:absolute; }
+  .section, .stat, .wrap { background:#ffffff !important; color:#111111 !important; border:1px solid #d9d9d9 !important; box-shadow:none !important; }
+  .stitle, .section-title, .stitle .num, .section-title .num { color:#000000 !important; }
+  .stitle .num, .section-title .num, .toc .no, .no { background:#111111 !important; color:#ffffff !important; font-family:'Audiowide',sans-serif !important; }
+  th { background:#f2f2f2 !important; color:#000000 !important; }
+  td, th { border-color:#dddddd !important; }
+  .chip { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  pre, .health { background:#f7f7f7 !important; color:#111111 !important; border:1px solid #cccccc !important; }
+  pre .c { color:#888888 !important; }
+  pre .k { color:#000000 !important; font-weight:700; }
+  .health .lbl { color:#555555 !important; }
+  .note { background:#ffffff !important; border-left:4px solid #111111 !important; border:1px solid #111111 !important; color:#222222 !important; }
+  .footer { color:#555555 !important; border-top:1px solid #cccccc !important; }
+  .shot { border:1px solid #cccccc !important; }
+  .shot .cap, .ba-label, .ba-label.before, .ba-label.after, .imp-head .badge,
+  .cloud-label, .region-tag, .tag.real, .tag.guide, .badge {
+     background:#111111 !important; color:#ffffff !important; border-color:#111111 !important; }
+  .ba-label.before { background:#777777 !important; }
+  .imp-head { background:#f2f2f2 !important; color:#000000 !important; }
+  .stat .num, .stat-num { color:#000000 !important; }
+  td .ok, .ok { background:#111111 !important; color:#ffffff !important; }
+  .arch { background:#fafafa !important; border:1.5px dashed #999999 !important; }
+  /* 잔여 컬러 토큰 무력화: AWS/HTTPS/전후비교 등 */
+  .header h1 .aws { color:#000000 !important; }
+  .box, .box.ec2, .box.db, .box.user { background:#ffffff !important; border:1.5px solid #111111 !important; box-shadow:none !important; }
+  .box .svc { color:#000000 !important; }
+  .box .desc { color:#444444 !important; }
+  .region { border:1.5px solid #111111 !important; }
+  .region-tag { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  .cloud-label { background:#111111 !important; color:#ffffff !important; }
+  .arrow { color:#111111 !important; }
+  .guide { background:#ffffff !important; border-left:4px solid #111111 !important; border:1px solid #111111 !important; }
+  .guide b { color:#000000 !important; }
+  .ok { background:#111111 !important; color:#ffffff !important; }
+  .flow { background:#f7f7f7 !important; color:#222222 !important; }
+  .head { background:#ffffff !important; color:#000000 !important; border-bottom:1.5px solid #111111 !important; }
+  tfoot td { background:#f2f2f2 !important; color:#000000 !important; border-top:1.5px solid #111111 !important; }
+  td.t { color:#000000 !important; }
+  .ba-label.after, .imp-head .badge, .badge { background:#111111 !important; color:#ffffff !important; }
+  code { background:#f2f2f2; color:#000; padding:1px 6px; border-radius:4px; font-family:'D2Coding','Consolas',monospace; font-size:13px; border:1px solid #ddd; }
+
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>① 앱 프로젝트 · 빌드 가이드 및 로컬 구동 증빙</h1>
+    <p><span class="brand">PACE RISE : Node</span> — 육상경기 운영 관리 시스템 · 하이브리드 앱 (Android = TWA / iOS = PWA)</p>
+    <div class="meta">
+      <span>패키지: com.pacerise.node</span>
+      <span>버전: 1.0.1 (versionCode 2)</span>
+      <span>Android: TWA(AAB)</span>
+      <span>iOS: PWA(설치형)</span>
+      <span>Node.js v20.19.6</span>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="section">
+      <div class="stitle"><span class="num">A</span> 기술 스택</div>
+      <p style="font-size:15px;color:#5a6b82;margin-bottom:12px;">서버 (Node.js / Express)</p>
+      <div class="stack">
+        <span class="chip">Node.js 20</span><span class="chip">Express 5</span>
+        <span class="chip">better-sqlite3</span><span class="chip">pg (PostgreSQL)</span>
+        <span class="chip">ws (WebSocket)</span><span class="chip">helmet</span>
+        <span class="chip">jsonwebtoken</span><span class="chip">bcryptjs</span>
+        <span class="chip">multer</span><span class="chip">pdfkit</span>
+        <span class="chip">exceljs</span><span class="chip">node-cron</span>
+      </div>
+      <p style="font-size:15px;color:#5a6b82;margin:16px 0 12px;">앱 패키징 / 빌드 도구</p>
+      <div class="stack">
+        <span class="chip">Android TWA</span><span class="chip">androidx.browser</span>
+        <span class="chip">androidbrowserhelper</span><span class="chip">AAB (App Bundle)</span>
+        <span class="chip">iOS PWA</span><span class="chip">Web App Manifest</span>
+        <span class="chip">Service Worker</span><span class="chip">오프라인 캐시</span>
+        <span class="chip">Playwright</span><span class="chip">vitest</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="stitle"><span class="num">B</span> 프로젝트 구조</div>
+      <pre><span class="c"># 주요 디렉토리</span>
+webapp/
+├─ server.js          <span class="c"># 메인 서버 (Express)</span>
+├─ lib/
+│   ├─ db.js          <span class="c"># DB 추상화 (SQLite/PG 전환)</span>
+│   └─ routes/        <span class="c"># 기능별 라우트 모듈</span>
+├─ public/            <span class="c"># 정적 프론트엔드 (HTML/JS)</span>
+│   ├─ manifest.json  <span class="c"># PWA 매니페스트 (iOS 설치형)</span>
+│   └─ sw.js          <span class="c"># Service Worker (오프라인 캐시)</span>
+├─ db/
+│   ├─ competition.db <span class="c"># SQLite 운영 DB</span>
+│   └─ schema.pg.sql  <span class="c"># PostgreSQL 스키마</span>
+├─ scripts/           <span class="c"># 마이그레이션·캡처 등</span>
+├─ tests/             <span class="c"># vitest 테스트</span>
+└─ build/             <span class="c"># AAB 산출물·키스토어</span></pre>
+    </div>
+  </div>
+
+  <div class="section full">
+    <div class="stitle"><span class="num">C</span> 빌드 · 실행 절차</div>
+    <div class="grid2">
+      <div>
+        <p style="font-size:16px;font-weight:700;color:#1e3a5f;margin-bottom:8px;">1) 웹 서버 로컬 실행</p>
+        <pre><span class="c"># 의존성 설치</span>
+npm install
+
+<span class="c"># SQLite 백엔드로 실행 (기본)</span>
+npm start
+<span class="c"># → http://localhost:3000</span>
+
+<span class="c"># PostgreSQL 백엔드로 실행</span>
+DB_BACKEND=postgres \
+DATABASE_URL=postgres://user:pw@host:5432/db \
+node server.js</pre>
+        <p style="font-size:16px;font-weight:700;color:#1e3a5f;margin:16px 0 8px;">2) 테스트</p>
+        <pre>npm test            <span class="c"># vitest 1회 실행</span>
+npm run test:coverage</pre>
+      </div>
+      <div>
+        <p style="font-size:16px;font-weight:700;color:#1e3a5f;margin-bottom:8px;">3) Android 앱(TWA · AAB) 빌드 · 서명</p>
+        <pre><span class="c"># TWA(Trusted Web Activity) 기반 App Bundle</span>
+<span class="c"># com.pacerise.node / versionCode 2 / 1.0.1</span>
+
+<span class="c"># 업로드 키 생성</span>
+keytool -genkeypair \
+  -keystore pacerise-upload.keystore \
+  -alias pacerise -keyalg RSA \
+  -keysize 2048 -validity 10000
+
+<span class="c"># AAB 서명 · 검증</span>
+jarsigner -keystore pacerise-upload.keystore \
+  app-release-v2.aab pacerise
+jarsigner -verify app-release-v2.aab
+<span class="k"># → jar verified.</span></pre>
+        <p style="font-size:16px;font-weight:700;color:#1e3a5f;margin:16px 0 8px;">4) iOS 앱(PWA) 설치 배포</p>
+        <pre><span class="c"># PWA: 빌드 불필요, 웹 표준으로 설치</span>
+<span class="c"># manifest.json + sw.js 가 자동 제공됨</span>
+
+<span class="c"># iOS Safari → 공유 → "홈 화면에 추가"</span>
+<span class="c"># → standalone 모드로 네이티브 앱처럼 구동</span>
+<span class="c"># → Service Worker 오프라인 캐시 동작</span></pre>
+        <div class="note">
+          산출물: <b>build/app-release-v2.aab</b> (Android TWA, Google Play 업로드) +
+          <b>public/manifest.json · public/sw.js</b> (iOS PWA, 설치형) — 동일 웹앱을 두 플랫폼에 하이브리드 패키징.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section full">
+    <div class="stitle"><span class="num">D</span> 하이브리드 앱 패키징 방식 (AOS = TWA / iOS = PWA)</div>
+    <p style="font-size:15px;color:#444;margin-bottom:14px;">기존 웹앱(<span class="brand">PACE RISE : Node</span>)의 렌더링을 최적화하고, 앱 설치 없이도 폰·태블릿·PC에서 동작하도록 <b>표준 웹 기술 기반 하이브리드 앱</b>으로 패키징하였다. Android는 <b>TWA(Trusted Web Activity)</b>로 AAB를 빌드하고, iOS는 <b>PWA(Progressive Web App)</b> 설치형으로 제공한다.</p>
+    <table>
+      <tr><th style="width:14%;">플랫폼</th><th style="width:20%;">패키징 방식</th><th>구성 요소 (실제 검증)</th><th style="width:18%;">배포</th></tr>
+      <tr>
+        <td><b>Android (AOS)</b></td>
+        <td>TWA<br><span style="color:#666;font-size:13px;">Trusted Web Activity</span></td>
+        <td>AAB 내 <code>TrustedWebActivity</code> · <code>androidbrowserhelper</code> · <code>android.support.customtabs.trusted</code> · <code>LauncherActivity</code> · Digital Asset Links(<code>asset_statements</code>) 포함</td>
+        <td>Google Play Console 업로드 (com.pacerise.node)</td>
+      </tr>
+      <tr>
+        <td><b>iOS</b></td>
+        <td>PWA<br><span style="color:#666;font-size:13px;">설치형 웹앱</span></td>
+        <td><code>manifest.json</code> (display:standalone, maskable 아이콘 10종) + <code>sw.js</code> Service Worker(v3, 오프라인 캐시·백그라운드 동기화) — <code>common.js</code>에서 <code>serviceWorker.register('/sw.js')</code> 등록</td>
+        <td>Safari "홈 화면에 추가" 설치</td>
+      </tr>
+      <tr>
+        <td><b>공통</b></td>
+        <td>반응형 웹</td>
+        <td>Cross-Device 반응형(폰·태블릿·PC) — 앱 설치 없이 브라우저로도 동일 화면 제공</td>
+        <td>배포 URL: <span class="brand">pace-rise-node.com</span></td>
+      </tr>
+    </table>
+    <div class="note">
+      ※ TWA/PWA 구성 요소는 실제 산출물(<b>build/app-release-v2.aab</b>, <b>public/manifest.json</b>, <b>public/sw.js</b>)을 직접 분석하여 확인한 사실입니다.
+      양 방식 모두 웹앱을 네이티브 앱처럼 전체화면(standalone)으로 구동하는 하이브리드 패키징에 해당합니다.
+    </div>
+  </div>
+
+  <div class="section full">
+    <div class="stitle"><span class="num">E</span> 로컬 구동 화면 (실제 실행 캡처)</div>
+    <div class="shots-grid">
+      <div class="shot"><div class="cap">메인 홈 — http://localhost:3999/</div><img src="app_running/home.png"></div>
+      <div class="shot"><div class="cap">경기 운영 모니터 — /monitor.html</div><img src="app_running/monitor.png"></div>
+      <div class="shot wide"><div class="cap">로그인 화면 — /login.html</div><img src="app_running/login.png"></div>
+    </div>
+    <div class="mobshot" style="margin-top:18px;">
+      <div class="shot m"><div class="cap">모바일 반응형</div><img src="app_running/home_mob.png"></div>
+      <div style="flex:1;">
+        <div class="stitle" style="font-size:18px;"><span class="num">F</span> 이중 DB 백엔드 구동 확인 (/api/health)</div>
+        <p style="font-size:14px;color:#5a6b82;margin-bottom:10px;">동일 코드베이스가 환경변수 <b>DB_BACKEND</b> 로 SQLite / PostgreSQL 양쪽에서 정상 기동됨을 실제 응답으로 확인.</p>
+        <div class="health">
+<span class="lbl">$ curl localhost:3999/api/health  (SQLite)</span><br>
+{"ok":true,"backend":"<b style="color:#ffd479">sqlite</b>","authMig":"ok","node":"v20.19.6"}
+        </div>
+        <div class="health">
+<span class="lbl">$ curl localhost:4100/api/health  (PostgreSQL)</span><br>
+{"ok":true,"backend":"<b style="color:#ffd479">postgres</b>","authMig":"ok","node":"v20.19.6"}<br>
+<span class="lbl">server log:</span> DB backend: PostgreSQL / Pool initialized (max:20)
+        </div>
+        <div class="note">두 백엔드 모두 <b>ok:true</b> — 코드 수정 없이 환경변수만으로 DB 전환되는 구조(클라우드 이관 대비) 검증 완료.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    본 자료의 모든 화면은 로컬 환경에서 실제 서버를 구동하여 캡처한 결과입니다. 임의 합성·편집 없음. &nbsp;|&nbsp; <span class="brand">PACE RISE : Node</span>
+  </div>
+</body>
+</html>
