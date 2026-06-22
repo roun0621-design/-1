@@ -234,7 +234,7 @@ app.use(helmet({
 }));
 app.use(rateLimit({
     windowMs: 60 * 1000,   // 1분
-    max: 3000,             // IP당 최대 3000회/분
+    max: parseInt(process.env.RATE_LIMIT_MAX || '3000', 10),  // IP당 분당 한도(기본 3000, 부하측정 시 env로 상향)
     message: { error: '요청이 너무 많습니다. 잠시 후 다시 시도하세요.' }
 }));
 // 인증 API는 더 엄격하게 제한 (무차별 대입 방지)
