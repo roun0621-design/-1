@@ -540,6 +540,7 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_template (
     text_color TEXT NOT NULL DEFAULT '#1a1a1a',           -- 본문 글씨 색(제목·이름·본문·날짜·발급자)
     label_color TEXT NOT NULL DEFAULT '#8a7f6a',          -- 보조 글씨 색(대회명·메타·패널 라벨)
     accent_color TEXT NOT NULL DEFAULT '#7a3a00',         -- 강조 색(기록값·종목 강조)
+    panel_opacity REAL NOT NULL DEFAULT 1.0,              -- 기록 패널 투명도(0.2~1.0, 낮추면 뒤 워터마크가 비침)
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`); } catch(e) { console.error('[DB] certificate_template create error:', e.message); }
@@ -552,6 +553,7 @@ try { db.exec(`ALTER TABLE certificate_template ADD COLUMN panel_color TEXT NOT 
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN text_color TEXT NOT NULL DEFAULT '#1a1a1a'`); } catch(e) {}
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN label_color TEXT NOT NULL DEFAULT '#8a7f6a'`); } catch(e) {}
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN accent_color TEXT NOT NULL DEFAULT '#7a3a00'`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN panel_opacity REAL NOT NULL DEFAULT 1.0`); } catch(e) {}
 
 try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_issue_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1344,6 +1346,7 @@ if (db.isAsync) {
                 text_color TEXT NOT NULL DEFAULT '#1a1a1a',
                 label_color TEXT NOT NULL DEFAULT '#8a7f6a',
                 accent_color TEXT NOT NULL DEFAULT '#7a3a00',
+                panel_opacity DOUBLE PRECISION NOT NULL DEFAULT 1.0,
                 created_at TEXT NOT NULL DEFAULT NOW(),
                 updated_at TEXT NOT NULL DEFAULT NOW()
             )`); } catch(e) { console.error('[PG migration] certificate_template error:', e.message); }
@@ -1483,6 +1486,7 @@ if (db.isAsync) {
             await pgIdempotentAddCol('certificate_template', 'text_color', `TEXT NOT NULL DEFAULT '#1a1a1a'`);
             await pgIdempotentAddCol('certificate_template', 'label_color', `TEXT NOT NULL DEFAULT '#8a7f6a'`);
             await pgIdempotentAddCol('certificate_template', 'accent_color', `TEXT NOT NULL DEFAULT '#7a3a00'`);
+            await pgIdempotentAddCol('certificate_template', 'panel_opacity', `DOUBLE PRECISION NOT NULL DEFAULT 1.0`);
             // qualification_selection: qualification_type
             await pgIdempotentAddCol('qualification_selection', 'qualification_type', `TEXT DEFAULT ''`);
             // record_breaking_log: wind

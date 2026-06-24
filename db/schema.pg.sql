@@ -595,6 +595,7 @@ CREATE TABLE IF NOT EXISTS "certificate_template" (
     "text_color" TEXT NOT NULL DEFAULT '#1a1a1a',
     "label_color" TEXT NOT NULL DEFAULT '#8a7f6a',
     "accent_color" TEXT NOT NULL DEFAULT '#7a3a00',
+    "panel_opacity" DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "updated_at" TEXT NOT NULL DEFAULT NOW()
 );
