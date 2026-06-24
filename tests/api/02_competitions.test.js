@@ -141,4 +141,54 @@ describe('Competition API — 회귀', () => {
             expect(all.body.some(c => c.id === id)).toBe(true);
         });
     });
+
+    // ---- 대회 재개(reopen) 재잠금 방지 — manual_status_lock ----
+    describe('reopen — 종료일 지난 대회 재개 후 재잠금되지 않음', () => {
+        const today = new Date().toISOString().slice(0, 10);
+
+        async function createComp(payload) {
+            const res = await request(app).post('/api/competitions')
+                .send({ admin_key: ADMIN_KEY, venue: '', ...payload })
+                .set('Content-Type', 'application/json');
+            expect(res.status).toBe(200);
+            return res.body.id;
+        }
+        async function getComp(id) {
+            const res = await request(app).get(`/api/competitions/${id}`);
+            return res.body.competition || res.body;
+        }
+
+        it('종료일이 지난 대회를 재개하면 active 가 되고, GET /api/competitions(자동갱신) 후에도 다시 completed 로 잠기지 않는다', async () => {
+            // 과거에 끝난 대회 생성 → 자동갱신으로 completed 가 됨
+            const id = await createComp({ name: 'REOPEN_' + Date.now(), start_date: '2020-01-01', end_date: '2020-01-02' });
+            await request(app).get('/api/competitions'); // autoUpdateCompetitionStatus 트리거
+            expect((await getComp(id)).status).toBe('completed');
+
+            // 재개
+            const re = await request(app).post(`/api/admin/competitions/${id}/reopen`)
+                .send({ admin_key: ADMIN_KEY }).set('Content-Type', 'application/json');
+            expect(re.status).toBe(200);
+            expect(re.body.status).toBe('active');
+
+            // 다른 창 이동 시뮬레이션: 목록 조회로 자동갱신 재실행
+            await request(app).get('/api/competitions');
+
+            // 재잠금되지 않아야 함 (버그 회귀 방지)
+            const after = await getComp(id);
+            expect(after.status).toBe('active');
+            expect(Number(after.manual_status_lock)).toBe(1);
+        });
+
+        it('재개 후 수동 종료(close)하면 manual_status_lock 이 해제된다', async () => {
+            const id = await createComp({ name: 'REOPEN_CLOSE_' + Date.now(), start_date: '2020-01-01', end_date: '2020-01-02' });
+            await request(app).post(`/api/admin/competitions/${id}/reopen`)
+                .send({ admin_key: ADMIN_KEY }).set('Content-Type', 'application/json');
+            const closed = await request(app).post(`/api/admin/competitions/${id}/close`)
+                .send({ admin_key: ADMIN_KEY }).set('Content-Type', 'application/json');
+            expect(closed.status).toBe(200);
+            const after = await getComp(id);
+            expect(after.status).toBe('completed');
+            expect(Number(after.manual_status_lock)).toBe(0);
+        });
+    });
 });

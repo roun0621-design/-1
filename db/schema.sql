@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS competition (
     division_type TEXT DEFAULT '',
     mode TEXT NOT NULL DEFAULT 'operation',         -- 'operation' | 'display'
     series_id INTEGER REFERENCES competition_series(id),
-    home_visibility TEXT NOT NULL DEFAULT 'auto'    -- 'auto' | 'pinned'(홈 고정) | 'hidden'(홈 숨김)
+    home_visibility TEXT NOT NULL DEFAULT 'auto',    -- 'auto' | 'pinned'(홈 고정) | 'hidden'(홈 숨김)
+    manual_status_lock INTEGER NOT NULL DEFAULT 0    -- 1=관리자 '대회 재개'로 수동 상태고정 → 날짜 자동갱신(active→completed) 제외
 );
 
 -- Events (종목) — linked to competition

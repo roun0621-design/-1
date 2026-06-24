@@ -973,6 +973,8 @@ try { db.exec(`ALTER TABLE competition ADD COLUMN event_show_rounds TEXT NOT NUL
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
 // competition.home_visibility: 홈 노출 강제 설정 — 'auto'(±3일 윈도우) | 'pinned'(항상 상단 고정) | 'hidden'(홈에서 숨김)
 try { db.exec(`ALTER TABLE competition ADD COLUMN home_visibility TEXT NOT NULL DEFAULT 'auto'`); } catch(e) {}
+// competition.manual_status_lock: 관리자가 '대회 재개'로 수동 상태변경한 경우 1 — 날짜 기반 자동 상태갱신(active→completed)을 막아 재잠금을 방지
+try { db.exec(`ALTER TABLE competition ADD COLUMN manual_status_lock INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 // event.division: 중등부/고등부/대학부/일반부/국제/U20
 try { db.exec(`ALTER TABLE event ADD COLUMN division TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 // event.result_url: 외부 결과 링크 URL (노출용 대회에서 사용)
@@ -1272,6 +1274,8 @@ if (db.isAsync) {
             )`);
             // competition.series_id 추가 (멱등)
             try { await db.run(`ALTER TABLE competition ADD COLUMN IF NOT EXISTS series_id BIGINT`); } catch(e) {}
+            // competition.manual_status_lock 추가 (멱등) — '대회 재개' 수동 상태변경 보호 플래그
+            try { await db.run(`ALTER TABLE competition ADD COLUMN IF NOT EXISTS manual_status_lock INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
             // Seed division_master (13 rows, idempotent)
             const seedRows = [
                 ['M_ELEM','남자초등부','M','ELEM',10],['M_MID','남자중학부','M','MID',20],
@@ -5356,6 +5360,29 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 }
             }
 
+            // ─── scoreboard_key 백필 ───
+            // 연맹 import 의 조 생성 경로들은 scoreboard_key 를 설정하지 않으므로,
+            // 키가 비어있는 모든 조에 대해 generateScoreboardKey 로 일괄 생성한다.
+            // (generateScoreboardKey 는 연맹 라벨 없어도 남자/여자/혼성 기본 라벨로 폴백 → null 아님)
+            const _keylessHeats = await db.all(`
+                SELECT h.id AS heat_id, h.heat_number, h.event_id,
+                       e.name, e.gender, e.round_type, e.competition_id
+                FROM heat h JOIN event e ON e.id = h.event_id
+                WHERE e.competition_id=? AND (h.scoreboard_key IS NULL OR h.scoreboard_key='')
+            `, competition_id);
+            const _heatCountByEvent = new Map();
+            for (const _h of _keylessHeats) {
+                if (!_heatCountByEvent.has(_h.event_id)) {
+                    const _c = await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', _h.event_id);
+                    _heatCountByEvent.set(_h.event_id, Number(_c && _c.c) || 1);
+                }
+            }
+            for (const _h of _keylessHeats) {
+                const _evt = { id: _h.event_id, name: _h.name, gender: _h.gender, round_type: _h.round_type, competition_id: _h.competition_id };
+                const _sbKey = await generateScoreboardKey(_evt, _h.heat_number, db, _heatCountByEvent.get(_h.event_id));
+                if (_sbKey) await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', _sbKey, _h.heat_id);
+            }
+
         })();
         opLog(`연맹 명단 업로드: 선수 ${stats.athletes}명, 종목 ${stats.events}개${createdEventNames.length ? ` (신규: ${createdEventNames.slice(0, 5).join(', ')}${createdEventNames.length > 5 ? ` 외 ${createdEventNames.length - 5}개` : ''})` : ''}`, 'import', 'admin', competition_id);
         // ⭐ created_event_names: 재업로드 시 0개면 정상. 누락된 종목이 새로 만들어졌다면 여기서 확인 가능
@@ -5815,6 +5842,70 @@ function normalizeRound(raw) {
     return 'final';
 }
 
+// Helper: Normalize division (부) from Excel — delegates to the shared label canonicalizer
+// (normalizeDivisionLabel: 중등부/고등부/대학부/초등부/일반부/선수권(남|여|혼)/U18/U20 정규화)
+function normalizeDivision(raw) {
+    if (raw == null) return '';
+    const s = String(raw).trim();
+    if (!s) return '';
+    return normalizeDivisionLabel(s);
+}
+// Helper: normalized division key for matching (공백/괄호 무시 비교는 normalizeDivisionLabel 이 처리)
+function divNorm(v) { return normalizeDivisionLabel(String(v || '')); }
+
+// Helper: infer event category for a heat-assignment row (file has no category column)
+//   1) resolveFedEventName (FED_EVENT_MAP: 1500m→track, 릴레이→relay, 10,000m, 10종경기→combined …)
+//   2) guessEventCategory (이름 정규식 폴백)
+function inferHeatEventCategory(eventNameRaw) {
+    const base = String(eventNameRaw || '').replace(/^\[(10종|7종)\]\s*/, '');
+    const m = resolveFedEventName(base);
+    if (m && m.category) return m.category;
+    return guessEventCategory(base);
+}
+// Helper: round_type for an auto-created heat-assignment event
+//   엑셀이 명시한 라운드(parsedRound) 우선, 단 field/road/combined/relay·장거리는 항상 final 로 보정
+function computeHeatRoundType(category, eventName, parsedRound) {
+    const ALWAYS_FINAL_CATEGORIES = ['field_distance', 'field_height', 'combined', 'relay', 'road'];
+    const ALWAYS_FINAL_EVENTS = ['5000m','5000mW','10,000m','10,000mW','10000m','3000mSC','3000m장애물','마라톤','하프마라톤','20KmW','35kmW','10K','5K'];
+    const base = String(eventName || '').replace(/^\[(10종|7종)\]\s*/, '');
+    const isFinalOnly = ALWAYS_FINAL_CATEGORIES.includes(category) || ALWAYS_FINAL_EVENTS.some(e => base === e || base.startsWith(e + ' '));
+    if (isFinalOnly) return 'final';
+    return parsedRound || 'final';
+}
+
+// Division-aware event lookup for heat-assignment import (apply/preview 공유).
+//   (a) displayName 정확매칭(이 importer 의 이전 실행) → (b) 기본명 + division 컬럼 매칭(시간표 자동연결이 만든 종목 재사용)
+//   → (c) division 없을 때만 기본명 레거시 매칭(부 없는 기존 대회 하위호환)
+async function findHeatAssignmentEvent(competition_id, group) {
+    const { gender, eventName, division, displayName, round } = group;
+    const g = gender && gender !== '?' ? gender : null;
+    const tryName = async (name) => {
+        if (g) {
+            return await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL', competition_id, name, g, round)
+                || await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL', competition_id, name, g)
+                || await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=?', competition_id, name, g, round)
+                || await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=?', competition_id, name, g);
+        }
+        return await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND parent_event_id IS NULL', competition_id, name)
+            || await db.get('SELECT * FROM event WHERE competition_id=? AND name=?', competition_id, name);
+    };
+    // (a) displayName 정확매칭
+    let e = await tryName(displayName);
+    if (e) return e;
+    // (b) 시간표 자동연결 종목 재사용: 기본명 + division 컬럼 일치
+    if (division && g) {
+        const cands = await db.all('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=?', competition_id, eventName, g);
+        const hit = cands.find(c => divNorm(c.division) === divNorm(division));
+        if (hit) return hit;
+    }
+    // (c) 부 없는 경우만 기본명 레거시 매칭
+    if (!division) {
+        e = await tryName(eventName);
+        if (e) return e;
+    }
+    return null;
+}
+
 // Parse heat assignment Excel: returns grouped events
 function parseHeatAssignmentExcel(filePath) {
     const wb = XLSX.readFile(filePath);
@@ -5840,6 +5931,7 @@ function parseHeatAssignmentExcel(filePath) {
         else if (hl === '배번' || hl === 'bib' || hl === '번호') colIdx.bib = idx;
         else if (hl === '성명' || hl === 'name' || hl === '선수명') colIdx.name = idx;
         else if (hl === '소속' || hl === 'team' || hl === '팀명') colIdx.team = idx;
+        else if (hl === '부' || hl === '부별' || hl === '종별' || hl === '부문' || hl === 'division') colIdx.division = idx;
     });
 
     // Validate required columns
@@ -5875,13 +5967,16 @@ function parseHeatAssignmentExcel(filePath) {
         const bib = colIdx.bib !== undefined ? (row[colIdx.bib] != null ? String(row[colIdx.bib]).trim() : null) : null;
         const name = String(row[colIdx.name]).trim();
         const team = colIdx.team !== undefined ? String(row[colIdx.team] || '').replace(/[\s\u3000]+$/g, '').trim() : '';
+        // \ubd80(division): \uc885\ubaa9\uba85\uc5d0 \uc811\ubbf8\uc0ac\ub85c \ubd99\uc5ec \ubd80\ubcc4\ub85c \ub2e4\ub978 \uc885\ubaa9\uc774 \ub418\ub3c4\ub85d (\uc608: "1500m \uc77c\ubc18\ubd80")
+        const division = colIdx.division !== undefined ? normalizeDivision(row[colIdx.division]) : '';
+        const displayName = division ? `${eventName} ${division}` : eventName;
 
         if (!eventName || !name) continue;
 
-        const eventKey = `${gender || '?'}|${eventName}|${round}`;
+        const eventKey = `${gender || '?'}|${eventName}|${division}|${round}`;
         if (!eventGroups.has(eventKey)) {
             eventGroups.set(eventKey, {
-                gender, eventName, round,
+                gender, eventName, division, displayName, round,
                 entries: []
             });
         }
@@ -5897,9 +5992,9 @@ function parseHeatAssignmentExcel(filePath) {
     // 단, 10종/7종 세부종목과의 혼재는 제외 (이건 정상)
     // ============================================================
     const mergeWarnings = [];
-    const byGenderEvent = new Map(); // 'M|400mH' → [{eventKey, round, count}]
+    const byGenderEvent = new Map(); // 'M|400mH|일반부' → [{eventKey, round, count}]  ← 부 포함: 부가 다르면 절대 병합 안 함
     for (const [eventKey, group] of eventGroups) {
-        const ge = `${group.gender}|${group.eventName}`;
+        const ge = `${group.gender}|${group.eventName}|${group.division || ''}`;
         if (!byGenderEvent.has(ge)) byGenderEvent.set(ge, []);
         byGenderEvent.get(ge).push({ eventKey, round: group.round, count: group.entries.length });
     }
@@ -5921,8 +6016,8 @@ function parseHeatAssignmentExcel(filePath) {
             const majorGroup = eventGroups.get(majority.eventKey);
             if (!minorGroup || !majorGroup) continue;
 
-            const [g, evName] = ge.split('|');
-            const gLabel = g === 'M' ? '남' : g === 'F' ? '여' : '혼성';
+            const [g, evName, evDiv] = ge.split('|');
+            const gLabel = (g === 'M' ? '남' : g === 'F' ? '여' : '혼성') + (evDiv ? ' ' + evDiv : '');
             const minRoundLabel = { preliminary: '예선', semifinal: '준결승', final: '결승' }[minor.round] || minor.round;
             const majRoundLabel = { preliminary: '예선', semifinal: '준결승', final: '결승' }[majority.round] || majority.round;
 
@@ -5958,49 +6053,50 @@ app.post('/api/heat-assignment/preview', upload.single('file'), async (req, res)
         const preview = [];
         
         for (const [eventKey, group] of eventGroups) {
-            const { gender, eventName, round, entries } = group;
-            
-            // Find matching event in DB
-            let dbEvent = null;
-            if (gender && gender !== '?') {
-                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL', competition_id, eventName, gender, round);
-            }
-            // Fallback: try without round_type match (some events only have final)
+            const { gender, eventName, division, displayName, round, entries } = group;
+
+            // 부(division) 인식 종목 조회 (apply 와 동일 헬퍼)
+            let dbEvent = await findHeatAssignmentEvent(competition_id, group);
+            // Fuzzy fallback: 공백 제거 후 displayName LIKE 매칭 (예: "10K 국제 남자부" → "10K국제남자부")
             if (!dbEvent && gender && gender !== '?') {
-                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL', competition_id, eventName, gender);
-            }
-            // Fallback: try without parent_event_id constraint (for child events like [10종] 100m, [7종] 100mH)
-            if (!dbEvent && gender && gender !== '?') {
-                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=?', competition_id, eventName, gender, round);
-            }
-            if (!dbEvent && gender && gender !== '?') {
-                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=?', competition_id, eventName, gender);
-            }
-            // Fuzzy fallback: LIKE match for partial names (e.g., "10K 국제 남자부" → DB has "10K국제남자부")
-            if (!dbEvent && gender && gender !== '?') {
-                const stripped = eventName.replace(/\s+/g, '%');
-                dbEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND REPLACE(REPLACE(name,' ',''),' ','') = ? AND gender=?", competition_id, eventName.replace(/\s+/g, ''), gender);
+                const stripped = displayName.replace(/\s+/g, '%');
+                dbEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND REPLACE(REPLACE(name,' ',''),' ','') = ? AND gender=?", competition_id, displayName.replace(/\s+/g, ''), gender);
                 if (!dbEvent) {
                     dbEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND name LIKE ? AND gender=?", competition_id, `%${stripped}%`, gender);
                 }
             }
-            
+
             if (!dbEvent) {
-                // Try to find similar events as suggestions
-                let suggestions = [];
-                if (gender && gender !== '?') {
-                    const sugRows = await db.all('SELECT id, name, round_type FROM event WHERE competition_id=? AND gender=? AND parent_event_id IS NULL ORDER BY name', competition_id, gender);
-                    suggestions = sugRows.map(e => ({ id: e.id, name: e.name, round: e.round_type }));
+                const genderLabel0 = gender === 'M' ? '남' : gender === 'F' ? '여' : '혼성';
+                // 조합경기 세부종목([10종]/[7종])은 자동생성 제외 → 기존처럼 not_found
+                const isCombinedSub = /^\[(10종|7종)\]/.test(eventName);
+                if (isCombinedSub) {
+                    let suggestions = [];
+                    if (gender && gender !== '?') {
+                        const sugRows = await db.all('SELECT id, name, round_type FROM event WHERE competition_id=? AND gender=? AND parent_event_id IS NULL ORDER BY name', competition_id, gender);
+                        suggestions = sugRows.map(e => ({ id: e.id, name: e.name, round: e.round_type }));
+                    }
+                    preview.push({
+                        eventKey, eventName: `${genderLabel0} ${displayName}`, gender, round,
+                        status: 'not_found',
+                        message: `종목을 찾을 수 없습니다(조합경기 세부종목은 자동생성 제외): ${genderLabel0} ${displayName}`,
+                        excelEntries: entries.length, dbEntries: 0, hasResults: false, changes: [], suggestions, canAutoCreate: false
+                    });
+                    continue;
                 }
+                // 자동생성 예정 — 생성될 종목 정보 표시
+                const cat = inferHeatEventCategory(eventName);
+                const rt = computeHeatRoundType(cat, eventName, round);
+                const roundLabel0 = rt === 'preliminary' ? '예선' : rt === 'semifinal' ? '준결승' : '결승';
                 preview.push({
-                    eventKey, eventName, gender, round,
-                    status: 'not_found',
-                    message: `종목을 찾을 수 없습니다: ${gender === 'M' ? '남' : gender === 'F' ? '여' : '혼성'} ${eventName}`,
+                    eventKey, eventName: `${genderLabel0} ${displayName}`, gender, round,
+                    status: 'will_create',
+                    message: `종목 자동생성: ${genderLabel0} ${displayName} (${cat}, ${roundLabel0})`,
                     excelEntries: entries.length,
                     dbEntries: 0,
                     hasResults: false,
-                    changes: [],
-                    suggestions,
+                    changes: entries.map(e => ({ type: 'added', name: e.name, team: e.team })),
+                    willCreate: { name: displayName, category: cat, round: rt, division: division || '' },
                     canAutoCreate: true
                 });
                 continue;
@@ -6111,7 +6207,7 @@ app.post('/api/heat-assignment/preview', upload.single('file'), async (req, res)
 
             preview.push({
                 eventKey,
-                eventName: `${genderLabel} ${eventName}`,
+                eventName: `${genderLabel} ${displayName}`,
                 eventId: dbEvent.id,
                 gender, round,
                 status: isIdentical ? 'unchanged' : (hasResults ? 'has_results' : 'changed'),
@@ -6170,7 +6266,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
         }
 
         const { eventGroups, mergeWarnings } = parseHeatAssignmentExcel(req.file.path);
-        const stats = { updated: 0, skipped: 0, skippedUnchanged: 0, skippedHasResults: 0, notFound: 0, athletesAdded: 0, entriesCreated: 0 };
+        const stats = { updated: 0, skipped: 0, skippedUnchanged: 0, skippedHasResults: 0, notFound: 0, athletesAdded: 0, entriesCreated: 0, eventsCreated: 0 };
 
         await db.transaction(async () => {
             // Cache all athletes for this competition by name+team
@@ -6198,8 +6294,11 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                 }
             }
             function buildScoreboardKey(gender, eventName, roundType, heatNum, totalHeats) {
-                const gLabel = gender === 'M' ? _sbLabelM : gender === 'F' ? _sbLabelF : _sbLabelX;
-                if (!gLabel) return null; // no federation label configured → skip
+                // 연맹 성별 라벨이 설정돼 있으면 사용, 없으면 기본 라벨(남자/여자/혼성)로 폴백 → 키가 항상 생성됨
+                // (부는 eventName(displayName)에 이미 포함되므로 키에 자연히 반영됨)
+                const gLabel = (gender === 'M' ? _sbLabelM : gender === 'F' ? _sbLabelF : _sbLabelX)
+                    || ({ M: '남자', F: '여자', X: '혼성' }[gender] || '');
+                if (!gLabel) return null; // 성별 자체가 불명일 때만 skip
                 const rLabel = { preliminary: '예선', semifinal: '준결승', final: '결승' }[roundType] || roundType;
                 // 결승이 1조뿐이면 "조" 생략 (예: "남자실업부 100m 결승")
                 if (roundType === 'final' && totalHeats === 1) {
@@ -6208,30 +6307,34 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                 return `${gLabel} ${eventName} ${rLabel} ${heatNum}조`;
             }
             for (const [eventKey, group] of eventGroups) {
-                const { gender, eventName, round, entries } = group;
+                const { gender, eventName, division, displayName, round, entries } = group;
 
                 // Keep Excel original lane numbers — no renumbering
                 // Excel has sequential lane numbers across groups (A:1-18, B:19-26) and that's correct
 
-                // Find matching event in DB
-                let dbEvent = null;
-                if (gender && gender !== '?') {
-                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL', competition_id, eventName, gender, round);
-                }
-                if (!dbEvent && gender && gender !== '?') {
-                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL', competition_id, eventName, gender);
-                }
-                // Fallback: try without parent_event_id constraint (for child events like [10종] 100m, [7종] 100mH)
-                if (!dbEvent && gender && gender !== '?') {
-                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=?', competition_id, eventName, gender, round);
-                }
-                if (!dbEvent && gender && gender !== '?') {
-                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=?', competition_id, eventName, gender);
-                }
+                // 부(division) 인식 종목 조회 (apply/preview 공유 헬퍼)
+                let dbEvent = await findHeatAssignmentEvent(competition_id, group);
 
+                // 없으면 종목 자동생성 (부별로 별도 종목) — 한 파일로 종목+선수+조편성 한번에
                 if (!dbEvent) {
-                    stats.notFound++;
-                    continue;
+                    // 조합경기 세부종목([10종]/[7종])은 부모 연결이 필요 → 자동생성 대상에서 제외(안전), 기존처럼 스킵
+                    if (/^\[(10종|7종)\]/.test(eventName)) {
+                        stats.notFound++;
+                        continue;
+                    }
+                    const cat = inferHeatEventCategory(eventName);
+                    const rt = computeHeatRoundType(cat, eventName, round);
+                    const evGender = gender && gender !== '?' ? gender : 'X';
+                    try {
+                        const ins = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,division,round_status) VALUES (?,?,?,?,?,?,?)',
+                            competition_id, displayName, cat, evGender, rt, division || '', 'heats_generated');
+                        dbEvent = { id: ins.lastInsertRowid, name: displayName, category: cat, gender: evGender, round_type: rt, division: division || '', parent_event_id: null };
+                    } catch (insErr) {
+                        // UNIQUE 충돌(동시 업로드 등) → 재조회 재사용
+                        dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL', competition_id, displayName, evGender);
+                        if (!dbEvent) throw insErr;
+                    }
+                    stats.eventsCreated = (stats.eventsCreated || 0) + 1;
                 }
 
                 // Get current DB state
@@ -6333,7 +6436,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                 // 4. Create heats and heat entries
                 for (const [origHeatNum, heatEntries] of [...heatGroups].sort((a, b) => a[0] - b[0])) {
                     const heatNum = heatRenumberMap.get(origHeatNum);
-                    const sbKey = buildScoreboardKey(gender, eventName, round, heatNum, heatGroups.size);
+                    const sbKey = buildScoreboardKey(gender, displayName, round, heatNum, heatGroups.size);
                     const heatRow = await db.run('INSERT INTO heat (event_id,heat_number,scoreboard_key) VALUES (?,?,?)', dbEvent.id, heatNum, sbKey);
                     const heatId = heatRow.lastInsertRowid;
 
@@ -6425,7 +6528,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                         let targetHeatId = currentHeats.length > 0 ? currentHeats[0].id : null;
                         if (!targetHeatId) {
                             // No heat exists yet → create one
-                            const sbKey = buildScoreboardKey(gender, eventName, round, 1, 1);
+                            const sbKey = buildScoreboardKey(gender, dbEvent.name, dbEvent.round_type || round, 1, 1);
                             const hRow = await db.run('INSERT INTO heat (event_id,heat_number,scoreboard_key) VALUES (?,?,?)', dbEvent.id, 1, sbKey);
                             targetHeatId = hRow.lastInsertRowid;
                         }
@@ -6501,7 +6604,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
             }
         })();
 
-        opLog(`조편성 업로드: ${stats.updated}개 종목 변경, ${stats.skippedUnchanged}개 스킵(변경없음), ${stats.skippedHasResults}개 스킵(기록있음)${stats.relayMembersAdded ? ', 릴레이 멤버 ' + stats.relayMembersAdded + '명 자동등록' : ''}`, 'import', 'admin', competition_id);
+        opLog(`조편성 업로드: ${stats.updated}개 종목 변경, ${stats.eventsCreated || 0}개 종목 생성, ${stats.skippedUnchanged}개 스킵(변경없음), ${stats.skippedHasResults}개 스킵(기록있음)${stats.relayMembersAdded ? ', 릴레이 멤버 ' + stats.relayMembersAdded + '명 자동등록' : ''}`, 'import', 'admin', competition_id);
         res.json({ success: true, message: '조편성 적용 완료', stats, mergeWarnings: mergeWarnings || [] });
     } catch (err) {
         console.error('[Heat Assignment Apply Error]', err);

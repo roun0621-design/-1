@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS "competition" (
     "event_show_genders" TEXT NOT NULL DEFAULT 'auto',
     "event_show_rounds" TEXT NOT NULL DEFAULT 'auto',
     "home_visibility" TEXT NOT NULL DEFAULT 'auto',
+    "manual_status_lock" INTEGER NOT NULL DEFAULT 0,
     CHECK (status IN ('upcoming','active','completed'))
 );
 
