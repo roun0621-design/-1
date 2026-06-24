@@ -537,6 +537,9 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_template (
     watermark_scale REAL NOT NULL DEFAULT 0.45,           -- 페이지폭 대비 0.1~0.9
     border_color TEXT NOT NULL DEFAULT '#b8945a',         -- 테두리/포인트 색
     panel_color TEXT NOT NULL DEFAULT '#faf8f2',          -- 기록증 기록 패널 배경색
+    text_color TEXT NOT NULL DEFAULT '#1a1a1a',           -- 본문 글씨 색(제목·이름·본문·날짜·발급자)
+    label_color TEXT NOT NULL DEFAULT '#8a7f6a',          -- 보조 글씨 색(대회명·메타·패널 라벨)
+    accent_color TEXT NOT NULL DEFAULT '#7a3a00',         -- 강조 색(기록값·종목 강조)
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`); } catch(e) { console.error('[DB] certificate_template create error:', e.message); }
@@ -546,6 +549,9 @@ try { db.exec(`ALTER TABLE certificate_template ADD COLUMN watermark_opacity REA
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN watermark_scale REAL NOT NULL DEFAULT 0.45`); } catch(e) {}
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN border_color TEXT NOT NULL DEFAULT '#b8945a'`); } catch(e) {}
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN panel_color TEXT NOT NULL DEFAULT '#faf8f2'`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN text_color TEXT NOT NULL DEFAULT '#1a1a1a'`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN label_color TEXT NOT NULL DEFAULT '#8a7f6a'`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN accent_color TEXT NOT NULL DEFAULT '#7a3a00'`); } catch(e) {}
 
 try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_issue_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1333,6 +1339,11 @@ if (db.isAsync) {
                 watermark_image_path TEXT NOT NULL DEFAULT '',
                 watermark_opacity DOUBLE PRECISION NOT NULL DEFAULT 0.07,
                 watermark_scale DOUBLE PRECISION NOT NULL DEFAULT 0.45,
+                border_color TEXT NOT NULL DEFAULT '#b8945a',
+                panel_color TEXT NOT NULL DEFAULT '#faf8f2',
+                text_color TEXT NOT NULL DEFAULT '#1a1a1a',
+                label_color TEXT NOT NULL DEFAULT '#8a7f6a',
+                accent_color TEXT NOT NULL DEFAULT '#7a3a00',
                 created_at TEXT NOT NULL DEFAULT NOW(),
                 updated_at TEXT NOT NULL DEFAULT NOW()
             )`); } catch(e) { console.error('[PG migration] certificate_template error:', e.message); }
@@ -1469,6 +1480,9 @@ if (db.isAsync) {
             await pgIdempotentAddCol('certificate_template', 'watermark_scale', `DOUBLE PRECISION NOT NULL DEFAULT 0.45`);
             await pgIdempotentAddCol('certificate_template', 'border_color', `TEXT NOT NULL DEFAULT '#b8945a'`);
             await pgIdempotentAddCol('certificate_template', 'panel_color', `TEXT NOT NULL DEFAULT '#faf8f2'`);
+            await pgIdempotentAddCol('certificate_template', 'text_color', `TEXT NOT NULL DEFAULT '#1a1a1a'`);
+            await pgIdempotentAddCol('certificate_template', 'label_color', `TEXT NOT NULL DEFAULT '#8a7f6a'`);
+            await pgIdempotentAddCol('certificate_template', 'accent_color', `TEXT NOT NULL DEFAULT '#7a3a00'`);
             // qualification_selection: qualification_type
             await pgIdempotentAddCol('qualification_selection', 'qualification_type', `TEXT DEFAULT ''`);
             // record_breaking_log: wind

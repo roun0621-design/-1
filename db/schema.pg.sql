@@ -592,6 +592,9 @@ CREATE TABLE IF NOT EXISTS "certificate_template" (
     "watermark_scale" DOUBLE PRECISION NOT NULL DEFAULT 0.45,
     "border_color" TEXT NOT NULL DEFAULT '#b8945a',
     "panel_color" TEXT NOT NULL DEFAULT '#faf8f2',
+    "text_color" TEXT NOT NULL DEFAULT '#1a1a1a',
+    "label_color" TEXT NOT NULL DEFAULT '#8a7f6a',
+    "accent_color" TEXT NOT NULL DEFAULT '#7a3a00',
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "updated_at" TEXT NOT NULL DEFAULT NOW()
 );

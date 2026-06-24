@@ -2377,6 +2377,18 @@ POST /api/external/event-result-link/batch<br>
                             <input type="color" id="cert-edit-panel-color" value="#faf8f2" style="width:100%;padding:2px;border:1px solid var(--gray);border-radius:6px;height:32px;">
                         </div>
                         <div>
+                            <label class="t-xs">글씨 색 <span class="t-muted">(제목·이름·본문)</span></label>
+                            <input type="color" id="cert-edit-text-color" value="#1a1a1a" style="width:100%;padding:2px;border:1px solid var(--gray);border-radius:6px;height:32px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">보조 글씨 색 <span class="t-muted">(대회명·라벨)</span></label>
+                            <input type="color" id="cert-edit-label-color" value="#8a7f6a" style="width:100%;padding:2px;border:1px solid var(--gray);border-radius:6px;height:32px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">강조 색 <span class="t-muted">(기록값·종목)</span></label>
+                            <input type="color" id="cert-edit-accent-color" value="#7a3a00" style="width:100%;padding:2px;border:1px solid var(--gray);border-radius:6px;height:32px;">
+                        </div>
+                        <div>
                             <label class="t-xs">표시 옵션</label>
                             <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;padding-top:4px;">
                                 <label><input type="checkbox" id="cert-edit-show-record" checked> 기록값</label>
@@ -10471,6 +10483,9 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('cert-edit-bg').value = t ? (t.background_color || '#fffdf6') : '#fffdf6';
             document.getElementById('cert-edit-border-color').value = (t && t.border_color) ? t.border_color : '#b8945a';
             document.getElementById('cert-edit-panel-color').value = (t && t.panel_color) ? t.panel_color : '#faf8f2';
+            document.getElementById('cert-edit-text-color').value = (t && t.text_color) ? t.text_color : '#1a1a1a';
+            document.getElementById('cert-edit-label-color').value = (t && t.label_color) ? t.label_color : '#8a7f6a';
+            document.getElementById('cert-edit-accent-color').value = (t && t.accent_color) ? t.accent_color : '#7a3a00';
             document.getElementById('cert-edit-show-record').checked = t ? !!t.show_record_value : true;
             document.getElementById('cert-edit-show-team').checked = t ? !!t.show_athlete_team : true;
             document.getElementById('cert-edit-show-date').checked = t ? !!t.show_date : true;
@@ -10570,6 +10585,9 @@ POST /api/external/event-result-link/batch<br>
                 background_color: document.getElementById('cert-edit-bg').value,
                 border_color: document.getElementById('cert-edit-border-color').value,
                 panel_color: document.getElementById('cert-edit-panel-color').value,
+                text_color: document.getElementById('cert-edit-text-color').value,
+                label_color: document.getElementById('cert-edit-label-color').value,
+                accent_color: document.getElementById('cert-edit-accent-color').value,
                 show_record_value: document.getElementById('cert-edit-show-record').checked ? 1 : 0,
                 show_athlete_team: document.getElementById('cert-edit-show-team').checked ? 1 : 0,
                 show_date: document.getElementById('cert-edit-show-date').checked ? 1 : 0,
