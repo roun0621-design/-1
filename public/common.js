@@ -1726,6 +1726,32 @@ async function openTimetable(compId) {
                 });
             }
 
+            // ── 타임테이블 뱃지 헬퍼: 부별/성별/라운드를 앞쪽 뱃지로 분해 ──
+            const _ttBadge = (txt, fg, bg) => txt ? `<span style="display:inline-block;font-size:10px;font-weight:700;color:${fg};background:${bg};padding:1px 6px;border-radius:8px;white-space:nowrap;line-height:1.6;">${txt}</span>` : '';
+            // 부별/성별 분리: "실업(남)"→{div:'실업',gender:'남'}, "남고"→{고등부,남}, "남자 일반부"→{일반부,남}
+            const _ttSplitCategory = (cat) => {
+                const s = (cat || '').trim();
+                if (!s) return { div: '', gender: '' };
+                const G = t => /^남/.test(t) ? '남' : /^여/.test(t) ? '여' : '혼';
+                let m = s.match(/^(.*?)\s*\(\s*(남자?|여자?|혼성?)\s*\)\s*$/);   // "실업(남)" / "선수권(남)"
+                if (m) return { div: m[1].trim(), gender: G(m[2]) };
+                m = s.match(/^([남여])\s*([초중고대일])$/);                       // "남고" "여중"
+                if (m) { const mp = { '초':'초등부','중':'중등부','고':'고등부','대':'대학부','일':'일반부' }; return { div: mp[m[2]], gender: m[1] }; }
+                m = s.match(/(남자|여자|혼성|남|여|혼)/);                          // "남자 일반부"
+                if (m) { const div = s.replace(/(남자|여자|혼성|남|여|혼)/g, '').replace(/\s+/g, ' ').trim(); return { div: div || s, gender: G(m[1]) }; }
+                return { div: s, gender: '' };
+            };
+            // 라운드 정규화(앞쪽 뱃지): 5-1+3→예선, 결승(+조), 7/10/5종은 예선결승 없음 → 그대로 앞에
+            const _ttRoundFront = (round) => {
+                const r = (round || '').trim();
+                const cb = r.match(/(10종|7종|5종)/);
+                if (cb) return { label: cb[1], fg: '#4a148c', bg: '#f3e5f5' };
+                if (/종경기|기록경기/.test(r)) return { label: '기록경기', fg: '#4a148c', bg: '#f3e5f5' };
+                if (/결승/.test(r)) { const j = r.match(/(\d+)\s*조/); return { label: j ? `결승 ${j[1]}조` : '결승', fg: '#b71c1c', bg: '#ffebee' }; }
+                if (/준결승|^준/.test(r)) return { label: '준결승', fg: '#e65100', bg: '#fff3e0' };
+                if (/예선/.test(r) || /^\d+-\d+\+\d+$/.test(r)) return { label: '예선', fg: '#1565c0', bg: '#e3f2fd' };
+                return { label: r, fg: '#555', bg: '#f0f0f0' };
+            };
             let html = '';
             const sections = [
                 { key: 'track', label: '트랙 경기', badgeCls: 'ico ico-track', badgeText: 'TRACK', color: '#6b6b6b', bg: '#f0f0f0', border: '#c0c0c0' },
@@ -1755,17 +1781,16 @@ async function openTimetable(compId) {
                     const defaultBg = idx % 2 && !isHighlighted ? '#fafbfc' : '';
                     const hoverBg = hasLink ? '#f8f4ea' : '';
                     const restoreBg = isHighlighted ? '#f5f0e0' : defaultBg;
-                    // Build combined event name: "종별 종목명 라운드명" (e.g., "남고 100m 예선")
+                    // 앞쪽 3뱃지: [부별][성별][라운드/복합] — 고정폭 칸 → 종목명 시작점 정렬
+                    const _cat = _ttSplitCategory(item.category);
+                    const _gst = _cat.gender === '남' ? { fg: '#1565c0', bg: '#e3f2fd' } : _cat.gender === '여' ? { fg: '#c2185b', bg: '#fde7ef' } : { fg: '#6a1b9a', bg: '#f3e5f5' };
+                    const _rd = _ttRoundFront(item.round);
+                    const _frontBadges = _ttBadge(_cat.div, '#555', '#eef0f3') + _ttBadge(_cat.gender, _gst.fg, _gst.bg) + _ttBadge(_rd.label, _rd.fg, _rd.bg);
+                    // 뒤쪽 가변 뱃지: 상태(명단/LIVE/결과보기) + 괄호(A,B) + 결과링크
                     const _roundFull = (item.round || '').trim();
                     const _bracketMatch = _roundFull.match(/\(([^)]+)\)/);
-                    const _roundBase = _roundFull.replace(/\([^)]*\)/g, '').trim();
-                    const _eventFullName = `${item.category || ''} ${item.event_name}${_roundBase ? ' ' + _roundBase : ''}`.trim();
-                    // Right-aligned tags: result link badge + status badge + round badge + bracket info (color-coded)
                     const _resultTag = item.result_url ? `<span style="color:#fff;font-size:9px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window.open('${(item.result_url||'').replace(/'/g,"\\'")}','_blank')">결과</span>` : '';
                     const _bracketTag = _bracketMatch ? `<span style="color:#8a7640;font-size:10px;font-weight:600;background:#f8f4ea;padding:1px 6px;border-radius:8px;white-space:nowrap;">(${_bracketMatch[1]})</span>` : '';
-                    const _roundColorMap = { '예선': { color: '#1565c0', bg: '#e3f2fd' }, '준결승': { color: '#e65100', bg: '#fff3e0' }, '결승': { color: '#b71c1c', bg: '#ffebee' }, '기록경기': { color: '#4a148c', bg: '#f3e5f5' } };
-                    const _rbc = _roundColorMap[_roundBase] || { color: '#555', bg: '#f0f0f0' };
-                    const _roundBadge = _roundBase ? `<span style="color:${_rbc.color};font-size:10px;font-weight:600;background:${_rbc.bg};padding:1px 6px;border-radius:8px;white-space:nowrap;">${_roundBase}</span>` : '';
                     // Status badge based on round_status (so operators can see at a glance whether records are entered)
                     let _statusTag = '';
                     if (item.event_id && item.round_status) {
@@ -1792,9 +1817,10 @@ async function openTimetable(compId) {
                         }
                     }
                     html += `<div id="tt-item-${item.id}" ${clickAction} style="display:flex;align-items:center;gap:8px;padding:9px 12px;${borderBottom}${defaultBg ? 'background:' + defaultBg + ';' : ''}${highlightStyle}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${restoreBg}'"` : ''}>
-                        <span style="font-weight:700;color:#333;font-size:13px;font-variant-numeric:tabular-nums;min-width:48px;white-space:nowrap;">${item.time}${nowBadge}</span>
-                        <span style="flex:1;font-weight:600;font-size:13px;color:#222;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_eventFullName}${crBadge}</span>
-                        <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;">${_resultTag}${_statusTag}${_roundBadge}${_bracketTag}</div>
+                        <span style="font-weight:700;color:#333;font-size:13px;font-variant-numeric:tabular-nums;min-width:44px;white-space:nowrap;">${item.time}${nowBadge}</span>
+                        <div style="width:170px;flex-shrink:0;display:flex;gap:3px;align-items:center;overflow:hidden;white-space:nowrap;">${_frontBadges}</div>
+                        <span style="flex:1;font-weight:600;font-size:13px;color:#222;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.event_name}${crBadge}</span>
+                        <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;">${_statusTag}${_bracketTag}${_resultTag}</div>
                     </div>`;
                 });
 
