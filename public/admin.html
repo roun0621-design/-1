@@ -3962,10 +3962,16 @@ POST /api/external/event-result-link/batch<br>
             }
             const DIV_BADGE_COLOR = new Proxy({}, { get: (_, d) => divBadgeColor(d) });
             // When showing 'all', sort groups by division within each category (일반화된 키 사용)
+            // 부(division) 우선 → 그 안에서는 sort_order(종목 재정렬 결과) → 동률이면 종목명
+            // (이전엔 종목명만으로 정렬해 '종목 재정렬'이 매트릭스에 반영되지 않던 버그)
+            const _groupSortOrder = g => Math.min(...g.rounds.map(e => (e.sort_order != null ? e.sort_order : 1e9)));
             const sortGroupsByDiv = (a, b) => {
                 const aRank = _admDivKey(a.division);
                 const bRank = _admDivKey(b.division);
                 if (aRank !== bRank) return aRank - bRank;
+                const aSort = _groupSortOrder(a);
+                const bSort = _groupSortOrder(b);
+                if (aSort !== bSort) return aSort - bSort;
                 return (a.name || '').localeCompare(b.name || '');
             };
             let html = '';
