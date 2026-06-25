@@ -5939,7 +5939,10 @@ function parseHeatAssignmentExcel(filePath) {
     // Find column indices by header name (flexible matching)
     const colIdx = {};
     headers.forEach((h, idx) => {
-        const hl = h.toLowerCase();
+        // 헤더에 괄호 설명이 붙은 템플릿("성별(남/여/혼성)", "라운드(예선/결승)",
+        // "그룹(A/B)", "순서(레인)" 등)도 인식되도록 첫 괄호 이전의 핵심 키워드만 추출해 매칭.
+        // (정확매칭만 하면 성별·라운드·그룹·레인 컬럼을 놓쳐 성별 NULL·레인 NULL 사고 발생)
+        const hl = h.replace(/[\(（].*$/, '').trim().toLowerCase();
         if (hl === '성별' || hl === 'gender') colIdx.gender = idx;
         else if (hl === '종목' || hl === 'event' || hl === '종목명') colIdx.event = idx;
         else if (hl === '라운드' || hl === 'round') colIdx.round = idx;
