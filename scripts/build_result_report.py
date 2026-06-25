@@ -264,7 +264,7 @@ req_rows = [
      '부하테스트(동시 500까지 무에러), vitest 단위테스트, 실 운영 검증, Android·iOS 실기기 구동 확인',
      '부하테스트 결과, 실기기 화면'),
     ('QUR-001', 'WA 표준 호환 및 코드 품질',
-     'WA(세계육상연맹) 기록 보고 규격 준수, 모듈화 개선(2→33), vitest 회귀검증, Git 형상관리(276커밋)',
+     'WA(세계육상연맹) 기록 보고 규격 준수, 모듈화 개선(2→33), vitest 회귀검증, Git 형상관리(Conventional Commits)',
      '호환성 점검표, 테스트 결과'),
 ]
 for r0 in req_rows:
@@ -280,32 +280,197 @@ add_para(doc, '', space_after=4)
 add_heading(doc, 'Ⅳ', '최종 산출물 (납품목록)')
 deliv = doc.add_table(rows=1, cols=4)
 style_table(deliv)
-for i, h in enumerate(['구분', '납품목록', '수량', '형식']):
+for i, h in enumerate(['구분', '납품목록', '수량', '납품 형태 / 위치']):
     set_cell_text(deliv.rows[0].cells[i], h, size=10, bold=True,
                   align=WD_ALIGN_PARAGRAPH.CENTER, shade_hex='1F3764', color=RGBColor(0xFF,0xFF,0xFF))
 deliv_rows = [
-    ('1', 'PWA 기반 앱 프로젝트 소스 일체 (Android TWA 래핑·AAB 빌드 설정 포함)', '1식', '전자파일'),
-    ('2', '앱 빌드·배포 가이드 (Google Play 업로드용, 발주처 자체 수행)', '1부', '전자파일'),
-    ('3', 'AWS 클라우드 아키텍처 구성도·실측 IP', '1부', '전자파일'),
-    ('4', 'SQLite→PostgreSQL 이관 검증 리포트 (34테이블/7,075행)', '1부', '전자파일'),
-    ('5', "HTTPS(SSL/TLS) 적용 내역서 (Let's Encrypt 인증서·자물쇠 화면)", '1부', '전자파일'),
-    ('6', '‘노드’ 경기운영시스템 웹 UI/UX 개편 화면(전·후)·배포 URL', '1식', '전자파일'),
-    ('7', '전체 소스코드 일체 (189파일/약 70,693행/276커밋, 소유권 발주처 귀속)', '1식', '전자파일'),
+    ('1', 'PWA 기반 앱 프로젝트 소스 일체 (Android TWA 래핑·AAB 빌드 설정 포함)', '1식',
+     'GitHub 소스 + build/app-release-v2.aab'),
+    ('2', '앱 빌드·배포 가이드 (Google Play 업로드용, 발주처 자체 수행)', '1부',
+     'evidence/app_build_guide_report.html'),
+    ('3', 'AWS 클라우드 아키텍처 구성도·실측 IP', '1부',
+     'evidence/aws_report.html'),
+    ('4', 'SQLite→PostgreSQL 이관 검증 리포트 (34테이블/7,075행)', '1부',
+     'db/schema.pg.sql + migration_report.html'),
+    ('5', "HTTPS(SSL/TLS) 적용 내역서 (Let's Encrypt 인증서·자물쇠 화면)", '1부',
+     'evidence/https_report.html'),
+    ('6', '‘노드’ 경기운영시스템 웹 UI/UX 개편 화면(전·후)·배포 URL', '1식',
+     'web_before_after + pace-rise-node.com'),
+    ('7', '전체 소스코드 일체 (253파일/약 83,746행/289커밋, 소유권 발주처 귀속)', '1식',
+     'github.com/roun0621-design/-1'),
 ]
 for r0 in deliv_rows:
     row = deliv.add_row()
     for ci, val in enumerate(r0):
-        set_cell_text(row.cells[ci], val, size=9.5,
-                      align=(None if ci == 1 else WD_ALIGN_PARAGRAPH.CENTER))
-deliv.columns[0].width = Cm(1.4)
-deliv.columns[1].width = Cm(10.6)
-deliv.columns[2].width = Cm(2.0)
-deliv.columns[3].width = Cm(2.0)
+        set_cell_text(row.cells[ci], val, size=9,
+                      align=(None if ci in (1, 3) else WD_ALIGN_PARAGRAPH.CENTER))
+deliv.columns[0].width = Cm(1.2)
+deliv.columns[1].width = Cm(8.0)
+deliv.columns[2].width = Cm(1.4)
+deliv.columns[3].width = Cm(5.4)
+add_para(doc, '', space_after=2)
+add_para(doc, '※ 상기 산출물의 구체적 납품 형태·형상관리(커밋)·검증 근거는 「Ⅴ. 산출물별 상세 증빙」에 기재.',
+         size=9, color=GRAY, space_after=4)
 
 doc.add_page_break()
 
-# ===== 5. 증빙 (품목별 증빙사진) =====
-add_heading(doc, 'Ⅴ', '수행 결과 증빙 (실 운영 화면)')
+# ===== Ⅴ. 산출물별 상세 증빙 (어떻게/어디에/어떤 형태로) =====
+add_heading(doc, 'Ⅴ', '산출물별 상세 증빙 (납품 형태·형상관리·검증)')
+add_para(doc,
+         '※ 본 용역의 모든 산출물은 Git 형상관리 저장소를 통해 형상관리·납품되며, '
+         '아래에 각 산출물의 ① 납품 형태·위치 ② Git 형상관리(브랜치·커밋·PR) ③ 검증 근거를 구체적으로 명시한다.',
+         size=9.5, color=GRAY, space_after=6)
+
+# 공통: 형상관리 환경 안내 박스
+git_box = doc.add_table(rows=4, cols=2)
+style_table(git_box)
+git_meta = [
+    ('형상관리 도구', 'Git / GitHub (원격 저장소) — Conventional Commits 규칙 적용'),
+    ('원격 저장소(Repository)', 'github.com/roun0621-design/-1  (Private, 소유권 발주처 귀속)'),
+    ('브랜치 전략', 'main(운영 반영) ← genspark_ai_developer(개발) — Pull Request 기반 병합'),
+    ('형상 이력', '총 289 커밋 / 최초 2026-02-18 ~ 최종 2026-06-25 / 추적 파일 253개 (소스 약 83,746 LOC)'),
+]
+for i, (k, v) in enumerate(git_meta):
+    set_cell_text(git_box.rows[i].cells[0], k, size=9, bold=True,
+                  align=WD_ALIGN_PARAGRAPH.CENTER, shade_hex=LIGHT)
+    set_cell_text(git_box.rows[i].cells[1], v, size=9)
+git_box.columns[0].width = Cm(3.6)
+git_box.columns[1].width = Cm(12.4)
+add_para(doc, '', space_after=2)
+add_para(doc,
+         '※ 납품 방식 : 발주처가 GitHub 저장소의 소유권(Owner)을 이관받아 전체 소스·이력·산출물에 '
+         '직접 접근하며, 전체 저장소 아카이브(.tar.gz)와 빌드 산출물(AAB)을 함께 전달함. '
+         '아래 커밋 해시는 GitHub에서 직접 조회·검증 가능함.',
+         size=9, color=GRAY, space_after=8)
+
+
+def detail_block(doc, no, title, rows):
+    """산출물 1건의 상세 증빙 블록 (제목 + 2열 표)."""
+    p = add_para(doc, '', space_before=8, space_after=3)
+    r = p.add_run(f'[{no}] {title}')
+    set_kfont(r, size=11, bold=True, color=NAVY)
+    t = doc.add_table(rows=len(rows), cols=2)
+    style_table(t)
+    for i, (k, v) in enumerate(rows):
+        set_cell_text(t.rows[i].cells[0], k, size=9, bold=True,
+                      align=WD_ALIGN_PARAGRAPH.CENTER, shade_hex='F2F5FA')
+        set_cell_text(t.rows[i].cells[1], v, size=9)
+    t.columns[0].width = Cm(3.2)
+    t.columns[1].width = Cm(12.8)
+    return t
+
+
+# 산출물 1
+detail_block(doc, 1, 'PWA 기반 앱 프로젝트 소스 일체 (Android TWA 래핑·AAB 빌드 설정 포함)', [
+    ('납품 형태·위치',
+     'GitHub 저장소 내 소스로 관리. PWA 핵심 : public/manifest.json · public/sw.js(Service Worker) · '
+     'public/push.js. Android TWA 설정 및 Digital Asset Links : public/.well-known/assetlinks.json. '
+     '빌드 산출물(서명 완료) : build/app-release-v2.aab (패키지 com.pacerise.node, versionCode 2 / v1.0.1).'),
+    ('Git 형상관리',
+     '관련 주요 커밋 — e5eb04a "assetlinks 에 Play 앱 서명키 지문 추가(TWA 검증 완성)", '
+     '3ced214 "assetlinks.json 실제 값 입력", d5c078a "스토어(TWA) 준비 — manifest 보강 + assetlinks 서빙". '
+     '서명 키 정보 : build/KEYSTORE_INFO.txt, 키스토어 : build/pacerise-upload.keystore.'),
+    ('검증 근거',
+     'AAB 파일 실재(약 1.0MB) 및 서명 키 지문이 assetlinks.json에 등록되어 TWA 검증 통과. '
+     '실기기(Android) 풀스크린 구동 확인 — 증빙 화면 [5] 앱 설치 안내 참조.'),
+])
+
+# 산출물 2
+detail_block(doc, 2, '앱 빌드·배포 가이드 (발주처 자체 빌드·업로드용)', [
+    ('납품 형태·위치',
+     '문서 산출물(HTML/PDF) : evidence/app_build_guide_report.html. '
+     'Google Play Console 업로드 절차(AAB 업로드 → 내부테스트 → 프로덕션) 및 키 서명 안내 포함.'),
+    ('Git 형상관리',
+     'Play 스토어 자산 커밋 — 74fe711 "Play 스토어 그래픽이미지(1024x500) 템플릿 추가". '
+     '스토어 자산 디렉터리 : playstore_assets/ (아카이브 playstore_assets_2026-06-15.tar.gz).'),
+    ('검증 근거',
+     '실제 빌드·스토어 업로드는 과업 범위상 발주처가 수행. 본 용역은 발주처가 자체 수행 가능하도록 '
+     '가이드 문서 + 서명 키 + AAB를 일체 제공(과업지시서 SFR-001 산출정보 일치).'),
+])
+
+# 산출물 3
+detail_block(doc, 3, 'AWS 클라우드 아키텍처 구성도·실측 IP', [
+    ('납품 형태·위치',
+     '문서 산출물 : evidence/aws_report.html (아키텍처 구성도·실측 배포 IP). '
+     '운영 환경 : AWS 서울 리전(ap-northeast-2), Node.js 20 / Express, PM2 무중단 운영, '
+     '운영 도메인 pace-rise-node.com 연결, 헬스체크 /api/health.'),
+    ('Git 형상관리',
+     '운영 백업·배포 관련 커밋 — 37a04ae "PostgreSQL pg_dump → S3 백업 스크립트 추가", '
+     '101a606 "pg_backup .env를 __dirname 기준 로드(cron 대비)". 백업 모듈 : lib/backupS3.js.'),
+    ('검증 근거',
+     '운영 도메인 HTTP 200 정상 응답(실 서비스 가동 중), /api/health 응답 캡처. '
+     '실 운영 대회 데이터는 공개 API /api/competitions 로 외부 확인 가능.'),
+])
+
+# 산출물 4
+detail_block(doc, 4, 'SQLite → PostgreSQL 이관 검증 리포트', [
+    ('납품 형태·위치',
+     '스키마 파일 : db/schema.pg.sql (CREATE TABLE 40종 정의). '
+     '이관 스크립트 : scripts/migrate_sqlite_to_postgres.js, scripts/sqlite_to_postgres_schema.js, '
+     'scripts/test_db_postgres.js. 검증 리포트 : evidence/migration_report.html. '
+     '이중 백엔드 구성 : 환경변수 DB_BACKEND(sqlite|postgres) — lib/db.js.'),
+    ('Git 형상관리',
+     '관련 주요 커밋 — 53a829b "PostgreSQL 호환 — db.prepare() → 비동기 db.get/all/run 일괄 마이그레이션", '
+     'db48139 "운영 PG DB 호환성 회복 — datetime(now) 제거 + 멱등 컬럼 마이그레이션", '
+     'd4be527 "상장·문자 테이블 PG 누락 복구". FK 위상정렬 이관 + 시퀀스 재설정 적용.'),
+    ('검증 근거',
+     '전 테이블 건수 대조 검증 : 34개 테이블 / 7,075행 → 34 PASS · 0 FAIL (전체 일치). '
+     '/api/health 로 SQLite·PostgreSQL 양측 정상 응답 확인.'),
+])
+
+doc.add_page_break()
+
+# 산출물 5
+detail_block(doc, 5, "HTTPS(SSL/TLS) 적용 내역서", [
+    ('납품 형태·위치',
+     "문서 산출물 : evidence/https_report.html. Let's Encrypt 인증서로 운영 도메인 전 구간 "
+     'HTTPS(SSL/TLS) 적용. 접근 인증 : JWT 기반 로그인 + 권한 분리(심판/운영/관리자) — '
+     'lib/auth/jwt.js · lib/auth/middleware.js · lib/auth/migrations.js. '
+     'API 호출 속도 제한 : 환경변수 RATE_LIMIT_MAX.'),
+    ('Git 형상관리',
+     '관련 주요 커밋 — 65bb5a9 "JWT/Refresh 기반 로그인 인프라 도입(DB 마이그레이션+헬퍼)", '
+     '4517517 "runAuthMigrations PG 모드 스킵 원인 픽스", '
+     'f107e76 "RATE_LIMIT_MAX env화 + HTTPS 점검범위 정직화".'),
+    ('검증 근거',
+     '운영 도메인 HTTPS 적용 후 HTTP 200 응답, 브라우저 자물쇠(보안 연결) 표시. '
+     '※ 본 과업 보안 범위는 HTTPS 적용·접근 인증까지이며, 모의해킹·취약점 진단은 과업 범위 외(과업지시서 SER-001 명시).'),
+])
+
+# 산출물 6
+detail_block(doc, 6, '‘노드(Node)’ 경기운영시스템 웹 UI/UX 개편 화면(전·후)·배포 URL', [
+    ('납품 형태·위치',
+     '개편 전·후 비교 문서 : evidence/web_before_after_report.html, '
+     'evidence/web_improvement_detail.html. 배포 URL : https://pace-rise-node.com (운영 중). '
+     '대회 목록 연맹별 그룹화·뱃지, RECENT 영역, 경기 운영 모니터(실시간 출석 집계) 등.'),
+    ('Git 형상관리',
+     '★ 개편 전·후를 git 이력으로 명확히 식별 — '
+     '개편 전 기준 커밋 ca3d736 "노출용 대회 시스템 전면 구현" → 개편 후 main 브랜치 최신. '
+     '관련 커밋 — c8fa386 "대회 홈 노출 강제 설정 home_visibility", '
+     '57be4ec "자동 레이아웃 정리 — 빈 라운드 열 자동 숨김".'),
+    ('검증 근거',
+     '운영 서비스에서 직접 캡처한 개편 후 화면(증빙 [1]~[4]). '
+     '개편 전 화면은 git checkout ca3d736 으로 재현 가능(형상관리로 전·후 추적성 확보).'),
+])
+
+# 산출물 7
+detail_block(doc, 7, '전체 소스코드 일체 (소유권 발주처 귀속)', [
+    ('납품 형태·위치',
+     'GitHub 저장소 전체(github.com/roun0621-design/-1) + 전체 아카이브 evidence_정부지원_2026-06-19.tar.gz. '
+     '서버 : server.js + lib/(33개 파일, 기능 모듈 routes/ 분리), 프론트 : public/(107개 파일), '
+     '테스트 : tests/(22개 파일), 스크립트 : scripts/(61개 파일).'),
+    ('Git 형상관리',
+     '총 289 커밋, 추적 파일 253개, 소스 약 83,746 LOC. '
+     'main ← genspark_ai_developer Pull Request 기반 병합(예: PR #4). '
+     '소유권 : 용역계약서 제8·13조에 따라 결과물·지식재산권 일체 발주처(갑) 귀속.'),
+    ('검증 근거',
+     '저장소 commit 수·파일 수·LOC 는 GitHub 및 git 명령(git rev-list --count HEAD / git ls-files)으로 '
+     '직접 검증 가능. 모듈화 개선 : 서버 기능 모듈 2 → 33개(QUR-001).'),
+])
+
+doc.add_page_break()
+
+# ===== Ⅵ. 증빙 (품목별 증빙사진) =====
+add_heading(doc, 'Ⅵ', '수행 결과 증빙 (실 운영 화면)')
 add_para(doc, '※ 운영 서비스(pace-rise-node.com)에서 직접 캡처한 실제 화면입니다.',
          size=9.5, color=GRAY, space_after=8)
 
