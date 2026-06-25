@@ -22,9 +22,16 @@ OUT = os.path.join(BASE, 'evidence', '결과보고서', '결과보고서_PACE-RI
 FONT = '맑은 고딕'
 FONT_FALLBACK = 'Noto Sans CJK KR'
 
-NAVY = RGBColor(0x1F, 0x37, 0x64)
-GRAY = RGBColor(0x55, 0x55, 0x55)
-LIGHT = 'EAF0F8'
+# ── 색상 정책 : 글씨는 모두 검정, 배경(음영)은 모두 화이트 ──
+BLACK = RGBColor(0x00, 0x00, 0x00)
+WHITE = RGBColor(0xFF, 0xFF, 0xFF)
+# 기존 코드 호환을 위해 동일 이름 유지하되 전부 검정/흰색으로 매핑
+NAVY = BLACK            # 제목·강조 글씨 → 검정
+GRAY = BLACK            # 주석 글씨 → 검정
+LIGHT = 'FFFFFF'        # 표 라벨 음영 → 흰색
+HEADER_FILL = 'FFFFFF'  # 표 헤더 음영 → 흰색
+HEADER_TEXT = BLACK     # 표 헤더 글씨 → 검정
+BORDER = '000000'       # 표/제목 밑줄 테두리 → 검정
 
 
 def set_kfont(run, size=None, bold=None, color=None):
@@ -86,16 +93,18 @@ def add_heading(doc, num, title):
     p = doc.add_paragraph()
     p.paragraph_format.space_before = Pt(14)
     p.paragraph_format.space_after = Pt(6)
+    # 제목이 뒤따르는 본문/표와 분리되어 페이지 끝에 고립되지 않도록
+    p.paragraph_format.keep_with_next = True
     run = p.add_run(f'{num}. {title}')
     set_kfont(run, size=13, bold=True, color=NAVY)
-    # underline bar
+    # underline bar (검정)
     pPr = p._p.get_or_add_pPr()
     pbdr = OxmlElement('w:pBdr')
     bottom = OxmlElement('w:bottom')
     bottom.set(qn('w:val'), 'single')
     bottom.set(qn('w:sz'), '12')
     bottom.set(qn('w:space'), '4')
-    bottom.set(qn('w:color'), '1F3764')
+    bottom.set(qn('w:color'), BORDER)
     pbdr.append(bottom)
     pPr.append(pbdr)
     return p
@@ -110,10 +119,22 @@ def style_table(table):
         e.set(qn('w:val'), 'single')
         e.set(qn('w:sz'), '6')
         e.set(qn('w:space'), '0')
-        e.set(qn('w:color'), 'AAB4C4')
+        e.set(qn('w:color'), BORDER)
         borders.append(e)
     tblPr = tbl.tblPr
     tblPr.append(borders)
+    # 각 행이 페이지 중간에서 잘리지 않도록 (자연스러운 페이지 넘김)
+    no_split_rows(table)
+
+
+def no_split_rows(table):
+    """표의 모든 행에 cantSplit 적용 (행이 페이지 경계에서 쪼개지지 않게)."""
+    for row in table.rows:
+        trPr = row._tr.get_or_add_trPr()
+        if trPr.find(qn('w:cantSplit')) is None:
+            cant = OxmlElement('w:cantSplit')
+            cant.set(qn('w:val'), 'true')
+            trPr.append(cant)
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +255,7 @@ hdr = ['고유번호', '요구사항', '이행 결과', '증빙(산출정보)']
 widths = [Cm(2.0), Cm(4.6), Cm(6.2), Cm(3.6)]
 for i, h in enumerate(hdr):
     set_cell_text(req.rows[0].cells[i], h, size=9.5, bold=True,
-                  align=WD_ALIGN_PARAGRAPH.CENTER, shade_hex='1F3764', color=RGBColor(0xFF,0xFF,0xFF))
+                  align=WD_ALIGN_PARAGRAPH.CENTER, shade_hex=HEADER_FILL, color=HEADER_TEXT)
 req_rows = [
     ('ECR-001', 'AWS 클라우드 환경 구성',
      'AWS 서울 리전 운영 인스턴스 배포, PostgreSQL 연결, 도메인·HTTPS, PM2 무중단·헬스체크 구성 완료',
@@ -274,6 +295,7 @@ for r0 in req_rows:
                       align=(WD_ALIGN_PARAGRAPH.CENTER if ci == 0 else None))
 for i, w in enumerate(widths):
     req.columns[i].width = w
+no_split_rows(req)
 add_para(doc, '', space_after=4)
 
 # ===== 4. 최종 산출물 =====
@@ -282,7 +304,7 @@ deliv = doc.add_table(rows=1, cols=4)
 style_table(deliv)
 for i, h in enumerate(['구분', '납품목록', '수량', '납품 형태 / 위치']):
     set_cell_text(deliv.rows[0].cells[i], h, size=10, bold=True,
-                  align=WD_ALIGN_PARAGRAPH.CENTER, shade_hex='1F3764', color=RGBColor(0xFF,0xFF,0xFF))
+                  align=WD_ALIGN_PARAGRAPH.CENTER, shade_hex=HEADER_FILL, color=HEADER_TEXT)
 deliv_rows = [
     ('1', 'PWA 기반 앱 프로젝트 소스 일체 (Android TWA 래핑·AAB 빌드 설정 포함)', '1식',
      'GitHub 소스 + build/app-release-v2.aab'),
@@ -308,6 +330,7 @@ deliv.columns[0].width = Cm(1.2)
 deliv.columns[1].width = Cm(8.0)
 deliv.columns[2].width = Cm(1.4)
 deliv.columns[3].width = Cm(5.4)
+no_split_rows(deliv)
 add_para(doc, '', space_after=2)
 add_para(doc, '※ 상기 산출물의 구체적 납품 형태·형상관리(커밋)·검증 근거는 「Ⅴ. 산출물별 상세 증빙」에 기재.',
          size=9, color=GRAY, space_after=4)
@@ -347,13 +370,15 @@ add_para(doc,
 def detail_block(doc, no, title, rows):
     """산출물 1건의 상세 증빙 블록 (제목 + 2열 표)."""
     p = add_para(doc, '', space_before=8, space_after=3)
+    # 블록 제목이 뒤따르는 표와 분리되지 않도록
+    p.paragraph_format.keep_with_next = True
     r = p.add_run(f'[{no}] {title}')
     set_kfont(r, size=11, bold=True, color=NAVY)
     t = doc.add_table(rows=len(rows), cols=2)
     style_table(t)
     for i, (k, v) in enumerate(rows):
         set_cell_text(t.rows[i].cells[0], k, size=9, bold=True,
-                      align=WD_ALIGN_PARAGRAPH.CENTER, shade_hex='F2F5FA')
+                      align=WD_ALIGN_PARAGRAPH.CENTER, shade_hex=HEADER_FILL)
         set_cell_text(t.rows[i].cells[1], v, size=9)
     t.columns[0].width = Cm(3.2)
     t.columns[1].width = Cm(12.8)
@@ -487,15 +512,21 @@ for idx, (fn, cap) in enumerate(images):
     if not os.path.exists(path):
         continue
     cap_p = add_para(doc, '', space_after=2, space_before=(8 if idx else 2))
+    # 캡션이 이미지와 분리되어 페이지 끝에 고립되지 않도록
+    cap_p.paragraph_format.keep_with_next = True
     r = cap_p.add_run(f'[{idx+1}] {cap}')
     set_kfont(r, size=10, bold=True, color=NAVY)
     pic_p = doc.add_paragraph()
     pic_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     pic_p.paragraph_format.space_after = Pt(6)
+    # 캡션+이미지가 한 덩어리로 페이지를 넘어가도록 (caption keep_with_next + 이미지단락 keepLines)
+    pPr = pic_p._p.get_or_add_pPr()
+    keep = OxmlElement('w:keepLines')
+    keep.set(qn('w:val'), 'true')
+    pPr.append(keep)
     run = pic_p.add_run()
-    run.add_picture(path, width=Cm(15.5))
-    if idx % 2 == 1 and idx != len(images) - 1:
-        doc.add_page_break()
+    run.add_picture(path, width=Cm(15.0))
+    # 강제 페이지 나눔 제거 — keep_with_next/keepLines 로 자연스럽게 흐르게 함
 
 # ===== 결재/날인 =====
 add_para(doc, '', space_after=14, space_before=10)
