@@ -26,6 +26,7 @@ public/ktfl_p*.png
 .png test files
 *.png
 !public/icons/og-image.png
+!public/images/*.png
 db/pacerise.db
 db/*.db
 !db/init.js

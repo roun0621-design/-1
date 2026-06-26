@@ -26,11 +26,11 @@
         { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
     ],
     "screenshots": [
-        {
-            "src": "/images/screenshot1.png",
-            "sizes": "1280x720",
-            "type": "image/png",
-            "form_factor": "wide"
-        }
+        { "src": "/images/screenshot1.png", "sizes": "1280x720", "type": "image/png", "form_factor": "wide", "label": "실시간 대시보드" },
+        { "src": "/images/screenshot2.png", "sizes": "1280x720", "type": "image/png", "form_factor": "wide", "label": "조편성 · 소집" },
+        { "src": "/images/screenshot3.png", "sizes": "1280x720", "type": "image/png", "form_factor": "wide", "label": "경기 결과" },
+        { "src": "/images/screenshot-narrow1.png", "sizes": "750x1334", "type": "image/png", "form_factor": "narrow", "label": "실시간 대시보드" },
+        { "src": "/images/screenshot-narrow2.png", "sizes": "750x1334", "type": "image/png", "form_factor": "narrow", "label": "조편성 · 소집" },
+        { "src": "/images/screenshot-narrow3.png", "sizes": "750x1334", "type": "image/png", "form_factor": "narrow", "label": "경기 결과" }
     ]
 }
