@@ -1767,6 +1767,27 @@ async function openTimetable(compId) {
                 if (/예선/.test(r) || /^\d+-\d+\+\d+$/.test(r)) return { label: '예선', fg: '#1565c0', bg: '#e3f2fd' };
                 return { label: r, fg: '#555', bg: '#f0f0f0' };
             };
+            // 부(division)→색: admin.html divBadgeColor 와 동일 팔레트(앱 전체 색 일관)
+            const _ttDivColor = (d) => {
+                const exact = {
+                    '중등부':{fg:'#1565c0',bg:'#e3f2fd'}, '고등부':{fg:'#e65100',bg:'#fff3e0'},
+                    '대학부':{fg:'#6a1b9a',bg:'#f3e5f5'}, '일반부':{fg:'#2e7d32',bg:'#e8f5e9'},
+                    '국제':{fg:'#00695c',bg:'#e0f7fa'},
+                };
+                const raw = (d||'').trim();
+                if (exact[raw]) return exact[raw];
+                const s = raw.replace(/\s/g,'');
+                if (!s) return { fg:'#555', bg:'#eef0f3' };
+                if (/초/.test(s))             return { fg:'#00695c', bg:'#e0f2f1' };
+                if (/중/.test(s))             return { fg:'#1565c0', bg:'#e3f2fd' };
+                if (/고/.test(s))             return { fg:'#e65100', bg:'#fff3e0' };
+                if (/대학|대$/.test(s))       return { fg:'#4a148c', bg:'#f3e5f5' };
+                if (/일반|실업/.test(s))      return { fg:'#1b5e20', bg:'#e8f5e9' };
+                if (/선수권/.test(s))         return { fg:'#5d4037', bg:'#efebe9' };
+                if (/마스터|master/i.test(s)) return { fg:'#37474f', bg:'#eceff1' };
+                if (/국제|inter/i.test(s))    return { fg:'#006064', bg:'#e0f7fa' };
+                return { fg:'#6a1b9a', bg:'#f3e5f5' };
+            };
             let html = '';
             const sections = [
                 { key: 'track', label: '트랙 경기', badgeCls: 'ico ico-track', badgeText: 'TRACK', color: '#6b6b6b', bg: '#f0f0f0', border: '#c0c0c0' },
@@ -1788,19 +1809,21 @@ async function openTimetable(compId) {
                 items.forEach((item, idx) => {
                     const borderBottom = idx < items.length - 1 ? 'border-bottom:1px solid #f5f5f5;' : '';
                     const isHighlighted = closestEventId === ('tt-item-' + item.id);
-                    const highlightStyle = isHighlighted ? 'background:#f5f0e0 !important;border-left:3px solid #b79f58;' : '';
                     const nowBadge = isHighlighted ? '<span style="background:#b79f58;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;">NOW</span>' : '';
                     // Call Room badge: show only within callroom_time -10min ~ +5min (KST)
                     const crBadge = isCallRoomWindow(item.callroom_time, item.scheduled_date) ? '<span class="ico-callroom" style="margin-left:4px;">Call Room</span>' : '';
                     const hasLink = !!item.event_id;
-                    const defaultBg = idx % 2 && !isHighlighted ? '#fafbfc' : '';
-                    const hoverBg = hasLink ? '#f8f4ea' : '';
-                    const restoreBg = isHighlighted ? '#f5f0e0' : defaultBg;
-                    // 앞쪽 3뱃지: [부별][성별][라운드/복합] — 고정폭 칸 → 종목명 시작점 정렬
+                    // 앞쪽 3뱃지: [부별][성별][라운드/복합] — 부는 부별 색, 성별/라운드도 색 구분
                     const _cat = _ttSplitCategory(item.category);
+                    const _dcol = _ttDivColor(_cat.div);
                     const _gst = _cat.gender === '남' ? { fg: '#1565c0', bg: '#e3f2fd' } : _cat.gender === '여' ? { fg: '#c2185b', bg: '#fde7ef' } : { fg: '#6a1b9a', bg: '#f3e5f5' };
                     const _rd = _ttRoundFront(item.round);
-                    const _frontBadges = _ttBadge(_cat.div, '#555', '#eef0f3') + _ttBadge(_cat.gender, _gst.fg, _gst.bg) + _ttBadge(_rd.label, _rd.fg, _rd.bg);
+                    const _frontBadges = _ttBadge(_cat.div, _dcol.fg, _dcol.bg) + _ttBadge(_cat.gender, _gst.fg, _gst.bg) + _ttBadge(_rd.label, _rd.fg, _rd.bg);
+                    // 성별 → 행 배경 은은한 틴트(남=남색 / 여=버건디 / 혼=보라) + 좌측 보더. NOW 하이라이트가 최우선.
+                    const _grow = _cat.gender === '남' ? { bg:'#f3f6fc', bar:'#1a2a5e' } : _cat.gender === '여' ? { bg:'#fbf4f6', bar:'#8a1f3d' } : { bg:'#f8f5fb', bar:'#6a1b9a' };
+                    const rowBg = isHighlighted ? '#f5f0e0' : _grow.bg;
+                    const rowBar = isHighlighted ? '#b79f58' : _grow.bar;
+                    const hoverBg = hasLink ? '#f1ead7' : rowBg;
                     // 뒤쪽 가변 뱃지: 상태(명단/LIVE/결과보기) + 괄호(A,B) + 결과링크
                     const _roundFull = (item.round || '').trim();
                     const _bracketMatch = _roundFull.match(/\(([^)]+)\)/);
@@ -1831,7 +1854,7 @@ async function openTimetable(compId) {
                             clickAction = `onclick="window._ttGoToEvent(${item.event_id})"`;
                         }
                     }
-                    html += `<div id="tt-item-${item.id}" class="tt-row" ${clickAction} style="${borderBottom}${defaultBg ? 'background:' + defaultBg + ';' : ''}${highlightStyle}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${restoreBg}'"` : ''}>
+                    html += `<div id="tt-item-${item.id}" class="tt-row" ${clickAction} style="background:${rowBg};border-left:3px solid ${rowBar};${borderBottom}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${rowBg}'"` : ''}>
                         <span class="tt-time">${item.time}${nowBadge}</span>
                         <div class="tt-front">${_frontBadges}</div>
                         <span class="tt-name">${item.event_name}${crBadge}</span>
