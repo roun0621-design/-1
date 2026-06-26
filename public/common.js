@@ -1614,7 +1614,22 @@ async function openTimetable(compId) {
         </div>`;
 
         const contentHtml = `<div id="tt-content" style="overflow-y:auto;padding:16px 22px 22px;flex:1;"></div>`;
-        modal.innerHTML = headerHtml + contentHtml;
+        // 시간표 행 반응형 레이아웃 — 데스크톱 1줄 정렬 / 모바일(≤600px) 2줄 스택(종목명 잘림 방지)
+        const styleHtml = `<style>
+            .tt-row{display:grid;align-items:center;gap:4px 8px;padding:9px 12px;
+                grid-template-columns:44px 170px minmax(0,1fr) auto;
+                grid-template-areas:"time front name tail";}
+            .tt-time{grid-area:time;font-weight:700;color:#333;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+            .tt-front{grid-area:front;display:flex;flex-wrap:wrap;gap:3px;align-items:center;overflow:hidden;}
+            .tt-name{grid-area:name;font-weight:600;font-size:13px;color:#222;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+            .tt-tail{grid-area:tail;display:flex;gap:3px;align-items:center;justify-self:end;flex-shrink:0;}
+            @media (max-width:600px){
+                .tt-row{grid-template-columns:44px minmax(0,1fr) auto;row-gap:5px;
+                    grid-template-areas:"time name tail" "gut front front";}
+                .tt-name{font-size:14px;}
+            }
+        </style>`;
+        modal.innerHTML = styleHtml + headerHtml + contentHtml;
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
 
@@ -1816,11 +1831,11 @@ async function openTimetable(compId) {
                             clickAction = `onclick="window._ttGoToEvent(${item.event_id})"`;
                         }
                     }
-                    html += `<div id="tt-item-${item.id}" ${clickAction} style="display:flex;align-items:center;gap:8px;padding:9px 12px;${borderBottom}${defaultBg ? 'background:' + defaultBg + ';' : ''}${highlightStyle}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${restoreBg}'"` : ''}>
-                        <span style="font-weight:700;color:#333;font-size:13px;font-variant-numeric:tabular-nums;min-width:44px;white-space:nowrap;">${item.time}${nowBadge}</span>
-                        <div style="width:170px;flex-shrink:0;display:flex;gap:3px;align-items:center;overflow:hidden;white-space:nowrap;">${_frontBadges}</div>
-                        <span style="flex:1;font-weight:600;font-size:13px;color:#222;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.event_name}${crBadge}</span>
-                        <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;">${_statusTag}${_bracketTag}${_resultTag}</div>
+                    html += `<div id="tt-item-${item.id}" class="tt-row" ${clickAction} style="${borderBottom}${defaultBg ? 'background:' + defaultBg + ';' : ''}${highlightStyle}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${restoreBg}'"` : ''}>
+                        <span class="tt-time">${item.time}${nowBadge}</span>
+                        <div class="tt-front">${_frontBadges}</div>
+                        <span class="tt-name">${item.event_name}${crBadge}</span>
+                        <div class="tt-tail">${_statusTag}${_bracketTag}${_resultTag}</div>
                     </div>`;
                 });
 
