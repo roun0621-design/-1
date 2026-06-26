@@ -2394,7 +2394,7 @@ async function loadRosterModalData(eventId) {
                 html += `<span style="font-size:11px;color:#999;">${entries.length}명</span>`;
             }
             html += `</div>`;
-            html += `<table style="width:100%;border-collapse:collapse;font-size:12px;">`;
+            html += `<table class="fill-table" style="width:100%;border-collapse:collapse;font-size:12px;">`;
             html += `<thead><tr style="background:#f5f5f5;border-bottom:1px solid #e0e0e0;">`;
             html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">${isField ? '순서' : '레인'}</th>`;
             html += `<th style="padding:5px 8px;text-align:center;width:50px;font-weight:600;color:#777;">배번</th>`;
