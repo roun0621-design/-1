@@ -6294,8 +6294,30 @@ POST /api/external/event-result-link/batch<br>
         async function deleteEventFromModal() {
             const id = document.getElementById('em-id').value;
             const name = document.getElementById('em-name').value;
+            const gender = document.getElementById('em-gender').value;
+            const category = document.getElementById('em-category').value;
+            const division = document.getElementById('em-division')?.value || '';
+            // 같은 종목 그룹(종목명+성별+종별+부별)의 다른 라운드(예선/준결승/결승) 찾기
+            const _n = s => (s || '').trim();
+            const siblings = (_allAdminEvents || []).filter(e =>
+                String(e.id) !== String(id) && !e.parent_event_id &&
+                _n(e.name) === _n(name) && e.gender === gender &&
+                e.category === category && (e.division || '') === division &&
+                ['preliminary', 'semifinal', 'final'].includes(e.round_type));
             if (!confirm(`"${name}" 종목을 삭제하시겠습니까?`)) return;
-            try { await API.deleteEvent(id, AK()); toast('삭제 완료'); closeEvtModal(); loadEvents(); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
+            let alsoIds = [];
+            if (siblings.length) {
+                const labels = siblings.map(e => ROUND_LABEL[e.round_type] || e.round_type).join(', ');
+                if (confirm(`연결된 다른 라운드(${labels})도 함께 삭제할까요?\n\n[확인] 함께 삭제   [취소] 이 라운드만 삭제`)) {
+                    alsoIds = siblings.map(e => e.id);
+                }
+            }
+            try {
+                await API.deleteEvent(id, AK());
+                for (const sid of alsoIds) { try { await API.deleteEvent(sid, AK()); } catch (e) {} }
+                toast(alsoIds.length ? `삭제 완료 (${alsoIds.length + 1}개 라운드)` : '삭제 완료');
+                closeEvtModal(); loadEvents();
+            } catch (e) { toast(e.error || '삭제 실패', 'error'); }
         }
 
         // ============================================================

@@ -12748,6 +12748,11 @@ app.post('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
 
 // Auto-link timetable to display-mode events
 async function autoLinkDisplayTimetable(compId) {
+    // 노출용(display) 대회만 시간표 행으로 종목을 자동 생성한다.
+    // 운영용(operation) 대회는 시간표에 다른 부(예: 대학부) 행이 섞여 있어도
+    // 종목을 만들지 않고 "이미 존재하는 종목과의 매칭(링크)"만 수행한다.
+    const _comp = await db.get('SELECT mode FROM competition WHERE id=?', compId);
+    const allowAutoCreate = !!(_comp && _comp.mode === 'display');
     let events = await db.all('SELECT id, name, gender, division, round_type, category FROM event WHERE competition_id=?', compId);
     const ttRows = await db.all('SELECT id, event_name, category AS jongbyul, round, event_id FROM timetable WHERE competition_id=?', compId);
 
@@ -12790,7 +12795,8 @@ async function autoLinkDisplayTimetable(compId) {
         });
 
         // 2) Auto-create: 매칭 실패 시, parseJongbyul이 division을 추출했다면 누락된 event를 자동 생성
-        if (!match && targetDivNorm) {
+        //    (노출용 대회에서만 — 운영용은 종목 자동 생성 금지)
+        if (!match && targetDivNorm && allowAutoCreate) {
             const cat = guessCat(targetName);
             const info = await db.run('INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)',
                 compId, targetName, cat, jbParsed.gender || 'X', targetRound, targetDivNorm, nextSort++);
