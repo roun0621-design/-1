@@ -2194,11 +2194,12 @@ function renderFieldHeightResults(data) {
 // ============================================================
 // Pacing Light Popup (W/L Target)
 // ============================================================
+// hex = 점/테두리(실제 라이트 색), ink = 흰 카드 위 글자색(가독성용)
 const _PACING_COLOR_MAP = {
-    green:  { label: 'Green',  hex: '#b79f58', textColor: '#fff' },
-    red:    { label: 'Red',    hex: '#FF0000', textColor: '#fff' },
-    white:  { label: 'White',  hex: '#E0E0E0', textColor: '#333' },
-    blue:   { label: 'Blue',   hex: '#6b6b6b', textColor: '#fff' },
+    green:  { label: 'Green',  hex: '#22c55e', textColor: '#fff',     ink: '#15803d' },
+    red:    { label: 'Red',    hex: '#ef4444', textColor: '#fff',     ink: '#dc2626' },
+    white:  { label: 'White',  hex: '#ffffff', textColor: '#111827', ink: '#475569' },
+    blue:   { label: 'Blue',   hex: '#2563eb', textColor: '#fff',     ink: '#1d4ed8' },
 };
 
 function _fmtPacingTime(seconds) {
@@ -2228,7 +2229,7 @@ function openPacingPopup(eventName) {
 
     // Notice
     if (cfg.notice) {
-        html += `<div style="background:#f8f4ea;border:1px solid #f8f4ea;border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:#b79f58;">${cfg.notice}</div>`;
+        html += `<div style="width:100%;box-sizing:border-box;background:#f8f4ea;border:1px solid #f8f4ea;border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:#b79f58;">${cfg.notice}</div>`;
     }
 
     // Color cards
@@ -2246,10 +2247,14 @@ function openPacingPopup(eventName) {
                 return { dist: cumDist, cum: cumTime, lap: seg.lap_seconds, segDist: seg.distance_meters };
             });
 
-            html += `<div style="border:2px solid ${cm.hex};border-radius:8px;padding:12px;margin-bottom:10px;">
+            const popupBorder = cm.hex === '#ffffff' ? '#cbd5e1' : cm.hex;
+            const popupDotBorder = cm.hex === '#ffffff' ? '#9ca3af' : 'rgba(0,0,0,.1)';
+            // width:100%+box-sizing — overflow-x:auto 컨테이너(result-panel-body) 안에서
+            // iOS Safari 가 카드를 내용 폭으로 줄여(shrink-wrap) 우측 여백이 생기는 문제 방지
+            html += `<div style="width:100%;box-sizing:border-box;border:2px solid ${popupBorder};border-radius:8px;padding:12px;margin-bottom:10px;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                    <span style="background:${cm.hex};width:18px;height:18px;border-radius:50%;display:inline-block;border:2px solid rgba(0,0,0,.1);flex-shrink:0;"></span>
-                    <span style="font-weight:700;font-size:15px;color:${cm.hex === '#E0E0E0' ? '#333' : cm.hex};">${cm.label}</span>
+                    <span style="background:${cm.hex};width:18px;height:18px;border-radius:50%;display:inline-block;border:2px solid ${popupDotBorder};flex-shrink:0;"></span>
+                    <span style="font-weight:700;font-size:15px;color:${cm.ink || cm.hex};">${cm.label}</span>
                     <span style="font-family:monospace;font-weight:700;font-size:18px;margin-left:auto;">${_fmtPacingTime(totalTime)}</span>
                     ${totalTime >= 60 ? `<span style="font-size:11px;color:var(--text-muted);margin-left:4px;">(${Math.round(totalTime)}초)</span>` : ''}
                 </div>`;
@@ -2260,8 +2265,9 @@ function openPacingPopup(eventName) {
 
             // Show cumulative splits table
             if (splits.length > 1) {
+                const headerBg = cm.hex === '#ffffff' ? '#e5e7eb' : `${cm.hex}22`;
                 html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">
-                    <thead><tr style="background:${cm.hex}22;">
+                    <thead><tr style="background:${headerBg};">
                         <th style="padding:3px 8px;text-align:left;font-size:11px;">구간</th>
                         <th style="padding:3px 8px;text-align:right;font-size:11px;">랩</th>
                         <th style="padding:3px 8px;text-align:right;font-size:11px;">누적</th>
