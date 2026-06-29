@@ -1855,10 +1855,10 @@ async function openTimetable(compId) {
                         }
                     }
                     html += `<div id="tt-item-${item.id}" class="tt-row" ${clickAction} style="background:${rowBg};border-left:3px solid ${rowBar};${borderBottom}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${rowBg}'"` : ''}>
-                        <span class="tt-time">${item.time}${nowBadge}</span>
+                        <span class="tt-time">${item.time}</span>
                         <div class="tt-front">${_frontBadges}</div>
                         <span class="tt-name">${item.event_name}${crBadge}</span>
-                        <div class="tt-tail">${_statusTag}${_bracketTag}${_resultTag}</div>
+                        <div class="tt-tail">${nowBadge}${_statusTag}${_bracketTag}${_resultTag}</div>
                     </div>`;
                 });
 
