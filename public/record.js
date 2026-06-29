@@ -1487,7 +1487,10 @@ function renderFieldDistanceContent() {
                         const cls = top8.has(r.event_entry_id) ? 'top8-highlight' : '';
                         const zebraCls = needsWind ? '' : (rowIdx % 2 === 1 ? 'field-row-odd' : '');
                         // === ROW 1: Name + Distance records ===
-                        const isStatusDisabled = !!r.status_code;
+                        // DNS/DNF/DQ 는 시도 입력이 의미 없어 잠그지만, NM(파울/패스로 유효기록 없음)은
+                        // 선수가 시기를 치른 상태라 수정 가능해야 함 → NM 은 입력칸을 잠그지 않는다.
+                        // (NM 자동판정이 입력칸을 잠가 패스를 실제 기록으로 못 고치던 deadlock 해결)
+                        const isStatusDisabled = !!r.status_code && r.status_code !== 'NM';
                         let distCells = '';
                         for (let i = 1; i <= maxAttempts; i++) {
                             const v = r.attempts[i];
