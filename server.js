@@ -10948,6 +10948,50 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
     queueCell('H3', dateStr);
     queueCell('X3', chiefJudge);
 
+    // ── 신기록(NR/DR/CR) 기준기록 로드 (이 대회 시리즈 기준) ──
+    const _compSeriesId = (comp && comp.series_id != null) ? comp.series_id : null;
+    const _baseByTpl = {}; // template_name -> { national, division, competition }
+    try {
+      const _recRows = await db.all('SELECT * FROM event_record WHERE gender IN (?, ?)', gender, 'X');
+      for (const rr of _recRows) {
+        if (rr.record_type === 'national') { if (rr.series_id != null || rr.division_code != null) continue; }
+        else if (rr.record_type === 'division') { if (rr.series_id != null) continue; }
+        else if (rr.record_type === 'competition') { if (_compSeriesId == null || rr.series_id !== _compSeriesId) continue; }
+        const tplName = eventMap[rr.event_name] || rr.event_name; // DB 종목명 → 템플릿 종목명
+        if (!_baseByTpl[tplName]) _baseByTpl[tplName] = {};
+        _baseByTpl[tplName][rr.record_type] = rr;
+      }
+    } catch (e) { console.warn('[comprehensive] 기준기록 로드 실패:', e.message); }
+    const _parseRec = (s) => {
+      if (s == null) return null;
+      const t = String(s).trim();
+      if (!t || ['DNS','DNF','DQ','DSQ','NM'].includes(t)) return null;
+      const mm = t.match(/^(\d+)m(\d+)$/);                 // 12m45 / 3m60 → 12.45 / 3.60
+      if (mm) return parseFloat(`${mm[1]}.${mm[2]}`);
+      if (t.includes(':')) { const p = t.split(':').map(x => parseFloat(x)); if (p.some(isNaN)) return null; return p.reduce((a, v) => a * 60 + v, 0); }
+      const v = parseFloat(t.replace(/[^\d.]/g, ''));
+      return isNaN(v) ? null : v;
+    };
+    const _dirForTpl = (tplName) => {
+      if (HEIGHT_EVENTS.has(tplName) || THROW_EVENTS.has(tplName) || JUMP_EVENTS.has(tplName)) return 'higher';
+      if (COMBINED_NAMES.has(tplName)) return null; // 점수 기반 → 매트릭스 라벨 제외
+      return 'lower'; // track/road/relay
+    };
+    const _recLabelFor = (tplName, recStr, windStr) => {
+      const dir = _dirForTpl(tplName); if (!dir) return '';
+      const base = _baseByTpl[tplName]; if (!base) return '';
+      const num = _parseRec(recStr); if (num == null) return '';
+      if (WIND_EVENTS.has(tplName) && windStr) { const w = parseFloat(String(windStr).replace('+', '')); if (!isNaN(w) && w > 2.0) return ''; } // 참고기록
+      const out = [];
+      for (const [k, lbl] of [['national', 'NR'], ['division', 'DR'], ['competition', 'CR']]) {
+        const rec = base[k]; if (!rec) continue;
+        const ov = _parseRec(rec.record_value); if (ov == null) continue;
+        if (dir === 'lower' && num < ov) out.push(lbl);
+        else if (dir === 'higher' && num > ov) out.push(lbl);
+      }
+      return out.join(' ');
+    };
+
     // Fill events
     for (const evt of resultEvents) {
       const row = rowMap[evt.template_name];
@@ -10964,7 +11008,13 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
         queueCell(`${recCol}${row}`, r.record);
         queueCell(`${nameCol}${row + 1}`, r.team);
         if (r.wind) queueCell(`${recCol}${row + 1}`, r.wind);
-        if (r.wa_score) queueCell(`${recCol}${row + 2}`, r.wa_score);
+        if (r.wa_score) {
+          queueCell(`${recCol}${row + 2}`, r.wa_score);
+        } else {
+          // 3번째 줄: 신기록 라벨(NR/DR/CR) — 기준 깬 선수 전원
+          const _lbl = _recLabelFor(evt.template_name, r.record, r.wind);
+          if (_lbl) queueCell(`${recCol}${row + 2}`, _lbl);
+        }
       }
     }
 
