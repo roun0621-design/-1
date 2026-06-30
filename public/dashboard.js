@@ -1434,13 +1434,13 @@ function renderLiveFieldDistResults(data) {
                     const bestWMark = _bestWindAided ? '<span class="wind-aided-mark">w</span>' : '';
                     // 신기록 배지 (풍속 초과 시 미표시)
                     const _recBadges = (!_bestWindAided && !r.status_code && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
-                    const bestDisp = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + bestWMark + _recBadges : '—');
+                    const bestDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + bestWMark + _recBadges : '—');
                     const rankDisp = r.status_code ? '' : r.rank;
                     let remarkText = '';
-                    if (r.status_code) remarkText = r.status_code;
+                    if (r.status_code) remarkText = '';  // 상태코드는 기록칸에 표시
                     else if (_bestWindAided) remarkText = '참고기록';
                     else remarkText = _recLabelText(r.best);  // 신기록(NR/DR/CR) 깬 사람 전원 비고 표기
-                    const remarkStyle = r.status_code ? 'color:var(--danger);font-weight:600;' : _bestWindAided ? 'color:var(--accent);font-weight:600;' : (remarkText ? 'color:#27ae60;font-weight:700;' : '');
+                    const remarkStyle = _bestWindAided ? 'color:var(--accent);font-weight:600;' : (remarkText ? 'color:#27ae60;font-weight:700;' : '');
                     return `<tr class="field-row1">
                         <td rowspan="2">${rankDisp}</td><td rowspan="2">${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td><strong>${bib(r.bib_number)}</strong></td>
@@ -1465,10 +1465,10 @@ function renderLiveFieldDistResults(data) {
                         distCells += `<td class="${attCls}" style="font-family:monospace;">${hasVal ? (isFoul ? '<span class="foul-mark">X</span>' : (isPass ? '<span class="pass-mark">-</span>' : formatHeight(v))) : ''}</td>`;
                     }
                     const _recBadges2 = (!r.status_code && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
-                    const bestDisp2 = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + _recBadges2 : '—');
+                    const bestDisp2 = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + _recBadges2 : '—');
                     const rankDisp2 = r.status_code ? '' : r.rank;
-                    const remarkText2 = r.status_code || (!r.status_code && r.best != null ? _recLabelText(r.best) : '');
-                    const remarkStyle2 = r.status_code ? 'color:var(--danger);font-weight:600;' : (remarkText2 ? 'color:#27ae60;font-weight:700;' : '');
+                    const remarkText2 = r.status_code ? '' : (r.best != null ? _recLabelText(r.best) : '');
+                    const remarkStyle2 = remarkText2 ? 'color:#27ae60;font-weight:700;' : '';
                     return `<tr>
                         <td>${rankDisp2}</td><td>${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td><td><strong>${bib(r.bib_number)}</strong></td>
@@ -1531,9 +1531,9 @@ function renderLiveFieldHeightResults(data) {
                 hts.forEach(h2 => { const d = r.hd[h2] || {}; let m = ''; for (let i = 1; i <= 3; i++) { if (d[i]) { const mark = d[i] === 'PASS' ? '-' : d[i]; const cls = d[i] === 'O' ? 'color:var(--green)' : d[i] === 'X' ? 'color:var(--danger)' : 'color:var(--text-muted)'; m += `<span style="${cls};font-weight:700;">${mark}</span>`; } } c += `<td style="font-size:11px;">${m}</td>`; });
                 const _rkDisp = r.isNM ? '' : r.rank;
                 const _hRecBadges = (!r.isNM && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
-                const _bestDisp = r.best != null ? (formatHeight(r.best) + _hRecBadges) : '';
-                const _rmk = r.isNM ? 'NM' : (r.best != null ? _recLabelText(r.best) : '');
-                const _rmkSt = r.isNM ? 'color:var(--danger);font-weight:600;' : (_rmk ? 'color:#27ae60;font-weight:700;' : '');
+                const _bestDisp = r.best != null ? (formatHeight(r.best) + _hRecBadges) : (r.isNM ? '<span class="sc-badge sc-NM">NM</span>' : '');
+                const _rmk = r.isNM ? '' : (r.best != null ? _recLabelText(r.best) : '');
+                const _rmkSt = _rmk ? 'color:#27ae60;font-weight:700;' : '';
                 return `<tr style="${r.best != null ? 'background:#f0fff4;' : ''}"><td>${_rkDisp}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>${c}<td style="font-weight:700;">${_bestDisp}</td><td style="font-size:11px;${_rmkSt}">${_rmk}</td></tr>`;
             }).join('')}</tbody></table>`;
     });
@@ -2127,13 +2127,14 @@ function renderFieldDistResults(data) {
                     const bestWindDisp = (r.bestWind != null) ? formatWind(r.bestWind) : '';
                     const _bwa = needsWind && r.bestWind != null && parseFloat(r.bestWind) > 2.0 && r.best != null;
                     const bestWMark = _bwa ? '<span class="wind-aided-mark">w</span>' : '';
-                    const bestDisp = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + bestWMark : '—');
+                    // 상태코드(NM/DNS/DNF/DQ)는 기록(결과) 칸에 표시, 비고엔 신기록/참고기록만
+                    const bestDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + bestWMark : '—');
                     const rkDisp = r.status_code ? '' : r.rank;
                     let rmk = '';
-                    if (r.status_code) rmk = r.status_code;
+                    if (r.status_code) rmk = '';
                     else if (_bwa) rmk = '참고기록';
                     else rmk = _recLabelText(r.best);  // 신기록(NR/DR/CR) 비고 표기
-                    const rmkSt = r.status_code ? 'color:var(--danger);font-weight:600;' : _bwa ? 'color:var(--accent);font-weight:600;' : (rmk ? 'color:#27ae60;font-weight:700;' : '');
+                    const rmkSt = _bwa ? 'color:var(--accent);font-weight:600;' : (rmk ? 'color:#27ae60;font-weight:700;' : '');
                     return `<tr class="field-row1">
                         <td rowspan="2">${rkDisp}</td><td rowspan="2">${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td><strong>${bib(r.bib_number)}</strong></td>
@@ -2150,10 +2151,10 @@ function renderFieldDistResults(data) {
                 <tbody>${rows.map(r => {
                     let c = '';
                     for (let i = 1; i <= 6; i++) { const attCls = (i === 1 ? 'att-col-first ' : '') + (i % 2 === 1 ? 'att-col-odd' : 'att-col-even'); const v = r.att[i]; c += `<td class="${attCls}" style="font-family:monospace;font-size:11px;">${v != null ? (v === 0 ? '<span class="foul-mark">X</span>' : (v < 0 ? '<span class="pass-mark">-</span>' : formatHeight(v))) : ''}</td>`; }
-                    const bestDisp2 = r.status_code ? '' : (r.best != null ? formatHeight(r.best) : '—');
+                    const bestDisp2 = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) : '—');
                     const rkDisp2 = r.status_code ? '' : r.rank;
-                    const rmk2 = r.status_code || (r.best != null ? _recLabelText(r.best) : '');
-                    const rmkSt2 = r.status_code ? 'color:var(--danger);font-weight:600;' : (rmk2 ? 'color:#27ae60;font-weight:700;' : '');
+                    const rmk2 = r.status_code ? '' : (r.best != null ? _recLabelText(r.best) : '');
+                    const rmkSt2 = rmk2 ? 'color:#27ae60;font-weight:700;' : '';
                     return `<tr><td>${rkDisp2}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td class="att-col-best" style="font-weight:700;">${bestDisp2}</td><td style="font-size:11px;${rmkSt2}">${rmk2}</td></tr>`;
                 }).join('')}</tbody></table>`;
         }
@@ -2203,9 +2204,9 @@ function renderFieldHeightResults(data) {
             <tbody>${rows.map(r => {
                 let c = '';
                 hts.forEach(h2 => { const d = r.hd[h2] || {}; let m = ''; for (let i = 1; i <= 3; i++) { if (d[i]) { const mark = d[i] === 'PASS' ? '-' : d[i]; m += mark; } } c += `<td style="font-size:11px;">${m}</td>`; });
-                const bestDisp3 = r.best != null ? formatHeight(r.best) : '';
-                const rmk3 = r.isNM ? 'NM' : (r.best != null ? _recLabelText(r.best) : '');
-                const rmkSt3 = r.isNM ? 'color:var(--danger);font-weight:600;' : (rmk3 ? 'color:#27ae60;font-weight:700;' : '');
+                const bestDisp3 = r.best != null ? formatHeight(r.best) : (r.isNM ? '<span class="sc-badge sc-NM">NM</span>' : '');
+                const rmk3 = r.isNM ? '' : (r.best != null ? _recLabelText(r.best) : '');
+                const rmkSt3 = rmk3 ? 'color:#27ae60;font-weight:700;' : '';
                 return `<tr><td>${r.isNM ? '' : r.rank}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td style="font-weight:700;">${bestDisp3}</td><td style="font-size:11px;${rmkSt3}">${rmk3}</td></tr>`;
             }).join('')}</tbody></table>`;
     });

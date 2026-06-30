@@ -9563,8 +9563,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 if (col.key === 'bib') return ath.bib_number || '-';
                 if (col.key === 'name') return ath.name || '';
                 if (col.key === 'team') return ath.team || '';
-                if (col.key === 'result') return special ? '' : (ath.bestCleared != null ? ath.bestCleared.toFixed(2) : '');
-                if (col.key === 'remark') return special ? (ath.status_code || 'NM') : (_brokenRecLabels(ath.bestCleared, null) || '');
+                if (col.key === 'result') return special ? (ath.status_code || 'NM') : (ath.bestCleared != null ? ath.bestCleared.toFixed(2) : '');
+                if (col.key === 'remark') return special ? '' : (_brokenRecLabels(ath.bestCleared, null) || '');
                 if (col.key.startsWith('h_')) {
                     const bh = parseFloat(col.key.substring(2));
                     return ath.heightResults[bh] || '';
@@ -9741,16 +9741,16 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                     doc.text(val, col.x + 1, y1, { width: col.w - 2, align: 'center' });
                 }
 
-                // Result (best) — DNF/DQ/NM → 기록란 공백, 비고란에만
+                // Result (best) — DNF/DQ/NM 은 기록(결과)란에 표시
                 const resCol = fdCols[4 + numAttempts];
                 pdfFont(doc, true).fontSize(fdFS + 0.5).fillColor('#000');
-                doc.text(special ? '' : (ath.best != null ? ath.best.toFixed(2) : ''), resCol.x + 1, y1, { width: resCol.w - 2, align: 'center' });
+                doc.text(special ? (ath.status_code || '') : (ath.best != null ? ath.best.toFixed(2) : ''), resCol.x + 1, y1, { width: resCol.w - 2, align: 'center' });
 
-                // Remark: status_code / 신기록 라벨 / wind of best
+                // Remark: 신기록 라벨만 (상태코드는 결과란에 표시하므로 비고엔 안 씀)
                 const remCol = fdCols[fdCols.length - 1];
                 pdfFont(doc, false).fontSize(fdFS).fillColor('#000');
                 if (special) {
-                    doc.text(ath.status_code, remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
+                    // 상태코드는 결과란에 표시됨 → 비고 비움
                 } else {
                     // 비고에는 신기록 라벨(NR/DR/CR)만. 풍속은 각 시기칸 하단에 이미 표기되므로
                     // 비고에 최고기록 풍속을 또 넣지 않는다 (최고가 6차일 때 풍속이 우측 비고에 중복되던 문제).
