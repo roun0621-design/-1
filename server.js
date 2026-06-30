@@ -9056,11 +9056,25 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         const nameMap = { '110m허들':'110mH','100m허들':'100mH','400m허들':'400mH','3000m장애물':'3000mSC','10000m경보':'10000mW','십종경기':'10종경기','칠종경기':'7종경기','오종경기':'5종경기','펜타슬론':'5종경기','Pentathlon':'5종경기','4x100m릴레이':'4x100mR','4x400m릴레이':'4x400mR','혼성4x400mR':'MIXED 4x400mR','MIXED4x400mR':'MIXED 4x400mR','4x800m릴레이':'4x800mR','4x1500m릴레이':'4x1500mR' };
         normName = nameMap[normName] || normName;
         try {
+            // 이 대회의 시리즈 컨텍스트 — CR(대회기록)은 반드시 '이 대회가 연결된 시리즈'의 기록만 사용해야 함.
+            // (series_id 필터가 없으면 같은 종목의 다른 시리즈 CR 이 잘못 끌려옴)
+            const _compRow = await db.get('SELECT series_id FROM competition WHERE id=?', event.competition_id);
+            const _compSeriesId = _compRow ? _compRow.series_id : null;
             const globalRecs = await db.all('SELECT * FROM event_record WHERE gender=? AND event_name=?', event.gender, normName);
             for (const gr of globalRecs) {
                 const keyMap = { national: 'nr', division: 'dr', competition: 'cr' };
                 const shortKey = keyMap[gr.record_type];
-                if (shortKey && (!evtRec[shortKey] || !evtRec[shortKey].record)) {
+                if (!shortKey) continue;
+                // 시리즈/부 컨텍스트 필터 (다른 시리즈·잘못된 행 혼입 방지)
+                if (gr.record_type === 'national') {
+                    if (gr.series_id != null || gr.division_code != null) continue; // NR = 전국(시리즈/부 없음)
+                } else if (gr.record_type === 'division') {
+                    if (gr.series_id != null) continue; // DR 은 시리즈 기록이 아님
+                } else if (gr.record_type === 'competition') {
+                    // CR = 이 대회가 연결된 시리즈의 기록만 (다른 시리즈 배제). 시리즈 미연결이면 CR 없음.
+                    if (_compSeriesId == null || gr.series_id !== _compSeriesId) continue;
+                }
+                if (!evtRec[shortKey] || !evtRec[shortKey].record) {
                     evtRec[shortKey] = { label: gr.record_type === 'national' ? '한국기록(NR)' : gr.record_type === 'division' ? '부별기록(DR)' : '대회기록(CR)', record: gr.record_value || '', athlete: gr.holder_name || '', team: gr.holder_team || '', year: gr.record_year || '' };
                 }
             }
