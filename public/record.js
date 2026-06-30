@@ -934,7 +934,7 @@ async function renderTrackTable() {
                     <td><strong>${bib(r.bib_number)}</strong></td>
                     <td style="text-align:left;">${jointBadgeHTML(r)}${r.name}${qualBadge}${relayMemberHtml}</td>
                     <td style="font-size:12px;text-align:left;">${r.team || ''}</td>
-                    <td><input class="track-time-input ${savedClass}" data-eid="${r.event_entry_id}" data-row="${idx}"
+                    <td><input class="track-time-input ${savedClass}" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-row="${idx}"
                         value="${displayVal}" placeholder="${placeholder}" ${r.status_code ? 'disabled' : ''}
                         onkeydown="trackInlineKeydown(event,this)" oninput="trackInlineInput(this)" onfocus="this.select()"></td>
                     <td><select class="sc-select" data-eid="${r.event_entry_id}" onchange="setStatusCode(this)" title="DQ=실격, DNS=불출발, DNF=미완주, NM=기록없음">
@@ -1505,7 +1505,7 @@ function renderFieldDistanceContent() {
                                 distCells += `<td class="attempt-cell ${attColCls}" style="opacity:0.3;text-align:center;">—</td>`;
                             } else if (isActive && !isView) {
                                 distCells += `<td class="attempt-cell attempt-cell-editing ${attColCls}" data-entry="${r.event_entry_id}" data-attempt="${i}">
-                                    <input class="field-dist-input" type="text" data-eid="${r.event_entry_id}" data-att="${i}" data-row="${rowIdx}"
+                                    <input class="field-dist-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-att="${i}" data-row="${rowIdx}"
                                         value="${hasVal && !isFoul && !isPass ? v.toFixed(2) : (isPass ? '-' : '')}" placeholder="0.00 / X / -"
                                         onkeydown="fieldInlineKeydown(event,this)" oninput="fieldInlineChange(this)" onblur="fieldInlineBlur(this)" onfocus="this.select()" autofocus>
                                     <button class="btn btn-xs btn-danger foul-inline-btn" onclick="fieldInlineFoul(${r.event_entry_id},${i})" title="파울 (X)">X</button>
@@ -3053,7 +3053,7 @@ function _renderSubTrack(area, evt, entries, results, heatId, parentId) {
             return `<tr class="${r.status_code ? 'row-status-code' : ''}">
                 <td>${r.status_code ? scBadge : (r.rank || '—')}</td><td><strong>${bib(r.bib_number)}</strong></td>
                 <td style="text-align:left;">${r.name}</td><td style="font-size:12px;text-align:left;">${r.team||''}</td>
-                <td><input class="track-time-input" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" data-row="${idx}"
+                <td><input class="track-time-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" data-row="${idx}"
                     value="${cv}" placeholder="${ph}" ${cv ? 'class="track-time-input has-value"' : ''} ${r.status_code ? 'disabled' : ''}
                     onkeydown="_cSubTrackKey(event,this)" onfocus="this.select()"></td>
                 <td><select class="sc-select" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" onchange="_cSubTrackSetStatus(this)" title="DQ=실격, DNS=불출발, DNF=미완주">
@@ -3320,7 +3320,7 @@ function _cSubFieldRender(area) {
                                 distCells += `<td class="attempt-cell ${attCls}" style="opacity:0.3;text-align:center;">—</td>`;
                             } else if (isActive) {
                                 distCells += `<td class="attempt-cell attempt-cell-editing ${attCls}" data-entry="${r.event_entry_id}" data-attempt="${i}">
-                                    <input class="field-dist-input" type="text" data-eid="${r.event_entry_id}" data-att="${i}" data-hid="${heatId}" data-pid="${parentId}" data-row="${rowIdx}"
+                                    <input class="field-dist-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-att="${i}" data-hid="${heatId}" data-pid="${parentId}" data-row="${rowIdx}"
                                         value="${hasVal && !isFoul ? v.toFixed(2) : ''}" placeholder="0.00"
                                         onkeydown="_cSubFieldKeydown(event,this)" oninput="_cSubFieldChange(this)" onblur="_cSubFieldBlur(this)" onfocus="this.select()" autofocus>
                                     <button class="btn btn-xs btn-danger foul-inline-btn" onclick="_cSubFieldFoul(${r.event_entry_id},${i},${heatId},${parentId})" title="파울 (X)">X</button>
