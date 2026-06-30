@@ -1018,6 +1018,14 @@ async function openResult(eventId) {
         const gL = getGenderLabel(evt.gender);
         const roundL = fmtRound(evt.round_type);
 
+        // ─── 신기록 비교용: NR/DR/CR 미리 로드 (비고 CR 표기용) ───
+        try {
+            const normName = (typeof normalizeEventNameClient === 'function') ? normalizeEventNameClient(evt.name) : evt.name;
+            const compInfo = await API.getCompetitionInfo(getCompetitionId()).catch(() => ({}));
+            window._liveRecords = await API.lookupEventRecords(normName, evt.gender, evt.division || null, compInfo?.series_id || null).catch(() => null);
+            window._liveRecDir = (typeof recordDirectionForCategoryClient === 'function') ? recordDirectionForCategoryClient(evt.category) : null;
+        } catch(e) { window._liveRecords = null; window._liveRecDir = null; }
+
         // Get video URL
         let videoUrl = '';
         try { const vr = await API.getEventVideoUrl(eventId); videoUrl = vr.video_url || ''; } catch(e){}
@@ -2015,6 +2023,7 @@ function renderTrackResults(data, relayMembers) {
             <thead><tr><th>순위</th><th>${smallNumLabel}</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th><th>기록</th><th>비고</th></tr></thead>
             <tbody>${rows.map(r => {
                 const wMark2 = (_isWindAided2 && !r.status_code && r.time_seconds != null) ? '<span class="wind-aided-mark">w</span>' : '';
+                const _trkRec2 = (!_isWindAided2 && !r.status_code && r.time_seconds != null) ? _recLabelText(r.time_seconds) : '';
                 let memberHtml = '';
                 if (isRelay && relayMembers) {
                     const members = relayMembers.filter(m => m.event_entry_id === r.event_entry_id);
@@ -2030,7 +2039,7 @@ function renderTrackResults(data, relayMembers) {
                 <td>${r.rank}</td><td>${r.lane_number || '—'}</td><td>${bib(r.bib_number)}</td>
                 <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>
                 <td style="font-family:monospace;font-weight:600;">${r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.time_seconds != null ? formatTime(r.time_seconds) + wMark2 : '<span style="color:var(--text-muted);">—</span>')}</td>
-                <td style="font-size:11px;color:#666;">${r.remark || ''}</td>
+                <td style="font-size:11px;${_trkRec2 ? 'color:#27ae60;font-weight:700;' : 'color:#666;'}">${_trkRec2 || r.remark || ''}</td>
             </tr>${memberHtml}`;
             }).join('')}</tbody></table>`;
     });
@@ -2123,7 +2132,8 @@ function renderFieldDistResults(data) {
                     let rmk = '';
                     if (r.status_code) rmk = r.status_code;
                     else if (_bwa) rmk = '참고기록';
-                    const rmkSt = r.status_code ? 'color:var(--danger);font-weight:600;' : _bwa ? 'color:var(--accent);font-weight:600;' : '';
+                    else rmk = _recLabelText(r.best);  // 신기록(NR/DR/CR) 비고 표기
+                    const rmkSt = r.status_code ? 'color:var(--danger);font-weight:600;' : _bwa ? 'color:var(--accent);font-weight:600;' : (rmk ? 'color:#27ae60;font-weight:700;' : '');
                     return `<tr class="field-row1">
                         <td rowspan="2">${rkDisp}</td><td rowspan="2">${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td><strong>${bib(r.bib_number)}</strong></td>
@@ -2142,8 +2152,8 @@ function renderFieldDistResults(data) {
                     for (let i = 1; i <= 6; i++) { const attCls = (i === 1 ? 'att-col-first ' : '') + (i % 2 === 1 ? 'att-col-odd' : 'att-col-even'); const v = r.att[i]; c += `<td class="${attCls}" style="font-family:monospace;font-size:11px;">${v != null ? (v === 0 ? '<span class="foul-mark">X</span>' : (v < 0 ? '<span class="pass-mark">-</span>' : formatHeight(v))) : ''}</td>`; }
                     const bestDisp2 = r.status_code ? '' : (r.best != null ? formatHeight(r.best) : '—');
                     const rkDisp2 = r.status_code ? '' : r.rank;
-                    const rmk2 = r.status_code || '';
-                    const rmkSt2 = r.status_code ? 'color:var(--danger);font-weight:600;' : '';
+                    const rmk2 = r.status_code || (r.best != null ? _recLabelText(r.best) : '');
+                    const rmkSt2 = r.status_code ? 'color:var(--danger);font-weight:600;' : (rmk2 ? 'color:#27ae60;font-weight:700;' : '');
                     return `<tr><td>${rkDisp2}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td class="att-col-best" style="font-weight:700;">${bestDisp2}</td><td style="font-size:11px;${rmkSt2}">${rmk2}</td></tr>`;
                 }).join('')}</tbody></table>`;
         }
@@ -2194,8 +2204,8 @@ function renderFieldHeightResults(data) {
                 let c = '';
                 hts.forEach(h2 => { const d = r.hd[h2] || {}; let m = ''; for (let i = 1; i <= 3; i++) { if (d[i]) { const mark = d[i] === 'PASS' ? '-' : d[i]; m += mark; } } c += `<td style="font-size:11px;">${m}</td>`; });
                 const bestDisp3 = r.best != null ? formatHeight(r.best) : '';
-                const rmk3 = r.isNM ? 'NM' : '';
-                const rmkSt3 = rmk3 ? 'color:var(--danger);font-weight:600;' : '';
+                const rmk3 = r.isNM ? 'NM' : (r.best != null ? _recLabelText(r.best) : '');
+                const rmkSt3 = r.isNM ? 'color:var(--danger);font-weight:600;' : (rmk3 ? 'color:#27ae60;font-weight:700;' : '');
                 return `<tr><td>${r.isNM ? '' : r.rank}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td style="font-weight:700;">${bestDisp3}</td><td style="font-size:11px;${rmkSt3}">${rmk3}</td></tr>`;
             }).join('')}</tbody></table>`;
     });
