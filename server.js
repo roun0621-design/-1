@@ -5216,9 +5216,10 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 if (info.category !== 'combined') continue;
                 const parentId = eventCache.get(`${info.name}|${info.category}|${info.gender}`);
                 if (!parentId) continue;
-                const existingSubsRow = await db.get('SELECT COUNT(*) AS c FROM event WHERE parent_event_id=?', parentId);
-                const existingSubs = (existingSubsRow && existingSubsRow.c) || 0;
-                if (existingSubs > 0) continue;
+                // 이미 생성된 세부종목의 차수(sort_order) 집합 — '일부만 있으면 전체 스킵'이 아니라
+                // '누락된 차수만' 생성한다. (예: 7종에 필드만 있고 트랙(100mH/200m/800m)이 빠진 경우 보충)
+                const existingSubRows = await db.all('SELECT sort_order FROM event WHERE parent_event_id=?', parentId);
+                const existingOrders = new Set((existingSubRows || []).map(r => Number(r.sort_order)));
                 // ─── 종목별 sub-events 매핑 (gender 분기 포함) ───
                 let subs, prefix;
                 if (info.name === '10종경기') {
@@ -5234,6 +5235,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     continue;  // 알 수 없는 combined 종목 → 스킵
                 }
                 for (const sub of subs) {
+                    if (existingOrders.has(Number(sub.order))) continue; // 이미 있는 차수는 건너뛰고 누락분만 생성 (중복 방지)
                     const subName = `${prefix} ${sub.name}`;
                     const subR = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)', competition_id, subName, sub.category, info.gender, 'final', 'heats_generated', parentId, sub.order);
                     const subEventId = subR.lastInsertRowid;

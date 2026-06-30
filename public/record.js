@@ -709,12 +709,27 @@ function showPlaceholder() {
         </div>`;
 }
 
+// 종목명으로 세부종목의 실제 카테고리 추정 (잘못된 category 방어용)
+function _guessSubCategory(name) {
+    const n = (name || '').replace(/^\[.*?\]\s*/, '').replace(/\s+/g, '');
+    if (/높이뛰기|장대높이뛰기/.test(n)) return 'field_height';
+    if (/멀리뛰기|세단뛰기|포환던지기|원반던지기|창던지기|해머던지기|던지기|뛰기/.test(n)) return 'field_distance';
+    return 'track'; // 100mH/200m/800m 등
+}
+
 async function renderDetail() {
     const evt = state.selectedEvent;
     if (!evt) return showPlaceholder();
 
     state.heats = await API.getHeats(evt.id);
-    const cat = evt.category;
+    let cat = evt.category;
+
+    // 방어: 세부종목(parent_event_id 있음)은 절대 combined 가 될 수 없음.
+    // category 가 'combined'(또는 누락)로 잘못 저장된 트랙/필드 세부종목을 종목명으로 올바르게 라우팅.
+    // (이 버그로 트랙 세부종목 클릭 시 종합순위 화면만 떠서 기록 입력이 안 되던 문제 해결)
+    if (evt.parent_event_id && (cat === 'combined' || !cat)) {
+        cat = _guessSubCategory(evt.name);
+    }
 
     if (cat === 'track' || cat === 'relay' || cat === 'road') await renderTrackDetail(evt);
     else if (cat === 'field_distance') await renderFieldDistanceDetail(evt);
