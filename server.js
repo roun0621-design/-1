@@ -9752,11 +9752,10 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 if (special) {
                     doc.text(ath.status_code, remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
                 } else {
-                    // 신기록 라벨(NR/DR/CR) 깬 사람 전원 + 풍속(있으면) 함께 표기
+                    // 비고에는 신기록 라벨(NR/DR/CR)만. 풍속은 각 시기칸 하단에 이미 표기되므로
+                    // 비고에 최고기록 풍속을 또 넣지 않는다 (최고가 6차일 때 풍속이 우측 비고에 중복되던 문제).
                     const _rl = _brokenRecLabels(ath.best, ath.bestWind);
-                    const _windStr = (hasWind && ath.bestWind != null) ? `${ath.bestWind >= 0 ? '+' : ''}${ath.bestWind.toFixed(1)}` : '';
-                    const _txt = [_rl, _windStr].filter(Boolean).join(' ');
-                    if (_txt) doc.text(_txt, remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
+                    if (_rl) doc.text(_rl, remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
                 }
 
                 // Wind per attempt (row 2) — only if hasWind
