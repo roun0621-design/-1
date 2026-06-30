@@ -712,6 +712,8 @@ try { db.exec(`ALTER TABLE athlete ADD COLUMN personal_best TEXT DEFAULT ''`); }
 try { db.exec(`ALTER TABLE athlete ADD COLUMN date_of_birth TEXT DEFAULT ''`); } catch(e) {}
 // Add callroom_memo to event_entry (소집실 메모)
 try { db.exec(`ALTER TABLE event_entry ADD COLUMN callroom_memo TEXT DEFAULT ''`); } catch(e) {}
+// Add manual_rank to event_entry (수직도약 순위결정전 등 동기록 시 수동 순위)
+try { db.exec(`ALTER TABLE event_entry ADD COLUMN manual_rank INTEGER`); } catch(e) {}
 // Add callroom_event_memo to event (소집실 종목 메모 — 인쇄 시 제목 하단에 표시)
 try { db.exec(`ALTER TABLE event ADD COLUMN callroom_event_memo TEXT DEFAULT ''`); } catch(e) {}
 // Add federation column to competition (KTFL=실업, KUAF=대학, ''=없음)
@@ -1454,6 +1456,7 @@ if (db.isAsync) {
             await pgIdempotentAddCol('heat_entry', 'sub_group', `TEXT DEFAULT NULL`);
             // event_entry: callroom_memo
             await pgIdempotentAddCol('event_entry', 'callroom_memo', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('event_entry', 'manual_rank', `INTEGER`);
             // event: callroom_event_memo, video_url
             await pgIdempotentAddCol('event', 'callroom_event_memo', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('event', 'video_url', `TEXT DEFAULT ''`);
@@ -2574,7 +2577,7 @@ app.get('/api/heats', async (req, res) => {
 app.get('/api/heats/:id/entries', async (req, res) => {
     const statusFilter = req.query.status;
     let query = `SELECT he.id AS heat_entry_id, he.lane_number, he.sub_group,
-               ee.id AS event_entry_id, ee.status, ee.callroom_memo,
+               ee.id AS event_entry_id, ee.status, ee.callroom_memo, ee.manual_rank,
                a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender, a.barcode
         FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
         JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?`;
@@ -2853,6 +2856,19 @@ app.patch('/api/event-entries/:id/memo', async (req, res) => {
     if (!entry) return res.status(404).json({ error: 'Not found' });
     await db.run('UPDATE event_entry SET callroom_memo=? WHERE id=?', memo || '', req.params.id);
     res.json({ success: true });
+});
+// Save manual rank (수직도약 순위결정전 등 동기록 시 직접 입력한 순위)
+app.patch('/api/event-entries/:id/manual-rank', async (req, res) => {
+    const { manual_rank, admin_key } = req.body;
+    const entry = await db.get('SELECT * FROM event_entry WHERE id=?', req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Not found' });
+    const _evt = await db.get('SELECT competition_id FROM event WHERE id=?', entry.event_id);
+    if (_evt && await requireAdminAfterCompEnd(_evt.competition_id, admin_key, res)) return;
+    let mr = (manual_rank === null || manual_rank === '' || manual_rank === undefined) ? null : parseInt(manual_rank);
+    if (mr != null && (isNaN(mr) || mr < 1)) mr = null;
+    await db.run('UPDATE event_entry SET manual_rank=? WHERE id=?', mr, req.params.id);
+    broadcastSSE('result_update', { event_id: entry.event_id });
+    res.json({ success: true, manual_rank: mr });
 });
 // Get/Save event-level callroom memo (소집실 종목 메모 — 인쇄 시 제목 하단)
 app.get('/api/events/:id/callroom-memo', async (req, res) => {
@@ -9440,7 +9456,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         const heat = heats[0]; // field height typically has one heat
         if (!heat) { doc.end(); return; }
         const entries = await db.all(`
-            SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
+            SELECT he.lane_number, ee.id AS event_entry_id, ee.status, ee.manual_rank,
                    a.name, a.bib_number, a.team
             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
             JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
@@ -9497,6 +9513,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
             if (a.bestCleared == null) return 1;
             if (b.bestCleared == null) return -1;
             if (b.bestCleared !== a.bestCleared) return b.bestCleared - a.bestCleared;
+            // 같은 높이 → 수동 순위(순위결정전) 우선, 없으면 countback
+            if (a.manual_rank != null && b.manual_rank != null) return a.manual_rank - b.manual_rank;
             if (a.missesAtBest !== b.missesAtBest) return a.missesAtBest - b.missesAtBest;
             return a.totalMisses - b.totalMisses;
         });
@@ -9528,11 +9546,16 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
             const special = ['DNS','DNF','DQ','NM'].includes(ath.status_code) || ath.bestCleared == null;
             if (!special) {
                 athIdx++;
-                // WA tie-break: same bestCleared + missesAtBest + totalMisses = same rank
-                const isTied = prevAth && prevAth.bestCleared === ath.bestCleared
-                    && prevAth.missesAtBest === ath.missesAtBest
-                    && prevAth.totalMisses === ath.totalMisses;
-                if (!isTied) rank = athIdx;
+                if (ath.manual_rank != null) {
+                    // 순위결정전 등 수동 순위 — 계산 순위 대신 직접 입력값 사용
+                    rank = ath.manual_rank;
+                } else {
+                    // WA tie-break: same bestCleared + missesAtBest + totalMisses = same rank
+                    const isTied = prevAth && prevAth.manual_rank == null && prevAth.bestCleared === ath.bestCleared
+                        && prevAth.missesAtBest === ath.missesAtBest
+                        && prevAth.totalMisses === ath.totalMisses;
+                    if (!isTied) rank = athIdx;
+                }
                 prevAth = ath;
             }
             const vals = hCols.map(col => {

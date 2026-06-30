@@ -2134,6 +2134,22 @@ function setupFieldModal() { /* No longer used — inline editing replaces modal
 // ============================================================
 // FIELD HEIGHT DETAIL — redesigned: empty start, add-height button, O/X/- toggle
 // ============================================================
+// 수직도약 순위결정전(동기록) — RANK 칸에 직접 입력한 순위 저장
+async function saveHeightManualRank(inp) {
+    if (!confirmCompletedEdit()) return;
+    const eid = +inp.dataset.eid;
+    const raw = (inp.value || '').trim();
+    const val = raw === '' ? null : parseInt(raw);
+    if (raw !== '' && (isNaN(val) || val < 1)) { showToast('순위는 1 이상의 숫자로 입력하세요.', 'error'); return; }
+    try {
+        await API.setManualRank(eid, val);
+        // 새 순위로 정렬 반영
+        if (state.selectedEvent) await renderFieldHeightDetail(state.selectedEvent);
+    } catch (e) {
+        showToast((e && (e.error || e.message)) || '순위 저장 실패', 'error');
+    }
+}
+
 async function renderFieldHeightDetail(evt) {
     let parentLink = '';
     if (evt.parent_event_id) {
@@ -2373,6 +2389,8 @@ function renderHeightContent() {
         if (r.bestHeight == null) r.rank = null;
         else { const f = rankedH.find(x => x.event_entry_id === r.event_entry_id); if (f) r.rank = f.rank; }
     });
+    // 수동 순위(순위결정전/동기록 시 직접 입력) override — 계산 순위를 덮어씀
+    rows.forEach(r => { if (r.manual_rank != null && r.manual_rank !== '') r.rank = Number(r.manual_rank); });
 
     // Sort: rank mode puts ranked athletes first by rank, then unranked
     const sorted = isRank
@@ -2435,9 +2453,13 @@ function renderHeightContent() {
                         cells += `<td class="height-toggle-cell">${cellContent}</td>`;
                     });
                 }
-                // Rank display
+                // Rank display — 순위결정전(동기록) 대비 직접 타이핑 가능한 입력칸.
+                //   비우면 자동순위로 복귀, 숫자 입력 시 수동 순위로 고정.
                 const rankDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` :
-                    (r.rank || '—');
+                    `<input class="height-rank-input" type="text" inputmode="numeric" value="${r.rank != null ? r.rank : ''}"
+                        data-eid="${r.event_entry_id}" placeholder="—" title="순위결정전 시 직접 입력 (비우면 자동)"
+                        onchange="saveHeightManualRank(this)" onfocus="this.select()"
+                        style="width:40px;text-align:center;padding:3px 2px;border:1px solid #d1d5db;border-radius:5px;font-weight:700;font-size:13px;background:${r.manual_rank != null ? '#fffbea' : '#fff'};">`;
                 // Status dropdown
                 const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" onchange="setFieldHeightStatusCode(this)" title="DNS=불출전, DNF=미완주, DQ=실격, NM=기록없음" ${r._isNoShow ? 'disabled' : ''}>
                     <option value="">—</option><option value="DNS" ${r.status_code==='DNS'?'selected':''}>DNS</option>

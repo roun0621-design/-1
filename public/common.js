@@ -519,6 +519,7 @@ const API = {
         if (seriesId) p.set('series_id', String(seriesId));
         return api('GET', '/api/event-records/lookup?' + p.toString());
     },
+    setManualRank: (entryId, rank) => api('PATCH', `/api/event-entries/${entryId}/manual-rank`, { manual_rank: rank }),
     deleteResult: body => api('DELETE', '/api/results', body),
     resetSubEvent: eventId => api('POST', '/api/results/reset-sub-event', { event_id: eventId }),
     updateEntryStatus: (id, st) => api('PATCH', `/api/event-entries/${id}/status`, { status: st }),
