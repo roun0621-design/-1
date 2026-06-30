@@ -9088,6 +9088,41 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
     };
     const recRowsForFooter = (tpl.show_records_table !== false) ? await _loadRecordsData() : null;
 
+    // ─── 비고란 신기록(NR/DR/CR) 표기용 — 기준기록 숫자화 + 방향 ───
+    // 기준을 깬 선수는 비고에 NR/DR/CR 표기 (깬 사람 전원). 승인/팝업은 별도(최고 1명).
+    const _parseRecNum = (s) => {
+        if (s == null) return null;
+        const t = String(s).trim();
+        if (!t) return null;
+        if (t.includes(':')) {
+            const parts = t.split(':').map(p => parseFloat(p));
+            if (parts.some(isNaN)) return null;
+            return parts.reduce((acc, v) => acc * 60 + v, 0);
+        }
+        const v = parseFloat(t.replace(/[^\d.]/g, ''));
+        return isNaN(v) ? null : v;
+    };
+    const _recDir = (event.category === 'field_distance' || event.category === 'field_height') ? 'higher'
+                  : (event.category === 'track' || event.category === 'road' || event.category === 'relay') ? 'lower' : null;
+    const _recBaseline = {
+        NR: recRowsForFooter ? _parseRecNum(recRowsForFooter[0] && recRowsForFooter[0].record) : null,
+        DR: recRowsForFooter ? _parseRecNum(recRowsForFooter[1] && recRowsForFooter[1].record) : null,
+        CR: recRowsForFooter ? _parseRecNum(recRowsForFooter[2] && recRowsForFooter[2].record) : null,
+    };
+    // val 이 깬 기록 라벨들 (예: "CR" 또는 "NR DR CR"). bestWind>2.0(참고기록)이면 미표기.
+    const _brokenRecLabels = (val, bestWind) => {
+        if (val == null || !isFinite(val) || !_recDir) return '';
+        if (bestWind != null && bestWind > 2.0) return ''; // 풍속 초과 → 신기록 불인정
+        const out = [];
+        for (const lbl of ['NR', 'DR', 'CR']) {
+            const base = _recBaseline[lbl];
+            if (base == null) continue;
+            if (_recDir === 'lower' && val < base) out.push(lbl);
+            else if (_recDir === 'higher' && val > base) out.push(lbl);
+        }
+        return out.join(' ');
+    };
+
     // 하단 박스 그리기: legend + 서명선 + NR/DR/CR 3행 표
     // 페이지 하단 영역 레이아웃 (위→아래):
     //   [legend 12]  +  [signature 24]  +  [표 header 22 + data row 20 x 3 = 82]  =  118pt
@@ -9504,7 +9539,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 if (col.key === 'name') return ath.name || '';
                 if (col.key === 'team') return ath.team || '';
                 if (col.key === 'result') return special ? '' : (ath.bestCleared != null ? ath.bestCleared.toFixed(2) : '');
-                if (col.key === 'remark') return special ? (ath.status_code || 'NM') : '';
+                if (col.key === 'remark') return special ? (ath.status_code || 'NM') : (_brokenRecLabels(ath.bestCleared, null) || '');
                 if (col.key.startsWith('h_')) {
                     const bh = parseFloat(col.key.substring(2));
                     return ath.heightResults[bh] || '';
@@ -9686,13 +9721,17 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 pdfFont(doc, true).fontSize(fdFS + 0.5).fillColor('#000');
                 doc.text(special ? '' : (ath.best != null ? ath.best.toFixed(2) : ''), resCol.x + 1, y1, { width: resCol.w - 2, align: 'center' });
 
-                // Remark: status_code or wind of best
+                // Remark: status_code / 신기록 라벨 / wind of best
                 const remCol = fdCols[fdCols.length - 1];
                 pdfFont(doc, false).fontSize(fdFS).fillColor('#000');
                 if (special) {
                     doc.text(ath.status_code, remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
-                } else if (hasWind && ath.bestWind != null) {
-                    doc.text((ath.bestWind >= 0 ? '+' : '') + ath.bestWind.toFixed(1), remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
+                } else {
+                    // 신기록 라벨(NR/DR/CR) 깬 사람 전원 + 풍속(있으면) 함께 표기
+                    const _rl = _brokenRecLabels(ath.best, ath.bestWind);
+                    const _windStr = (hasWind && ath.bestWind != null) ? `${ath.bestWind >= 0 ? '+' : ''}${ath.bestWind.toFixed(1)}` : '';
+                    const _txt = [_rl, _windStr].filter(Boolean).join(' ');
+                    if (_txt) doc.text(_txt, remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
                 }
 
                 // Wind per attempt (row 2) — only if hasWind
@@ -9809,6 +9848,11 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 if (special) remarkStr = e.status_code;
                 else if (qualMap[e.event_entry_id]) remarkStr = qualMap[e.event_entry_id];
                 else remarkStr = e.allResults?.[0]?.remark || '';
+                // 신기록 라벨(NR/DR/CR) — 기준을 깬 선수 전원 비고에 표기
+                if (!special) {
+                    const _rl = _brokenRecLabels(e.best, e.bestWind);
+                    if (_rl) remarkStr = remarkStr ? `${_rl} ${remarkStr}` : _rl;
+                }
 
                 // ─── 비고 멤버 리스트 정규화 (긴 텍스트 줄바꿈) ───
                 // 사용자가 비고에 멤버 이름을 ", " 로 구분해 직접 입력하는 케이스 대비:
