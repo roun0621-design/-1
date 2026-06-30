@@ -1507,6 +1507,8 @@ function renderLiveFieldHeightResults(data) {
             if (a.best == null && b.best == null) return 0;
             if (a.best == null) return 1; if (b.best == null) return -1;
             if (b.best !== a.best) return b.best - a.best;
+            // 같은 높이 → 수동 순위(순위결정전) 우선
+            if (a.manual_rank != null && b.manual_rank != null) return a.manual_rank - b.manual_rank;
             // WA tie-break: fewer fails at best height, then fewer total fails
             if (a.failsAtBest !== b.failsAtBest) return a.failsAtBest - b.failsAtBest;
             return a.totalFails - b.totalFails;
@@ -1520,6 +1522,8 @@ function renderLiveFieldHeightResults(data) {
             r.rank = isTied ? rows[i - 1].rank : rk;
             rk = i + 2;
         });
+        // 수동 순위(순위결정전) override
+        rows.forEach(r => { if (r.manual_rank != null) r.rank = r.manual_rank; });
 
         let thead = '<th>순위</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>';
         hts.forEach(h2 => { thead += `<th style="font-size:10px;">${formatHeight(h2)}</th>`; });
@@ -2185,6 +2189,8 @@ function renderFieldHeightResults(data) {
             if (a.best == null && b.best == null) return 0;
             if (a.best == null) return 1; if (b.best == null) return -1;
             if (b.best !== a.best) return b.best - a.best;
+            // 같은 높이 → 수동 순위(순위결정전) 우선
+            if (a.manual_rank != null && b.manual_rank != null) return a.manual_rank - b.manual_rank;
             if (a.failsAtBest !== b.failsAtBest) return a.failsAtBest - b.failsAtBest;
             return a.totalFails - b.totalFails;
         });
@@ -2195,6 +2201,8 @@ function renderFieldHeightResults(data) {
             r.rank = isTied ? rows[i-1].rank : rk;
             rk = i + 2;
         });
+        // 수동 순위(순위결정전) override
+        rows.forEach(r => { if (r.manual_rank != null) r.rank = r.manual_rank; });
 
         let thead = '<th>순위</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>';
         hts.forEach(h2 => { thead += `<th style="font-size:10px;">${formatHeight(h2)}</th>`; });
