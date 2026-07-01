@@ -712,6 +712,8 @@ try { db.exec(`ALTER TABLE athlete ADD COLUMN personal_best TEXT DEFAULT ''`); }
 try { db.exec(`ALTER TABLE athlete ADD COLUMN date_of_birth TEXT DEFAULT ''`); } catch(e) {}
 // Add callroom_memo to event_entry (소집실 메모)
 try { db.exec(`ALTER TABLE event_entry ADD COLUMN callroom_memo TEXT DEFAULT ''`); } catch(e) {}
+// Add manual_rank to event_entry (수직도약 순위결정전 등 동기록 시 수동 순위)
+try { db.exec(`ALTER TABLE event_entry ADD COLUMN manual_rank INTEGER`); } catch(e) {}
 // Add callroom_event_memo to event (소집실 종목 메모 — 인쇄 시 제목 하단에 표시)
 try { db.exec(`ALTER TABLE event ADD COLUMN callroom_event_memo TEXT DEFAULT ''`); } catch(e) {}
 // Add federation column to competition (KTFL=실업, KUAF=대학, ''=없음)
@@ -1454,6 +1456,7 @@ if (db.isAsync) {
             await pgIdempotentAddCol('heat_entry', 'sub_group', `TEXT DEFAULT NULL`);
             // event_entry: callroom_memo
             await pgIdempotentAddCol('event_entry', 'callroom_memo', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('event_entry', 'manual_rank', `INTEGER`);
             // event: callroom_event_memo, video_url
             await pgIdempotentAddCol('event', 'callroom_event_memo', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('event', 'video_url', `TEXT DEFAULT ''`);
@@ -2574,7 +2577,7 @@ app.get('/api/heats', async (req, res) => {
 app.get('/api/heats/:id/entries', async (req, res) => {
     const statusFilter = req.query.status;
     let query = `SELECT he.id AS heat_entry_id, he.lane_number, he.sub_group,
-               ee.id AS event_entry_id, ee.status, ee.callroom_memo,
+               ee.id AS event_entry_id, ee.status, ee.callroom_memo, ee.manual_rank,
                a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender, a.barcode
         FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
         JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?`;
@@ -2660,7 +2663,7 @@ app.get('/api/events/:id/live-results', async (req, res) => {
     // Also load qualifications if available
     const quals = await db.all('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
     const result = await Promise.all(heats.map(async h => {
-        const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status,
+        const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status, ee.manual_rank,
                a.name, a.bib_number, a.team FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
                JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`, h.id);
         if (event.category === 'field_height') {
@@ -2853,6 +2856,19 @@ app.patch('/api/event-entries/:id/memo', async (req, res) => {
     if (!entry) return res.status(404).json({ error: 'Not found' });
     await db.run('UPDATE event_entry SET callroom_memo=? WHERE id=?', memo || '', req.params.id);
     res.json({ success: true });
+});
+// Save manual rank (수직도약 순위결정전 등 동기록 시 직접 입력한 순위)
+app.patch('/api/event-entries/:id/manual-rank', async (req, res) => {
+    const { manual_rank, admin_key } = req.body;
+    const entry = await db.get('SELECT * FROM event_entry WHERE id=?', req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Not found' });
+    const _evt = await db.get('SELECT competition_id FROM event WHERE id=?', entry.event_id);
+    if (_evt && await requireAdminAfterCompEnd(_evt.competition_id, admin_key, res)) return;
+    let mr = (manual_rank === null || manual_rank === '' || manual_rank === undefined) ? null : parseInt(manual_rank);
+    if (mr != null && (isNaN(mr) || mr < 1)) mr = null;
+    await db.run('UPDATE event_entry SET manual_rank=? WHERE id=?', mr, req.params.id);
+    broadcastSSE('result_update', { event_id: entry.event_id });
+    res.json({ success: true, manual_rank: mr });
 });
 // Get/Save event-level callroom memo (소집실 종목 메모 — 인쇄 시 제목 하단)
 app.get('/api/events/:id/callroom-memo', async (req, res) => {
@@ -3692,7 +3708,7 @@ app.get('/api/events/:id/full-results', async (req, res) => {
     const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
     const quals = await db.all('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
     const result = await Promise.all(heats.map(async h => {
-        const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status,
+        const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status, ee.manual_rank,
                a.name, a.bib_number, a.team FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
                JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`, h.id);
         if (event.category === 'field_height') {
@@ -5216,9 +5232,10 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 if (info.category !== 'combined') continue;
                 const parentId = eventCache.get(`${info.name}|${info.category}|${info.gender}`);
                 if (!parentId) continue;
-                const existingSubsRow = await db.get('SELECT COUNT(*) AS c FROM event WHERE parent_event_id=?', parentId);
-                const existingSubs = (existingSubsRow && existingSubsRow.c) || 0;
-                if (existingSubs > 0) continue;
+                // 이미 생성된 세부종목의 차수(sort_order) 집합 — '일부만 있으면 전체 스킵'이 아니라
+                // '누락된 차수만' 생성한다. (예: 7종에 필드만 있고 트랙(100mH/200m/800m)이 빠진 경우 보충)
+                const existingSubRows = await db.all('SELECT sort_order FROM event WHERE parent_event_id=?', parentId);
+                const existingOrders = new Set((existingSubRows || []).map(r => Number(r.sort_order)));
                 // ─── 종목별 sub-events 매핑 (gender 분기 포함) ───
                 let subs, prefix;
                 if (info.name === '10종경기') {
@@ -5234,6 +5251,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     continue;  // 알 수 없는 combined 종목 → 스킵
                 }
                 for (const sub of subs) {
+                    if (existingOrders.has(Number(sub.order))) continue; // 이미 있는 차수는 건너뛰고 누락분만 생성 (중복 방지)
                     const subName = `${prefix} ${sub.name}`;
                     const subR = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)', competition_id, subName, sub.category, info.gender, 'final', 'heats_generated', parentId, sub.order);
                     const subEventId = subR.lastInsertRowid;
@@ -9056,11 +9074,25 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         const nameMap = { '110m허들':'110mH','100m허들':'100mH','400m허들':'400mH','3000m장애물':'3000mSC','10000m경보':'10000mW','십종경기':'10종경기','칠종경기':'7종경기','오종경기':'5종경기','펜타슬론':'5종경기','Pentathlon':'5종경기','4x100m릴레이':'4x100mR','4x400m릴레이':'4x400mR','혼성4x400mR':'MIXED 4x400mR','MIXED4x400mR':'MIXED 4x400mR','4x800m릴레이':'4x800mR','4x1500m릴레이':'4x1500mR' };
         normName = nameMap[normName] || normName;
         try {
+            // 이 대회의 시리즈 컨텍스트 — CR(대회기록)은 반드시 '이 대회가 연결된 시리즈'의 기록만 사용해야 함.
+            // (series_id 필터가 없으면 같은 종목의 다른 시리즈 CR 이 잘못 끌려옴)
+            const _compRow = await db.get('SELECT series_id FROM competition WHERE id=?', event.competition_id);
+            const _compSeriesId = _compRow ? _compRow.series_id : null;
             const globalRecs = await db.all('SELECT * FROM event_record WHERE gender=? AND event_name=?', event.gender, normName);
             for (const gr of globalRecs) {
                 const keyMap = { national: 'nr', division: 'dr', competition: 'cr' };
                 const shortKey = keyMap[gr.record_type];
-                if (shortKey && (!evtRec[shortKey] || !evtRec[shortKey].record)) {
+                if (!shortKey) continue;
+                // 시리즈/부 컨텍스트 필터 (다른 시리즈·잘못된 행 혼입 방지)
+                if (gr.record_type === 'national') {
+                    if (gr.series_id != null || gr.division_code != null) continue; // NR = 전국(시리즈/부 없음)
+                } else if (gr.record_type === 'division') {
+                    if (gr.series_id != null) continue; // DR 은 시리즈 기록이 아님
+                } else if (gr.record_type === 'competition') {
+                    // CR = 이 대회가 연결된 시리즈의 기록만 (다른 시리즈 배제). 시리즈 미연결이면 CR 없음.
+                    if (_compSeriesId == null || gr.series_id !== _compSeriesId) continue;
+                }
+                if (!evtRec[shortKey] || !evtRec[shortKey].record) {
                     evtRec[shortKey] = { label: gr.record_type === 'national' ? '한국기록(NR)' : gr.record_type === 'division' ? '부별기록(DR)' : '대회기록(CR)', record: gr.record_value || '', athlete: gr.holder_name || '', team: gr.holder_team || '', year: gr.record_year || '' };
                 }
             }
@@ -9073,6 +9105,41 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         ];
     };
     const recRowsForFooter = (tpl.show_records_table !== false) ? await _loadRecordsData() : null;
+
+    // ─── 비고란 신기록(NR/DR/CR) 표기용 — 기준기록 숫자화 + 방향 ───
+    // 기준을 깬 선수는 비고에 NR/DR/CR 표기 (깬 사람 전원). 승인/팝업은 별도(최고 1명).
+    const _parseRecNum = (s) => {
+        if (s == null) return null;
+        const t = String(s).trim();
+        if (!t) return null;
+        if (t.includes(':')) {
+            const parts = t.split(':').map(p => parseFloat(p));
+            if (parts.some(isNaN)) return null;
+            return parts.reduce((acc, v) => acc * 60 + v, 0);
+        }
+        const v = parseFloat(t.replace(/[^\d.]/g, ''));
+        return isNaN(v) ? null : v;
+    };
+    const _recDir = (event.category === 'field_distance' || event.category === 'field_height') ? 'higher'
+                  : (event.category === 'track' || event.category === 'road' || event.category === 'relay') ? 'lower' : null;
+    const _recBaseline = {
+        NR: recRowsForFooter ? _parseRecNum(recRowsForFooter[0] && recRowsForFooter[0].record) : null,
+        DR: recRowsForFooter ? _parseRecNum(recRowsForFooter[1] && recRowsForFooter[1].record) : null,
+        CR: recRowsForFooter ? _parseRecNum(recRowsForFooter[2] && recRowsForFooter[2].record) : null,
+    };
+    // val 이 깬 기록 라벨들 (예: "CR" 또는 "NR DR CR"). bestWind>2.0(참고기록)이면 미표기.
+    const _brokenRecLabels = (val, bestWind) => {
+        if (val == null || !isFinite(val) || !_recDir) return '';
+        if (bestWind != null && bestWind > 2.0) return ''; // 풍속 초과 → 신기록 불인정
+        const out = [];
+        for (const lbl of ['NR', 'DR', 'CR']) {
+            const base = _recBaseline[lbl];
+            if (base == null) continue;
+            if (_recDir === 'lower' && val < base) out.push(lbl);
+            else if (_recDir === 'higher' && val > base) out.push(lbl);
+        }
+        return out.join(' ');
+    };
 
     // 하단 박스 그리기: legend + 서명선 + NR/DR/CR 3행 표
     // 페이지 하단 영역 레이아웃 (위→아래):
@@ -9389,7 +9456,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
         const heat = heats[0]; // field height typically has one heat
         if (!heat) { doc.end(); return; }
         const entries = await db.all(`
-            SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
+            SELECT he.lane_number, ee.id AS event_entry_id, ee.status, ee.manual_rank,
                    a.name, a.bib_number, a.team
             FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
             JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
@@ -9446,6 +9513,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
             if (a.bestCleared == null) return 1;
             if (b.bestCleared == null) return -1;
             if (b.bestCleared !== a.bestCleared) return b.bestCleared - a.bestCleared;
+            // 같은 높이 → 수동 순위(순위결정전) 우선, 없으면 countback
+            if (a.manual_rank != null && b.manual_rank != null) return a.manual_rank - b.manual_rank;
             if (a.missesAtBest !== b.missesAtBest) return a.missesAtBest - b.missesAtBest;
             return a.totalMisses - b.totalMisses;
         });
@@ -9477,20 +9546,26 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
             const special = ['DNS','DNF','DQ','NM'].includes(ath.status_code) || ath.bestCleared == null;
             if (!special) {
                 athIdx++;
-                // WA tie-break: same bestCleared + missesAtBest + totalMisses = same rank
-                const isTied = prevAth && prevAth.bestCleared === ath.bestCleared
-                    && prevAth.missesAtBest === ath.missesAtBest
-                    && prevAth.totalMisses === ath.totalMisses;
-                if (!isTied) rank = athIdx;
+                if (ath.manual_rank != null) {
+                    // 순위결정전 등 수동 순위 — 계산 순위 대신 직접 입력값 사용
+                    rank = ath.manual_rank;
+                } else {
+                    // WA tie-break: same bestCleared + missesAtBest + totalMisses = same rank
+                    const isTied = prevAth && prevAth.manual_rank == null && prevAth.bestCleared === ath.bestCleared
+                        && prevAth.missesAtBest === ath.missesAtBest
+                        && prevAth.totalMisses === ath.totalMisses;
+                    if (!isTied) rank = athIdx;
+                }
                 prevAth = ath;
             }
+            const _hLbl = (!special && ath.bestCleared != null) ? (_brokenRecLabels(ath.bestCleared, null) || '') : '';
             const vals = hCols.map(col => {
                 if (col.key === 'rank') return special ? '' : String(rank);
                 if (col.key === 'bib') return ath.bib_number || '-';
                 if (col.key === 'name') return ath.name || '';
                 if (col.key === 'team') return ath.team || '';
-                if (col.key === 'result') return special ? '' : (ath.bestCleared != null ? ath.bestCleared.toFixed(2) : '');
-                if (col.key === 'remark') return special ? (ath.status_code || 'NM') : '';
+                if (col.key === 'result') return special ? (ath.status_code || 'NM') : (ath.bestCleared != null ? (ath.bestCleared.toFixed(2) + (_hLbl ? ` (${_hLbl})` : '')) : '');
+                if (col.key === 'remark') return '';
                 if (col.key.startsWith('h_')) {
                     const bh = parseFloat(col.key.substring(2));
                     return ath.heightResults[bh] || '';
@@ -9667,19 +9742,13 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                     doc.text(val, col.x + 1, y1, { width: col.w - 2, align: 'center' });
                 }
 
-                // Result (best) — DNF/DQ/NM → 기록란 공백, 비고란에만
+                // Result (best) — DNF/DQ/NM 은 결과란에, 신기록(NR/DR/CR)은 기록 값 옆 괄호로
                 const resCol = fdCols[4 + numAttempts];
                 pdfFont(doc, true).fontSize(fdFS + 0.5).fillColor('#000');
-                doc.text(special ? '' : (ath.best != null ? ath.best.toFixed(2) : ''), resCol.x + 1, y1, { width: resCol.w - 2, align: 'center' });
-
-                // Remark: status_code or wind of best
-                const remCol = fdCols[fdCols.length - 1];
-                pdfFont(doc, false).fontSize(fdFS).fillColor('#000');
-                if (special) {
-                    doc.text(ath.status_code, remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
-                } else if (hasWind && ath.bestWind != null) {
-                    doc.text((ath.bestWind >= 0 ? '+' : '') + ath.bestWind.toFixed(1), remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
-                }
+                const _fdLbl = (!special && ath.best != null) ? _brokenRecLabels(ath.best, ath.bestWind) : '';
+                const _fdRec = special ? (ath.status_code || '') : (ath.best != null ? (ath.best.toFixed(2) + (_fdLbl ? ` (${_fdLbl})` : '')) : '');
+                doc.text(_fdRec, resCol.x + 1, y1, { width: resCol.w - 2, align: 'center' });
+                // 비고: 상태코드는 결과란에 표시되므로 비움 (신기록도 결과란 괄호로 이동)
 
                 // Wind per attempt (row 2) — only if hasWind
                 if (hasWind) {
@@ -9795,6 +9864,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 if (special) remarkStr = e.status_code;
                 else if (qualMap[e.event_entry_id]) remarkStr = qualMap[e.event_entry_id];
                 else remarkStr = e.allResults?.[0]?.remark || '';
+                // 신기록 라벨(NR/DR/CR) — 기록 값 옆 괄호에 표기
+                const _recLbl = (!special && e.best != null) ? _brokenRecLabels(e.best, e.bestWind) : '';
 
                 // ─── 비고 멤버 리스트 정규화 (긴 텍스트 줄바꿈) ───
                 // 사용자가 비고에 멤버 이름을 ", " 로 구분해 직접 입력하는 케이스 대비:
@@ -9815,7 +9886,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                         case 'bib': return e.bib_number || '-';
                         case 'name': return e.name || '';
                         case 'team': return e.team || '';
-                        case 'record': return special ? '' : (e.best != null ? formatTimeForPDF(e.best) : '');
+                        case 'record': return special ? '' : (e.best != null ? formatTimeForPDF(e.best) + (_recLbl ? ` (${_recLbl})` : '') : '');
                         case 'wind': return e.bestWind != null ? String(e.bestWind) : (heat.wind != null ? String(heat.wind) : '');
                         case 'remark': return remarkStr;
                         default: return '';
@@ -10612,12 +10683,13 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           return b.totalPoints - a.totalPoints;
         });
 
-        rankings = athleteData.filter(a => a.status_code !== 'DNS').slice(0, 8).map(a => ({
+        rankings = athleteData.slice(0, 8).map(a => ({
           name: a.name || '',
           team: a.team || '',
           record: ['DNS','DNF','DQ'].includes(a.status_code) ? a.status_code : String(a.totalPoints),
           wind: null,
-          wa_score: null
+          wa_score: null,
+          _metric: ['DNS','DNF','DQ'].includes(a.status_code) ? null : a.totalPoints
         }));
 
       // ===== FIELD HEIGHT =====
@@ -10670,13 +10742,14 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           team: a.team || '',
           record: fmtHeightCm(a.bestCleared),
           wind: null,
-          wa_score: null
+          wa_score: null,
+          _metric: `${a.bestCleared}|${a.missesAtBest}|${a.totalMisses}` // 같은 높이+실패수 = 공동
         }));
-        // Add NM/DNS/DNF at end
+        // Add NM/DNS/DNF/DQ at end (up to 8)
         const specials = athleteData.filter(a => ['DNS','DNF','DQ','NM'].includes(a.status_code) || a.bestCleared == null);
         for (const s of specials) {
           if (rankings.length >= 8) break;
-          rankings.push({ name: s.name || '', team: s.team || '', record: s.status_code || 'NM', wind: null, wa_score: null });
+          rankings.push({ name: s.name || '', team: s.team || '', record: s.status_code || 'NM', wind: null, wa_score: null, _metric: null });
         }
 
       // ===== FIELD DISTANCE (jumps + throws) =====
@@ -10726,12 +10799,13 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
         // 투척+도약 모두 "15m09" 형식 사용 (fmtJumpCm은 cm정수 "1509"로 변환되어 오류)
         const fmtFn = (isThrow || isJump) ? fmtFieldDist : (m => m != null ? m.toFixed(2) : '');
 
-        rankings = allEntries.filter(a => a.status_code !== 'DNS').slice(0, 8).map(a => ({
+        rankings = allEntries.slice(0, 8).map(a => ({
           name: a.name || '',
           team: a.team || '',
           record: ['DNS','DNF','DQ','NM'].includes(a.status_code) ? a.status_code : fmtFn(a.best),
           wind: (hasWind && a.bestWind != null) ? fmtWind(a.bestWind) : null,
-          wa_score: null
+          wa_score: null,
+          _metric: ['DNS','DNF','DQ','NM'].includes(a.status_code) ? null : a.best
         }));
 
       // ===== TRACK / ROAD / RELAY =====
@@ -10768,14 +10842,15 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           return a.best - b.best;
         });
 
-        for (const a of allEntries.filter(e => e.status_code !== 'DNS').slice(0, 8)) {
-          const isSpecial = ['DNF','NM','DQ'].includes(a.status_code);
+        for (const a of allEntries.slice(0, 8)) {
+          const isSpecial = ['DNS','DNF','NM','DQ'].includes(a.status_code);
           const entry = {
             name: a.name || '',
             team: a.team || '',
             record: isSpecial ? a.status_code : fmtTrackTime(a.best),
             wind: null,
-            wa_score: null
+            wa_score: null,
+            _metric: isSpecial ? null : a.best
           };
 
           // Wind: per-result or per-heat
@@ -10866,12 +10941,68 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
     queueCell('H3', dateStr);
     queueCell('X3', chiefJudge);
 
+    // ── 신기록(NR/DR/CR) 기준기록 로드 (이 대회 시리즈 기준) ──
+    const _compSeriesId = (comp && comp.series_id != null) ? comp.series_id : null;
+    const _baseByTpl = {}; // template_name -> { national, division, competition }
+    try {
+      const _recRows = await db.all('SELECT * FROM event_record WHERE gender IN (?, ?)', gender, 'X');
+      for (const rr of _recRows) {
+        if (rr.record_type === 'national') { if (rr.series_id != null || rr.division_code != null) continue; }
+        else if (rr.record_type === 'division') { if (rr.series_id != null) continue; }
+        else if (rr.record_type === 'competition') { if (_compSeriesId == null || rr.series_id !== _compSeriesId) continue; }
+        const tplName = eventMap[rr.event_name] || rr.event_name; // DB 종목명 → 템플릿 종목명
+        if (!_baseByTpl[tplName]) _baseByTpl[tplName] = {};
+        _baseByTpl[tplName][rr.record_type] = rr;
+      }
+    } catch (e) { console.warn('[comprehensive] 기준기록 로드 실패:', e.message); }
+    const _parseRec = (s) => {
+      if (s == null) return null;
+      const t = String(s).trim();
+      if (!t || ['DNS','DNF','DQ','DSQ','NM'].includes(t)) return null;
+      const mm = t.match(/^(\d+)m(\d+)$/);                 // 12m45 / 3m60 → 12.45 / 3.60
+      if (mm) return parseFloat(`${mm[1]}.${mm[2]}`);
+      if (t.includes(':')) { const p = t.split(':').map(x => parseFloat(x)); if (p.some(isNaN)) return null; return p.reduce((a, v) => a * 60 + v, 0); }
+      const v = parseFloat(t.replace(/[^\d.]/g, ''));
+      return isNaN(v) ? null : v;
+    };
+    const _dirForTpl = (tplName) => {
+      if (HEIGHT_EVENTS.has(tplName) || THROW_EVENTS.has(tplName) || JUMP_EVENTS.has(tplName)) return 'higher';
+      if (COMBINED_NAMES.has(tplName)) return null; // 점수 기반 → 매트릭스 라벨 제외
+      return 'lower'; // track/road/relay
+    };
+    const _recLabelFor = (tplName, recStr, windStr) => {
+      const dir = _dirForTpl(tplName); if (!dir) return '';
+      const base = _baseByTpl[tplName]; if (!base) return '';
+      const num = _parseRec(recStr); if (num == null) return '';
+      if (WIND_EVENTS.has(tplName) && windStr) { const w = parseFloat(String(windStr).replace('+', '')); if (!isNaN(w) && w > 2.0) return ''; } // 참고기록
+      const out = [];
+      for (const [k, lbl] of [['national', 'NR'], ['division', 'DR'], ['competition', 'CR']]) {
+        const rec = base[k]; if (!rec) continue;
+        const ov = _parseRec(rec.record_value); if (ov == null) continue;
+        if (dir === 'lower' && num < ov) out.push(lbl);
+        else if (dir === 'higher' && num > ov) out.push(lbl);
+      }
+      return out.join(' ');
+    };
+
     // Fill events
     for (const evt of resultEvents) {
       const row = rowMap[evt.template_name];
       if (!row) continue;
-      for (let i = 0; i < Math.min(evt.rankings.length, 8); i++) {
-        const r = evt.rankings[i];
+      const rks = evt.rankings.slice(0, 8);
+      // 순위 + 공동순위 계산 (유효기록만 순위 부여, 표준: 1,2,2,4)
+      for (let i = 0; i < rks.length; i++) {
+        const r = rks[i];
+        if (r._metric == null) { r._rank = null; continue; }
+        if (i > 0 && rks[i - 1]._metric != null && rks[i - 1]._metric === r._metric) {
+          r._rank = rks[i - 1]._rank;
+          r._tied = true; rks[i - 1]._tied = true;
+        } else {
+          r._rank = i + 1;
+        }
+      }
+      for (let i = 0; i < rks.length; i++) {
+        const r = rks[i];
         const [nameCol, recCol] = PLACE_COLS[i];
         if (evt.is_relay && r.members && r.members.length >= 2) {
           queueCell(`${nameCol}${row}`, r.members.slice(0, 2).join(' '));
@@ -10879,7 +11010,15 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
         } else {
           queueCell(`${nameCol}${row}`, r.name);
         }
-        queueCell(`${recCol}${row}`, r.record);
+        // 기록 옆 괄호: 공동순위 + 신기록(NR/DR/CR) — 예: "12m45 (2위, CR)"
+        const parts = [];
+        if (r._tied && r._rank != null) parts.push(`${r._rank}위`);
+        if (!r.wa_score) {
+          const _lbl = _recLabelFor(evt.template_name, r.record, r.wind);
+          if (_lbl) parts.push(_lbl);
+        }
+        const recDisplay = (r.record != null ? String(r.record) : '') + (parts.length ? ` (${parts.join(', ')})` : '');
+        queueCell(`${recCol}${row}`, recDisplay);
         queueCell(`${nameCol}${row + 1}`, r.team);
         if (r.wind) queueCell(`${recCol}${row + 1}`, r.wind);
         if (r.wa_score) queueCell(`${recCol}${row + 2}`, r.wa_score);
@@ -12748,6 +12887,11 @@ app.post('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
 
 // Auto-link timetable to display-mode events
 async function autoLinkDisplayTimetable(compId) {
+    // 노출용(display) 대회만 시간표 행으로 종목을 자동 생성한다.
+    // 운영용(operation) 대회는 시간표에 다른 부(예: 대학부) 행이 섞여 있어도
+    // 종목을 만들지 않고 "이미 존재하는 종목과의 매칭(링크)"만 수행한다.
+    const _comp = await db.get('SELECT mode FROM competition WHERE id=?', compId);
+    const allowAutoCreate = !!(_comp && _comp.mode === 'display');
     let events = await db.all('SELECT id, name, gender, division, round_type, category FROM event WHERE competition_id=?', compId);
     const ttRows = await db.all('SELECT id, event_name, category AS jongbyul, round, event_id FROM timetable WHERE competition_id=?', compId);
 
@@ -12790,7 +12934,8 @@ async function autoLinkDisplayTimetable(compId) {
         });
 
         // 2) Auto-create: 매칭 실패 시, parseJongbyul이 division을 추출했다면 누락된 event를 자동 생성
-        if (!match && targetDivNorm) {
+        //    (노출용 대회에서만 — 운영용은 종목 자동 생성 금지)
+        if (!match && targetDivNorm && allowAutoCreate) {
             const cat = guessCat(targetName);
             const info = await db.run('INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)',
                 compId, targetName, cat, jbParsed.gender || 'X', targetRound, targetDivNorm, nextSort++);

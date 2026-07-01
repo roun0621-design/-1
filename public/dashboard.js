@@ -1018,6 +1018,14 @@ async function openResult(eventId) {
         const gL = getGenderLabel(evt.gender);
         const roundL = fmtRound(evt.round_type);
 
+        // ─── 신기록 비교용: NR/DR/CR 미리 로드 (비고 CR 표기용) ───
+        try {
+            const normName = (typeof normalizeEventNameClient === 'function') ? normalizeEventNameClient(evt.name) : evt.name;
+            const compInfo = await API.getCompetitionInfo(getCompetitionId()).catch(() => ({}));
+            window._liveRecords = await API.lookupEventRecords(normName, evt.gender, evt.division || null, compInfo?.series_id || null).catch(() => null);
+            window._liveRecDir = (typeof recordDirectionForCategoryClient === 'function') ? recordDirectionForCategoryClient(evt.category) : null;
+        } catch(e) { window._liveRecords = null; window._liveRecDir = null; }
+
         // Get video URL
         let videoUrl = '';
         try { const vr = await API.getEventVideoUrl(eventId); videoUrl = vr.video_url || ''; } catch(e){}
@@ -1250,16 +1258,20 @@ function _buildRecordsBannerHTML(records) {
         <span class="record-chips" style="display:inline-flex;flex-wrap:wrap;gap:4px;">${parts.join('')}</span>
     </div>`;
 }
+// 기록 값 옆 괄호 신기록 표기 (예: " (CR)" / " (NR, CR)")
 function _buildRecordBadgesHTML(newValNum) {
+    const lbl = _recLabelText(newValNum);
+    if (!lbl) return '';
+    return ` <span style="color:#27ae60;font-weight:700;">(${lbl.replace(/ /g, ', ')})</span>`;
+}
+
+// 비고란용 신기록 라벨 텍스트 (예: "CR" 또는 "NR DR CR") — 깬 기록 전부
+function _recLabelText(newValNum) {
     if (!window._liveRecords || !window._liveRecDir) return '';
     if (newValNum == null || !isFinite(newValNum)) return '';
     if (typeof detectBrokenRecordsClient !== 'function') return '';
     const broken = detectBrokenRecordsClient(newValNum, window._liveRecords, window._liveRecDir);
-    if (!broken || broken.length === 0) return '';
-    return broken.map(lbl => {
-        const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-        return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
-    }).join('');
+    return (broken && broken.length) ? broken.join(' ') : '';
 }
 
 function renderLiveTrackResults(data, relayMembers) {
@@ -1316,7 +1328,7 @@ function renderLiveTrackResults(data, relayMembers) {
                         </td></tr>`;
                     }
                 }
-                // 비고: 풍속 초과 → 참고기록, 그 외엔 remark
+                // 비고: 풍속 초과 → 참고기록, 그 외엔 remark (신기록은 기록칸 괄호로 표시)
                 const remarkText = _isWindAided ? '참고기록' : (r.remark || '');
                 const remarkStyle = _isWindAided ? 'color:var(--accent);font-weight:600;' : '';
                 return `<tr style="${r.time_seconds != null ? 'background:#f0fff4;' : ''}">
@@ -1416,12 +1428,11 @@ function renderLiveFieldDistResults(data) {
                     const bestWMark = _bestWindAided ? '<span class="wind-aided-mark">w</span>' : '';
                     // 신기록 배지 (풍속 초과 시 미표시)
                     const _recBadges = (!_bestWindAided && !r.status_code && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
-                    const bestDisp = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + bestWMark + _recBadges : '—');
+                    const bestDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + bestWMark + _recBadges : '—');
                     const rankDisp = r.status_code ? '' : r.rank;
                     let remarkText = '';
-                    if (r.status_code) remarkText = r.status_code;
-                    else if (_bestWindAided) remarkText = '참고기록';
-                    const remarkStyle = r.status_code ? 'color:var(--danger);font-weight:600;' : _bestWindAided ? 'color:var(--accent);font-weight:600;' : '';
+                    if (_bestWindAided) remarkText = '참고기록';  // 상태코드는 기록칸에, 신기록은 기록칸 괄호로
+                    const remarkStyle = _bestWindAided ? 'color:var(--accent);font-weight:600;' : '';
                     return `<tr class="field-row1">
                         <td rowspan="2">${rankDisp}</td><td rowspan="2">${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td><strong>${bib(r.bib_number)}</strong></td>
@@ -1446,10 +1457,10 @@ function renderLiveFieldDistResults(data) {
                         distCells += `<td class="${attCls}" style="font-family:monospace;">${hasVal ? (isFoul ? '<span class="foul-mark">X</span>' : (isPass ? '<span class="pass-mark">-</span>' : formatHeight(v))) : ''}</td>`;
                     }
                     const _recBadges2 = (!r.status_code && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
-                    const bestDisp2 = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + _recBadges2 : '—');
+                    const bestDisp2 = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + _recBadges2 : '—');
                     const rankDisp2 = r.status_code ? '' : r.rank;
-                    const remarkText2 = r.status_code || '';
-                    const remarkStyle2 = r.status_code ? 'color:var(--danger);font-weight:600;' : '';
+                    const remarkText2 = '';  // 신기록은 기록칸 괄호로 표시
+                    const remarkStyle2 = remarkText2 ? 'color:#27ae60;font-weight:700;' : '';
                     return `<tr>
                         <td>${rankDisp2}</td><td>${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td><td><strong>${bib(r.bib_number)}</strong></td>
@@ -1488,6 +1499,8 @@ function renderLiveFieldHeightResults(data) {
             if (a.best == null && b.best == null) return 0;
             if (a.best == null) return 1; if (b.best == null) return -1;
             if (b.best !== a.best) return b.best - a.best;
+            // 같은 높이 → 수동 순위(순위결정전) 우선
+            if (a.manual_rank != null && b.manual_rank != null) return a.manual_rank - b.manual_rank;
             // WA tie-break: fewer fails at best height, then fewer total fails
             if (a.failsAtBest !== b.failsAtBest) return a.failsAtBest - b.failsAtBest;
             return a.totalFails - b.totalFails;
@@ -1501,6 +1514,8 @@ function renderLiveFieldHeightResults(data) {
             r.rank = isTied ? rows[i - 1].rank : rk;
             rk = i + 2;
         });
+        // 수동 순위(순위결정전) override
+        rows.forEach(r => { if (r.manual_rank != null) r.rank = r.manual_rank; });
 
         let thead = '<th>순위</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>';
         hts.forEach(h2 => { thead += `<th style="font-size:10px;">${formatHeight(h2)}</th>`; });
@@ -1512,9 +1527,9 @@ function renderLiveFieldHeightResults(data) {
                 hts.forEach(h2 => { const d = r.hd[h2] || {}; let m = ''; for (let i = 1; i <= 3; i++) { if (d[i]) { const mark = d[i] === 'PASS' ? '-' : d[i]; const cls = d[i] === 'O' ? 'color:var(--green)' : d[i] === 'X' ? 'color:var(--danger)' : 'color:var(--text-muted)'; m += `<span style="${cls};font-weight:700;">${mark}</span>`; } } c += `<td style="font-size:11px;">${m}</td>`; });
                 const _rkDisp = r.isNM ? '' : r.rank;
                 const _hRecBadges = (!r.isNM && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
-                const _bestDisp = r.best != null ? (formatHeight(r.best) + _hRecBadges) : '';
-                const _rmk = r.isNM ? 'NM' : '';
-                const _rmkSt = r.isNM ? 'color:var(--danger);font-weight:600;' : '';
+                const _bestDisp = r.best != null ? (formatHeight(r.best) + _hRecBadges) : (r.isNM ? '<span class="sc-badge sc-NM">NM</span>' : '');
+                const _rmk = '';  // 신기록은 기록칸 괄호로 표시
+                const _rmkSt = _rmk ? 'color:#27ae60;font-weight:700;' : '';
                 return `<tr style="${r.best != null ? 'background:#f0fff4;' : ''}"><td>${_rkDisp}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>${c}<td style="font-weight:700;">${_bestDisp}</td><td style="font-size:11px;${_rmkSt}">${_rmk}</td></tr>`;
             }).join('')}</tbody></table>`;
     });
@@ -2018,7 +2033,7 @@ function renderTrackResults(data, relayMembers) {
                 return `<tr>
                 <td>${r.rank}</td><td>${r.lane_number || '—'}</td><td>${bib(r.bib_number)}</td>
                 <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>
-                <td style="font-family:monospace;font-weight:600;">${r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.time_seconds != null ? formatTime(r.time_seconds) + wMark2 : '<span style="color:var(--text-muted);">—</span>')}</td>
+                <td style="font-family:monospace;font-weight:600;">${r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.time_seconds != null ? formatTime(r.time_seconds) + wMark2 + (!_isWindAided2 ? _buildRecordBadgesHTML(r.time_seconds) : '') : '<span style="color:var(--text-muted);">—</span>')}</td>
                 <td style="font-size:11px;color:#666;">${r.remark || ''}</td>
             </tr>${memberHtml}`;
             }).join('')}</tbody></table>`;
@@ -2107,12 +2122,13 @@ function renderFieldDistResults(data) {
                     const bestWindDisp = (r.bestWind != null) ? formatWind(r.bestWind) : '';
                     const _bwa = needsWind && r.bestWind != null && parseFloat(r.bestWind) > 2.0 && r.best != null;
                     const bestWMark = _bwa ? '<span class="wind-aided-mark">w</span>' : '';
-                    const bestDisp = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + bestWMark : '—');
+                    // 상태코드는 기록(결과) 칸에, 신기록(NR/DR/CR)은 기록 값 옆 괄호로
+                    const _recP = (!_bwa && !r.status_code && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
+                    const bestDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + bestWMark + _recP : '—');
                     const rkDisp = r.status_code ? '' : r.rank;
                     let rmk = '';
-                    if (r.status_code) rmk = r.status_code;
-                    else if (_bwa) rmk = '참고기록';
-                    const rmkSt = r.status_code ? 'color:var(--danger);font-weight:600;' : _bwa ? 'color:var(--accent);font-weight:600;' : '';
+                    if (_bwa) rmk = '참고기록';
+                    const rmkSt = _bwa ? 'color:var(--accent);font-weight:600;' : '';
                     return `<tr class="field-row1">
                         <td rowspan="2">${rkDisp}</td><td rowspan="2">${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td><strong>${bib(r.bib_number)}</strong></td>
@@ -2129,10 +2145,10 @@ function renderFieldDistResults(data) {
                 <tbody>${rows.map(r => {
                     let c = '';
                     for (let i = 1; i <= 6; i++) { const attCls = (i === 1 ? 'att-col-first ' : '') + (i % 2 === 1 ? 'att-col-odd' : 'att-col-even'); const v = r.att[i]; c += `<td class="${attCls}" style="font-family:monospace;font-size:11px;">${v != null ? (v === 0 ? '<span class="foul-mark">X</span>' : (v < 0 ? '<span class="pass-mark">-</span>' : formatHeight(v))) : ''}</td>`; }
-                    const bestDisp2 = r.status_code ? '' : (r.best != null ? formatHeight(r.best) : '—');
+                    const bestDisp2 = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + _buildRecordBadgesHTML(r.best) : '—');
                     const rkDisp2 = r.status_code ? '' : r.rank;
-                    const rmk2 = r.status_code || '';
-                    const rmkSt2 = r.status_code ? 'color:var(--danger);font-weight:600;' : '';
+                    const rmk2 = '';  // 신기록은 기록칸 괄호로 표시
+                    const rmkSt2 = rmk2 ? 'color:#27ae60;font-weight:700;' : '';
                     return `<tr><td>${rkDisp2}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td class="att-col-best" style="font-weight:700;">${bestDisp2}</td><td style="font-size:11px;${rmkSt2}">${rmk2}</td></tr>`;
                 }).join('')}</tbody></table>`;
         }
@@ -2163,6 +2179,8 @@ function renderFieldHeightResults(data) {
             if (a.best == null && b.best == null) return 0;
             if (a.best == null) return 1; if (b.best == null) return -1;
             if (b.best !== a.best) return b.best - a.best;
+            // 같은 높이 → 수동 순위(순위결정전) 우선
+            if (a.manual_rank != null && b.manual_rank != null) return a.manual_rank - b.manual_rank;
             if (a.failsAtBest !== b.failsAtBest) return a.failsAtBest - b.failsAtBest;
             return a.totalFails - b.totalFails;
         });
@@ -2173,6 +2191,8 @@ function renderFieldHeightResults(data) {
             r.rank = isTied ? rows[i-1].rank : rk;
             rk = i + 2;
         });
+        // 수동 순위(순위결정전) override
+        rows.forEach(r => { if (r.manual_rank != null) r.rank = r.manual_rank; });
 
         let thead = '<th>순위</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>';
         hts.forEach(h2 => { thead += `<th style="font-size:10px;">${formatHeight(h2)}</th>`; });
@@ -2182,9 +2202,9 @@ function renderFieldHeightResults(data) {
             <tbody>${rows.map(r => {
                 let c = '';
                 hts.forEach(h2 => { const d = r.hd[h2] || {}; let m = ''; for (let i = 1; i <= 3; i++) { if (d[i]) { const mark = d[i] === 'PASS' ? '-' : d[i]; m += mark; } } c += `<td style="font-size:11px;">${m}</td>`; });
-                const bestDisp3 = r.best != null ? formatHeight(r.best) : '';
-                const rmk3 = r.isNM ? 'NM' : '';
-                const rmkSt3 = rmk3 ? 'color:var(--danger);font-weight:600;' : '';
+                const bestDisp3 = r.best != null ? (formatHeight(r.best) + _buildRecordBadgesHTML(r.best)) : (r.isNM ? '<span class="sc-badge sc-NM">NM</span>' : '');
+                const rmk3 = '';  // 신기록은 기록칸 괄호로 표시
+                const rmkSt3 = rmk3 ? 'color:#27ae60;font-weight:700;' : '';
                 return `<tr><td>${r.isNM ? '' : r.rank}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td style="font-weight:700;">${bestDisp3}</td><td style="font-size:11px;${rmkSt3}">${rmk3}</td></tr>`;
             }).join('')}</tbody></table>`;
     });
@@ -2194,11 +2214,12 @@ function renderFieldHeightResults(data) {
 // ============================================================
 // Pacing Light Popup (W/L Target)
 // ============================================================
+// hex = 점/테두리(실제 라이트 색), ink = 흰 카드 위 글자색(가독성용)
 const _PACING_COLOR_MAP = {
-    green:  { label: 'Green',  hex: '#b79f58', textColor: '#fff' },
-    red:    { label: 'Red',    hex: '#FF0000', textColor: '#fff' },
-    white:  { label: 'White',  hex: '#E0E0E0', textColor: '#333' },
-    blue:   { label: 'Blue',   hex: '#6b6b6b', textColor: '#fff' },
+    green:  { label: 'Green',  hex: '#22c55e', textColor: '#fff',     ink: '#15803d' },
+    red:    { label: 'Red',    hex: '#ef4444', textColor: '#fff',     ink: '#dc2626' },
+    white:  { label: 'White',  hex: '#ffffff', textColor: '#111827', ink: '#475569' },
+    blue:   { label: 'Blue',   hex: '#2563eb', textColor: '#fff',     ink: '#1d4ed8' },
 };
 
 function _fmtPacingTime(seconds) {
@@ -2228,7 +2249,7 @@ function openPacingPopup(eventName) {
 
     // Notice
     if (cfg.notice) {
-        html += `<div style="background:#f8f4ea;border:1px solid #f8f4ea;border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:#b79f58;">${cfg.notice}</div>`;
+        html += `<div style="width:100%;box-sizing:border-box;background:#f8f4ea;border:1px solid #f8f4ea;border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:#b79f58;">${cfg.notice}</div>`;
     }
 
     // Color cards
@@ -2246,10 +2267,14 @@ function openPacingPopup(eventName) {
                 return { dist: cumDist, cum: cumTime, lap: seg.lap_seconds, segDist: seg.distance_meters };
             });
 
-            html += `<div style="border:2px solid ${cm.hex};border-radius:8px;padding:12px;margin-bottom:10px;">
+            const popupBorder = cm.hex === '#ffffff' ? '#cbd5e1' : cm.hex;
+            const popupDotBorder = cm.hex === '#ffffff' ? '#9ca3af' : 'rgba(0,0,0,.1)';
+            // width:100%+box-sizing — overflow-x:auto 컨테이너(result-panel-body) 안에서
+            // iOS Safari 가 카드를 내용 폭으로 줄여(shrink-wrap) 우측 여백이 생기는 문제 방지
+            html += `<div style="width:100%;box-sizing:border-box;border:2px solid ${popupBorder};border-radius:8px;padding:12px;margin-bottom:10px;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                    <span style="background:${cm.hex};width:18px;height:18px;border-radius:50%;display:inline-block;border:2px solid rgba(0,0,0,.1);flex-shrink:0;"></span>
-                    <span style="font-weight:700;font-size:15px;color:${cm.hex === '#E0E0E0' ? '#333' : cm.hex};">${cm.label}</span>
+                    <span style="background:${cm.hex};width:18px;height:18px;border-radius:50%;display:inline-block;border:2px solid ${popupDotBorder};flex-shrink:0;"></span>
+                    <span style="font-weight:700;font-size:15px;color:${cm.ink || cm.hex};">${cm.label}</span>
                     <span style="font-family:monospace;font-weight:700;font-size:18px;margin-left:auto;">${_fmtPacingTime(totalTime)}</span>
                     ${totalTime >= 60 ? `<span style="font-size:11px;color:var(--text-muted);margin-left:4px;">(${Math.round(totalTime)}초)</span>` : ''}
                 </div>`;
@@ -2260,8 +2285,9 @@ function openPacingPopup(eventName) {
 
             // Show cumulative splits table
             if (splits.length > 1) {
+                const headerBg = cm.hex === '#ffffff' ? '#e5e7eb' : `${cm.hex}22`;
                 html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">
-                    <thead><tr style="background:${cm.hex}22;">
+                    <thead><tr style="background:${headerBg};">
                         <th style="padding:3px 8px;text-align:left;font-size:11px;">구간</th>
                         <th style="padding:3px 8px;text-align:right;font-size:11px;">랩</th>
                         <th style="padding:3px 8px;text-align:right;font-size:11px;">누적</th>

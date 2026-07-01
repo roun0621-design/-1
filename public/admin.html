@@ -6294,8 +6294,30 @@ POST /api/external/event-result-link/batch<br>
         async function deleteEventFromModal() {
             const id = document.getElementById('em-id').value;
             const name = document.getElementById('em-name').value;
+            const gender = document.getElementById('em-gender').value;
+            const category = document.getElementById('em-category').value;
+            const division = document.getElementById('em-division')?.value || '';
+            // 같은 종목 그룹(종목명+성별+종별+부별)의 다른 라운드(예선/준결승/결승) 찾기
+            const _n = s => (s || '').trim();
+            const siblings = (_allAdminEvents || []).filter(e =>
+                String(e.id) !== String(id) && !e.parent_event_id &&
+                _n(e.name) === _n(name) && e.gender === gender &&
+                e.category === category && (e.division || '') === division &&
+                ['preliminary', 'semifinal', 'final'].includes(e.round_type));
             if (!confirm(`"${name}" 종목을 삭제하시겠습니까?`)) return;
-            try { await API.deleteEvent(id, AK()); toast('삭제 완료'); closeEvtModal(); loadEvents(); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
+            let alsoIds = [];
+            if (siblings.length) {
+                const labels = siblings.map(e => ROUND_LABEL[e.round_type] || e.round_type).join(', ');
+                if (confirm(`연결된 다른 라운드(${labels})도 함께 삭제할까요?\n\n[확인] 함께 삭제   [취소] 이 라운드만 삭제`)) {
+                    alsoIds = siblings.map(e => e.id);
+                }
+            }
+            try {
+                await API.deleteEvent(id, AK());
+                for (const sid of alsoIds) { try { await API.deleteEvent(sid, AK()); } catch (e) {} }
+                toast(alsoIds.length ? `삭제 완료 (${alsoIds.length + 1}개 라운드)` : '삭제 완료');
+                closeEvtModal(); loadEvents();
+            } catch (e) { toast(e.error || '삭제 실패', 'error'); }
         }
 
         // ============================================================
@@ -6343,10 +6365,11 @@ POST /api/external/event-result-link/batch<br>
         document.addEventListener('DOMContentLoaded', () => { setTimeout(applyPacingZoom, 100); });
 
         const PACING_COLORS = [
-            { key: 'green', label: 'Green',  hex: '#b79f58', text: '#fff' },
-            { key: 'red',   label: 'Red',    hex: '#FF0000', text: '#fff' },
-            { key: 'white', label: 'White',  hex: '#E0E0E0', text: '#333' },
-            { key: 'blue',  label: 'Blue',   hex: '#6b6b6b', text: '#fff' },
+            // hex = 점/테두리(실제 라이트 색), ink = 밝은 배경 위 글자색(가독성용)
+            { key: 'green', label: 'Green',  hex: '#22c55e', text: '#fff',     ink: '#15803d' },
+            { key: 'red',   label: 'Red',    hex: '#ef4444', text: '#fff',     ink: '#dc2626' },
+            { key: 'white', label: 'White',  hex: '#ffffff', text: '#111827', ink: '#475569' },
+            { key: 'blue',  label: 'Blue',   hex: '#2563eb', text: '#fff',     ink: '#1d4ed8' },
         ];
         const PACING_DEFAULTS = {
             '800m':      { dist: 800,   segs: [200, 200, 400] },
@@ -6565,9 +6588,9 @@ POST /api/external/event-result-link/batch<br>
 
         // ---- Side-by-side grid rendering ----
         // Color-specific light background tints for column readability
-        const PACING_BG = { green: '#f0faf4', red: '#fef2f2', white: '#f5f5f5', blue: '#f5f5f5' };
-        const PACING_BG_DARK = { green: '#dcf5e7', red: '#fde8e8', white: '#e8e8e8', blue: '#e8e8e8' };
-        const PACING_BORDER = { green: '#b79f58', red: '#FF0000', white: '#bbb', blue: '#6b6b6b' };
+        const PACING_BG = { green: '#f0faf4', red: '#fef2f2', white: '#f8fafc', blue: '#eff6ff' };
+        const PACING_BG_DARK = { green: '#dcf5e7', red: '#fde8e8', white: '#e5e7eb', blue: '#dbeafe' };
+        const PACING_BORDER = { green: '#22c55e', red: '#ef4444', white: '#cbd5e1', blue: '#2563eb' };
 
         function renderPacingGrid() {
             const container = document.getElementById('pacing-grid-container');
@@ -6584,12 +6607,13 @@ POST /api/external/event-result-link/batch<br>
             // ── Row 1: Color headers ──
             html += '<tr><th style="padding:8px 10px;text-align:left;font-size:11px;background:#fafafa;border-bottom:3px solid #ddd;min-width:100px;">구간</th>';
             colors.forEach((c, ci) => {
-                const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#ccc',label:c.color_key};
+                const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#ccc',text:'#333',label:c.color_key};
                 const bg = PACING_BG_DARK[c.color_key] || '#f0f0f0';
                 const borderL = ci > 0 ? `border-left:3px solid ${PACING_BORDER[c.color_key] || '#ccc'};` : '';
+                const labelColor = pc.ink || pc.hex;
                 html += `<th colspan="2" style="padding:10px 6px;text-align:center;background:${bg};border-bottom:3px solid ${pc.hex};min-width:170px;${borderL}">
                     <span style="background:${pc.hex};width:20px;height:20px;border-radius:50%;display:inline-block;vertical-align:middle;border:2px solid rgba(0,0,0,.15);margin-right:6px;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>
-                    <span style="font-weight:800;font-size:14px;color:${pc.hex==='#E0E0E0'?'#555':pc.hex};letter-spacing:0.5px;">${pc.label}</span>
+                    <span style="font-weight:800;font-size:14px;color:${labelColor};letter-spacing:0.5px;">${pc.label}</span>
                     <button class="btn btn-xs btn-ghost" onclick="removePacingColor(${ci})" style="color:#aaa;font-size:10px;padding:0 3px;margin-left:4px;" title="삭제"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                 </th>`;
             });
@@ -6626,13 +6650,13 @@ POST /api/external/event-result-link/batch<br>
                     for (let k = 0; k <= si; k++) cum += (c.segments[k]?.lap_seconds || 0);
                     const bg = PACING_BG[c.color_key] || '#f8f8f8';
                     const borderL = ci > 0 ? `border-left:3px solid ${PACING_BORDER[c.color_key] || '#ccc'};` : '';
-                    const cumColor = PACING_COLORS.find(p=>p.key===c.color_key)?.hex || 'var(--primary)';
+                    const cumColor = PACING_COLORS.find(p=>p.key===c.color_key)?.ink || 'var(--primary)';
                     html += `<td style="padding:4px 3px;border-bottom:1px solid #eee;text-align:center;background:${bg};${borderL}">
                         <input type="text" value="${_pFmtInput(lap)}" placeholder="0.00"
                             onchange="_pSetLap(${ci},${si},this.value)"
                             style="width:72px;padding:3px 5px;border:1px solid #ccc;border-radius:4px;font-size:11px;font-family:monospace;text-align:right;background:#fff;">
                     </td>`;
-                    html += `<td style="padding:4px 6px;border-bottom:1px solid #eee;text-align:center;font-family:'Courier New',monospace;font-size:12px;font-weight:700;color:${cumColor==='#E0E0E0'?'#555':cumColor};background:${bg};">${cum > 0 ? _pFmtTime(cum) : '—'}</td>`;
+                    html += `<td style="padding:4px 6px;border-bottom:1px solid #eee;text-align:center;font-family:'Courier New',monospace;font-size:12px;font-weight:700;color:${cumColor};background:${bg};">${cum > 0 ? _pFmtTime(cum) : '—'}</td>`;
                 });
                 html += '</tr>';
             }
@@ -6641,10 +6665,11 @@ POST /api/external/event-result-link/batch<br>
             html += '<tr><td style="padding:10px 10px;font-weight:800;font-size:13px;color:#222;background:#f0f0f0;border-bottom:3px solid #bbb;border-top:3px solid #bbb;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> 총 기록</td>';
             colors.forEach((c, ci) => {
                 const total = c.segments.reduce((s, seg) => s + (seg.lap_seconds || 0), 0);
-                const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#333'};
+                const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#333',text:'#333'};
                 const bgDark = PACING_BG_DARK[c.color_key] || '#e8e8e8';
                 const borderL = ci > 0 ? `border-left:3px solid ${PACING_BORDER[c.color_key] || '#ccc'};` : '';
-                html += `<td colspan="2" style="padding:10px 6px;text-align:center;font-family:'Courier New',monospace;font-weight:900;font-size:18px;color:${pc.hex==='#E0E0E0'?'#333':pc.hex};background:${bgDark};border-bottom:3px solid #bbb;border-top:3px solid #bbb;letter-spacing:1px;${borderL}">${_pFmtTime(total)}</td>`;
+                const totalColor = pc.ink || pc.hex;
+                html += `<td colspan="2" style="padding:10px 6px;text-align:center;font-family:'Courier New',monospace;font-weight:900;font-size:18px;color:${totalColor};background:${bgDark};border-bottom:3px solid #bbb;border-top:3px solid #bbb;letter-spacing:1px;${borderL}">${_pFmtTime(total)}</td>`;
             });
             html += '</tr>';
 
@@ -6663,10 +6688,11 @@ POST /api/external/event-result-link/batch<br>
             html += '<tr><td style="padding:10px 10px;font-weight:800;font-size:13px;color:#222;background:#f0f0f0;border-top:3px solid #bbb;">합계</td>';
             colors.forEach((c, ci) => {
                 const total = c.segments.reduce((s, seg) => s + (seg.lap_seconds || 0), 0);
-                const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#333'};
+                const pc = PACING_COLORS.find(p=>p.key===c.color_key) || {hex:'#333',text:'#333'};
                 const bgDark = PACING_BG_DARK[c.color_key] || '#e8e8e8';
                 const borderL = ci > 0 ? `border-left:3px solid ${PACING_BORDER[c.color_key] || '#ccc'};` : '';
-                html += `<td colspan="2" style="padding:10px 6px;text-align:center;font-family:'Courier New',monospace;font-weight:900;font-size:17px;color:${pc.hex==='#E0E0E0'?'#333':pc.hex};background:${bgDark};border-top:3px solid #bbb;letter-spacing:1px;${borderL}">${_pFmtTime(total)}</td>`;
+                const totalColor = pc.ink || pc.hex;
+                html += `<td colspan="2" style="padding:10px 6px;text-align:center;font-family:'Courier New',monospace;font-weight:900;font-size:17px;color:${totalColor};background:${bgDark};border-top:3px solid #bbb;letter-spacing:1px;${borderL}">${_pFmtTime(total)}</td>`;
             });
             html += '</tr>';
             html += '</tbody></table>';
