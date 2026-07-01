@@ -9558,13 +9558,14 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 }
                 prevAth = ath;
             }
+            const _hLbl = (!special && ath.bestCleared != null) ? (_brokenRecLabels(ath.bestCleared, null) || '') : '';
             const vals = hCols.map(col => {
                 if (col.key === 'rank') return special ? '' : String(rank);
                 if (col.key === 'bib') return ath.bib_number || '-';
                 if (col.key === 'name') return ath.name || '';
                 if (col.key === 'team') return ath.team || '';
-                if (col.key === 'result') return special ? (ath.status_code || 'NM') : (ath.bestCleared != null ? ath.bestCleared.toFixed(2) : '');
-                if (col.key === 'remark') return special ? '' : (_brokenRecLabels(ath.bestCleared, null) || '');
+                if (col.key === 'result') return special ? (ath.status_code || 'NM') : (ath.bestCleared != null ? (ath.bestCleared.toFixed(2) + (_hLbl ? ` (${_hLbl})` : '')) : '');
+                if (col.key === 'remark') return '';
                 if (col.key.startsWith('h_')) {
                     const bh = parseFloat(col.key.substring(2));
                     return ath.heightResults[bh] || '';
@@ -9741,22 +9742,13 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                     doc.text(val, col.x + 1, y1, { width: col.w - 2, align: 'center' });
                 }
 
-                // Result (best) — DNF/DQ/NM 은 기록(결과)란에 표시
+                // Result (best) — DNF/DQ/NM 은 결과란에, 신기록(NR/DR/CR)은 기록 값 옆 괄호로
                 const resCol = fdCols[4 + numAttempts];
                 pdfFont(doc, true).fontSize(fdFS + 0.5).fillColor('#000');
-                doc.text(special ? (ath.status_code || '') : (ath.best != null ? ath.best.toFixed(2) : ''), resCol.x + 1, y1, { width: resCol.w - 2, align: 'center' });
-
-                // Remark: 신기록 라벨만 (상태코드는 결과란에 표시하므로 비고엔 안 씀)
-                const remCol = fdCols[fdCols.length - 1];
-                pdfFont(doc, false).fontSize(fdFS).fillColor('#000');
-                if (special) {
-                    // 상태코드는 결과란에 표시됨 → 비고 비움
-                } else {
-                    // 비고에는 신기록 라벨(NR/DR/CR)만. 풍속은 각 시기칸 하단에 이미 표기되므로
-                    // 비고에 최고기록 풍속을 또 넣지 않는다 (최고가 6차일 때 풍속이 우측 비고에 중복되던 문제).
-                    const _rl = _brokenRecLabels(ath.best, ath.bestWind);
-                    if (_rl) doc.text(_rl, remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
-                }
+                const _fdLbl = (!special && ath.best != null) ? _brokenRecLabels(ath.best, ath.bestWind) : '';
+                const _fdRec = special ? (ath.status_code || '') : (ath.best != null ? (ath.best.toFixed(2) + (_fdLbl ? ` (${_fdLbl})` : '')) : '');
+                doc.text(_fdRec, resCol.x + 1, y1, { width: resCol.w - 2, align: 'center' });
+                // 비고: 상태코드는 결과란에 표시되므로 비움 (신기록도 결과란 괄호로 이동)
 
                 // Wind per attempt (row 2) — only if hasWind
                 if (hasWind) {
@@ -9872,11 +9864,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 if (special) remarkStr = e.status_code;
                 else if (qualMap[e.event_entry_id]) remarkStr = qualMap[e.event_entry_id];
                 else remarkStr = e.allResults?.[0]?.remark || '';
-                // 신기록 라벨(NR/DR/CR) — 기준을 깬 선수 전원 비고에 표기
-                if (!special) {
-                    const _rl = _brokenRecLabels(e.best, e.bestWind);
-                    if (_rl) remarkStr = remarkStr ? `${_rl} ${remarkStr}` : _rl;
-                }
+                // 신기록 라벨(NR/DR/CR) — 기록 값 옆 괄호에 표기
+                const _recLbl = (!special && e.best != null) ? _brokenRecLabels(e.best, e.bestWind) : '';
 
                 // ─── 비고 멤버 리스트 정규화 (긴 텍스트 줄바꿈) ───
                 // 사용자가 비고에 멤버 이름을 ", " 로 구분해 직접 입력하는 케이스 대비:
@@ -9897,7 +9886,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                         case 'bib': return e.bib_number || '-';
                         case 'name': return e.name || '';
                         case 'team': return e.team || '';
-                        case 'record': return special ? '' : (e.best != null ? formatTimeForPDF(e.best) : '');
+                        case 'record': return special ? '' : (e.best != null ? formatTimeForPDF(e.best) + (_recLbl ? ` (${_recLbl})` : '') : '');
                         case 'wind': return e.bestWind != null ? String(e.bestWind) : (heat.wind != null ? String(heat.wind) : '');
                         case 'remark': return remarkStr;
                         default: return '';
