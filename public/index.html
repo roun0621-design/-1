@@ -571,10 +571,15 @@
         function openInstallGuide() {
             document.getElementById('install-modal').classList.add('show');
             const os = detectOS();
+            const androidTab = document.getElementById('install-tab-android');
+            // iOS 앱스토어 심사 대응: iOS 기기(웹/래핑 앱)에서는 Android(Chrome) 탭을 숨겨
+            //   타 플랫폼·스토어 언급이 보이지 않도록 한다. Android/기타에서는 그대로 노출.
             if (os === 'ios') {
+                if (androidTab) androidTab.style.display = 'none';
                 switchInstallTab('ios', document.getElementById('install-tab-ios'));
             } else {
-                switchInstallTab('android', document.getElementById('install-tab-android'));
+                if (androidTab) androidTab.style.display = '';
+                switchInstallTab('android', androidTab);
             }
         }
         // PWA install prompt
