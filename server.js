@@ -10694,12 +10694,13 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           return b.totalPoints - a.totalPoints;
         });
 
-        rankings = athleteData.filter(a => a.status_code !== 'DNS').slice(0, 8).map(a => ({
+        rankings = athleteData.slice(0, 8).map(a => ({
           name: a.name || '',
           team: a.team || '',
           record: ['DNS','DNF','DQ'].includes(a.status_code) ? a.status_code : String(a.totalPoints),
           wind: null,
-          wa_score: null
+          wa_score: null,
+          _metric: ['DNS','DNF','DQ'].includes(a.status_code) ? null : a.totalPoints
         }));
 
       // ===== FIELD HEIGHT =====
@@ -10752,13 +10753,14 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           team: a.team || '',
           record: fmtHeightCm(a.bestCleared),
           wind: null,
-          wa_score: null
+          wa_score: null,
+          _metric: `${a.bestCleared}|${a.missesAtBest}|${a.totalMisses}` // 같은 높이+실패수 = 공동
         }));
-        // Add NM/DNS/DNF at end
+        // Add NM/DNS/DNF/DQ at end (up to 8)
         const specials = athleteData.filter(a => ['DNS','DNF','DQ','NM'].includes(a.status_code) || a.bestCleared == null);
         for (const s of specials) {
           if (rankings.length >= 8) break;
-          rankings.push({ name: s.name || '', team: s.team || '', record: s.status_code || 'NM', wind: null, wa_score: null });
+          rankings.push({ name: s.name || '', team: s.team || '', record: s.status_code || 'NM', wind: null, wa_score: null, _metric: null });
         }
 
       // ===== FIELD DISTANCE (jumps + throws) =====
@@ -10808,12 +10810,13 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
         // 투척+도약 모두 "15m09" 형식 사용 (fmtJumpCm은 cm정수 "1509"로 변환되어 오류)
         const fmtFn = (isThrow || isJump) ? fmtFieldDist : (m => m != null ? m.toFixed(2) : '');
 
-        rankings = allEntries.filter(a => a.status_code !== 'DNS').slice(0, 8).map(a => ({
+        rankings = allEntries.slice(0, 8).map(a => ({
           name: a.name || '',
           team: a.team || '',
           record: ['DNS','DNF','DQ','NM'].includes(a.status_code) ? a.status_code : fmtFn(a.best),
           wind: (hasWind && a.bestWind != null) ? fmtWind(a.bestWind) : null,
-          wa_score: null
+          wa_score: null,
+          _metric: ['DNS','DNF','DQ','NM'].includes(a.status_code) ? null : a.best
         }));
 
       // ===== TRACK / ROAD / RELAY =====
@@ -10850,14 +10853,15 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           return a.best - b.best;
         });
 
-        for (const a of allEntries.filter(e => e.status_code !== 'DNS').slice(0, 8)) {
-          const isSpecial = ['DNF','NM','DQ'].includes(a.status_code);
+        for (const a of allEntries.slice(0, 8)) {
+          const isSpecial = ['DNS','DNF','NM','DQ'].includes(a.status_code);
           const entry = {
             name: a.name || '',
             team: a.team || '',
             record: isSpecial ? a.status_code : fmtTrackTime(a.best),
             wind: null,
-            wa_score: null
+            wa_score: null,
+            _metric: isSpecial ? null : a.best
           };
 
           // Wind: per-result or per-heat
@@ -10996,8 +11000,20 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
     for (const evt of resultEvents) {
       const row = rowMap[evt.template_name];
       if (!row) continue;
-      for (let i = 0; i < Math.min(evt.rankings.length, 8); i++) {
-        const r = evt.rankings[i];
+      const rks = evt.rankings.slice(0, 8);
+      // 순위 + 공동순위 계산 (유효기록만 순위 부여, 표준: 1,2,2,4)
+      for (let i = 0; i < rks.length; i++) {
+        const r = rks[i];
+        if (r._metric == null) { r._rank = null; continue; }
+        if (i > 0 && rks[i - 1]._metric != null && rks[i - 1]._metric === r._metric) {
+          r._rank = rks[i - 1]._rank;
+          r._tied = true; rks[i - 1]._tied = true;
+        } else {
+          r._rank = i + 1;
+        }
+      }
+      for (let i = 0; i < rks.length; i++) {
+        const r = rks[i];
         const [nameCol, recCol] = PLACE_COLS[i];
         if (evt.is_relay && r.members && r.members.length >= 2) {
           queueCell(`${nameCol}${row}`, r.members.slice(0, 2).join(' '));
@@ -11005,16 +11021,18 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
         } else {
           queueCell(`${nameCol}${row}`, r.name);
         }
-        queueCell(`${recCol}${row}`, r.record);
+        // 기록 옆 괄호: 공동순위 + 신기록(NR/DR/CR) — 예: "12m45 (2위, CR)"
+        const parts = [];
+        if (r._tied && r._rank != null) parts.push(`${r._rank}위`);
+        if (!r.wa_score) {
+          const _lbl = _recLabelFor(evt.template_name, r.record, r.wind);
+          if (_lbl) parts.push(_lbl);
+        }
+        const recDisplay = (r.record != null ? String(r.record) : '') + (parts.length ? ` (${parts.join(', ')})` : '');
+        queueCell(`${recCol}${row}`, recDisplay);
         queueCell(`${nameCol}${row + 1}`, r.team);
         if (r.wind) queueCell(`${recCol}${row + 1}`, r.wind);
-        if (r.wa_score) {
-          queueCell(`${recCol}${row + 2}`, r.wa_score);
-        } else {
-          // 3번째 줄: 신기록 라벨(NR/DR/CR) — 기준 깬 선수 전원
-          const _lbl = _recLabelFor(evt.template_name, r.record, r.wind);
-          if (_lbl) queueCell(`${recCol}${row + 2}`, _lbl);
-        }
+        if (r.wa_score) queueCell(`${recCol}${row + 2}`, r.wa_score);
       }
     }
 
