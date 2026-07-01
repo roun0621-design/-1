@@ -393,6 +393,29 @@ app.post('/api/admin/competitions/:id/brand-image', upload.single('image'), asyn
 // 무시하므로 별도 마운트로 서빙. (assetlinks.json 채우면 앱에서 주소창 숨김 검증됨)
 app.use('/.well-known', express.static(path.join(__dirname, 'public', '.well-known')));
 
+// ─── iOS 앱(WKWebView) 대응: App Store 심사 가이드 2.3.10 ────────────────────
+//   iOS 래퍼는 User-Agent 에 "PWAShell" 표식을 붙인다(WebView.swift). 그 요청에는
+//   Android/타 스토어 안내를 서버에서 아예 제거하고 서빙한다(안드로이드 웹 사용자는 그대로).
+//   index.html 의 <!--PWASHELL-STRIP--> ~ <!--/PWASHELL-STRIP--> 구간을 제거.
+function isIOSAppShell(req) {
+    return /PWAShell/i.test(req.headers['user-agent'] || '');
+}
+app.get(['/', '/index.html'], (req, res, next) => {
+    const p = path.join(__dirname, 'public', 'index.html');
+    if (!isIOSAppShell(req)) return res.sendFile(p);
+    fs.readFile(p, 'utf8', (err, html) => {
+        if (err) return next();
+        const stripped = html.replace(/<!--PWASHELL-STRIP-->[\s\S]*?<!--\/PWASHELL-STRIP-->/g, '');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.type('html').send(stripped);
+    });
+});
+// open.html 은 Android intent 리다이렉트 전용 → iOS 앱에서는 홈으로 우회
+app.get('/open.html', (req, res, next) => {
+    if (isIOSAppShell(req)) return res.redirect('/');
+    next();
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
     etag: false,
     setHeaders: (res, filePath) => {
@@ -449,7 +472,10 @@ app.get('/api/health', async (req, res) => {
 });
 
 // /open — Android intent:// 중간 리다이렉트 페이지 (카카오톡/인스타 인앱브라우저 대응)
-app.get('/open', (req, res) => res.sendFile(path.join(__dirname, 'public', 'open.html')));
+app.get('/open', (req, res) => {
+    if (isIOSAppShell(req)) return res.redirect('/');   // 2.3.10: iOS 앱엔 Android 리다이렉트 페이지 노출 금지
+    res.sendFile(path.join(__dirname, 'public', 'open.html'));
+});
 
 // DB 어댑터 사용 (lib/db.js).
 // 기존 better-sqlite3 인터페이스 100% 호환 — db.prepare/.get/.all/.run/.exec/.transaction/.pragma 모두 정상 동작.
