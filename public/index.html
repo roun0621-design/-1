@@ -111,13 +111,6 @@
         .info-modal-inner p, .info-modal-inner li { font-size: 13px; color: var(--text); line-height: 1.7; }
         .info-modal-inner ul { padding-left: 20px; margin: 4px 0 12px; }
         .info-modal-inner .close-modal-btn { display: block; margin: 16px auto 0; padding: 8px 32px; }
-        .install-tabs { display: flex; gap: 0; margin-bottom: 12px; border-bottom: 2px solid var(--gray); }
-        .install-tab { padding: 8px 16px; font-size: 13px; font-weight: 600; border: none; background: none; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; }
-        .install-tab.active { color: var(--blue); border-bottom-color: var(--blue); }
-        .install-content { display: none; font-size: 13px; line-height: 1.8; }
-        .install-content.active { display: block; }
-        .install-step { display: flex; gap: 10px; margin-bottom: 8px; align-items: flex-start; }
-        .install-step-num { background: var(--blue); color: #fff; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -142,7 +135,6 @@
         <!-- Quick links (visible to all) -->
         <div class="home-quick">
             <button class="home-quick-btn" data-i18n="home.about_btn" onclick="openAbout()">P-R : Node에 관하여</button>
-            <button class="home-quick-btn" data-i18n="home.install_btn" onclick="openInstallGuide()">앱 설치 안내</button>
             <button class="home-quick-btn" id="btn-manual" data-i18n="home.manual_btn" style="display:none;" onclick="openManual()">운영 매뉴얼</button>
         </div>
 
@@ -186,70 +178,28 @@
             <h3 data-i18n="about.title">P-R : Node에 관하여</h3>
             <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Sport Competition Operation Platform for Excellence</p>
 
+            <p style="background:#f1f8e9;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.7;margin-bottom:14px;">
+                이제 <strong>모바일 앱</strong>으로도 만나보실 수 있습니다. 대회 현장의 실시간 기록·결과·알림을 더 빠르고 편하게 확인하세요.
+            </p>
+
             <h4 data-i18n="about.h1">실시간 대회 결과 확인</h4>
             <p>P-R : Node를 통해 육상 대회의 실시간 경기 결과를 확인할 수 있습니다. 대회를 선택한 후 대시보드에서 종목별 진행 상황과 결과를 바로 확인하세요.</p>
 
             <h4 data-i18n="about.features">주요 기능</h4>
             <ul>
                 <li><strong>대시보드</strong> — 전 종목의 진행 상황을 한눈에 확인, 영상 링크 바로가기</li>
-                <li><strong>실시간 결과</strong> — 경기가 끝나는 즉시 기록과 순위 확인 가능</li>
+                <li><strong>실시간 결과</strong> — 경기가 끝나는 즉시 기록과 순위 확인</li>
+                <li><strong>실시간 알림</strong> — 관심 종목의 결과·공지를 앱 알림으로 바로 받기</li>
                 <li><strong>종합 순위</strong> — 여러 조로 진행되는 종목도 통합 순위로 확인</li>
-                <li><strong>실시간 현황</strong> — 소집 상태, 진행중인 경기 확인</li>
-                <li><strong>소집실 운영</strong> — 바코드/배번 스캔, 릴레이 팀 단위 체크인</li>
-                <li><strong>기록 입력</strong> — 트랙/필드/도로/복합 종목별 기록 관리</li>
+                <li><strong>소집 · 기록 운영</strong> — 소집실 체크인, 트랙/필드/도로/복합 종목 기록 관리</li>
+                <li><strong>상장 · 기록증</strong> — 입상자 상장과 참가 기록증 발급</li>
                 <li><strong>관리자 패널</strong> — 선수/종목 관리, 조편성, 엑셀 업로드, 데이터 백업</li>
             </ul>
 
             <h4 data-i18n="about.favorites">즐겨찾기</h4>
-            <p>대시보드에서 관심 종목 옆의 별 아이콘을 눌러 즐겨찾기에 추가하면, 해당 종목이 상단에 고정되어 빠르게 확인할 수 있습니다.</p>
+            <p>대시보드에서 관심 종목 옆의 별 아이콘을 눌러 즐겨찾기에 추가하면, 해당 종목이 상단에 고정되어 빠르게 확인할 수 있습니다. 즐겨찾기한 종목의 결과는 실시간 알림으로도 받아볼 수 있습니다.</p>
 
             <button class="btn btn-ghost close-modal-btn" data-i18n="common.close" onclick="closeModal('about-modal')">닫기</button>
-        </div>
-    </div>
-
-    <!-- Install Guide Modal -->
-    <div class="info-modal" id="install-modal">
-        <div class="info-modal-inner">
-            <h3>앱 설치 안내</h3>
-            <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">홈 화면에 추가하면 앱처럼 빠르게 접근할 수 있습니다.</p>
-
-            <div class="install-tabs" id="install-tabs-container">
-                <!--PWASHELL-STRIP-->
-                <button class="install-tab" id="install-tab-android" onclick="switchInstallTab('android',this)">Android (Chrome)</button>
-                <!--/PWASHELL-STRIP-->
-                <button class="install-tab" id="install-tab-ios" onclick="switchInstallTab('ios',this)">iOS (Safari)</button>
-            </div>
-            <!--PWASHELL-STRIP-->
-            <div class="install-content" id="install-android">
-                <div id="install-android-steps">
-                    <div class="install-step"><div class="install-step-num">1</div><div>Chrome 브라우저로 이 페이지에 접속합니다.</div></div>
-                    <div class="install-step"><div class="install-step-num">2</div><div>우측 상단 <strong>메뉴 (&#8942;)</strong> 를 누릅니다.</div></div>
-                    <div class="install-step"><div class="install-step-num">3</div><div><strong>"홈 화면에 추가"</strong> 또는 <strong>"앱 설치"</strong>를 선택합니다.</div></div>
-                    <div class="install-step"><div class="install-step-num">4</div><div><strong>"추가"</strong>를 누르면 홈 화면에 아이콘이 생성됩니다.</div></div>
-                </div>
-                <div style="margin-top:12px;text-align:center;">
-                    <a href="/open" class="btn btn-primary" style="display:inline-block;text-decoration:none;font-size:13px;padding:10px 24px;" target="_blank" rel="noopener">Chrome으로 열기</a>
-                    <button class="btn btn-primary" id="pwa-install-btn" style="display:none;margin-top:8px;" onclick="doPWAInstall()">앱 설치하기</button>
-                    <p style="font-size:10px;color:var(--text-muted);margin-top:6px;">카카오톡·인스타 등 인앱브라우저에서도 Chrome으로 이동됩니다</p>
-                </div>
-            </div>
-            <!--/PWASHELL-STRIP-->
-            <div class="install-content" id="install-ios">
-                <div id="install-ios-steps">
-                    <div class="install-step"><div class="install-step-num">1</div><div><strong>Safari</strong> 브라우저로 이 페이지에 접속합니다. (Safari만 지원)</div></div>
-                    <div class="install-step"><div class="install-step-num">2</div><div>하단 (또는 상단) 의 <strong>공유 버튼</strong> (&#x2B06;&#xFE0E; 사각형+화살표)을 누릅니다.</div></div>
-                    <div class="install-step"><div class="install-step-num">3</div><div>목록에서 <strong>"홈 화면에 추가"</strong>를 선택합니다.</div></div>
-                    <div class="install-step"><div class="install-step-num">4</div><div><strong>"추가"</strong>를 누르면 홈 화면에 아이콘이 생성됩니다.</div></div>
-                </div>
-                <div style="text-align:center;margin-top:12px;">
-                    <a href="x-safari-https://pace-rise-node.com" class="btn btn-primary" style="display:inline-block;text-decoration:none;font-size:13px;padding:10px 24px;">Safari로 열기</a>
-                    <p style="font-size:10px;color:var(--text-muted);margin-top:6px;">Safari에서 열린 후 공유 → 홈 화면에 추가</p>
-                </div>
-            </div>
-
-            <p style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:12px;">위 단계를 따라 홈 화면에 추가하면 앱처럼 사용할 수 있습니다.</p>
-
-            <button class="btn btn-ghost close-modal-btn" onclick="closeModal('install-modal')">닫기</button>
         </div>
     </div>
 
@@ -550,59 +500,12 @@
 
         // ---- Modals ----
         function openAbout() { document.getElementById('about-modal').classList.add('show'); }
-        // openInstallGuide is defined below with OS auto-detect
         function openManual() { document.getElementById('manual-modal').classList.add('show'); }
         function closeModal(id) { document.getElementById(id).classList.remove('show'); }
         // Close on outside click
-        ['about-modal','install-modal','manual-modal'].forEach(id => {
+        ['about-modal','manual-modal'].forEach(id => {
             document.getElementById(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); });
         });
-
-        function switchInstallTab(tab, btn) {
-            document.querySelectorAll('.install-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.install-content').forEach(c => c.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById('install-' + tab).classList.add('active');
-        }
-
-        // ---- OS Auto-detect for install guide ----
-        function detectOS() {
-            const ua = navigator.userAgent || '';
-            if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'ios';
-            if (/android/i.test(ua)) return 'android';
-            return 'other';
-        }
-        function openInstallGuide() {
-            document.getElementById('install-modal').classList.add('show');
-            const os = detectOS();
-            const androidTab = document.getElementById('install-tab-android');
-            // iOS 앱스토어 심사 대응: iOS 기기(웹/래핑 앱)에서는 Android(Chrome) 탭을 숨겨
-            //   타 플랫폼·스토어 언급이 보이지 않도록 한다. Android/기타에서는 그대로 노출.
-            if (os === 'ios') {
-                if (androidTab) androidTab.style.display = 'none';
-                switchInstallTab('ios', document.getElementById('install-tab-ios'));
-            } else {
-                if (androidTab) androidTab.style.display = '';
-                switchInstallTab('android', androidTab);
-            }
-        }
-        // PWA install prompt
-        let _deferredPrompt = null;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            _deferredPrompt = e;
-            const btn = document.getElementById('pwa-install-btn');
-            if (btn) btn.style.display = 'inline-flex';
-        });
-        function doPWAInstall() {
-            if (_deferredPrompt) {
-                _deferredPrompt.prompt();
-                _deferredPrompt.userChoice.then(r => {
-                    _deferredPrompt = null;
-                    document.getElementById('pwa-install-btn').style.display = 'none';
-                });
-            }
-        }
 
         // ---- Competitions ----
         let _allComps = [];
