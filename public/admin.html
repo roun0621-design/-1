@@ -10817,7 +10817,7 @@ POST /api/external/event-result-link/batch<br>
             const sample = {
                 athlete_name: '홍길동', team: '서울육상클럽', event_name: '남자 100m',
                 rank_label: '우승', record_value: '10.32', competition_name: '제30회 전국선수권',
-                cert_url: 'https://pacerise.kr/c/abc123'
+                cert_url: 'https://pace-rise-node.com/c/(자동생성링크)'
             };
             const out = tpl.replace(/\{(\w+)\}/g, (m, k) => sample[k] !== undefined ? sample[k] : '');
             alert('샘플 변환 결과:\n\n' + out);
