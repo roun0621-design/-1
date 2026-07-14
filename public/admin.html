@@ -2589,10 +2589,14 @@ POST /api/external/event-result-link/batch<br>
                             </div>
                         </div>
                     </div>
-                    <div style="margin-top:10px;">
+                    <div style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
                         <button class="btn btn-primary" onclick="sendSingleSms()">발송</button>
-                        <span id="sms-send-status" style="font-size:12px;font-weight:600;margin-left:10px;"></span>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:#a05a00;font-weight:600;">
+                            <input type="checkbox" id="sms-send-force-real"> 실제 발송 (시뮬레이션 무시)
+                        </label>
+                        <span id="sms-send-status" style="font-size:12px;font-weight:600;"></span>
                     </div>
+                    <p class="t-xs t-muted" style="margin-top:6px;">체크하면 시뮬레이션 모드여도 이 테스트 1건은 실제로 발송됩니다(요금 발생). API Key·발신번호 저장 필수.</p>
                 </div>
 
                 <!-- C. 일괄 발송 -->
@@ -10833,6 +10837,8 @@ POST /api/external/event-result-link/batch<br>
             const phone = document.getElementById('sms-send-phone').value.trim();
             const message = document.getElementById('sms-send-message').value;
             if (!phone || !message) { toast('전화번호와 메시지를 입력하세요', 'error'); return; }
+            const forceReal = !!document.getElementById('sms-send-force-real')?.checked;
+            if (forceReal && !confirm('시뮬레이션을 무시하고 실제 문자를 발송합니다.\n요금이 발생하며 수신자에게 실제로 도착합니다. 계속할까요?')) return;
             const st = document.getElementById('sms-send-status');
             st.textContent = '발송 중...';
             st.style.color = '#888';
@@ -10842,7 +10848,7 @@ POST /api/external/event-result-link/batch<br>
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         admin_key: AK(), phone, message,
-                        competition_id: _selectedCompId, triggered_by: 'manual'
+                        competition_id: _selectedCompId, triggered_by: 'manual', force_real: forceReal
                     })
                 });
                 const data = await res.json();
