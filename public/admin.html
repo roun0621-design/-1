@@ -2639,10 +2639,14 @@ POST /api/external/event-result-link/batch<br>
                         <div class="t-xs t-muted" style="margin-bottom:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 선수 휴대폰 번호는 athlete.phone 컬럼에서 가져옵니다. 비어 있는 선수는 자동 시뮬레이션 실패로 기록됩니다.</div>
                         <button class="btn btn-sm btn-warning" onclick="dryRunSmsBatch()">먼저 미리보기 (발송 없이 대상자 표시)</button>
                     </div>
-                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
                         <button class="btn btn-primary" onclick="runSmsBatch()">일괄 발송 실행</button>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:#a05a00;font-weight:600;">
+                            <input type="checkbox" id="sms-batch-force-real"> 실제 발송 (시뮬레이션 무시)
+                        </label>
                         <span id="sms-batch-status" style="font-size:12px;font-weight:600;"></span>
                     </div>
+                    <p class="t-xs t-muted" style="margin-top:6px;">체크하면 시뮬레이션 모드여도 실제로 발송됩니다(대상자 전원, 요금 발생). API Key·발신번호 저장 필수.</p>
                     <div id="sms-batch-result" style="margin-top:10px;font-size:11px;"></div>
                 </div>
 
@@ -10914,6 +10918,8 @@ POST /api/external/event-result-link/batch<br>
             const rankTo = parseInt(document.getElementById('sms-batch-rank-to').value || 3, 10);
             const includeFinishers = document.getElementById('sms-batch-include-finishers').checked;
             const selectedIds = Array.from(document.querySelectorAll('.sms-batch-event-cb:checked')).map(cb => parseInt(cb.value, 10));
+            const forceReal = !!document.getElementById('sms-batch-force-real')?.checked;
+            if (forceReal && !confirm('시뮬레이션을 무시하고 선택한 종목의 대상자 전원에게 실제 문자를 발송합니다.\n요금이 발생하며 수신자에게 실제로 도착합니다. 계속할까요?')) return;
 
             const status = document.getElementById('sms-batch-status');
             const resultBox = document.getElementById('sms-batch-result');
@@ -10934,6 +10940,7 @@ POST /api/external/event-result-link/batch<br>
                         rank_to: rankTo,
                         include_finishers: includeFinishers,
                         triggered_by: 'cert_batch',
+                        force_real: forceReal,
                     })
                 });
                 const data = await res.json();
