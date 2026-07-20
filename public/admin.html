@@ -835,6 +835,33 @@
                     <div id="sb-keys-list" style="max-height:400px;overflow-y:auto;font-size:12px;"></div>
                 </div>
 
+                <!-- 기록 엑셀 가져오기 (.lif 대안) -->
+                <div class="admin-card" style="border-left:4px solid #b8945a;">
+                    <h4 style="color:#8a7640;">기록 엑셀 가져오기 <span class="t-sm t-muted">Record Excel Import (.lif 대안)</span></h4>
+                    <p class="t-help-lg">
+                        헤더형 기록 엑셀(.xlsx)을 업로드하면 <strong>배번(BIB) 기준</strong>으로 종목·조·선수를 매칭하고 기록을 입력합니다.
+                    </p>
+                    <div style="background:#f8f4ea;border:1px solid #e8dfc0;border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                        <strong>엑셀 컬럼:</strong> 종별 · 세부종목 · 라운드 · 조 · 순위 · 레인 · <strong>배번</strong> · 성명 · 기록 · 풍속 · 팀명 · 기록구분<br>
+                        <span style="color:#8a7640;">배번 앞자리 0 자동 정규화 · 기록 <code>4:15.21</code>→초/필드 미터 자동변환 · 순위칸의 <code>DNS/DNF/DQ</code> 인식</span>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                        <label class="btn btn-sm btn-primary" style="cursor:pointer;">
+                            기록 엑셀 선택 (.xlsx)
+                            <input type="file" id="recx-file" accept=".xlsx,.xls" style="display:none;" onchange="recxPreview()">
+                        </label>
+                    </div>
+                    <div id="recx-preview-area" style="display:none;">
+                        <h4 style="font-size:14px;margin-bottom:8px;">미리보기</h4>
+                        <div id="recx-preview-list"></div>
+                        <div style="margin-top:12px;display:flex;gap:8px;">
+                            <button class="btn btn-primary" onclick="recxImport()">기록 입력 실행</button>
+                            <button class="btn btn-outline" onclick="recxCancel()">취소</button>
+                        </div>
+                    </div>
+                    <div id="recx-result" style="display:none;margin-top:16px;"></div>
+                </div>
+
                 <!-- 합동 종목 관리 (Joint Group Management — Multi-event) -->
                 <div class="admin-card" style="border-left:4px solid #6b5520;">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
@@ -7028,6 +7055,99 @@ POST /api/external/event-result-link/batch<br>
             _sbPreviewData = null;
             document.getElementById('sb-preview-area').style.display = 'none';
             document.getElementById('sb-lif-files').value = '';
+        }
+
+        // ── 기록 엑셀 가져오기 (.lif 대안) ──────────────────────────────
+        async function recxPreview() {
+            const fi = document.getElementById('recx-file');
+            if (!fi.files.length) return;
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const list = document.getElementById('recx-preview-list');
+            document.getElementById('recx-result').style.display = 'none';
+            document.getElementById('recx-preview-area').style.display = 'block';
+            list.innerHTML = '<div style="color:var(--text-muted);padding:12px;">파싱 중...</div>';
+            try {
+                const fd = new FormData();
+                fd.append('admin_key', AK());
+                fd.append('competition_id', _selectedCompId);
+                fd.append('file', fi.files[0]);
+                const resp = await fetch('/api/record-xlsx/preview', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
+                const data = await resp.json();
+                if (!resp.ok || !data.success) throw new Error(data.error || '미리보기 실패');
+                recxRender(data.results);
+            } catch (e) {
+                list.innerHTML = `<div style="color:red;">오류: ${e.message}</div>`;
+            }
+        }
+        function recxRender(results) {
+            let html = '';
+            for (const r of results) {
+                const g = r.group || {};
+                const label = `${g.divisionRaw || ''} ${g.eventName || ''} ${g.roundRaw || ''} ${g.heatNum || ''}조`;
+                if (r.matchStatus !== 'matched') {
+                    html += `<div style="border:1px solid #fca5a5;background:#fef2f2;border-radius:8px;padding:12px;margin-bottom:8px;">
+                        <strong>${label}</strong> — <span style="color:#dc2626;">매칭되는 종목/조 없음</span>
+                        <div class="t-help">DB에 해당 성별·부·종목·라운드·조가 있는지 확인하세요.</div></div>`;
+                    continue;
+                }
+                const matched = r.athleteMatches.filter(m => m.match_method !== 'none').length;
+                const total = r.athleteMatches.length;
+                html += `<div style="border:1px solid var(--gray);border-radius:8px;padding:12px;margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <strong>${label}</strong>
+                        <span style="font-size:12px;font-weight:600;color:${matched === total ? '#b79f58' : '#f59e0b'};">${matched}/${total} 매칭</span>
+                    </div>
+                    <div class="t-help" style="margin-bottom:6px;">→ ${r.heatInfo.event_name} ${r.heatInfo.round_type} ${r.heatInfo.heat_number}조 ${r.ambiguous ? '<span style="color:#f59e0b;">(종목 후보 여러 개 — 확인 필요)</span>' : ''}</div>
+                    <table style="width:100%;font-size:11px;border-collapse:collapse;"><thead><tr style="background:#f9fafb;">
+                        <th style="text-align:left;padding:4px 6px;">순위</th><th style="text-align:left;padding:4px 6px;">배번</th>
+                        <th style="text-align:left;padding:4px 6px;">이름(DB)</th><th style="text-align:left;padding:4px 6px;">기록</th>
+                        <th style="text-align:left;padding:4px 6px;">매칭</th></tr></thead><tbody>`;
+                for (const m of r.athleteMatches) {
+                    const mColor = m.match_method === 'bib' ? '#b79f58' : m.match_method === 'lane' ? '#6b6b6b' : m.match_method === 'name' ? '#f59e0b' : '#ef4444';
+                    const mLabel = m.match_method === 'none' ? '실패' : m.match_method;
+                    const valStr = (m.rec_type !== 'result') ? m.rec_type : (m.rec_value != null ? (m.is_field ? m.rec_value + 'm' : m.rec_value + 's') : (m.rec_raw || '-'));
+                    html += `<tr style="border-top:1px solid #f3f4f6;">
+                        <td style="padding:3px 6px;">${m.rec_rank || '-'}</td>
+                        <td style="padding:3px 6px;">${m.rec_bib || '-'}</td>
+                        <td style="padding:3px 6px;">${m.db_name || '<span style=color:red>매칭실패</span>'}</td>
+                        <td style="padding:3px 6px;font-family:monospace;">${valStr}</td>
+                        <td style="padding:3px 6px;color:${mColor};font-weight:600;">${mLabel}</td></tr>`;
+                }
+                html += '</tbody></table></div>';
+            }
+            document.getElementById('recx-preview-list').innerHTML = html || '<div class="t-muted">데이터 없음</div>';
+        }
+        function recxCancel() {
+            document.getElementById('recx-preview-area').style.display = 'none';
+            document.getElementById('recx-file').value = '';
+        }
+        async function recxImport() {
+            const fi = document.getElementById('recx-file');
+            if (!fi.files.length) { toast('파일을 선택해 주세요.', 'error'); return; }
+            if (!confirm('매칭된 선수에게 기록을 입력합니다. 계속할까요?\n(기존 기록이 있으면 덮어씁니다)')) return;
+            const box = document.getElementById('recx-result');
+            box.style.display = 'block';
+            box.innerHTML = '<div style="color:var(--text-muted);padding:12px;">입력 중...</div>';
+            try {
+                const fd = new FormData();
+                fd.append('admin_key', AK());
+                fd.append('competition_id', _selectedCompId);
+                fd.append('file', fi.files[0]);
+                const resp = await fetch('/api/record-xlsx/import', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
+                const data = await resp.json();
+                if (!resp.ok || !data.success) throw new Error(data.error || '입력 실패');
+                let html = '<div style="border:1px solid #b79f58;background:#f0fdf4;border-radius:8px;padding:12px;"><strong style="color:#b79f58;">기록 입력 완료</strong><br><br>';
+                for (const r of data.results) {
+                    if (r.error) html += `<div style="margin-bottom:6px;"><strong>${r.label}</strong> — <span style="color:red;">${r.error}</span></div>`;
+                    else html += `<div style="margin-bottom:6px;"><strong>${r.label}</strong> — <span style="color:#b79f58;">${r.imported}건 입력</span>${r.skipped > 0 ? `<span style="color:#f59e0b;"> / ${r.skipped}건 스킵</span>` : ''}${r.wind ? ` <span style="color:#6b7280;">풍속 ${r.wind}</span>` : ''}</div>`;
+                }
+                html += '</div>';
+                box.innerHTML = html;
+                recxCancel();
+                if (typeof loadEvents === 'function') loadEvents();
+            } catch (e) {
+                box.innerHTML = `<div style="color:red;padding:12px;">오류: ${e.message}</div>`;
+            }
         }
 
         async function sbImportFiles() {
