@@ -27,6 +27,7 @@ public/ktfl_p*.png
 *.png
 !public/icons/og-image.png
 !public/images/*.png
+!public/brand/*.png
 db/pacerise.db
 db/*.db
 !db/init.js

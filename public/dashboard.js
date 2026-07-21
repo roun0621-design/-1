@@ -1032,6 +1032,7 @@ async function openResult(eventId) {
 
         let bodyHtml = '';
         bodyHtml += buildEmbedVideoHTML(videoUrl);
+        bodyHtml += _scNoticeHtml();
 
         if (evt.category === 'track' || evt.category === 'relay' || evt.category === 'road') {
             let relayMembers = null;
@@ -1746,7 +1747,18 @@ async function _loadCombinedResultsAsync(evt) {
                             const rec = se.unit === 's' ? formatTime(p.raw) : formatHeight(p.raw);
                             return `<td style="font-size:10px;cursor:pointer;" onclick="_cResultShowSub(${se.order})"><div>${rec}</div><div style="color:var(--primary);font-size:9px;">${p.points}</div></td>`;
                         }).join('');
-                        return `<tr style="${r.total > 0 ? 'background:#f0fff4;' : ''}">
+                        // SNS 카드용: 세부 기록을 종목명 없이 순서대로만 (표 셀과 같은 판정 순서)
+                        const scMarks = subDefs.map(se => {
+                            const p = r.pts[se.order];
+                            if (!p || p.raw == null) return '—';
+                            if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) return p.status_code;
+                            if (p.raw === 0 && p.points === 0) return 'NM';
+                            if (p.raw <= 0) return '—';
+                            return se.unit === 's' ? formatTime(p.raw) : formatHeight(p.raw);
+                        });
+                        const scAttr = _scAttr(evt, r, r.total > 0 ? String(r.total) : '', r.rank,
+                            { marks: scMarks, marksPerRow: day1Max });
+                        return `<tr style="${r.total > 0 ? 'background:#f0fff4;' : ''}"${scAttr}>
                             <td><strong>${r.rank}</strong></td><td><strong>${bib(r.bib_number)}</strong></td>
                             <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:10px;">${r.team || ''}</td>
                             ${cells}
@@ -1986,6 +1998,58 @@ async function _cResultShowSub(order) {
     }
 }
 
+// ============================================================
+// SNS 기록 카드 — 결과표 행에 카드용 데이터를 실어둔다
+// share-card.js 의 openShareCard() 가 이 payload 를 그대로 받는다.
+// 기록이 없는 행(미출전/실격)은 카드를 만들지 않는다.
+// ============================================================
+function _scAttr(evt, r, record, rank, extra) {
+    if (!record || !r || !r.name) return '';
+    const isRelay = evt?.category === 'relay';
+    const payload = {
+        eventName: evt?.name || '',
+        division: [getGenderLabel(evt?.gender), evt?.division].filter(Boolean).join(' '),
+        record: record,
+        name: r.name || '',
+        // 계주는 athlete 행 자체가 팀(더미 선수)이라 name 에 이미 팀명이 들어있다.
+        // 소속까지 찍으면 같은 글자가 두 번 나오므로 비운다.
+        team: isRelay ? '' : (r.team || ''),
+        rank: (typeof rank === 'number' && rank > 0) ? rank : null,
+        laneLabel: getSmallNumberLabel(evt?.name, evt?.category),
+        laneNumber: r.lane_number || null,
+        competition: (document.querySelector('.comp-info-name')?.textContent || '').trim(),
+        compDate: (document.querySelector('.comp-info-dates')?.textContent || '').trim()
+    };
+    if (extra) Object.assign(payload, extra);
+    return ` data-sc="${encodeURIComponent(JSON.stringify(payload))}"`;
+}
+
+// 최초 1회 안내 — 닫으면 다시 뜨지 않는다.
+// (행마다 큰 버튼을 다는 대신 한 번만 크게 알려서 결과표를 깨끗하게 유지)
+function _scNoticeHtml() {
+    try { if (localStorage.getItem('sc_notice_done') === '1') return ''; } catch (e) {}
+    return `<div class="sc-notice" id="sc-notice">기록을 누르면 공유 카드를 만들 수 있어요
+        <button onclick="_scDismissNotice()" aria-label="닫기">&times;</button></div>`;
+}
+function _scDismissNotice() {
+    try { localStorage.setItem('sc_notice_done', '1'); } catch (e) {}
+    const n = document.getElementById('sc-notice');
+    if (n) n.remove();
+}
+
+// 결과표 행 클릭 → 카드 팝업 (재렌더링돼도 유지되도록 document 위임)
+document.addEventListener('click', function (e) {
+    if (!e.target || !e.target.closest) return;
+    const row = e.target.closest('tr[data-sc]');
+    if (!row || typeof openShareCard !== 'function') return;
+    // 행 안에 자체 동작이 있는 요소(혼성 표의 세부기록 셀 등)를 누른 경우엔 양보한다.
+    const own = e.target.closest('[onclick], a, button, input, select, label');
+    if (own && row.contains(own)) return;
+    try {
+        openShareCard(JSON.parse(decodeURIComponent(row.getAttribute('data-sc'))));
+    } catch (err) { /* 잘못된 payload 는 무시 */ }
+});
+
 function renderTrackResults(data, relayMembers) {
     const isRelay = data.event?.category === 'relay';
     let html = '';
@@ -2030,7 +2094,8 @@ function renderTrackResults(data, relayMembers) {
                         </td></tr>`;
                     }
                 }
-                return `<tr>
+                const _scRec = (!r.status_code && r.time_seconds != null) ? formatTime(r.time_seconds) : '';
+                return `<tr${_scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null)}>
                 <td>${r.rank}</td><td>${r.lane_number || '—'}</td><td>${bib(r.bib_number)}</td>
                 <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>
                 <td style="font-family:monospace;font-weight:600;">${r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.time_seconds != null ? formatTime(r.time_seconds) + wMark2 + (!_isWindAided2 ? _buildRecordBadgesHTML(r.time_seconds) : '') : '<span style="color:var(--text-muted);">—</span>')}</td>
@@ -2129,7 +2194,8 @@ function renderFieldDistResults(data) {
                     let rmk = '';
                     if (_bwa) rmk = '참고기록';
                     const rmkSt = _bwa ? 'color:var(--accent);font-weight:600;' : '';
-                    return `<tr class="field-row1">
+                    const _scRec = (!r.status_code && r.best != null) ? formatHeight(r.best) : '';
+                    return `<tr class="field-row1"${_scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null)}>
                         <td rowspan="2">${rkDisp}</td><td rowspan="2">${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td><strong>${bib(r.bib_number)}</strong></td>
                         ${distCells}<td rowspan="2" class="best-cell att-col-best">${bestDisp}<div class="best-wind">${bestWindDisp}</div></td>
@@ -2149,7 +2215,8 @@ function renderFieldDistResults(data) {
                     const rkDisp2 = r.status_code ? '' : r.rank;
                     const rmk2 = '';  // 신기록은 기록칸 괄호로 표시
                     const rmkSt2 = rmk2 ? 'color:#27ae60;font-weight:700;' : '';
-                    return `<tr><td>${rkDisp2}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td class="att-col-best" style="font-weight:700;">${bestDisp2}</td><td style="font-size:11px;${rmkSt2}">${rmk2}</td></tr>`;
+                    const _scRec2 = (!r.status_code && r.best != null) ? formatHeight(r.best) : '';
+                    return `<tr${_scAttr(data.event, r, _scRec2, typeof r.rank === 'number' ? r.rank : null)}><td>${rkDisp2}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td class="att-col-best" style="font-weight:700;">${bestDisp2}</td><td style="font-size:11px;${rmkSt2}">${rmk2}</td></tr>`;
                 }).join('')}</tbody></table>`;
         }
     });
@@ -2205,7 +2272,8 @@ function renderFieldHeightResults(data) {
                 const bestDisp3 = r.best != null ? (formatHeight(r.best) + _buildRecordBadgesHTML(r.best)) : (r.isNM ? '<span class="sc-badge sc-NM">NM</span>' : '');
                 const rmk3 = '';  // 신기록은 기록칸 괄호로 표시
                 const rmkSt3 = rmk3 ? 'color:#27ae60;font-weight:700;' : '';
-                return `<tr><td>${r.isNM ? '' : r.rank}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td style="font-weight:700;">${bestDisp3}</td><td style="font-size:11px;${rmkSt3}">${rmk3}</td></tr>`;
+                const _scRec3 = (!r.isNM && r.best != null) ? formatHeight(r.best) : '';
+                return `<tr${_scAttr(data.event, r, _scRec3, typeof r.rank === 'number' ? r.rank : null)}><td>${r.isNM ? '' : r.rank}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td style="font-weight:700;">${bestDisp3}</td><td style="font-size:11px;${rmkSt3}">${rmk3}</td></tr>`;
             }).join('')}</tbody></table>`;
     });
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
