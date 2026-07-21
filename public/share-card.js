@@ -260,6 +260,15 @@ function openShareCard(payload) {
         document.body.appendChild(ov);
     }
 
+    // PC: 공유 버튼을 숨기고 저장 버튼 하나만 남긴다
+    const shareBtn = document.getElementById('sc-share');
+    const saveBtn = document.getElementById('sc-save');
+    if (shareBtn && saveBtn) {
+        const mobile = _scIsMobile();
+        shareBtn.style.display = mobile ? '' : 'none';
+        saveBtn.className = 'sc-btn ' + (mobile ? 'sc-btn-sub' : 'sc-btn-main');
+    }
+
     const cb = document.getElementById('sc-rank');
     if (cb) cb.checked = true;
     // 순위가 없는 경우(실격/기록없음)엔 토글 자체를 숨긴다
@@ -317,6 +326,20 @@ async function _scToBlob() {
     } finally {
         holder.remove();
     }
+}
+
+// PC 인지 판별.
+// PC 에서는 OS 공유창을 띄워봐야 인스타그램에 올릴 수 없다(인스타는 모바일
+// 업로드 전용). 브라우저마다 navigator.share 지원 여부도 제각각이라 실패
+// 경로만 늘어난다 → PC 는 '이미지 저장' 하나로 단순화한다.
+function _scIsMobile() {
+    if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean') {
+        return navigator.userAgentData.mobile;
+    }
+    if (/Android|iPhone|iPod/i.test(navigator.userAgent)) return true;
+    // iPadOS 는 UA 를 Mac 으로 위장하므로 터치 지원으로 가려낸다
+    if (/iPad/.test(navigator.userAgent)) return true;
+    return /Mac/.test(navigator.platform || '') && navigator.maxTouchPoints > 1;
 }
 
 function _scKey() { try { return JSON.stringify(_scData); } catch (e) { return ''; } }
