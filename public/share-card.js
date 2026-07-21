@@ -22,6 +22,8 @@ const SC_W = 1080, SC_H = 1350;
 let _scLoaded = false;      // html2canvas 로더 1회성
 let _scStyled = false;      // 스타일 주입 1회성
 let _scData = null;         // 현재 팝업에 뜬 카드 데이터
+let _scPrebuilt = null;     // 미리 구워둔 PNG blob (공유 버튼의 즉시 응답용)
+let _scPrebuiltKey = '';    // 그 blob 이 어떤 카드 데이터로 만들어졌는지
 
 // ------------------------------------------------------------
 // html2canvas 지연 로드 — 카드를 실제로 열 때만 206KB 를 받는다.
@@ -268,10 +270,9 @@ function openShareCard(payload) {
     if (window.pushModalState) pushModalState(() => closeShareCard());
 
     // 폰트가 로드된 뒤에 그려야 미리보기와 최종 PNG 가 어긋나지 않는다
-    const draw = () => _scRenderPreview();
+    const draw = () => { _scRenderPreview(); _scPrewarm(); };
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw).catch(draw);
-    else draw();
-    draw();
+    else _scRenderPreview();
 }
 
 function closeShareCard() {
@@ -285,6 +286,7 @@ function _scToggleRank(on) {
     if (!_scData) return;
     _scData.showRank = !!on;
     _scRenderPreview();
+    _scPrewarm();
 }
 
 // ------------------------------------------------------------
@@ -317,9 +319,48 @@ async function _scToBlob() {
     }
 }
 
+function _scKey() { try { return JSON.stringify(_scData); } catch (e) { return ''; } }
+
+// 캐시된 blob 이 현재 카드와 같으면 재사용, 아니면 새로 굽는다
+async function _scBlob() {
+    if (_scPrebuilt && _scPrebuiltKey === _scKey()) return _scPrebuilt;
+    const blob = await _scToBlob();
+    _scPrebuilt = blob;
+    _scPrebuiltKey = _scKey();
+    return blob;
+}
+
+// 팝업이 뜨는 즉시 백그라운드로 PNG 를 구워둔다 → 공유 버튼이 기다림 없이
+// navigator.share() 를 호출할 수 있다(사용자 조작 권한 만료 방지).
+function _scPrewarm() {
+    const key = _scKey();
+    _scPrebuilt = null;
+    _scPrebuiltKey = '';
+    _scToBlob().then(b => {
+        if (_scKey() === key) { _scPrebuilt = b; _scPrebuiltKey = key; }
+    }).catch(() => { /* 실패해도 버튼 누를 때 다시 시도한다 */ });
+}
+
 function _scFileName() {
     const d = _scData || {};
     return `${d.name || 'record'}_${d.eventName || ''}.png`.replace(/\s+/g, '');
+}
+
+// 다운로드
+// ⚠️ 앵커를 DOM 에 붙이지 않고 click() 하면 브라우저가 download 속성을 무시하고
+// blob URL 로 '이동'해 버린다 — 페이지가 about:blank 로 날아가 앱이 종료된 것처럼 보인다.
+// 반드시 body 에 붙였다가 지울 것.
+function _scDownload(blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = _scFileName();
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function _scBusy(on) {
@@ -332,12 +373,7 @@ function _scBusy(on) {
 async function _scSave() {
     _scBusy(true);
     try {
-        const blob = await _scToBlob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = _scFileName();
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        _scDownload(await _scBlob());
     } catch (e) {
         alert('이미지 생성에 실패했습니다.');
     } finally { _scBusy(false); }
@@ -346,20 +382,24 @@ async function _scSave() {
 async function _scShare() {
     _scBusy(true);
     try {
-        const blob = await _scToBlob();
+        // 미리 만들어둔 blob 이 있으면 await 없이 바로 share() 를 호출한다.
+        // navigator.share() 는 사용자 조작 직후에만 허용되는데(transient
+        // activation), PNG 생성을 기다리는 동안 그 권한이 만료되면
+        // NotAllowedError 가 난다. openShareCard() 에서 미리 굽는 이유.
+        const ready = _scPrebuilt;
+        const blob = ready || await _scBlob();
         const file = new File([blob], _scFileName(), { type: 'image/png' });
-        // 모바일: OS 공유창(인스타/카톡). 미지원 환경이면 저장으로 대체.
+
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file] });
         } else {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = _scFileName();
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            _scDownload(blob);          // 공유 미지원(주로 PC) → 저장으로 대체
         }
     } catch (e) {
-        if (e && e.name === 'AbortError') return;   // 사용자가 공유창을 닫음
+        if (e && e.name === 'AbortError') return;       // 사용자가 공유창을 닫음
+        if (e && e.name === 'NotAllowedError') {        // 조작 권한 만료 → 저장으로 대체
+            try { _scDownload(await _scBlob()); return; } catch (e2) {}
+        }
         alert('공유에 실패했습니다.');
     } finally { _scBusy(false); }
 }
