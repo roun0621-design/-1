@@ -1816,7 +1816,7 @@ function opLog(message, category = 'general', performedBy = 'system', compId = n
 // Federation event mapping
 const FED_EVENT_MAP = {
     '100m':{name:'100m',category:'track'},'200m':{name:'200m',category:'track'},'400m':{name:'400m',category:'track'},
-    '800m':{name:'800m',category:'track'},'1500m':{name:'1500m',category:'track'},'5000m':{name:'5000m',category:'track'},
+    '800m':{name:'800m',category:'track'},'1000m':{name:'1000m',category:'track'},'1500m':{name:'1500m',category:'track'},'5000m':{name:'5000m',category:'track'},
     '5000mW':{name:'5000mW',category:'track'},'10000m':{name:'10,000m',category:'track'},
     '10000mW':{name:'10,000mW',category:'track'},'10,000mW':{name:'10,000mW',category:'track'},
     '100mH':{name:'100mH',category:'track'},
@@ -4992,8 +4992,14 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 const hn = String(h || '').trim().toLowerCase();
                 return hn === '\ubc30\ubc88' || hn === 'bib' || hn === '\ubc30\ubc88\ud638' || hn === 'bib_number';
             });
+            // 휴대폰 컬럼 탐색 (SMS·기록증 발송용) — 헤더명으로 위치 자동 인식
+            const _phoneColIdx = headers.findIndex(h => {
+                const hn = String(h || '').trim().toLowerCase();
+                return /^(휴대폰|핸드폰|전화|전화번호|연락처|phone|phone_number|mobile)$/.test(hn);
+            });
             const _barcodeMap = new Map(); // key: name|team|gender -> barcode
             const _bibMap = new Map(); // key: name|team|gender -> bib
+            const _phoneMap = new Map(); // key: name|team|gender -> phone (숫자만)
             // barcode와 bib_number는 별도 필드로 유지 (바코드≠배번)
 
             dataRows.forEach(row => {
@@ -5031,6 +5037,10 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 if (rowBib) {
                     _bibMap.set(`${name}|${team}|${gender}`, rowBib);
                 }
+                if (_phoneColIdx >= 0 && row[_phoneColIdx]) {
+                    const rowPhone = String(row[_phoneColIdx]).replace(/[^0-9]/g, '');
+                    if (rowPhone) _phoneMap.set(`${name}|${team}|${gender}`, rowPhone);
+                }
                 for (const [colKey, relayInfo] of Object.entries(relayColMap)) {
                     if (String(row[relayInfo.idx] || '').trim().toUpperCase() === 'O') {
                         const rGender = relayInfo.gender || gender;
@@ -5064,7 +5074,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     // Field, combined, road events are always 'final'
                     // Only track short-distance events can have preliminary rounds
                     const ALWAYS_FINAL_CATEGORIES = ['field_distance', 'field_height', 'combined', 'relay', 'road'];
-                    const ALWAYS_FINAL_EVENTS = ['5000m','5000mW','10,000m','10,000mW','10000m','3000mSC','3000m장애물','마라톤','하프마라톤','20KmW','35kmW','10K','5K'];
+                    const ALWAYS_FINAL_EVENTS = ['1000m','5000m','5000mW','10,000m','10,000mW','10000m','3000mSC','3000m장애물','마라톤','하프마라톤','20KmW','35kmW','10K','5K'];
                     const isFinalOnly = ALWAYS_FINAL_CATEGORIES.includes(info.category) || ALWAYS_FINAL_EVENTS.some(e => info.name === e || info.name.startsWith(e + ' '));
                     const rt = (!isFinalOnly && info.athletes.length > heatSize) ? 'preliminary' : 'final';
                     try {
@@ -5169,11 +5179,14 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                         if (!bibConflict) await db.run('UPDATE athlete SET bib_number=? WHERE id=? AND (bib_number IS NULL OR bib_number = ?)', bib, existingId, '');
                     }
                     if (bc) await db.run('UPDATE athlete SET barcode=? WHERE id=? AND (barcode IS NULL OR barcode = ?)', bc, existingId, bc);
+                    const ph = _phoneMap.get(key) || null;
+                    if (ph) await db.run("UPDATE athlete SET phone=? WHERE id=? AND (phone IS NULL OR phone = '')", ph, existingId);
                     return existingId;
                 }
                 const bib = _bibMap.get(key) || null;
                 const bc = _barcodeMap.get(key) || '';
-                const r = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', competition_id, name, bib, team, bc, gender);
+                const ph = _phoneMap.get(key) || '';
+                const r = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone) VALUES (?,?,?,?,?,?,?)', competition_id, name, bib, team, bc, gender, ph);
                 athleteCache.set(key, r.lastInsertRowid);
                 stats.athletes++;
                 return r.lastInsertRowid;
@@ -5928,7 +5941,7 @@ function inferHeatEventCategory(eventNameRaw) {
 //   엑셀이 명시한 라운드(parsedRound) 우선, 단 field/road/combined/relay·장거리는 항상 final 로 보정
 function computeHeatRoundType(category, eventName, parsedRound) {
     const ALWAYS_FINAL_CATEGORIES = ['field_distance', 'field_height', 'combined', 'relay', 'road'];
-    const ALWAYS_FINAL_EVENTS = ['5000m','5000mW','10,000m','10,000mW','10000m','3000mSC','3000m장애물','마라톤','하프마라톤','20KmW','35kmW','10K','5K'];
+    const ALWAYS_FINAL_EVENTS = ['1000m','5000m','5000mW','10,000m','10,000mW','10000m','3000mSC','3000m장애물','마라톤','하프마라톤','20KmW','35kmW','10K','5K'];
     const base = String(eventName || '').replace(/^\[(10종|7종)\]\s*/, '');
     const isFinalOnly = ALWAYS_FINAL_CATEGORIES.includes(category) || ALWAYS_FINAL_EVENTS.some(e => base === e || base.startsWith(e + ' '));
     if (isFinalOnly) return 'final';
