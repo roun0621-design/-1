@@ -1890,11 +1890,16 @@ body.viewer-mode .footer { display: none; }
    MISSING CLASS FIXES (v7.1)
    ============================================================ */
 .comp-info-line {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; flex-direction: column; align-items: stretch; gap: 6px;
     padding: 8px 16px; background: var(--bg-dark);
     border-radius: var(--radius); font-size: 13px;
-    margin-bottom: 16px; flex-wrap: wrap;
+    margin-bottom: 16px;
 }
+/* 줄1: 대회 정보(이름·날짜·장소) — 길면 자체 wrap */
+.comp-info-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* 줄2: 액션 버튼(기록지·시간표·영상·공지) — 항상 오른쪽에 나란히 */
+.comp-info-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.comp-info-actions:empty { display: none; }
 .comp-info-name { font-weight: 700; }
 .comp-info-sep { color: var(--text-muted); }
 .comp-info-dates, .comp-info-venue { color: var(--text-muted); }

@@ -787,24 +787,24 @@ async function renderCompInfoBar(containerId) {
         }
         const role = localStorage.getItem('pace_role') || 'viewer';
         // Shared button style for comp-info-bar action buttons
+        // (간격은 .comp-info-actions 의 gap 이 담당 — 버튼 자체엔 margin 없음)
         const _cibBtnBase = 'white-space:nowrap;font-size:13px;font-weight:700;padding:7px 16px;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;';
-        // 버튼들은 모두 6px 간격으로 붙이고, 오른쪽 정렬은 아래 flex 스페이서가 담당
-        // (예전엔 기록지/영상 버튼이 각각 margin-left:auto 를 가져 남는 공간이 반씩 나뉘며
-        //  기록지-영상 사이가 크게 벌어지는 버그가 있었음 → 스페이서 1개로 통일)
         const docBtnHtml = role !== 'viewer'
-            ? `<button id="comp-doc-btn" style="${_cibBtnBase}margin-left:6px;background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
+            ? `<button id="comp-doc-btn" style="${_cibBtnBase}background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
             : '';
         // 대시보드 모드에서는 히어로 카드가 시간표 진입점을 대체하므로 상단 버튼 숨김
         const isDashboardMode = document.body.classList.contains('dashboard-mode');
-        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}margin-left:6px;background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
-        el.innerHTML = `<span class="comp-info-name">${info.name || ''}</span>
-            ${fedBadge}
-            <span class="comp-info-sep">|</span>
-            <span class="comp-info-dates">${info.dates || ''}</span>
-            <span class="comp-info-sep">|</span>
-            <span class="comp-info-venue">${info.venue || ''}</span>
-            <span class="comp-info-spacer" style="flex:1 1 auto;"></span>
-            ${docBtnHtml}${ttBtnHtml}`;
+        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
+        // 정보(줄1) 와 액션 버튼(줄2) 을 분리 → 대회명이 길어도 버튼이 항상 한 줄에 나란히
+        el.innerHTML = `<div class="comp-info-main">
+                <span class="comp-info-name">${info.name || ''}</span>
+                ${fedBadge}
+                <span class="comp-info-sep">|</span>
+                <span class="comp-info-dates">${info.dates || ''}</span>
+                <span class="comp-info-sep">|</span>
+                <span class="comp-info-venue">${info.venue || ''}</span>
+            </div>
+            <div class="comp-info-actions" id="comp-info-actions">${docBtnHtml}${ttBtnHtml}</div>`;
     } catch (e) {}
 }
 
@@ -902,13 +902,13 @@ function openCompNoticePopup() {
 }
 
 function renderCompNoticeButton() {
-    const bar = document.getElementById('comp-info-bar');
+    const bar = document.getElementById('comp-info-actions') || document.getElementById('comp-info-bar');
     if (!bar) return;
     let btn = document.getElementById('comp-notice-btn');
     if (!btn) {
         btn = document.createElement('button');
         btn.id = 'comp-notice-btn';
-        btn.style.cssText = 'white-space:nowrap;font-size:13px;font-weight:700;padding:7px 16px;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;margin-left:6px;background:linear-gradient(135deg,#e0574f,#b23b34);box-shadow:0 2px 6px rgba(178,59,52,0.3);';
+        btn.style.cssText = 'white-space:nowrap;font-size:13px;font-weight:700;padding:7px 16px;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;background:linear-gradient(135deg,#e0574f,#b23b34);box-shadow:0 2px 6px rgba(178,59,52,0.3);';
         btn.textContent = '공지';
         btn.onmouseover = () => { btn.style.transform = 'translateY(-1px)'; };
         btn.onmouseout = () => { btn.style.transform = ''; };
