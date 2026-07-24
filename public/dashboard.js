@@ -238,6 +238,8 @@ async function loadData() {
         _timetableFull = tt || { days: {}, start_date: null };
     } catch(e) { _timetableFull = { days: {}, start_date: null }; }
     renderCompVideoButton();
+    // 대회별 공지 팝업: [공지] 버튼 표시 + 진입 시 자동 노출 (common.js)
+    if (typeof initCompNoticePopup === 'function') initCompNoticePopup();
     renderHeroSchedule();
     // Render division filter tabs when events have divisions (regardless of mode setting)
     renderDivisionTabs();
@@ -417,7 +419,7 @@ function renderCompVideoButton() {
         btn = document.createElement('button');
         btn.id = 'comp-video-btn';
         btn.className = 'btn btn-sm btn-outline';
-        btn.style.cssText = 'margin-left:auto;white-space:nowrap;font-size:12px;padding:5px 12px;display:none;';
+        btn.style.cssText = 'margin-left:6px;white-space:nowrap;font-size:12px;padding:5px 12px;display:none;';
         btn.innerHTML = '&#9654; 대회 영상';
         btn.onclick = () => {
             if (_compVideoUrl) openVideoModal(_compVideoUrl, '대회 대표 영상');

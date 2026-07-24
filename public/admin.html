@@ -1237,6 +1237,15 @@
                             <div class="admin-form-group"><label>종료일</label><input type="date" id="pe-until"></div>
                         </div>
                         <div class="admin-form-row" style="margin-bottom:10px;">
+                            <div class="admin-form-group" style="flex:1;">
+                                <label>노출 대상</label>
+                                <select id="pe-competition">
+                                    <option value="">공통 (전체 · 홈에 노출)</option>
+                                </select>
+                                <span class="t-xs t-muted">특정 대회를 고르면 그 대회 대시보드의 [공지] 버튼에서만 표시됩니다.</span>
+                            </div>
+                        </div>
+                        <div class="admin-form-row" style="margin-bottom:10px;">
                             <div class="admin-form-group" style="flex:1;"><label>제목</label><input id="pe-title" placeholder="예: PACE RISE : Node"></div>
                         </div>
                         <div class="admin-form-row" style="margin-bottom:10px;">
@@ -1244,7 +1253,7 @@
                         </div>
                         <div class="admin-form-group" style="margin-bottom:10px;">
                             <label>소개 문구</label>
-                            <textarea id="pe-intro" rows="3" style="width:100%;padding:8px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:12px;resize:vertical;" placeholder="HTML 가능"></textarea>
+                            <textarea id="pe-intro" rows="3" style="width:100%;padding:8px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:12px;resize:vertical;" placeholder="HTML 가능 · 엔터로 줄바꿈됨"></textarea>
                         </div>
 
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -2280,6 +2289,13 @@ POST /api/external/event-result-link/batch<br>
                                 <option value="record">기록증 (기록 있는 출전자 전원)</option>
                             </select>
                         </div>
+                        <div id="cert-rank-scope-wrap">
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">순위 기준</label>
+                            <select id="cert-rank-scope" style="width:100%;padding:6px 8px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="overall">종합 (종목 전체)</option>
+                                <option value="heat">조별 (조 내 순위 — 예: 2조 1위)</option>
+                            </select>
+                        </div>
                         <div id="cert-rank-range-wrap">
                             <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">순위 범위</label>
                             <div style="display:flex;gap:6px;align-items:center;">
@@ -2577,7 +2593,7 @@ POST /api/external/event-result-link/batch<br>
                             <input type="number" id="sms-cfg-monthly-quota" placeholder="0" min="0" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
                         </div>
                         <div style="grid-column:1 / -1;">
-                            <label class="t-xs">기본 메시지 템플릿 (변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {competition_name} {cert_url})</label>
+                            <label class="t-xs">기본 메시지 템플릿 (변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {competition_name} {cert_url} {heat_label} {heat})</label>
                             <textarea id="sms-cfg-template" rows="4" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;font-family:inherit;"></textarea>
                             <div style="display:flex;gap:10px;align-items:center;margin-top:4px;font-size:11px;color:var(--text-muted);">
                                 <span id="sms-cfg-tpl-bytes">0 bytes</span>
@@ -2636,6 +2652,13 @@ POST /api/external/event-result-link/batch<br>
                             <select id="sms-batch-mode" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
                                 <option value="award">시상장 (순위별)</option>
                                 <option value="finisher">완주자 전원</option>
+                            </select>
+                        </div>
+                        <div id="sms-batch-scope-wrap">
+                            <label class="t-xs">순위 기준</label>
+                            <select id="sms-batch-rank-scope" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="overall">종합 (종목 전체)</option>
+                                <option value="heat">조별 (조 내 순위)</option>
                             </select>
                         </div>
                         <div id="sms-batch-rank-wrap">
@@ -4628,6 +4651,10 @@ POST /api/external/event-result-link/batch<br>
             if (!_homePopups.length) { wrap.innerHTML = '<span class="t-md t-muted">등록된 팝업이 없습니다. 위 버튼으로 추가하세요.</span>'; return; }
             wrap.innerHTML = _homePopups.map((p, i) => {
                 const typeLabel = p.popup_type === 'admin' ? '● 관리자용' : '○ 일반 유저용';
+                const _tComp = p.competition_id ? (_competitions.find(c => c.id === p.competition_id) || {}) : null;
+                const compLabel = p.competition_id
+                    ? `<span style="font-size:10px;font-weight:700;background:#fdecea;color:#b23b34;padding:2px 7px;border-radius:99px;white-space:nowrap;">${_esc(_tComp.name || ('대회#'+p.competition_id))}</span>`
+                    : `<span style="font-size:10px;font-weight:700;background:#eef2ff;color:#4f46e5;padding:2px 7px;border-radius:99px;white-space:nowrap;">공통</span>`;
                 const activeLabel = p.is_active ? '<span style="color:#b79f58;font-size:11px;">● ON</span>' : '<span style="color:#999;font-size:11px;">○ OFF</span>';
                 const period = (p.show_from || p.show_until) ? `<span class="t-xs t-muted">${p.show_from||'시작없음'} ~ ${p.show_until||'종료없음'}</span>` : '';
                 const orderLabel = `<span style="font-size:10px;color:var(--text-muted);font-weight:600;min-width:20px;text-align:center;">#${i+1}</span>`;
@@ -4639,6 +4666,7 @@ POST /api/external/event-result-link/batch<br>
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
                         <span style="font-size:11px;font-weight:600;white-space:nowrap;">${typeLabel}</span>
+                        ${compLabel}
                         ${activeLabel}
                         <span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.title || '(제목 없음)'}</span>
                         ${period}
@@ -4664,9 +4692,22 @@ POST /api/external/event-result-link/batch<br>
                 showToast('팝업 순서 변경됨');
             } catch(e) { showToast(e.error || '순서 변경 실패', 'error'); }
         }
+        // 노출 대상(대회) 드롭다운 채우기 — _competitions(전역) 사용, 없으면 조회
+        async function _fillPopupCompetitionSelect(selectedId) {
+            const sel = document.getElementById('pe-competition');
+            if (!sel) return;
+            let comps = _competitions;
+            if (!comps || !comps.length) { try { comps = await API.getCompetitions(); } catch(e) { comps = []; } }
+            const sorted = [...comps].sort((a,b) => (b.start_date||'').localeCompare(a.start_date||''));
+            sel.innerHTML = '<option value="">공통 (전체 · 홈에 노출)</option>' +
+                sorted.map(c => `<option value="${c.id}">${_esc(c.name || '')}${c.start_date ? ' ('+c.start_date+')' : ''}</option>`).join('');
+            sel.value = selectedId != null && selectedId !== '' ? String(selectedId) : '';
+        }
+
         function openPopupEditor(type) {
             _editingPopupId = null;
             _popupSections = [];
+            _fillPopupCompetitionSelect('');
             document.getElementById('pe-type').value = type || 'public';
             document.getElementById('pe-active').value = '1';
             document.getElementById('pe-from').value = '';
@@ -4692,6 +4733,7 @@ POST /api/external/event-result-link/batch<br>
             if (!p) return;
             _editingPopupId = p.id;
             _popupSections = (p.sections || []).map(s => ({ ...s }));
+            _fillPopupCompetitionSelect(p.competition_id ?? '');
             document.getElementById('pe-type').value = p.popup_type || 'public';
             document.getElementById('pe-active').value = String(p.is_active ?? 1);
             document.getElementById('pe-from').value = p.show_from || '';
@@ -4723,7 +4765,7 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                     </div>
                     <div class="admin-form-group" style="margin-bottom:6px;"><label class="t-sm">제목</label><input value="${(s.title||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].title=this.value" style="width:100%;"></div>
-                    <div class="admin-form-group" style="margin-bottom:6px;"><label class="t-sm">내용 (HTML 가능, • 으로 줄바꿈)</label><textarea rows="3" onchange="_popupSections[${i}].content=this.value" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:4px;font-size:11px;resize:vertical;">${(s.content||'').replace(/</g,'&lt;')}</textarea></div>
+                    <div class="admin-form-group" style="margin-bottom:6px;"><label class="t-sm">내용 (HTML 가능 · 엔터로 줄바꿈됨)</label><textarea rows="3" onchange="_popupSections[${i}].content=this.value" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:4px;font-size:11px;resize:vertical;">${(s.content||'').replace(/</g,'&lt;')}</textarea></div>
                     <div class="admin-form-row" style="gap:6px;">
                         <div class="admin-form-group" style="flex:1;"><label class="t-sm">링크 버튼 텍스트</label><input value="${(s.link_btn_text||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].link_btn_text=this.value" placeholder="비워두면 표시 안함"></div>
                         <div class="admin-form-group" style="flex:1;"><label class="t-sm">링크 URL</label><input value="${(s.link_btn_url||'').replace(/"/g,'&quot;')}" onchange="_popupSections[${i}].link_btn_url=this.value" placeholder="/dashboard.html?comp=1"></div>
@@ -4754,8 +4796,10 @@ POST /api/external/event-result-link/batch<br>
                 if (m) _popupSections[parseInt(m[1])][m[2]] = inp.value;
             });
 
+            const _peComp = document.getElementById('pe-competition');
             const data = {
                 popup_type: document.getElementById('pe-type').value,
+                competition_id: _peComp && _peComp.value ? parseInt(_peComp.value, 10) : null,
                 is_active: parseInt(document.getElementById('pe-active').value),
                 show_from: document.getElementById('pe-from').value || null,
                 show_until: document.getElementById('pe-until').value || null,
@@ -4804,7 +4848,7 @@ POST /api/external/event-result-link/batch<br>
                     <div style="font-family:'Audiowide',sans-serif;font-size:18px;letter-spacing:2px;">${title}</div>
                     ${subtitle ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${subtitle}</div>` : ''}
                 </div>
-                ${intro ? `<div style="font-size:13px;line-height:1.6;margin-bottom:16px;">${intro}</div>` : ''}`;
+                ${intro ? `<div style="font-size:13px;line-height:1.6;margin-bottom:16px;">${intro.replace(/\n/g,'<br>')}</div>` : ''}`;
             _popupSections.filter(s => s.is_active !== 0).forEach(s => {
                 html += `<details style="margin-bottom:8px;border:1px solid var(--gray);border-radius:8px;overflow:hidden;">
                     <summary style="padding:10px 14px;font-weight:600;font-size:13px;cursor:pointer;background:#f9fafb;">${s.title || '(제목 없음)'}</summary>
@@ -10419,8 +10463,11 @@ POST /api/external/event-result-link/batch<br>
 
         function toggleCertRankRangeWrap() {
             const mode = document.getElementById('cert-mode-select').value;
+            const hide = (mode === 'finisher' || mode === 'record');
             const wrap = document.getElementById('cert-rank-range-wrap');
-            if (wrap) wrap.style.display = (mode === 'finisher' || mode === 'record') ? 'none' : '';
+            if (wrap) wrap.style.display = hide ? 'none' : '';
+            const scopeWrap = document.getElementById('cert-rank-scope-wrap');
+            if (scopeWrap) scopeWrap.style.display = hide ? 'none' : '';
         }
 
         function renderCertTemplateList() {
@@ -10568,6 +10615,7 @@ POST /api/external/event-result-link/batch<br>
             if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
 
             const mode = document.getElementById('cert-mode-select').value;
+            const rankScope = (document.getElementById('cert-rank-scope') || {}).value || 'overall';
             const rankFrom = parseInt(document.getElementById('cert-rank-from').value || 1, 10);
             const rankTo = parseInt(document.getElementById('cert-rank-to').value || 3, 10);
             const includeFinishers = document.getElementById('cert-include-finishers').checked;
@@ -10585,6 +10633,7 @@ POST /api/external/event-result-link/batch<br>
                         template_id: parseInt(tplId, 10),
                         competition_id: _selectedCompId,
                         event_ids: selectedIds,
+                        rank_scope: rankScope,
                         rank_from: rankFrom,
                         rank_to: rankTo,
                         include_finishers: includeFinishers,
@@ -11020,6 +11069,8 @@ POST /api/external/event-result-link/batch<br>
             const mode = document.getElementById('sms-batch-mode').value;
             const wrap = document.getElementById('sms-batch-rank-wrap');
             if (wrap) wrap.style.display = (mode === 'finisher') ? 'none' : '';
+            const scopeWrap = document.getElementById('sms-batch-scope-wrap');
+            if (scopeWrap) scopeWrap.style.display = (mode === 'finisher') ? 'none' : '';
         }
 
         async function dryRunSmsBatch() {
@@ -11034,6 +11085,7 @@ POST /api/external/event-result-link/batch<br>
         async function runSmsBatch() {
             if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
             const mode = document.getElementById('sms-batch-mode').value;
+            const rankScope = (document.getElementById('sms-batch-rank-scope') || {}).value || 'overall';
             const rankFrom = parseInt(document.getElementById('sms-batch-rank-from').value || 1, 10);
             const rankTo = parseInt(document.getElementById('sms-batch-rank-to').value || 3, 10);
             const includeFinishers = document.getElementById('sms-batch-include-finishers').checked;
@@ -11056,6 +11108,7 @@ POST /api/external/event-result-link/batch<br>
                         competition_id: _selectedCompId,
                         event_ids: selectedIds,
                         mode,
+                        rank_scope: rankScope,
                         rank_from: rankFrom,
                         rank_to: rankTo,
                         include_finishers: includeFinishers,

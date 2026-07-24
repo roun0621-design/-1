@@ -931,6 +931,8 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS home_popup (
 )`); } catch(e) {}
 // Add sort_order column to home_popup if missing (migration)
 try { db.exec(`ALTER TABLE home_popup ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
+// Add competition_id to home_popup (NULL = 공통/전체 노출, 특정 id = 그 대회 전용) — 대회별 팝업
+try { db.exec(`ALTER TABLE home_popup ADD COLUMN competition_id INTEGER DEFAULT NULL`); } catch(e) {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS home_popup_section (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     popup_id INTEGER NOT NULL REFERENCES home_popup(id) ON DELETE CASCADE,

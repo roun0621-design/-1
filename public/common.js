@@ -497,8 +497,8 @@ const API = {
     deleteFederation: (id, adminKey) => api('DELETE', `/api/federations/${id}`, { admin_key: adminKey }),
     reorderFederations: (order, adminKey) => api('PUT', '/api/federations/reorder', { order, admin_key: adminKey }),
 
-    // Home Popups
-    getHomePopups: () => api('GET', '/api/home-popups'),
+    // Home Popups (compId 지정 시 그 대회 전용, 'common' 이면 공통만, 없으면 전체)
+    getHomePopups: (compId) => api('GET', '/api/home-popups' + (compId != null && compId !== '' ? '?competition_id=' + encodeURIComponent(compId) : '')),
     createHomePopup: (data, adminKey) => api('POST', '/api/home-popups', { ...data, admin_key: adminKey }),
     updateHomePopup: (id, data, adminKey) => api('PUT', `/api/home-popups/${id}`, { ...data, admin_key: adminKey }),
     deleteHomePopup: (id, adminKey) => api('DELETE', `/api/home-popups/${id}`, { admin_key: adminKey }),
@@ -788,20 +788,149 @@ async function renderCompInfoBar(containerId) {
         const role = localStorage.getItem('pace_role') || 'viewer';
         // Shared button style for comp-info-bar action buttons
         const _cibBtnBase = 'white-space:nowrap;font-size:13px;font-weight:700;padding:7px 16px;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;';
+        // 버튼들은 모두 6px 간격으로 붙이고, 오른쪽 정렬은 아래 flex 스페이서가 담당
+        // (예전엔 기록지/영상 버튼이 각각 margin-left:auto 를 가져 남는 공간이 반씩 나뉘며
+        //  기록지-영상 사이가 크게 벌어지는 버그가 있었음 → 스페이서 1개로 통일)
         const docBtnHtml = role !== 'viewer'
-            ? `<button id="comp-doc-btn" style="${_cibBtnBase}margin-left:auto;background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
+            ? `<button id="comp-doc-btn" style="${_cibBtnBase}margin-left:6px;background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
             : '';
         // 대시보드 모드에서는 히어로 카드가 시간표 진입점을 대체하므로 상단 버튼 숨김
         const isDashboardMode = document.body.classList.contains('dashboard-mode');
-        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}${role === 'viewer' ? 'margin-left:auto;' : 'margin-left:6px;'}background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
+        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}margin-left:6px;background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
         el.innerHTML = `<span class="comp-info-name">${info.name || ''}</span>
             ${fedBadge}
             <span class="comp-info-sep">|</span>
             <span class="comp-info-dates">${info.dates || ''}</span>
             <span class="comp-info-sep">|</span>
             <span class="comp-info-venue">${info.venue || ''}</span>
+            <span class="comp-info-spacer" style="flex:1 1 auto;"></span>
             ${docBtnHtml}${ttBtnHtml}`;
     } catch (e) {}
+}
+
+// ============================================================
+// Competition Notice Popup (대회별 공지 팝업)
+//   - 대시보드 대회명 줄의 [공지] 버튼 + 진입 시 자동 노출("오늘 하루 보지 않음" 지원)
+//   - 홈(index.html)의 공통 팝업과 분리: 여기선 competition_id 가 그 대회인 팝업만 다룸
+// ============================================================
+let _cnPopupQueue = [];
+let _cnPopupIndex = 0;
+let _cnAllPopups = [];
+
+function _cnApplicable(p, ignoreDismiss) {
+    const role = localStorage.getItem('pace_role') || 'viewer';
+    const isAdmin = role === 'admin' || role === 'operation';
+    const today = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
+    if (!p.is_active) return false;
+    if (p.popup_type === 'admin' && !isAdmin) return false;
+    if (p.show_from && today < p.show_from) return false;
+    if (p.show_until && today > p.show_until) return false;
+    if (!ignoreDismiss) {
+        const d = localStorage.getItem(`popup_dismiss_${p.id}`);
+        if (d && (now - parseInt(d)) < 24 * 60 * 60 * 1000) return false;
+    }
+    return true;
+}
+
+function _cnBuildHtml(p, idx, total) {
+    const hasNext = idx < total - 1;
+    const counter = total > 1 ? `<span style="font-size:10px;color:var(--text-muted);margin-left:8px;">(${idx + 1}/${total})</span>` : '';
+    let html = `<div style="text-align:center;margin-bottom:16px;">
+        <div style="font-family:'Audiowide',sans-serif;font-size:18px;letter-spacing:2px;">${p.title || '공지'} ${counter}</div>
+        ${p.subtitle ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${(p.subtitle || '').replace(/\n/g, '<br>')}</div>` : ''}
+    </div>`;
+    // 소개 문구: 줄바꿈(\n)을 <br>로 변환 (기존 홈 팝업 버그와 동일하게 여기서도 처리)
+    if (p.intro_text) html += `<div style="font-size:13px;line-height:1.6;margin-bottom:16px;">${(p.intro_text || '').replace(/\n/g, '<br>')}</div>`;
+    (p.sections || []).filter(s => s.is_active !== 0).forEach(s => {
+        html += `<details style="margin-bottom:8px;border:1px solid var(--gray);border-radius:8px;overflow:hidden;">
+            <summary style="padding:10px 14px;font-weight:600;font-size:13px;cursor:pointer;background:#f9fafb;">${s.title || ''}</summary>
+            <div style="padding:10px 14px;font-size:12px;line-height:1.7;">${(s.content || '').replace(/\n/g, '<br>')}</div>
+            ${s.link_btn_text ? `<div style="padding:0 14px 10px;"><a href="${s.link_btn_url || '#'}" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="font-size:12px;color:var(--primary);font-weight:600;text-decoration:none;">${s.link_btn_text} →</a></div>` : ''}
+        </details>`;
+    });
+    if (p.bottom_btn_active && p.bottom_btn_text) {
+        html += `<div style="margin-top:16px;padding:16px;background:#f0f9ff;border-radius:8px;text-align:center;border:1px solid #c0c0c0;">
+            <div style="font-size:14px;font-weight:600;">${p.bottom_btn_text}</div>
+            ${p.bottom_btn_desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${p.bottom_btn_desc}</div>` : ''}
+            ${p.bottom_btn_link ? `<div style="margin-top:8px;"><a href="${p.bottom_btn_link}" onclick="event.stopPropagation();_cnClose();" style="display:inline-block;padding:8px 20px;background:var(--primary);color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;">이동 →</a></div>` : ''}
+        </div>`;
+    }
+    html += `<div style="display:flex;gap:8px;justify-content:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--gray);">
+        <button onclick="dismissCompNoticeToday(${p.id})" style="padding:8px 16px;background:#f5f5f5;border:1px solid var(--gray);border-radius:6px;font-size:12px;cursor:pointer;">오늘 하루 보지 않음</button>
+        ${hasNext
+            ? `<button onclick="showCompNoticeNext()" style="padding:8px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">다음 →</button>`
+            : `<button onclick="_cnClose()" style="padding:8px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">닫기</button>`}
+    </div>`;
+    return html;
+}
+
+function _cnClose() {
+    const ov = document.getElementById('comp-notice-overlay');
+    if (ov) ov.remove();
+}
+
+function _cnRender(p) {
+    _cnClose();
+    const overlay = document.createElement('div');
+    overlay.id = 'comp-notice-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.onclick = (e) => { if (e.target === overlay) _cnClose(); };
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+    box.innerHTML = _cnBuildHtml(p, _cnPopupIndex, _cnPopupQueue.length);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+}
+
+function showCompNoticeNext() {
+    _cnPopupIndex++;
+    if (_cnPopupIndex < _cnPopupQueue.length) _cnRender(_cnPopupQueue[_cnPopupIndex]);
+    else _cnClose();
+}
+
+function dismissCompNoticeToday(id) {
+    localStorage.setItem(`popup_dismiss_${id}`, Date.now().toString());
+    showCompNoticeNext();
+}
+
+// 버튼 클릭 → dismiss 무시하고 이 대회의 모든(노출가능) 공지 표시
+function openCompNoticePopup() {
+    const list = _cnAllPopups.filter(p => _cnApplicable(p, true));
+    if (!list.length) { if (typeof toast === 'function') toast('등록된 공지가 없습니다.'); return; }
+    _cnPopupQueue = list; _cnPopupIndex = 0; _cnRender(list[0]);
+}
+
+function renderCompNoticeButton() {
+    const bar = document.getElementById('comp-info-bar');
+    if (!bar) return;
+    let btn = document.getElementById('comp-notice-btn');
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'comp-notice-btn';
+        btn.style.cssText = 'white-space:nowrap;font-size:13px;font-weight:700;padding:7px 16px;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;margin-left:6px;background:linear-gradient(135deg,#e0574f,#b23b34);box-shadow:0 2px 6px rgba(178,59,52,0.3);';
+        btn.textContent = '공지';
+        btn.onmouseover = () => { btn.style.transform = 'translateY(-1px)'; };
+        btn.onmouseout = () => { btn.style.transform = ''; };
+        btn.onclick = openCompNoticePopup;
+        bar.appendChild(btn);
+    }
+}
+
+// 대시보드 등에서 호출: 이 대회의 공지 로드 → 버튼 표시 + 진입 자동노출
+async function initCompNoticePopup() {
+    try {
+        const compId = getCompetitionId();
+        if (!compId) return;
+        const popups = await API.getHomePopups(compId);
+        if (!Array.isArray(popups)) return;
+        _cnAllPopups = popups;
+        // 노출 가능한 공지가 하나라도 있으면 버튼 표시
+        if (popups.some(p => _cnApplicable(p, true))) renderCompNoticeButton();
+        // 자동 노출 (오늘 하루 보지 않음 반영)
+        const auto = popups.filter(p => _cnApplicable(p, false));
+        if (auto.length) { _cnPopupQueue = auto; _cnPopupIndex = 0; _cnRender(auto[0]); }
+    } catch (e) { /* noop */ }
 }
 
 // ============================================================
