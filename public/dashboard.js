@@ -420,7 +420,7 @@ function renderCompVideoButton() {
         btn.id = 'comp-video-btn';
         // 기록지/공지 버튼과 동일 규격(그라데이션·13px·패딩 7/16). 이모지 제거.
         btn.style.cssText = 'margin-left:6px;white-space:nowrap;font-size:13px;font-weight:700;padding:7px 16px;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);display:none;';
-        btn.textContent = '대회 영상';
+        btn.textContent = '영상';
         btn.onmouseover = () => { btn.style.transform = 'translateY(-1px)'; };
         btn.onmouseout = () => { btn.style.transform = ''; };
         btn.onclick = () => {
@@ -777,7 +777,7 @@ function renderCategoryTable(groups, label, isLive) {
             const tBg = schedEvt.is_today ? '#f8f4ea' : '#f5f5f5';
             const crBadge = isCallRoomWindow(schedEvt.callroom_time, schedEvt.scheduled_date) ? ' <span class="ico-callroom">Call Room</span>' : '';
             const dayLabel = schedEvt.day ? `<span style="font-size:8px;color:#666;background:#eee;padding:1px 3px;border-radius:3px;margin-right:2px;">Day-${schedEvt.day}</span>` : '';
-            timeBadge = `${dayLabel}<span style="font-size:9px;color:${tColor};background:${tBg};padding:1px 5px;border-radius:6px;margin-left:2px;font-weight:600;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
+            timeBadge = `${dayLabel}<span class="num-display" style="font-size:9px;color:${tColor};background:${tBg};padding:1px 5px;border-radius:6px;margin-left:2px;font-weight:600;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
         }
 
         // Division badge for display mode (color-coded by age group)

@@ -2,13 +2,15 @@
 // Offline-first PWA: cache app shell, queue API mutations for sync
 // v3: auto version sync, IndexedDB offline queue, background sync
 
-const CACHE_NAME = 'pacerise-v136';
+const CACHE_NAME = 'pacerise-v137';
 const OFFLINE_URL = '/';
 
 // App shell — version-free paths (actual files are network-first, cache updated on every fetch)
 const APP_SHELL = [
     '/',
     '/styles.css',
+    '/fonts/d2coding-subset.woff2',
+    '/fonts/d2coding-bold-subset.woff2',
     '/common.js',
     '/dashboard.html',
     '/admin.html',

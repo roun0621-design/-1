@@ -2300,3 +2300,24 @@ body.viewer-mode .footer { display: none; }
     border-color: #b79f58 !important;
 }
 
+
+/* ============================================================
+   시간·기록 전용 등폭 폰트 (D2Coding, self-host · 숫자/기호 서브셋 ~4KB)
+   원칙: 이름·문장은 Noto Sans KR, 시간·기록 값만 전광판체
+   ============================================================ */
+@font-face {
+    font-family: 'D2Coding';
+    font-style: normal; font-weight: 400; font-display: swap;
+    src: url('/fonts/d2coding-subset.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'D2Coding';
+    font-style: normal; font-weight: 700; font-display: swap;
+    src: url('/fonts/d2coding-bold-subset.woff2') format('woff2');
+}
+/* 시간·기록 값에 붙이는 유틸 클래스 (렌더러에서 이 클래스를 부여) */
+.num-display { font-family: 'D2Coding', monospace; letter-spacing: 0.02em; }
+/* 여러 줄 기록표(공백 정렬) — 고정폭 오버레이용. 반응형 화면엔 table 권장 */
+.pace-table { font-family: 'D2Coding', monospace; white-space: pre; line-height: 1.8; }
+/* 일반 폰트로 남는 숫자도 폭 고정 → 표 자릿수 세로 정렬 */
+body { font-variant-numeric: tabular-nums; }
