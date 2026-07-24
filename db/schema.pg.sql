@@ -640,6 +640,7 @@ CREATE TABLE IF NOT EXISTS "sms_log" (
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "competition_id" BIGINT,
     "athlete_id" BIGINT,
+    "event_id" BIGINT,
     "phone_number" TEXT NOT NULL,
     "message" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'pending',

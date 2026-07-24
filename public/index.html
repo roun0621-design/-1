@@ -340,7 +340,7 @@
     </div>
 
     <script src="/i18n.js?v=3"></script>
-    <script src="common.js?v=76"></script>
+    <script src="common.js?v=85"></script>
     <script src="/lib/auth-client.js?v=1"></script>
     <script>
         renderPageNav('home');
@@ -778,7 +778,7 @@
                 html += `<details style="margin-bottom:8px;border:1px solid var(--gray);border-radius:8px;overflow:hidden;">
                     <summary style="padding:10px 14px;font-weight:600;font-size:13px;cursor:pointer;background:#f9fafb;">${s.title || ''}</summary>
                     <div style="padding:10px 14px;font-size:12px;line-height:1.7;">${(s.content||'').replace(/\n/g,'<br>')}</div>
-                    ${s.link_btn_text ? `<div style="padding:0 14px 10px;"><a href="${s.link_btn_url||'#'}" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="font-size:12px;color:var(--primary);font-weight:600;text-decoration:none;">${s.link_btn_text} →</a></div>` : ''}
+                    ${s.link_btn_text ? `<div style="padding:0 14px 10px;"><a href="${s.link_btn_url||'#'}" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="font-size:12px;color:#1565c0;font-weight:600;text-decoration:none;">${s.link_btn_text} →</a></div>` : ''}
                 </details>`;
             });
 
@@ -786,7 +786,7 @@
                 html += `<div style="margin-top:16px;padding:16px;background:#f0f9ff;border-radius:8px;text-align:center;border:1px solid #c0c0c0;">
                     <div style="font-size:14px;font-weight:600;">${p.bottom_btn_text}</div>
                     ${p.bottom_btn_desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${p.bottom_btn_desc}</div>` : ''}
-                    ${p.bottom_btn_link ? `<div style="margin-top:8px;"><a href="${p.bottom_btn_link}" onclick="event.stopPropagation();closeModal('home-popup-modal');" style="display:inline-block;padding:8px 20px;background:var(--primary);color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;">이동 →</a></div>` : ''}
+                    ${p.bottom_btn_link ? `<div style="margin-top:8px;"><a href="${p.bottom_btn_link}" onclick="event.stopPropagation();closeModal('home-popup-modal');" style="display:inline-block;padding:8px 20px;background:var(--green);color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;">이동 →</a></div>` : ''}
                 </div>`;
             }
 

@@ -853,14 +853,14 @@ function _cnBuildHtml(p, idx, total) {
         html += `<div style="margin-top:16px;padding:16px;background:#f0f9ff;border-radius:8px;text-align:center;border:1px solid #c0c0c0;">
             <div style="font-size:14px;font-weight:600;">${p.bottom_btn_text}</div>
             ${p.bottom_btn_desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${p.bottom_btn_desc}</div>` : ''}
-            ${p.bottom_btn_link ? `<div style="margin-top:8px;"><a href="${p.bottom_btn_link}" onclick="event.stopPropagation();_cnClose();" style="display:inline-block;padding:8px 20px;background:var(--primary);color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;">이동 →</a></div>` : ''}
+            ${p.bottom_btn_link ? `<div style="margin-top:8px;"><a href="${p.bottom_btn_link}" onclick="event.stopPropagation();_cnClose();" style="display:inline-block;padding:8px 20px;background:var(--green);color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;">이동 →</a></div>` : ''}
         </div>`;
     }
     html += `<div style="display:flex;gap:8px;justify-content:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--gray);">
-        <button onclick="dismissCompNoticeToday(${p.id})" style="padding:8px 16px;background:#f5f5f5;border:1px solid var(--gray);border-radius:6px;font-size:12px;cursor:pointer;">오늘 하루 보지 않음</button>
+        <button class="btn btn-ghost" onclick="dismissCompNoticeToday(${p.id})" style="font-size:12px;">오늘 하루 보지 않음</button>
         ${hasNext
-            ? `<button onclick="showCompNoticeNext()" style="padding:8px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">다음 →</button>`
-            : `<button onclick="_cnClose()" style="padding:8px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">닫기</button>`}
+            ? `<button class="btn btn-primary" onclick="showCompNoticeNext()" style="font-size:12px;">다음 →</button>`
+            : `<button class="btn btn-primary" onclick="_cnClose()" style="font-size:12px;">닫기</button>`}
     </div>`;
     return html;
 }

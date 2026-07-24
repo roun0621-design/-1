@@ -2670,12 +2670,24 @@ POST /api/external/event-result-link/batch<br>
                             </div>
                         </div>
                         <div>
+                            <label class="t-xs">조 (선택)</label>
+                            <input type="number" id="sms-batch-heat" min="1" placeholder="비우면 전체" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                            <span class="t-xs t-muted">특정 조만 발송 (예: 1조 끝나면 1)</span>
+                        </div>
+                        <div>
                             <label class="t-xs">완주자 포함</label>
                             <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding-top:6px;">
                                 <input type="checkbox" id="sms-batch-include-finishers"> 순위 외 완주자도
                             </label>
                         </div>
+                        <div>
+                            <label class="t-xs">중복 방지</label>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding-top:6px;">
+                                <input type="checkbox" id="sms-batch-skip-sent" checked> 이미 보낸 사람 제외
+                            </label>
+                        </div>
                     </div>
+                    <p class="t-xs t-muted" style="margin:-4px 0 10px;">※ 기록이 없는(미출전) 선수는 자동 제외됩니다. 조를 지정하면 그 조만, 중복 방지를 켜면 같은 종목에서 이미 받은 선수는 다시 보내지 않습니다.</p>
                     <div style="margin-bottom:10px;">
                         <label class="t-xs" style="font-weight:600;">발송 대상 종목</label>
                         <div id="sms-batch-event-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#fafafa;">대회를 선택하면 종목이 표시됩니다.</div>
@@ -2734,7 +2746,7 @@ POST /api/external/event-result-link/batch<br>
 
     <script src="lib/xlsx.full.min.js"></script>
     <script src="/lib/auth-client.js?v=1"></script>
-    <script src="common.js?v=76"></script>
+    <script src="common.js?v=85"></script>
     <script>
         renderPageNav('admin');
         // [정책] 종료된 대회 + 운영진(operation) → 진입 차단, dashboard 로 리다이렉트
@@ -11089,6 +11101,9 @@ POST /api/external/event-result-link/batch<br>
             const rankFrom = parseInt(document.getElementById('sms-batch-rank-from').value || 1, 10);
             const rankTo = parseInt(document.getElementById('sms-batch-rank-to').value || 3, 10);
             const includeFinishers = document.getElementById('sms-batch-include-finishers').checked;
+            const heatNumEl = document.getElementById('sms-batch-heat');
+            const heatNumber = heatNumEl && heatNumEl.value !== '' ? parseInt(heatNumEl.value, 10) : null;
+            const skipSent = (document.getElementById('sms-batch-skip-sent') || {}).checked !== false;
             const selectedIds = Array.from(document.querySelectorAll('.sms-batch-event-cb:checked')).map(cb => parseInt(cb.value, 10));
             const forceReal = !!document.getElementById('sms-batch-force-real')?.checked;
             if (forceReal && !confirm('시뮬레이션을 무시하고 선택한 종목의 대상자 전원에게 실제 문자를 발송합니다.\n요금이 발생하며 수신자에게 실제로 도착합니다. 계속할까요?')) return;
@@ -11112,6 +11127,8 @@ POST /api/external/event-result-link/batch<br>
                         rank_from: rankFrom,
                         rank_to: rankTo,
                         include_finishers: includeFinishers,
+                        heat_number: heatNumber,
+                        skip_sent: skipSent,
                         triggered_by: 'cert_batch',
                         force_real: forceReal,
                     })
@@ -11120,7 +11137,8 @@ POST /api/external/event-result-link/batch<br>
                 if (!res.ok) throw new Error(data.error || 'batch failed');
                 const sum = data.summary || {};
                 const sumStr = Object.entries(sum).map(([k, v]) => `${k}: ${v}`).join(', ');
-                status.textContent = `${data.sim_mode ? '[시뮬레이션]' : ''} ${data.total}건 처리 (${sumStr})`;
+                const skipStr = data.skipped_already_sent ? ` · 중복제외 ${data.skipped_already_sent}명` : '';
+                status.textContent = `${data.sim_mode ? '[시뮬레이션]' : ''} ${data.total}건 처리 (${sumStr})${skipStr}`;
                 status.style.color = data.sim_mode ? '#a05a00' : 'var(--green)';
 
                 resultBox.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#f5f5f5;"><th style="padding:4px;text-align:left;">선수</th><th style="padding:4px;">번호</th><th style="padding:4px;">상태</th><th style="padding:4px;text-align:left;">메모</th></tr></thead><tbody>' +
