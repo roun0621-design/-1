@@ -2670,11 +2670,6 @@ POST /api/external/event-result-link/batch<br>
                             </div>
                         </div>
                         <div>
-                            <label class="t-xs">조 (선택)</label>
-                            <input type="number" id="sms-batch-heat" min="1" placeholder="비우면 전체" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
-                            <span class="t-xs t-muted">특정 조만 발송 (예: 1조 끝나면 1)</span>
-                        </div>
-                        <div>
                             <label class="t-xs">완주자 포함</label>
                             <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding-top:6px;">
                                 <input type="checkbox" id="sms-batch-include-finishers"> 순위 외 완주자도
@@ -2696,6 +2691,11 @@ POST /api/external/event-result-link/batch<br>
                             <button class="btn btn-xs btn-outline" onclick="smsBatchSelectAll(false)">전체 해제</button>
                             <button class="btn btn-xs btn-outline" onclick="loadSmsBatchEvents()">새로고침</button>
                         </div>
+                    </div>
+                    <!-- 조 선택: 종목 1개 선택 & 조가 2개 이상일 때만 노출 (실제 있는 조만 칩으로) -->
+                    <div id="sms-batch-heat-wrap" style="margin-bottom:10px;display:none;">
+                        <label class="t-xs" style="font-weight:600;">조 선택</label>
+                        <div id="sms-batch-heat-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;"></div>
                     </div>
                     <div style="margin-bottom:10px;background:#f5f5f5;border-radius:6px;padding:10px;">
                         <div class="t-xs t-muted" style="margin-bottom:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 선수 휴대폰 번호는 athlete.phone 컬럼에서 가져옵니다. 비어 있는 선수는 자동 시뮬레이션 실패로 기록됩니다.</div>
@@ -11052,22 +11052,31 @@ POST /api/external/event-result-link/batch<br>
             }
         }
 
+        let _smsBatchHeat = null;          // null=전체, 숫자=특정 조
+        let _smsBatchSentSummary = [];     // [{event_id, heat_number, cnt}] — 발송완료 표시용
+
         async function loadSmsBatchEvents() {
             const root = document.getElementById('sms-batch-event-list');
             if (!root) return;
             if (!_selectedCompId) { root.innerHTML = '<span class="t-muted">대회를 먼저 선택하세요.</span>'; return; }
             try {
-                const res = await fetch(`/api/events?competition_id=${_selectedCompId}`);
-                const data = await res.json();
+                const [data, summ] = await Promise.all([
+                    fetch(`/api/events?competition_id=${_selectedCompId}`).then(r => r.json()),
+                    fetch(`/api/admin/sms/sent-summary?competition_id=${_selectedCompId}&admin_key=${encodeURIComponent(AK())}`).then(r => r.json()).catch(() => ({ summary: [] })),
+                ]);
+                _smsBatchSentSummary = (summ && summ.summary) || [];
+                const sentEventIds = new Set(_smsBatchSentSummary.map(s => String(s.event_id)));
                 const events = (data.events || data || []).filter(e => !e.parent_event_id);
                 root.innerHTML = events.length === 0 ? '<span class="t-muted">종목이 없습니다.</span>' :
                     events.map(e => `
                         <label style="display:block;padding:3px 0;">
-                            <input type="checkbox" class="sms-batch-event-cb" value="${e.id}">
+                            <input type="checkbox" class="sms-batch-event-cb" value="${e.id}" onchange="smsBatchEventChanged()">
                             ${e.gender === 'M' ? '남' : e.gender === 'F' ? '여' : '혼'} ${_esc(e.name)}
                             <span class="t-muted t-xs">[${e.round_type || ''}]</span>
+                            ${sentEventIds.has(String(e.id)) ? '<span style="font-size:10px;font-weight:700;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:99px;margin-left:4px;">발송완료</span>' : ''}
                         </label>
                     `).join('');
+                smsBatchEventChanged();  // 조 칩 초기화
             } catch (e) {
                 root.innerHTML = '<span class="t-muted">종목 로드 실패</span>';
             }
@@ -11075,6 +11084,50 @@ POST /api/external/event-result-link/batch<br>
 
         function smsBatchSelectAll(on) {
             document.querySelectorAll('.sms-batch-event-cb').forEach(cb => cb.checked = !!on);
+            smsBatchEventChanged();
+        }
+
+        // 종목 선택이 바뀌면: 정확히 1개 선택 & 조 2개 이상일 때만 조 칩 노출
+        async function smsBatchEventChanged() {
+            _smsBatchHeat = null;
+            const wrap = document.getElementById('sms-batch-heat-wrap');
+            const chips = document.getElementById('sms-batch-heat-chips');
+            if (!wrap || !chips) return;
+            const checked = Array.from(document.querySelectorAll('.sms-batch-event-cb:checked'));
+            if (checked.length !== 1) { wrap.style.display = 'none'; chips.innerHTML = ''; return; }
+            const eventId = parseInt(checked[0].value, 10);
+            let heats = [];
+            try { heats = await fetch(`/api/heats?event_id=${eventId}`).then(r => r.json()); } catch (_) {}
+            heats = Array.isArray(heats) ? heats : [];
+            if (heats.length <= 1) { wrap.style.display = 'none'; chips.innerHTML = ''; return; }  // 1개 조뿐이면 선택 불필요
+            const sentHeats = new Set(_smsBatchSentSummary
+                .filter(s => String(s.event_id) === String(eventId) && s.heat_number != null)
+                .map(s => String(s.heat_number)));
+            wrap.style.display = '';
+            chips.innerHTML =
+                `<button type="button" class="sms-heat-chip" data-heat="" onclick="smsBatchPickHeat(this,'')">전체</button>` +
+                heats.map(h => {
+                    const sent = sentHeats.has(String(h.heat_number));
+                    return `<button type="button" class="sms-heat-chip" data-heat="${h.heat_number}" onclick="smsBatchPickHeat(this,'${h.heat_number}')">${h.heat_number}조${sent ? ' <span style="color:#2e7d32;font-weight:700;">✓발송</span>' : ''}</button>`;
+                }).join('');
+            _smsBatchStyleChips(chips.querySelector('.sms-heat-chip'));  // '전체' 기본 선택
+        }
+
+        function _smsBatchStyleChips(activeBtn) {
+            document.querySelectorAll('#sms-batch-heat-chips .sms-heat-chip').forEach(c => {
+                const on = c === activeBtn;
+                c.style.cssText = `padding:5px 12px;border-radius:99px;font-size:12px;cursor:pointer;border:1px solid ${on ? '#1a2a5e' : 'var(--gray)'};background:${on ? '#1a2a5e' : '#fff'};color:${on ? '#fff' : 'var(--text)'};font-weight:${on ? '700' : '400'};`;
+            });
+        }
+
+        function smsBatchPickHeat(btn, heatStr) {
+            _smsBatchHeat = heatStr === '' ? null : parseInt(heatStr, 10);
+            _smsBatchStyleChips(btn);
+            // 특정 조 선택 시 순위 기준을 자동으로 '조별' 로
+            if (_smsBatchHeat != null) {
+                const scope = document.getElementById('sms-batch-rank-scope');
+                if (scope) scope.value = 'heat';
+            }
         }
 
         function toggleSmsBatchRankWrap() {
@@ -11101,8 +11154,7 @@ POST /api/external/event-result-link/batch<br>
             const rankFrom = parseInt(document.getElementById('sms-batch-rank-from').value || 1, 10);
             const rankTo = parseInt(document.getElementById('sms-batch-rank-to').value || 3, 10);
             const includeFinishers = document.getElementById('sms-batch-include-finishers').checked;
-            const heatNumEl = document.getElementById('sms-batch-heat');
-            const heatNumber = heatNumEl && heatNumEl.value !== '' ? parseInt(heatNumEl.value, 10) : null;
+            const heatNumber = _smsBatchHeat;  // 조 칩에서 선택 (null=전체)
             const skipSent = (document.getElementById('sms-batch-skip-sent') || {}).checked !== false;
             const selectedIds = Array.from(document.querySelectorAll('.sms-batch-event-cb:checked')).map(cb => parseInt(cb.value, 10));
             const forceReal = !!document.getElementById('sms-batch-force-real')?.checked;
@@ -11151,6 +11203,7 @@ POST /api/external/event-result-link/batch<br>
                         </tr>
                     `).join('') + '</tbody></table>';
                 loadSmsLog();
+                loadSmsBatchEvents();  // 발송완료 배지 갱신 (선택은 초기화됨)
             } catch (e) {
                 status.textContent = '실패: ' + e.message;
                 status.style.color = '#a00';

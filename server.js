@@ -622,6 +622,7 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS sms_log (
     competition_id INTEGER,
     athlete_id INTEGER,
     event_id INTEGER,
+    heat_number INTEGER,
     phone_number TEXT NOT NULL,
     message TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',  -- pending|sent|failed|simulated
@@ -632,8 +633,9 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS sms_log (
     sent_at TEXT NOT NULL DEFAULT (datetime('now')),
     triggered_by TEXT NOT NULL DEFAULT ''    -- e.g. 'manual', 'cert_batch'
 )`); } catch(e) { console.error('[DB] sms_log error:', e.message); }
-// 기존 sms_log 에 event_id 없으면 추가 (SQLite 멱등 마이그레이션 — 종목별 중복발송 방지용)
+// 기존 sms_log 에 event_id/heat_number 없으면 추가 (SQLite 멱등 마이그레이션 — 종목·조별 발송현황용)
 try { db.exec(`ALTER TABLE sms_log ADD COLUMN event_id INTEGER`); } catch(e) {}
+try { db.exec(`ALTER TABLE sms_log ADD COLUMN heat_number INTEGER`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC)`); } catch(e) {}
 // ========== END SMS Schema ==========
@@ -1422,6 +1424,7 @@ if (db.isAsync) {
                 competition_id BIGINT,
                 athlete_id BIGINT,
                 event_id BIGINT,
+                heat_number BIGINT,
                 phone_number TEXT NOT NULL,
                 message TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending',
@@ -1432,8 +1435,9 @@ if (db.isAsync) {
                 sent_at TEXT NOT NULL DEFAULT NOW(),
                 triggered_by TEXT NOT NULL DEFAULT ''
             )`); } catch(e) { console.error('[PG migration] sms_log error:', e.message); }
-            // sms_log.event_id 추가 (멱등) — 종목별 중복발송 방지용. schema.pg.sql 누락분 보정
+            // sms_log.event_id/heat_number 추가 (멱등) — 종목·조별 발송현황용. schema.pg.sql 누락분 보정
             try { await db.run(`ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS event_id BIGINT`); } catch(e) {}
+            try { await db.run(`ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS heat_number BIGINT`); } catch(e) {}
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC)`); } catch(e) {}
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC)`); } catch(e) {}
 
