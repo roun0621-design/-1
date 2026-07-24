@@ -788,7 +788,7 @@ async function renderCompInfoBar(containerId) {
         const role = localStorage.getItem('pace_role') || 'viewer';
         // Shared button style for comp-info-bar action buttons
         // (간격은 .comp-info-actions 의 gap 이 담당 — 버튼 자체엔 margin 없음)
-        const _cibBtnBase = 'white-space:nowrap;font-size:13px;font-weight:700;padding:7px 16px;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;';
+        const _cibBtnBase = 'white-space:nowrap;font-size:12px;font-weight:600;padding:4px 11px;border:none;border-radius:6px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.2px;';
         const docBtnHtml = role !== 'viewer'
             ? `<button id="comp-doc-btn" style="${_cibBtnBase}background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
             : '';
@@ -908,7 +908,7 @@ function renderCompNoticeButton() {
     if (!btn) {
         btn = document.createElement('button');
         btn.id = 'comp-notice-btn';
-        btn.style.cssText = 'white-space:nowrap;font-size:13px;font-weight:700;padding:7px 16px;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;background:linear-gradient(135deg,#e0574f,#b23b34);box-shadow:0 2px 6px rgba(178,59,52,0.3);';
+        btn.style.cssText = 'white-space:nowrap;font-size:12px;font-weight:600;padding:4px 11px;border:none;border-radius:6px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.2px;background:linear-gradient(135deg,#e0574f,#b23b34);box-shadow:0 2px 6px rgba(178,59,52,0.3);';
         btn.textContent = '공지';
         btn.onmouseover = () => { btn.style.transform = 'translateY(-1px)'; };
         btn.onmouseout = () => { btn.style.transform = ''; };
