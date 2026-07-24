@@ -1314,6 +1314,8 @@ if (db.isAsync) {
             try { await db.run(`ALTER TABLE competition ADD COLUMN IF NOT EXISTS series_id BIGINT`); } catch(e) {}
             // competition.manual_status_lock 추가 (멱등) — '대회 재개' 수동 상태변경 보호 플래그
             try { await db.run(`ALTER TABLE competition ADD COLUMN IF NOT EXISTS manual_status_lock INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
+            // home_popup.competition_id 추가 (멱등) — 대회별 공지 팝업 (NULL=공통). schema.pg.sql 누락분 보정
+            try { await db.run(`ALTER TABLE home_popup ADD COLUMN IF NOT EXISTS competition_id BIGINT`); } catch(e) {}
             // Seed division_master (13 rows, idempotent)
             const seedRows = [
                 ['M_ELEM','남자초등부','M','ELEM',10],['M_MID','남자중학부','M','MID',20],

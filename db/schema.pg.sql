@@ -369,6 +369,7 @@ CREATE TABLE IF NOT EXISTS "home_popup" (
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "updated_at" TEXT NOT NULL DEFAULT NOW(),
     "sort_order" BIGINT NOT NULL DEFAULT 0,
+    "competition_id" BIGINT DEFAULT NULL,
     CHECK (popup_type IN ('public','admin'))
 );
 
