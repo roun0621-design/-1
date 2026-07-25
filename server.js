@@ -6813,7 +6813,19 @@ function parseLifBuffer(buffer) {
             rows.push({ type: 'DQ', bib, lane: parseInt(lane), name, team });
         } else if (rank && bib && name) {
             // Valid result row
-            const time = parseFloat(rawTime);
+            // FIX: "3:22.35"(분:초) / "1:02:03.4"(시:분:초) 형식 지원.
+            //   예전엔 parseFloat 만 써서 콜론 앞에서 잘려(3:22.35→3) 중장거리 기록이 깨졌음.
+            let time;
+            {
+                const ts = String(rawTime).replace(/[^0-9.:]/g, '');
+                if (ts.includes(':')) {
+                    const p = ts.split(':').map(x => parseFloat(x));
+                    time = p.some(isNaN) ? null : p.reduce((a, v) => a * 60 + v, 0);
+                } else {
+                    const f = parseFloat(ts);
+                    time = isNaN(f) ? null : f;
+                }
+            }
             rows.push({
                 type: 'result',
                 rank: parseInt(rank),
