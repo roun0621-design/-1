@@ -18,6 +18,55 @@ let _timetableFull = { days: {}, start_date: null }; // 전체 시간표 (히어
 let _isDisplayMode = false; // 노출용 대회 모드
 let _displayRoster = []; // 노출용 대회 명단
 let _currentDivision = '전체'; // 부별 필터
+let _searchQuery = ''; // 종목 검색어 (종목명/거리 부분일치)
+
+// 알림(관심) 토글 아이콘 — 종(bell) / 종-끄기(bell-off)
+const _BELL_ON = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+const _BELL_OFF = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+// ── 종목 검색 (상단 인풋) ────────────────────────────────────────
+function onEventSearch(v) {
+    _searchQuery = v || '';
+    const clr = document.getElementById('event-search-clear');
+    if (clr) clr.style.display = _searchQuery ? '' : 'none';
+    renderMatrix();
+}
+function clearEventSearch() {
+    const inp = document.getElementById('event-search');
+    if (inp) inp.value = '';
+    _searchQuery = '';
+    const clr = document.getElementById('event-search-clear');
+    if (clr) clr.style.display = 'none';
+    renderMatrix();
+}
+
+// ── "진행 중 N" 배지 + 라이브 카드로 스크롤 ──────────────────────
+function updateLiveJumpBadge(n) {
+    const b = document.getElementById('live-jump-badge');
+    if (!b) return;
+    const c = document.getElementById('live-jump-count');
+    if (c) c.textContent = n;
+    b.style.display = n > 0 ? '' : 'none';
+}
+function jumpToLive() {
+    const el = document.getElementById('live-pin') || document.querySelector('.live-pin');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── 카드 전체 터치 → 종목 상세(가장 관련있는 라운드) 열기 ─────────
+// 칩/토글/링크 탭은 각자 동작하도록 전파 차단.
+function onCardTap(e, evtId) {
+    if (e.target.closest('.round-btn, .fav-cell, .fav-toggle, a, button')) return;
+    openEventDetail(evtId);
+}
+function openEventDetail(evtId) {
+    const evt = allEvents.find(e => e.id === evtId);
+    if (!evt) return;
+    if (evt.round_status === 'completed') { openResult(evtId); return; }
+    if (evt.round_status === 'in_progress' || callroomCompletedIds.has(evtId)) { openLiveResult(evtId); return; }
+    if (evt.heat_count > 0) { openRosterModal(evtId, evt.name); return; }
+    // 예정/대기 — 표시할 상세 없음
+}
 
 // Favorites: stored per-user in localStorage keyed by compId
 function getFavorites() {
@@ -588,6 +637,11 @@ function renderMatrix() {
     if (_isDisplayMode && _currentDivision !== '전체') {
         events = events.filter(e => e.division === _currentDivision);
     }
+    // 종목 검색 (종목명/거리 부분일치, 예: "400" → 400m)
+    if (_searchQuery && _searchQuery.trim()) {
+        const q = _searchQuery.trim().toLowerCase();
+        events = events.filter(e => (e.name || '').toLowerCase().includes(q));
+    }
 
     const categories = [
         { key: 'track', label: 'TRACK', match: c => c === 'track' },
@@ -691,7 +745,7 @@ function renderMatrix() {
     // Render LIVE (in_progress) section pinned at top
     const liveGroups = allGroups.filter(g => g.rounds.some(r => r.round_status === 'in_progress'));
     if (liveGroups.length > 0) {
-        html += `<div class="live-pin" style="margin-bottom:16px;padding:12px;background:linear-gradient(135deg,var(--green-light),var(--green-soft));border:1.5px solid var(--green);border-radius:var(--radius);">
+        html += `<div class="live-pin" id="live-pin" style="margin-bottom:16px;padding:12px;background:linear-gradient(135deg,var(--green-light),var(--green-soft));border:1.5px solid var(--green);border-radius:var(--radius);">
             <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:var(--green);letter-spacing:1px;margin-bottom:8px;">● LIVE • 진행중인 경기</div>`;
         html += renderCategoryTable(liveGroups, 'LIVE', true);
         html += `</div>`;
@@ -709,6 +763,7 @@ function renderMatrix() {
         html = `<div style="text-align:center;padding:40px;color:var(--text-muted);">${emptyMsg}</div>`;
     }
     container.innerHTML = html;
+    updateLiveJumpBadge(liveGroups.length);
 }
 
 function renderCategoryTable(groups, label, isLive) {
@@ -749,7 +804,7 @@ function renderCategoryTable(groups, label, isLive) {
                 const _vName = (g.name || '').replace(/'/g, "\\'");
                 videoCell = `<span class="round-btn" style="background:#f3e8ff;color:#7c3aed;border:1px solid #d8b4fe;cursor:pointer;font-size:10px;padding:3px 6px;font-weight:700;white-space:nowrap;" onclick="openEventVideoModal(${vidEvt.id},'${_vName}')">▶ 영상</span>`;
             } else {
-                videoCell = '<span class="round-btn btn-disabled" style="font-size:10px;">—</span>';
+                videoCell = ''; // 없으면 빈 칸(모바일 숨김) — '—' 제거
             }
         }
 
@@ -763,7 +818,7 @@ function renderCategoryTable(groups, label, isLive) {
                 const firstId = eventIds[0];
                 rosterCell = `<span class="round-btn" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;cursor:pointer;font-size:10px;padding:3px 6px;" onclick="openDisplayRoster(${firstId},'${(g.name||'').replace(/'/g,"\\'")}','${g.division||''}')">명단</span>`;
             } else {
-                rosterCell = '<span class="round-btn btn-disabled" style="font-size:10px;">—</span>';
+                rosterCell = ''; // 없으면 빈 칸(모바일 숨김) — '—' 제거
             }
         }
 
@@ -807,18 +862,54 @@ function renderCategoryTable(groups, label, isLive) {
         const _dc = _divColorOf(g.division);
         const divBadge = (_isDisplayMode && g.division && _currentDivision === '전체') ? `<span style="font-size:9px;color:${_dc.color};background:${_dc.bg};padding:1px 5px;border-radius:6px;margin-left:4px;font-weight:600;">${g.division}</span>` : '';
 
+        // ── 카드 상태 배지 (예정 / ● 진행 중(라운드) / 종료) — 모든 카드에 1개 ──
+        const _liveR = g.rounds.find(r => r.round_status === 'in_progress') || g.rounds.find(r => callroomCompletedIds.has(r.id));
+        const _allDone = g.rounds.length > 0 && g.rounds.every(r => r.round_status === 'completed');
+        let statusBadge = '';
+        if (_liveR) {
+            const _rl = { preliminary: '예선', semifinal: '준결승', final: '결승' }[_liveR.round_type] || '';
+            statusBadge = `<span class="status-badge status-live">진행 중${_rl ? ' · ' + _rl : ''}</span>`;
+        } else if (_allDone) {
+            statusBadge = `<span class="status-badge status-done">종료</span>`;
+        } else {
+            statusBadge = `<span class="status-badge status-upcoming">예정</span>`;
+        }
+
+        // ── 비활성(존재하지 않는) 라운드 표기 통일: '—' 박스 대신 메타라인 "○○ 없음" ──
+        const _cols = [];
+        if (_colRounds.preliminary) _cols.push(['예선', prelim]);
+        if (_colRounds.semifinal) _cols.push(['준결승', semi]);
+        if (_colRounds.final) _cols.push(['결승', fin]);
+        const _missing = _cols.filter(([, e]) => !e).map(([l]) => l);
+        const metaMissing = (_missing.length && _missing.length < _cols.length)
+            ? `<span class="card-meta-missing">${_missing.join('·')} 없음</span>` : '';
+
+        // 라운드 셀: 없으면 빈 칸(모바일 라벨도 숨김) — '—' 제거
+        const _roundCell = (evt, label) => {
+            const content = _isDisplayMode ? renderDisplayBtn(evt) : renderViewerBtn(evt);
+            return `<td data-label="${label}" class="${content ? '' : 'cell-empty'}">${content}</td>`;
+        };
+
+        // 카드 전체 터치 대상 (운영/뷰어 모드) — 가장 관련있는 라운드로 이동
+        const _doneR = [fin, semi, prelim].find(r => r && r.round_status === 'completed');
+        const _heatR = g.rounds.find(r => r.heat_count > 0);
+        const _primary = _liveR || _doneR || _heatR || fin || semi || prelim || g.rounds[0];
+        const _primaryId = _primary ? _primary.id : 0;
+        const _tapAttr = (!_isDisplayMode && _primaryId) ? ` onclick="onCardTap(event,${_primaryId})"` : '';
+
         // data-label: 모바일 카드 레이아웃(@media max-width:640px)에서 각 칸 앞에
         // "예선/준결승/결승" 라벨을 붙이기 위함. PC(표 모드)에서는 사용되지 않음.
+        // 알림 토글: 종 아이콘 + "알림" 라벨 (켜짐=bell 강조 / 꺼짐=bell-off muted), 탭영역 ≥44×44
         const _isFav = favs.includes(_rowGender + '|' + g.name);
-        const favCell = `<td class="fav-cell"><span class="fav-toggle${_isFav ? ' on' : ''}" role="button" tabindex="0" aria-pressed="${_isFav}" title="${_isFav ? '관심 알림 켜짐 (눌러서 해제)' : '이 종목 알림 받기'}" onclick="event.stopPropagation();toggleFavorite('${g.name.replace(/'/g, "\\'")}','${_rowGender}')"><span class="fav-knob"></span></span></td>`;
-        html += `<tr data-row-gender="${_rowGender}">
+        const favCell = `<td class="fav-cell"><span class="fav-toggle${_isFav ? ' on' : ''}" role="button" tabindex="0" aria-pressed="${_isFav}" title="${_isFav ? '관심 알림 켜짐 (눌러서 해제)' : '이 종목 알림 받기'}" onclick="event.stopPropagation();toggleFavorite('${g.name.replace(/'/g, "\\'")}','${_rowGender}')">${_isFav ? _BELL_ON : _BELL_OFF}<span class="fav-label">알림</span></span></td>`;
+        html += `<tr data-row-gender="${_rowGender}"${_tapAttr}>
             ${favCell}
-            <td class="event-name">${genderBadge}${g.name}${divBadge}${timeBadge}</td>
-            ${_isDisplayMode ? `<td data-label="영상">${videoCell}</td>` : ''}
-            ${(_isDisplayMode || _colRounds.wl) ? `<td data-label="${_isDisplayMode ? '명단' : 'W/L'}">${_isDisplayMode ? rosterCell : wlCell}</td>` : ''}
-            ${_colRounds.preliminary ? `<td data-label="예선">${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>` : ''}
-            ${_colRounds.semifinal ? `<td data-label="준결승">${_isDisplayMode ? renderDisplayBtn(semi) : renderViewerBtn(semi)}</td>` : ''}
-            ${_colRounds.final ? `<td data-label="결승">${_isDisplayMode ? renderDisplayBtn(fin) : renderViewerBtn(fin)}</td>` : ''}
+            <td class="event-name">${genderBadge}${g.name}${divBadge}${statusBadge}${timeBadge}${metaMissing}</td>
+            ${_isDisplayMode ? `<td data-label="영상" class="${videoCell ? '' : 'cell-empty'}">${videoCell}</td>` : ''}
+            ${(_isDisplayMode || _colRounds.wl) ? `<td data-label="${_isDisplayMode ? '명단' : 'W/L'}" class="${(_isDisplayMode ? rosterCell : wlCell) ? '' : 'cell-empty'}">${_isDisplayMode ? rosterCell : wlCell}</td>` : ''}
+            ${_colRounds.preliminary ? _roundCell(prelim, '예선') : ''}
+            ${_colRounds.semifinal ? _roundCell(semi, '준결승') : ''}
+            ${_colRounds.final ? _roundCell(fin, '결승') : ''}
         </tr>`;
     });
 
@@ -834,7 +925,7 @@ function renderCategoryTable(groups, label, isLive) {
  * - completed → "결과" button (shows results)
  */
 function renderViewerBtn(evt) {
-    if (!evt) return '<span class="round-btn btn-disabled">—</span>';
+    if (!evt) return ''; // 존재하지 않는 라운드 — '—' 대신 빈 칸(메타라인 "○○ 없음"으로 통일)
 
     const isAdmin = currentRole === 'admin';
     const isJudge = currentRole === 'operation' || isAdmin;
@@ -884,11 +975,13 @@ const _roundColors = {
 };
 
 function renderDisplayBtn(evt) {
-    if (!evt) return '<span class="round-btn btn-disabled">—</span>';
+    if (!evt) return ''; // 존재하지 않는 라운드 — '—' 대신 빈 칸(메타라인으로 통일)
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
     const rc = _roundColors[evt.round_type] || { color: '#1565c0', bg: '#e3f2fd', border: '#90caf9' };
     if (evt.result_url) {
-        return `<a class="round-btn" href="${evt.result_url}" target="_blank" rel="noopener" style="background:${rc.bg};color:${rc.color};border:1px solid ${rc.border};cursor:pointer;font-size:10px;padding:3px 8px;text-decoration:none;font-weight:700;" title="결과 보기 (외부 링크)">${roundL || '결과'}</a>`;
+        // 노출용: 외부(연맹) 사이트로 넘어가는 칩 → external-link(↗) 아이콘 표시
+        const extIco = '<svg class="ext-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>';
+        return `<a class="round-btn round-btn-ext" href="${evt.result_url}" target="_blank" rel="noopener" style="background:${rc.bg};color:${rc.color};border:1px solid ${rc.border};cursor:pointer;font-size:10px;padding:3px 8px;text-decoration:none;font-weight:700;" title="결과 보기 (외부 링크로 이동)">${roundL || '결과'}${extIco}</a>`;
     }
     return `<span class="round-btn btn-disabled" style="font-size:10px;padding:3px 6px;" title="결과 링크 없음">${roundL || '—'}</span>`;
 }
