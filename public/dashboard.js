@@ -2589,12 +2589,14 @@ async function loadRosterModalData(eventId) {
                 html += `<span style="font-size:11px;color:#999;">${entries.length}명</span>`;
             }
             html += `</div>`;
-            html += `<table class="fill-table" style="width:100%;border-collapse:collapse;font-size:12px;">`;
+            // table-layout:fixed + 열폭 고정 → 조가 여러 테이블이어도 열 위치 정렬 통일.
+            //   소속은 남은 폭을 차지하고, 긴 팀명은 줄바꿈(word-break)으로 다음 줄로.
+            html += `<table class="fill-table" style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">`;
             html += `<thead><tr style="background:#f5f5f5;border-bottom:1px solid #e0e0e0;">`;
             html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">${isField ? '순서' : '레인'}</th>`;
             html += `<th style="padding:5px 8px;text-align:center;width:50px;font-weight:600;color:#777;">배번</th>`;
             if (hasSubGroup) html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">그룹</th>`;
-            html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">이름</th>`;
+            html += `<th style="padding:5px 8px;text-align:left;width:68px;font-weight:600;color:#777;">이름</th>`;
             html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">소속</th>`;
             if (showCallroomStatus) html += `<th style="padding:5px 8px;text-align:center;width:48px;font-weight:600;color:#777;">상태</th>`;
             html += `</tr></thead><tbody>`;
@@ -2632,8 +2634,8 @@ async function loadRosterModalData(eventId) {
                     const gColor = g === 'A' ? '#555' : g === 'B' ? '#8b1a2a' : '#999';
                     html += `<td style="padding:5px 8px;text-align:center;font-weight:800;color:${gColor};">${g || '—'}</td>`;
                 }
-                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;">${e.name}</td>`;
-                html += `<td style="padding:5px 8px;text-align:left;color:#666;">${e.team || ''}</td>`;
+                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;word-break:keep-all;">${e.name}</td>`;
+                html += `<td style="padding:5px 8px;text-align:left;color:#666;word-break:keep-all;overflow-wrap:anywhere;">${e.team || ''}</td>`;
                 if (showCallroomStatus) {
                     let badge = '<span style="font-size:10px;color:#bbb;">—</span>';
                     if (e.status === 'checked_in') badge = '<span style="font-size:10px;color:#b79f58;font-weight:700;">출석</span>';
