@@ -3167,6 +3167,69 @@ app.post('/api/events/:id/callroom-complete', async (req, res) => {
     opLog(`${event.name} ${roundL}${heatLabel} 소집 완료 - ${performer}`, 'callroom', performer, event.competition_id);
     res.json({ success: true, dns_auto: dnsCount });
 });
+
+// ============================================================
+// 일괄 소집완료 / 되돌리기 (부별·다중선택 운영용)
+//   - 여러 종목을 한 번에 소집완료(in_progress) 또는 되돌림(heats_generated)
+//   - 푸시 알림은 스팸 방지를 위해 발송하지 않음(단일 소집완료만 발송)
+// ============================================================
+app.post('/api/events/callroom-complete-batch', async (req, res) => {
+    const { event_ids, judge_name } = req.body;
+    // 단일 소집완료(/callroom-complete)와 동일하게 현장 운영자용 — 별도 키 요구 없음(프론트 확인창이 안전장치)
+    if (!Array.isArray(event_ids) || event_ids.length === 0) return res.status(400).json({ error: '종목을 선택하세요.' });
+    const performer = judge_name || 'operator';
+    const done = [], skipped = [];
+    let compId = null;
+    for (const eid of event_ids) {
+        const event = await db.get('SELECT * FROM event WHERE id=?', eid);
+        if (!event) { skipped.push({ id: eid, reason: 'not_found' }); continue; }
+        compId = event.competition_id;
+        if (event.round_status === 'completed') { skipped.push({ id: eid, reason: 'completed' }); continue; }
+        if (event.round_status !== 'in_progress') {
+            await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
+        }
+        // 결석(no_show) 선수 DNS 자동 처리 (단일 소집완료와 동일)
+        const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
+        for (const h of heats) {
+            const noShow = await db.all(`SELECT he.event_entry_id FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id WHERE he.heat_id=? AND ee.status='no_show'`, h.id);
+            for (const ns of noShow) {
+                const ex = await db.get('SELECT id FROM result WHERE heat_id=? AND event_entry_id=? LIMIT 1', h.id, ns.event_entry_id);
+                if (!ex) await db.run(`INSERT OR IGNORE INTO result (heat_id,event_entry_id,attempt_number,status_code) VALUES (?,?,NULL,'DNS')`, h.id, ns.event_entry_id);
+            }
+        }
+        audit('event', event.id, 'UPDATE', { round_status: event.round_status }, { action: 'callroom_complete', round_status: 'in_progress', batch: true }, performer, event.competition_id, req);
+        broadcastSSE('callroom_complete', { event_id: event.id, judge_name: performer, heat_id: null });
+        done.push(event.id);
+    }
+    if (done.length) opLog(`일괄 소집완료: ${done.length}개 종목 - ${performer}`, 'callroom', performer, compId);
+    res.json({ success: true, completed: done.length, skipped });
+});
+
+app.post('/api/events/callroom-revert-batch', async (req, res) => {
+    const { event_ids, judge_name } = req.body;
+    if (!Array.isArray(event_ids) || event_ids.length === 0) return res.status(400).json({ error: '종목을 선택하세요.' });
+    const performer = judge_name || 'operator';
+    const reverted = [], blocked = [];
+    let compId = null;
+    for (const eid of event_ids) {
+        const event = await db.get('SELECT * FROM event WHERE id=?', eid);
+        if (!event) continue;
+        compId = event.competition_id;
+        if (event.round_status !== 'in_progress') { blocked.push({ id: eid, reason: 'not_in_progress' }); continue; }
+        // 실기록(비 DNS)이 하나라도 있으면 되돌리기 금지 (이미 기록 입력 시작)
+        const realResult = await db.get(`SELECT r.id FROM result r JOIN heat h ON h.id=r.heat_id WHERE h.event_id=? AND (r.time_seconds IS NOT NULL OR r.distance_meters IS NOT NULL OR (r.status_code IS NOT NULL AND r.status_code<>'DNS')) LIMIT 1`, event.id);
+        if (realResult) { blocked.push({ id: eid, reason: 'has_results' }); continue; }
+        // 자동 DNS만 제거 후 소집전(heats_generated) 상태로 되돌림
+        await db.run(`DELETE FROM result WHERE heat_id IN (SELECT id FROM heat WHERE event_id=?) AND status_code='DNS' AND time_seconds IS NULL AND distance_meters IS NULL`, event.id);
+        await db.run("UPDATE event SET round_status='heats_generated' WHERE id=?", event.id);
+        audit('event', event.id, 'UPDATE', { round_status: 'in_progress' }, { action: 'callroom_revert', round_status: 'heats_generated', batch: true }, performer, event.competition_id, req);
+        broadcastSSE('event_status_changed', { event_id: event.id, round_status: 'heats_generated' });
+        reverted.push(event.id);
+    }
+    if (reverted.length) opLog(`일괄 소집 되돌리기: ${reverted.length}개 종목 - ${performer}`, 'callroom', performer, compId);
+    res.json({ success: true, reverted: reverted.length, blocked });
+});
+
 app.post('/api/events/:id/create-final', async (req, res) => {
     const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
