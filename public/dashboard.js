@@ -248,9 +248,11 @@ async function loadData() {
         callroomCompletedIds = new Set(cs.completed_event_ids);
     } catch (e) {}
     // Load competition info (video URL + mode)
+    let _compMode = 'operation';
     try {
         const comp = await API.getCompetition(compId);
         _compVideoUrl = comp.video_url || '';
+        _compMode = comp.mode || 'operation';
         _isDisplayMode = comp.mode === 'display';
     } catch(e) { _compVideoUrl = ''; _isDisplayMode = false; }
     // Load display roster if display mode
@@ -259,12 +261,14 @@ async function loadData() {
             _displayRoster = await fetch('/api/display/roster/' + compId).then(r => r.json());
         } catch(e) { _displayRoster = []; }
     }
-    // Auto-detect display mode: if events have divisions but mode isn't set, enable display mode
-    if (!_isDisplayMode) {
+    // Auto-detect display mode: 부(division)만 보고 노출모드로 강제하지 않는다.
+    // ★ 운영(operation) 대회는 부가 있어도 운영 대시보드(명단→LIVE→결과)로 둔다.
+    //    노출 대회는 관리자에서 mode='display' 로 명시하면 위 라인에서 이미 잡힌다.
+    //    (mode 가 명시적으로 operation 이 아닌 레거시 대회만 부 기반 자동 노출 유지)
+    if (!_isDisplayMode && _compMode !== 'operation') {
         const hasDivisions = allEvents.some(e => !e.parent_event_id && e.division);
         if (hasDivisions) {
             _isDisplayMode = true;
-            // Still try to load display roster
             try {
                 _displayRoster = await fetch('/api/display/roster/' + compId).then(r => r.json());
             } catch(e) { _displayRoster = []; }
