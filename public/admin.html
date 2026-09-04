@@ -862,6 +862,30 @@
                     <div id="recx-result" style="display:none;margin-top:16px;"></div>
                 </div>
 
+                <!-- 계측 결과 .txt 가져오기 (드래그 업로드) -->
+                <div class="admin-card" style="border-left:4px solid #16a085;">
+                    <h4 style="color:#0e7c66;">계측 결과 가져오기 (.txt) <span class="t-sm t-muted">Timing Result Import — 드래그 업로드</span></h4>
+                    <p class="t-help-lg">계측업체 결과프로그램이 저장한 <strong>.txt 결과파일</strong>을 끌어다 놓으면 종목·조·선수를 자동 매칭해 기록을 입력합니다. (여러 파일 동시 가능)</p>
+                    <div style="background:#f0fbf8;border:1px solid #cdeee5;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;color:#0e7c66;">
+                        <strong>인식 형식:</strong> 1행 <code>성별 부 종목 라운드 [조]</code> + 풍속 · 2행 <code>순위 번호 레인 이름 소속 기록</code> · 배번→레인→성명 순 매칭 · 기록 <code>1:05.3</code>→초/필드 미터 자동변환 · <code>DNS/DNF/DQ</code> 인식
+                    </div>
+                    <div id="tt-drop" style="border:2px dashed #6ec8b3;border-radius:10px;padding:26px 16px;text-align:center;color:#0e7c66;background:#f0fbf8;cursor:pointer;transition:all .15s;">
+                        <div style="font-size:26px;">📄 ⬇️</div>
+                        <div style="font-weight:700;margin-top:6px;">여기로 .txt 결과파일을 끌어다 놓으세요</div>
+                        <div style="font-size:12px;color:#5b8f82;margin-top:4px;">또는 클릭해서 선택 (복수 가능)</div>
+                        <input type="file" id="tt-files" multiple accept=".txt" style="display:none;" onchange="ttPreview(this.files)">
+                    </div>
+                    <div id="tt-preview-area" style="display:none;margin-top:14px;">
+                        <h4 style="font-size:14px;margin-bottom:8px;">미리보기</h4>
+                        <div id="tt-preview-list"></div>
+                        <div style="margin-top:12px;display:flex;gap:8px;">
+                            <button class="btn btn-primary" onclick="ttImport()">기록 입력 실행</button>
+                            <button class="btn btn-outline" onclick="ttCancel()">취소</button>
+                        </div>
+                    </div>
+                    <div id="tt-result" style="display:none;margin-top:16px;"></div>
+                </div>
+
                 <!-- 합동 종목 관리 (Joint Group Management — Multi-event) -->
                 <div class="admin-card" style="border-left:4px solid #6b5520;">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
@@ -7207,6 +7231,97 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) {
                 box.innerHTML = `<div style="color:red;padding:12px;">오류: ${e.message}</div>`;
             }
+        }
+
+        // ── 계측 결과 .txt 드래그 업로드 ──────────────────────────────
+        let _ttFiles = [];
+        function ttInitDrop() {
+            const dz = document.getElementById('tt-drop');
+            if (!dz || dz._ttInit) return;
+            dz._ttInit = true;
+            dz.addEventListener('click', () => document.getElementById('tt-files').click());
+            ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => {
+                e.preventDefault(); e.stopPropagation();
+                dz.style.background = '#dff5ef'; dz.style.borderColor = '#0e7c66';
+            }));
+            ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => {
+                e.preventDefault(); e.stopPropagation();
+                dz.style.background = '#f0fbf8'; dz.style.borderColor = '#6ec8b3';
+            }));
+            dz.addEventListener('drop', e => {
+                const files = [...(e.dataTransfer?.files || [])].filter(f => /\.txt$/i.test(f.name));
+                if (!files.length) { toast('.txt 결과파일만 업로드할 수 있습니다.', 'error'); return; }
+                ttPreview(files);
+            });
+        }
+        document.addEventListener('DOMContentLoaded', ttInitDrop);
+        ttInitDrop();
+
+        async function ttPreview(files) {
+            _ttFiles = [...files];
+            if (!_ttFiles.length) return;
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const area = document.getElementById('tt-preview-area');
+            const list = document.getElementById('tt-preview-list');
+            document.getElementById('tt-result').style.display = 'none';
+            area.style.display = 'block';
+            list.innerHTML = `<div style="color:var(--text-muted);padding:12px;">${_ttFiles.length}개 파일 분석 중...</div>`;
+            try {
+                const fd = new FormData();
+                fd.append('competition_id', _selectedCompId);
+                fd.append('preview', 'true');
+                _ttFiles.forEach(f => fd.append('files', f));
+                const resp = await fetch('/api/timing-txt/import', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || '미리보기 실패');
+                let html = '<table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:6px 8px;text-align:left;">파일 / 종목</th><th style="padding:6px;text-align:center;white-space:nowrap;">매칭</th><th style="padding:6px 8px;text-align:left;">상태</th></tr></thead><tbody>';
+                for (const r of (data.results || [])) {
+                    const ok = !r.error && r.matched === r.total;
+                    const color = r.error ? '#dc3545' : (r.matched < r.total ? '#d97706' : '#16a34a');
+                    const status = r.error ? r.error : (ok ? '전원 매칭' : `${r.total - r.matched}명 미매칭`);
+                    html += `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px 8px;"><strong>${r.label || ''}</strong><br><span style="color:#9ca3af;font-size:11px;">${r.filename || ''}</span></td><td style="padding:6px;text-align:center;font-weight:600;">${r.matched || 0}/${r.total || 0}</td><td style="padding:6px 8px;color:${color};">${status}</td></tr>`;
+                }
+                html += '</tbody></table>';
+                list.innerHTML = html;
+            } catch (e) {
+                list.innerHTML = `<div style="color:red;padding:12px;">오류: ${e.message}</div>`;
+            }
+        }
+
+        async function ttImport() {
+            if (!_ttFiles.length) { toast('파일을 먼저 끌어다 놓으세요.', 'error'); return; }
+            if (!confirm(`${_ttFiles.length}개 계측 결과파일의 기록을 입력합니다. 계속할까요?\n(기존 기록이 있으면 덮어씁니다)`)) return;
+            const box = document.getElementById('tt-result');
+            box.style.display = 'block';
+            box.innerHTML = '<div style="color:var(--text-muted);padding:12px;">입력 중...</div>';
+            try {
+                const fd = new FormData();
+                fd.append('competition_id', _selectedCompId);
+                _ttFiles.forEach(f => fd.append('files', f));
+                const resp = await fetch('/api/timing-txt/import', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || '입력 실패');
+                const tot = (data.results || []).reduce((s, x) => s + (x.imported || 0), 0);
+                let html = `<div style="border:1px solid #a7e0d1;background:#f0fbf8;border-radius:8px;padding:12px;"><strong style="color:#0e7c66;">✅ 총 ${tot}건 기록 입력 완료</strong><br><br>`;
+                for (const r of (data.results || [])) {
+                    if (r.error) html += `<div style="margin-bottom:6px;"><strong>${r.label || r.filename}</strong> — <span style="color:red;">${r.error}</span></div>`;
+                    else html += `<div style="margin-bottom:6px;"><strong>${r.label}</strong> — <span style="color:#0e7c66;">${r.imported}건 입력</span>${r.skipped > 0 ? `<span style="color:#f59e0b;"> / ${r.skipped}건 스킵</span>` : ''}${r.wind ? ` <span style="color:#6b7280;">풍속 ${r.wind}</span>` : ''}</div>`;
+                }
+                html += '</div>';
+                box.innerHTML = html;
+                document.getElementById('tt-preview-area').style.display = 'none';
+                document.getElementById('tt-files').value = '';
+                _ttFiles = [];
+                if (typeof loadEvents === 'function') loadEvents();
+            } catch (e) {
+                box.innerHTML = `<div style="color:red;padding:12px;">오류: ${e.message}</div>`;
+            }
+        }
+
+        function ttCancel() {
+            _ttFiles = [];
+            document.getElementById('tt-preview-area').style.display = 'none';
+            document.getElementById('tt-files').value = '';
         }
 
         async function sbImportFiles() {

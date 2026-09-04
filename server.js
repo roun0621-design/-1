@@ -7548,6 +7548,134 @@ app.post('/api/record-xlsx/import', upload.single('file'), async (req, res) => {
     } finally { try { fs.unlinkSync(req.file.path); } catch (e) {} }
 });
 
+// ============================================================
+// 계측 결과 .txt 가져오기 (계측업체 결과프로그램 출력물)
+//   양식(탭 구분):
+//     1행: "성별 부 종목 라운드 [조]\t풍속(m/s)\t...\t날짜-시간"  (예: 남자 장년부 100m 예선 1조 \t N/A m/s \t ...)
+//     2행: 순위 \t 번호 \t 레인 \t 이름 \t 소속 \t 기록
+//     3행~: 데이터 (기록 = 12.34 / 1:05.3 / DNS/DNF/DQ, 순위 ##$$ = 비순위)
+//   → record-xlsx 임포트와 동일 인프라(_recxMatchGroup/삽입) 재활용. 파일 1개 = 종목·조 1개.
+// ============================================================
+function parseTimingTxt(content) {
+    content = String(content).replace(/^﻿/, '');
+    const lines = content.split(/\r?\n/);
+    let i = 0; while (i < lines.length && !lines[i].trim()) i++;
+    if (i >= lines.length) throw new Error('빈 파일');
+    const head = lines[i].split('\t').map(s => s.trim());
+    const fullName = (head[0] || '').replace(/^﻿/, '').trim();
+    if (!fullName) throw new Error('1행에서 종목명을 찾을 수 없습니다.');
+    // 풍속: 메타 필드 중 m/s 로 끝나는 것 (N/A m/s 는 무시)
+    let wind = null;
+    for (const f of head.slice(1)) { const wm = String(f).match(/([+-]?\d+(?:\.\d+)?)\s*m\/s/i); if (wm) { const w = parseFloat(wm[1]); if (!isNaN(w)) { wind = w; break; } } }
+    // 종목명 파싱: 종목(거리/필드) 기준으로 앞(성별+부) / 뒤(라운드+조) 분리
+    const em = fullName.match(/(\d+\s*[×xX]\s*\d+\s*m?R?|\d+mH|\d+mSC|\d+mW|\d+m|\d+kmW?|하프마라톤|마라톤|멀리뛰기|세단뛰기|높이뛰기|장대높이뛰기|포환던지기|원반던지기|창던지기|해머던지기|\d+종경기)/i);
+    const eventName = em ? em[1].replace(/\s+/g, '') : fullName;
+    const beforeEvt = em ? fullName.slice(0, em.index).trim() : '';
+    const afterEvt = em ? fullName.slice(em.index + em[1].length).trim() : '';
+    const hm = afterEvt.match(/(\d+)\s*조/); const heatNum = hm ? parseInt(hm[1]) : 1;
+    const roundRaw = /예선/.test(afterEvt) ? '예선' : /준결/.test(afterEvt) ? '준결승' : '결승';
+    const divisionRaw = beforeEvt || fullName;
+    // 컬럼 헤더행 (순위 … 기록)
+    let hi = -1;
+    for (let k = i + 1; k < lines.length; k++) { if (/순위/.test(lines[k]) && /기록/.test(lines[k])) { hi = k; break; } }
+    if (hi < 0) hi = i + 1;
+    const cols = (lines[hi] || '').split('\t').map(s => s.trim());
+    const ci = {
+        rank: cols.findIndex(c => /순위/.test(c)), bib: cols.findIndex(c => /번호|배번/.test(c)),
+        lane: cols.findIndex(c => /레인|순서/.test(c)), name: cols.findIndex(c => /이름|성명/.test(c)),
+        team: cols.findIndex(c => /소속|팀/.test(c)), record: cols.findIndex(c => /기록/.test(c)),
+    };
+    const rows = [];
+    for (let k = hi + 1; k < lines.length; k++) {
+        if (!lines[k].trim()) continue;
+        const f = lines[k].split('\t');
+        const gv = (idx) => idx >= 0 ? String(f[idx] == null ? '' : f[idx]).trim() : '';
+        const name = gv(ci.name), rec = gv(ci.record), bib = gv(ci.bib);
+        if (!name && !rec && !bib) continue;
+        const rankRaw = gv(ci.rank);
+        let type = 'result';
+        if (/^dns$/i.test(rec)) type = 'DNS';
+        else if (/^dnf$/i.test(rec)) type = 'DNF';
+        else if (/^(dq|실격)$/i.test(rec)) type = 'DQ';
+        else if (/^(nm|nh|기록없음)$/i.test(rec)) type = 'NM';
+        rows.push({ type, rank: /^\d+$/.test(rankRaw) ? parseInt(rankRaw) : null, bib, lane: parseInt(gv(ci.lane)) || null, name, team: gv(ci.team), recordRaw: rec });
+    }
+    return [{ divisionRaw, gender: _recxGenderOf(divisionRaw), divToken: _recxDivToken(divisionRaw), eventName, roundRaw, round: _recxRound(roundRaw), heatNum, wind, rows }];
+}
+
+app.post('/api/timing-txt/import', upload.array('files', 100), async (req, res) => {
+    const competition_id = parseInt(req.body.competition_id);
+    if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
+    if (!req.files || !req.files.length) return res.status(400).json({ error: '.txt 파일을 선택하세요.' });
+    const previewOnly = req.body.preview === 'true' || req.body.preview === true;
+    const out = [];
+    const run = async () => {
+        for (const file of req.files) {
+            let groups;
+            try { groups = parseTimingTxt(fs.readFileSync(file.path, 'utf8')); }
+            catch (e) { out.push({ filename: file.originalname, error: e.message, imported: 0, skipped: 0 }); continue; }
+            for (const g of groups) {
+                const matched = await _recxMatchGroup(competition_id, g);
+                if (matched.matchStatus !== 'matched') {
+                    out.push({ filename: file.originalname, label: `${g.divisionRaw} ${g.eventName} ${g.roundRaw} ${g.heatNum}조`, error: '매칭되는 종목/조 없음', imported: 0, skipped: g.rows.length, matched: 0, total: g.rows.length });
+                    continue;
+                }
+                const { heat_id, event_id, is_field } = matched.heatInfo;
+                const matchedCnt = matched.athleteMatches.filter(a => a.event_entry_id).length;
+                if (previewOnly) {
+                    out.push({ filename: file.originalname, label: `${matched.heatInfo.event_name} ${{ preliminary: '예선', semifinal: '준결승', final: '결승' }[matched.heatInfo.round_type] || ''} ${matched.heatInfo.heat_number}조`, matched: matchedCnt, total: matched.athleteMatches.length,
+                        rows: matched.athleteMatches.map(a => ({ rank: a.rec_rank, bib: a.rec_bib, name: a.rec_name, record: a.rec_raw, ok: !!a.event_entry_id })) });
+                    continue;
+                }
+                let imported = 0, skipped = 0;
+                for (const am of matched.athleteMatches) {
+                    if (!am.event_entry_id) { skipped++; continue; }
+                    let time_seconds = null, distance_meters = null, status_code = '';
+                    if (am.rec_type === 'DNS') status_code = 'DNS';
+                    else if (am.rec_type === 'DNF') status_code = 'DNF';
+                    else if (am.rec_type === 'DQ') status_code = 'DQ';
+                    else if (am.rec_type === 'NM') status_code = 'NM';
+                    else { if (is_field) distance_meters = am.rec_value; else time_seconds = am.rec_value; }
+                    if (am.rec_type === 'result' && time_seconds == null && distance_meters == null) { skipped++; continue; }
+                    const existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NULL ORDER BY id DESC LIMIT 1', heat_id, am.event_entry_id);
+                    const _now = db.isAsync ? 'NOW()' : "datetime('now')";
+                    if (existing) {
+                        await db.run(`UPDATE result SET time_seconds=?,distance_meters=?,status_code=?,updated_at=${_now} WHERE id=?`, time_seconds, distance_meters, status_code, existing.id);
+                        const upd = await db.get('SELECT * FROM result WHERE id=?', existing.id);
+                        audit('result', existing.id, 'UPDATE', existing, upd, 'timing-txt', null, req);
+                    } else {
+                        const info = await db.run('INSERT INTO result (heat_id,event_entry_id,time_seconds,distance_meters,status_code,remark) VALUES (?,?,?,?,?,?)', heat_id, am.event_entry_id, time_seconds, distance_meters, status_code, '');
+                        const ins = await db.get('SELECT * FROM result WHERE id=?', info.lastInsertRowid);
+                        audit('result', ins.id, 'INSERT', null, ins, 'timing-txt', null, req);
+                    }
+                    imported++;
+                }
+                if (g.wind != null && !is_field) {
+                    const windStr = g.wind.toFixed(1) + ' m/s';
+                    await db.run('UPDATE heat SET wind=? WHERE id=?', windStr, heat_id);
+                    broadcastSSE('wind_update', { heat_id, wind: windStr });
+                }
+                const ev = await db.get('SELECT * FROM event WHERE id=?', event_id);
+                if (ev && imported > 0 && (ev.round_status === 'heats_generated' || ev.round_status === 'created')) {
+                    await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event_id);
+                    broadcastSSE('event_status_changed', { event_id, round_status: 'in_progress' });
+                }
+                if (imported > 0) broadcastSSE('result_update', { heat_id, bulk: true });
+                out.push({ filename: file.originalname, label: `${matched.heatInfo.event_name} ${{ preliminary: '예선', semifinal: '준결승', final: '결승' }[matched.heatInfo.round_type] || ''} ${matched.heatInfo.heat_number}조`, imported, skipped, matched: matchedCnt, total: matched.athleteMatches.length, wind: g.wind != null && !is_field ? g.wind.toFixed(1) + ' m/s' : null });
+            }
+        }
+    };
+    try {
+        if (previewOnly) await run(); else await db.transaction(run)();
+        const totalImp = out.reduce((s, r) => s + (r.imported || 0), 0);
+        if (!previewOnly && totalImp > 0) opLog(`계측결과(txt) 가져오기: ${req.files.length}개 파일, ${totalImp}건 입력`, 'record', 'timing', competition_id);
+        res.json({ success: true, preview: previewOnly, results: out });
+    } catch (err) {
+        console.error('[timing-txt/import]', err);
+        res.status(500).json({ error: err.message });
+    } finally { for (const f of (req.files || [])) { try { fs.unlinkSync(f.path); } catch (e) {} } }
+});
+
 /**
  * GET /api/scoreboard/keys?competition_id=N
  * List all scoreboard_keys for a given competition (for debugging/review)
