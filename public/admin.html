@@ -5395,6 +5395,7 @@ POST /api/external/event-result-link/batch<br>
                 }
 
                 const changed = data.preview.filter(p => p.status === 'changed');
+                const willCreate = data.preview.filter(p => p.status === 'will_create');
                 const hasResults = data.preview.filter(p => p.status === 'has_results');
                 const unchanged = data.preview.filter(p => p.status === 'unchanged');
                 const notFound = data.preview.filter(p => p.status === 'not_found');
@@ -5402,6 +5403,7 @@ POST /api/external/event-result-link/batch<br>
                 // Summary bar
                 html += `<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">`;
                 if (changed.length) html += `<span style="background:#f5f0e0;color:#166534;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 변경 적용: ${changed.length}개</span>`;
+                if (willCreate.length) html += `<span style="background:#e0f2fe;color:#0369a1;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#0284c7;" class="ui-emoji"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 생성 예정: ${willCreate.length}개</span>`;
                 if (hasResults.length) html += `<span style="background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 기록있음: ${hasResults.length}개</span>`;
                 if (unchanged.length) html += `<span style="background:#f3f4f6;color:#6b7280;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg> 변경없음: ${unchanged.length}개</span>`;
                 if (notFound.length) html += `<span style="background:#fef2f2;color:#dc2626;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 미발견: ${notFound.length}개</span>`;
@@ -5416,6 +5418,7 @@ POST /api/external/event-result-link/batch<br>
                         changed: { bg: '#f5f0e0', color: '#166534', label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 변경' },
                         has_results: { bg: '#fef3c7', color: '#92400e', label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 기록있음' },
                         unchanged: { bg: '#f3f4f6', color: '#9ca3af', label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg> 스킵' },
+                        will_create: { bg: '#e0f2fe', color: '#0369a1', label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#0284c7;" class="ui-emoji"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 생성 예정' },
                         not_found: { bg: '#fef2f2', color: '#dc2626', label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 미발견' }
                     };
                     const sc = statusColors[item.status] || statusColors.not_found;
@@ -5448,8 +5451,8 @@ POST /api/external/event-result-link/batch<br>
                 }
                 html += `</tbody></table>`;
 
-                // Action buttons
-                const hasChanges = changed.length > 0 || hasResults.length > 0;
+                // Action buttons (will_create = 신규 종목 자동생성도 '적용' 대상)
+                const hasChanges = changed.length > 0 || willCreate.length > 0 || hasResults.length > 0;
                 if (hasChanges) {
                     html += `<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">`;
                     html += `<button class="btn btn-outline" onclick="cancelHeatAssignment()">취소</button>`;
