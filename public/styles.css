@@ -1282,7 +1282,15 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .matrix-section-compact .matrix-section-title { font-size: 10px; padding: 4px 8px; }
 .matrix-table-compact th { font-size: 9px; padding: 5px 4px; }
 .matrix-table-compact td { padding: 5px 4px; font-size: 12px; }
-.rec-matrix-event { font-weight: 600; font-size: 12px !important; text-align: left !important; white-space: nowrap; }
+/* 소집실/기록실/관리 매트릭스: 종목 셀이 시간·Call Room 배지로 넓어지면
+   준결승·결승 라운드 버튼이 320px 패널 밖으로 밀려 잘리던 문제 →
+   고정 레이아웃으로 라운드 열 폭을 확보하고 종목명은 줄바꿈시켜 항상 표시. */
+.matrix-table-compact { table-layout: fixed; width: 100%; min-width: 0; }
+.matrix-table-compact th:first-child,
+.matrix-table-compact td:first-child { width: auto; }
+.matrix-table-compact th:not(:first-child),
+.matrix-table-compact td:not(:first-child) { width: 58px; }
+.rec-matrix-event { font-weight: 600; font-size: 12px !important; text-align: left !important; white-space: normal; word-break: keep-all; line-height: 1.25; }
 .rec-round-btn { font-size: 10px !important; padding: 3px 8px !important; white-space: nowrap; }
 .rec-round-btn.rec-btn-active {
     background: var(--green) !important; color: #fff !important;
