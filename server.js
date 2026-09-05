@@ -3188,6 +3188,13 @@ app.post('/api/events/callroom-complete-batch', async (req, res) => {
         if (event.round_status !== 'in_progress') {
             await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
         }
+        // 등록 선수 전원 자동 출석(checked_in) — 일괄 소집은 개별 출석 단계를 건너뛰므로
+        // 이 처리가 없으면 기록입력 화면에 "소집이 완료된 선수가 없습니다"로 뜬다.
+        // no_show(결석)는 유지하고 registered 만 checked_in 으로 전환.
+        await db.run(`UPDATE event_entry SET status='checked_in'
+            WHERE status='registered' AND id IN (
+                SELECT he.event_entry_id FROM heat_entry he JOIN heat h ON h.id=he.heat_id WHERE h.event_id=?
+            )`, event.id);
         // 결석(no_show) 선수 DNS 자동 처리 (단일 소집완료와 동일)
         const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
         for (const h of heats) {
@@ -3221,6 +3228,11 @@ app.post('/api/events/callroom-revert-batch', async (req, res) => {
         if (realResult) { blocked.push({ id: eid, reason: 'has_results' }); continue; }
         // 자동 DNS만 제거 후 소집전(heats_generated) 상태로 되돌림
         await db.run(`DELETE FROM result WHERE heat_id IN (SELECT id FROM heat WHERE event_id=?) AND status_code='DNS' AND time_seconds IS NULL AND distance_meters IS NULL`, event.id);
+        // 일괄 소집완료 시 자동 출석(checked_in) 처리한 것을 되돌림 (checked_in → registered)
+        await db.run(`UPDATE event_entry SET status='registered'
+            WHERE status='checked_in' AND id IN (
+                SELECT he.event_entry_id FROM heat_entry he JOIN heat h ON h.id=he.heat_id WHERE h.event_id=?
+            )`, event.id);
         await db.run("UPDATE event SET round_status='heats_generated' WHERE id=?", event.id);
         audit('event', event.id, 'UPDATE', { round_status: 'in_progress' }, { action: 'callroom_revert', round_status: 'heats_generated', batch: true }, performer, event.competition_id, req);
         broadcastSSE('event_status_changed', { event_id: event.id, round_status: 'heats_generated' });
