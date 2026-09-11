@@ -2141,7 +2141,8 @@ function _scDismissNotice() {
 // 결과표 행 클릭 → 카드 팝업 (재렌더링돼도 유지되도록 document 위임)
 document.addEventListener('click', function (e) {
     if (!e.target || !e.target.closest) return;
-    const row = e.target.closest('tr[data-sc]');
+    // 트랙 결과는 두 줄 div 행(.rr), 필드·종합은 아직 tr — 둘 다 data-sc 로 잡는다
+    const row = e.target.closest('[data-sc]');
     if (!row || typeof openShareCard !== 'function') return;
     // 행 안에 자체 동작이 있는 요소(혼성 표의 세부기록 셀 등)를 누른 경우엔 양보한다.
     const own = e.target.closest('[onclick], a, button, input, select, label');
@@ -2180,31 +2181,58 @@ function renderTrackResults(data, relayMembers) {
             r.rank = r.time_seconds == null ? '—' : ((i > 0 && rows[i - 1].time_seconds === r.time_seconds && !rows[i - 1].status_code) ? rows[i - 1].rank : rk);
             rk = i + 2;
         });
-        html += `<table class="data-table" style="font-size:13px;">
-            <thead><tr><th>순위</th><th>${smallNumLabel}</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th><th>기록</th><th>비고</th></tr></thead>
-            <tbody>${rows.map(r => {
-                const wMark2 = (_isWindAided2 && !r.status_code && r.time_seconds != null) ? '<span class="wind-aided-mark">w</span>' : '';
-                let memberHtml = '';
-                if (isRelay && relayMembers) {
-                    const members = relayMembers.filter(m => m.event_entry_id === r.event_entry_id);
-                    if (members.length > 0) {
-                        const sorted = [...members].sort((a, b) => (a.leg_order || 99) - (b.leg_order || 99));
-                        memberHtml = `<tr><td colspan="7" style="padding:2px 8px 6px 40px;background:#f8f9fa;border-bottom:2px solid #e5e7eb;">
-                            <span style="font-size:10px;color:var(--text-muted);margin-right:6px;">주자:</span>
-                            ${sorted.map(m => `<span style="font-size:11px;margin-right:10px;">${m.leg_order ? m.leg_order + '주 ' : ''}${m.name} <span style="color:var(--text-muted);">#${bib(m.bib_number)}</span></span>`).join('')}
-                        </td></tr>`;
-                    }
+        // ── 두 줄 에디토리얼 행 (2026-09) ──
+        //   상단: 순위 · 이름 · 소속 / 하단 왼쪽: LANE · BIB · 그룹 · 비고 / 하단 오른쪽: 기록(+w·신기록 배지)
+        //   표 헤더·세로선 없음. 행 전체가 공유 카드 버튼이고, 눌린다는 표시는 오른쪽 골드 › 하나.
+        //   비고는 하단 메타에 흡수되므로 "대회신기록" 같은 자유 입력이 들어와도 기록·배지와 안 섞인다.
+        html += `<div class="rr-list${_rrFirstOpen ? ' rr-first' : ''}">${rows.map(r => {
+            const hasRec = !r.status_code && r.time_seconds != null;
+            const wMark2 = (_isWindAided2 && hasRec) ? '<span class="rr-w">w</span>' : '';
+            const recBadges = (hasRec && !_isWindAided2) ? _rrRecordBadges(r.time_seconds) : '';
+            let memberHtml = '';
+            if (isRelay && relayMembers) {
+                const members = relayMembers.filter(m => m.event_entry_id === r.event_entry_id);
+                if (members.length > 0) {
+                    const sorted = [...members].sort((a, b) => (a.leg_order || 99) - (b.leg_order || 99));
+                    memberHtml = `<div class="rr-members">${sorted.map(m => `<span>${m.leg_order ? m.leg_order + '주 ' : ''}${m.name}<i>#${bib(m.bib_number)}</i></span>`).join('')}</div>`;
                 }
-                const _scRec = (!r.status_code && r.time_seconds != null) ? formatTime(r.time_seconds) : '';
-                return `<tr${_scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null)}>
-                <td>${r.rank}</td><td>${r.lane_number || '—'}</td><td>${bib(r.bib_number)}</td>
-                <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>
-                <td style="font-family:monospace;font-weight:600;">${r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.time_seconds != null ? formatTime(r.time_seconds) + wMark2 + (!_isWindAided2 ? _buildRecordBadgesHTML(r.time_seconds) : '') : '<span style="color:var(--text-muted);">—</span>')}</td>
-                <td style="font-size:11px;color:#666;">${r.remark || ''}</td>
-            </tr>${memberHtml}`;
-            }).join('')}</tbody></table>`;
+            }
+            const _scRec = hasRec ? formatTime(r.time_seconds) : '';
+            const scAttr = _scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null);
+            const rankHtml = r.status_code
+                ? `<div class="rr-rank rr-rank-st sc-${r.status_code}">${r.status_code}</div>`
+                : `<div class="rr-rank${r.rank === 1 ? ' rr-rank-1' : ''}">${r.rank}</div>`;
+            const meta = [
+                `${smallNumLabel} ${r.lane_number || '—'}`,
+                `BIB ${bib(r.bib_number)}`,
+                r.sub_group ? `${r.sub_group}그룹` : '',
+                r.remark ? `<b>${r.remark}</b>` : '',
+            ].filter(Boolean).join('<i>·</i>');
+            const recHtml = r.status_code
+                ? `<div class="rr-rec rr-rec-st">${r.status_code}</div>`
+                : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark2}${recBadges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
+            return `<div class="rr${scAttr ? '' : ' rr-nocard'}"${scAttr}>
+                ${rankHtml}
+                <div class="rr-who"><span class="rr-name">${r.name}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}</span>`}</div>
+                <div class="rr-meta">${meta}</div>
+                ${recHtml}
+                <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
+                ${memberHtml}
+            </div>`;
+        }).join('')}</div>`;
     });
+    _rrFirstOpen = false;
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
+}
+
+// 결과 팝업 첫 열람 여부 — 첫 번째로 연 결과표에서만 › 가 두 번 숨 쉬듯 흐르고 멈춘다 (계속 깜빡이지 않음)
+let _rrFirstOpen = (() => { try { return localStorage.getItem('sc_notice_done') !== '1'; } catch (e) { return true; } })();
+
+// 신기록 배지 (NR/DR/CR) — 두 줄 행의 기록 옆 작은 알약
+function _rrRecordBadges(newValNum) {
+    const lbl = _recLabelText(newValNum);
+    if (!lbl) return '';
+    return lbl.split(' ').map(l => `<span class="rr-badge rr-badge-${l}">${l}</span>`).join('');
 }
 
 function renderFieldDistResults(data) {
