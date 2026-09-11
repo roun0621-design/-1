@@ -18,27 +18,10 @@ let _timetableFull = { days: {}, start_date: null }; // 전체 시간표 (히어
 let _isDisplayMode = false; // 노출용 대회 모드
 let _displayRoster = []; // 노출용 대회 명단
 let _currentDivision = '전체'; // 부별 필터
-let _searchQuery = ''; // 종목 검색어 (종목명/거리 부분일치)
 
 // 알림(관심) 토글 아이콘 — 종(bell) / 종-끄기(bell-off)
 const _BELL_ON = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
 const _BELL_OFF = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
-
-// ── 종목 검색 (상단 인풋) ────────────────────────────────────────
-function onEventSearch(v) {
-    _searchQuery = v || '';
-    const clr = document.getElementById('event-search-clear');
-    if (clr) clr.style.display = _searchQuery ? '' : 'none';
-    renderMatrix();
-}
-function clearEventSearch() {
-    const inp = document.getElementById('event-search');
-    if (inp) inp.value = '';
-    _searchQuery = '';
-    const clr = document.getElementById('event-search-clear');
-    if (clr) clr.style.display = 'none';
-    renderMatrix();
-}
 
 // ── "진행 중 N" 배지 + 라이브 카드로 스크롤 ──────────────────────
 function updateLiveJumpBadge(n) {
@@ -641,12 +624,6 @@ function renderMatrix() {
     if (_isDisplayMode && _currentDivision !== '전체') {
         events = events.filter(e => e.division === _currentDivision);
     }
-    // 종목 검색 (종목명/거리 부분일치, 예: "400" → 400m)
-    if (_searchQuery && _searchQuery.trim()) {
-        const q = _searchQuery.trim().toLowerCase();
-        events = events.filter(e => (e.name || '').toLowerCase().includes(q));
-    }
-
     const categories = [
         { key: 'track', label: 'TRACK', match: c => c === 'track' },
         { key: 'field', label: 'FIELD', match: c => c === 'field_distance' || c === 'field_height' },

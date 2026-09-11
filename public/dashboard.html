@@ -239,14 +239,6 @@
         #dash-toolbar { background:var(--white); border-bottom:1px solid var(--gray); }
         #filter-bar { display:flex; align-items:center; gap:10px; }
         #filter-bar .filter-scroll { flex:1; min-width:0; }
-        .dash-search-row { display:flex; align-items:center; gap:8px; padding:8px 12px 6px; }
-        .dash-search-wrap { position:relative; flex:1; display:flex; align-items:center; }
-        .dash-search-ico { position:absolute; left:11px; width:16px; height:16px; color:var(--text-muted); pointer-events:none; }
-        #event-search { width:100%; box-sizing:border-box; padding:9px 34px; border:1px solid var(--gray); border-radius:999px; font-size:14px; background:var(--bg); -webkit-appearance:none; appearance:none; outline:none; transition:border-color .15s, background .15s; }
-        #event-search:focus { border-color:var(--accent); background:var(--white); }
-        #event-search::-webkit-search-cancel-button { -webkit-appearance:none; display:none; }
-        .dash-search-clear { position:absolute; right:6px; width:26px; height:26px; border:none; background:none; color:var(--text-muted); font-size:20px; line-height:1; cursor:pointer; border-radius:50%; display:flex; align-items:center; justify-content:center; }
-        .dash-search-clear:hover { background:var(--gray-light); }
         .live-jump-badge { flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; padding:8px 13px; border:none; border-radius:999px; cursor:pointer; white-space:nowrap; font-size:12px; font-weight:800; letter-spacing:.3px; color:#fff; background:linear-gradient(135deg,#16a34a,#15803d); box-shadow:0 2px 8px rgba(21,128,61,.32); }
         .live-jump-badge:hover { filter:brightness(1.06); }
         .live-jump-dot { width:7px; height:7px; border-radius:50%; background:#fff; animation:liveDotBlink 1.4s ease-in-out infinite; }
@@ -285,11 +277,6 @@
             body.dashboard-mode .hamburger-btn { width:32px; height:32px; font-size:16px; }
             body.dashboard-mode .dashboard-layout { height:calc(100vh - 40px); height:calc(100dvh - 40px); }
 
-            /* 툴바 검색행 컴팩트 */
-            .dash-search-row { padding:4px 10px; gap:6px; }
-            #event-search { height:32px; padding:0 32px; font-size:13px; }
-            .dash-search-ico { left:11px; width:15px; height:15px; }
-            .dash-search-clear { width:24px; height:24px; }
             .live-jump-badge { padding:0 11px; height:32px; font-size:11px; }
 
             /* 성별 + 부 필터를 한 줄 가로스크롤 칩으로 통합 (진행중 배지는 우측 고정) */
@@ -348,15 +335,7 @@
         <!-- ── 스크롤 콘텐츠: 검색 + 대회정보 + 히어로 + 종목 매트릭스 ──
              검색·comp-info·hero 를 스크롤 영역으로 옮겨 상단 고정영역(툴바)만 남긴다. -->
         <div class="events-scroll" id="events-scroll-region">
-            <!-- 종목 검색 (콘텐츠 최상단) -->
-            <div class="dash-search-row">
-                <div class="dash-search-wrap">
-                    <svg class="dash-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <input id="event-search" type="search" inputmode="search" autocomplete="off" placeholder="종목 검색 (예: 400, 멀리)" oninput="onEventSearch(this.value)">
-                    <button type="button" id="event-search-clear" class="dash-search-clear" aria-label="검색 지우기" onclick="clearEventSearch()" style="display:none;">&times;</button>
-                </div>
-            </div>
-
+            <!-- (종목 검색창 제거 — 모바일 상단 공간 확보, 2026-09) -->
             <!-- Single-line competition info -->
             <div class="comp-info-line" id="comp-info-bar"></div>
 
@@ -458,7 +437,7 @@
     </style>
 
     <script src="common.js?v=89"></script>
-    <script src="dashboard.js?v=107"></script>
+    <script src="dashboard.js?v=108"></script>
     <script src="share-card.js?v=1"></script>
     <script src="push.js?v=10"></script>
 </body>
