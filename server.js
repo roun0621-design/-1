@@ -1897,6 +1897,15 @@ function resolveFedEventName(rawName) {
 
     return null;
 }
+// 연맹 명단 엑셀의 종목1/종목2 열 위치 — 헤더명으로 탐색, 없으면 레거시 고정 위치(E·F열).
+//   배포 양식(PACERISE_upload_template.xlsx)은 E열이 휴대폰이라 고정 인덱스로 읽으면 종목이 누락되던 문제 방지.
+function fedEventColIdx(headers) {
+    const hn = (headers || []).map(h => String(h || '').replace(/\s+/g, '').toLowerCase());
+    const i1 = hn.findIndex(h => /^(종목1|종목|event1|event)$/.test(h));
+    const i2 = hn.findIndex(h => /^(종목2|event2)$/.test(h));
+    if (i1 >= 0) return [i1, i2 >= 0 ? i2 : -1];
+    return [4, 5];
+}
 const FED_RELAY_MAP = {
     '400mR':{name:'4X100mR',category:'relay'},'1600mR':{name:'4X400mR',category:'relay'},
     'Mixed':{name:'4X400mR(Mixed)',category:'relay',gender:'X'},
@@ -4984,13 +4993,14 @@ app.post('/api/federation/preview', upload.single('file'), (req, res) => {
         const dataRows = rows.slice(1).filter(r => r[0] && r[1]);
         const relayColMap = {};
         headers.forEach((h, idx) => { const key = String(h).trim(); if (FED_RELAY_MAP[key]) relayColMap[key] = { idx, ...FED_RELAY_MAP[key] }; });
+        const [_evCol1, _evCol2] = fedEventColIdx(headers);
         const eventSet = new Map();
         const relayTeams = new Map();
         dataRows.forEach(row => {
             const _g2414 = String(row[2] || '').trim();
             const gender = (_g2414 === '남' || _g2414 === '남자') ? 'M' : (_g2414 === '여' || _g2414 === '여자') ? 'F' : null;
             if (!gender) return;
-            [row[4], row[5]].forEach(evtName => {
+            [row[_evCol1], _evCol2 >= 0 ? row[_evCol2] : ''].forEach(evtName => {
                 if (!evtName) return;
                 const mapped = resolveFedEventName(String(evtName).trim());
                 if (!mapped) return;
@@ -5034,6 +5044,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
         const dataRows = rows.slice(1).filter(r => r[0] && r[1]);
         const relayColMap = {};
         headers.forEach((h, idx) => { const key = String(h).trim(); if (FED_RELAY_MAP[key]) relayColMap[key] = { idx, ...FED_RELAY_MAP[key] }; });
+        const [_evCol1, _evCol2] = fedEventColIdx(headers);
         let stats = { athletes: 0, events: 0, entries: 0, heats: 0, relayTeams: 0 };
         const createdEventNames = [];  // ⭐ 트랜잭션 안에서 push, 응답에서 전달
 
@@ -5109,7 +5120,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 }
                 // barcode와 bib_number는 별도 필드로 유지
 
-                [row[4], row[5]].forEach(evtName => {
+                [row[_evCol1], _evCol2 >= 0 ? row[_evCol2] : ''].forEach(evtName => {
                     if (!evtName) return;
                     const mapped = resolveFedEventName(String(evtName).trim());
                     if (!mapped) return;
@@ -9117,7 +9128,7 @@ if (!db.isAsync) try {
 // TIMETABLE — 대회 일정 관리 (Excel 업로드, 자동 매칭, 일별 조회)
 // ============================================================
 // TIMETABLE 라우트들은 lib/routes/timetable.js 로 추출됨
-require('./lib/routes/timetable')(app, { db, isAdminKey, isOperationKey, opLog, upload, XLSX, excelTimeToHHMM, cleanTimetableEventName });
+const _timetableRoutes = require('./lib/routes/timetable')(app, { db, isAdminKey, isOperationKey, opLog, upload, XLSX, excelTimeToHHMM, cleanTimetableEventName });
 
 // ============================================================
 // PDF DOCUMENT GENERATION — WA-Style Professional Layout
@@ -13502,6 +13513,15 @@ async function autoLinkDisplayTimetable(compId) {
 
     if (createdEvents > 0) {
         console.log(`[autoLink] competition_id=${compId}: ${linked} linked, ${createdEvents} events auto-created from timetable`);
+    }
+    // 폴백: 위 strict 매칭은 "실업(남)"·"대학/실업(여)" 같은 부별 표기를 division 으로 해석해
+    //   division 이 빈 운영용 종목과 연결하지 못함 → 시간표 업로드/재매칭과 동일한 매처로 남은 NULL 행만 재시도.
+    //   (결승·준결승 생성 직후 시간표의 "결승" 행이 자동 연결되도록)
+    try {
+        const fb = await _timetableRoutes.autoLinkTimetable(compId);
+        if (fb && fb.linked) linked += fb.linked;
+    } catch (fbErr) {
+        console.warn('[autoLink fallback] ', fbErr.message);
     }
     return linked;
 }

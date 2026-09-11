@@ -2596,7 +2596,10 @@ async function loadRosterModalData(eventId) {
             html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">${isField ? '순서' : '레인'}</th>`;
             html += `<th style="padding:5px 8px;text-align:center;width:50px;font-weight:600;color:#777;">배번</th>`;
             if (hasSubGroup) html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">그룹</th>`;
-            html += `<th style="padding:5px 8px;text-align:left;width:68px;font-weight:600;color:#777;">이름</th>`;
+            //   이름은 keep-all 만 두면 폭을 넘는 긴 이름(외국인 선수 등)이 소속 열 위로 겹쳐 그려짐
+            //   → 이름 열을 표 폭의 24%(데스크톱 ≈125px, 9자까지 한 줄)로 넓히고, 그래도 넘치면
+            //     overflow-wrap:anywhere 로 셀 안에서 줄바꿈. 소속은 남은 폭(≈250px)이라 상태 열을 침범하지 않음.
+            html += `<th style="padding:5px 8px;text-align:left;width:24%;font-weight:600;color:#777;">이름</th>`;
             html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">소속</th>`;
             if (showCallroomStatus) html += `<th style="padding:5px 8px;text-align:center;width:48px;font-weight:600;color:#777;">상태</th>`;
             html += `</tr></thead><tbody>`;
@@ -2634,7 +2637,7 @@ async function loadRosterModalData(eventId) {
                     const gColor = g === 'A' ? '#555' : g === 'B' ? '#8b1a2a' : '#999';
                     html += `<td style="padding:5px 8px;text-align:center;font-weight:800;color:${gColor};">${g || '—'}</td>`;
                 }
-                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;word-break:keep-all;">${e.name}</td>`;
+                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;word-break:keep-all;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
                 html += `<td style="padding:5px 8px;text-align:left;color:#666;word-break:keep-all;overflow-wrap:anywhere;">${e.team || ''}</td>`;
                 if (showCallroomStatus) {
                     let badge = '<span style="font-size:10px;color:#bbb;">—</span>';
