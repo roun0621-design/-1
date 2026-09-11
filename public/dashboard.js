@@ -1133,7 +1133,6 @@ async function openResult(eventId) {
 
         let bodyHtml = '';
         bodyHtml += buildEmbedVideoHTML(videoUrl);
-        bodyHtml += _scNoticeHtml();
 
         if (evt.category === 'track' || evt.category === 'relay' || evt.category === 'road') {
             let relayMembers = null;
@@ -2125,18 +2124,7 @@ function _scAttr(evt, r, record, rank, extra) {
     return ` data-sc="${encodeURIComponent(JSON.stringify(payload))}"`;
 }
 
-// 최초 1회 안내 — 닫으면 다시 뜨지 않는다.
-// (행마다 큰 버튼을 다는 대신 한 번만 크게 알려서 결과표를 깨끗하게 유지)
-function _scNoticeHtml() {
-    try { if (localStorage.getItem('sc_notice_done') === '1') return ''; } catch (e) {}
-    return `<div class="sc-notice" id="sc-notice">기록을 누르면 공유 카드를 만들 수 있어요
-        <button onclick="_scDismissNotice()" aria-label="닫기">&times;</button></div>`;
-}
-function _scDismissNotice() {
-    try { localStorage.setItem('sc_notice_done', '1'); } catch (e) {}
-    const n = document.getElementById('sc-notice');
-    if (n) n.remove();
-}
+// (안내문 "기록을 누르면 공유 카드를…" 은 제거 — 힌트는 두 줄 행 오른쪽의 골드 › 와 첫 열람 숨쉬기 애니메이션뿐)
 
 // 결과표 행 클릭 → 카드 팝업 (재렌더링돼도 유지되도록 document 위임)
 document.addEventListener('click', function (e) {
@@ -2225,8 +2213,14 @@ function renderTrackResults(data, relayMembers) {
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
 }
 
-// 결과 팝업 첫 열람 여부 — 첫 번째로 연 결과표에서만 › 가 두 번 숨 쉬듯 흐르고 멈춘다 (계속 깜빡이지 않음)
-let _rrFirstOpen = (() => { try { return localStorage.getItem('sc_notice_done') !== '1'; } catch (e) { return true; } })();
+// 결과 팝업 첫 열람 여부 — 이 기기에서 처음 연 결과표에서만 › 가 두 번 숨 쉬듯 흐르고 멈춘다 (계속 깜빡이지 않음)
+let _rrFirstOpen = (() => {
+    try {
+        if (localStorage.getItem('rr_hint_done') === '1') return false;
+        localStorage.setItem('rr_hint_done', '1');
+    } catch (e) {}
+    return true;
+})();
 
 // 신기록 배지 (NR/DR/CR) — 두 줄 행의 기록 옆 작은 알약
 function _rrRecordBadges(newValNum) {
