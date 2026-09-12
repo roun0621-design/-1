@@ -709,12 +709,27 @@ function showPlaceholder() {
         </div>`;
 }
 
+// 종목명으로 세부종목의 실제 카테고리 추정 (잘못된 category 방어용)
+function _guessSubCategory(name) {
+    const n = (name || '').replace(/^\[.*?\]\s*/, '').replace(/\s+/g, '');
+    if (/높이뛰기|장대높이뛰기/.test(n)) return 'field_height';
+    if (/멀리뛰기|세단뛰기|포환던지기|원반던지기|창던지기|해머던지기|던지기|뛰기/.test(n)) return 'field_distance';
+    return 'track'; // 100mH/200m/800m 등
+}
+
 async function renderDetail() {
     const evt = state.selectedEvent;
     if (!evt) return showPlaceholder();
 
     state.heats = await API.getHeats(evt.id);
-    const cat = evt.category;
+    let cat = evt.category;
+
+    // 방어: 세부종목(parent_event_id 있음)은 절대 combined 가 될 수 없음.
+    // category 가 'combined'(또는 누락)로 잘못 저장된 트랙/필드 세부종목을 종목명으로 올바르게 라우팅.
+    // (이 버그로 트랙 세부종목 클릭 시 종합순위 화면만 떠서 기록 입력이 안 되던 문제 해결)
+    if (evt.parent_event_id && (cat === 'combined' || !cat)) {
+        cat = _guessSubCategory(evt.name);
+    }
 
     if (cat === 'track' || cat === 'relay' || cat === 'road') await renderTrackDetail(evt);
     else if (cat === 'field_distance') await renderFieldDistanceDetail(evt);
@@ -934,7 +949,7 @@ async function renderTrackTable() {
                     <td><strong>${bib(r.bib_number)}</strong></td>
                     <td style="text-align:left;">${jointBadgeHTML(r)}${r.name}${qualBadge}${relayMemberHtml}</td>
                     <td style="font-size:12px;text-align:left;">${r.team || ''}</td>
-                    <td><input class="track-time-input ${savedClass}" data-eid="${r.event_entry_id}" data-row="${idx}"
+                    <td><input class="track-time-input ${savedClass}" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-row="${idx}"
                         value="${displayVal}" placeholder="${placeholder}" ${r.status_code ? 'disabled' : ''}
                         onkeydown="trackInlineKeydown(event,this)" oninput="trackInlineInput(this)" onfocus="this.select()"></td>
                     <td><select class="sc-select" data-eid="${r.event_entry_id}" onchange="setStatusCode(this)" title="DQ=실격, DNS=불출발, DNF=미완주, NM=기록없음">
@@ -1487,7 +1502,10 @@ function renderFieldDistanceContent() {
                         const cls = top8.has(r.event_entry_id) ? 'top8-highlight' : '';
                         const zebraCls = needsWind ? '' : (rowIdx % 2 === 1 ? 'field-row-odd' : '');
                         // === ROW 1: Name + Distance records ===
-                        const isStatusDisabled = !!r.status_code;
+                        // DNS/DNF/DQ 는 시도 입력이 의미 없어 잠그지만, NM(파울/패스로 유효기록 없음)은
+                        // 선수가 시기를 치른 상태라 수정 가능해야 함 → NM 은 입력칸을 잠그지 않는다.
+                        // (NM 자동판정이 입력칸을 잠가 패스를 실제 기록으로 못 고치던 deadlock 해결)
+                        const isStatusDisabled = !!r.status_code && r.status_code !== 'NM';
                         let distCells = '';
                         for (let i = 1; i <= maxAttempts; i++) {
                             const v = r.attempts[i];
@@ -1502,7 +1520,7 @@ function renderFieldDistanceContent() {
                                 distCells += `<td class="attempt-cell ${attColCls}" style="opacity:0.3;text-align:center;">—</td>`;
                             } else if (isActive && !isView) {
                                 distCells += `<td class="attempt-cell attempt-cell-editing ${attColCls}" data-entry="${r.event_entry_id}" data-attempt="${i}">
-                                    <input class="field-dist-input" type="text" data-eid="${r.event_entry_id}" data-att="${i}" data-row="${rowIdx}"
+                                    <input class="field-dist-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-att="${i}" data-row="${rowIdx}"
                                         value="${hasVal && !isFoul && !isPass ? v.toFixed(2) : (isPass ? '-' : '')}" placeholder="0.00 / X / -"
                                         onkeydown="fieldInlineKeydown(event,this)" oninput="fieldInlineChange(this)" onblur="fieldInlineBlur(this)" onfocus="this.select()" autofocus>
                                     <button class="btn btn-xs btn-danger foul-inline-btn" onclick="fieldInlineFoul(${r.event_entry_id},${i})" title="파울 (X)">X</button>
@@ -2116,6 +2134,22 @@ function setupFieldModal() { /* No longer used — inline editing replaces modal
 // ============================================================
 // FIELD HEIGHT DETAIL — redesigned: empty start, add-height button, O/X/- toggle
 // ============================================================
+// 수직도약 순위결정전(동기록) — RANK 칸에 직접 입력한 순위 저장
+async function saveHeightManualRank(inp) {
+    if (!confirmCompletedEdit()) return;
+    const eid = +inp.dataset.eid;
+    const raw = (inp.value || '').trim();
+    const val = raw === '' ? null : parseInt(raw);
+    if (raw !== '' && (isNaN(val) || val < 1)) { showToast('순위는 1 이상의 숫자로 입력하세요.', 'error'); return; }
+    try {
+        await API.setManualRank(eid, val);
+        // 새 순위로 정렬 반영
+        if (state.selectedEvent) await renderFieldHeightDetail(state.selectedEvent);
+    } catch (e) {
+        showToast((e && (e.error || e.message)) || '순위 저장 실패', 'error');
+    }
+}
+
 async function renderFieldHeightDetail(evt) {
     let parentLink = '';
     if (evt.parent_event_id) {
@@ -2355,6 +2389,8 @@ function renderHeightContent() {
         if (r.bestHeight == null) r.rank = null;
         else { const f = rankedH.find(x => x.event_entry_id === r.event_entry_id); if (f) r.rank = f.rank; }
     });
+    // 수동 순위(순위결정전/동기록 시 직접 입력) override — 계산 순위를 덮어씀
+    rows.forEach(r => { if (r.manual_rank != null && r.manual_rank !== '') r.rank = Number(r.manual_rank); });
 
     // Sort: rank mode puts ranked athletes first by rank, then unranked
     const sorted = isRank
@@ -2417,9 +2453,13 @@ function renderHeightContent() {
                         cells += `<td class="height-toggle-cell">${cellContent}</td>`;
                     });
                 }
-                // Rank display
+                // Rank display — 순위결정전(동기록) 대비 직접 타이핑 가능한 입력칸.
+                //   비우면 자동순위로 복귀, 숫자 입력 시 수동 순위로 고정.
                 const rankDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` :
-                    (r.rank || '—');
+                    `<input class="height-rank-input" type="text" inputmode="numeric" value="${r.rank != null ? r.rank : ''}"
+                        data-eid="${r.event_entry_id}" placeholder="—" title="순위결정전 시 직접 입력 (비우면 자동)"
+                        onchange="saveHeightManualRank(this)" onfocus="this.select()"
+                        style="width:40px;text-align:center;padding:3px 2px;border:1px solid #d1d5db;border-radius:5px;font-weight:700;font-size:13px;background:${r.manual_rank != null ? '#fffbea' : '#fff'};">`;
                 // Status dropdown
                 const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" onchange="setFieldHeightStatusCode(this)" title="DNS=불출전, DNF=미완주, DQ=실격, NM=기록없음" ${r._isNoShow ? 'disabled' : ''}>
                     <option value="">—</option><option value="DNS" ${r.status_code==='DNS'?'selected':''}>DNS</option>
@@ -3050,7 +3090,7 @@ function _renderSubTrack(area, evt, entries, results, heatId, parentId) {
             return `<tr class="${r.status_code ? 'row-status-code' : ''}">
                 <td>${r.status_code ? scBadge : (r.rank || '—')}</td><td><strong>${bib(r.bib_number)}</strong></td>
                 <td style="text-align:left;">${r.name}</td><td style="font-size:12px;text-align:left;">${r.team||''}</td>
-                <td><input class="track-time-input" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" data-row="${idx}"
+                <td><input class="track-time-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" data-row="${idx}"
                     value="${cv}" placeholder="${ph}" ${cv ? 'class="track-time-input has-value"' : ''} ${r.status_code ? 'disabled' : ''}
                     onkeydown="_cSubTrackKey(event,this)" onfocus="this.select()"></td>
                 <td><select class="sc-select" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" onchange="_cSubTrackSetStatus(this)" title="DQ=실격, DNS=불출발, DNF=미완주">
@@ -3317,7 +3357,7 @@ function _cSubFieldRender(area) {
                                 distCells += `<td class="attempt-cell ${attCls}" style="opacity:0.3;text-align:center;">—</td>`;
                             } else if (isActive) {
                                 distCells += `<td class="attempt-cell attempt-cell-editing ${attCls}" data-entry="${r.event_entry_id}" data-attempt="${i}">
-                                    <input class="field-dist-input" type="text" data-eid="${r.event_entry_id}" data-att="${i}" data-hid="${heatId}" data-pid="${parentId}" data-row="${rowIdx}"
+                                    <input class="field-dist-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-att="${i}" data-hid="${heatId}" data-pid="${parentId}" data-row="${rowIdx}"
                                         value="${hasVal && !isFoul ? v.toFixed(2) : ''}" placeholder="0.00"
                                         onkeydown="_cSubFieldKeydown(event,this)" oninput="_cSubFieldChange(this)" onblur="_cSubFieldBlur(this)" onfocus="this.select()" autofocus>
                                     <button class="btn btn-xs btn-danger foul-inline-btn" onclick="_cSubFieldFoul(${r.event_entry_id},${i},${heatId},${parentId})" title="파울 (X)">X</button>
@@ -4418,7 +4458,10 @@ async function saveLaneReview(finalEventId) {
         // Save all lane assignments
         const resp = await fetch('/api/lanes/bulk-update', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-key': localStorage.getItem('pace_admin_key') || ''
+            },
             body: JSON.stringify({ assignments })
         });
         if (!resp.ok) {

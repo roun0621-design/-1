@@ -215,24 +215,122 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .data-table tbody tr:hover { background: var(--gray-light); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 
-/* Result panel — tables fill modal width, scroll if wider */
+/* ─── Result panel tables (모달 내부 결과 표) ─────────────────────────
+   원칙 (UX): "스크롤 없이 한 화면" 우선 — 모바일에서는 패딩/폰트를 줄여
+   최대한 한 화면에 들어오게 하고, 그래도 넘치면 가로 스크롤로 폴백.
+
+   ⚠️ ★ 진짜 근본 원인 (2026-06 재수정):
+       `.data-table { width:100%; overflow:hidden }` 가 table 자체를 클립.
+       width 는 max-content 로 덮어써도 overflow:hidden 은 .data-table 의
+       0,1,0 specificity 가 살아남아 셀이 table 박스 밖으로 못 나가고,
+       그 결과 .result-panel-body 의 scrollWidth === clientWidth 되어
+       가로 스크롤이 트리거되지 않음.
+       → table.overflow 도 visible 로 명시적 복원 필요. */
 .result-panel .data-table,
 .result-panel .field-table {
-    width: 100%;
+    width: max-content;       /* 내용에 맞춰 자연스럽게 확장 */
+    min-width: 100%;          /* 좁은 표는 모달 폭을 채워 빈공간 방지 */
     table-layout: auto;
+    overflow: visible !important;  /* ★ .data-table 의 overflow:hidden 무력화 */
+    box-shadow: none;         /* 잘림 방지 — 둥근 모서리 효과는 모달이 담당 */
+    border-radius: 0;
 }
-/* Prevent text overflow in result panels */
+/* 결과 모달 본문: 양축 스크롤 컨테이너 */
 .result-panel-body,
 .result-detail-content {
     overflow-x: auto;
     overflow-y: auto;
     max-width: 100%;
+    -webkit-overflow-scrolling: touch;
 }
-.result-panel .data-table td,
+
+/* ─── 컬럼별 너비 전략 (자연스러움 + 한 화면 우선) ──────────────────────
+   원칙:
+   1. 이름/팀 같은 한글 단어는 한 줄로 유지 — 글자 단위 줄바꿈 절대 금지
+   2. 길면 차라리 table 이 넓어져 가로 스크롤이 일어나도록 (셀이 짤리는 것보다 자연스러움)
+   3. 비고(remark) 는 어절 단위로 줄바꿈 허용 (긴 문구가 보이도록)
+   4. .data-table 기본은 white-space:nowrap — 이를 유지하되 비고만 normal */
+
+/* 비고/remark 컬럼: 어절 단위 자연스러운 줄바꿈 — 잘려서 안 보이는 문제 해결 */
+.result-panel .data-table tbody td:last-child,
+.result-panel .field-table tbody td:last-child {
+    white-space: normal;
+    word-break: keep-all;       /* 한글: 어절(공백/구두점) 단위로만 줄바꿈 */
+    line-height: 1.3;
+    max-width: 110px;
+    min-width: 50px;
+}
+
+/* ─── 모바일 (≤480px) — 가독성 최우선 (3차 피드백 반영) ─────────────────
+   사용자 요구: "글씨 너무 작음, 우측으로 스크롤 해서 보더라도 가독성 떨어지면 안됨"
+   → 폰트 13px, 패딩 8px 로 키움. 한 화면에 안 들어오면 자연스럽게 가로 스크롤. */
+@media (max-width: 480px) {
+    .result-panel .data-table th,
+    .result-panel .field-table th {
+        padding: 8px 6px;
+        font-size: 12px;
+        letter-spacing: 0;
+        line-height: 1.3;
+        white-space: nowrap;        /* 헤더는 무조건 한 줄 — "선/수/명" 같은 글자 분리 방지 */
+    }
+    .result-panel .data-table td,
+    .result-panel .field-table td {
+        padding: 8px 6px;
+        font-size: 13px;            /* ★ 11 → 13 (가독성 우선) */
+        line-height: 1.35;
+    }
+    /* 이름/소속: 한글은 한 줄 유지 — 글자 단위 줄바꿈 차단.
+       긴 팀명(예: "대전광역시청") 은 표가 넓어져 가로 스크롤로 폴백. */
+    .result-panel .data-table td[style*="text-align:left"],
+    .result-panel .field-table td[style*="text-align:left"] {
+        font-size: 13px;
+        white-space: nowrap;       /* ★ 한글 글자 분리 방지 */
+        max-width: none;           /* 폭 제한 제거 — nowrap 으로 자연 폭 사용 */
+    }
+    .result-panel .data-table th[style*="text-align:left"],
+    .result-panel .field-table th[style*="text-align:left"] {
+        white-space: nowrap;
+    }
+    /* 시도 기록 셀: 가독성 우선 — 17m95 같은 기록이 한 줄에 들어가도록 */
+    .result-panel .field-table td.attempt-cell,
+    .result-panel .field-table .att-col-first,
+    .result-panel .field-table .att-col-odd,
+    .result-panel .field-table .att-col-even,
+    .result-panel .field-table .att-col-best {
+        min-width: 50px;
+        padding: 8px 5px;
+        font-size: 13px;            /* ★ 11 → 13 */
+        white-space: nowrap;
+    }
+    /* 비고 컬럼: 모바일에서도 어절 단위 줄바꿈 허용 — 긴 비고가 다 보이도록 */
+    .result-panel .data-table tbody td:last-child,
+    .result-panel .field-table tbody td:last-child {
+        max-width: 110px;
+        white-space: normal;
+        word-break: keep-all;
+        font-size: 12px;
+        line-height: 1.35;
+    }
+}
+
+/* ─── 결과 모달 내 필드 테이블: 검은 세로선 제거 ────────────────────────
+   .field-table 의 .att-col-first / .att-col-best 는 기록입력 페이지에서
+   "시도 시작" / "기록 컬럼" 을 강조하려고 border-left: 2px solid #000 임.
+   → 결과 모달에서는 시각적으로 거슬리고 가독성 해침. 가벼운 회색선으로 대체. */
+.result-panel .field-table th.att-col-first,
+.result-panel .field-table td.att-col-first,
+.result-panel .field-table th.att-col-best,
+.result-panel .field-table td.att-col-best {
+    border-left: 1px solid #e0e0e0 !important;  /* 검정 2px → 옅은 회색 1px */
+}
+/* 결과 모달 셀 경계: 기록입력 페이지의 1px solid #333 도 결과보기에선 옅게 */
+.result-panel .field-table th,
 .result-panel .field-table td {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 200px;
+    border: 1px solid #e8e8e8 !important;
+}
+/* 단, 선수와 선수 사이 가로 구분선은 살짝 진하게 (구분 명확하게) */
+.result-panel .field-table.field-2row-table .field-row2 td {
+    border-bottom: 2px solid #bbb !important;
 }
 
 /* ============================================================
@@ -350,16 +448,20 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    ============================================================ */
 .matrix-section {
     margin-bottom: 20px;
-    overflow: hidden;
+    /* overflow:hidden 을 제거 — 자식 .matrix-scroll-wrap 의 가로 스크롤이
+       부모에 의해 잘리는 문제를 막는다. (mobile right-cut 픽스) */
     max-width: 100%;
 }
 .matrix-scroll-wrap {
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     /* Always show scrollbar on PC */
     scrollbar-width: thin;
     scrollbar-color: #b0b0b0 #f0f0f0;
     max-width: 100%;
+    /* iOS 관성 스크롤 활성화를 위한 보조 */
+    touch-action: pan-x pan-y;
 }
 .matrix-scroll-wrap::-webkit-scrollbar { height: 10px; }
 .matrix-scroll-wrap::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 5px; }
@@ -377,10 +479,15 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     border-bottom: 2px solid var(--gray);
 }
 .matrix-table {
-    width: 100%; border-collapse: collapse;
+    /* width:100% 가 강제되면 모바일에서 마지막 컬럼이 잘리고 가로 스크롤이
+       활성화되지 않음. min-width:100% 로 풀어주면 데스크톱에서는 전체 폭을
+       채우고, 컬럼 합계가 화면을 넘는 모바일에서는 자연스럽게 스크롤됨. */
+    min-width: 100%;
+    width: max-content;
+    border-collapse: collapse;
     background: var(--white); box-shadow: var(--shadow);
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    overflow: hidden; margin-bottom: 0;
+    margin-bottom: 0;
 }
 .matrix-table th {
     background: var(--gray-light); color: var(--gray-dark);
@@ -390,6 +497,9 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     white-space: nowrap;
 }
 .matrix-table th:first-child { text-align: left; }
+/* 모바일에서 마지막 컬럼이 화면 가장자리에 닿지 않도록 우측 안전 여백 확보 */
+.matrix-table th:last-child,
+.matrix-table td:last-child { padding-right: 16px; }
 .matrix-table .event-name {
     white-space: normal;
     word-break: keep-all;
@@ -1172,7 +1282,15 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .matrix-section-compact .matrix-section-title { font-size: 10px; padding: 4px 8px; }
 .matrix-table-compact th { font-size: 9px; padding: 5px 4px; }
 .matrix-table-compact td { padding: 5px 4px; font-size: 12px; }
-.rec-matrix-event { font-weight: 600; font-size: 12px !important; text-align: left !important; white-space: nowrap; }
+/* 소집실/기록실/관리 매트릭스: 종목 셀이 시간·Call Room 배지로 넓어지면
+   준결승·결승 라운드 버튼이 320px 패널 밖으로 밀려 잘리던 문제 →
+   고정 레이아웃으로 라운드 열 폭을 확보하고 종목명은 줄바꿈시켜 항상 표시. */
+.matrix-table-compact { table-layout: fixed; width: 100%; min-width: 0; }
+.matrix-table-compact th:first-child,
+.matrix-table-compact td:first-child { width: auto; }
+.matrix-table-compact th:not(:first-child),
+.matrix-table-compact td:not(:first-child) { width: 58px; }
+.rec-matrix-event { font-weight: 600; font-size: 12px !important; text-align: left !important; white-space: normal; word-break: keep-all; line-height: 1.25; }
 .rec-round-btn { font-size: 10px !important; padding: 3px 8px !important; white-space: nowrap; }
 .rec-round-btn.rec-btn-active {
     background: var(--green) !important; color: #fff !important;
@@ -1780,11 +1898,16 @@ body.viewer-mode .footer { display: none; }
    MISSING CLASS FIXES (v7.1)
    ============================================================ */
 .comp-info-line {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; flex-direction: row; align-items: center; gap: 8px;
     padding: 8px 16px; background: var(--bg-dark);
     border-radius: var(--radius); font-size: 13px;
-    margin-bottom: 16px; flex-wrap: wrap;
+    margin-bottom: 16px; flex-wrap: nowrap;
 }
+/* 대회 정보(이름·날짜·장소): 한 줄 유지, 자리 부족하면 … 로 줄임 */
+.comp-info-main { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 액션 버튼(기록지·시간표·영상·공지): 오른쪽에 고정, 절대 줄이거나 줄바꿈 안 함 */
+.comp-info-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.comp-info-actions:empty { display: none; }
 .comp-info-name { font-weight: 700; }
 .comp-info-sep { color: var(--text-muted); }
 .comp-info-dates, .comp-info-venue { color: var(--text-muted); }
@@ -2132,3 +2255,82 @@ body.viewer-mode .footer { display: none; }
 .admin-tabs-content.pacing-zoom-active {
     overflow: visible;
 }
+
+/* ============================================================
+   대시보드 행(row)별 성별 표시 — 좌측 컬러 막대 + 배지
+   - 안쪽 매트릭스 박스는 흰색 그대로 유지
+   - 각 <tr data-row-gender="M|F|X"> 에 좌측 4px 막대 + 종목명 앞 배지로
+     성별을 표시 → "전체" 탭에서도, 개별 성별 탭에서도 동일하게 적용
+   - 남자(M): 네이비 #1a2a5e
+   - 여자(F): 버건디 #8b1a2a
+   - 혼성(X): 골드   #b79f58
+   ============================================================ */
+.matrix-table tbody tr[data-row-gender] td:first-child {
+    position: relative;
+    padding-left: 16px; /* 4px 막대 + 8px 여백 + 기존 padding 보정 */
+}
+.matrix-table tbody tr[data-row-gender] td:first-child::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--row-gender-color, transparent);
+}
+.matrix-table tbody tr[data-row-gender="M"] { --row-gender-color: #1a2a5e; }
+.matrix-table tbody tr[data-row-gender="F"] { --row-gender-color: #8b1a2a; }
+.matrix-table tbody tr[data-row-gender="X"] { --row-gender-color: #b79f58; }
+
+/* 종목명 앞 성별 배지 (남/여/혼) */
+.gender-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 6px;
+    vertical-align: middle;
+    line-height: 1.4;
+    letter-spacing: 0.5px;
+    color: #fff;
+}
+.gender-badge[data-g="M"] { background: #1a2a5e; }
+.gender-badge[data-g="F"] { background: #8b1a2a; }
+.gender-badge[data-g="X"] { background: #b79f58; }
+
+/* 결과 버튼 성별색 (행의 data-row-gender 를 상속받아 결정) */
+.matrix-table tbody tr[data-row-gender="M"] .round-btn.round-btn-result {
+    background: #1a2a5e !important;
+    border-color: #1a2a5e !important;
+}
+.matrix-table tbody tr[data-row-gender="F"] .round-btn.round-btn-result {
+    background: #8b1a2a !important;
+    border-color: #8b1a2a !important;
+}
+.matrix-table tbody tr[data-row-gender="X"] .round-btn.round-btn-result {
+    background: #b79f58 !important;
+    border-color: #b79f58 !important;
+}
+
+
+/* ============================================================
+   시간·기록 전용 등폭 폰트 (D2Coding, self-host · 숫자/기호 서브셋 ~4KB)
+   원칙: 이름·문장은 Noto Sans KR, 시간·기록 값만 전광판체
+   ============================================================ */
+@font-face {
+    font-family: 'D2Coding';
+    font-style: normal; font-weight: 400; font-display: swap;
+    src: url('/fonts/d2coding-subset.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'D2Coding';
+    font-style: normal; font-weight: 700; font-display: swap;
+    src: url('/fonts/d2coding-bold-subset.woff2') format('woff2');
+}
+/* 시간·기록 값에 붙이는 유틸 클래스 (렌더러에서 이 클래스를 부여) */
+.num-display { font-family: 'D2Coding', monospace; letter-spacing: 0.02em; }
+/* 여러 줄 기록표(공백 정렬) — 고정폭 오버레이용. 반응형 화면엔 table 권장 */
+.pace-table { font-family: 'D2Coding', monospace; white-space: pre; line-height: 1.8; }
+/* 일반 폰트로 남는 숫자도 폭 고정 → 표 자릿수 세로 정렬 */
+body { font-variant-numeric: tabular-nums; }

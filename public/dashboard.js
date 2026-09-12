@@ -8,7 +8,7 @@
 // Helper: bib() is shared from common.js (loaded before dashboard.js)
 
 let allEvents = [];
-let currentGender = 'M';
+let currentGender = 'ALL'; // 'ALL' | 'M' | 'F' | 'X'  (기본탭: 전체)
 let callroomCompletedIds = new Set();
 let currentRole = localStorage.getItem('pace_role') || 'viewer';
 let _compVideoUrl = ''; // Competition-level video URL
@@ -19,6 +19,38 @@ let _isDisplayMode = false; // 노출용 대회 모드
 let _displayRoster = []; // 노출용 대회 명단
 let _currentDivision = '전체'; // 부별 필터
 
+// 알림(관심) 토글 아이콘 — 종(bell) / 종-끄기(bell-off)
+const _BELL_ON = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+const _BELL_OFF = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+// ── "진행 중 N" 배지 + 라이브 카드로 스크롤 ──────────────────────
+function updateLiveJumpBadge(n) {
+    const b = document.getElementById('live-jump-badge');
+    if (!b) return;
+    const c = document.getElementById('live-jump-count');
+    if (c) c.textContent = n;
+    b.style.display = n > 0 ? '' : 'none';
+}
+function jumpToLive() {
+    const el = document.getElementById('live-pin') || document.querySelector('.live-pin');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── 카드 전체 터치 → 종목 상세(가장 관련있는 라운드) 열기 ─────────
+// 칩/토글/링크 탭은 각자 동작하도록 전파 차단.
+function onCardTap(e, evtId) {
+    if (e.target.closest('.round-btn, .fav-cell, .fav-toggle, a, button')) return;
+    openEventDetail(evtId);
+}
+function openEventDetail(evtId) {
+    const evt = allEvents.find(e => e.id === evtId);
+    if (!evt) return;
+    if (evt.round_status === 'completed') { openResult(evtId); return; }
+    if (evt.round_status === 'in_progress' || callroomCompletedIds.has(evtId)) { openLiveResult(evtId); return; }
+    if (evt.heat_count > 0) { openRosterModal(evtId, evt.name); return; }
+    // 예정/대기 — 표시할 상세 없음
+}
+
 // Favorites: stored per-user in localStorage keyed by compId
 function getFavorites() {
     const compId = getCompetitionId();
@@ -28,16 +60,122 @@ function setFavorites(favs) {
     const compId = getCompetitionId();
     localStorage.setItem(`pace_favorites_${compId}`, JSON.stringify(favs));
 }
-function toggleFavorite(eventName) {
-    const favKey = currentGender + '|' + eventName;
+function toggleFavorite(eventName, gender) {
+    // gender 는 행의 실제 성별(M/F/X) — 서버 트리거의 'event.gender|name' 키와 일치시키기 위함
+    const g = gender || (currentGender !== 'ALL' ? currentGender : 'X');
+    const favKey = g + '|' + eventName;
     let favs = getFavorites();
-    if (favs.includes(favKey)) { favs = favs.filter(f => f !== favKey); }
+    const wasOn = favs.includes(favKey);
+    if (wasOn) { favs = favs.filter(f => f !== favKey); }
     else { favs.push(favKey); }
     setFavorites(favs);
+    // 관심 종목 변경 → 푸시 서버에 동기화(알림 받기 켠 경우만 실제 반영)
+    try { if (window.PaceRisePush && window.PaceRisePush.syncFavorites) window.PaceRisePush.syncFavorites(); } catch (e) {}
+    // 토글을 '켤 때' + 아직 알림 미허용이면 → 알림 켜기 유도 팝업(일주일 보지않기 포함)
+    if (!wasOn) { try { window.PaceRisePush && window.PaceRisePush.promptToggle && window.PaceRisePush.promptToggle(); } catch (e) {} }
     renderMatrix();
 }
 
+// ── 행사(event) 화이트라벨 — /e/<slug> 진입 시 대회 세팅 + 브랜딩 적용 ──
+async function _eventBrandBootstrap() {
+    const m = location.pathname.match(/^\/e\/([^\/?#]+)/);
+    if (!m) return;
+    try {
+        // 어떤 경우에도(서비스워커/네트워크 hang 포함) 대시보드 전체가
+        // '로딩 중' 에서 멈추지 않도록 5초 타임아웃을 건다.
+        const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        const timer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, 5000) : null;
+        let res;
+        try {
+            res = await fetch('/api/event/' + encodeURIComponent(decodeURIComponent(m[1])),
+                ctrl ? { signal: ctrl.signal } : undefined);
+        } finally { if (timer) clearTimeout(timer); }
+        if (!res.ok) return;
+        const ev = await res.json();
+        if (ev && ev.id) {
+            if (typeof setCompetitionId === 'function') setCompetitionId(ev.id);
+            else localStorage.setItem('pace_competition_id', ev.id);
+            window.__EVENT_MODE = true;
+            window.__EVENT_SLUG = ev.event_slug || '';
+            // 노출 override(관리자 설정) — 없으면 자동
+            if (Array.isArray(ev.genders)) window.__EVENT_GENDERS = ev.genders;
+            if (Array.isArray(ev.rounds)) window.__EVENT_ROUNDS = ev.rounds;
+            _applyEventBrand(ev);
+        }
+    } catch (e) { /* 조용히 무시 */ }
+}
+// 포인트 컬러 한 개에서 전체 팔레트(배경/라인/소프트 틴트/강조)를 자동 생성한다.
+// 사용자가 색 하나만 고르면 대시보드 톤이 통째로 그 색에 맞춰지도록.
+function _hexToRgb(hex) {
+    let h = String(hex || '').trim().replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    const n = parseInt(h, 16);
+    if (isNaN(n) || h.length !== 6) return null;
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+// w = 흰색 쪽으로 섞는 비율(0=원색, 1=흰색). 옅은 틴트 생성용.
+function _tint(rgb, w) {
+    const m = (c) => Math.round(c + (255 - c) * w);
+    const hx = (c) => ('0' + m(c).toString(16)).slice(-2);
+    return '#' + hx(rgb.r) + hx(rgb.g) + hx(rgb.b);
+}
+function _applyEventBrand(ev) {
+    const b = (ev && ev.brand) || {};
+    const P = b.point && _hexToRgb(b.point) ? b.point : null;
+    const rgb = P ? _hexToRgb(P) : null;
+    let css = '';
+    if (rgb) {
+        // 단일 포인트 → 조화 팔레트. 강조는 원색, 라인/배경은 옅은 틴트로 밸런스.
+        const vars = {
+            '--green':        P,                 // 핵심 강조(활성 탭/LIVE/주요 버튼)
+            '--green-light':  _tint(rgb, 0.90),  // 아주 옅은 채움/hover
+            '--green-soft':   _tint(rgb, 0.74),  // 소프트 보더
+            '--gray':         _tint(rgb, 0.82),  // 일반 라인/테두리 — 은은한 톤
+            '--gray-light':   _tint(rgb, 0.93),  // 옅은 채움
+            '--bg':           _tint(rgb, 0.955), // 페이지 배경(금색기 제거, 거의 흰색의 미세 틴트)
+            '--bg-dark':      _tint(rgb, 0.88),
+            '--accent':       P,                 // 보조 강조도 브랜드 색으로
+            '--accent-light': _tint(rgb, 0.90)
+        };
+        css += ':root{' + Object.keys(vars).map(k => k + ':' + vars[k] + ';').join('') + '}';
+        // 인라인/하드코딩된 금색(#b79f58) 잔재도 전부 브랜드 색으로 (색 자동화)
+        css += '.header-colon,.header-scope{color:' + P + ';}'
+            + 'body.event-brand .fav-toggle.on{background:' + P + '!important;}'
+            + 'body.event-brand .round-btn.btn-summon{background:' + _tint(rgb, 0.90) + '!important;color:' + P + '!important;}'
+            + 'body.event-brand .gender-tab-btn[data-gender="X"]{color:' + P + '!important;}'
+            + 'body.event-brand .gender-tab-btn.active[data-gender="X"]{border-bottom-color:' + P + '!important;background:' + _tint(rgb, 0.90) + '!important;}';
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = P;
+    }
+    // 워터마크: 콘텐츠 뒤 고정 레이어 + 본문/카드를 살짝 투과시켜 은은하게 보이게.
+    if (b.watermark) {
+        let wm = document.getElementById('event-watermark');
+        if (!wm) {
+            wm = document.createElement('div');
+            wm.id = 'event-watermark';
+            document.body.insertBefore(wm, document.body.firstChild);
+        }
+        wm.style.cssText = 'position:fixed;inset:0;z-index:0;pointer-events:none;'
+            + 'background-image:url("' + b.watermark + '");background-repeat:no-repeat;'
+            + 'background-position:center 48%;background-size:min(62vw,500px);opacity:.09;';
+        // 본문은 워터마크 위, 카드 배경은 반투명으로 워터마크가 비쳐 보이도록(행사 모드 한정)
+        css += '.header,.main-content{position:relative;z-index:1;}'
+            + 'body.event-brand .live-pin{background:rgba(255,255,255,.62)!important;}'
+            + 'body.event-brand .matrix-table{background:rgba(255,255,255,.78)!important;}'
+            + 'body.event-brand .matrix-table th,body.event-brand .matrix-section-title{background:rgba(255,255,255,.55)!important;}'
+            + 'body.event-brand .matrix-table tbody tr:hover{background:rgba(255,255,255,.45)!important;}';
+    }
+    document.body.classList.add('event-brand');
+    if (css) { const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s); }
+    if (b.logo) {
+        const h = document.querySelector('.header-title');
+        if (h) h.innerHTML = '<img src="' + b.logo + '" alt="" style="height:30px;max-width:220px;vertical-align:middle;object-fit:contain;">';
+    }
+    if (ev.name) document.title = ev.name;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+    await _eventBrandBootstrap();
     if (!(await requireCompetition())) return;
     renderPageNav('dashboard');
     await renderCompInfoBar();
@@ -93,9 +231,11 @@ async function loadData() {
         callroomCompletedIds = new Set(cs.completed_event_ids);
     } catch (e) {}
     // Load competition info (video URL + mode)
+    let _compMode = 'operation';
     try {
         const comp = await API.getCompetition(compId);
         _compVideoUrl = comp.video_url || '';
+        _compMode = comp.mode || 'operation';
         _isDisplayMode = comp.mode === 'display';
     } catch(e) { _compVideoUrl = ''; _isDisplayMode = false; }
     // Load display roster if display mode
@@ -104,12 +244,14 @@ async function loadData() {
             _displayRoster = await fetch('/api/display/roster/' + compId).then(r => r.json());
         } catch(e) { _displayRoster = []; }
     }
-    // Auto-detect display mode: if events have divisions but mode isn't set, enable display mode
-    if (!_isDisplayMode) {
+    // Auto-detect display mode: 부(division)만 보고 노출모드로 강제하지 않는다.
+    // ★ 운영(operation) 대회는 부가 있어도 운영 대시보드(명단→LIVE→결과)로 둔다.
+    //    노출 대회는 관리자에서 mode='display' 로 명시하면 위 라인에서 이미 잡힌다.
+    //    (mode 가 명시적으로 operation 이 아닌 레거시 대회만 부 기반 자동 노출 유지)
+    if (!_isDisplayMode && _compMode !== 'operation') {
         const hasDivisions = allEvents.some(e => !e.parent_event_id && e.division);
         if (hasDivisions) {
             _isDisplayMode = true;
-            // Still try to load display roster
             try {
                 _displayRoster = await fetch('/api/display/roster/' + compId).then(r => r.json());
             } catch(e) { _displayRoster = []; }
@@ -132,6 +274,8 @@ async function loadData() {
         _timetableFull = tt || { days: {}, start_date: null };
     } catch(e) { _timetableFull = { days: {}, start_date: null }; }
     renderCompVideoButton();
+    // 대회별 공지 팝업: [공지] 버튼 표시 + 진입 시 자동 노출 (common.js)
+    if (typeof initCompNoticePopup === 'function') initCompNoticePopup();
     renderHeroSchedule();
     // Render division filter tabs when events have divisions (regardless of mode setting)
     renderDivisionTabs();
@@ -310,13 +454,15 @@ function renderCompVideoButton() {
     if (!btn) {
         btn = document.createElement('button');
         btn.id = 'comp-video-btn';
-        btn.className = 'btn btn-sm btn-outline';
-        btn.style.cssText = 'margin-left:auto;white-space:nowrap;font-size:12px;padding:5px 12px;display:none;';
-        btn.innerHTML = '&#9654; 대회 영상';
+        // 기록지/공지 버튼과 동일 규격(그라데이션·13px·패딩 7/16). 이모지 제거. 간격은 actions gap 담당.
+        btn.style.cssText = 'white-space:nowrap;font-size:12px;font-weight:600;padding:3px 13px;border:none;border-radius:999px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.2px;background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);display:none;';
+        btn.textContent = '영상';
+        btn.onmouseover = () => { btn.style.transform = 'translateY(-1px)'; };
+        btn.onmouseout = () => { btn.style.transform = ''; };
         btn.onclick = () => {
             if (_compVideoUrl) openVideoModal(_compVideoUrl, '대회 대표 영상');
         };
-        const bar = document.getElementById('comp-info-bar');
+        const bar = document.getElementById('comp-info-actions') || document.getElementById('comp-info-bar');
         if (bar) bar.appendChild(btn);
     }
     btn.style.display = _compVideoUrl ? '' : 'none';
@@ -328,6 +474,14 @@ function switchGender(g, btn) {
     // 재사용하므로 전역 querySelectorAll 로 잡으면 division 탭의 active 도 같이 풀려버림)
     document.querySelectorAll('#gender-tabs .gender-tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
+    // 선택된 성별을 data-active-gender 속성으로 노출 (ALL | M | F | X)
+    // CSS 가 직접 사용하진 않지만 디버깅 / 통합 테스트에서 유용하게 활용
+    try {
+        const tabsEl = document.getElementById('gender-tabs');
+        if (tabsEl) tabsEl.setAttribute('data-active-gender', g);
+        const mainEl = document.querySelector('main.main-content');
+        if (mainEl) mainEl.setAttribute('data-active-gender', g);
+    } catch (_) { /* noop */ }
     // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 성별 변경 시 division 탭 목록도 새 성별에 맞게 다시 렌더링
     //    (남자 탭에서 여자/혼성 division 이 보이던 버그 수정)
     if (typeof renderDivisionTabs === 'function') renderDivisionTabs();
@@ -388,10 +542,11 @@ function renderDivisionTabs() {
     }
     // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 현재 성별 탭(M/F/X)에 해당하는 events 만 division 목록 추출
     //    이전엔 모든 events 의 division 합집합을 보여줘서 "남자" 탭에서도 "선수권(여)" 등이 표시됨.
+    //    'ALL' 탭은 전 성별 합집합으로 보여줌 (사용자가 전체 division 을 한눈에 볼 수 있게)
     const existingDivs = [...new Set(
         allEvents
             .filter(e => !e.parent_event_id)
-            .filter(e => e.gender === currentGender)
+            .filter(e => currentGender === 'ALL' ? true : e.gender === currentGender)
             .map(e => e.division)
             .filter(Boolean)
     )];
@@ -414,9 +569,52 @@ function switchDivision(div, btn) {
     renderMatrix();
 }
 
+// ── 행사(event) 모드 레이아웃 제어 — 노출 라운드 열 / 성별 탭 ──
+// 우선순위: 관리자 override(window.__EVENT_ROUNDS / __EVENT_GENDERS) > 자동(데이터 기반)
+let _colRounds = { wl: true, preliminary: true, semifinal: true, final: true };
+function _computeColRounds(allGroups) {
+    // 일반/노출 모드는 모든 열 유지(기존 동작 불변)
+    if (!window.__EVENT_MODE) return { wl: true, preliminary: true, semifinal: true, final: true };
+    const ov = window.__EVENT_ROUNDS; // 예: ['wl','final'] / undefined=자동
+    if (Array.isArray(ov) && ov.length) {
+        return { wl: ov.includes('wl'), preliminary: ov.includes('preliminary'), semifinal: ov.includes('semifinal'), final: ov.includes('final') };
+    }
+    // 자동: 실제 데이터에 존재하는 라운드 열만 노출
+    const has = { preliminary: false, semifinal: false, final: false };
+    (allGroups || []).forEach(g => (g.rounds || []).forEach(r => { if (r.round_type in has) has[r.round_type] = true; }));
+    if (!has.preliminary && !has.semifinal && !has.final) has.final = true; // 안전장치
+    // W/L 자동: 페이싱(Target) 설정이 하나라도 있으면 노출(트레드밀 행사 등은 없음 → 숨김)
+    const wlAuto = !!(typeof _pacingMap === 'object' && _pacingMap && Object.keys(_pacingMap).length);
+    return { wl: wlAuto, preliminary: has.preliminary, semifinal: has.semifinal, final: has.final };
+}
+function _applyEventGenderBar() {
+    if (!window.__EVENT_MODE) return;
+    const bar = document.getElementById('gender-tabs');
+    const gv = window.__EVENT_GENDERS; // 예: ['M','F'] subset / undefined / ['ALL']=자동(숨김)
+    const explicit = Array.isArray(gv) && gv.length && !(gv.length === 1 && gv[0] === 'ALL');
+    if (explicit) {
+        if (bar) {
+            bar.style.display = '';
+            bar.querySelectorAll('.gender-tab-btn').forEach(btn => {
+                const g = btn.getAttribute('data-gender');
+                btn.style.display = (g === 'ALL' || gv.includes(g)) ? '' : 'none';
+            });
+        }
+    } else {
+        // 자동/전체만 → 성별 탭 바 숨김, '전체' 고정 (깔끔)
+        if (bar) bar.style.display = 'none';
+        currentGender = 'ALL';
+    }
+}
+
 function renderMatrix() {
+    _applyEventGenderBar();
     const container = document.getElementById('events-container');
-    let events = allEvents.filter(e => e.gender === currentGender && !e.parent_event_id);
+    // 'ALL' 탭이면 성별 필터 해제 → 남/여/혼성 모든 종목을 종목순으로 통합 표시
+    let events = allEvents.filter(e => !e.parent_event_id);
+    if (currentGender !== 'ALL') {
+        events = events.filter(e => e.gender === currentGender);
+    }
     // FIX: 노출(display) 모드에서는 부별이 비어있는 "미지정" 종목을 화면에서 제외
     // (단, 혼성 릴레이처럼 의도적으로 gender='X'인 종목은 division이 채워져 있으므로 영향 없음)
     if (_isDisplayMode) {
@@ -426,7 +624,6 @@ function renderMatrix() {
     if (_isDisplayMode && _currentDivision !== '전체') {
         events = events.filter(e => e.division === _currentDivision);
     }
-
     const categories = [
         { key: 'track', label: 'TRACK', match: c => c === 'track' },
         { key: 'field', label: 'FIELD', match: c => c === 'field_distance' || c === 'field_height' },
@@ -435,11 +632,14 @@ function renderMatrix() {
         { key: 'road', label: 'ROAD', match: c => c === 'road' },
     ];
 
-    // Group events by name (+ division for display mode)
+    // Group events by name + gender (+ division for display mode)
+    // gender 를 그룹키에 포함해야 '전체' 탭에서 남자 100m / 여자 100m 가 서로 다른 행으로 분리됨
     const eventGroups = {};
     events.forEach(e => {
-        const gKey = _isDisplayMode ? (e.name + '|' + e.category + '|' + (e.division||'')) : (e.name + '|' + e.category);
-        if (!eventGroups[gKey]) eventGroups[gKey] = { name: e.name, category: e.category, division: e.division || '', rounds: [] };
+        const gKey = _isDisplayMode
+            ? (e.name + '|' + e.category + '|' + e.gender + '|' + (e.division||''))
+            : (e.name + '|' + e.category + '|' + e.gender);
+        if (!eventGroups[gKey]) eventGroups[gKey] = { name: e.name, category: e.category, gender: e.gender, division: e.division || '', rounds: [] };
         eventGroups[gKey].rounds.push(e);
     });
 
@@ -502,22 +702,32 @@ function renderMatrix() {
         return 999;
     }
     function _divSortIdx(div) { return _divCompareKey(div); }
+    // 성별 정렬 점수: 남(0) < 여(1) < 혼성(2)
+    function _genderSortIdx(g) { return g === 'M' ? 0 : g === 'F' ? 1 : g === 'X' ? 2 : 3; }
     categories.forEach(cat => {
         const groups = Object.values(eventGroups).filter(g => cat.match(g.category));
-        // Sort groups by event standard order, then division
-        groups.sort((a,b) => _evSortIdx(a.name) - _evSortIdx(b.name) || _divSortIdx(a.division) - _divSortIdx(b.division) || a.name.localeCompare(b.name));
+        // 종목순 → 성별순(M<F<X) → 부별순  ('전체' 탭에서 남100m → 여100m → 남200m → 여200m ... 흐름)
+        groups.sort((a,b) =>
+            _evSortIdx(a.name) - _evSortIdx(b.name)
+            || _genderSortIdx(a.gender) - _genderSortIdx(b.gender)
+            || _divSortIdx(a.division) - _divSortIdx(b.division)
+            || a.name.localeCompare(b.name)
+        );
         groups.forEach(g => allGroups.push({ ...g, catKey: cat.key, catLabel: cat.label }));
     });
 
     let html = '';
+
+    // 행사모드: 노출할 라운드 열 계산(자동 또는 override) — 렌더 전에 1회
+    _colRounds = _computeColRounds(allGroups);
 
     // 종합기록지 버튼 삭제됨 — 관리자 문서 탭에서 다운로드
 
     // Render LIVE (in_progress) section pinned at top
     const liveGroups = allGroups.filter(g => g.rounds.some(r => r.round_status === 'in_progress'));
     if (liveGroups.length > 0) {
-        html += `<div style="margin-bottom:16px;padding:12px;background:linear-gradient(135deg,#f8f4ea,#fbe9e7);border:1.5px solid #b79f58;border-radius:var(--radius);">
-            <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#b79f58;letter-spacing:1px;margin-bottom:8px;">● LIVE • 진행중인 경기</div>`;
+        html += `<div class="live-pin" id="live-pin" style="margin-bottom:16px;padding:12px;background:linear-gradient(135deg,var(--green-light),var(--green-soft));border:1.5px solid var(--green);border-radius:var(--radius);">
+            <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:var(--green);letter-spacing:1px;margin-bottom:8px;">● LIVE • 진행중인 경기</div>`;
         html += renderCategoryTable(liveGroups, 'LIVE', true);
         html += `</div>`;
     }
@@ -529,8 +739,12 @@ function renderMatrix() {
         html += renderCategoryTable(groups, cat.label);
     });
 
-    if (!html) html = '<div style="text-align:center;padding:40px;color:var(--text-muted);">해당 성별의 종목이 없습니다.</div>';
+    if (!html) {
+        const emptyMsg = currentGender === 'ALL' ? '등록된 종목이 없습니다.' : '해당 성별의 종목이 없습니다.';
+        html = `<div style="text-align:center;padding:40px;color:var(--text-muted);">${emptyMsg}</div>`;
+    }
     container.innerHTML = html;
+    updateLiveJumpBadge(liveGroups.length);
 }
 
 function renderCategoryTable(groups, label, isLive) {
@@ -538,13 +752,14 @@ function renderCategoryTable(groups, label, isLive) {
     let html = `<div class="matrix-section">
         <div class="matrix-section-title">${label}</div>
         <div class="matrix-scroll-wrap">
-        <table class="matrix-table">
+        <table class="matrix-table${_isDisplayMode ? ' matrix-display' : ''}">
             <thead><tr>
+                <th class="fav-th">알림</th>
                 <th style="text-align:left;">종목</th>
-                ${_isDisplayMode ? '<th style="width:60px;">명단</th>' : '<th style="width:52px;">W/L</th>'}
-                <th style="width:72px;"><span style="color:#1565c0;">예선</span></th>
-                <th style="width:72px;"><span style="color:#e65100;">준결승</span></th>
-                <th style="width:72px;"><span style="color:#b71c1c;">결승</span></th>
+                ${_isDisplayMode ? '<th style="width:64px;">영상</th><th style="width:60px;">명단</th>' : (_colRounds.wl ? '<th style="width:52px;">W/L</th>' : '')}
+                ${_colRounds.preliminary ? '<th style="width:72px;"><span style="color:#1565c0;">예선</span></th>' : ''}
+                ${_colRounds.semifinal ? '<th style="width:72px;"><span style="color:#e65100;">준결승</span></th>' : ''}
+                ${_colRounds.final ? '<th style="width:72px;"><span style="color:#b71c1c;">결승</span></th>' : ''}
             </tr></thead>
             <tbody>`;
 
@@ -552,10 +767,27 @@ function renderCategoryTable(groups, label, isLive) {
         const prelim = g.rounds.find(r => r.round_type === 'preliminary');
         const semi = g.rounds.find(r => r.round_type === 'semifinal');
         const fin = g.rounds.find(r => r.round_type === 'final');
-        const _gLabel = currentGender === 'M' ? '남' : currentGender === 'F' ? '여' : '혼성';
+        // 행 단위 성별 — 그룹의 gender(M/F/X) 를 우선, 폴백으로 currentGender (개별 탭일 때 동일값)
+        const _rowGender = g.gender || (currentGender !== 'ALL' ? currentGender : 'X');
+        const _gLabel = _rowGender === 'M' ? '남' : _rowGender === 'F' ? '여' : '혼성';
+        // 종목명 앞 작은 성별 배지 (남/여/혼)
+        const _badgeText = _rowGender === 'M' ? '남' : _rowGender === 'F' ? '여' : '혼';
+        const genderBadge = `<span class="gender-badge" data-g="${_rowGender}" aria-label="${_gLabel}">${_badgeText}</span>`;
         const pacingCfg = _pacingMap[g.name + ' (' + _gLabel + ')'] || _pacingMap[g.name];
         const _pacingKey = pacingCfg ? pacingCfg.event_name : g.name;
         const wlCell = pacingCfg ? `<span class="round-btn" style="background:#f0f9ff;color:#6b6b6b;border:1px solid #c0c0c0;cursor:pointer;font-size:9px;padding:3px 6px;white-space:nowrap;" onclick="openPacingPopup('${_pacingKey.replace(/'/g, "\\'")}')">Target</span>` : '';
+
+        // Display mode: video button (종목당 1개, 결승 > 준결승 > 예선 우선순위)
+        let videoCell = '';
+        if (_isDisplayMode) {
+            const vidEvt = [fin, semi, prelim].find(r => r && r.video_url && String(r.video_url).trim());
+            if (vidEvt) {
+                const _vName = (g.name || '').replace(/'/g, "\\'");
+                videoCell = `<span class="round-btn" style="background:#f3e8ff;color:#7c3aed;border:1px solid #d8b4fe;cursor:pointer;font-size:10px;padding:3px 6px;font-weight:700;white-space:nowrap;" onclick="openEventVideoModal(${vidEvt.id},'${_vName}')">▶ 영상</span>`;
+            } else {
+                videoCell = ''; // 없으면 빈 칸(모바일 숨김) — '—' 제거
+            }
+        }
 
         // Display mode: roster button + external link buttons
         let rosterCell = '';
@@ -567,19 +799,21 @@ function renderCategoryTable(groups, label, isLive) {
                 const firstId = eventIds[0];
                 rosterCell = `<span class="round-btn" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;cursor:pointer;font-size:10px;padding:3px 6px;" onclick="openDisplayRoster(${firstId},'${(g.name||'').replace(/'/g,"\\'")}','${g.division||''}')">명단</span>`;
             } else {
-                rosterCell = '<span class="round-btn btn-disabled" style="font-size:10px;">—</span>';
+                rosterCell = ''; // 없으면 빈 칸(모바일 숨김) — '—' 제거
             }
         }
 
         // Time badge from schedule (show time for first available round: final > semifinal > preliminary)
-        const schedEvt = fin ? _scheduleMap[fin.id] : (semi ? _scheduleMap[semi.id] : (prelim ? _scheduleMap[prelim.id] : null));
+        // 스케줄이 '있는' 라운드를 결승→준결승→예선 순으로 선택.
+        // (결승 이벤트가 자동생성됐지만 시간표에 결승이 없을 때, 준결승/예선 시간으로 폴백)
+        const schedEvt = (fin && _scheduleMap[fin.id]) || (semi && _scheduleMap[semi.id]) || (prelim && _scheduleMap[prelim.id]) || null;
         let timeBadge = '';
         if (schedEvt && schedEvt.time) {
             const tColor = schedEvt.is_today ? '#b79f58' : '#999';
             const tBg = schedEvt.is_today ? '#f8f4ea' : '#f5f5f5';
             const crBadge = isCallRoomWindow(schedEvt.callroom_time, schedEvt.scheduled_date) ? ' <span class="ico-callroom">Call Room</span>' : '';
             const dayLabel = schedEvt.day ? `<span style="font-size:8px;color:#666;background:#eee;padding:1px 3px;border-radius:3px;margin-right:2px;">Day-${schedEvt.day}</span>` : '';
-            timeBadge = `${dayLabel}<span style="font-size:9px;color:${tColor};background:${tBg};padding:1px 5px;border-radius:6px;margin-left:2px;font-weight:600;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
+            timeBadge = `${dayLabel}<span class="num-display" style="font-size:9px;color:${tColor};background:${tBg};padding:1px 5px;border-radius:6px;margin-left:2px;font-weight:600;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
         }
 
         // Division badge for display mode (color-coded by age group)
@@ -609,12 +843,54 @@ function renderCategoryTable(groups, label, isLive) {
         const _dc = _divColorOf(g.division);
         const divBadge = (_isDisplayMode && g.division && _currentDivision === '전체') ? `<span style="font-size:9px;color:${_dc.color};background:${_dc.bg};padding:1px 5px;border-radius:6px;margin-left:4px;font-weight:600;">${g.division}</span>` : '';
 
-        html += `<tr>
-            <td class="event-name">${g.name}${divBadge}${timeBadge}</td>
-            <td>${_isDisplayMode ? rosterCell : wlCell}</td>
-            <td>${_isDisplayMode ? renderDisplayBtn(prelim) : renderViewerBtn(prelim)}</td>
-            <td>${_isDisplayMode ? renderDisplayBtn(semi) : renderViewerBtn(semi)}</td>
-            <td>${_isDisplayMode ? renderDisplayBtn(fin) : renderViewerBtn(fin)}</td>
+        // ── 카드 상태 배지 (예정 / ● 진행 중(라운드) / 종료) — 모든 카드에 1개 ──
+        const _liveR = g.rounds.find(r => r.round_status === 'in_progress') || g.rounds.find(r => callroomCompletedIds.has(r.id));
+        const _allDone = g.rounds.length > 0 && g.rounds.every(r => r.round_status === 'completed');
+        let statusBadge = '';
+        if (_liveR) {
+            const _rl = { preliminary: '예선', semifinal: '준결승', final: '결승' }[_liveR.round_type] || '';
+            statusBadge = `<span class="status-badge status-live">진행 중${_rl ? ' · ' + _rl : ''}</span>`;
+        } else if (_allDone) {
+            statusBadge = `<span class="status-badge status-done">종료</span>`;
+        } else {
+            statusBadge = `<span class="status-badge status-upcoming">예정</span>`;
+        }
+
+        // ── 비활성(존재하지 않는) 라운드 표기 통일: '—' 박스 대신 메타라인 "○○ 없음" ──
+        const _cols = [];
+        if (_colRounds.preliminary) _cols.push(['예선', prelim]);
+        if (_colRounds.semifinal) _cols.push(['준결승', semi]);
+        if (_colRounds.final) _cols.push(['결승', fin]);
+        const _missing = _cols.filter(([, e]) => !e).map(([l]) => l);
+        const metaMissing = (_missing.length && _missing.length < _cols.length)
+            ? `<span class="card-meta-missing">${_missing.join('·')} 없음</span>` : '';
+
+        // 라운드 셀: 없으면 빈 칸(모바일 라벨도 숨김) — '—' 제거
+        const _roundCell = (evt, label) => {
+            const content = _isDisplayMode ? renderDisplayBtn(evt) : renderViewerBtn(evt);
+            return `<td data-label="${label}" class="${content ? '' : 'cell-empty'}">${content}</td>`;
+        };
+
+        // 카드 전체 터치 대상 (운영/뷰어 모드) — 가장 관련있는 라운드로 이동
+        const _doneR = [fin, semi, prelim].find(r => r && r.round_status === 'completed');
+        const _heatR = g.rounds.find(r => r.heat_count > 0);
+        const _primary = _liveR || _doneR || _heatR || fin || semi || prelim || g.rounds[0];
+        const _primaryId = _primary ? _primary.id : 0;
+        const _tapAttr = (!_isDisplayMode && _primaryId) ? ` onclick="onCardTap(event,${_primaryId})"` : '';
+
+        // data-label: 모바일 카드 레이아웃(@media max-width:640px)에서 각 칸 앞에
+        // "예선/준결승/결승" 라벨을 붙이기 위함. PC(표 모드)에서는 사용되지 않음.
+        // 알림 토글: 종 아이콘 + "알림" 라벨 (켜짐=bell 강조 / 꺼짐=bell-off muted), 탭영역 ≥44×44
+        const _isFav = favs.includes(_rowGender + '|' + g.name);
+        const favCell = `<td class="fav-cell"><span class="fav-toggle${_isFav ? ' on' : ''}" role="button" tabindex="0" aria-pressed="${_isFav}" title="${_isFav ? '관심 알림 켜짐 (눌러서 해제)' : '이 종목 알림 받기'}" onclick="event.stopPropagation();toggleFavorite('${g.name.replace(/'/g, "\\'")}','${_rowGender}')">${_isFav ? _BELL_ON : _BELL_OFF}<span class="fav-label">알림</span></span></td>`;
+        html += `<tr data-row-gender="${_rowGender}"${_tapAttr}>
+            ${favCell}
+            <td class="event-name">${genderBadge}${g.name}${divBadge}${statusBadge}${timeBadge}${metaMissing}</td>
+            ${_isDisplayMode ? `<td data-label="영상" class="${videoCell ? '' : 'cell-empty'}">${videoCell}</td>` : ''}
+            ${(_isDisplayMode || _colRounds.wl) ? `<td data-label="${_isDisplayMode ? '명단' : 'W/L'}" class="${(_isDisplayMode ? rosterCell : wlCell) ? '' : 'cell-empty'}">${_isDisplayMode ? rosterCell : wlCell}</td>` : ''}
+            ${_colRounds.preliminary ? _roundCell(prelim, '예선') : ''}
+            ${_colRounds.semifinal ? _roundCell(semi, '준결승') : ''}
+            ${_colRounds.final ? _roundCell(fin, '결승') : ''}
         </tr>`;
     });
 
@@ -630,7 +906,7 @@ function renderCategoryTable(groups, label, isLive) {
  * - completed → "결과" button (shows results)
  */
 function renderViewerBtn(evt) {
-    if (!evt) return '<span class="round-btn btn-disabled">—</span>';
+    if (!evt) return ''; // 존재하지 않는 라운드 — '—' 대신 빈 칸(메타라인 "○○ 없음"으로 통일)
 
     const isAdmin = currentRole === 'admin';
     const isJudge = currentRole === 'operation' || isAdmin;
@@ -642,7 +918,8 @@ function renderViewerBtn(evt) {
 
     if (evt.round_status === 'completed') {
         // 완료 라운드 — 클릭 시 결과 화면으로 이동하므로 라벨도 "결과"로 표기 (일관성)
-        return `<span class="round-btn" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 결과</span>`;
+        // round-btn-result 클래스가 부모 tr[data-row-gender] 에 따라 성별색(네이비/버건디/골드)으로 override됨
+        return `<span class="round-btn round-btn-result" onclick="openResult(${evt.id})" title="결과 확인 (기록 입력됨)" style="background:${rc.color};color:#fff;border:1px solid ${rc.color};cursor:pointer;font-size:10px;padding:3px 7px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12);">결과</span>`;
     }
 
     // 소집 완료 또는 in_progress → LIVE (경기 진행 중)
@@ -679,11 +956,13 @@ const _roundColors = {
 };
 
 function renderDisplayBtn(evt) {
-    if (!evt) return '<span class="round-btn btn-disabled">—</span>';
+    if (!evt) return ''; // 존재하지 않는 라운드 — '—' 대신 빈 칸(메타라인으로 통일)
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
     const rc = _roundColors[evt.round_type] || { color: '#1565c0', bg: '#e3f2fd', border: '#90caf9' };
     if (evt.result_url) {
-        return `<a class="round-btn" href="${evt.result_url}" target="_blank" rel="noopener" style="background:${rc.bg};color:${rc.color};border:1px solid ${rc.border};cursor:pointer;font-size:10px;padding:3px 8px;text-decoration:none;font-weight:700;" title="결과 보기 (외부 링크)">${roundL || '결과'}</a>`;
+        // 노출용: 외부(연맹) 사이트로 넘어가는 칩 → external-link(↗) 아이콘 표시
+        const extIco = '<svg class="ext-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>';
+        return `<a class="round-btn round-btn-ext" href="${evt.result_url}" target="_blank" rel="noopener" style="background:${rc.bg};color:${rc.color};border:1px solid ${rc.border};cursor:pointer;font-size:10px;padding:3px 8px;text-decoration:none;font-weight:700;" title="결과 보기 (외부 링크로 이동)">${roundL || '결과'}${extIco}</a>`;
     }
     return `<span class="round-btn btn-disabled" style="font-size:10px;padding:3px 6px;" title="결과 링크 없음">${roundL || '—'}</span>`;
 }
@@ -698,12 +977,16 @@ async function openDisplayRoster(eventId, eventName, division) {
 
     // Get all roster entries for this event and related rounds
     const evtRoster = _displayRoster.filter(dr => dr.event_id === eventId);
+    // 'ALL' 탭에서도 정확한 sibling 그룹을 찾기 위해 클릭된 event 자체의 gender 를 사용
+    // (currentGender === 'ALL' 일 때 e.gender === 'ALL' 필터는 모든 행을 제외시켜 빈 명단 버그 유발)
+    const _clickedEvt = allEvents.find(e => e.id === eventId);
+    const _evtGender = _clickedEvt ? _clickedEvt.gender : currentGender;
     // Also try to find roster for sibling events (same name + division but different rounds)
-    const siblingEvents = allEvents.filter(e => e.name === eventName && (e.division || '') === (division || '') && e.gender === currentGender);
+    const siblingEvents = allEvents.filter(e => e.name === eventName && (e.division || '') === (division || '') && e.gender === _evtGender);
     const siblingIds = siblingEvents.map(e => e.id);
     const allRoster = _displayRoster.filter(dr => siblingIds.includes(dr.event_id));
 
-    const gLabel = currentGender === 'M' ? '남자' : currentGender === 'F' ? '여자' : '혼성';
+    const gLabel = _evtGender === 'M' ? '남자' : _evtGender === 'F' ? '여자' : '혼성';
     const divLabel = division ? ` ${division}` : '';
 
     let bodyHtml = '';
@@ -769,6 +1052,25 @@ async function openDisplayRoster(eventId, eventName, division) {
 }
 
 // ============================================================
+// Event video modal (노출 모드 — 종목별 영상 보기)
+// ============================================================
+async function openEventVideoModal(eventId, title) {
+    const overlay = document.getElementById('result-overlay');
+    const panel = document.getElementById('result-panel');
+    if (!overlay || !panel) return;
+    let videoUrl = '';
+    try { const vr = await API.getEventVideoUrl(eventId); videoUrl = vr.video_url || ''; } catch (e) {}
+    const embed = buildEmbedVideoHTML(videoUrl);
+    const body = embed || '<div style="text-align:center;padding:30px;color:#888;">등록된 영상이 없습니다.</div>';
+    panel.innerHTML = `<div class="result-panel-header">
+        <h3>${title} — 영상</h3>
+        <button class="result-panel-close" onclick="closeResult()">&times;</button>
+    </div><div class="result-panel-body">${body}</div>`;
+    overlay.classList.add('show');
+    if (window.pushModalState) pushModalState(() => closeResult());
+}
+
+// ============================================================
 // Result overlay
 // ============================================================
 
@@ -793,6 +1095,14 @@ async function openResult(eventId) {
         const evt = data.event;
         const gL = getGenderLabel(evt.gender);
         const roundL = fmtRound(evt.round_type);
+
+        // ─── 신기록 비교용: NR/DR/CR 미리 로드 (비고 CR 표기용) ───
+        try {
+            const normName = (typeof normalizeEventNameClient === 'function') ? normalizeEventNameClient(evt.name) : evt.name;
+            const compInfo = await API.getCompetitionInfo(getCompetitionId()).catch(() => ({}));
+            window._liveRecords = await API.lookupEventRecords(normName, evt.gender, evt.division || null, compInfo?.series_id || null).catch(() => null);
+            window._liveRecDir = (typeof recordDirectionForCategoryClient === 'function') ? recordDirectionForCategoryClient(evt.category) : null;
+        } catch(e) { window._liveRecords = null; window._liveRecDir = null; }
 
         // Get video URL
         let videoUrl = '';
@@ -834,9 +1144,17 @@ async function openResult(eventId) {
 }
 
 function closeResult() {
-    const iframe = document.querySelector('#result-panel iframe');
-    if (iframe) iframe.src = '';
-    document.getElementById('result-overlay').classList.remove('show');
+    // 🐛 BUGFIX (2026-06): iframe.src='' 가 iOS Safari 에서 about:blank 새 창처럼
+    // 보이는 문제 → iframe 자체를 DOM 에서 제거하여 navigation 이벤트 자체를 차단.
+    // (이전 코드: if (iframe) iframe.src = '';)
+    const iframes = document.querySelectorAll('#result-panel iframe');
+    iframes.forEach(f => f.parentNode && f.parentNode.removeChild(f));
+
+    const overlay = document.getElementById('result-overlay');
+    if (overlay) overlay.classList.remove('show');
+
+    // 중복 호출 방지: overlay 가 이미 안 보이면 popModalState 도 skip.
+    // popstate 로 인해 closeResult 가 호출된 경우 _modalStack 은 이미 pop 됨.
     if (window.popModalState) popModalState();
 }
 
@@ -1018,16 +1336,20 @@ function _buildRecordsBannerHTML(records) {
         <span class="record-chips" style="display:inline-flex;flex-wrap:wrap;gap:4px;">${parts.join('')}</span>
     </div>`;
 }
+// 기록 값 옆 괄호 신기록 표기 (예: " (CR)" / " (NR, CR)")
 function _buildRecordBadgesHTML(newValNum) {
+    const lbl = _recLabelText(newValNum);
+    if (!lbl) return '';
+    return ` <span style="color:#27ae60;font-weight:700;">(${lbl.replace(/ /g, ', ')})</span>`;
+}
+
+// 비고란용 신기록 라벨 텍스트 (예: "CR" 또는 "NR DR CR") — 깬 기록 전부
+function _recLabelText(newValNum) {
     if (!window._liveRecords || !window._liveRecDir) return '';
     if (newValNum == null || !isFinite(newValNum)) return '';
     if (typeof detectBrokenRecordsClient !== 'function') return '';
     const broken = detectBrokenRecordsClient(newValNum, window._liveRecords, window._liveRecDir);
-    if (!broken || broken.length === 0) return '';
-    return broken.map(lbl => {
-        const c = lbl === 'NR' ? '#c0392b' : lbl === 'DR' ? '#2980b9' : '#27ae60';
-        return `<span style="display:inline-block;background:${c};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
-    }).join('');
+    return (broken && broken.length) ? broken.join(' ') : '';
 }
 
 function renderLiveTrackResults(data, relayMembers) {
@@ -1084,7 +1406,7 @@ function renderLiveTrackResults(data, relayMembers) {
                         </td></tr>`;
                     }
                 }
-                // 비고: 풍속 초과 → 참고기록, 그 외엔 remark
+                // 비고: 풍속 초과 → 참고기록, 그 외엔 remark (신기록은 기록칸 괄호로 표시)
                 const remarkText = _isWindAided ? '참고기록' : (r.remark || '');
                 const remarkStyle = _isWindAided ? 'color:var(--accent);font-weight:600;' : '';
                 return `<tr style="${r.time_seconds != null ? 'background:#f0fff4;' : ''}">
@@ -1184,12 +1506,11 @@ function renderLiveFieldDistResults(data) {
                     const bestWMark = _bestWindAided ? '<span class="wind-aided-mark">w</span>' : '';
                     // 신기록 배지 (풍속 초과 시 미표시)
                     const _recBadges = (!_bestWindAided && !r.status_code && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
-                    const bestDisp = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + bestWMark + _recBadges : '—');
+                    const bestDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + bestWMark + _recBadges : '—');
                     const rankDisp = r.status_code ? '' : r.rank;
                     let remarkText = '';
-                    if (r.status_code) remarkText = r.status_code;
-                    else if (_bestWindAided) remarkText = '참고기록';
-                    const remarkStyle = r.status_code ? 'color:var(--danger);font-weight:600;' : _bestWindAided ? 'color:var(--accent);font-weight:600;' : '';
+                    if (_bestWindAided) remarkText = '참고기록';  // 상태코드는 기록칸에, 신기록은 기록칸 괄호로
+                    const remarkStyle = _bestWindAided ? 'color:var(--accent);font-weight:600;' : '';
                     return `<tr class="field-row1">
                         <td rowspan="2">${rankDisp}</td><td rowspan="2">${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td><strong>${bib(r.bib_number)}</strong></td>
@@ -1214,10 +1535,10 @@ function renderLiveFieldDistResults(data) {
                         distCells += `<td class="${attCls}" style="font-family:monospace;">${hasVal ? (isFoul ? '<span class="foul-mark">X</span>' : (isPass ? '<span class="pass-mark">-</span>' : formatHeight(v))) : ''}</td>`;
                     }
                     const _recBadges2 = (!r.status_code && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
-                    const bestDisp2 = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + _recBadges2 : '—');
+                    const bestDisp2 = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + _recBadges2 : '—');
                     const rankDisp2 = r.status_code ? '' : r.rank;
-                    const remarkText2 = r.status_code || '';
-                    const remarkStyle2 = r.status_code ? 'color:var(--danger);font-weight:600;' : '';
+                    const remarkText2 = '';  // 신기록은 기록칸 괄호로 표시
+                    const remarkStyle2 = remarkText2 ? 'color:#27ae60;font-weight:700;' : '';
                     return `<tr>
                         <td>${rankDisp2}</td><td>${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td><td><strong>${bib(r.bib_number)}</strong></td>
@@ -1256,6 +1577,8 @@ function renderLiveFieldHeightResults(data) {
             if (a.best == null && b.best == null) return 0;
             if (a.best == null) return 1; if (b.best == null) return -1;
             if (b.best !== a.best) return b.best - a.best;
+            // 같은 높이 → 수동 순위(순위결정전) 우선
+            if (a.manual_rank != null && b.manual_rank != null) return a.manual_rank - b.manual_rank;
             // WA tie-break: fewer fails at best height, then fewer total fails
             if (a.failsAtBest !== b.failsAtBest) return a.failsAtBest - b.failsAtBest;
             return a.totalFails - b.totalFails;
@@ -1269,6 +1592,8 @@ function renderLiveFieldHeightResults(data) {
             r.rank = isTied ? rows[i - 1].rank : rk;
             rk = i + 2;
         });
+        // 수동 순위(순위결정전) override
+        rows.forEach(r => { if (r.manual_rank != null) r.rank = r.manual_rank; });
 
         let thead = '<th>순위</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>';
         hts.forEach(h2 => { thead += `<th style="font-size:10px;">${formatHeight(h2)}</th>`; });
@@ -1280,13 +1605,25 @@ function renderLiveFieldHeightResults(data) {
                 hts.forEach(h2 => { const d = r.hd[h2] || {}; let m = ''; for (let i = 1; i <= 3; i++) { if (d[i]) { const mark = d[i] === 'PASS' ? '-' : d[i]; const cls = d[i] === 'O' ? 'color:var(--green)' : d[i] === 'X' ? 'color:var(--danger)' : 'color:var(--text-muted)'; m += `<span style="${cls};font-weight:700;">${mark}</span>`; } } c += `<td style="font-size:11px;">${m}</td>`; });
                 const _rkDisp = r.isNM ? '' : r.rank;
                 const _hRecBadges = (!r.isNM && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
-                const _bestDisp = r.best != null ? (formatHeight(r.best) + _hRecBadges) : '';
-                const _rmk = r.isNM ? 'NM' : '';
-                const _rmkSt = r.isNM ? 'color:var(--danger);font-weight:600;' : '';
+                const _bestDisp = r.best != null ? (formatHeight(r.best) + _hRecBadges) : (r.isNM ? '<span class="sc-badge sc-NM">NM</span>' : '');
+                const _rmk = '';  // 신기록은 기록칸 괄호로 표시
+                const _rmkSt = _rmk ? 'color:#27ae60;font-weight:700;' : '';
                 return `<tr style="${r.best != null ? 'background:#f0fff4;' : ''}"><td>${_rkDisp}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>${c}<td style="font-weight:700;">${_bestDisp}</td><td style="font-size:11px;${_rmkSt}">${_rmk}</td></tr>`;
             }).join('')}</tbody></table>`;
     });
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
+}
+
+// ── Helper: format API error for display ─────────────────────
+// api() in common.js throws plain objects: { status, error, ... } — NOT Error instances.
+// Template-literal `${e}` on plain objects yields "[object Object]".
+// This helper extracts a human-readable message from any thrown value.
+function _formatApiError(e) {
+    if (e == null) return '알 수 없는 오류';
+    if (typeof e === 'string') return e;
+    if (e.error) return String(e.error) + (e.status ? ` (HTTP ${e.status})` : '');
+    if (e.message) return String(e.message);
+    try { return JSON.stringify(e); } catch (_) { return String(e); }
 }
 
 function renderLiveCombinedResults(data) {
@@ -1384,8 +1721,9 @@ function renderLiveCombinedResults(data) {
                 </div>
                 <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">실시간 WA 점수 합산 | ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')}</p>`;
         } catch (e) {
+            console.error('[combined live] 데이터 로드 실패:', e);
             const container = document.getElementById('live-combined-content');
-            if (container) container.innerHTML = `<p style="color:var(--danger);">혼성 경기 데이터 로드 실패</p>`;
+            if (container) container.innerHTML = `<p style="color:var(--danger);padding:12px;">혼성 경기 데이터 로드 실패: ${_formatApiError(e)}</p>`;
         }
     }, 100);
 
@@ -1486,7 +1824,18 @@ async function _loadCombinedResultsAsync(evt) {
                             const rec = se.unit === 's' ? formatTime(p.raw) : formatHeight(p.raw);
                             return `<td style="font-size:10px;cursor:pointer;" onclick="_cResultShowSub(${se.order})"><div>${rec}</div><div style="color:var(--primary);font-size:9px;">${p.points}</div></td>`;
                         }).join('');
-                        return `<tr style="${r.total > 0 ? 'background:#f0fff4;' : ''}">
+                        // SNS 카드용: 세부 기록을 종목명 없이 순서대로만 (표 셀과 같은 판정 순서)
+                        const scMarks = subDefs.map(se => {
+                            const p = r.pts[se.order];
+                            if (!p || p.raw == null) return '—';
+                            if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) return p.status_code;
+                            if (p.raw === 0 && p.points === 0) return 'NM';
+                            if (p.raw <= 0) return '—';
+                            return se.unit === 's' ? formatTime(p.raw) : formatHeight(p.raw);
+                        });
+                        const scAttr = _scAttr(evt, r, r.total > 0 ? String(r.total) : '', r.rank,
+                            { marks: scMarks, marksPerRow: day1Max });
+                        return `<tr style="${r.total > 0 ? 'background:#f0fff4;' : ''}"${scAttr}>
                             <td><strong>${r.rank}</strong></td><td><strong>${bib(r.bib_number)}</strong></td>
                             <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:10px;">${r.team || ''}</td>
                             ${cells}
@@ -1510,8 +1859,9 @@ async function _loadCombinedResultsAsync(evt) {
         // Store data for sub-event detail rendering
         window._crSubData = { evt, subEvents, subDefs, entries, scores };
     } catch (e) {
+        console.error('[combined result] 데이터 로드 실패:', e);
         const container = document.getElementById('combined-result-content');
-        if (container) container.innerHTML = `<p style="color:var(--danger);">혼성 경기 데이터 로드 실패: ${e.message || e}</p>`;
+        if (container) container.innerHTML = `<p style="color:var(--danger);padding:12px;">혼성 경기 데이터 로드 실패: ${_formatApiError(e)}</p>`;
     }
 }
 
@@ -1725,6 +2075,48 @@ async function _cResultShowSub(order) {
     }
 }
 
+// ============================================================
+// SNS 기록 카드 — 결과표 행에 카드용 데이터를 실어둔다
+// share-card.js 의 openShareCard() 가 이 payload 를 그대로 받는다.
+// 기록이 없는 행(미출전/실격)은 카드를 만들지 않는다.
+// ============================================================
+function _scAttr(evt, r, record, rank, extra) {
+    if (!record || !r || !r.name) return '';
+    const isRelay = evt?.category === 'relay';
+    const payload = {
+        eventName: evt?.name || '',
+        division: [getGenderLabel(evt?.gender), evt?.division].filter(Boolean).join(' '),
+        record: record,
+        name: r.name || '',
+        // 계주는 athlete 행 자체가 팀(더미 선수)이라 name 에 이미 팀명이 들어있다.
+        // 소속까지 찍으면 같은 글자가 두 번 나오므로 비운다.
+        team: isRelay ? '' : (r.team || ''),
+        rank: (typeof rank === 'number' && rank > 0) ? rank : null,
+        laneLabel: getSmallNumberLabel(evt?.name, evt?.category),
+        laneNumber: r.lane_number || null,
+        competition: (document.querySelector('.comp-info-name')?.textContent || '').trim(),
+        compDate: (document.querySelector('.comp-info-dates')?.textContent || '').trim()
+    };
+    if (extra) Object.assign(payload, extra);
+    return ` data-sc="${encodeURIComponent(JSON.stringify(payload))}"`;
+}
+
+// (안내문 "기록을 누르면 공유 카드를…" 은 제거 — 힌트는 두 줄 행 오른쪽의 골드 › 와 첫 열람 숨쉬기 애니메이션뿐)
+
+// 결과표 행 클릭 → 카드 팝업 (재렌더링돼도 유지되도록 document 위임)
+document.addEventListener('click', function (e) {
+    if (!e.target || !e.target.closest) return;
+    // 트랙 결과는 두 줄 div 행(.rr), 필드·종합은 아직 tr — 둘 다 data-sc 로 잡는다
+    const row = e.target.closest('[data-sc]');
+    if (!row || typeof openShareCard !== 'function') return;
+    // 행 안에 자체 동작이 있는 요소(혼성 표의 세부기록 셀 등)를 누른 경우엔 양보한다.
+    const own = e.target.closest('[onclick], a, button, input, select, label');
+    if (own && row.contains(own)) return;
+    try {
+        openShareCard(JSON.parse(decodeURIComponent(row.getAttribute('data-sc'))));
+    } catch (err) { /* 잘못된 payload 는 무시 */ }
+});
+
 function renderTrackResults(data, relayMembers) {
     const isRelay = data.event?.category === 'relay';
     let html = '';
@@ -1754,30 +2146,64 @@ function renderTrackResults(data, relayMembers) {
             r.rank = r.time_seconds == null ? '—' : ((i > 0 && rows[i - 1].time_seconds === r.time_seconds && !rows[i - 1].status_code) ? rows[i - 1].rank : rk);
             rk = i + 2;
         });
-        html += `<table class="data-table" style="font-size:13px;">
-            <thead><tr><th>순위</th><th>${smallNumLabel}</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th><th>기록</th><th>비고</th></tr></thead>
-            <tbody>${rows.map(r => {
-                const wMark2 = (_isWindAided2 && !r.status_code && r.time_seconds != null) ? '<span class="wind-aided-mark">w</span>' : '';
-                let memberHtml = '';
-                if (isRelay && relayMembers) {
-                    const members = relayMembers.filter(m => m.event_entry_id === r.event_entry_id);
-                    if (members.length > 0) {
-                        const sorted = [...members].sort((a, b) => (a.leg_order || 99) - (b.leg_order || 99));
-                        memberHtml = `<tr><td colspan="7" style="padding:2px 8px 6px 40px;background:#f8f9fa;border-bottom:2px solid #e5e7eb;">
-                            <span style="font-size:10px;color:var(--text-muted);margin-right:6px;">주자:</span>
-                            ${sorted.map(m => `<span style="font-size:11px;margin-right:10px;">${m.leg_order ? m.leg_order + '주 ' : ''}${m.name} <span style="color:var(--text-muted);">#${bib(m.bib_number)}</span></span>`).join('')}
-                        </td></tr>`;
-                    }
+        // ── 두 줄 에디토리얼 행 (2026-09) ──
+        //   상단: 순위 · 이름 · 소속 / 하단 왼쪽: LANE · BIB · 그룹 · 비고 / 하단 오른쪽: 기록(+w·신기록 배지)
+        //   표 헤더·세로선 없음. 행 전체가 공유 카드 버튼이고, 눌린다는 표시는 오른쪽 골드 › 하나.
+        //   비고는 하단 메타에 흡수되므로 "대회신기록" 같은 자유 입력이 들어와도 기록·배지와 안 섞인다.
+        html += `<div class="rr-list${_rrFirstOpen ? ' rr-first' : ''}">${rows.map(r => {
+            const hasRec = !r.status_code && r.time_seconds != null;
+            const wMark2 = (_isWindAided2 && hasRec) ? '<span class="rr-w">w</span>' : '';
+            const recBadges = (hasRec && !_isWindAided2) ? _rrRecordBadges(r.time_seconds) : '';
+            let memberHtml = '';
+            if (isRelay && relayMembers) {
+                const members = relayMembers.filter(m => m.event_entry_id === r.event_entry_id);
+                if (members.length > 0) {
+                    const sorted = [...members].sort((a, b) => (a.leg_order || 99) - (b.leg_order || 99));
+                    memberHtml = `<div class="rr-members">${sorted.map(m => `<span>${m.leg_order ? m.leg_order + '주 ' : ''}${m.name}<i>#${bib(m.bib_number)}</i></span>`).join('')}</div>`;
                 }
-                return `<tr>
-                <td>${r.rank}</td><td>${r.lane_number || '—'}</td><td>${bib(r.bib_number)}</td>
-                <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>
-                <td style="font-family:monospace;font-weight:600;">${r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.time_seconds != null ? formatTime(r.time_seconds) + wMark2 : '<span style="color:var(--text-muted);">—</span>')}</td>
-                <td style="font-size:11px;color:#666;">${r.remark || ''}</td>
-            </tr>${memberHtml}`;
-            }).join('')}</tbody></table>`;
+            }
+            const _scRec = hasRec ? formatTime(r.time_seconds) : '';
+            const scAttr = _scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null);
+            const rankHtml = r.status_code
+                ? `<div class="rr-rank rr-rank-st sc-${r.status_code}">${r.status_code}</div>`
+                : `<div class="rr-rank${r.rank === 1 ? ' rr-rank-1' : ''}">${r.rank}</div>`;
+            const meta = [
+                `${smallNumLabel} ${r.lane_number || '—'}`,
+                `BIB ${bib(r.bib_number)}`,
+                r.sub_group ? `${r.sub_group}그룹` : '',
+                r.remark ? `<b>${r.remark}</b>` : '',
+            ].filter(Boolean).join('<i>·</i>');
+            const recHtml = r.status_code
+                ? `<div class="rr-rec rr-rec-st">${r.status_code}</div>`
+                : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark2}${recBadges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
+            return `<div class="rr${scAttr ? '' : ' rr-nocard'}"${scAttr}>
+                ${rankHtml}
+                <div class="rr-who"><span class="rr-name">${r.name}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}</span>`}</div>
+                <div class="rr-meta">${meta}</div>
+                ${recHtml}
+                <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
+                ${memberHtml}
+            </div>`;
+        }).join('')}</div>`;
     });
+    _rrFirstOpen = false;
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
+}
+
+// 결과 팝업 첫 열람 여부 — 이 기기에서 처음 연 결과표에서만 › 가 두 번 숨 쉬듯 흐르고 멈춘다 (계속 깜빡이지 않음)
+let _rrFirstOpen = (() => {
+    try {
+        if (localStorage.getItem('rr_hint_done') === '1') return false;
+        localStorage.setItem('rr_hint_done', '1');
+    } catch (e) {}
+    return true;
+})();
+
+// 신기록 배지 (NR/DR/CR) — 두 줄 행의 기록 옆 작은 알약
+function _rrRecordBadges(newValNum) {
+    const lbl = _recLabelText(newValNum);
+    if (!lbl) return '';
+    return lbl.split(' ').map(l => `<span class="rr-badge rr-badge-${l}">${l}</span>`).join('');
 }
 
 function renderFieldDistResults(data) {
@@ -1861,13 +2287,15 @@ function renderFieldDistResults(data) {
                     const bestWindDisp = (r.bestWind != null) ? formatWind(r.bestWind) : '';
                     const _bwa = needsWind && r.bestWind != null && parseFloat(r.bestWind) > 2.0 && r.best != null;
                     const bestWMark = _bwa ? '<span class="wind-aided-mark">w</span>' : '';
-                    const bestDisp = r.status_code ? '' : (r.best != null ? formatHeight(r.best) + bestWMark : '—');
+                    // 상태코드는 기록(결과) 칸에, 신기록(NR/DR/CR)은 기록 값 옆 괄호로
+                    const _recP = (!_bwa && !r.status_code && r.best != null) ? _buildRecordBadgesHTML(r.best) : '';
+                    const bestDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + bestWMark + _recP : '—');
                     const rkDisp = r.status_code ? '' : r.rank;
                     let rmk = '';
-                    if (r.status_code) rmk = r.status_code;
-                    else if (_bwa) rmk = '참고기록';
-                    const rmkSt = r.status_code ? 'color:var(--danger);font-weight:600;' : _bwa ? 'color:var(--accent);font-weight:600;' : '';
-                    return `<tr class="field-row1">
+                    if (_bwa) rmk = '참고기록';
+                    const rmkSt = _bwa ? 'color:var(--accent);font-weight:600;' : '';
+                    const _scRec = (!r.status_code && r.best != null) ? formatHeight(r.best) : '';
+                    return `<tr class="field-row1"${_scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null)}>
                         <td rowspan="2">${rkDisp}</td><td rowspan="2">${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td><strong>${bib(r.bib_number)}</strong></td>
                         ${distCells}<td rowspan="2" class="best-cell att-col-best">${bestDisp}<div class="best-wind">${bestWindDisp}</div></td>
@@ -1883,11 +2311,12 @@ function renderFieldDistResults(data) {
                 <tbody>${rows.map(r => {
                     let c = '';
                     for (let i = 1; i <= 6; i++) { const attCls = (i === 1 ? 'att-col-first ' : '') + (i % 2 === 1 ? 'att-col-odd' : 'att-col-even'); const v = r.att[i]; c += `<td class="${attCls}" style="font-family:monospace;font-size:11px;">${v != null ? (v === 0 ? '<span class="foul-mark">X</span>' : (v < 0 ? '<span class="pass-mark">-</span>' : formatHeight(v))) : ''}</td>`; }
-                    const bestDisp2 = r.status_code ? '' : (r.best != null ? formatHeight(r.best) : '—');
+                    const bestDisp2 = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` : (r.best != null ? formatHeight(r.best) + _buildRecordBadgesHTML(r.best) : '—');
                     const rkDisp2 = r.status_code ? '' : r.rank;
-                    const rmk2 = r.status_code || '';
-                    const rmkSt2 = r.status_code ? 'color:var(--danger);font-weight:600;' : '';
-                    return `<tr><td>${rkDisp2}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td class="att-col-best" style="font-weight:700;">${bestDisp2}</td><td style="font-size:11px;${rmkSt2}">${rmk2}</td></tr>`;
+                    const rmk2 = '';  // 신기록은 기록칸 괄호로 표시
+                    const rmkSt2 = rmk2 ? 'color:#27ae60;font-weight:700;' : '';
+                    const _scRec2 = (!r.status_code && r.best != null) ? formatHeight(r.best) : '';
+                    return `<tr${_scAttr(data.event, r, _scRec2, typeof r.rank === 'number' ? r.rank : null)}><td>${rkDisp2}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td class="att-col-best" style="font-weight:700;">${bestDisp2}</td><td style="font-size:11px;${rmkSt2}">${rmk2}</td></tr>`;
                 }).join('')}</tbody></table>`;
         }
     });
@@ -1917,6 +2346,8 @@ function renderFieldHeightResults(data) {
             if (a.best == null && b.best == null) return 0;
             if (a.best == null) return 1; if (b.best == null) return -1;
             if (b.best !== a.best) return b.best - a.best;
+            // 같은 높이 → 수동 순위(순위결정전) 우선
+            if (a.manual_rank != null && b.manual_rank != null) return a.manual_rank - b.manual_rank;
             if (a.failsAtBest !== b.failsAtBest) return a.failsAtBest - b.failsAtBest;
             return a.totalFails - b.totalFails;
         });
@@ -1927,6 +2358,8 @@ function renderFieldHeightResults(data) {
             r.rank = isTied ? rows[i-1].rank : rk;
             rk = i + 2;
         });
+        // 수동 순위(순위결정전) override
+        rows.forEach(r => { if (r.manual_rank != null) r.rank = r.manual_rank; });
 
         let thead = '<th>순위</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>';
         hts.forEach(h2 => { thead += `<th style="font-size:10px;">${formatHeight(h2)}</th>`; });
@@ -1936,10 +2369,11 @@ function renderFieldHeightResults(data) {
             <tbody>${rows.map(r => {
                 let c = '';
                 hts.forEach(h2 => { const d = r.hd[h2] || {}; let m = ''; for (let i = 1; i <= 3; i++) { if (d[i]) { const mark = d[i] === 'PASS' ? '-' : d[i]; m += mark; } } c += `<td style="font-size:11px;">${m}</td>`; });
-                const bestDisp3 = r.best != null ? formatHeight(r.best) : '';
-                const rmk3 = r.isNM ? 'NM' : '';
-                const rmkSt3 = rmk3 ? 'color:var(--danger);font-weight:600;' : '';
-                return `<tr><td>${r.isNM ? '' : r.rank}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td style="font-weight:700;">${bestDisp3}</td><td style="font-size:11px;${rmkSt3}">${rmk3}</td></tr>`;
+                const bestDisp3 = r.best != null ? (formatHeight(r.best) + _buildRecordBadgesHTML(r.best)) : (r.isNM ? '<span class="sc-badge sc-NM">NM</span>' : '');
+                const rmk3 = '';  // 신기록은 기록칸 괄호로 표시
+                const rmkSt3 = rmk3 ? 'color:#27ae60;font-weight:700;' : '';
+                const _scRec3 = (!r.isNM && r.best != null) ? formatHeight(r.best) : '';
+                return `<tr${_scAttr(data.event, r, _scRec3, typeof r.rank === 'number' ? r.rank : null)}><td>${r.isNM ? '' : r.rank}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td style="font-weight:700;">${bestDisp3}</td><td style="font-size:11px;${rmkSt3}">${rmk3}</td></tr>`;
             }).join('')}</tbody></table>`;
     });
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
@@ -1948,11 +2382,12 @@ function renderFieldHeightResults(data) {
 // ============================================================
 // Pacing Light Popup (W/L Target)
 // ============================================================
+// hex = 점/테두리(실제 라이트 색), ink = 흰 카드 위 글자색(가독성용)
 const _PACING_COLOR_MAP = {
-    green:  { label: 'Green',  hex: '#b79f58', textColor: '#fff' },
-    red:    { label: 'Red',    hex: '#FF0000', textColor: '#fff' },
-    white:  { label: 'White',  hex: '#E0E0E0', textColor: '#333' },
-    blue:   { label: 'Blue',   hex: '#6b6b6b', textColor: '#fff' },
+    green:  { label: 'Green',  hex: '#22c55e', textColor: '#fff',     ink: '#15803d' },
+    red:    { label: 'Red',    hex: '#ef4444', textColor: '#fff',     ink: '#dc2626' },
+    white:  { label: 'White',  hex: '#ffffff', textColor: '#111827', ink: '#475569' },
+    blue:   { label: 'Blue',   hex: '#2563eb', textColor: '#fff',     ink: '#1d4ed8' },
 };
 
 function _fmtPacingTime(seconds) {
@@ -1982,7 +2417,7 @@ function openPacingPopup(eventName) {
 
     // Notice
     if (cfg.notice) {
-        html += `<div style="background:#f8f4ea;border:1px solid #f8f4ea;border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:#b79f58;">${cfg.notice}</div>`;
+        html += `<div style="width:100%;box-sizing:border-box;background:#f8f4ea;border:1px solid #f8f4ea;border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:#b79f58;">${cfg.notice}</div>`;
     }
 
     // Color cards
@@ -2000,10 +2435,14 @@ function openPacingPopup(eventName) {
                 return { dist: cumDist, cum: cumTime, lap: seg.lap_seconds, segDist: seg.distance_meters };
             });
 
-            html += `<div style="border:2px solid ${cm.hex};border-radius:8px;padding:12px;margin-bottom:10px;">
+            const popupBorder = cm.hex === '#ffffff' ? '#cbd5e1' : cm.hex;
+            const popupDotBorder = cm.hex === '#ffffff' ? '#9ca3af' : 'rgba(0,0,0,.1)';
+            // width:100%+box-sizing — overflow-x:auto 컨테이너(result-panel-body) 안에서
+            // iOS Safari 가 카드를 내용 폭으로 줄여(shrink-wrap) 우측 여백이 생기는 문제 방지
+            html += `<div style="width:100%;box-sizing:border-box;border:2px solid ${popupBorder};border-radius:8px;padding:12px;margin-bottom:10px;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                    <span style="background:${cm.hex};width:18px;height:18px;border-radius:50%;display:inline-block;border:2px solid rgba(0,0,0,.1);flex-shrink:0;"></span>
-                    <span style="font-weight:700;font-size:15px;color:${cm.hex === '#E0E0E0' ? '#333' : cm.hex};">${cm.label}</span>
+                    <span style="background:${cm.hex};width:18px;height:18px;border-radius:50%;display:inline-block;border:2px solid ${popupDotBorder};flex-shrink:0;"></span>
+                    <span style="font-weight:700;font-size:15px;color:${cm.ink || cm.hex};">${cm.label}</span>
                     <span style="font-family:monospace;font-weight:700;font-size:18px;margin-left:auto;">${_fmtPacingTime(totalTime)}</span>
                     ${totalTime >= 60 ? `<span style="font-size:11px;color:var(--text-muted);margin-left:4px;">(${Math.round(totalTime)}초)</span>` : ''}
                 </div>`;
@@ -2014,8 +2453,9 @@ function openPacingPopup(eventName) {
 
             // Show cumulative splits table
             if (splits.length > 1) {
+                const headerBg = cm.hex === '#ffffff' ? '#e5e7eb' : `${cm.hex}22`;
                 html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">
-                    <thead><tr style="background:${cm.hex}22;">
+                    <thead><tr style="background:${headerBg};">
                         <th style="padding:3px 8px;text-align:left;font-size:11px;">구간</th>
                         <th style="padding:3px 8px;text-align:right;font-size:11px;">랩</th>
                         <th style="padding:3px 8px;text-align:right;font-size:11px;">누적</th>
@@ -2148,12 +2588,17 @@ async function loadRosterModalData(eventId) {
                 html += `<span style="font-size:11px;color:#999;">${entries.length}명</span>`;
             }
             html += `</div>`;
-            html += `<table style="width:100%;border-collapse:collapse;font-size:12px;">`;
+            // table-layout:fixed + 열폭 고정 → 조가 여러 테이블이어도 열 위치 정렬 통일.
+            //   소속은 남은 폭을 차지하고, 긴 팀명은 줄바꿈(word-break)으로 다음 줄로.
+            html += `<table class="fill-table" style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">`;
             html += `<thead><tr style="background:#f5f5f5;border-bottom:1px solid #e0e0e0;">`;
             html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">${isField ? '순서' : '레인'}</th>`;
             html += `<th style="padding:5px 8px;text-align:center;width:50px;font-weight:600;color:#777;">배번</th>`;
             if (hasSubGroup) html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">그룹</th>`;
-            html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">이름</th>`;
+            //   이름은 keep-all 만 두면 폭을 넘는 긴 이름(외국인 선수 등)이 소속 열 위로 겹쳐 그려짐
+            //   → 이름 열을 표 폭의 24%(데스크톱 ≈125px, 9자까지 한 줄)로 넓히고, 그래도 넘치면
+            //     overflow-wrap:anywhere 로 셀 안에서 줄바꿈. 소속은 남은 폭(≈250px)이라 상태 열을 침범하지 않음.
+            html += `<th style="padding:5px 8px;text-align:left;width:24%;font-weight:600;color:#777;">이름</th>`;
             html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">소속</th>`;
             if (showCallroomStatus) html += `<th style="padding:5px 8px;text-align:center;width:48px;font-weight:600;color:#777;">상태</th>`;
             html += `</tr></thead><tbody>`;
@@ -2191,8 +2636,11 @@ async function loadRosterModalData(eventId) {
                     const gColor = g === 'A' ? '#555' : g === 'B' ? '#8b1a2a' : '#999';
                     html += `<td style="padding:5px 8px;text-align:center;font-weight:800;color:${gColor};">${g || '—'}</td>`;
                 }
-                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;">${e.name}</td>`;
-                html += `<td style="padding:5px 8px;text-align:left;color:#666;">${e.team || ''}</td>`;
+                // 모바일에서 lib/responsive.css 가 모든 td 에 white-space:nowrap 을 걸어 줄바꿈이 원천 차단됨
+                //   → 긴 이름(비웨사다니엘가사마)이 소속 열에 겹침. 인라인 white-space:normal 로 되돌리고(인라인이 우선)
+                //   폭이 모자라면 음절 단위로 줄바꿈(word-break:normal + overflow-wrap:anywhere).
+                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
+                html += `<td style="padding:5px 8px;text-align:left;color:#666;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.team || ''}</td>`;
                 if (showCallroomStatus) {
                     let badge = '<span style="font-size:10px;color:#bbb;">—</span>';
                     if (e.status === 'checked_in') badge = '<span style="font-size:10px;color:#b79f58;font-weight:700;">출석</span>';

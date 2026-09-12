@@ -2,13 +2,15 @@
 // Offline-first PWA: cache app shell, queue API mutations for sync
 // v3: auto version sync, IndexedDB offline queue, background sync
 
-const CACHE_NAME = 'pacerise-v124';
+const CACHE_NAME = 'pacerise-v150';
 const OFFLINE_URL = '/';
 
 // App shell — version-free paths (actual files are network-first, cache updated on every fetch)
 const APP_SHELL = [
     '/',
     '/styles.css',
+    '/fonts/d2coding-subset.woff2',
+    '/fonts/d2coding-bold-subset.woff2',
     '/common.js',
     '/dashboard.html',
     '/admin.html',
@@ -138,6 +140,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
+    // 외부 도메인(FCM/구글 등) 요청은 절대 가로채지 않음 — getToken 의
+    // fcmregistrations.googleapis.com 호출이 'Failed to fetch(token-subscribe-failed)'
+    // 로 깨지는 것 방지. (오프라인 SW 의 알려진 함정)
+    if (url.origin !== self.location.origin) return;
+
     // Skip SSE connections entirely
     if (url.pathname === '/api/sse') return;
 
@@ -156,14 +163,22 @@ self.addEventListener('fetch', (event) => {
         if (event.request.method === 'GET') {
             event.respondWith(
                 fetch(event.request)
-                    .then(async (response) => {
+                    .then((response) => {
+                        // ⚠️ 응답을 '즉시' 페이지로 돌려준다. IndexedDB 캐시 쓰기는
+                        //    백그라운드로 떼어내(await 하지 않음) — 캐시 쓰기가 blocked/hang
+                        //    되더라도 페이지 fetch 가 영원히 멈추지 않도록 한다.
+                        //    (예전엔 await cacheAPIResponse 가 response 반환을 막아
+                        //     /e/<slug> 진입 시 대시보드가 '로딩 중' 에서 멈추는 버그가 있었음.)
                         if (response.ok) {
-                            // Cache the API response in IndexedDB
-                            try {
-                                const clone = response.clone();
-                                const data = await clone.json();
-                                await cacheAPIResponse(url.pathname + url.search, data);
-                            } catch(e) {}
+                            const clone = response.clone();
+                            const cacheKey = url.pathname + url.search;
+                            const bg = (async () => {
+                                try {
+                                    const data = await clone.json();
+                                    await cacheAPIResponse(cacheKey, data);
+                                } catch (e) {}
+                            })();
+                            if (event.waitUntil) { try { event.waitUntil(bg); } catch (e) {} }
                         }
                         return response;
                     })

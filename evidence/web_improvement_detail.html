@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="fonts/audiowide_face.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif; background:#eef1f5; color:#1a2233; padding:40px; width:2000px; }
+  .header { background:linear-gradient(135deg,#1e3a5f,#2c5282); color:#fff; padding:38px 44px; border-radius:16px; margin-bottom:28px; }
+  .header h1 { font-size:38px; margin-bottom:10px; }
+  .header p { font-size:18px; color:#b9d0e8; }
+  .meta { display:flex; gap:14px; margin-top:18px; flex-wrap:wrap; }
+  .meta span { background:rgba(255,255,255,0.13); padding:8px 16px; border-radius:20px; font-size:15px; }
+
+  /* 정량 요약 */
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-bottom:28px; }
+  .stat { background:#fff; border-radius:14px; padding:24px; text-align:center; box-shadow:0 2px 14px rgba(20,40,80,0.07); }
+  .stat .big { font-size:42px; font-weight:800; color:#2c5282; line-height:1.1; }
+  .stat .big .arr { color:#94a3b8; font-size:24px; }
+  .stat .lbl { font-size:15px; color:#5a6b82; margin-top:8px; }
+
+  .section { background:#fff; border-radius:16px; padding:30px 34px; box-shadow:0 2px 14px rgba(20,40,80,0.07); margin-bottom:26px; }
+  .stitle { font-size:24px; font-weight:700; color:#1e3a5f; margin-bottom:20px; display:flex; align-items:center; gap:12px; }
+  .stitle .num { background:#2c5282; color:#fff; width:34px; height:34px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:18px; }
+
+  /* 개선 카드: 문제→작업→개선 */
+  .imp { border:1px solid #e2e8f0; border-radius:12px; margin-bottom:18px; overflow:hidden; }
+  .imp-head { background:#f5f8fc; padding:14px 20px; font-size:18px; font-weight:700; color:#1e3a5f; display:flex; justify-content:space-between; align-items:center; }
+  .imp-head .badge { font-size:13px; font-weight:600; background:#2c5282; color:#fff; padding:4px 12px; border-radius:12px; }
+  .imp-body { display:grid; grid-template-columns:1fr 1fr 1fr; }
+  .imp-col { padding:18px 22px; border-right:1px solid #eef1f5; }
+  .imp-col:last-child { border-right:none; }
+  .imp-col .tag { font-size:13px; font-weight:700; padding:3px 10px; border-radius:8px; display:inline-block; margin-bottom:10px; }
+  .imp-col.problem .tag { background:#fde8e8; color:#c0392b; }
+  .imp-col.work .tag { background:#e3f2fd; color:#1565c0; }
+  .imp-col.result .tag { background:#e8f5e9; color:#2e7d32; }
+  .imp-col ul { margin-left:16px; font-size:14.5px; line-height:1.75; color:#33415a; }
+  .imp-col .metric { margin-top:10px; font-size:15px; font-weight:700; color:#2e7d32; background:#f0faf2; padding:8px 12px; border-radius:8px; }
+
+  /* before/after 이미지 */
+  .ba-grid { display:grid; grid-template-columns:1fr auto 1fr; gap:0; align-items:center; margin-top:16px; }
+  .ba-col { border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }
+  .ba-label { padding:11px 18px; font-size:16px; font-weight:700; color:#fff; }
+  .ba-label.before { background:#94a3b8; }
+  .ba-label.after { background:#2c5282; }
+  .ba-col img { width:100%; display:block; }
+  .ba-arrow { font-size:46px; color:#2c5282; font-weight:800; padding:0 22px; }
+
+  .footer { text-align:center; color:#7a8aa0; font-size:14px; margin-top:24px; padding-top:18px; border-top:1px solid #d5dde8; }
+  .src { font-size:13px; color:#94a3b8; margin-top:8px; }
+
+  /* ===== WHITE/BLACK THEME OVERRIDE (회사 표준) ===== */
+  body { background:#ffffff !important; color:#111111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:'Noto Sans CJK KR','NanumSquare','Malgun Gothic',sans-serif !important; }
+  .brand, .mono-bd { font-family:'Audiowide',sans-serif !important; letter-spacing:0.5px; }
+  .header { background:#ffffff !important; color:#000000 !important; border:1.5px solid #111111 !important; border-radius:8px !important; }
+  .header h1 { color:#000000 !important; }
+  .header p { color:#333333 !important; }
+  .header .meta span { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  .header::before { content:''; display:block; position:absolute; }
+  .section, .stat, .wrap { background:#ffffff !important; color:#111111 !important; border:1px solid #d9d9d9 !important; box-shadow:none !important; }
+  .stitle, .section-title, .stitle .num, .section-title .num { color:#000000 !important; }
+  .stitle .num, .section-title .num, .toc .no, .no { background:#111111 !important; color:#ffffff !important; font-family:'Audiowide',sans-serif !important; }
+  th { background:#f2f2f2 !important; color:#000000 !important; }
+  td, th { border-color:#dddddd !important; }
+  .chip { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  pre, .health { background:#f7f7f7 !important; color:#111111 !important; border:1px solid #cccccc !important; }
+  pre .c { color:#888888 !important; }
+  pre .k { color:#000000 !important; font-weight:700; }
+  .health .lbl { color:#555555 !important; }
+  .note { background:#ffffff !important; border-left:4px solid #111111 !important; border:1px solid #111111 !important; color:#222222 !important; }
+  .footer { color:#555555 !important; border-top:1px solid #cccccc !important; }
+  .shot { border:1px solid #cccccc !important; }
+  .shot .cap, .ba-label, .ba-label.before, .ba-label.after, .imp-head .badge,
+  .cloud-label, .region-tag, .tag.real, .tag.guide, .badge {
+     background:#111111 !important; color:#ffffff !important; border-color:#111111 !important; }
+  .ba-label.before { background:#777777 !important; }
+  .imp-head { background:#f2f2f2 !important; color:#000000 !important; }
+  .stat .num, .stat-num { color:#000000 !important; }
+  td .ok, .ok { background:#111111 !important; color:#ffffff !important; }
+  .arch { background:#fafafa !important; border:1.5px dashed #999999 !important; }
+  /* 잔여 컬러 토큰 무력화: AWS/HTTPS/전후비교 등 */
+  .header h1 .aws { color:#000000 !important; }
+  .box, .box.ec2, .box.db, .box.user { background:#ffffff !important; border:1.5px solid #111111 !important; box-shadow:none !important; }
+  .box .svc { color:#000000 !important; }
+  .box .desc { color:#444444 !important; }
+  .region { border:1.5px solid #111111 !important; }
+  .region-tag { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  .cloud-label { background:#111111 !important; color:#ffffff !important; }
+  .arrow { color:#111111 !important; }
+  .guide { background:#ffffff !important; border-left:4px solid #111111 !important; border:1px solid #111111 !important; }
+  .guide b { color:#000000 !important; }
+  .ok { background:#111111 !important; color:#ffffff !important; }
+  .flow { background:#f7f7f7 !important; color:#222222 !important; }
+  .head { background:#ffffff !important; color:#000000 !important; border-bottom:1.5px solid #111111 !important; }
+  tfoot td { background:#f2f2f2 !important; color:#000000 !important; border-top:1.5px solid #111111 !important; }
+  td.t { color:#000000 !important; }
+  .ba-label.after, .imp-head .badge, .badge { background:#111111 !important; color:#ffffff !important; }
+
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>웹 시스템 고도화 — 작업 내역 및 개선 효과 상세</h1>
+    <p><span class="brand">PACE RISE : Node</span> — 개편 전 → 개편 후(2026년 5월 초~6월 중순 고도화) 정량·정성 비교 · 용역업체 수행</p>
+    <div class="meta">
+      <span>비교 구간: ca3d736 → 현행 main</span>
+      <span>분석 방식: git 커밋 이력 실측</span>
+      <span>작성일: 2026-06-16</span>
+    </div>
+  </div>
+
+  <!-- 정량 요약 -->
+  <div class="stats">
+    <div class="stat"><div class="big">271<span style="font-size:22px;">건</span></div><div class="lbl">개편 기간 개선 커밋 수</div></div>
+    <div class="stat"><div class="big">2 <span class="arr">→</span> 33</div><div class="lbl">서버 기능 모듈 수 (lib/)</div></div>
+    <div class="stat"><div class="big">10.4k <span class="arr">→</span> 14.2k</div><div class="lbl">서버 코드 라인 (server.js)</div></div>
+    <div class="stat"><div class="big">SQLite <span class="arr">→</span> PG</div><div class="lbl">DB 클라우드 이관 (34테이블)</div></div>
+  </div>
+
+  <!-- 개선 1: 대회 목록 -->
+  <div class="section">
+    <div class="stitle"><span class="num">1</span> 대회 목록 구조 개편</div>
+    <div class="imp">
+      <div class="imp-head">대회 탐색 방식 <span class="badge">dashboard 23건 커밋</span></div>
+      <div class="imp-body">
+        <div class="imp-col problem"><span class="tag">문제</span>
+          <ul><li>대회가 단순 평면 리스트로 나열</li><li>대회 수 증가 시 가독성·탐색성 저하</li><li>주관 연맹 구분 불가</li></ul>
+        </div>
+        <div class="imp-col work"><span class="tag">수행 작업</span>
+          <ul><li>주관 연맹(KAAF/KTFL/KUAF)별 접이식 그룹화 구현</li><li>연맹 식별 배지·대회 수 카운트 추가</li><li>RECENT(진행중 ±3일) 히어로 영역 신설</li></ul>
+        </div>
+        <div class="imp-col result"><span class="tag">개선 효과</span>
+          <ul><li>다수 대회를 연맹 단위로 즉시 분류</li><li>진행중 대회 한눈에 파악(LIVE 배지)</li></ul>
+          <div class="metric">탐색 단계 ↓ · 연맹별 구조화 100%</div>
+        </div>
+      </div>
+    </div>
+    <div class="ba-grid">
+      <div class="ba-col"><div class="ba-label before">개편 전 (BEFORE)</div><img src="web_before_after/home_desktop_before.png"></div>
+      <div class="ba-arrow">→</div>
+      <div class="ba-col"><div class="ba-label after">개편 후 (AFTER)</div><img src="web_before_after/home_desktop_after.png"></div>
+    </div>
+    <div class="src">근거: git 커밋 — feat(home) 노출 강제설정, feat(dashboard) 전체 탭·연맹 그룹화 외</div>
+  </div>
+
+  <!-- 개선 2: 운영 모니터 -->
+  <div class="section">
+    <div class="stitle"><span class="num">2</span> 경기 운영 모니터 고도화</div>
+    <div class="imp">
+      <div class="imp-head">실시간 경기 운영 모니터링 <span class="badge">event 12건 + display 5건</span></div>
+      <div class="imp-body">
+        <div class="imp-col problem"><span class="tag">문제</span>
+          <ul><li>모든 종목이 '대기'로만 표시, 상태 구분 없음</li><li>출석/소집 현황 집계 불가(출석 0)</li><li>단일 대회만 표시</li></ul>
+        </div>
+        <div class="imp-col work"><span class="tag">수행 작업</span>
+          <ul><li>상태 분류 체계(소집완료/진행/대기/완료) 구현</li><li>소집 진행률 바(3/3, 6/6) 시각화</li><li>다중 대회 탭 전환·실시간 출석 집계 추가</li></ul>
+        </div>
+        <div class="imp-col result"><span class="tag">개선 효과</span>
+          <ul><li>운영진이 소집 현황을 즉시 파악</li><li>출석 인원 실시간 반영(예: 171명)</li></ul>
+          <div class="metric">상태 가시성 0 → 4단계 분류</div>
+        </div>
+      </div>
+    </div>
+    <div class="ba-grid">
+      <div class="ba-col"><div class="ba-label before">개편 전 (BEFORE)</div><img src="web_before_after/monitor_desktop_before.png"></div>
+      <div class="ba-arrow">→</div>
+      <div class="ba-col"><div class="ba-label after">개편 후 (AFTER)</div><img src="web_before_after/monitor_desktop_after.png"></div>
+    </div>
+    <div class="src">근거: git 커밋 — feat(event) 자동 레이아웃·성별탭 override, feat(display) 노출 시스템 외</div>
+  </div>
+
+  <!-- 개선 3: 모바일 -->
+  <div class="section">
+    <div class="stitle"><span class="num">3</span> 모바일 반응형 최적화</div>
+    <div class="imp">
+      <div class="imp-head">현장 운영진 모바일 사용성 <span class="badge">mobile/dashboard 모바일 커밋 다수</span></div>
+      <div class="imp-body">
+        <div class="imp-col problem"><span class="tag">문제</span>
+          <ul><li>모바일에서 카드 헤더 세로 깨짐</li><li>여백 과다로 한 화면 정보량 부족</li><li>결승 컬럼 잘림</li></ul>
+        </div>
+        <div class="imp-col work"><span class="tag">수행 작업</span>
+          <ul><li>공용 반응형 CSS(lib/responsive.css) 도입</li><li>카드 컴팩트화·여백 축소·라운드칸 균등폭</li><li>연맹 그룹 구조 모바일 동일 적용</li></ul>
+        </div>
+        <div class="imp-col result"><span class="tag">개선 효과</span>
+          <ul><li>한 화면 노출 종목 수 증가</li><li>현장 휴대폰 운영 가독성 향상</li></ul>
+          <div class="metric">5개 페이지 반응형 일괄 적용</div>
+        </div>
+      </div>
+    </div>
+    <div class="ba-grid">
+      <div class="ba-col"><div class="ba-label before">개편 전 (BEFORE)</div><img src="web_before_after/home_mobile_before.png"></div>
+      <div class="ba-arrow">→</div>
+      <div class="ba-col"><div class="ba-label after">개편 후 (AFTER)</div><img src="web_before_after/home_mobile_after.png"></div>
+    </div>
+    <div class="src">근거: git 커밋 — feat(mobile) 공용 반응형 CSS 5개 페이지 적용, fix(dashboard) 모바일 가독성 다수</div>
+  </div>
+
+  <!-- 개선 4: 신규 기능 (이미지 없이 텍스트) -->
+  <div class="section">
+    <div class="stitle"><span class="num">4</span> 신규 도입 기능 (개편 전 → 후 신설)</div>
+    <div class="imp">
+      <div class="imp-head">기능 확장 내역 <span class="badge">cert 14 · push 16 · auth 3 · security 5</span></div>
+      <div class="imp-body">
+        <div class="imp-col problem"><span class="tag">개편 전 (없음)</span>
+          <ul><li>상장/기록증 발급 기능 없음</li><li>실시간 알림 없음</li><li>로그인/권한 체계 미흡</li><li>SMS 발송 없음</li></ul>
+        </div>
+        <div class="imp-col work"><span class="tag">신규 구현</span>
+          <ul><li><b>상장·기록증</b> PDF 발급(레이아웃·워터마크·전원발급)</li><li><b>웹푸시(FCM)</b> 관심종목 알림</li><li><b>JWT 로그인</b>·관리자 권한 분리</li><li><b>SMS 일괄발송</b>(알리고 연동)</li></ul>
+        </div>
+        <div class="imp-col result"><span class="tag">개편 후 (제공)</span>
+          <ul><li>대회 운영 전 과정 디지털화</li><li>참가자 알림·증명서 자동화</li><li>보안 엔드포인트 8종 잠금</li></ul>
+          <div class="metric">신규 기능 모듈 31개 추가 (lib 2→33)</div>
+        </div>
+      </div>
+    </div>
+    <div class="src">근거: git 커밋 — feat(cert)·feat(push)·feat(auth)·fix(security) 무인증 엔드포인트 8종 운영키 잠금 외</div>
+  </div>
+
+  <div class="footer">
+    본 자료의 모든 수치(커밋 수·모듈 수·코드 라인)와 화면은 용역 수행 과정의 형상관리(Git) 이력 및 실제 서버 실행으로 측정·캡처한 결과입니다(용역업체 개발→발주처 인계). &nbsp;|&nbsp; <span class="brand">PACE RISE : Node</span>
+  </div>
+</body>
+</html>

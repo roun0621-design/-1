@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<!-- /e/<slug> 등 하위경로로 진입해도 모든 상대경로 자원(js/css)이 루트에서 로드되도록 -->
+<base href="/">
 <!-- Google Analytics 4 -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-3PRW9G7KVQ"></script>
 <script>
@@ -16,10 +18,13 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
     <meta name="theme-color" content="#b79f58">
     <title>PACE RISE : Node — 대시보드</title>
-    <link rel="stylesheet" href="styles.css?v=72">
+    <link rel="stylesheet" href="styles.css?v=75">
     <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
-        .comp-info-line { display:flex; align-items:center; gap:8px; padding:8px 16px; background:var(--bg-dark); border-radius:var(--radius); font-size:13px; flex-wrap:wrap; }
+        .comp-info-line { display:flex; flex-direction:row; align-items:center; gap:8px; padding:8px 16px; background:var(--bg-dark); border-radius:var(--radius); font-size:13px; flex-wrap:nowrap; }
+        .comp-info-main { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .comp-info-actions { flex:0 0 auto; display:flex; align-items:center; gap:6px; }
+        .comp-info-actions:empty { display:none; }
         .comp-info-name { font-weight:700; }
         .comp-info-sep { color:var(--text-muted); }
         .comp-info-dates, .comp-info-venue { color:var(--text-muted); }
@@ -84,9 +89,11 @@
 
         .gender-tabs-bar { display:flex; gap:0; background:var(--white); padding:8px 0; border-bottom:2px solid var(--gray); }
         .gender-tab-btn { flex:1; padding:10px 0; text-align:center; font-size:14px; font-weight:800; border:none; cursor:pointer; border-bottom:3px solid transparent; transition:all .15s; background:none; letter-spacing:0.5px; }
+        .gender-tab-btn[data-gender="ALL"] { color:#374151; }
         .gender-tab-btn[data-gender="M"] { color:#1a2a5e; }
         .gender-tab-btn[data-gender="F"] { color:#8b1a2a; }
         .gender-tab-btn[data-gender="X"] { color:#b79f58; }
+        .gender-tab-btn.active[data-gender="ALL"] { border-bottom-color:#374151; background:#eef0f2; }
         .gender-tab-btn.active[data-gender="M"] { border-bottom-color:#1a2a5e; background:#e8eaf0; }
         .gender-tab-btn.active[data-gender="F"] { border-bottom-color:#8b1a2a; background:#f0e0e4; }
         .gender-tab-btn.active[data-gender="X"] { border-bottom-color:#b79f58; background:#f8f4ea; }
@@ -94,11 +101,18 @@
         .dashboard-layout { display:flex; flex-direction:column; height:calc(100vh - 60px); overflow:hidden; }
         .matrix-section { margin-bottom:16px; }
         .matrix-section-title { font-size:12px; font-weight:800; color:var(--text-muted); padding:6px 10px; background:var(--bg); border-radius:4px; margin-bottom:6px; letter-spacing:1.2px; }
-        .matrix-scroll-wrap { overflow-x:auto; }
-        .matrix-table { width:100%; border-collapse:collapse; font-size:13px; table-layout:auto; }
+        /* matrix-scroll-wrap / matrix-table 의 폭·overflow 는 styles.css 에서 통합 관리.
+           여기서 width:100% 를 덮어쓰면 모바일에서 마지막 컬럼이 잘림. */
+        .matrix-table { border-collapse:collapse; font-size:13px; table-layout:auto; }
         .matrix-table th { padding:6px 4px; text-align:center; font-size:11px; font-weight:700; color:var(--text-muted); border-bottom:1px solid var(--gray); white-space:nowrap; }
         .matrix-table td { padding:8px 6px; text-align:center; border-bottom:1px solid #f0f0f0; white-space:nowrap; }
         .matrix-table td.event-name { text-align:left; font-weight:700; white-space:nowrap; font-size:14px; }
+        .fav-th { width:54px; font-size:11px; }
+        .matrix-table td.fav-cell { text-align:center; white-space:nowrap; }
+        .fav-toggle { display:inline-block; width:34px; height:18px; border-radius:999px; background:#d3cdbe; position:relative; cursor:pointer; transition:background .15s; vertical-align:middle; }
+        .fav-toggle .fav-knob { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:left .15s; box-shadow:0 1px 2px rgba(0,0,0,.25); }
+        .fav-toggle.on { background:#b79f58; }
+        .fav-toggle.on .fav-knob { left:18px; }
         .round-btn { display:inline-block; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; text-decoration:none; cursor:pointer; transition:all .12s; }
         .round-btn.btn-wait { background:#f5f5f5; color:#9e9e9e; cursor:default; }
         .round-btn.btn-summon { background:#f8f4ea; color:#b79f58; }
@@ -120,11 +134,172 @@
             .result-panel-close { width:38px; height:38px; font-size:20px; }
             .result-panel-header { padding:10px 14px; }
             .result-panel-header h3 { font-size:13px; }
-            .result-panel-body { padding:10px 8px; }
+            .result-panel-body { padding:10px 6px; }
         }
-        .result-panel .data-table, .result-panel .field-table { width:100%; table-layout:auto; }
-        .result-panel .data-table td, .result-panel .field-table td { overflow:hidden; text-overflow:ellipsis; max-width:200px; }
-        .result-panel .data-table td[style*="text-align:left"] { max-width:160px; overflow:hidden; text-overflow:ellipsis; }
+        /* ⚠️ result-panel 내부 표 폭·overflow 규칙은 styles.css 에서 통합 관리.
+           여기서 width:100% 를 덮어쓰면 6차 시도/BEST 컬럼이 잘리고도 스크롤이 트리거되지 않음. */
+
+        /* ── 모바일: 종목 매트릭스 표를 "컴팩트 카드"로 재배치 ───────────────
+           좁은 화면에서 가로로 넘쳐 옆스크롤되던 문제 해결. 단, 카드가 너무
+           길어 무한스크롤이 되지 않도록 종목당 ~2줄로 압축:
+             1줄 = 종목명 + 시간/부 (헤더)
+             2줄 = 예선/준결승/결승(+영상/명단) 버튼을 한 줄에 나란히
+           640px 초과(PC/태블릿)는 기존 표 그대로 유지. */
+        @media (max-width:640px) {
+            .matrix-scroll-wrap { overflow-x:visible; }
+            .matrix-table { display:block; width:100%; min-width:0; box-shadow:none; background:transparent; }
+            .matrix-table thead { display:none; }
+            .matrix-table tbody { display:block; }
+            /* 행 = 카드. 헤더(전체폭) 아래에 라운드 칸들이 균등폭으로 한 줄 */
+            .matrix-table tr {
+                display:flex;
+                flex-wrap:wrap;
+                align-items:stretch;
+                gap:4px 4px;
+                background:var(--white);
+                border:1px solid #e8e8e8;
+                border-radius:12px;
+                box-shadow:0 1px 3px rgba(0,0,0,.05);
+                margin-bottom:6px;
+                padding:6px 10px;
+                position:relative;   /* 알림 토글 우상단 고정 기준 */
+            }
+            /* 종목명 = 헤더(전체폭, 가운데 정렬). display:block 로 배지들이 가로로 흐름
+               (일반 td 의 flex column 을 반드시 덮어써야 세로쌓임 방지) */
+            .matrix-table td.event-name {
+                display:block;
+                flex:0 0 100%;
+                text-align:left;
+                font-size:15px;
+                font-weight:700;
+                white-space:normal;
+                padding:0 46px 4px 0;   /* 우측: 우상단 알림 토글과 겹침 방지 */
+                margin-bottom:0;
+                border-bottom:1px solid #f0f0f0;
+                line-height:1.35;
+            }
+            .matrix-table td.event-name::before { content:none; }
+            /* 라운드/영상/명단 = 동일폭(flex:1) 컬럼, 라벨 위·버튼 아래, 가운데 정렬
+               → 빈 공간 없이 꽉 차고 표처럼 정렬돼 가독성↑ */
+            .matrix-table td {
+                flex:1;
+                min-width:0;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+                gap:3px;
+                padding:0;
+                border:none;
+                white-space:nowrap;
+            }
+            .matrix-table td::before {
+                content:attr(data-label);
+                font-size:10px;
+                font-weight:700;
+                color:var(--text-muted);
+                letter-spacing:0.2px;
+            }
+            /* 노출 모드: 버튼에 이미 라운드명(▶영상/명단/예선…)이 있어 라벨 중복
+               → 라벨 숨겨 카드 한 줄 더 낮춤. 일반(뷰어) 모드는 버튼이 상태(대기/
+               LIVE/결과)만 보여주므로 라벨 유지(어떤 라운드인지 식별 필요). */
+            .matrix-table.matrix-display td::before { content:none; }
+            .matrix-table td .round-btn { font-size:12px; padding:5px 6px; }
+            /* 알림 토글 — 칩 흐름에서 완전히 빼서 카드 우상단 고정(높이 안 늘림). 일반 td 규칙 뒤에 !important 로 확실히 적용 */
+            .matrix-table td.fav-cell {
+                position:absolute !important; top:7px; right:10px;
+                display:block !important; flex:0 0 auto !important;
+                width:auto !important; padding:0 !important; border:none !important; margin:0 !important;
+            }
+            .matrix-table td.fav-cell::before { content:none !important; }
+        }
+
+        /* ── 모바일: 성별/부별 탭 위아래 여백 축소 (스크롤 영역 확보) ─────────
+           PC/태블릿(>640px)은 기존 높이 유지. 부별 탭은 JS 인라인 스타일이라
+           !important 로만 덮어쓸 수 있음. */
+        @media (max-width:640px) {
+            /* 탭 */
+            .gender-tabs-bar { padding:1px 0; }
+            .gender-tab-btn { padding:6px 0; font-size:13px; }
+            #division-tabs { padding:2px 0 !important; }
+            #division-tabs .gender-tab-btn { padding:5px 12px !important; font-size:12px; }
+            .events-scroll { padding:2px 0; }
+            /* 상단: 대회정보 박스 */
+            .comp-info-line { padding:6px 12px; font-size:12px; gap:6px; margin-bottom:0; }
+            /* 상단: 시간표 히어로 카드 — 위아래 여백·내부 패딩 축소 */
+            .hero-schedule { margin:6px 0 7px; padding:10px 12px; gap:8px; }
+            /* 섹션(TRACK/FIELD) 제목·간격 */
+            .matrix-section { margin-bottom:8px; }
+            .matrix-section-title { padding:3px 8px; margin-bottom:3px; font-size:11px; }
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           Phase 1 — 툴바(검색+진행중) · 상태배지 · 알림 토글 재구성 · 외부링크
+           ═══════════════════════════════════════════════════════════════ */
+        #dash-toolbar { background:var(--white); border-bottom:1px solid var(--gray); }
+        #filter-bar { display:flex; align-items:center; gap:10px; }
+        #filter-bar .filter-scroll { flex:1; min-width:0; }
+        .live-jump-badge { flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; padding:8px 13px; border:none; border-radius:999px; cursor:pointer; white-space:nowrap; font-size:12px; font-weight:800; letter-spacing:.3px; color:#fff; background:linear-gradient(135deg,#16a34a,#15803d); box-shadow:0 2px 8px rgba(21,128,61,.32); }
+        .live-jump-badge:hover { filter:brightness(1.06); }
+        .live-jump-dot { width:7px; height:7px; border-radius:50%; background:#fff; animation:liveDotBlink 1.4s ease-in-out infinite; }
+
+        /* 상태 배지 — 예정 / ● 진행 중 / 종료 (모든 카드에 1개) */
+        .status-badge { display:inline-block; vertical-align:middle; margin-left:6px; font-size:10px; font-weight:800; letter-spacing:.2px; padding:2px 7px; border-radius:999px; white-space:nowrap; }
+        .status-badge.status-live { color:#0f7b3f; background:#dcfce7; border:1px solid #86efac; }
+        .status-badge.status-live::before { content:'●'; margin-right:3px; color:#16a34a; }
+        .status-badge.status-done { color:#6b7280; background:#f1f2f4; border:1px solid #e2e4e8; }
+        .status-badge.status-upcoming { color:#8a7640; background:#f8f4ea; border:1px solid #e8dfc0; }
+
+        /* 비활성(존재하지 않는) 라운드 — 메타라인 통일 */
+        .card-meta-missing { display:block; margin-top:2px; font-size:10px; font-weight:500; color:#b0b4bb; letter-spacing:.2px; }
+
+        /* 알림(관심) 토글 — 종 아이콘 + "알림" 라벨, 탭영역 ≥44×44 (무라벨 pill 교체) */
+        .matrix-table td.fav-cell .fav-toggle { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; min-width:44px; min-height:44px; width:auto; height:auto; padding:2px 4px; border-radius:10px; background:none; color:#b0b4bb; cursor:pointer; transition:background .15s, color .15s; vertical-align:middle; }
+        .matrix-table td.fav-cell .fav-toggle .fav-bell { width:20px; height:20px; }
+        .matrix-table td.fav-cell .fav-toggle .fav-label { font-size:9px; font-weight:700; letter-spacing:.2px; line-height:1; }
+        .matrix-table td.fav-cell .fav-toggle:hover { background:var(--gray-light); }
+        .matrix-table td.fav-cell .fav-toggle.on { color:var(--accent); background:var(--accent-light); }
+        .fav-th { width:52px; }
+
+        /* 외부 링크(↗) — 노출용 라운드 칩만 */
+        .round-btn-ext { display:inline-flex; align-items:center; gap:3px; }
+        .round-btn-ext .ext-ico { width:10px; height:10px; }
+
+        /* 카드 전체 탭 affordance */
+        .matrix-table tr[onclick] { cursor:pointer; }
+        .matrix-table tbody tr[onclick]:hover { background:#fafafa; }
+
+        /* ── 모바일: 헤더 압축 · 성별+부 필터 한 줄 통합 · 알림 토글 겹침 방지 ── */
+        @media (max-width:640px) {
+            /* 헤더 압축 (대시보드 전용) — 로고 줄만 남기고 높이 최소화 */
+            body.dashboard-mode .header-inner { padding:3px 12px; }
+            body.dashboard-mode .header-title { font-size:15px; letter-spacing:1px; }
+            body.dashboard-mode .hamburger-btn { width:32px; height:32px; font-size:16px; }
+            body.dashboard-mode .dashboard-layout { height:calc(100vh - 40px); height:calc(100dvh - 40px); }
+
+            .live-jump-badge { padding:0 11px; height:32px; font-size:11px; }
+
+            /* 성별 + 부 필터를 한 줄 가로스크롤 칩으로 통합 (진행중 배지는 우측 고정) */
+            #filter-bar { gap:6px; padding:4px 10px; border-bottom:1px solid var(--gray); }
+            #filter-bar .filter-scroll { display:flex; flex-wrap:nowrap; align-items:center; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+            #filter-bar .filter-scroll::-webkit-scrollbar { display:none; }
+            #filter-bar .gender-tabs-bar { flex:0 0 auto; display:inline-flex; gap:4px; padding:0 !important; border:none; background:none; }
+            #filter-bar .gender-tab-btn { flex:0 0 auto; padding:5px 11px !important; font-size:12px; font-weight:700; border:1px solid var(--gray) !important; border-radius:999px !important; background:var(--bg) !important; color:#555 !important; white-space:nowrap; }
+            #filter-bar .gender-tab-btn.active { background:var(--accent-light) !important; color:var(--accent) !important; border-color:var(--accent) !important; }
+            #filter-bar #division-tabs { flex:0 0 auto !important; display:inline-flex !important; flex-wrap:nowrap !important; gap:4px; padding:0 !important; margin:0; border:none !important; }
+            /* 성별 ↔ 부 구분선 */
+            #filter-bar #division-tabs::before { content:''; flex:0 0 auto; width:1px; align-self:stretch; margin:3px 2px; background:var(--gray); }
+            #filter-bar #division-tabs .gender-tab-btn { padding:5px 11px !important; border:1px solid transparent !important; background:#f2f2f2 !important; }
+            #filter-bar #division-tabs .gender-tab-btn.active { background:var(--accent-light) !important; color:var(--accent) !important; border-color:var(--accent) !important; }
+
+            /* 비활성(존재하지 않는) 라운드 셀은 카드에서 숨김 — 실제 액션 칩만 노출.
+               부재 라운드는 종목명 아래 "○○ 없음" 메타라인으로 단일 표기. */
+            .matrix-table td.cell-empty { display:none !important; }
+
+            /* 알림 토글(44×44) 우상단 고정과 종목명 겹침 방지 */
+            .matrix-table td.event-name { padding-right:52px; }
+            .matrix-table td.fav-cell { top:4px !important; right:6px !important; }
+        }
     </style>
 </head>
 <body class="dashboard-mode">
@@ -137,35 +312,52 @@
         <nav class="page-nav" id="page-nav"></nav>
     </header>
 
-    <main class="main-content dashboard-layout">
-        <!-- Single-line competition info -->
-        <div class="comp-info-line" id="comp-info-bar" style="flex-shrink:0;"></div>
+    <main class="main-content dashboard-layout" data-active-gender="ALL">
+        <!-- ── 고정 툴바: 성별/부 필터(가로스크롤 칩) + 진행중 배지 (한 줄) ──
+             검색 인풋은 스크롤 콘텐츠 최상단으로 내려 고정영역을 최소화한다. -->
+        <div id="dash-toolbar" style="flex-shrink:0;">
+            <div id="filter-bar" class="filter-bar">
+                <!-- 성별/부 칩 — 모바일에서 가로스크롤 (division-tabs 는 JS 가 gender-tabs 뒤에 삽입) -->
+                <div class="filter-scroll">
+                    <div class="gender-tabs-bar" id="gender-tabs" data-active-gender="ALL" style="position:static;">
+                        <button class="gender-tab-btn active" data-gender="ALL" onclick="switchGender('ALL',this)">전체</button>
+                        <button class="gender-tab-btn" data-gender="M" onclick="switchGender('M',this)">남자</button>
+                        <button class="gender-tab-btn" data-gender="F" onclick="switchGender('F',this)">여자</button>
+                        <button class="gender-tab-btn" data-gender="X" onclick="switchGender('X',this)">혼성</button>
+                    </div>
+                </div>
+                <button type="button" id="live-jump-badge" class="live-jump-badge" onclick="jumpToLive()" style="display:none;">
+                    <span class="live-jump-dot"></span>진행 중 <span id="live-jump-count">0</span>
+                </button>
+            </div>
+        </div>
 
-        <!-- Hero Schedule Card (large CTA above gender tabs) — 기존 openTimetable() 재사용 -->
-        <div class="hero-schedule" id="hero-schedule" onclick="openTimetable()" style="flex-shrink:0;display:none;">
-            <div class="hero-left">
-                <div class="hero-icon" id="hero-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-                <div class="hero-text">
-                    <div class="hero-title" id="hero-title">시간표</div>
-                    <div class="hero-sub" id="hero-sub">불러오는 중…</div>
+        <!-- ── 스크롤 콘텐츠: 검색 + 대회정보 + 히어로 + 종목 매트릭스 ──
+             검색·comp-info·hero 를 스크롤 영역으로 옮겨 상단 고정영역(툴바)만 남긴다. -->
+        <div class="events-scroll" id="events-scroll-region">
+            <!-- (종목 검색창 제거 — 모바일 상단 공간 확보, 2026-09) -->
+            <!-- Single-line competition info -->
+            <div class="comp-info-line" id="comp-info-bar"></div>
+
+            <!-- Hero Schedule Card — 기존 openTimetable() 재사용 -->
+            <div class="hero-schedule" id="hero-schedule" onclick="openTimetable()" style="display:none;">
+                <div class="hero-left">
+                    <div class="hero-icon" id="hero-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+                    <div class="hero-text">
+                        <div class="hero-title" id="hero-title">시간표</div>
+                        <div class="hero-sub" id="hero-sub">불러오는 중…</div>
+                    </div>
+                </div>
+                <div class="hero-cta">
+                    전체 시간표 열기
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                 </div>
             </div>
-            <div class="hero-cta">
-                전체 시간표 열기
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+
+            <!-- Events matrix -->
+            <div id="events-container">
+                <div style="text-align:center;padding:40px;color:var(--text-muted);">로딩 중...</div>
             </div>
-        </div>
-
-        <!-- Gender tabs (fixed at top) -->
-        <div class="gender-tabs-bar" id="gender-tabs" style="flex-shrink:0;position:static;">
-            <button class="gender-tab-btn active" data-gender="M" onclick="switchGender('M',this)">남자</button>
-            <button class="gender-tab-btn" data-gender="F" onclick="switchGender('F',this)">여자</button>
-            <button class="gender-tab-btn" data-gender="X" onclick="switchGender('X',this)">혼성</button>
-        </div>
-
-        <!-- Events matrix (scrollable middle) -->
-        <div class="events-scroll" id="events-container">
-            <div style="text-align:center;padding:40px;color:var(--text-muted);">로딩 중...</div>
         </div>
 
         <!-- 종합기록지 기능 삭제됨 -->
@@ -198,7 +390,55 @@
 
 
 
-    <script src="common.js?v=77"></script>
-    <script src="dashboard.js?v=77"></script>
+    <!-- SNS 기록 카드: 결과표 행 클릭 시 열리는 카드를 눌러볼 수 있음을 알리는 최소 표시 -->
+    <style>
+        /* 필드·종합 결과표(tr) — 기존 최소 표시 유지 */
+        #result-panel tr[data-sc] { cursor: pointer; }
+        #result-panel tr[data-sc]:hover { background: #fafafa; }
+        #result-panel tr[data-sc] td:last-child::after {
+            content: '↗'; float: right; margin-left: 6px;
+            color: #c9c9c9; font-size: 11px; line-height: inherit;
+        }
+
+        /* ── 트랙·도로 결과: 두 줄 에디토리얼 행 ──
+           그리드: [순위 34px][정보 1fr][기록 auto][› 18px] × 2줄.
+           순위·›는 두 줄 높이 가운데, 이름/소속은 1행, LANE·BIB·비고는 2행 왼쪽, 기록은 2행 오른쪽 정렬. */
+        .rr-list { border-top: 1px solid #e9e4da; margin: 0 0 4px; }
+        .rr { display: grid; grid-template-columns: 34px minmax(0,1fr) auto 18px; grid-template-rows: auto auto;
+              column-gap: 10px; row-gap: 2px; align-items: baseline; padding: 9px 2px 9px 4px;
+              border-bottom: 1px solid #e9e4da; cursor: pointer; transition: background var(--dur-fast); }
+        .rr:hover, .rr:active { background: #faf7ef; }
+        .rr.rr-nocard { cursor: default; } .rr.rr-nocard:hover { background: transparent; }
+        .rr-rank { grid-row: 1 / 3; align-self: center; font-family: 'D2Coding', var(--font-mono); font-size: 20px; font-weight: 700;
+                   text-align: center; font-variant-numeric: tabular-nums; color: var(--text); }
+        .rr-rank-1 { color: #b79f58; }
+        .rr-rank-st { font-family: inherit; font-size: 10px; font-weight: 700; letter-spacing: .04em; border-radius: 6px; padding: 3px 0; }
+        .rr-who { grid-column: 2 / 4; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+        .rr-name { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; }
+        .rr-team { font-size: 12px; color: var(--gray-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rr-meta { grid-column: 2; font-size: 11px; color: var(--text-light); font-variant-numeric: tabular-nums;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rr-meta i { font-style: normal; margin: 0 5px; opacity: .6; }
+        .rr-meta b { color: var(--gray-dark); font-weight: 500; }
+        .rr-rec { grid-column: 3; justify-self: end; font-family: 'D2Coding', var(--font-mono); font-size: 20px; font-weight: 700;
+                  letter-spacing: 0.01em; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+        .rr-rec .rr-w { font-size: 12px; font-weight: 500; color: var(--gray-dark); font-family: inherit; }
+        .rr-rec-st { font-family: inherit; font-size: 12px; font-weight: 700; color: var(--gray-dark); }
+        .rr-badge { font-family: 'Noto Sans KR', sans-serif; font-size: 10px; font-weight: 800; color: #fff; padding: 1px 6px; border-radius: 8px; position: relative; top: -2px; }
+        .rr-badge-NR { background: #c0392b; } .rr-badge-DR { background: #2b6cb0; } .rr-badge-CR { background: #27ae60; }
+        .rr-go { grid-column: 4; grid-row: 1 / 3; align-self: center; color: #b79f58; font-size: 22px; line-height: 1; font-weight: 400; transform: translateY(-1px); }
+        .rr-members { grid-column: 2 / 5; display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; color: var(--gray-dark); padding-top: 3px; }
+        .rr-members i { font-style: normal; color: var(--text-light); margin-left: 3px; }
+        /* 처음 연 결과표에서만 › 가 두 번 숨 쉬고 멈춘다 — 계속 깜빡이지 않음 */
+        @keyframes rr-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+        .rr-list.rr-first .rr-go { animation: rr-breathe 1.6s ease-in-out 2; }
+        @media (prefers-reduced-motion: reduce) { .rr-list.rr-first .rr-go { animation: none; } }
+        @media (max-width: 380px) { .rr-rank, .rr-rec { font-size: 18px; } .rr-name { font-size: 14px; } }
+    </style>
+
+    <script src="common.js?v=89"></script>
+    <script src="dashboard.js?v=110"></script>
+    <script src="share-card.js?v=1"></script>
+    <script src="push.js?v=10"></script>
 </body>
 </html>

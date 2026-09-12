@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
     <meta name="theme-color" content="#b79f58">
     <title>PACE RISE : Node — 소집실</title>
-    <link rel="stylesheet" href="styles.css?v=72">
+    <link rel="stylesheet" href="styles.css?v=76">
     <link rel="stylesheet" href="/lib/responsive.css?v=1">
 </head>
 <body>
@@ -30,9 +30,10 @@
     </header>
 
     <main class="main-content">
-        <div class="page-title-bar">
+        <div class="page-title-bar" style="display:flex;align-items:center;gap:12px;">
             <a href="/dashboard.html" class="back-link">&larr; 대시보드</a>
             <h2>소집실 <span class="page-sub">Call Room Dashboard</span></h2>
+            <button class="btn btn-primary" style="margin-left:auto;white-space:nowrap;" onclick="openBatchCallroom()">🔊 일괄 소집</button>
         </div>
 
         <!-- Single-line competition info -->
@@ -69,7 +70,7 @@
     </footer>
 
     <script src="lib/xlsx.full.min.js"></script>
-    <script src="common.js?v=74"></script>
-    <script src="callroom.js?v=42"></script>
+    <script src="common.js?v=89"></script>
+    <script src="callroom.js?v=43"></script>
 </body>
 </html>

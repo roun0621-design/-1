@@ -86,3 +86,12 @@ require('./lib/routes/<domain>')(app, { db, isAdminKey, opLog });
 ```
 
 다음 사이클 목표: 누적 10% (≈1,750 lines, ≈28 routes)
+
+### ✅ qualifications 추출 (6/10)
+
+| 모듈 | 라우트 수 | 의존성 |
+|------|---------|--------|
+| qualifications.js | 3 | db, isOperationKey |
+
+- 동작 동일 추출 (인증 없음 — 심판 화면용, 운영 정책상 키 미요구)
+- GET `/api/qualifications`는 dashboard/results 조회용
