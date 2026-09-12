@@ -2636,10 +2636,11 @@ async function loadRosterModalData(eventId) {
                     const gColor = g === 'A' ? '#555' : g === 'B' ? '#8b1a2a' : '#999';
                     html += `<td style="padding:5px 8px;text-align:center;font-weight:800;color:${gColor};">${g || '—'}</td>`;
                 }
-                // word-break:keep-all 금지 — iOS Safari(WebKit)는 keep-all 텍스트에 overflow-wrap 을 적용하지 않아
-                //   긴 이름이 셀을 넘어 소속 열에 겹쳐 그려짐(2026-09 예천 소집명단). normal 이면 폭에 맞춰 음절 단위로 줄바꿈.
-                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
-                html += `<td style="padding:5px 8px;text-align:left;color:#666;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.team || ''}</td>`;
+                // 모바일에서 lib/responsive.css 가 모든 td 에 white-space:nowrap 을 걸어 줄바꿈이 원천 차단됨
+                //   → 긴 이름(비웨사다니엘가사마)이 소속 열에 겹침. 인라인 white-space:normal 로 되돌리고(인라인이 우선)
+                //   폭이 모자라면 음절 단위로 줄바꿈(word-break:normal + overflow-wrap:anywhere).
+                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
+                html += `<td style="padding:5px 8px;text-align:left;color:#666;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.team || ''}</td>`;
                 if (showCallroomStatus) {
                     let badge = '<span style="font-size:10px;color:#bbb;">—</span>';
                     if (e.status === 'checked_in') badge = '<span style="font-size:10px;color:#b79f58;font-weight:700;">출석</span>';
