@@ -1549,6 +1549,31 @@ POST /api/external/event-result-link/batch<br>
                     <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;">한국기록(NR) · 부별기록(DR, 13부) · 대회기록(CR, 시리즈별)을 종목별로 관리합니다. 기록지/종합기록/실시간 보드 등에 자동 표시됩니다.</p>
                 </div>
 
+                <!-- 기록표 엑셀 일괄 업로드 (NR/DR/CR) -->
+                <div class="admin-card" style="border-left:4px solid #6b5520;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                        <div>
+                            <h4 style="margin:0;">기록표 엑셀 일괄 업로드 <span class="t-sm t-muted">NR · DR · CR 한 번에</span></h4>
+                            <p class="t-help" style="margin:4px 0 0;">연맹 프로그램의 기록표(한국기록·부별기록·대회기록)를 우리 양식으로 옮겨 올리면 한 번에 등록됩니다. 미리보기 → 적용.</p>
+                        </div>
+                        <a href="/PACERISE_records_template.xlsx" download class="btn btn-sm btn-outline" style="text-decoration:none;">양식 다운로드 (.xlsx)</a>
+                    </div>
+                    <div style="background:#f8f4ea;border:1px solid #e8dfc0;border-radius:6px;padding:9px 12px;margin:10px 0 12px;font-size:11px;line-height:1.7;">
+                        <strong>열:</strong> <code>종류</code>(NR/DR/CR) · <code>성별</code>(남/여/혼성) · <code>부</code>(DR만: 대학/일반/고등/중등/초등 — 실업은 일반) · <code>종목</code> · <code>기록</code> · 성명 · 소속 · 대회명 · 장소 · 일자 · 풍속 · 비고<br>
+                        <span style="color:#8a7640;">기록 표기: <code>10.07</code> · <code>1:44.14</code> · <code>2:07:20</code> · <code>2.36</code>(=2m36) · <code>7860</code>(점수). 종목은 <code>10000m</code> <code>3000mSC</code> <code>4x100mR</code> <code>4x400mR(Mixed)</code> 처럼 규격 괄호 없이.</span><br>
+                        <span style="color:#b45309;">대회기록(CR) 행은 아래에서 고른 <strong>시리즈</strong>에 들어갑니다 — 파일 하나 = 시리즈 하나. 기존보다 나쁜 값으로 바뀌는 행은 체크해야만 덮어씁니다.</span>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                        <label style="font-size:12px;display:flex;align-items:center;gap:6px;">시리즈(CR용)
+                            <select id="rbk-series" style="padding:5px 8px;font-size:12px;border:1px solid var(--gray);border-radius:5px;min-width:220px;"><option value="">— 선택 안 함 (NR/DR만) —</option></select>
+                        </label>
+                        <input type="file" id="rbk-file" accept=".xlsx,.xls" class="t-lg">
+                        <button class="btn btn-outline" onclick="rbkPreview()">미리보기</button>
+                    </div>
+                    <div id="rbk-preview" style="display:none;"></div>
+                    <div id="rbk-result" style="display:none;padding:12px;border-radius:var(--radius);font-size:13px;font-weight:600;margin-top:10px;"></div>
+                </div>
+
                 <!-- 승인 대기 큐 (Phase C) -->
                 <div class="admin-card" id="record-breaks-card" style="border-left:4px solid #e67e22;display:none;">
                     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="record-breaks-toggle">
@@ -8947,6 +8972,103 @@ POST /api/external/event-result-link/batch<br>
                 '<p style="color:var(--text-muted);font-size:13px;text-align:center;padding:60px 0;">← 왼쪽에서 종목을 선택하세요.</p>';
         }
 
+        // ── 기록표 엑셀 일괄 업로드 (NR/DR/CR) ──────────────────────────
+        let _rbkPreview = null;
+        function rbkFillSeries() {
+            const sel = document.getElementById('rbk-series');
+            if (!sel) return;
+            const cur = sel.value;
+            sel.innerHTML = '<option value="">— 선택 안 함 (NR/DR만) —</option>' +
+                (_recSeries || []).map(s => `<option value="${s.id}">${s.name}${s.federation ? ' · ' + s.federation : ''}</option>`).join('');
+            if (cur) sel.value = cur;
+        }
+        function _rbkForm() {
+            const f = document.getElementById('rbk-file');
+            if (!f.files.length) { toast('파일을 선택하세요', 'error'); return null; }
+            const fd = new FormData();
+            fd.append('file', f.files[0]);
+            fd.append('admin_key', AK());
+            const sid = document.getElementById('rbk-series').value;
+            if (sid) fd.append('series_id', sid);
+            return fd;
+        }
+        async function rbkPreview() {
+            const fd = _rbkForm(); if (!fd) return;
+            const box = document.getElementById('rbk-preview'), out = document.getElementById('rbk-result');
+            out.style.display = 'none';
+            box.style.display = 'block';
+            box.innerHTML = '<div style="padding:14px;text-align:center;color:var(--blue);">분석 중...</div>';
+            try {
+                const res = await fetch('/api/records/bulk-preview', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (!res.ok) throw data;
+                _rbkPreview = data;
+                const S = data.summary;
+                const chip = (n, label, bg, fg) => n ? `<span style="background:${bg};color:${fg};padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">${label} ${n}</span>` : '';
+                const typeL = { national: 'NR', division: 'DR', competition: 'CR' };
+                const stL = { new: ['신규', '#e0f2fe', '#0369a1'], update: ['갱신', '#f5f0e0', '#166534'], unchanged: ['변경없음', '#f3f4f6', '#6b7280'], worse: ['나쁜 값', '#fef3c7', '#92400e'], error: ['오류', '#fef2f2', '#dc2626'] };
+                let html = `<div style="background:var(--bg);border:1px solid #e5e7eb;border-radius:8px;padding:14px;">`;
+                html += `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;"><strong style="font-size:13px;">${S.total}행</strong>${data.series ? `<span class="t-sm t-muted">시리즈: ${data.series.name}</span>` : ''} ${chip(S.new, '신규', '#e0f2fe', '#0369a1')}${chip(S.update, '갱신', '#f5f0e0', '#166534')}${chip(S.unchanged, '변경없음', '#f3f4f6', '#6b7280')}${chip(S.worse, '나쁜 값(확인)', '#fef3c7', '#92400e')}${chip(S.error, '오류', '#fef2f2', '#dc2626')}</div>`;
+                html += `<div style="max-height:420px;overflow:auto;"><table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="background:#f9fafb;position:sticky;top:0;">` +
+                    ['행', '종류', '성별', '부/시리즈', '종목', '기록', '보유자', '기존', '상태'].map(h => `<th style="padding:5px 6px;text-align:left;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${h}</th>`).join('') + `</tr></thead><tbody>`;
+                const order = { error: 0, worse: 1, new: 2, update: 3, unchanged: 4 };
+                for (const x of [...data.rows].sort((a, b) => order[a.status] - order[b.status] || a.row - b.row)) {
+                    const [lab, bg, fg] = stL[x.status] || stL.error;
+                    const g = { M: '남', F: '여', X: '혼성' }[x.gender] || x.gender || '?';
+                    const scope = x.record_type === 'division' ? (x.division_code || '') : x.record_type === 'competition' ? (data.series ? data.series.name : '') : '';
+                    const ex = x.existing ? `${x.existing.record_value} <span class="t-muted">${x.existing.holder_name || ''}${x.existing.record_year ? ' ' + x.existing.record_year : ''}</span>` : '';
+                    html += `<tr style="border-bottom:1px solid #f0f0f0;${x.status === 'error' ? 'background:#fff7f7;' : ''}">` +
+                        `<td style="padding:4px 6px;color:#999;">${x.row}</td><td style="padding:4px 6px;">${typeL[x.record_type] || '?'}</td><td style="padding:4px 6px;">${g}</td>` +
+                        `<td style="padding:4px 6px;font-size:11px;">${scope}</td><td style="padding:4px 6px;font-weight:600;">${x.event_name || x.event_raw || ''}</td>` +
+                        `<td style="padding:4px 6px;font-family:var(--font-mono);">${x.record_value || ''}</td><td style="padding:4px 6px;font-size:11px;">${x.holder_name || ''}${x.holder_team ? ' <span class="t-muted">' + x.holder_team + '</span>' : ''}</td>` +
+                        `<td style="padding:4px 6px;font-size:11px;font-family:var(--font-mono);">${ex}</td>` +
+                        `<td style="padding:4px 6px;"><span style="background:${bg};color:${fg};padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600;white-space:nowrap;">${lab}</span>${x.errors && x.errors.length ? `<div style="font-size:11px;color:#dc2626;margin-top:2px;">${x.errors.join('<br>')}</div>` : ''}</td></tr>`;
+                }
+                html += `</tbody></table></div>`;
+                if (S.error > 0) {
+                    html += `<div style="margin-top:12px;padding:10px;background:#fef2f2;border-radius:6px;font-size:12px;color:#b91c1c;font-weight:600;">오류 ${S.error}건을 엑셀에서 고친 뒤 다시 미리보기 하세요. 오류가 있으면 적용되지 않습니다.</div>`;
+                } else if (S.new + S.update + S.worse > 0) {
+                    html += `<div style="margin-top:12px;display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap;">`;
+                    if (S.worse > 0) html += `<label style="font-size:12px;color:#92400e;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="rbk-allow-worse"> 기존보다 나쁜 값 ${S.worse}건도 덮어쓰기</label>`;
+                    html += `<button class="btn btn-outline" onclick="rbkCancel()">취소</button><button class="btn btn-primary" onclick="rbkImport()">적용 (신규 ${S.new} · 갱신 ${S.update})</button></div>`;
+                } else {
+                    html += `<div style="margin-top:12px;padding:10px;background:#f0fdf4;border-radius:6px;text-align:center;font-size:13px;color:#166534;font-weight:600;">모두 변경사항 없음 — 이미 같은 기록이 등록되어 있습니다.</div>`;
+                }
+                html += `</div>`;
+                box.innerHTML = html;
+            } catch (e) {
+                box.innerHTML = `<div style="padding:12px;color:var(--danger);background:#fef2f2;border-radius:6px;">오류: ${e.error || e.message || '알 수 없는 오류'}</div>`;
+            }
+        }
+        function rbkCancel() { document.getElementById('rbk-preview').style.display = 'none'; _rbkPreview = null; }
+        async function rbkImport() {
+            const fd = _rbkForm(); if (!fd) return;
+            const cb = document.getElementById('rbk-allow-worse');
+            if (cb && cb.checked) {
+                if (!confirm('기존 기록보다 나쁜 값으로 덮어쓰는 행이 포함됩니다. 정말 적용하시겠습니까?')) return;
+                fd.append('allow_worse', '1');
+            }
+            if (!confirm('기록표를 적용합니다. 계속하시겠습니까?')) return;
+            const out = document.getElementById('rbk-result');
+            out.style.display = 'block'; out.style.background = ''; out.style.color = '';
+            out.innerHTML = '<div style="color:var(--blue)">적용 중...</div>';
+            try {
+                const res = await fetch('/api/records/bulk-import', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (!res.ok) throw data;
+                const st = data.stats;
+                out.style.background = 'var(--green-light)'; out.style.color = 'var(--green)';
+                out.innerHTML = `신규 ${st.inserted} · 갱신 ${st.updated} · 변경없음 ${st.unchanged}${st.skippedWorse ? ` · 나쁜 값 건너뜀 ${st.skippedWorse}` : ''}${data.series ? ` — 시리즈: ${data.series.name}` : ''}`;
+                toast('기록표 적용 완료');
+                rbkCancel();
+                document.getElementById('rbk-file').value = '';
+                if (_recSelectedEvent) await loadEventMatrix(_recSelectedEvent);
+            } catch (e) {
+                out.style.background = '#fff0f0'; out.style.color = 'var(--danger)';
+                out.innerHTML = `오류: ${e.error || e.message || '알 수 없는 오류'}`;
+            }
+        }
+
         async function loadRecordsTab() {
             // 0) 위임 이벤트 리스너 설치 (멱등 — 한 번만)
             installRecordsDelegation();
@@ -8964,6 +9086,7 @@ POST /api/external/event-result-link/batch<br>
 
             renderRecordsEventList();
             renderSeriesList();
+            rbkFillSeries();
 
             // 종목이 이미 선택돼 있으면 매트릭스 재로드
             if (_recSelectedEvent) await loadEventMatrix(_recSelectedEvent);

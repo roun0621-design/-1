@@ -11013,6 +11013,8 @@ require('./lib/routes/competition_series')(app, { db, isAdminKey, opLog });
 
 // ─── Records v4 (NR/DR/CR 통합) ─── (lib/routes/records.js 로 추출)
 require('./lib/routes/records')(app, { db, isAdminKey, opLog });
+// 기록표 엑셀 일괄 업로드 (NR/DR/CR) — /api/records/bulk-preview, /api/records/bulk-import
+require('./lib/routes/records_bulk')(app, { db, isAdminKey, opLog, upload, XLSX, guessEventCategory });
 
 // ============================================================
 // RECORD BREAKS (신기록 승인 큐) — lib/routes/record_breaks.js 로 추출
