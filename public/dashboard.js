@@ -2636,8 +2636,10 @@ async function loadRosterModalData(eventId) {
                     const gColor = g === 'A' ? '#555' : g === 'B' ? '#8b1a2a' : '#999';
                     html += `<td style="padding:5px 8px;text-align:center;font-weight:800;color:${gColor};">${g || '—'}</td>`;
                 }
-                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;word-break:keep-all;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
-                html += `<td style="padding:5px 8px;text-align:left;color:#666;word-break:keep-all;overflow-wrap:anywhere;">${e.team || ''}</td>`;
+                // word-break:keep-all 금지 — iOS Safari(WebKit)는 keep-all 텍스트에 overflow-wrap 을 적용하지 않아
+                //   긴 이름이 셀을 넘어 소속 열에 겹쳐 그려짐(2026-09 예천 소집명단). normal 이면 폭에 맞춰 음절 단위로 줄바꿈.
+                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
+                html += `<td style="padding:5px 8px;text-align:left;color:#666;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.team || ''}</td>`;
                 if (showCallroomStatus) {
                     let badge = '<span style="font-size:10px;color:#bbb;">—</span>';
                     if (e.status === 'checked_in') badge = '<span style="font-size:10px;color:#b79f58;font-weight:700;">출석</span>';
