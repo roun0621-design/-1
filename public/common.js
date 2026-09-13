@@ -2440,3 +2440,80 @@ function _showConflictModal(conflicts) {
     document.getElementById('pr-conflict-modal-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
+
+// ============================================================
+// 앱 설치 유도 배너 (홈·대시보드) — 링크로 들어온 모바일 브라우저 사용자에게만
+//   · 앱(standalone/TWA)에서 열었으면 표시 안 함
+//   · iOS Safari 는 <meta name="apple-itunes-app"> 의 시스템 Smart App Banner 가 뜨므로 중복 표시 안 함
+//   · 닫으면 7일간 숨김 (localStorage). 데스크톱은 표시 안 함.
+// ============================================================
+(function () {
+    const STORE = {
+        android: 'https://play.google.com/store/apps/details?id=com.pacerise.node',
+        ios: 'https://apps.apple.com/kr/app/pace-rise-node/id6784736644',
+    };
+    const DISMISS_KEY = 'pr_app_banner_dismissed_at';
+    const DISMISS_DAYS = 7;
+
+    function shouldShow() {
+        const p = location.pathname;
+        const onHome = p === '/' || p === '/index.html';
+        const onDash = p === '/dashboard.html' || p.startsWith('/e/');
+        if (!onHome && !onDash) return false;
+        const ua = navigator.userAgent || '';
+        const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const isAndroid = /Android/.test(ua);
+        if (!isIOS && !isAndroid) return false;
+        // 이미 앱으로 보는 중
+        try { if (window.matchMedia('(display-mode: standalone)').matches) return false; } catch (e) {}
+        if (navigator.standalone === true) return false;
+        if ((document.referrer || '').startsWith('android-app://')) return false;
+        // iOS Safari 본체 → 시스템 Smart App Banner 에 맡김 (인앱 브라우저·Chrome 등은 자체 배너)
+        if (isIOS && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|KAKAOTALK|NAVER|Instagram|Line\/|whale|DaumApps|FBAN|FBAV/i.test(ua)) return false;
+        try {
+            const t = parseInt(localStorage.getItem(DISMISS_KEY) || '0', 10);
+            if (t && Date.now() - t < DISMISS_DAYS * 86400000) return false;
+        } catch (e) {}
+        return true;
+    }
+
+    function render() {
+        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const href = isIOS ? STORE.ios : STORE.android;
+        const css = document.createElement('style');
+        css.textContent = `
+            .pr-app-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9500; display: flex; align-items: center; gap: 10px;
+                padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+                background: #fff; border-top: 1px solid #e8dfc0; box-shadow: 0 -6px 20px rgba(38,35,36,.10);
+                font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+            .pr-app-banner img { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; }
+            .pr-app-banner .t { flex: 1 1 auto; min-width: 0; line-height: 1.3; }
+            .pr-app-banner .t b { display: block; font-size: 13px; color: #262324; letter-spacing: -0.01em; }
+            .pr-app-banner .t span { display: block; font-size: 11px; color: #7a746e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .pr-app-banner .get { flex: 0 0 auto; background: #b79f58; color: #fff; font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 999px; text-decoration: none; letter-spacing: .02em; }
+            .pr-app-banner .x { flex: 0 0 auto; width: 30px; height: 30px; border: none; background: none; color: #9a938d; font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }
+            body.pr-app-banner-on { padding-bottom: 64px; }
+            body.pr-app-banner-on .events-scroll { padding-bottom: 72px; }
+        `;
+        document.head.appendChild(css);
+        const el = document.createElement('div');
+        el.className = 'pr-app-banner';
+        el.setAttribute('role', 'complementary');
+        el.innerHTML = `<img src="/icons/icon-192.png" alt="">
+            <div class="t"><b>PACE RISE : Node 앱</b><span>실시간 기록 알림 · 더 빠른 결과 확인</span></div>
+            <a class="get" href="${href}" target="_blank" rel="noopener">앱 받기</a>
+            <button class="x" aria-label="닫기">&times;</button>`;
+        el.querySelector('.x').addEventListener('click', () => {
+            try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {}
+            el.remove();
+            document.body.classList.remove('pr-app-banner-on');
+        });
+        el.querySelector('.get').addEventListener('click', () => {
+            try { if (typeof gtag === 'function') gtag('event', 'app_banner_click', { platform: isIOS ? 'ios' : 'android', page: location.pathname }); } catch (e) {}
+        });
+        document.body.appendChild(el);
+        document.body.classList.add('pr-app-banner-on');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => { try { if (shouldShow()) render(); } catch (e) { /* 배너는 실패해도 페이지에 영향 없음 */ } });
+})();
