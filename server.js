@@ -6382,18 +6382,28 @@ app.post('/api/heat-assignment/preview', upload.single('file'), async (req, res)
 
             const genderLabel = gender === 'M' ? '남' : gender === 'F' ? '여' : '혼성';
             const roundLabel = round === 'preliminary' ? '예선' : round === 'semifinal' ? '준결승' : '결승';
+            const _rL = r => ({ preliminary: '예선', semifinal: '준결승', final: '결승' }[r] || r);
+
+            // 라운드 동기화 예고 (apply 와 같은 조건: 트랙·릴레이·도로, 기록 없음, 같은 라운드 별도 종목 없음)
+            let roundChange = null;
+            if (!dbEvent.parent_event_id && ['track', 'relay', 'road'].includes(dbEvent.category)
+                && ['preliminary', 'semifinal', 'final'].includes(round) && dbEvent.round_type !== round && !hasResults) {
+                const sibling = await db.get('SELECT id FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL AND id!=?', competition_id, dbEvent.name, dbEvent.gender, round, dbEvent.id);
+                if (!sibling) { roundChange = { from: dbEvent.round_type, to: round }; isIdentical = false; changes.push({ type: 'round', from: dbEvent.round_type, to: round }); }
+            }
 
             preview.push({
                 eventKey,
                 eventName: `${genderLabel} ${displayName}`,
                 eventId: dbEvent.id,
                 gender, round,
+                roundChange,
                 status: isIdentical ? 'unchanged' : (hasResults ? 'has_results' : 'changed'),
                 message: isIdentical
                     ? '변경없음 (스킵)'
                     : hasResults
                         ? `기록이 있습니다 (${resultCount + heightAttemptCount}건). 변경 시 기록이 초기화됩니다.`
-                        : '변경 적용 가능',
+                        : (roundChange ? `변경 적용 가능 · 라운드 ${_rL(roundChange.from)}→${_rL(roundChange.to)}` : '변경 적용 가능'),
                 excelEntries: entries.length,
                 dbEntries: dbHeatEntries.reduce((sum, hd) => sum + hd.entries.length, 0),
                 hasResults,
@@ -6445,6 +6455,7 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
 
         const { eventGroups, mergeWarnings } = parseHeatAssignmentExcel(req.file.path);
         const stats = { updated: 0, skipped: 0, skippedUnchanged: 0, skippedHasResults: 0, notFound: 0, athletesAdded: 0, entriesCreated: 0, eventsCreated: 0 };
+        let roundChangedAny = false;
 
         await db.transaction(async () => {
             // Cache all athletes for this competition by name+team
@@ -6513,6 +6524,23 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                         if (!dbEvent) throw insErr;
                     }
                     stats.eventsCreated = (stats.eventsCreated || 0) + 1;
+                }
+
+                // ── 라운드 동기화 (2026-09) ──
+                //   사전소집 후 예선이 폐지돼 결승 직행이 되거나(1500m 36명→15명), 반대로 릴레이에 예선이 생기는 경우
+                //   파일의 라운드와 종목 round_type 이 어긋난다. findHeatAssignmentEvent 는 같은 라운드 종목이 없으면
+                //   다른 라운드 종목을 잡아 조만 바꾸고 round_type 은 그대로 두던 문제 → 기록이 없고 해당 라운드의
+                //   별도 종목이 없을 때만 종목 라운드를 파일에 맞춘다. (트랙·릴레이·도로만, 필드/종합/세부종목 제외)
+                if (!dbEvent.parent_event_id && ['track', 'relay', 'road'].includes(dbEvent.category)
+                    && ['preliminary', 'semifinal', 'final'].includes(round) && dbEvent.round_type !== round) {
+                    const rcRow = await db.get('SELECT COUNT(*) AS c FROM result r JOIN heat h ON h.id=r.heat_id WHERE h.event_id=?', dbEvent.id);
+                    const sibling = await db.get('SELECT id FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL AND id!=?', competition_id, dbEvent.name, dbEvent.gender, round, dbEvent.id);
+                    if (((rcRow && rcRow.c) || 0) === 0 && !sibling) {
+                        await db.run('UPDATE event SET round_type=? WHERE id=?', round, dbEvent.id);
+                        stats.roundChanged = (stats.roundChanged || 0) + 1;
+                        roundChangedAny = true;
+                        dbEvent.round_type = round;
+                    }
                 }
 
                 // Get current DB state
@@ -6697,9 +6725,17 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
                 if (dbEvent.parent_event_id) {
                     const parentEvt = await db.get('SELECT * FROM event WHERE id=?', dbEvent.parent_event_id);
                     if (parentEvt && parentEvt.category === 'combined') {
-                        // Get all athletes from parent event_entry
-                        const parentEntries = await db.all('SELECT ee.athlete_id, a.name, a.team FROM event_entry ee JOIN athlete a ON ee.athlete_id=a.id WHERE ee.event_id=?', dbEvent.parent_event_id);
-                        
+                        // 보충 기준 = 부모 종목의 "스타트리스트"(heat_entry). 부모에 조편성이 있으면 거기 있는 선수만 보충하고,
+                        //   출전 등록(event_entry)만 남은 불참 선수는 세부종목 조에 다시 넣지 않는다 (2026-09: 데일리 조편성으로
+                        //   10종 7명→4명이 됐는데 불참 3명이 세부종목마다 재추가되던 문제). 부모에 조가 없으면 종전대로 전체 등록자.
+                        let parentEntries = await db.all(`SELECT DISTINCT ee.athlete_id, a.name, a.team FROM event_entry ee
+                            JOIN athlete a ON ee.athlete_id=a.id
+                            JOIN heat_entry he ON he.event_entry_id=ee.id JOIN heat h ON h.id=he.heat_id AND h.event_id=ee.event_id
+                            WHERE ee.event_id=?`, dbEvent.parent_event_id);
+                        if (parentEntries.length === 0) {
+                            parentEntries = await db.all('SELECT ee.athlete_id, a.name, a.team FROM event_entry ee JOIN athlete a ON ee.athlete_id=a.id WHERE ee.event_id=?', dbEvent.parent_event_id);
+                        }
+
                         // Get currently assigned heat(s) for this sub-event
                         const currentHeats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', dbEvent.id);
                         // Use the first heat (combined sub-events typically have 1 heat)
@@ -6782,7 +6818,12 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
             }
         })();
 
-        opLog(`조편성 업로드: ${stats.updated}개 종목 변경, ${stats.eventsCreated || 0}개 종목 생성, ${stats.skippedUnchanged}개 스킵(변경없음), ${stats.skippedHasResults}개 스킵(기록있음)${stats.relayMembersAdded ? ', 릴레이 멤버 ' + stats.relayMembersAdded + '명 자동등록' : ''}`, 'import', 'admin', competition_id);
+        // 라운드가 바뀐 종목이 있으면 시간표 "결승"/"예선" 행이 새 라운드에 붙도록 재매칭
+        if (roundChangedAny) {
+            try { await autoLinkDisplayTimetable(competition_id); } catch (autoErr) { console.warn('[autoLink after heat-assignment round sync] ', autoErr.message); }
+        }
+
+        opLog(`조편성 업로드: ${stats.updated}개 종목 변경, ${stats.eventsCreated || 0}개 종목 생성, ${stats.skippedUnchanged}개 스킵(변경없음), ${stats.skippedHasResults}개 스킵(기록있음)${stats.relayMembersAdded ? ', 릴레이 멤버 ' + stats.relayMembersAdded + '명 자동등록' : ''}${stats.roundChanged ? ', 라운드 변경 ' + stats.roundChanged + '개' : ''}`, 'import', 'admin', competition_id);
         res.json({ success: true, message: '조편성 적용 완료', stats, mergeWarnings: mergeWarnings || [] });
     } catch (err) {
         console.error('[Heat Assignment Apply Error]', err);

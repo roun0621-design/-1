@@ -5477,7 +5477,9 @@ POST /api/external/event-result-link/batch<br>
                         const added = item.changes.filter(c => c.type === 'added');
                         const removed = item.changes.filter(c => c.type === 'removed');
                         const heatChange = item.changes.find(c => c.type === 'heat_count');
+                        const roundChange = item.changes.find(c => c.type === 'round');
                         const parts = [];
+                        if (roundChange) { const rl = r => ({ preliminary: '예선', semifinal: '준결승', final: '결승' }[r] || r); parts.push(`<b style="color:#b45309;">라운드 ${rl(roundChange.from)}→${rl(roundChange.to)}</b>`); }
                         if (heatChange) parts.push(`조: ${heatChange.from}→${heatChange.to}`);
                         if (added.length) parts.push(`+${added.length}명`);
                         if (removed.length) parts.push(`-${removed.length}명`);
