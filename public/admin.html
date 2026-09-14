@@ -175,23 +175,6 @@
         /* 기존 가로탭 숨김 (DOM은 유지 — switchTab 호환) */
         .admin-tabs { display:none !important; }
 
-        .sidebar-search { position:relative; margin-bottom:10px; }
-        .sidebar-search input {
-            width:100%; padding:8px 30px 8px 30px;
-            border:1.5px solid var(--gray); border-radius:6px;
-            font-size:13px; box-sizing:border-box; background:#fafafa;
-        }
-        .sidebar-search input:focus { background:#fff; border-color:var(--blue); outline:none; }
-        .sidebar-search .search-icon {
-            position:absolute; left:8px; top:50%; transform:translateY(-50%);
-            font-size:13px; color:var(--text-muted); pointer-events:none;
-        }
-        .sidebar-search .kbd-hint {
-            position:absolute; right:6px; top:50%; transform:translateY(-50%);
-            font-size:10px; color:var(--text-muted); background:#f3f4f6;
-            border:1px solid #e5e7eb; padding:1px 5px; border-radius:3px;
-            font-family:monospace;
-        }
 
         .sb-group { margin-bottom:6px; }
         .sb-group-title {
@@ -210,67 +193,12 @@
         .sb-item .sb-icon { width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted); flex-shrink:0; }
         .sb-item.active .sb-icon { color:#3730a3; }
         .sb-item .sb-icon svg { display:block; }
-        .palette-item .pi-icon { font-size:0; flex-shrink:0; margin-top:1px; color:var(--text-muted); width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; }
-        .palette-item .pi-icon svg { display:block; }
-        .palette-item.selected .pi-icon, .palette-item:hover .pi-icon { color:#6366f1; }
-        .sidebar-search .search-icon svg { display:block; color:var(--text-muted); }
         /* 카드 헤더 라인 아이콘 (이모지 교체) */
         .card-icon { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; color:var(--text-muted); flex-shrink:0; vertical-align:-3px; }
         .card-icon svg { display:block; }
         .sb-item .sb-badge {
             margin-left:auto; font-size:10px; background:#e5e7eb;
             color:#374151; padding:1px 6px; border-radius:10px; font-weight:600;
-        }
-
-        /* 검색 팔레트 모달 */
-        .palette-backdrop {
-            position:fixed; inset:0; background:rgba(15,23,42,0.4);
-            display:none; align-items:flex-start; justify-content:center;
-            z-index:9998; padding-top:80px; backdrop-filter:blur(2px);
-        }
-        .palette-backdrop.show { display:flex; }
-        .palette {
-            width:560px; max-width:92vw; background:#fff; border-radius:12px;
-            box-shadow:0 20px 60px rgba(0,0,0,0.25); overflow:hidden;
-            border:1px solid #e5e7eb;
-        }
-        .palette-header { padding:14px 16px; border-bottom:1px solid #f1f5f9; }
-        .palette-input {
-            width:100%; padding:10px 12px; border:1.5px solid var(--gray);
-            border-radius:8px; font-size:15px; box-sizing:border-box;
-        }
-        .palette-input:focus { border-color:var(--blue); outline:none; }
-        .palette-results { max-height:50vh; overflow-y:auto; padding:6px 0; }
-        .palette-item {
-            padding:10px 16px; cursor:pointer; display:flex; gap:10px;
-            align-items:flex-start; border-left:3px solid transparent;
-        }
-        .palette-item:hover, .palette-item.selected { background:#f1f5f9; border-left-color:#6366f1; }
-        .palette-item .pi-icon { font-size:18px; flex-shrink:0; margin-top:2px; }
-        .palette-item .pi-body { flex:1; min-width:0; }
-        .palette-item .pi-label {
-            font-size:13px; font-weight:600; color:var(--text);
-            display:flex; align-items:center; gap:6px;
-        }
-        .palette-item .pi-group-badge {
-            font-size:10px; font-weight:500; color:var(--text-muted);
-            background:#f3f4f6; padding:1px 6px; border-radius:8px;
-        }
-        .palette-item .pi-desc {
-            font-size:11px; color:var(--text-muted); margin-top:2px;
-            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-        }
-        .palette-empty {
-            padding:24px; text-align:center; color:var(--text-muted); font-size:13px;
-        }
-        .palette-footer {
-            padding:8px 16px; background:#fafafa; border-top:1px solid #f1f5f9;
-            font-size:11px; color:var(--text-muted);
-            display:flex; gap:14px; justify-content:space-between;
-        }
-        .palette-footer kbd {
-            font-family:monospace; background:#fff; border:1px solid #e5e7eb;
-            border-bottom-width:2px; padding:1px 5px; border-radius:3px; font-size:10px;
         }
 
         /* 카드 점프 시 강조 효과 */
@@ -427,11 +355,6 @@
             <!-- [대 리뉴얼] 2단 레이아웃: 좌 그룹 사이드바 + 검색 / 우 메인 -->
             <div class="admin-shell">
                 <aside class="admin-sidebar" id="admin-sidebar">
-                    <div class="sidebar-search">
-                        <span class="search-icon" id="sidebar-search-icon"></span>
-                        <input type="text" id="sidebar-search-input" placeholder="기능 검색…" autocomplete="off">
-                        <span class="kbd-hint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="10.01"/><line x1="10" y1="10" x2="10" y2="10.01"/><line x1="14" y1="10" x2="14" y2="10.01"/><line x1="18" y1="10" x2="18" y2="10.01"/><line x1="6" y1="14" x2="18" y2="14"/></svg>K</span>
-                    </div>
                     <div id="sidebar-nav"><!-- JS로 렌더링 --></div>
                 </aside>
 
@@ -2778,20 +2701,6 @@ POST /api/external/event-result-link/batch<br>
         </div>
     </div>
 
-    <!-- [대 리뉴얼] 검색 팔레트 (Cmd/Ctrl+K) -->
-    <div class="palette-backdrop" id="cmd-palette" onclick="if(event.target===this)closeCmdPalette()">
-        <div class="palette" role="dialog" aria-label="기능 검색">
-            <div class="palette-header">
-                <input type="text" id="cmd-palette-input" class="palette-input"
-                       placeholder="기능명 또는 키워드 검색…" autocomplete="off" spellcheck="false">
-            </div>
-            <div class="palette-results" id="cmd-palette-results"></div>
-            <div class="palette-footer">
-                <span><kbd>↑</kbd> <kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 이동 · <kbd>Esc</kbd> 닫기</span>
-                <span id="cmd-palette-count"></span>
-            </div>
-        </div>
-    </div>
 
     <script src="lib/xlsx.full.min.js"></script>
     <script src="/lib/auth-client.js?v=1"></script>
@@ -3470,129 +3379,7 @@ POST /api/external/event-result-link/batch<br>
             }, isAlreadyActive ? 0 : 120);
         }
 
-        // 사이드바 검색 (인라인): 일치하는 항목만 보이게 필터
-        function filterSidebar(q) {
-            q = (q || '').trim().toLowerCase();
-            document.querySelectorAll('#sidebar-nav .sb-item').forEach(el => {
-                if (!q) { el.style.display = ''; return; }
-                const idx = parseInt((el.getAttribute('onclick').match(/\d+/)||[0])[0]);
-                const f = ADMIN_FEATURES[idx];
-                const hay = (f.label + ' ' + (f.desc||'') + ' ' + (f.keywords||'')).toLowerCase();
-                el.style.display = hay.includes(q) ? '' : 'none';
-            });
-            // 빈 그룹 제목도 숨김
-            document.querySelectorAll('#sidebar-nav .sb-group').forEach(g => {
-                const anyVisible = Array.from(g.querySelectorAll('.sb-item')).some(el => el.style.display !== 'none');
-                g.style.display = anyVisible ? '' : 'none';
-            });
-        }
-
-        // ─── Cmd/Ctrl+K 검색 팔레트 ───
-        let _paletteSelectedIdx = 0;
-        let _paletteMatches = [];
-
-        function openCmdPalette() {
-            const back = document.getElementById('cmd-palette');
-            if (!back) return;
-            back.classList.add('show');
-            const input = document.getElementById('cmd-palette-input');
-            input.value = '';
-            renderPaletteResults('');
-            setTimeout(() => input.focus(), 30);
-        }
-        function closeCmdPalette() {
-            const back = document.getElementById('cmd-palette');
-            if (back) back.classList.remove('show');
-        }
-        function renderPaletteResults(q) {
-            q = (q || '').trim().toLowerCase();
-            _paletteSelectedIdx = 0;
-            _paletteMatches = ADMIN_FEATURES
-                .map((f, i) => ({ f, i, hay: (f.label + ' ' + (f.desc||'') + ' ' + (f.keywords||'')).toLowerCase() }))
-                .filter(x => !q || x.hay.includes(q));
-            const root = document.getElementById('cmd-palette-results');
-            const countEl = document.getElementById('cmd-palette-count');
-            if (_paletteMatches.length === 0) {
-                root.innerHTML = '<div class="palette-empty">일치하는 기능이 없습니다.</div>';
-                countEl.textContent = '0건';
-                return;
-            }
-            countEl.textContent = `${_paletteMatches.length}건`;
-            const groupTitle = (gid) => (ADMIN_GROUPS.find(g => g.id === gid) || {}).title || '';
-            root.innerHTML = _paletteMatches.map((m, idx) => `
-                <div class="palette-item ${idx === 0 ? 'selected' : ''}" data-idx="${idx}"
-                     onclick="paletteSelect(${idx})"
-                     onmouseenter="paletteHover(${idx})">
-                    <span class="pi-icon">${ICON(m.f.icon || 'list', { size: 18 })}</span>
-                    <div class="pi-body">
-                        <div class="pi-label">${m.f.label}
-                            <span class="pi-group-badge">${groupTitle(m.f.group)}</span>
-                        </div>
-                        <div class="pi-desc">${m.f.desc || ''}</div>
-                    </div>
-                </div>
-            `).join('');
-        }
-        function paletteHover(idx) {
-            _paletteSelectedIdx = idx;
-            document.querySelectorAll('#cmd-palette-results .palette-item').forEach((el, i) => {
-                el.classList.toggle('selected', i === idx);
-            });
-        }
-        function paletteSelect(idx) {
-            const m = _paletteMatches[idx];
-            if (!m) return;
-            closeCmdPalette();
-            sidebarNavigate(m.i);
-        }
-        function paletteMoveSelection(delta) {
-            if (_paletteMatches.length === 0) return;
-            _paletteSelectedIdx = (_paletteSelectedIdx + delta + _paletteMatches.length) % _paletteMatches.length;
-            const items = document.querySelectorAll('#cmd-palette-results .palette-item');
-            items.forEach((el, i) => el.classList.toggle('selected', i === _paletteSelectedIdx));
-            const sel = items[_paletteSelectedIdx];
-            if (sel) sel.scrollIntoView({ block:'nearest' });
-        }
-
-        // 글로벌 키바인딩
-        document.addEventListener('keydown', (e) => {
-            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-            const mod = isMac ? e.metaKey : e.ctrlKey;
-            if (mod && e.key.toLowerCase() === 'k') {
-                e.preventDefault();
-                openCmdPalette();
-                return;
-            }
-            const back = document.getElementById('cmd-palette');
-            if (back && back.classList.contains('show')) {
-                if (e.key === 'Escape') { e.preventDefault(); closeCmdPalette(); }
-                else if (e.key === 'ArrowDown') { e.preventDefault(); paletteMoveSelection(1); }
-                else if (e.key === 'ArrowUp')   { e.preventDefault(); paletteMoveSelection(-1); }
-                else if (e.key === 'Enter')     { e.preventDefault(); paletteSelect(_paletteSelectedIdx); }
-            }
-        });
-
-        // 사이드바 검색 input
-        document.addEventListener('DOMContentLoaded', () => {
-            // 검색 아이콘 (SVG)
-            const searchIconEl = document.getElementById('sidebar-search-icon');
-            if (searchIconEl) searchIconEl.innerHTML = ICON('search', { size: 14 });
-            renderSidebar();
-            const sbInput = document.getElementById('sidebar-search-input');
-            if (sbInput) {
-                sbInput.addEventListener('input', (e) => filterSidebar(e.target.value));
-                // 사이드바 검색창에서 Enter → 첫 결과로 이동
-                sbInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        const first = document.querySelector('#sidebar-nav .sb-item:not([style*="display: none"])');
-                        if (first) first.click();
-                    }
-                });
-            }
-            // 팔레트 input
-            const paInput = document.getElementById('cmd-palette-input');
-            if (paInput) paInput.addEventListener('input', (e) => renderPaletteResults(e.target.value));
-        });
+        document.addEventListener('DOMContentLoaded', () => { renderSidebar(); });
 
         function toast(msg, type = 'success') {
             const t = document.createElement('div'); t.className = 'toast ' + type; t.textContent = msg;
