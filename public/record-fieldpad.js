@@ -65,10 +65,12 @@
         .fe-tabs { display:flex; gap:5px; margin:0 0 8px; }
         .fe-tabs button { flex:1; min-width:0; border:1px solid #e9e4da; background:#fff; border-radius:8px; padding:8px 0; font-size:13px; font-weight:700; color:#5d5754; }
         .fe-tabs button.done { color:#9a938d; background:#f6f4ef; } .fe-tabs button.now { background:#262324; color:#fff; border-color:#262324; }
-        #field-distance-table td.fe-now, #field-distance-table th.fe-now { background:#fffbe8 !important; }
+        #field-distance-table td.fe-now { background:#fffbe8 !important; }
+        #field-distance-table th.fe-now { box-shadow:inset 0 -4px 0 #b79f58; }
         #field-distance-table td.fe-sel { box-shadow:inset 0 0 0 2px #b79f58; background:#f6f1e3 !important; border-radius:6px; }
         #field-distance-table td.attempt-cell { min-height:44px; }
-        .height-toggle-table th.fe-now, .height-toggle-table td.fe-now { background:#fffbe8 !important; }
+        .height-toggle-table td.fe-now { background:#fffbe8 !important; }
+        .height-toggle-table th.fe-now { box-shadow:inset 0 -4px 0 #b79f58; }
         .height-toggle-table tr.fe-selrow td { background:#f6f1e3 !important; }
         .fe-hbtns { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
         .fe-hbtns button { height:84px; border-radius:14px; border:2px solid #e9e4da; background:#fff; font-size:30px; font-weight:800; color:#5d5754; touch-action:manipulation; }
@@ -90,7 +92,7 @@
         .fe-hbar .lbl { font-size:12px; color:#9a938d; white-space:nowrap; } .fe-hbar .cnt { margin-left:auto; font-size:12px; color:#5d5754; white-space:nowrap; }
         .fe-hbar .chips { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; } .fe-hbar .chips::-webkit-scrollbar { display:none; }
         .fe-hbar .chips button { flex:0 0 auto; border:1px solid #e9e4da; background:#fff; border-radius:999px; padding:8px 14px; font-family:'D2Coding', var(--font-mono, monospace); font-size:15px; font-weight:700; color:#5d5754; }
-        .fe-hbar .chips button.now { background:#262324; color:#fff; border-color:#262324; }
+        .fe-hbar .chips button.now { background:#fff; color:#262324; border:2px solid #b79f58; box-shadow:0 0 0 3px #f6f1e3; }
         .fe-hlist .hrow { display:grid; grid-template-columns:36px minmax(0,1fr) auto auto; column-gap:10px; align-items:center; padding:10px 12px; border-bottom:1px solid #e9e4da; min-height:72px; }
         .fe-hlist .hrow.done { background:#faf9f6; } .fe-hlist .hrow.off { opacity:.5; }
         .fe-hlist .no { font-family:'D2Coding', var(--font-mono, monospace); font-size:18px; font-weight:700; color:#9a938d; text-align:center; }
