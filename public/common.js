@@ -2517,3 +2517,54 @@ function _showConflictModal(conflicts) {
 
     document.addEventListener('DOMContentLoaded', () => { try { if (shouldShow()) render(); } catch (e) { /* 배너는 실패해도 페이지에 영향 없음 */ } });
 })();
+
+// ============================================================
+// 마우스 드래그 스크롤 (전 페이지 공통)
+//   손가락으로 끄는 것처럼, 마우스로 눌러 끌어도 가로/세로로 넘치는 상자가 따라온다.
+//   대상: 눌린 지점에서 위로 올라가며 처음 만나는 overflow auto/scroll 이고 실제로 넘치는 요소.
+//   입력창·링크·select 위에서 시작한 드래그는 무시(기존 동작 유지). 버튼 위 시작은 허용(드래그면 click 삼킴). 4px 이상 움직였을 때만 드래그로 간주,
+//   드래그 뒤 따라오는 click 은 한 번 삼킨다(셀 클릭 오작동 방지).
+// ============================================================
+(function () {
+    if (typeof document === 'undefined') return;
+    // 버튼 위에서 시작한 드래그도 허용 (버튼은 click 으로만 동작하고, 드래그면 click 을 삼키므로 안전) — 표가 버튼으로 가득한 높이뛰기 표 대응
+    const SKIP = /^(INPUT|TEXTAREA|SELECT|A|LABEL)$/;
+    function scrollBoxFrom(el) {
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+            if (n.nodeType !== 1) continue;
+            const cs = getComputedStyle(n);
+            const ox = /(auto|scroll)/.test(cs.overflowX), oy = /(auto|scroll)/.test(cs.overflowY);
+            if ((ox && n.scrollWidth > n.clientWidth + 1) || (oy && n.scrollHeight > n.clientHeight + 1)) return n;
+        }
+        return null;
+    }
+    let box = null, sx = 0, sy = 0, sl = 0, st = 0, dragged = false;
+    document.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        const t = e.target;
+        if (!t || SKIP.test(t.tagName) || t.closest('input,textarea,select,a,label,[contenteditable="true"]')) return;
+        box = scrollBoxFrom(t); if (!box) return;
+        sx = e.clientX; sy = e.clientY; sl = box.scrollLeft; st = box.scrollTop; dragged = false;
+    });
+    document.addEventListener('mousemove', function (e) {
+        if (!box) return;
+        const dx = e.clientX - sx, dy = e.clientY - sy;
+        if (!dragged && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+        if (!dragged) { dragged = true; document.documentElement.classList.add('is-drag-scrolling'); }
+        box.scrollLeft = sl - dx; box.scrollTop = st - dy;
+        e.preventDefault();
+    });
+    function end() {
+        if (!box) return;
+        box = null;
+        document.documentElement.classList.remove('is-drag-scrolling');
+        if (dragged) {
+            // 드래그로 끝난 mouseup 뒤의 click 한 번 삼키기
+            const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); document.removeEventListener('click', swallow, true); };
+            document.addEventListener('click', swallow, true);
+            setTimeout(() => document.removeEventListener('click', swallow, true), 300);
+        }
+    }
+    document.addEventListener('mouseup', end);
+    document.addEventListener('mouseleave', end);
+})();

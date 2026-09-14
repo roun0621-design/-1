@@ -375,7 +375,7 @@
         const w = needsWind && fe.wind ? `<span class="w">${esc(normWind(fe.wind))}</span>` : '';
         slot.innerHTML = main + w;
     }
-    // 거리 종목 목록 렌더 (표 대신): 시기 칩 + 선수별 한 줄(이전 시기 칩 · 최고 · 현재 시기 슬롯 · 상태)
+    // 거리 종목 목록 렌더 (표 대신): 시기 칩 + 선수별 한 줄(이름 · 최고 · 선택한 시기의 기록 슬롯 · 상태) — 선택한 시기 기록만 표시
     function feRenderList(content) {
         let box = content.querySelector('.fe-dlist');
         if (!box) { box = document.createElement('div'); box.className = 'fe-hlist fe-dlist'; const pad = content.querySelector('.fe-pad'); if (pad) content.insertBefore(box, pad); else content.appendChild(box); }
@@ -402,13 +402,6 @@
             const done = v != null;
             const valid = Object.values(att).filter(x => x > 0);
             const best = valid.length ? Math.max(...valid) : null;
-            const prev = [];
-            for (let k = 1; k <= m; k++) {
-                if (k === a || att[k] === undefined) continue;
-                const pv = att[k];
-                const body = pv === 0 ? '<em class="x">X</em>' : pv === -1 ? '<em class="p">–</em>' : pv == null ? `<em class="p">${needsWind && wind[k] != null ? fmtW(wind[k]) : '·'}</em>` : `<em>${fmtDist(pv)}</em>${needsWind && wind[k] != null ? ' ' + fmtW(wind[k]) : ''}`;
-                prev.push(`<i class="lnk" onclick="event.stopPropagation();feSelectRow(${eid},${k})" title="${k}차 정정"><b>${k}차</b>${body}</i>`);
-            }
             const stTxt = e.status === 'no_show' ? 'DNS' : sc || (offCut ? '상위 8명 외' : '');
             let slot;
             if (off) slot = `<div class="slot"><span class="ph">${esc(stTxt)}</span></div>`;
@@ -418,7 +411,7 @@
                 <option value="">상태 —</option>${['DNS', 'DNF', 'DQ', 'NM'].map(c => `<option value="${c}" ${sc === c ? 'selected' : ''}>${c}</option>`).join('')}</select>`;
             html += `<div class="hrow ${sel ? 'sel' : ''} ${done && !sel ? 'done' : ''} ${off ? 'off' : ''}" onclick="feSelectRow(${eid})">
                 <div class="no">${e.lane_number || '—'}</div>
-                <div class="who"><div class="nm">${esc(e.name)}<small>#${typeof bib === 'function' ? bib(e.bib_number) : e.bib_number}</small>${e.team ? `<small class="tm">${esc(e.team)}</small>` : ''}</div><div class="prev">${prev.join('') || '<i class="none">첫 시기</i>'}</div></div>
+                <div class="who"><div class="nm">${esc(e.name)}<small>#${typeof bib === 'function' ? bib(e.bib_number) : e.bib_number}</small>${e.team ? `<small class="tm">${esc(e.team)}</small>` : ''}</div></div>
                 <div class="best">${best != null ? fmtDist(best) : '—'}<small>최고</small></div>
                 ${slot}
                 <div class="sc">${scSel}</div>

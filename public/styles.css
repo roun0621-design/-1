@@ -650,7 +650,20 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    ============================================================ */
 .field-two-panel { display: grid; grid-template-columns: 1fr 260px; gap: 14px; }
 @media (max-width: 1000px) { .field-two-panel { grid-template-columns: 1fr; } }
-.field-input-panel { overflow-x: auto; }
+.field-input-panel {
+    overflow-x: auto;
+    min-width: 0;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    scrollbar-width: thin;
+    scrollbar-color: #b0b0b0 #f0f0f0;
+}
+.field-input-panel::-webkit-scrollbar { height: 10px; }
+.field-input-panel::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 5px; }
+.field-input-panel::-webkit-scrollbar-thumb { background: #b0b0b0; border-radius: 5px; min-width: 40px; }
+/* 마우스 드래그 스크롤 중 (common.js) — 텍스트 선택 방지 */
+.is-drag-scrolling, .is-drag-scrolling * { user-select: none !important; cursor: grabbing !important; }
 .field-ranking-panel {
     background: var(--white); border-radius: var(--radius-lg);
     padding: 14px; box-shadow: var(--shadow);
@@ -1182,6 +1195,11 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .callroom-detail-panel,
 .record-detail-panel {
     min-height: 400px;
+    /* grid 1fr 자식은 기본 min-width:auto 라 내용(넓은 표)만큼 커져 페이지 전체가 넘치고,
+       html/body overflow-x:hidden 에 잘려 "화면이 갇힘". min-width:0 으로 패널 폭을 고정해야
+       안쪽 .field-input-panel / .matrix-scroll-wrap 이 진짜 스크롤 상자가 된다. */
+    min-width: 0;
+    max-width: 100%;
 }
 
 /* Matrix Section */
