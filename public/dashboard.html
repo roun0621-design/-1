@@ -246,7 +246,14 @@
         .live-jump-dot { width:7px; height:7px; border-radius:50%; background:#fff; animation:liveDotBlink 1.4s ease-in-out infinite; }
 
         /* 상태 배지 — 예정 / ● 진행 중 / 종료 (모든 카드에 1개) */
-        .status-badge { display:inline-block; vertical-align:middle; margin-left:6px; font-size:10px; font-weight:800; letter-spacing:.2px; padding:2px 7px; border-radius:999px; white-space:nowrap; }
+        /* 종목명 옆 칩 묶음(상태 · Day · 시간 · Call Room): 같은 높이·글자크기, 칩 사이 8px */
+        .card-chips { display:inline-flex; align-items:center; gap:8px; margin-left:10px; vertical-align:middle; }
+        .card-chip { display:inline-block; font-size:10px; font-weight:700; line-height:1.4; padding:2px 7px; border-radius:999px; white-space:nowrap; }
+        .card-chip.chip-day { color:#6b7280; background:#f1f2f4; border:1px solid #e2e4e8; font-weight:600; letter-spacing:.2px; }
+        .card-chip.chip-time { border:1px solid transparent; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:.3px; }
+        .card-chips .ico-callroom { margin-left:0; font-size:10px; padding:2px 7px; border-radius:999px; line-height:1.4; }
+        @media (max-width:640px) { .card-chips { flex-wrap:wrap; gap:6px; margin-left:8px; } }
+        .status-badge { display:inline-block; vertical-align:middle; font-size:10px; font-weight:800; letter-spacing:.2px; padding:2px 7px; border-radius:999px; white-space:nowrap; line-height:1.4; }
         .status-badge.status-live { color:#0f7b3f; background:#dcfce7; border:1px solid #86efac; }
         .status-badge.status-live::before { content:'●'; margin-right:3px; color:#16a34a; }
         .status-badge.status-done { color:#6b7280; background:#f1f2f4; border:1px solid #e2e4e8; }
@@ -439,7 +446,7 @@
     </style>
 
     <script src="common.js?v=90"></script>
-    <script src="dashboard.js?v=111"></script>
+    <script src="dashboard.js?v=112"></script>
     <script src="share-card.js?v=1"></script>
     <script src="push.js?v=10"></script>
 </body>

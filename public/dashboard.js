@@ -812,8 +812,10 @@ function renderCategoryTable(groups, label, isLive) {
             const tColor = schedEvt.is_today ? '#b79f58' : '#999';
             const tBg = schedEvt.is_today ? '#f8f4ea' : '#f5f5f5';
             const crBadge = isCallRoomWindow(schedEvt.callroom_time, schedEvt.scheduled_date) ? ' <span class="ico-callroom">Call Room</span>' : '';
-            const dayLabel = schedEvt.day ? `<span style="font-size:8px;color:#666;background:#eee;padding:1px 3px;border-radius:3px;margin-right:2px;">Day-${schedEvt.day}</span>` : '';
-            timeBadge = `${dayLabel}<span class="num-display" style="font-size:9px;color:${tColor};background:${tBg};padding:1px 5px;border-radius:6px;margin-left:2px;font-weight:600;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
+            // 상태·Day·시간 칩은 .card-chips(공통 간격/높이)로 묶어 렌더 — 크기·여백을 통일해 다닥다닥 붙지 않게
+            const dayLabel = schedEvt.day ? `<span class="card-chip chip-day">Day-${schedEvt.day}</span>` : '';
+            const tBorder = schedEvt.is_today ? '#e8dfc0' : '#e2e4e8';
+            timeBadge = `${dayLabel}<span class="card-chip chip-time num-display" style="color:${tColor};background:${tBg};border-color:${tBorder};" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
         }
 
         // Division badge for display mode (color-coded by age group)
@@ -888,7 +890,7 @@ function renderCategoryTable(groups, label, isLive) {
         const favCell = `<td class="fav-cell"><span class="fav-toggle${_isFav ? ' on' : ''}" role="button" tabindex="0" aria-pressed="${_isFav}" title="${_isFav ? '관심 알림 켜짐 (눌러서 해제)' : '이 종목 알림 받기'}" onclick="event.stopPropagation();toggleFavorite('${g.name.replace(/'/g, "\\'")}','${_rowGender}')">${_isFav ? _BELL_ON : _BELL_OFF}<span class="fav-label">알림</span></span></td>`;
         html += `<tr data-row-gender="${_rowGender}"${_tapAttr}>
             ${favCell}
-            <td class="event-name">${genderBadge}${g.name}${divBadge}${statusBadge}${timeBadge}${metaMissing}</td>
+            <td class="event-name">${genderBadge}${g.name}${divBadge}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
             ${_isDisplayMode ? `<td data-label="영상" class="${videoCell ? '' : 'cell-empty'}">${videoCell}</td>` : ''}
             ${(_isDisplayMode || _colRounds.wl) ? `<td data-label="${_isDisplayMode ? '명단' : 'W/L'}" class="${(_isDisplayMode ? rosterCell : wlCell) ? '' : 'cell-empty'}">${_isDisplayMode ? rosterCell : wlCell}</td>` : ''}
             ${_colRounds.preliminary ? _roundCell(prelim, '예선') : ''}
