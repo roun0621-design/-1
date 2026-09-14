@@ -1581,11 +1581,12 @@ function renderFieldDistanceContent() {
                                             onkeydown="fieldWindKeydown2(event,this)" onblur="windCellBlur(this)" onfocus="this.select()" autofocus>
                                     </td>`;
                                 } else {
+                                    // 기록(거리) 입력 전에도 풍속 먼저 입력 가능 — 풍속계가 먼저 나오는 현장 순서
                                     let wDisp = '';
-                                    if (hasVal && !isFoul && !isPass && r.attWind && r.attWind[i] != null) {
+                                    if (!isFoul && !isPass && r.attWind && r.attWind[i] != null) {
                                         wDisp = formatWind(r.attWind[i]);
                                     }
-                                    const wClickAttr = (isView || !hasVal || isFoul || isPass) ? '' : `onclick="activateWindCell(${r.event_entry_id},${i})"`;
+                                    const wClickAttr = (isView || isFoul || isPass) ? '' : `onclick="activateWindCell(${r.event_entry_id},${i})"`;
                                     windCells += `<td class="wind-cell ${wAttColCls}" ${wClickAttr}>${wDisp}</td>`;
                                 }
                             } else {
@@ -1893,21 +1894,19 @@ function fieldWindKeydown(e, windInp) {
 async function saveFieldWind(entryId, attempt, wind) {
     if (!confirmCompletedEdit()) return;
     try {
-        const existing = state.results.find(r => r.event_entry_id === entryId && r.attempt_number === attempt);
-        if (existing) {
-            const hid = getSaveHeatId(entryId); // [JOINT]
-            await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: existing.distance_meters, wind });
-            let allResults = await API.getResults(state.heatId);
-            if (isJointMode()) {
-                const extraR = await fetchJointExtraResults();
-                allResults = allResults.concat(extraR);
-            }
-            state.results = allResults;
-            state._activeWindCell = null;
-            state._activeFieldCell = null;
-            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 풍속 저장');
-            renderFieldDistanceContent();
+        // 기록이 아직 없어도 풍속만 먼저 저장 가능 (distance_meters 미전송 → 기존값 유지 / 신규는 NULL)
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, wind });
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
         }
+        state.results = allResults;
+        state._activeWindCell = null;
+        state._activeFieldCell = null;
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 풍속 저장');
+        renderFieldDistanceContent();
     } catch (err) {
         console.error('saveFieldWind error:', err);
     }
@@ -3398,10 +3397,10 @@ function _cSubFieldRender(area) {
                                     </td>`;
                                 } else {
                                     let wDisp = '';
-                                    if (hasVal && !isFoul && r.attWind && r.attWind[i] != null) {
+                                    if (!isFoul && r.attWind && r.attWind[i] != null) {
                                         wDisp = formatWind(r.attWind[i]);
                                     }
-                                    const wClickAttr = (!hasVal || isFoul) ? '' : `onclick="_cSubFieldWindActivate(${r.event_entry_id},${i})"`;
+                                    const wClickAttr = isFoul ? '' : `onclick="_cSubFieldWindActivate(${r.event_entry_id},${i})"`;
                                     windCells += `<td class="wind-cell ${wAttCls}" ${wClickAttr}>${wDisp}</td>`;
                                 }
                             }
@@ -3615,7 +3614,8 @@ async function _cSubFieldSaveAll() {
         if (hasStatusCode) continue; // already has status
         const attemptResults = er.filter(r => r.attempt_number != null);
         if (attemptResults.length === 0) continue; // no attempts yet
-        const allFoul = attemptResults.every(r => r.distance_meters === 0 || r.distance_meters === null);
+        // distance NULL 은 '풍속만 먼저 입력된 빈 시기' 이므로 파울로 세지 않는다
+        const allFoul = attemptResults.every(r => r.distance_meters === 0);
         const hasValidDist = attemptResults.some(r => r.distance_meters != null && r.distance_meters > 0);
         // If all attempts are fouls (distance=0) and there are enough attempts, auto-NM
         // 10종/7종 필드종목은 3회 시기 (예: 원반, 포환, 창던지기, 멀리뛰기)
@@ -3692,13 +3692,11 @@ function _cSubFieldWindBlur(inp) {
 
 async function _cSubFieldWindSave(entryId, attempt, wind, heatId, parentId) {
     try {
-        const existing = _cSubFieldData.results.find(r => r.event_entry_id === entryId && r.attempt_number === attempt);
-        if (existing) {
-            await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: existing.distance_meters, wind });
-            _cSubFieldData.results = await API.getResults(heatId);
-            _cSubFieldWindActive = null;
-            _cSubFieldRender();
-        }
+        // 기록 입력 전에도 풍속만 먼저 저장 가능
+        await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, wind });
+        _cSubFieldData.results = await API.getResults(heatId);
+        _cSubFieldWindActive = null;
+        _cSubFieldRender();
     } catch(err) { console.error('_cSubFieldWindSave error:', err); }
 }
 

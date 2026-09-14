@@ -149,13 +149,14 @@
     function firstPendingAttempt() {
         const m = maxAtt();
         const ents = laneSorted().filter(e => !isLocked(e));
-        for (let a = 1; a <= m; a++) if (ents.some(e => attemptsOf(e.event_entry_id).att[a] === undefined)) return a;
+        for (let a = 1; a <= m; a++) if (ents.some(e => attemptsOf(e.event_entry_id).att[a] == null)) return a;
         return m;
     }
     function nextPending(attempt, afterEid) {
         const ents = laneSorted().filter(e => !isLocked(e));
         const idx = afterEid == null ? -1 : ents.findIndex(e => e.event_entry_id === afterEid);
-        for (let i = idx + 1; i < ents.length; i++) if (attemptsOf(ents[i].event_entry_id).att[attempt] === undefined) return ents[i].event_entry_id;
+        // att[attempt] == null : 미입력(undefined) 또는 풍속만 먼저 저장된 빈 시기(null) → 둘 다 '입력 대기'
+        for (let i = idx + 1; i < ents.length; i++) if (attemptsOf(ents[i].event_entry_id).att[attempt] == null) return ents[i].event_entry_id;
         return null;
     }
     function selectCell(eid, attempt, keepBuf) {
@@ -221,8 +222,16 @@
         if (!fe.sel) return;
         const { eid, attempt } = fe.sel;
         const dist = parseBuf(fe.buf);
-        if (dist == null) { feFlash('기록을 3자리 이상 입력 (예: 724 → 7.24)'); return; }
         const wind = fe.wind.trim() ? parseFloat(normWind(fe.wind)) : null;
+        // 기록 없이 풍속만 입력한 경우 → 풍속만 저장하고 같은 칸에 머무름 (거리 계측 후 이어서 입력)
+        if (dist == null) {
+            if (wind == null || isNaN(wind)) { feFlash('기록을 3자리 이상 입력 (예: 724 → 7.24)'); return; }
+            fe.undo = { prev: snapshot(eid, attempt), label: `${laneOf(eid)} ${nameOf(eid)} 풍속 ${fmtW(wind)}` };
+            await saveFieldWind(eid, attempt, wind);
+            selectCell(eid, attempt);
+            renderFieldDistanceContent();
+            return;
+        }
         fe.undo = { prev: snapshot(eid, attempt), label: `${laneOf(eid)} ${nameOf(eid)} ${fmtDist(dist)}${wind != null && !isNaN(wind) ? ' ' + fmtW(wind) : ''}` };
         advanceAfter(eid, attempt);
         await saveFieldInline(eid, attempt, dist);
@@ -248,6 +257,7 @@
         fe.undo = null;
         const { eid, attempt, dist, wind } = u.prev;
         if (dist === undefined) await fieldInlineClear(eid, attempt);
+        else if (dist === null) { await fieldInlineClear(eid, attempt); if (wind != null) await saveFieldWind(eid, attempt, wind); }
         else if (dist === 0) await fieldInlineFoul(eid, attempt);
         else if (dist < 0) await fieldInlinePass(eid, attempt);
         else { await saveFieldInline(eid, attempt, dist); if (wind != null) await saveFieldWind(eid, attempt, wind); }
@@ -263,7 +273,7 @@
         const needsWind = typeof requiresWindMeasurement === 'function' && requiresWindMeasurement(state.selectedEvent?.name, 'field_distance');
         const m = maxAtt();
         const ents = laneSorted().filter(e => !isLocked(e));
-        const done = ents.filter(e => attemptsOf(e.event_entry_id).att[fe.attempt] !== undefined).length;
+        const done = ents.filter(e => attemptsOf(e.event_entry_id).att[fe.attempt] != null).length;
         const nxt = fe.sel ? nextPending(fe.attempt, fe.sel.eid) : null;
         let body;
         if (!fe.sel) {
