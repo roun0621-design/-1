@@ -2415,8 +2415,10 @@ function renderHeightContent() {
     heights.forEach(h => { hdr += `<th class="height-col-header" style="font-size:10px;">${formatHeight(h)}<br><button class="btn-bar-delete" onclick="deleteBarHeight(${h})" title="${formatHeight(h)} 삭제">&times;</button></th>`; });
     hdr += '<th>최고</th><th>상태</th>';
 
+    // 높이 열이 늘어나면 표가 화면보다 넓어진다 → 가로 스크롤 래퍼로 감싼다 (없으면 상위 overflow-x:hidden 에 잘려 드래그 불가)
     document.getElementById('height-content').innerHTML = `
         ${sortBtns}
+        <div class="matrix-scroll-wrap height-scroll-wrap">
         <table class="data-table field-table height-toggle-table">
             <thead><tr>${hdr}</tr></thead>
             <tbody>${sorted.map(r => {
@@ -2481,7 +2483,8 @@ function renderHeightContent() {
                     <td>${statusCell}</td>
                 </tr>`;
             }).join('')}</tbody>
-        </table>`;
+        </table>
+        </div>`;
 }
 
 // Toggle height sort mode
