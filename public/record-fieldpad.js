@@ -113,6 +113,24 @@
         .fe-hlist .btns button:active { transform:scale(.96); }
         .fe-hlist .fe-undo { padding:10px 12px; }
         .fe-hlist .fe-empty { margin:12px; }
+        /* 거리 종목 터치 목록 (표 대신) — 높이 목록과 같은 골격 */
+        #field-content.fe-on .field-two-panel { display:none; }
+        .fe-dlist .hrow { cursor:pointer; }
+        .fe-dlist .hrow.sel { background:#fbf8ef; box-shadow:inset 4px 0 0 #b79f58; }
+        .fe-dlist .hrow.off { cursor:default; }
+        .fe-dlist .nm small.tm { margin-left:8px; color:#7a746e; }
+        .fe-dlist .prev i { cursor:pointer; } .fe-dlist .prev i em.p { color:#9a938d; }
+        .fe-dlist .best { text-align:right; font-family:'D2Coding', var(--font-mono, monospace); font-size:16px; font-weight:700; color:#262324; white-space:nowrap; }
+        .fe-dlist .best small { display:block; font-family:'Noto Sans KR', sans-serif; font-size:10px; color:#9a938d; font-weight:400; }
+        .fe-dlist .slot { min-width:124px; height:58px; border:2px solid #e9e4da; border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:'D2Coding', var(--font-mono, monospace); font-size:22px; font-weight:700; color:#262324; background:#fff; line-height:1.1; }
+        .fe-dlist .hrow.sel .slot { border-color:#b79f58; background:#fbf8ef; box-shadow:0 0 0 3px #f6f1e3; }
+        .fe-dlist .slot .w { font-family:'D2Coding', var(--font-mono, monospace); font-size:11px; color:#9a938d; font-weight:400; }
+        .fe-dlist .slot .x { color:#c0392b; } .fe-dlist .slot .p { color:#9a938d; }
+        .fe-dlist .slot .ph { color:#c9c3b8; font-size:13px; font-weight:400; font-family:'Noto Sans KR', sans-serif; }
+        .fe-dlist .slot .cs { display:inline-block; width:2px; height:22px; background:#b79f58; margin-left:2px; animation:feBlink 1s steps(2) infinite; vertical-align:middle; }
+        .fe-dlist .hrow.done .slot { background:#faf9f6; }
+        .fe-hbar .chips button.done { color:#9a938d; background:#f6f4ef; }
+        @media (max-width: 600px) { .fe-dlist .hrow { grid-template-columns:30px minmax(0,1fr) auto auto; } .fe-dlist .best { display:none; } .fe-dlist .slot { min-width:104px; height:52px; font-size:19px; } }
         @media (max-width: 600px) { .fe-hlist .hrow { grid-template-columns:30px minmax(0,1fr) auto auto; grid-template-rows:auto auto; } .fe-hlist .btns { grid-column:1 / -1; justify-content:flex-end; } .fe-hlist .btns button { width:72px; } }
         @media (max-width: 899px) {
             #field-content.fe-on, #height-content.fe-on { grid-template-columns:1fr; }
@@ -144,14 +162,27 @@
     const fe = { sel: null, attempt: 1, buf: '', wind: '', focus: 'dist', undo: null, lastAttemptInit: false };
     window._fe = fe;
 
+    // 4~6차: 8명 초과 시 3차까지의 상위 8명만 (WA 25.6, 종합경기 세부종목 제외)
+    function cutApplies(attempt) {
+        if (attempt <= 3 || maxAtt() <= 3) return false;
+        return laneSorted().filter(e => e.status !== 'no_show').length > 8;
+    }
+    function top8Set() {
+        const rows = laneSorted().map(e => { const { att } = attemptsOf(e.event_entry_id); const v = Object.values(att).filter(x => x > 0); return { event_entry_id: e.event_entry_id, best: v.length ? Math.max(...v) : null }; });
+        return typeof getTop8Ids === 'function' ? getTop8Ids(rows) : new Set(rows.map(r => r.event_entry_id));
+    }
+    function eligible(e, attempt) {
+        if (isLocked(e)) return false;
+        if (cutApplies(attempt) && !top8Set().has(e.event_entry_id)) return false;
+        return true;
+    }
     function firstPendingAttempt() {
         const m = maxAtt();
-        const ents = laneSorted().filter(e => !isLocked(e));
-        for (let a = 1; a <= m; a++) if (ents.some(e => attemptsOf(e.event_entry_id).att[a] == null)) return a;
+        for (let a = 1; a <= m; a++) if (laneSorted().some(e => eligible(e, a) && attemptsOf(e.event_entry_id).att[a] == null)) return a;
         return m;
     }
     function nextPending(attempt, afterEid) {
-        const ents = laneSorted().filter(e => !isLocked(e));
+        const ents = laneSorted().filter(e => eligible(e, attempt));
         const idx = afterEid == null ? -1 : ents.findIndex(e => e.event_entry_id === afterEid);
         // att[attempt] == null : 미입력(undefined) 또는 풍속만 먼저 저장된 빈 시기(null) → 둘 다 '입력 대기'
         for (let i = idx + 1; i < ents.length; i++) if (attemptsOf(ents[i].event_entry_id).att[attempt] == null) return ents[i].event_entry_id;
@@ -186,6 +217,15 @@
         else { if (s.replace(/[^0-9]/g, '').length >= 5) return; s += k; }
         if (isWind) fe.wind = s; else fe.buf = s;
         feRenderPad();
+    };
+    // 행 선택 (목록에서 탭) — 시기는 현재 탭 유지, 이미 값이 있으면 불러와 정정 가능
+    window.feSelectRow = function (eid, attempt) {
+        const e = state.heatEntries.find(x => x.event_entry_id === eid); if (!e) return;
+        const a = attempt || fe.attempt;
+        if (!eligible(e, a)) return;
+        fe.attempt = a;
+        selectCell(eid, a);
+        renderFieldDistanceContent();
     };
     window.feFocus = function (f) { fe.focus = f; feRenderPad(); };
     // 풍속 버퍼 정규화: "+06" → "+0.6", "12" → "+1.2", "-1.4" 그대로
@@ -325,6 +365,66 @@
         }
         pad.innerHTML = `${body}
             <div class="fe-undo"><span>${fe.undo ? '방금 저장: <b>' + esc(fe.undo.label) + '</b>' : '&nbsp;'}</span>${fe.undo ? '<button onclick="feUndo()">되돌리기</button>' : ''}</div>`;
+        feSyncSlot();
+    }
+    // 선택 행의 슬롯에 입력 중인 값을 실시간 표시
+    function feSyncSlot() {
+        const slot = document.querySelector('#field-content .fe-dlist .hrow.sel .slot'); if (!slot || !fe.sel) return;
+        const needsWind = typeof requiresWindMeasurement === 'function' && requiresWindMeasurement(state.selectedEvent?.name, 'field_distance');
+        const main = fe.buf ? `<span>${esc(fe.buf)}<span class="cs"></span></span>` : '<span class="ph">입력 중…<span class="cs"></span></span>';
+        const w = needsWind && fe.wind ? `<span class="w">${esc(normWind(fe.wind))}</span>` : '';
+        slot.innerHTML = main + w;
+    }
+    // 거리 종목 목록 렌더 (표 대신): 시기 칩 + 선수별 한 줄(이전 시기 칩 · 최고 · 현재 시기 슬롯 · 상태)
+    function feRenderList(content) {
+        let box = content.querySelector('.fe-dlist');
+        if (!box) { box = document.createElement('div'); box.className = 'fe-hlist fe-dlist'; const pad = content.querySelector('.fe-pad'); if (pad) content.insertBefore(box, pad); else content.appendChild(box); }
+        const needsWind = typeof requiresWindMeasurement === 'function' && requiresWindMeasurement(state.selectedEvent?.name, 'field_distance');
+        const m = maxAtt(), a = fe.attempt;
+        const ents = laneSorted();
+        const elig = ents.filter(e => eligible(e, a));
+        const remain = elig.filter(e => attemptsOf(e.event_entry_id).att[a] == null).length;
+        const chips = Array.from({ length: m }, (_, i) => i + 1).map(k => {
+            const pend = ents.some(e => eligible(e, k) && attemptsOf(e.event_entry_id).att[k] == null);
+            return `<button class="${k === a ? 'now' : (!pend ? 'done' : '')}" onclick="feSelectAttempt(${k})">${k}차</button>`;
+        }).join('');
+        const cut = cutApplies(a) ? top8Set() : null;
+        let html = `<div class="fe-hbar"><span class="lbl">현재 시기</span><div class="chips">${chips}</div><span class="cnt">남은 선수 ${remain}${cut ? ' · 상위 8명' : ''}</span></div>`;
+        const fmtVal = (v, w) => v === 0 ? '<span class="x">X</span>' : v === -1 ? '<span class="p">–</span>' : v == null ? '' : `${fmtDist(v)}${needsWind && w != null ? `<span class="w">${fmtW(w)}</span>` : ''}`;
+        ents.forEach(e => {
+            const eid = e.event_entry_id;
+            const { att, wind, sc } = attemptsOf(eid);
+            const locked = isLocked(e);
+            const offCut = !!cut && !cut.has(eid) && !locked;
+            const off = locked || offCut;
+            const sel = !!fe.sel && fe.sel.eid === eid;
+            const v = att[a];
+            const done = v != null;
+            const valid = Object.values(att).filter(x => x > 0);
+            const best = valid.length ? Math.max(...valid) : null;
+            const prev = [];
+            for (let k = 1; k <= m; k++) {
+                if (k === a || att[k] === undefined) continue;
+                const pv = att[k];
+                const body = pv === 0 ? '<em class="x">X</em>' : pv === -1 ? '<em class="p">–</em>' : pv == null ? `<em class="p">${needsWind && wind[k] != null ? fmtW(wind[k]) : '·'}</em>` : `<em>${fmtDist(pv)}</em>${needsWind && wind[k] != null ? ' ' + fmtW(wind[k]) : ''}`;
+                prev.push(`<i class="lnk" onclick="event.stopPropagation();feSelectRow(${eid},${k})" title="${k}차 정정"><b>${k}차</b>${body}</i>`);
+            }
+            const stTxt = e.status === 'no_show' ? 'DNS' : sc || (offCut ? '상위 8명 외' : '');
+            let slot;
+            if (off) slot = `<div class="slot"><span class="ph">${esc(stTxt)}</span></div>`;
+            else if (sel) slot = `<div class="slot"><span class="ph">입력 중…<span class="cs"></span></span></div>`;
+            else slot = `<div class="slot">${done ? fmtVal(v, wind[a]) : '<span class="ph">' + a + '차 대기</span>'}</div>`;
+            const scSel = `<select class="sc-select fe-sc" data-eid="${eid}" onclick="event.stopPropagation()" onchange="setFieldDistStatusCode(this)" title="DNS=불출전, DNF=미완주, DQ=실격, NM=기록없음" ${e.status === 'no_show' ? 'disabled' : ''}>
+                <option value="">상태 —</option>${['DNS', 'DNF', 'DQ', 'NM'].map(c => `<option value="${c}" ${sc === c ? 'selected' : ''}>${c}</option>`).join('')}</select>`;
+            html += `<div class="hrow ${sel ? 'sel' : ''} ${done && !sel ? 'done' : ''} ${off ? 'off' : ''}" onclick="feSelectRow(${eid})">
+                <div class="no">${e.lane_number || '—'}</div>
+                <div class="who"><div class="nm">${esc(e.name)}<small>#${typeof bib === 'function' ? bib(e.bib_number) : e.bib_number}</small>${e.team ? `<small class="tm">${esc(e.team)}</small>` : ''}</div><div class="prev">${prev.join('') || '<i class="none">첫 시기</i>'}</div></div>
+                <div class="best">${best != null ? fmtDist(best) : '—'}<small>최고</small></div>
+                ${slot}
+                <div class="sc">${scSel}</div>
+            </div>`;
+        });
+        box.innerHTML = html;
     }
 
     // renderFieldDistanceContent 후처리: 탭·강조·패널
@@ -338,22 +438,8 @@
         if (!fe.lastAttemptInit || !state.heatEntries.length) { fe.attempt = firstPendingAttempt(); fe.lastAttemptInit = true; }
         if (fe.sel && !state.heatEntries.some(e => e.event_entry_id === fe.sel.eid)) fe.sel = null;
         if (!fe.sel) { const eid = nextPending(fe.attempt, null); if (eid != null) selectCell(eid, fe.attempt); }
-        // 시기 탭
-        const m = maxAtt();
-        const tabs = document.createElement('div'); tabs.className = 'fe-tabs';
-        for (let a = 1; a <= m; a++) {
-            const pend = nextPending(a, null) != null;
-            tabs.innerHTML += `<button class="${a === fe.attempt ? 'now' : (!pend ? 'done' : '')}" onclick="feSelectAttempt(${a})">${a}차</button>`;
-        }
-        const table = content.querySelector('#field-distance-table');
-        if (table && table.parentElement) table.parentElement.insertBefore(tabs, table);
-        // 칸 강조: 현재 시기 열 + 선택 칸
-        content.querySelectorAll('td.attempt-cell[data-attempt]').forEach(td => {
-            const a = +td.dataset.attempt, eid = +td.dataset.entry;
-            td.classList.toggle('fe-now', a === fe.attempt);
-            td.classList.toggle('fe-sel', !!fe.sel && fe.sel.eid === eid && fe.sel.attempt === a);
-        });
-        if (table) table.querySelectorAll('thead th').forEach(th => { if (/^(\d)차시기$/.test(th.textContent.trim())) th.classList.toggle('fe-now', +th.textContent.trim()[0] === fe.attempt); });
+        // 표 대신 선수별 목록 (표는 .field-two-panel 로 남겨두되 숨김 — 조망/기록순 모드에서 다시 보임)
+        feRenderList(content);
         feRenderPad();
     };
     // 칸 클릭 → 인라인 입력 대신 키패드 대상 지정
