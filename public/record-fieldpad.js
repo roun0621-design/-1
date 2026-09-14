@@ -10,25 +10,16 @@
 // 거리 종목: 시기 탭(1~6차) · 선택 칸 강조 · 숫자 키패드(724 → 7.24) · X 파울 / – 패스 ·
 //           풍속 입력 · 저장 후 같은 시기 다음 순번으로 자동 이동 · 되돌리기(마지막 1건)
 // 높이 종목: 현재 바 높이 · 선택 선수의 이번 높이 시도 · O / X / – 큰 버튼 · 다음 선수 자동 선택
-// PC(마우스)는 기존 인라인 입력 그대로. 토글 버튼으로 켜고 끌 수 있고 설정은 기기에 저장.
+// 항상 켜짐(2026-09 현장 요청: 표 인라인 입력은 OS 키보드가 아래서 튀어나와 조잡 → 키패드/목록 단일 UI).
+// PC 물리 키보드도 지원: 숫자·. ·Backspace·Enter(저장)·X(파울)·P(패스)·Tab(기록↔풍속)·Delete(칸 지움)
 // ============================================================
 (function () {
     if (typeof state === 'undefined' || typeof renderFieldDistanceContent !== 'function') return;
 
-    const LS_KEY = 'fe_pad_enabled';
-    const isCoarse = () => { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } };
-    function padEnabled() {
-        try { const v = localStorage.getItem(LS_KEY); if (v === '1') return true; if (v === '0') return false; } catch (e) {}
-        return isCoarse();
-    }
-    function setPadEnabled(on) {
-        try { localStorage.setItem(LS_KEY, on ? '1' : '0'); } catch (e) {}
-        fe.sel = null;
-        if (state.selectedEvent && state.selectedEvent.category === 'field_height') renderHeightContent();
-        else renderFieldDistanceContent();
-    }
+    // 키패드/목록 모드 단일화 — 표 인라인 입력 모드는 제거 (토글 없음)
+    function padEnabled() { return true; }
     window._fePadOn = padEnabled;
-    window.fePadToggle = () => setPadEnabled(!padEnabled());
+    window.fePadToggle = function () {};
 
     // ─── 스타일 ───
     const css = document.createElement('style');
@@ -61,7 +52,6 @@
         .fe-pad .fe-hint { font-size:11px; color:#7a746e; line-height:1.5; }
         .fe-pad .fe-undo { display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#9a938d; margin-top:2px; }
         .fe-pad .fe-undo b { color:#5d5754; } .fe-pad .fe-undo button { border:1px solid #e9e4da; background:#fff; border-radius:999px; padding:6px 12px; font-size:12px; font-weight:700; color:#5d5754; }
-        .fe-pad .fe-close { position:absolute; top:8px; right:10px; border:none; background:none; color:#9a938d; font-size:16px; padding:4px; }
         .fe-tabs { display:flex; gap:5px; margin:0 0 8px; }
         .fe-tabs button { flex:1; min-width:0; border:1px solid #e9e4da; background:#fff; border-radius:8px; padding:8px 0; font-size:13px; font-weight:700; color:#5d5754; }
         .fe-tabs button.done { color:#9a938d; background:#f6f4ef; } .fe-tabs button.now { background:#262324; color:#fff; border-color:#262324; }
@@ -88,9 +78,14 @@
         .fe-toggle-btn { margin-left:auto; }
         /* 높이 종목 터치 목록 */
         .fe-hlist { border:1px solid #e9e4da; border-radius:14px; background:#fff; overflow:hidden; }
-        .fe-hbar { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid #e9e4da; background:#faf8f3; }
-        .fe-hbar .lbl { font-size:12px; color:#9a938d; white-space:nowrap; } .fe-hbar .cnt { margin-left:auto; font-size:12px; color:#5d5754; white-space:nowrap; }
-        .fe-hbar .chips { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; } .fe-hbar .chips::-webkit-scrollbar { display:none; }
+        #height-content, #field-content { min-width:0; max-width:100%; }
+        .fe-hlist { max-width:100%; }
+        .fe-hbar { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #e9e4da; background:#faf8f3; }
+        .fe-hbar .lbl { flex:0 0 auto; font-size:12px; color:#9a938d; white-space:nowrap; } .fe-hbar .cnt { flex:0 0 auto; margin-left:auto; font-size:12px; color:#5d5754; white-space:nowrap; }
+        /* 바 높이 칩 줄만 좌우 스크롤 (min-width:0 이 없으면 내용만큼 늘어나 목록 전체가 화면 밖으로 밀림) */
+        .fe-hbar .chips { flex:1 1 auto; min-width:0; display:flex; gap:6px; overflow-x:auto; overscroll-behavior-x:contain; scroll-behavior:smooth; padding:4px 2px; scrollbar-width:thin; scrollbar-color:#d9d2c3 transparent; }
+        .fe-hbar .chips::-webkit-scrollbar { height:5px; } .fe-hbar .chips::-webkit-scrollbar-thumb { background:#d9d2c3; border-radius:3px; }
+        .fe-hbar .arw { flex:0 0 auto; width:30px; height:34px; border:1px solid #e9e4da; background:#fff; border-radius:8px; font-size:16px; color:#5d5754; padding:0; }
         .fe-hbar .chips button { flex:0 0 auto; border:1px solid #e9e4da; background:#fff; border-radius:999px; padding:8px 14px; font-family:'D2Coding', var(--font-mono, monospace); font-size:15px; font-weight:700; color:#5d5754; }
         .fe-hbar .chips button.now { background:#fff; color:#262324; border:2px solid #b79f58; box-shadow:0 0 0 3px #f6f1e3; }
         .fe-hbar .del { flex:0 0 auto; border:1px solid #e9e4da; background:#fff; border-radius:8px; padding:6px 10px; font-size:12px; color:#9a938d; white-space:nowrap; }
@@ -109,6 +104,9 @@
         .fe-hlist .dots { display:flex; gap:6px; } .fe-hlist .dots i { width:26px; height:26px; border-radius:50%; border:2px solid #e9e4da; display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-size:13px; font-weight:800; color:#fff; }
         .fe-hlist .dots i.o { background:#2e7d32; border-color:#2e7d32; } .fe-hlist .dots i.x { background:#c0392b; border-color:#c0392b; } .fe-hlist .dots i.p { background:#9a938d; border-color:#9a938d; }
         .fe-hlist .st { font-size:12px; color:#7a746e; font-weight:700; } .fe-hlist .st.ok { color:#2e7d32; } .fe-hlist .st.out { color:#c0392b; }
+        .fe-hlist .clr { border:1px solid #e9e4da; background:#fff; border-radius:999px; padding:3px 10px; font-size:11px; font-weight:700; color:#9a938d; }
+        .fe-hlist .prev i.lnk { cursor:pointer; } .fe-hlist .prev i.lnk:active { background:#efe9d8; }
+        .fe-pad .fe-clr { border:1px solid #e9e4da; background:#fff; border-radius:999px; padding:4px 10px; font-size:11px; font-weight:700; color:#c0392b; white-space:nowrap; }
         .fe-hlist .btns { display:flex; gap:8px; }
         .fe-hlist .btns button { width:64px; height:56px; border-radius:12px; border:2px solid #e9e4da; background:#fff; font-size:24px; font-weight:800; color:#5d5754; touch-action:manipulation; }
         .fe-hlist .btns .o { color:#2e7d32; border-color:#2e7d32; background:#eaf5eb; } .fe-hlist .btns .x { color:#c0392b; border-color:#c0392b; background:#fbeceb; }
@@ -264,6 +262,37 @@
         selectCell(eid, attempt);
         renderFieldDistanceContent();
     };
+    // 오입력 정정: 선택 칸의 기록·풍속 삭제 (되돌리기 가능), 같은 칸에 머무름
+    window.feClear = async function () {
+        if (!fe.sel) return; const { eid, attempt } = fe.sel;
+        const { att, wind } = attemptsOf(eid);
+        if (att[attempt] === undefined) return;
+        const cur = att[attempt] === 0 ? 'X' : att[attempt] === -1 ? '–' : att[attempt] == null ? ('풍속 ' + fmtW(wind[attempt])) : fmtDist(att[attempt]);
+        if (!confirm(`${laneOf(eid)} ${nameOf(eid)} ${attempt}차 시기(${cur})를 지울까요?`)) return;
+        fe.undo = { prev: snapshot(eid, attempt), label: `${laneOf(eid)} ${nameOf(eid)} ${attempt}차 지움` };
+        await fieldInlineClear(eid, attempt);
+        selectCell(eid, attempt);
+        renderFieldDistanceContent();
+    };
+    // PC 물리 키보드 → 키패드 (입력창에 포커스가 없을 때만)
+    document.addEventListener('keydown', function (ev) {
+        if (!fe.sel) return;
+        if (!state.selectedEvent || state.selectedEvent.category !== 'field_distance') return;
+        if (state.fieldMode === 'view' || state.fieldMode === 'rank') return;
+        const t = ev.target; if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+        if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+        const k = ev.key;
+        if (/^[0-9]$/.test(k) || k === '.') { feKey(k); }
+        else if (k === 'Backspace') { feKey('del'); }
+        else if (k === 'Enter') { feSave(); }
+        else if (k === 'x' || k === 'X') { feFoul(); }
+        else if (k === 'p' || k === 'P') { fePass(); }
+        else if (k === '+' || k === '-') { feFocus('wind'); feKey(k); }
+        else if (k === 'Tab') { feFocus(fe.focus === 'wind' ? 'dist' : 'wind'); }
+        else if (k === 'Delete') { feClear(); }
+        else return;
+        ev.preventDefault();
+    });
     function feFlash(msg) { const el = document.querySelector('.fe-pad .fe-hint'); if (el) { const o = el.textContent; el.textContent = msg; el.style.color = '#c0392b'; setTimeout(() => { el.textContent = o; el.style.color = ''; }, 1600); } }
 
     function feRenderPad() {
@@ -283,7 +312,7 @@
             const valid = Object.values(att).filter(v => v > 0);
             const best = valid.length ? Math.max(...valid) : null;
             body = `
-            <div class="fe-who"><b>${laneOf(fe.sel.eid)} · ${esc(nameOf(fe.sel.eid))}</b><span>${fe.sel.attempt}차 시기${best != null ? ' · 최고 ' + fmtDist(best) : ''}</span></div>
+            <div class="fe-who"><b>${laneOf(fe.sel.eid)} · ${esc(nameOf(fe.sel.eid))}</b><span>${fe.sel.attempt}차 시기${best != null ? ' · 최고 ' + fmtDist(best) : ''}${att[fe.sel.attempt] !== undefined ? ` <button class="fe-clr" onclick="feClear()" title="이 칸의 기록·풍속을 지웁니다 (오입력 정정)">이 칸 지움</button>` : ''}</span></div>
             <div class="fe-val ${fe.focus === 'dist' ? 'focus' : ''}" onclick="feFocus('dist')">${esc(fe.buf) || '<span style="color:#c9c3b8;font-size:20px;font-weight:400;">예: 724 → 7.24</span>'}${fe.focus === 'dist' ? '<span class="cur"></span>' : ''}</div>
             ${needsWind ? `<div class="fe-wind"><span class="wl">풍속</span><div class="wv ${fe.focus === 'wind' ? 'focus' : ''}" onclick="feFocus('wind')">${esc(normWind(fe.wind)) || '<span style="color:#c9c3b8;font-weight:400;">±0.0</span>'}${fe.focus === 'wind' ? '<span class="cur" style="height:22px"></span>' : ''}</div><button onclick="feFocus('wind');feKey('+')">+</button><button onclick="feFocus('wind');feKey('-')">−</button></div>` : ''}
             <div class="fe-keys">
@@ -294,7 +323,7 @@
             </div>
             <div class="fe-hint">${fe.attempt}차 시기 ${done}/${ents.length} 입력${nxt != null ? ' · 다음 ' + laneOf(nxt) + ' ' + esc(nameOf(nxt)) : (done >= ents.length ? ' · 이 시기 완료' : '')}${m > 3 && ents.length > 8 ? ' · 4차부터 상위 8명' : ''}</div>`;
         }
-        pad.innerHTML = `<button class="fe-close" onclick="fePadToggle()" title="키패드 끄기 (표에서 직접 입력)">×</button>${body}
+        pad.innerHTML = `${body}
             <div class="fe-undo"><span>${fe.undo ? '방금 저장: <b>' + esc(fe.undo.label) + '</b>' : '&nbsp;'}</span>${fe.undo ? '<button onclick="feUndo()">되돌리기</button>' : ''}</div>`;
     }
 
@@ -303,17 +332,7 @@
     window.renderFieldDistanceContent = function () {
         _origRenderDist.apply(this, arguments);
         const content = document.getElementById('field-content'); if (!content) return;
-        const on = padEnabled() && state.fieldMode !== 'view' && state.fieldMode !== 'rank';
-        // 토글 버튼 (정렬 바 끝)
-        const bar = content.querySelector('.sort-toggle-bar');
-        if (bar && !bar.querySelector('.fe-toggle-btn')) {
-            const b = document.createElement('button');
-            b.className = 'btn btn-xs ' + (on ? 'btn-primary' : 'btn-outline') + ' fe-toggle-btn';
-            b.textContent = on ? '키패드 켜짐' : '키패드';
-            b.title = '터치용 큰 키패드 패널';
-            b.onclick = fePadToggle;
-            bar.appendChild(b);
-        }
+        const on = state.fieldMode !== 'view' && state.fieldMode !== 'rank';
         content.classList.toggle('fe-on', on);
         if (!on) return;
         if (!fe.lastAttemptInit || !state.heatEntries.length) { fe.attempt = firstPendingAttempt(); fe.lastAttemptInit = true; }
@@ -413,7 +432,7 @@
         const rows = heRows();
         const chips = hs.map(h => `<button class="${h === bar ? 'now' : ''}" onclick="heSetBar(${h})">${fmtDist(h)}</button>`).join('');
         const active = rows.filter(r => !r.elim && !(Object.values(r.hd[bar] || {}).includes('O')) && !(Object.values(r.hd[bar] || {}).some(m => m === 'PASS' || m === '-')) && Object.keys(r.hd[bar] || {}).length < 3);
-        let html = `<div class="fe-hbar"><span class="lbl">현재 바</span><div class="chips">${chips}</div><button class="del" onclick="deleteBarHeight(${bar})" title="${fmtDist(bar)} 삭제">${fmtDist(bar)} 삭제</button><span class="cnt">남은 선수 ${active.length}</span></div>`;
+        let html = `<div class="fe-hbar"><span class="lbl">현재 바</span><button class="arw" onclick="heScrollChips(-1)" title="이전 높이 보기">‹</button><div class="chips">${chips}</div><button class="arw" onclick="heScrollChips(1)" title="다음 높이 보기">›</button><button class="del" onclick="deleteBarHeight(${bar})" title="${fmtDist(bar)} 삭제">${fmtDist(bar)} 삭제</button><span class="cnt">남은 선수 ${active.length}</span></div>`;
         rows.forEach(r => {
             const d = r.hd[bar] || {};
             const n = Object.keys(d).length;
@@ -421,7 +440,8 @@
             const passed = Object.values(d).some(m => m === 'PASS' || m === '-');
             const done = r.elim || cleared || passed || n >= 3;
             // 이전 높이 요약 (현재 바 제외, 시도한 높이만)
-            const prev = hs.filter(h => h < bar && r.hd[h]).map(h => { const m = [1, 2, 3].map(k => r.hd[h][k]).filter(Boolean).map(k => k === 'PASS' ? '–' : k).join(''); return `<i><b>${fmtDist(h)}</b>${m.replace(/O/g, '<em class="o">O</em>').replace(/X/g, '<em class="x">X</em>')}</i>`; }).join('');
+            // 이전 높이 칩을 누르면 그 높이로 이동 → 오입력 정정 가능
+            const prev = hs.filter(h => h !== bar && r.hd[h]).map(h => { const m = [1, 2, 3].map(k => r.hd[h][k]).filter(Boolean).map(k => k === 'PASS' ? '–' : k).join(''); return `<i class="lnk" onclick="heSetBar(${h})" title="${fmtDist(h)} 로 이동해 정정"><b>${fmtDist(h)}</b>${m.replace(/O/g, '<em class="o">O</em>').replace(/X/g, '<em class="x">X</em>')}</i>`; }).join('');
             const dots = [1, 2, 3].map(k => { const m = d[k]; const cls = m === 'O' ? 'o' : m === 'X' ? 'x' : (m ? 'p' : ''); const txt = m === 'O' ? 'O' : m === 'X' ? 'X' : (m ? '–' : ''); return `<i class="${cls}" ${m ? `onclick="heClearMark(${r.event_entry_id},${k})" title="이 시도 지우기"` : ''}>${txt}</i>`; }).join('');
             let status = '';
             if (r.sc) status = `<span class="st out">${r.sc}</span>`;
@@ -436,14 +456,21 @@
             html += `<div class="hrow ${done ? 'done' : ''} ${r.elim ? 'off' : ''}">
                 <div class="no">${r.lane_number || '—'}</div>
                 <div class="who"><div class="nm">${esc(r.name)}<small>#${typeof bib === 'function' ? bib(r.bib_number) : r.bib_number}</small></div><div class="prev">${prev || '<i class="none">첫 높이</i>'}</div></div>
-                <div class="cur"><div class="dots">${dots}</div>${status}</div>
+                <div class="cur"><div class="dots">${dots}</div>${status}${n > 0 && !r.sc ? `<button class="clr" onclick="heClearMark(${r.event_entry_id},${n})" title="마지막 시도 지우기 (오입력 정정)">${n}차 지움</button>` : ''}</div>
                 <div class="sc">${scSel}</div>
                 ${btns}
             </div>`;
         });
         html += `<div class="fe-undo"><span>${he.undo ? '방금 저장: <b>' + esc(he.undo.label) + '</b>' : '&nbsp;'}</span>${he.undo ? '<button onclick="heUndo()">되돌리기</button>' : ''}</div>`;
         box.innerHTML = html;
+        // 현재 바 칩이 보이도록 칩 줄만 스크롤 (페이지는 안 움직임)
+        const chipsEl = box.querySelector('.chips'), nowEl = box.querySelector('.chips .now');
+        if (chipsEl && nowEl) chipsEl.scrollLeft = Math.max(0, nowEl.offsetLeft - chipsEl.clientWidth / 2 + nowEl.offsetWidth / 2);
     }
+    window.heScrollChips = function (dir) {
+        const el = document.querySelector('#height-content .fe-hbar .chips'); if (!el) return;
+        el.scrollBy({ left: dir * Math.max(120, el.clientWidth * 0.6), behavior: 'smooth' });
+    };
     // 표 모드: 순위·순번·이름 열 고정 (가로 스크롤 시 이름이 사라지던 문제)
     function heStickyCols(content) {
         const table = content.querySelector('.height-toggle-table'); if (!table) return;
@@ -462,14 +489,7 @@
     window.renderHeightContent = function () {
         _origRenderHeight.apply(this, arguments);
         const content = document.getElementById('height-content'); if (!content) return;
-        const on = padEnabled();
-        const bar = content.querySelector('.sort-toggle-bar');
-        if (bar && !bar.querySelector('.fe-toggle-btn')) {
-            const b = document.createElement('button');
-            b.className = 'btn btn-xs ' + (on ? 'btn-primary' : 'btn-outline') + ' fe-toggle-btn';
-            b.textContent = on ? '터치 입력 켜짐' : '터치 입력'; b.title = '높이별 큰 버튼 입력 / 표 입력 전환'; b.onclick = fePadToggle;
-            bar.appendChild(b);
-        }
+        const on = true;
         content.classList.remove('fe-on');
         content.classList.toggle('fe-hl', on);
         const wrap = content.querySelector('.height-scroll-wrap');
