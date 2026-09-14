@@ -6980,6 +6980,44 @@ function parseLifBuffer(buffer) {
 }
 
 /**
+ * .lif 헤더 → 조(heat) 찾기. 반환 { heat, jointHeats, via } / heat=null 이면 미매칭
+ *   1) heat.scoreboard_key 정확 일치
+ *   2) joint_group.joint_scoreboard_key (합동조)
+ *   3) 구조 매칭 — .txt/.xlsx 가져오기와 같은 알고리즘(_recxResolveHeat):
+ *      라벨을 성별·부·종목·라운드·조 로 분해해 매칭. "남자 실업부 100 결승" ↔ "남자 일반부 100m 결승" 처럼
+ *      부 명칭(실업↔일반)·띄어쓰기·단위(m) 가 달라 문자열 키가 안 맞을 때 잡아준다.
+ */
+async function _lifFindHeat(competition_id, header) {
+    const SEL = `SELECT h.*, e.name as event_name, e.gender, e.round_type, e.category, e.competition_id as comp_id, e.id as event_id
+                 FROM heat h JOIN event e ON e.id = h.event_id`;
+    let heat = await db.get(`${SEL} WHERE h.scoreboard_key = ? AND e.competition_id = ?`, header.scoreboardKey, competition_id);
+    if (heat) return { heat, jointHeats: [], via: 'key' };
+    const jointHeats = [];
+    const jg = await db.get('SELECT * FROM joint_group WHERE joint_scoreboard_key = ?', header.scoreboardKey);
+    if (jg) {
+        const members = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id = ?', jg.id);
+        for (const m of members) {
+            const mh = await db.get(`${SEL} WHERE h.event_id = ? ORDER BY h.heat_number LIMIT 1`, m.event_id);
+            if (mh) jointHeats.push(mh);
+        }
+        heat = jointHeats.find(h => String(h.comp_id) === String(competition_id)) || jointHeats[0] || null;
+        if (heat) return { heat, jointHeats, via: 'joint' };
+    }
+    // 구조 매칭 (라벨에 "(2+4)" 같은 접미는 이미 제거된 scoreboardKey 사용)
+    try {
+        const label = _parseEventLabel(header.scoreboardKey || header.eventName);
+        const resolved = await _recxResolveHeat(competition_id, label);
+        if (resolved && resolved.heat) {
+            const sh = await db.get(`${SEL} WHERE h.id = ?`, resolved.heat.id);
+            if (sh) return { heat: sh, jointHeats: [], via: 'structural', ambiguous: !!resolved.ambiguous };
+        }
+    } catch (e) { console.warn('[lif structural match]', e.message); }
+    return { heat: null, jointHeats: [], via: null };
+}
+// .lif 배번 매칭 — 앞자리 0 무시 ("007" ↔ "7")
+function _lifBibEq(a, b) { const x = _recxNormBib(a), y = _recxNormBib(b); return !!x && x === y; }
+
+/**
  * POST /api/scoreboard/preview
  * Upload .lif files and preview parsed data + matching status
  */
@@ -6997,34 +7035,9 @@ app.post('/api/scoreboard/preview', upload.array('files', 50), async (req, res) 
                 const buf = fs.readFileSync(file.path);
                 const parsed = parseLifBuffer(buf);
 
-                // Try to find matching heat by scoreboard_key
-                let heat = await db.get(`
-                    SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
-                    FROM heat h
-                    JOIN event e ON e.id = h.event_id
-                    WHERE h.scoreboard_key = ? AND e.competition_id = ?
-                `, parsed.header.scoreboardKey, competition_id);
-
-                // Fallback: try joint_scoreboard_key
-                if (!heat) {
-                    const jg = await db.get('SELECT * FROM joint_group WHERE joint_scoreboard_key = ?', parsed.header.scoreboardKey);
-                    if (jg) {
-                        const members = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id = ?', jg.id);
-                        for (const m of members) {
-                            const mh = await db.get(`SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
-                                FROM heat h JOIN event e ON e.id=h.event_id WHERE h.event_id=? AND e.competition_id=? ORDER BY h.heat_number LIMIT 1`, m.event_id, competition_id);
-                            if (mh) { heat = mh; break; }
-                        }
-                        // If not in this competition, use any
-                        if (!heat) {
-                            for (const m of members) {
-                                const mh = await db.get(`SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
-                                    FROM heat h JOIN event e ON e.id=h.event_id WHERE h.event_id=? ORDER BY h.heat_number LIMIT 1`, m.event_id);
-                                if (mh) { heat = mh; break; }
-                            }
-                        }
-                    }
-                }
+                // 조 찾기: 키 정확일치 → 합동조 키 → 구조 매칭(.txt/.xlsx 와 동일)
+                const found = await _lifFindHeat(competition_id, parsed.header);
+                const heat = found.heat;
 
                 let matchStatus = 'not_found';
                 let heatInfo = null;
@@ -7039,6 +7052,8 @@ app.post('/api/scoreboard/preview', upload.array('files', 50), async (req, res) 
                         round_type: heat.round_type,
                         heat_number: heat.heat_number,
                         scoreboard_key: heat.scoreboard_key,
+                        match_via: found.via,
+                        ambiguous: !!found.ambiguous,
                     };
 
                     // Check athlete matches for each result row
@@ -7057,9 +7072,9 @@ app.post('/api/scoreboard/preview', upload.array('files', 50), async (req, res) 
                         let matchedEntry = null;
                         let matchMethod = 'none';
 
-                        // 1. Match by BIB number
+                        // 1. Match by BIB number (앞자리 0 무시)
                         if (row.bib) {
-                            matchedEntry = heatEntries.find(e => e.bib_number === row.bib);
+                            matchedEntry = heatEntries.find(e => _lifBibEq(e.bib_number, row.bib));
                             if (matchedEntry) matchMethod = 'bib';
                         }
 
@@ -7146,35 +7161,10 @@ app.post('/api/scoreboard/import', upload.array('files', 50), async (req, res) =
                     continue;
                 }
 
-                // Find heat — first try direct scoreboard_key match
-                let heat = await db.get(`
-                    SELECT h.*, e.name as event_name, e.gender, e.round_type, e.category,
-                           e.competition_id as comp_id, e.id as event_id
-                    FROM heat h
-                    JOIN event e ON e.id = h.event_id
-                    WHERE h.scoreboard_key = ? AND e.competition_id = ?
-                `, parsed.header.scoreboardKey, competition_id);
-
-                // If no direct match, try joint_scoreboard_key — find all heats in this joint group
-                let jointHeats = [];
-                if (!heat) {
-                    const jointGroup = await db.get(`SELECT jg.* FROM joint_group jg WHERE jg.joint_scoreboard_key = ?`, parsed.header.scoreboardKey);
-                    if (jointGroup) {
-                        const members = await db.all(`SELECT jgm.event_id FROM joint_group_member jgm WHERE jgm.joint_group_id = ?`, jointGroup.id);
-                        for (const m of members) {
-                            const mHeat = await db.get(`
-                                SELECT h.*, e.name as event_name, e.gender, e.round_type, e.category,
-                                       e.competition_id as comp_id, e.id as event_id
-                                FROM heat h JOIN event e ON e.id = h.event_id
-                                WHERE h.event_id = ? ORDER BY h.heat_number LIMIT 1
-                            `, m.event_id);
-                            if (mHeat) jointHeats.push(mHeat);
-                        }
-                        // Use the first heat that belongs to this competition as primary
-                        heat = jointHeats.find(h => String(h.comp_id) === String(competition_id));
-                        if (!heat && jointHeats.length > 0) heat = jointHeats[0];
-                    }
-                }
+                // 조 찾기: 키 정확일치 → 합동조 키 → 구조 매칭(.txt/.xlsx 와 동일)
+                const found = await _lifFindHeat(competition_id, parsed.header);
+                const heat = found.heat;
+                const jointHeats = found.jointHeats;
 
                 if (!heat) {
                     importResults.push({
@@ -7222,9 +7212,9 @@ app.post('/api/scoreboard/import', upload.array('files', 50), async (req, res) =
                     // Match athlete
                     let matchedEntry = null;
 
-                    // 1. BIB match
+                    // 1. BIB match (앞자리 0 무시)
                     if (row.bib) {
-                        matchedEntry = heatEntries.find(e => e.bib_number === row.bib);
+                        matchedEntry = heatEntries.find(e => _lifBibEq(e.bib_number, row.bib));
                     }
                     // 2. Lane match
                     if (!matchedEntry && row.lane) {
@@ -7471,13 +7461,13 @@ async function _recxResolveHeat(competition_id, g) {
         const n = _recxNormEvt(e.name);
         return n === fEvt || n.startsWith(fEvt);
     };
-    let cands = events.filter(e =>
-        (!g.gender || !e.gender || e.gender === g.gender) &&
-        nameOk(e) &&
-        (e.round_type === g.round));
+    // 정확히 같은 이름이 있으면 그것만 (100m 이 100mH 로 새지 않도록), 없을 때만 접두 매칭
+    const preferExact = (list) => { const ex = list.filter(e => _recxNormEvt(e.name) === fEvt); return ex.length ? ex : list; };
+    const genderOk = (e) => (!g.gender || !e.gender || e.gender === g.gender);
+    let cands = preferExact(events.filter(e => genderOk(e) && nameOk(e) && e.round_type === g.round));
     if (cands.length === 0) {
         // 라운드 무관 재시도 (round_type 이 다르게 저장된 경우)
-        cands = events.filter(e => (!g.gender || !e.gender || e.gender === g.gender) && nameOk(e));
+        cands = preferExact(events.filter(e => genderOk(e) && nameOk(e)));
     }
     if (cands.length === 0) return null;
     if (cands.length > 1 && g.divToken) {
@@ -7620,6 +7610,26 @@ app.post('/api/record-xlsx/import', upload.single('file'), async (req, res) => {
 //     3행~: 데이터 (기록 = 12.34 / 1:05.3 / DNS/DNF/DQ, 순위 ##$$ = 비순위)
 //   → record-xlsx 임포트와 동일 인프라(_recxMatchGroup/삽입) 재활용. 파일 1개 = 종목·조 1개.
 // ============================================================
+// "남자 실업부 100m 결승 2조" 같은 한 줄 종목 라벨 → { divisionRaw, gender, divToken, eventName, roundRaw, round, heatNum }
+//   .txt(계측 결과) 1행과 .lif 헤더가 같은 형태라 공유. 종목(거리/필드) 위치 기준으로 앞=성별+부, 뒤=라운드+조.
+//   전광판 .lif 는 "100 결승" 처럼 m 이 빠진 경우가 있어 숫자만 있으면 m 을 붙인다.
+function _parseEventLabel(fullName) {
+    fullName = String(fullName || '').trim();
+    let em = fullName.match(/(\d+\s*[×xX]\s*\d+\s*m?R?|\d+mH|\d+mSC|\d+mW|\d+m|\d+kmW?|하프마라톤|마라톤|멀리뛰기|세단뛰기|높이뛰기|장대높이뛰기|포환던지기|원반던지기|창던지기|해머던지기|\d+종경기)/i);
+    let eventName = em ? em[1].replace(/\s+/g, '') : fullName;
+    if (!em) {
+        // 단위 없는 거리("100 결승", "1500 예선 1조") → 100m / 1500m
+        const bare = fullName.match(/(?:^|\s)(\d{2,5})(?=\s|$)/);
+        if (bare) { em = { index: bare.index + (bare[0].length - bare[1].length), 1: bare[1] }; eventName = bare[1] + 'm'; }
+    }
+    const beforeEvt = em ? fullName.slice(0, em.index).trim() : '';
+    const afterEvt = em ? fullName.slice(em.index + em[1].length).trim() : '';
+    const hm = afterEvt.match(/(\d+)\s*조/); const heatNum = hm ? parseInt(hm[1]) : 1;
+    const roundRaw = /예선/.test(afterEvt) ? '예선' : /준결/.test(afterEvt) ? '준결승' : '결승';
+    const divisionRaw = beforeEvt || fullName;
+    return { divisionRaw, gender: _recxGenderOf(divisionRaw), divToken: _recxDivToken(divisionRaw), eventName, roundRaw, round: _recxRound(roundRaw), heatNum };
+}
+
 function parseTimingTxt(content) {
     content = String(content).replace(/^﻿/, '');
     const lines = content.split(/\r?\n/);
@@ -7631,14 +7641,7 @@ function parseTimingTxt(content) {
     // 풍속: 메타 필드 중 m/s 로 끝나는 것 (N/A m/s 는 무시)
     let wind = null;
     for (const f of head.slice(1)) { const wm = String(f).match(/([+-]?\d+(?:\.\d+)?)\s*m\/s/i); if (wm) { const w = parseFloat(wm[1]); if (!isNaN(w)) { wind = w; break; } } }
-    // 종목명 파싱: 종목(거리/필드) 기준으로 앞(성별+부) / 뒤(라운드+조) 분리
-    const em = fullName.match(/(\d+\s*[×xX]\s*\d+\s*m?R?|\d+mH|\d+mSC|\d+mW|\d+m|\d+kmW?|하프마라톤|마라톤|멀리뛰기|세단뛰기|높이뛰기|장대높이뛰기|포환던지기|원반던지기|창던지기|해머던지기|\d+종경기)/i);
-    const eventName = em ? em[1].replace(/\s+/g, '') : fullName;
-    const beforeEvt = em ? fullName.slice(0, em.index).trim() : '';
-    const afterEvt = em ? fullName.slice(em.index + em[1].length).trim() : '';
-    const hm = afterEvt.match(/(\d+)\s*조/); const heatNum = hm ? parseInt(hm[1]) : 1;
-    const roundRaw = /예선/.test(afterEvt) ? '예선' : /준결/.test(afterEvt) ? '준결승' : '결승';
-    const divisionRaw = beforeEvt || fullName;
+    const label = _parseEventLabel(fullName);
     // 컬럼 헤더행 (순위 … 기록)
     let hi = -1;
     for (let k = i + 1; k < lines.length; k++) { if (/순위/.test(lines[k]) && /기록/.test(lines[k])) { hi = k; break; } }
@@ -7664,7 +7667,7 @@ function parseTimingTxt(content) {
         else if (/^(nm|nh|기록없음)$/i.test(rec)) type = 'NM';
         rows.push({ type, rank: /^\d+$/.test(rankRaw) ? parseInt(rankRaw) : null, bib, lane: parseInt(gv(ci.lane)) || null, name, team: gv(ci.team), recordRaw: rec });
     }
-    return [{ divisionRaw, gender: _recxGenderOf(divisionRaw), divToken: _recxDivToken(divisionRaw), eventName, roundRaw, round: _recxRound(roundRaw), heatNum, wind, rows }];
+    return [{ ...label, wind, rows }];
 }
 
 app.post('/api/timing-txt/import', upload.array('files', 100), async (req, res) => {
