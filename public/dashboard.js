@@ -1393,34 +1393,42 @@ function renderLiveTrackResults(data, relayMembers) {
             r.rank = r.time_seconds == null ? '—' : ((i > 0 && rows[i - 1].time_seconds === r.time_seconds && !rows[i - 1].status_code) ? rows[i - 1].rank : rk);
             rk = i + 2;
         });
-        html += `<table class="data-table" style="font-size:13px;">
-            <thead><tr><th>순위</th><th>${smallNumLabel}</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th><th>기록</th><th>비고</th></tr></thead>
-            <tbody>${rows.map(r => {
-                const wMark = (_isWindAided && !r.status_code && r.time_seconds != null) ? '<span class="wind-aided-mark">w</span>' : '';
-                // 신기록 배지 (풍속 초과 시 미표시 — 참고기록)
-                const recBadges = (!_isWindAided && !r.status_code && r.time_seconds != null)
-                    ? _buildRecordBadgesHTML(r.time_seconds) : '';
-                let memberHtml = '';
-                if (isRelay && relayMembers) {
-                    const members = relayMembers.filter(m => m.event_entry_id === r.event_entry_id);
-                    if (members.length > 0) {
-                        const sorted = [...members].sort((a, b) => (a.leg_order || 99) - (b.leg_order || 99));
-                        memberHtml = `<tr><td colspan="7" style="padding:2px 8px 6px 40px;background:#f8f9fa;border-bottom:2px solid #e5e7eb;">
-                            <span style="font-size:10px;color:var(--text-muted);margin-right:6px;">주자:</span>
-                            ${sorted.map(m => `<span style="font-size:11px;margin-right:10px;">${m.leg_order ? m.leg_order + '주 ' : ''}${m.name} <span style="color:var(--text-muted);">#${bib(m.bib_number)}</span></span>`).join('')}
-                        </td></tr>`;
-                    }
+        // ── 완료 결과(renderTrackResults)와 같은 두 줄 행 — LIVE 는 공유 카드(data-sc) 없음, 기록 들어온 행만 살짝 강조 ──
+        //   (LIVE 와 결과 팝업이 다른 함수라 "어떨 땐 두 줄, 어떨 땐 표"로 보이던 문제)
+        html += `<div class="rr-list rr-live">${rows.map(r => {
+            const hasRec = !r.status_code && r.time_seconds != null;
+            const wMark = (_isWindAided && hasRec) ? '<span class="rr-w">w</span>' : '';
+            const recBadges = (hasRec && !_isWindAided) ? _rrRecordBadges(r.time_seconds) : '';
+            let memberHtml = '';
+            if (isRelay && relayMembers) {
+                const members = relayMembers.filter(m => m.event_entry_id === r.event_entry_id);
+                if (members.length > 0) {
+                    const sorted = [...members].sort((a, b) => (a.leg_order || 99) - (b.leg_order || 99));
+                    memberHtml = `<div class="rr-members">${sorted.map(m => `<span>${m.leg_order ? m.leg_order + '주 ' : ''}${m.name}<i>#${bib(m.bib_number)}</i></span>`).join('')}</div>`;
                 }
-                // 비고: 풍속 초과 → 참고기록, 그 외엔 remark (신기록은 기록칸 괄호로 표시)
-                const remarkText = _isWindAided ? '참고기록' : (r.remark || '');
-                const remarkStyle = _isWindAided ? 'color:var(--accent);font-weight:600;' : '';
-                return `<tr style="${r.time_seconds != null ? 'background:#f0fff4;' : ''}">
-                <td>${r.rank}</td><td>${r.lane_number || '—'}</td><td><strong>${bib(r.bib_number)}</strong></td>
-                <td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>
-                <td style="font-family:monospace;font-weight:600;">${r.status_code ? `<span class="sc-badge">${r.status_code}</span>` : (r.time_seconds != null ? formatTime(r.time_seconds) + wMark + recBadges : '<span style="color:var(--text-muted);">—</span>')}</td>
-                <td style="font-size:11px;color:#666;${remarkStyle}">${remarkText}</td>
-            </tr>${memberHtml}`;
-            }).join('')}</tbody></table>`;
+            }
+            const rankHtml = r.status_code
+                ? `<div class="rr-rank rr-rank-st sc-${r.status_code}">${r.status_code}</div>`
+                : `<div class="rr-rank${r.rank === 1 ? ' rr-rank-1' : ''}${r.rank === '—' ? ' rr-rank-wait' : ''}">${r.rank}</div>`;
+            const meta = [
+                `${smallNumLabel} ${r.lane_number || '—'}`,
+                `BIB ${bib(r.bib_number)}`,
+                r.sub_group ? `${r.sub_group}그룹` : '',
+                _isWindAided && hasRec ? '<b>참고기록</b>' : '',
+                r.remark ? `<b>${r.remark}</b>` : '',
+            ].filter(Boolean).join('<i>·</i>');
+            const recHtml = r.status_code
+                ? `<div class="rr-rec rr-rec-st">${r.status_code}</div>`
+                : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark}${recBadges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
+            return `<div class="rr rr-nocard${hasRec ? ' rr-has-rec' : ''}">
+                ${rankHtml}
+                <div class="rr-who"><span class="rr-name">${r.name}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}</span>`}</div>
+                <div class="rr-meta">${meta}</div>
+                ${recHtml}
+                <div class="rr-go" aria-hidden="true"></div>
+                ${memberHtml}
+            </div>`;
+        }).join('')}</div>`;
     });
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
 }
