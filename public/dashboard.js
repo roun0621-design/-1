@@ -1691,7 +1691,8 @@ function renderLiveCombinedResults(data) {
             if (!container) return;
 
             container.innerHTML = `
-                <div class="matrix-scroll-wrap" style="overflow-x:auto;">
+                ${_rrCombinedList(rows, subDefs, day1Max, { live: true, evt })}
+                <div class="rr-field-desktop"><div class="matrix-scroll-wrap" style="overflow-x:auto;">
                     <table class="data-table" style="font-size:11px;">
                         <thead>
                         <tr>
@@ -1733,7 +1734,7 @@ function renderLiveCombinedResults(data) {
                             </tr>`;
                         }).join('')}</tbody>
                     </table>
-                </div>
+                </div></div>
                 <p style="margin-top:6px;font-size:10px;color:var(--text-muted);">실시간 WA 점수 합산 | ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')}</p>`;
         } catch (e) {
             console.error('[combined live] 데이터 로드 실패:', e);
@@ -1805,7 +1806,8 @@ async function _loadCombinedResultsAsync(evt) {
         }).join('');
 
         container.innerHTML = `
-            <div class="matrix-scroll-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+            ${_rrCombinedList(rows, subDefs, day1Max, { live: false, evt, scAttr: r => _scAttr(evt, r, r.total > 0 ? String(r.total) : '', r.rank, { marks: subDefs.map(se => { const p = r.pts[se.order]; if (!p || p.raw == null) return '—'; if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) return p.status_code; if (p.raw === 0 && p.points === 0) return 'NM'; if (p.raw <= 0) return '—'; return se.unit === 's' ? formatTime(p.raw) : formatHeight(p.raw); }), marksPerRow: day1Max }) })}
+            <div class="rr-field-desktop"><div class="matrix-scroll-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
                 <table class="data-table sticky-leading" style="font-size:11px;">
                     <thead>
                     <tr>
@@ -1858,7 +1860,7 @@ async function _loadCombinedResultsAsync(evt) {
                         </tr>`;
                     }).join('')}</tbody>
                 </table>
-            </div>
+            </div></div>
             <p style="margin-top:6px;font-size:10px;color:var(--text-muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
             <div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border);">
                 <div style="font-weight:700;font-size:13px;margin-bottom:6px;">종목별 세부기록</div>
@@ -2287,6 +2289,76 @@ function _rrFieldHeightList(rows, hts, opts) {
         </div>`;
     }).join('');
     return `<div class="rr-field-mobile"><div class="rr-list${live ? ' rr-live' : ''}">${items}</div></div>`;
+}
+
+// ── 종합경기(10종/7종) 모바일(<900px) 카드 ──
+//   1줄 순위·이름·소속 / 2줄 BIB·1일차·2일차 소계 / 오른쪽 총점 + 선두 차이
+//   3·4줄: 1일차 한 줄, 2일차 한 줄 종목 그리드(약칭·기록·점수). 칸 높이는 항상 3줄 고정(DNF/미실시도 같은 크기).
+//   LIVE: 상단 진행 바(끝난 종목 골드·현재 초록), 현재 종목 칸 초록, 미실시 '–'.
+const _RR_CMB_SHORT = { '100m': '100m', '멀리뛰기': '멀리', '포환던지기': '포환', '높이뛰기': '높이', '400m': '400m', '110m 허들': '110mH', '원반던지기': '원반', '장대높이뛰기': '장대', '창던지기': '창', '1500m': '1500m', '100m 허들': '100mH', '200m': '200m', '800m': '800m' };
+function _rrCombinedList(rows, subDefs, day1Max, opts) {
+    const live = !!(opts && opts.live);
+    const fmtPts = n => (n || 0).toLocaleString('ko-KR');
+    // 진행 중 종목: 누구든 값이 들어온 가장 뒤 차수
+    let nowOrder = 0;
+    rows.forEach(r => subDefs.forEach(se => { const p = r.pts[se.order]; if (p && (p.raw != null || p.status_code)) nowOrder = Math.max(nowOrder, se.order); }));
+    const allDoneNow = nowOrder > 0 && rows.every(r => { const p = r.pts[nowOrder]; return p && (p.raw != null || p.status_code); });
+    const finished = nowOrder === subDefs.length && allDoneNow;
+    const leaderTotal = rows.reduce((m, r) => Math.max(m, r.total || 0), 0);
+    const canDetail = !live && typeof _cResultShowSub === 'function';
+
+    let prog = '';
+    if (live && subDefs.length) {
+        const dots = subDefs.map(se => `<i class="${se.order < nowOrder || (se.order === nowOrder && allDoneNow) ? 'd' : (se.order === nowOrder ? 'now' : '')}"></i>`).join('');
+        const cur = subDefs.find(se => se.order === nowOrder);
+        const txt = nowOrder === 0 ? '시작 전' : (finished ? `${subDefs.length}/${subDefs.length} · 전 종목 종료` : `${nowOrder}/${subDefs.length} · <b>${cur ? cur.name : ''}</b> ${allDoneNow ? '종료' : '진행 중'}`);
+        prog = `<div class="rr-cmb-prog"><span class="dots">${dots}</span><span>${txt}</span></div>`;
+    }
+
+    const items = rows.map(r => {
+        const codes = subDefs.map(se => (r.pts[se.order] || {}).status_code).filter(c => ['DNF', 'DNS', 'DQ'].includes(c));
+        const status = codes.length ? codes[codes.length - 1] : '';
+        const rankNum = (r.total > 0 && !status) ? r.rank : null;
+        let d1 = 0, d2 = 0, bestOrder = 0, bestPts = -1;
+        subDefs.forEach(se => {
+            const p = r.pts[se.order] || {};
+            const pts = p.points || 0;
+            if (se.order <= day1Max) d1 += pts; else d2 += pts;
+            if (p.raw != null && pts > bestPts) { bestPts = pts; bestOrder = se.order; }
+        });
+        let sub = '';
+        if (status) sub = `<small>${status}</small>`;
+        else if (r.total > 0 && rankNum === 1) { const b = _rrRecordBadges(r.total); sub = b ? `<small class="lead">${b}</small>` : (live ? '<small class="lead">선두</small>' : '<small>&nbsp;</small>'); }
+        else if (r.total > 0) sub = `<small>−${fmtPts(leaderTotal - r.total)}</small>`;
+        else sub = '<small>&nbsp;</small>';
+        const cell = se => {
+            const p = r.pts[se.order] || {};
+            const has = p.raw != null || !!p.status_code;
+            const isNow = live && se.order === nowOrder && !finished;
+            let cls = 'rr-cmb-c', mark = '–', pts = '&nbsp;';
+            if (p.status_code && ['DNS', 'DNF', 'DQ', 'NM', 'NH'].includes(p.status_code)) { cls += ' x'; mark = p.status_code; pts = '0'; }
+            else if (has && p.raw === 0 && !p.points) { cls += ' x'; mark = 'NM'; pts = '0'; }
+            else if (has && p.raw > 0) { mark = se.unit === 's' ? formatTime(p.raw) : formatHeight(p.raw); pts = String(p.points || 0); if (se.order === bestOrder) cls += ' best'; }
+            else cls += ' wait';
+            if (isNow) cls += ' now';
+            const click = canDetail ? ` onclick="event.stopPropagation();_cResultShowSub(${se.order})"` : '';
+            return `<div class="${cls}"${click}><span class="l">${_RR_CMB_SHORT[se.name] || se.name}</span><span class="m">${mark}</span><span class="p">${pts}</span></div>`;
+        };
+        const day1 = subDefs.filter(se => se.order <= day1Max), day2 = subDefs.filter(se => se.order > day1Max);
+        // 두 줄 칸 폭 동일: 칸 수가 적은 줄(7종 2일차 3종목)도 같은 열 수로 깔고 빈칸을 둔다
+        const cols = Math.max(day1.length, day2.length);
+        const scAttr = (!live && r.total > 0 && opts && opts.scAttr) ? opts.scAttr(r) : '';
+        return `<div class="rr rr-cmb${scAttr ? '' : ' rr-nocard'}${live && r.total > 0 ? ' rr-has-rec' : ''}"${scAttr}>
+            ${_rrFieldRankHtml(status, rankNum)}
+            <div class="rr-who"><span class="rr-name">${r.name}</span><span class="rr-team">${r.team || ''}</span></div>
+            <div class="rr-meta">BIB ${bib(r.bib_number)}<i>·</i><span class="d1">1일차 ${fmtPts(d1)}</span><i>·</i><span class="d2">2일차 ${d2 || nowOrder > day1Max ? fmtPts(d2) : '–'}</span></div>
+            <div class="rr-tot"><b>${r.total > 0 ? fmtPts(r.total) : '—'}</b>${sub}</div>
+            <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
+            <div class="rr-cmb-ev d1 c${cols}">${day1.map(cell).join('')}</div>
+            <div class="rr-cmb-ev d2 c${cols}">${day2.map(cell).join('')}</div>
+        </div>`;
+    }).join('');
+    return `<div class="rr-field-mobile">${prog}<div class="rr-list${live ? ' rr-live' : ''}">${items}</div></div>`;
 }
 
 // 신기록 배지 (NR/DR/CR) — 두 줄 행의 기록 옆 작은 알약
