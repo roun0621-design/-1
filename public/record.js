@@ -4933,13 +4933,20 @@ function closeFieldZoomModal() {
 // RESET EVENT RESULTS — 종목 기록 전체 초기화 (10종/7종 + 일반 종목)
 // ============================================================
 async function resetSubEventResults(eventId, eventName) {
-    if (!confirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.\n정말 초기화하시겠습니까?`)) return;
+    // 합동 종목이면 다른 대회 멤버의 기록도 같이 지운다 (화면에 함께 보이므로 이것만 지우면 "안 지워진 것"처럼 보임)
+    const joint = (typeof isJointMode === 'function' && eventId === state.selectedEventId && isJointMode());
+    const jointNote = joint ? `\n\n※ 합동 종목: 함께 표시되는 다른 대회(${_jointOtherMembers().map(m => m.federation || m.comp_name || '').filter(Boolean).join(', ') || '멤버'})의 기록도 함께 초기화됩니다.` : '';
+    if (!confirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.${jointNote}\n정말 초기화하시겠습니까?`)) return;
     if (!confirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
 
     try {
         showToast('기록 초기화 중...', 'info', 2000);
-        const result = await API.resetSubEvent(eventId);
-        showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제)`, 'success', 4000);
+        const result = await API.resetSubEvent(eventId, joint);
+        // 화면 상태도 즉시 비움 (되돌아오는 재조회가 늦어도 옛 기록이 남아 보이지 않게)
+        state.results = []; state.heightAttempts = [];
+        if (window._fe) { _fe.sel = null; _fe.undo = null; _fe.lastAttemptInit = false; }
+        if (window._he) { _he.undo = null; }
+        showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제${result.jointEvents ? `, 합동 ${result.jointEvents}종목 포함` : ''})`, 'success', 4000);
         // Reload the event list and current event data
         await loadEventsAndMatrix();
         if (state.selectedEventId) {

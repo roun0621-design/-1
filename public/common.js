@@ -521,7 +521,7 @@ const API = {
     },
     setManualRank: (entryId, rank) => api('PATCH', `/api/event-entries/${entryId}/manual-rank`, { manual_rank: rank }),
     deleteResult: body => api('DELETE', '/api/results', body),
-    resetSubEvent: eventId => api('POST', '/api/results/reset-sub-event', { event_id: eventId }),
+    resetSubEvent: (eventId, includeJoint) => api('POST', '/api/results/reset-sub-event', { event_id: eventId, include_joint: !!includeJoint }),
     updateEntryStatus: (id, st) => api('PATCH', `/api/event-entries/${id}/status`, { status: st }),
     checkinBarcode: (bc, eid) => api('POST', '/api/callroom/checkin', { barcode: bc, event_id: eid }),
     cancelCheckin: (id) => api('PATCH', `/api/event-entries/${id}/status`, { status: 'registered' }),
