@@ -3103,11 +3103,16 @@ app.post('/api/events/:id/complete', async (req, res) => {
     const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     if (event.round_status === 'completed') return res.status(400).json({ error: '이미 완료된 경기입니다.' });
-    if (event.round_status !== 'in_progress') return res.status(400).json({ error: '진행 중인 경기만 완료 처리할 수 있습니다.' });
+    // 기록이 하나도 없거나 소집 전(created/heats_generated)이어도 강제 완료 허용 (현장 요청 2026-09).
+    // 되돌리기는 /revert-complete (관리자). 운영 로그에 '강제' 표기.
+    const forced = event.round_status !== 'in_progress';
+    const resultCntRow = await db.get('SELECT COUNT(*) as cnt FROM result r JOIN heat h ON h.id = r.heat_id WHERE h.event_id = ?', event.id);
+    const noRecords = !resultCntRow || !resultCntRow.cnt;
     await db.run("UPDATE event SET round_status='completed' WHERE id=?", event.id);
     broadcastSSE('event_completed', { event_id: event.id, judge_name });
     const gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
+    if (forced || noRecords) opLog(`${event.name} ${roundL} 강제 완료 (${forced ? '진행중 아님: ' + event.round_status : ''}${forced && noRecords ? ', ' : ''}${noRecords ? '기록 없음' : ''}) - ${judge_name}`, 'completion', judge_name, event.competition_id);
     // 관심 종목 알림 — 경기완료(결과 확정)
     notifyEventInterest(event, { kind: 'result', title: `${gL} ${event.name} 결과 발표`, body: `${roundL} 경기가 완료되어 결과가 올라왔습니다.` }).catch(() => {});
     opLog(`${event.name} ${roundL} 경기완료 - ${judge_name}`, 'completion', judge_name, event.competition_id);

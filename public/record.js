@@ -4603,13 +4603,9 @@ async function completeRound() {
                 ? `높이 시기가 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(패스/탈락 선수도 최소 한 번의 시기 기록이 필요합니다)\n계속 완료하시겠습니까?`
                 : isFieldDist
                 ? `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(예선탈락 등으로 일부 시기만 진행한 선수가 있을 수 있습니다)\n그래도 경기를 완료하시겠습니까?`
-                : `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n모든 선수의 기록 또는 상태코드(DQ/DNS/DNF/NM)를 입력한 후 경기를 완료하세요.`;
-            if (isHeight || isFieldDist) {
-                if (!confirm(msg)) return;
-            } else {
-                alert(msg);
-                return;
-            }
+                : `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(기록/상태코드 없이도 완료할 수 있으며, 완료 후 관리자가 되돌릴 수 있습니다)\n그래도 경기를 완료하시겠습니까?`;
+            // 기록이 없어도 강제 완료 허용 (현장 요청) — 확인만 받는다
+            if (!confirm(msg)) return;
         }
     } catch(e) { console.error(e); }
 
