@@ -93,7 +93,11 @@
         .fe-hbar .chips { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; } .fe-hbar .chips::-webkit-scrollbar { display:none; }
         .fe-hbar .chips button { flex:0 0 auto; border:1px solid #e9e4da; background:#fff; border-radius:999px; padding:8px 14px; font-family:'D2Coding', var(--font-mono, monospace); font-size:15px; font-weight:700; color:#5d5754; }
         .fe-hbar .chips button.now { background:#fff; color:#262324; border:2px solid #b79f58; box-shadow:0 0 0 3px #f6f1e3; }
-        .fe-hlist .hrow { display:grid; grid-template-columns:36px minmax(0,1fr) auto auto; column-gap:10px; align-items:center; padding:10px 12px; border-bottom:1px solid #e9e4da; min-height:72px; }
+        .fe-hbar .del { flex:0 0 auto; border:1px solid #e9e4da; background:#fff; border-radius:8px; padding:6px 10px; font-size:12px; color:#9a938d; white-space:nowrap; }
+        .fe-hlist .hrow { display:grid; grid-template-columns:36px minmax(0,1fr) auto auto auto; column-gap:10px; align-items:center; padding:10px 12px; border-bottom:1px solid #e9e4da; min-height:72px; }
+        .fe-hlist .hrow.done .btns { display:none; }
+        .fe-hlist .sc select { font-size:13px; padding:8px 6px; border:1px solid #e9e4da; border-radius:8px; background:#fff; color:#5d5754; min-width:78px; }
+        .fe-hlist .hrow.off .sc select { opacity:1; }
         .fe-hlist .hrow.done { background:#faf9f6; } .fe-hlist .hrow.off { opacity:.5; }
         .fe-hlist .no { font-family:'D2Coding', var(--font-mono, monospace); font-size:18px; font-weight:700; color:#9a938d; text-align:center; }
         .fe-hlist .nm { font-size:17px; font-weight:800; } .fe-hlist .nm small { font-size:11px; color:#9a938d; font-weight:400; margin-left:6px; }
@@ -111,7 +115,7 @@
         .fe-hlist .btns button:active { transform:scale(.96); }
         .fe-hlist .fe-undo { padding:10px 12px; }
         .fe-hlist .fe-empty { margin:12px; }
-        @media (max-width: 600px) { .fe-hlist .hrow { grid-template-columns:30px minmax(0,1fr) auto; grid-template-rows:auto auto; } .fe-hlist .btns { grid-column:1 / -1; justify-content:flex-end; } .fe-hlist .btns button { width:72px; } }
+        @media (max-width: 600px) { .fe-hlist .hrow { grid-template-columns:30px minmax(0,1fr) auto auto; grid-template-rows:auto auto; } .fe-hlist .btns { grid-column:1 / -1; justify-content:flex-end; } .fe-hlist .btns button { width:72px; } }
         @media (max-width: 899px) {
             #field-content.fe-on, #height-content.fe-on { grid-template-columns:1fr; }
             .fe-pad { position:sticky; bottom:0; top:auto; border-radius:14px 14px 0 0; }
@@ -399,7 +403,7 @@
         const rows = heRows();
         const chips = hs.map(h => `<button class="${h === bar ? 'now' : ''}" onclick="heSetBar(${h})">${fmtDist(h)}</button>`).join('');
         const active = rows.filter(r => !r.elim && !(Object.values(r.hd[bar] || {}).includes('O')) && !(Object.values(r.hd[bar] || {}).some(m => m === 'PASS' || m === '-')) && Object.keys(r.hd[bar] || {}).length < 3);
-        let html = `<div class="fe-hbar"><span class="lbl">현재 바</span><div class="chips">${chips}</div><span class="cnt">남은 선수 ${active.length}</span></div>`;
+        let html = `<div class="fe-hbar"><span class="lbl">현재 바</span><div class="chips">${chips}</div><button class="del" onclick="deleteBarHeight(${bar})" title="${fmtDist(bar)} 삭제">${fmtDist(bar)} 삭제</button><span class="cnt">남은 선수 ${active.length}</span></div>`;
         rows.forEach(r => {
             const d = r.hd[bar] || {};
             const n = Object.keys(d).length;
@@ -415,10 +419,15 @@
             else if (cleared) status = `<span class="st ok">통과</span>`;
             else if (passed) status = `<span class="st">패스</span>`;
             const btns = done ? '' : `<div class="btns"><button class="o" onclick="heMarkRow(${r.event_entry_id},'O')">O</button><button class="x" onclick="heMarkRow(${r.event_entry_id},'X')">X</button><button class="p" onclick="heMarkRow(${r.event_entry_id},'-')">–</button></div>`;
+            // 상태(DNS/DNF/DQ/NM) — 표 모드의 상태 열과 같은 핸들러(setFieldHeightStatusCode)
+            const noShow = r.status === 'no_show';
+            const scSel = `<select class="sc-select fe-sc" data-eid="${r.event_entry_id}" onchange="setFieldHeightStatusCode(this)" title="DNS=불출전, DNF=미완주, DQ=실격, NM=기록없음" ${noShow ? 'disabled' : ''}>
+                <option value="">상태 —</option>${['DNS', 'DNF', 'DQ', 'NM'].map(c => `<option value="${c}" ${r.sc === c ? 'selected' : ''}>${c}</option>`).join('')}</select>`;
             html += `<div class="hrow ${done ? 'done' : ''} ${r.elim ? 'off' : ''}">
                 <div class="no">${r.lane_number || '—'}</div>
                 <div class="who"><div class="nm">${esc(r.name)}<small>#${typeof bib === 'function' ? bib(r.bib_number) : r.bib_number}</small></div><div class="prev">${prev || '<i class="none">첫 높이</i>'}</div></div>
                 <div class="cur"><div class="dots">${dots}</div>${status}</div>
+                <div class="sc">${scSel}</div>
                 ${btns}
             </div>`;
         });
