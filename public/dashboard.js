@@ -1492,6 +1492,7 @@ function renderLiveFieldDistResults(data) {
             rk = i + 2;
         });
         const needsWind = requiresWindMeasurement(data.event?.name, 'field_distance');
+        html += '<div class="rr-field-desktop">';   // ≥900px: 6차시기 표 / <900px: 두 줄+시기 스트립 (_rrFieldDistList)
         if (needsWind) {
             html += `<table class="data-table field-table field-2row-table" style="font-size:12px;">
                 <thead>
@@ -1560,6 +1561,7 @@ function renderLiveFieldDistResults(data) {
                     </tr>`;
                 }).join('')}</tbody></table>`;
         }
+        html += '</div>' + _rrFieldDistList(rows, needsWind, { live: true, event: data.event });
     });
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
 }
@@ -1611,7 +1613,7 @@ function renderLiveFieldHeightResults(data) {
         let thead = '<th>순위</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>';
         hts.forEach(h2 => { thead += `<th style="font-size:10px;">${formatHeight(h2)}</th>`; });
         thead += '<th>최고</th><th>비고</th>';
-        html += `<table class="data-table" style="font-size:12px;">
+        html += `<div class="rr-field-desktop"><table class="data-table" style="font-size:12px;">
             <thead><tr>${thead}</tr></thead>
             <tbody>${rows.map(r => {
                 let c = '';
@@ -1622,7 +1624,7 @@ function renderLiveFieldHeightResults(data) {
                 const _rmk = '';  // 신기록은 기록칸 괄호로 표시
                 const _rmkSt = _rmk ? 'color:#27ae60;font-weight:700;' : '';
                 return `<tr style="${r.best != null ? 'background:#f0fff4;' : ''}"><td>${_rkDisp}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team || ''}</td>${c}<td style="font-weight:700;">${_bestDisp}</td><td style="font-size:11px;${_rmkSt}">${_rmk}</td></tr>`;
-            }).join('')}</tbody></table>`;
+            }).join('')}</tbody></table></div>` + _rrFieldHeightList(rows, hts, { live: true, event: data.event });
     });
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
 }
@@ -2212,6 +2214,81 @@ let _rrFirstOpen = (() => {
     return true;
 })();
 
+// ── 필드 종목 모바일(<900px) 두 줄 행 + 3줄 시기 스트립 ──
+//   거리: 6칸 고정(차수·기록·풍속), 최고 시기 골드, 파울 ×, 패스 –, 미실시 연하게
+//   높이: 시도한 높이만 칩으로 가로 스크롤, 통과 최고 높이 골드, O 초록 / X 빨강
+//   완료 결과는 행 전체가 공유 카드(data-sc), LIVE 는 공유 없음 + 기록 들어온 행 연한 강조
+function _rrFieldRankHtml(status, rankNum) {
+    if (status) return `<div class="rr-rank rr-rank-st sc-${status}">${status}</div>`;
+    return `<div class="rr-rank${rankNum === 1 ? ' rr-rank-1' : ''}${rankNum == null ? ' rr-rank-wait' : ''}">${rankNum == null ? '—' : rankNum}</div>`;
+}
+function _rrFieldDistList(rows, needsWind, opts) {
+    const live = !!(opts && opts.live), evt = opts && opts.event;
+    const items = rows.map(r => {
+        const hasRec = !r.status_code && r.best != null;
+        const rankNum = typeof r.rank === 'number' ? r.rank : null;
+        const bwa = needsWind && hasRec && r.bestWind != null && parseFloat(r.bestWind) > 2.0;
+        const badges = (hasRec && !bwa) ? _rrRecordBadges(r.best) : '';
+        let bestIdx = 0;
+        if (hasRec) { for (let i = 6; i >= 1; i--) { if (r.att[i] === r.best) { bestIdx = i; break; } } }
+        const recHtml = r.status_code
+            ? `<div class="rr-rec rr-rec-st">${r.status_code}</div>`
+            : (hasRec ? `<div class="rr-rec">${formatHeight(r.best)}${(needsWind && r.bestWind != null) ? `<span class="rr-w">${formatWind(r.bestWind)}${bwa ? ' w' : ''}</span>` : ''}${badges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
+        const meta = [`순번 ${r.lane_number || '—'}`, `BIB ${bib(r.bib_number)}`, bwa ? '<b>참고기록</b>' : ''].filter(Boolean).join('<i>·</i>');
+        let cells = '';
+        for (let i = 1; i <= 6; i++) {
+            const v = r.att[i];
+            const has = v != null, foul = has && v === 0, pass = has && v < 0;
+            const cls = ['rr-att-c', i === bestIdx ? 'best' : '', foul ? 'x' : '', pass ? 'pass' : '', !has ? 'empty' : ''].filter(Boolean).join(' ');
+            const val = has ? (foul ? '×' : (pass ? '–' : formatHeight(v))) : '–';
+            const wind = needsWind ? `<small>${(has && !foul && !pass && r.attWind[i] != null) ? formatWind(r.attWind[i]) : '&nbsp;'}</small>` : '';
+            cells += `<div class="${cls}"><span class="n">${i}</span>${val}${wind}</div>`;
+        }
+        const scAttr = (!live && hasRec) ? _scAttr(evt, r, formatHeight(r.best), rankNum) : '';
+        return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr}>
+            ${_rrFieldRankHtml(r.status_code, rankNum)}
+            <div class="rr-who"><span class="rr-name">${r.name}</span><span class="rr-team">${r.team || ''}</span></div>
+            <div class="rr-meta">${meta}</div>
+            ${recHtml}
+            <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
+            <div class="rr-att">${cells}</div>
+        </div>`;
+    }).join('');
+    return `<div class="rr-field-mobile"><div class="rr-list${live ? ' rr-live' : ''}">${items}</div></div>`;
+}
+function _rrFieldHeightList(rows, hts, opts) {
+    const live = !!(opts && opts.live), evt = opts && opts.event;
+    const items = rows.map(r => {
+        const status = r.isNM ? 'NM' : (r.status_code || '');
+        const hasRec = !status && r.best != null;
+        const rankNum = typeof r.rank === 'number' ? r.rank : null;
+        const badges = hasRec ? _rrRecordBadges(r.best) : '';
+        const recHtml = status ? `<div class="rr-rec rr-rec-st">${status}</div>` : (hasRec ? `<div class="rr-rec">${formatHeight(r.best)}${badges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
+        const meta = [`순번 ${r.lane_number || '—'}`, `BIB ${bib(r.bib_number)}`].join('<i>·</i>');
+        let chips = '';
+        hts.forEach(h2 => {
+            const d = r.hd[h2]; if (!d) return;
+            let marks = '';
+            for (let i = 1; i <= 3; i++) {
+                if (!d[i]) continue;
+                const m = d[i] === 'PASS' ? '–' : d[i];
+                marks += `<i class="${m === 'O' ? 'o' : (m === 'X' ? 'xx' : 'p')}">${m}</i>`;
+            }
+            chips += `<div class="rr-hj-c${h2 === r.best ? ' best' : ''}"><b>${formatHeight(h2)}</b><span>${marks || '&nbsp;'}</span></div>`;
+        });
+        const scAttr = (!live && hasRec) ? _scAttr(evt, r, formatHeight(r.best), rankNum) : '';
+        return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr}>
+            ${_rrFieldRankHtml(status, rankNum)}
+            <div class="rr-who"><span class="rr-name">${r.name}</span><span class="rr-team">${r.team || ''}</span></div>
+            <div class="rr-meta">${meta}</div>
+            ${recHtml}
+            <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
+            ${chips ? `<div class="rr-hj">${chips}</div>` : ''}
+        </div>`;
+    }).join('');
+    return `<div class="rr-field-mobile"><div class="rr-list${live ? ' rr-live' : ''}">${items}</div></div>`;
+}
+
 // 신기록 배지 (NR/DR/CR) — 두 줄 행의 기록 옆 작은 알약
 function _rrRecordBadges(newValNum) {
     const lbl = _recLabelText(newValNum);
@@ -2275,6 +2352,7 @@ function renderFieldDistResults(data) {
             rk = i + 2;
         });
         const needsWind = requiresWindMeasurement(data.event?.name, 'field_distance');
+        html += '<div class="rr-field-desktop">';   // ≥900px: 6차시기 표 / <900px: 두 줄+시기 스트립 (_rrFieldDistList)
         if (needsWind) {
             html += `<table class="data-table field-table field-2row-table" style="font-size:12px;">
                 <thead>
@@ -2332,6 +2410,7 @@ function renderFieldDistResults(data) {
                     return `<tr${_scAttr(data.event, r, _scRec2, typeof r.rank === 'number' ? r.rank : null)}><td>${rkDisp2}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td class="att-col-best" style="font-weight:700;">${bestDisp2}</td><td style="font-size:11px;${rmkSt2}">${rmk2}</td></tr>`;
                 }).join('')}</tbody></table>`;
         }
+        html += '</div>' + _rrFieldDistList(rows, needsWind, { live: false, event: data.event });
     });
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
 }
@@ -2377,7 +2456,7 @@ function renderFieldHeightResults(data) {
         let thead = '<th>순위</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>';
         hts.forEach(h2 => { thead += `<th style="font-size:10px;">${formatHeight(h2)}</th>`; });
         thead += '<th>최고</th><th>비고</th>';
-        html += `<table class="data-table" style="font-size:13px;">
+        html += `<div class="rr-field-desktop"><table class="data-table" style="font-size:13px;">
             <thead><tr>${thead}</tr></thead>
             <tbody>${rows.map(r => {
                 let c = '';
@@ -2387,7 +2466,7 @@ function renderFieldHeightResults(data) {
                 const rmkSt3 = rmk3 ? 'color:#27ae60;font-weight:700;' : '';
                 const _scRec3 = (!r.isNM && r.best != null) ? formatHeight(r.best) : '';
                 return `<tr${_scAttr(data.event, r, _scRec3, typeof r.rank === 'number' ? r.rank : null)}><td>${r.isNM ? '' : r.rank}</td><td>${bib(r.bib_number)}</td><td style="text-align:left;">${r.name}</td><td style="text-align:left;font-size:11px;">${r.team||''}</td>${c}<td style="font-weight:700;">${bestDisp3}</td><td style="font-size:11px;${rmkSt3}">${rmk3}</td></tr>`;
-            }).join('')}</tbody></table>`;
+            }).join('')}</tbody></table></div>` + _rrFieldHeightList(rows, hts, { live: false, event: data.event });
     });
     return html || '<div style="color:var(--text-muted);">결과 없음</div>';
 }

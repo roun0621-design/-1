@@ -418,6 +418,22 @@
               border-bottom: 1px solid #e9e4da; cursor: pointer; transition: background var(--dur-fast); }
         .rr:hover, .rr:active { background: #faf7ef; }
         .rr.rr-nocard { cursor: default; } .rr.rr-nocard:hover { background: transparent; }
+        /* ── 필드 종목: 데스크톱은 표, 모바일(<900px)은 두 줄 + 시기 스트립 ── */
+        .rr-field-mobile { display: none; }
+        @media (max-width: 899px) { .rr-field-desktop { display: none; } .rr-field-mobile { display: block; } }
+        .rr-att { grid-column: 2 / 5; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 4px; }
+        .rr-att-c { text-align: center; font-family: 'D2Coding', var(--font-mono); font-size: 12px; font-weight: 500; line-height: 1.15; padding: 3px 0 2px; border-radius: 6px; border: 1px solid transparent; font-variant-numeric: tabular-nums; color: var(--text); }
+        .rr-att-c .n { display: block; font-family: 'Noto Sans KR', sans-serif; font-size: 8px; color: var(--text-light); letter-spacing: .05em; margin-bottom: 1px; }
+        .rr-att-c small { display: block; font-family: 'Noto Sans KR', sans-serif; font-size: 9px; color: var(--text-light); font-weight: 400; margin-top: 1px; }
+        .rr-att-c.best { border-color: #b79f58; background: #f6f1e3; font-weight: 700; }
+        .rr-att-c.x { color: #c0392b; font-weight: 700; } .rr-att-c.pass { color: var(--text-light); } .rr-att-c.empty { color: #d8d3c8; }
+        .rr-hj { grid-column: 2 / 5; display: flex; gap: 6px; overflow-x: auto; margin-top: 4px; padding-bottom: 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+        .rr-hj::-webkit-scrollbar { display: none; }
+        .rr-hj-c { flex: 0 0 auto; min-width: 44px; text-align: center; border: 1px solid #e9e4da; border-radius: 6px; padding: 3px 6px 2px; }
+        .rr-hj-c b { display: block; font-family: 'D2Coding', var(--font-mono); font-size: 11px; font-weight: 500; color: var(--gray-dark); }
+        .rr-hj-c span { display: block; font-family: 'D2Coding', var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: .06em; }
+        .rr-hj-c span i { font-style: normal; } .rr-hj-c span .o { color: #2e7d32; } .rr-hj-c span .xx { color: #c0392b; } .rr-hj-c span .p { color: var(--text-light); }
+        .rr-hj-c.best { border-color: #b79f58; background: #f6f1e3; } .rr-hj-c.best b { color: var(--text); }
         /* LIVE: 기록 들어온 행만 연한 강조, 아직 안 들어온 순위 '—' 는 흐리게, › 자리는 비움 */
         .rr-live .rr.rr-has-rec { background: #f6fbf7; }
         .rr-live .rr-rank-wait { color: var(--text-light); font-weight: 500; }
@@ -451,7 +467,7 @@
     </style>
 
     <script src="common.js?v=90"></script>
-    <script src="dashboard.js?v=113"></script>
+    <script src="dashboard.js?v=114"></script>
     <script src="share-card.js?v=1"></script>
     <script src="push.js?v=10"></script>
 </body>
