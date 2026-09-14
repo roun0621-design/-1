@@ -1529,7 +1529,13 @@ function showToast(message, type = 'success', duration = 2000) {
     const toast = document.createElement('div');
     const bg = type === 'success' ? 'var(--green)' : type === 'error' ? '#8b1a2a' : '#b79f58';
     toast.style.cssText = `background:${bg};color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.15);opacity:0;transform:translateY(10px);transition:all 0.25s ease;pointer-events:auto;`;
-    toast.textContent = message;
+    // 코드에서 박아 넣는 아이콘(<svg …>) 으로 시작하는 메시지만 HTML 로 렌더 — 그 외(서버 에러 문자열 등)는 텍스트
+    if (/^\s*<svg\b/i.test(String(message))) {
+        toast.innerHTML = message;
+        toast.style.display = 'flex'; toast.style.alignItems = 'center'; toast.style.gap = '6px';
+    } else {
+        toast.textContent = message;
+    }
     container.appendChild(toast);
     requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
     setTimeout(() => {

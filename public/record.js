@@ -4948,7 +4948,8 @@ async function resetSubEventResults(eventId, eventName) {
         if (window._he) { _he.undo = null; }
         showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제${result.jointEvents ? `, 합동 ${result.jointEvents}종목 포함` : ''})`, 'success', 4000);
         // Reload the event list and current event data
-        await loadEventsAndMatrix();
+        state.events = await API.getAllEvents(getCompetitionId());
+        renderMatrix();
         if (state.selectedEventId) {
             await selectEvent(state.selectedEventId);
         }
