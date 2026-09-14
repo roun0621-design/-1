@@ -724,7 +724,8 @@ function renderMatrix() {
     // 종합기록지 버튼 삭제됨 — 관리자 문서 탭에서 다운로드
 
     // Render LIVE (in_progress) section pinned at top
-    const liveGroups = allGroups.filter(g => g.rounds.some(r => r.round_status === 'in_progress'));
+    // 종합경기(10종/7종)는 이틀 내내 '진행 중'이라 상단 LIVE 묶음·"진행 중 N" 배지에서 제외 (COMBINED 섹션의 자기 카드에만 상태 표시)
+    const liveGroups = allGroups.filter(g => g.catKey !== 'combined' && g.rounds.some(r => r.round_status === 'in_progress'));
     if (liveGroups.length > 0) {
         html += `<div class="live-pin" id="live-pin" style="margin-bottom:16px;padding:12px;background:linear-gradient(135deg,var(--green-light),var(--green-soft));border:1.5px solid var(--green);border-radius:var(--radius);">
             <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:var(--green);letter-spacing:1px;margin-bottom:8px;">● LIVE • 진행중인 경기</div>`;
