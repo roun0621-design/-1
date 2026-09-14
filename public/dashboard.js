@@ -844,7 +844,10 @@ function renderCategoryTable(groups, label, isLive) {
         const divBadge = (_isDisplayMode && g.division && _currentDivision === '전체') ? `<span style="font-size:9px;color:${_dc.color};background:${_dc.bg};padding:1px 5px;border-radius:6px;margin-left:4px;font-weight:600;">${g.division}</span>` : '';
 
         // ── 카드 상태 배지 (예정 / ● 진행 중(라운드) / 종료) — 모든 카드에 1개 ──
-        const _liveR = g.rounds.find(r => r.round_status === 'in_progress') || g.rounds.find(r => callroomCompletedIds.has(r.id));
+        // 소집 완료 목록(callroomCompletedIds)은 경기 완료 후에도 남으므로, 완료된 라운드는 LIVE 판정에서 제외
+        //   (완료 처리했는데 배지가 "진행 중 · 결승"으로 남던 문제 — 버튼은 completed 를 먼저 봐서 "결과"였음)
+        const _liveR = g.rounds.find(r => r.round_status === 'in_progress')
+            || g.rounds.find(r => r.round_status !== 'completed' && callroomCompletedIds.has(r.id));
         const _allDone = g.rounds.length > 0 && g.rounds.every(r => r.round_status === 'completed');
         let statusBadge = '';
         if (_liveR) {
