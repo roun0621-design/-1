@@ -2498,7 +2498,8 @@ function setHeightMode(mode) {
 //     · 옵티미스틱 머지 제거 → 서버 응답으로만 state 갱신 (race 의 근원 차단)
 //     · 클릭 시 즉시 버튼 disabled (busy 표시) → 서버 호출 → reload → 렌더
 //     · cycle: empty → X → O → '-' (pass) → empty
-async function toggleHeightMark(entryId, barHeight, attemptNumber) {
+// forceMark: 'O' | 'X' | '-' | '' 를 주면 순환 대신 그 값으로 지정 (터치 키패드 패널 record-fieldpad.js 에서 사용)
+async function toggleHeightMark(entryId, barHeight, attemptNumber, forceMark) {
     const cellKey = _heightCellKey(entryId, barHeight, attemptNumber);
     return _heightCellRunSerial(cellKey, async () => {
         // 직렬화 락 안에 들어왔으므로 직전 작업은 이미 완료 → state 최신.
@@ -2506,7 +2507,7 @@ async function toggleHeightMark(entryId, barHeight, attemptNumber) {
             a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
         );
         const currentMark = current ? current.result_mark : '';
-        const newMark = _heightNextMark(currentMark);
+        const newMark = (forceMark !== undefined && forceMark !== null) ? forceMark : _heightNextMark(currentMark);
 
         _heightCellMarkBusy(cellKey, true);
         renderHeightContent(); // busy 표시 즉시 반영
