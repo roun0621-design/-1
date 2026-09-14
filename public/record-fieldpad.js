@@ -23,7 +23,7 @@
     }
     function setPadEnabled(on) {
         try { localStorage.setItem(LS_KEY, on ? '1' : '0'); } catch (e) {}
-        fe.sel = null; he.sel = null;
+        fe.sel = null;
         if (state.selectedEvent && state.selectedEvent.category === 'field_height') renderHeightContent();
         else renderFieldDistanceContent();
     }
@@ -84,6 +84,32 @@
         .fe-order div { display:flex; justify-content:space-between; padding:6px 10px; border-bottom:1px solid #e9e4da; } .fe-order div:last-child { border-bottom:none; }
         .fe-order div.cur { background:#f6f1e3; font-weight:700; } .fe-order div span { color:#9a938d; }
         .fe-toggle-btn { margin-left:auto; }
+        /* 높이 종목 터치 목록 */
+        .fe-hlist { border:1px solid #e9e4da; border-radius:14px; background:#fff; overflow:hidden; }
+        .fe-hbar { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid #e9e4da; background:#faf8f3; }
+        .fe-hbar .lbl { font-size:12px; color:#9a938d; white-space:nowrap; } .fe-hbar .cnt { margin-left:auto; font-size:12px; color:#5d5754; white-space:nowrap; }
+        .fe-hbar .chips { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; } .fe-hbar .chips::-webkit-scrollbar { display:none; }
+        .fe-hbar .chips button { flex:0 0 auto; border:1px solid #e9e4da; background:#fff; border-radius:999px; padding:8px 14px; font-family:'D2Coding', var(--font-mono, monospace); font-size:15px; font-weight:700; color:#5d5754; }
+        .fe-hbar .chips button.now { background:#262324; color:#fff; border-color:#262324; }
+        .fe-hlist .hrow { display:grid; grid-template-columns:36px minmax(0,1fr) auto auto; column-gap:10px; align-items:center; padding:10px 12px; border-bottom:1px solid #e9e4da; min-height:72px; }
+        .fe-hlist .hrow.done { background:#faf9f6; } .fe-hlist .hrow.off { opacity:.5; }
+        .fe-hlist .no { font-family:'D2Coding', var(--font-mono, monospace); font-size:18px; font-weight:700; color:#9a938d; text-align:center; }
+        .fe-hlist .nm { font-size:17px; font-weight:800; } .fe-hlist .nm small { font-size:11px; color:#9a938d; font-weight:400; margin-left:6px; }
+        .fe-hlist .prev { display:flex; flex-wrap:wrap; gap:4px 8px; margin-top:3px; }
+        .fe-hlist .prev i { font-style:normal; font-size:11px; color:#5d5754; background:#f6f4ef; border-radius:5px; padding:1px 6px; font-family:'D2Coding', var(--font-mono, monospace); letter-spacing:.04em; }
+        .fe-hlist .prev i b { font-weight:500; color:#9a938d; margin-right:4px; } .fe-hlist .prev i em { font-style:normal; font-weight:800; } .fe-hlist .prev i em.o { color:#2e7d32; } .fe-hlist .prev i em.x { color:#c0392b; }
+        .fe-hlist .prev i.none { color:#c9c3b8; background:none; }
+        .fe-hlist .cur { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:96px; }
+        .fe-hlist .dots { display:flex; gap:6px; } .fe-hlist .dots i { width:26px; height:26px; border-radius:50%; border:2px solid #e9e4da; display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-size:13px; font-weight:800; color:#fff; }
+        .fe-hlist .dots i.o { background:#2e7d32; border-color:#2e7d32; } .fe-hlist .dots i.x { background:#c0392b; border-color:#c0392b; } .fe-hlist .dots i.p { background:#9a938d; border-color:#9a938d; }
+        .fe-hlist .st { font-size:12px; color:#7a746e; font-weight:700; } .fe-hlist .st.ok { color:#2e7d32; } .fe-hlist .st.out { color:#c0392b; }
+        .fe-hlist .btns { display:flex; gap:8px; }
+        .fe-hlist .btns button { width:64px; height:56px; border-radius:12px; border:2px solid #e9e4da; background:#fff; font-size:24px; font-weight:800; color:#5d5754; touch-action:manipulation; }
+        .fe-hlist .btns .o { color:#2e7d32; border-color:#2e7d32; background:#eaf5eb; } .fe-hlist .btns .x { color:#c0392b; border-color:#c0392b; background:#fbeceb; }
+        .fe-hlist .btns button:active { transform:scale(.96); }
+        .fe-hlist .fe-undo { padding:10px 12px; }
+        .fe-hlist .fe-empty { margin:12px; }
+        @media (max-width: 600px) { .fe-hlist .hrow { grid-template-columns:30px minmax(0,1fr) auto; grid-template-rows:auto auto; } .fe-hlist .btns { grid-column:1 / -1; justify-content:flex-end; } .fe-hlist .btns button { width:72px; } }
         @media (max-width: 899px) {
             #field-content.fe-on, #height-content.fe-on { grid-template-columns:1fr; }
             .fe-pad { position:sticky; bottom:0; top:auto; border-radius:14px 14px 0 0; }
@@ -311,8 +337,8 @@
     const _origActivateWind = window.activateWindCell;
     window.activateWindCell = function () { if (padEnabled() && state.fieldMode !== 'view' && state.fieldMode !== 'rank') return; return _origActivateWind.apply(this, arguments); };
 
-    // ─── 높이 종목 ───
-    const he = { sel: null, bar: null, undo: null };
+    // ─── 높이 종목: 선수 행마다 현재 높이의 O / X / – 큰 버튼 (선택 단계 없음, 가로 스크롤 없음) ───
+    const he = { bar: null, undo: null };
     window._he = he;
     function heRows() {
         const heights = state._heightBarList || [];
@@ -320,8 +346,11 @@
             const hd = {}; let elim = e.status === 'no_show', best = null, sc = null;
             (state.heightAttempts || []).forEach(a => { if (a.event_entry_id !== e.event_entry_id) return; if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
             if (state.results) { const sr = state.results.find(r => r.event_entry_id === e.event_entry_id && r.status_code); if (sr) sc = sr.status_code; }
+            if (e.status === 'no_show' && !sc) sc = 'DNS';
             if (sc) elim = true;
-            heights.forEach(h => { const d = hd[h]; if (!d) return; const x = Object.values(d).filter(m => m === 'X').length; if (Object.values(d).includes('O')) best = h; if (x >= 3) elim = true; });
+            let fails = 0;
+            heights.forEach(h => { const d = hd[h]; if (!d) return; const x = Object.values(d).filter(m => m === 'X').length; fails += x; if (Object.values(d).includes('O')) best = h; if (x >= 3) elim = true; });
+            if (elim && best == null && !sc && fails >= 3) sc = 'NM';
             return { ...e, hd, elim, best, sc };
         });
     }
@@ -331,66 +360,82 @@
         if (he.bar != null && hs.includes(he.bar)) return he.bar;
         he.bar = hs[hs.length - 1]; return he.bar;
     }
-    // 이번 높이에서 시도가 남은 선수: [ {row, attempt} ] — 시도 수 적은 순, 같으면 순번 순
-    function hePending(bar) {
-        const out = [];
-        heRows().forEach(r => {
-            if (r.elim) return;
-            const d = r.hd[bar] || {};
-            if (Object.values(d).includes('O')) return;
-            if (Object.values(d).includes('PASS') || Object.values(d).includes('-')) return;
-            const n = Object.keys(d).length;
-            if (n >= 3) return;
-            out.push({ row: r, attempt: n + 1 });
-        });
-        return out.sort((a, b) => a.attempt - b.attempt || (a.row.lane_number || 999) - (b.row.lane_number || 999));
-    }
-    window.heSelect = function (eid) { const bar = heBar(); const p = hePending(bar).find(x => x.row.event_entry_id === eid); he.sel = p ? { eid, attempt: p.attempt } : null; renderHeightContent(); };
-    window.heSetBar = function (dir) { const hs = state._heightBarList || []; const i = hs.indexOf(heBar()); const j = Math.min(hs.length - 1, Math.max(0, i + dir)); he.bar = hs[j]; he.sel = null; renderHeightContent(); };
-    window.heMark = async function (mark) {
-        const bar = heBar(); if (!he.sel || bar == null) return;
-        const { eid, attempt } = he.sel;
-        const cur = (state.heightAttempts || []).find(a => a.event_entry_id === eid && a.bar_height === bar && a.attempt_number === attempt);
-        he.undo = { eid, bar, attempt, prev: cur ? cur.result_mark : '', label: `${laneOf(eid)} ${nameOf(eid)} ${fmtDist(bar)} ${attempt}차 ${mark}` };
-        he.sel = null;
+    window.heSetBar = function (h) { he.bar = h; renderHeightContent(); };
+    // 행 버튼: 이 선수의 현재 높이 다음 시도에 mark 저장
+    window.heMarkRow = async function (eid, mark) {
+        const bar = heBar(); if (bar == null) return;
+        const r = heRows().find(x => x.event_entry_id === eid); if (!r) return;
+        const d = r.hd[bar] || {};
+        const n = Object.keys(d).length;
+        if (n >= 3) return;
+        const attempt = n + 1;
+        he.undo = { eid, bar, attempt, prev: '', label: `${laneOf(eid)} ${nameOf(eid)} ${fmtDist(bar)} ${attempt}차 ${mark === '-' ? '패스' : mark}` };
         await toggleHeightMark(eid, bar, attempt, mark);
+        renderHeightContent();
+    };
+    // 이미 찍은 시도 점을 누르면 그 시도를 지움(정정)
+    window.heClearMark = async function (eid, attempt) {
+        const bar = heBar(); if (bar == null) return;
+        const cur = (state.heightAttempts || []).find(a => a.event_entry_id === eid && a.bar_height === bar && a.attempt_number === attempt);
+        if (!cur) return;
+        if (!confirm(`${nameOf(eid)} ${fmtDist(bar)} ${attempt}차 시도(${cur.result_mark === 'PASS' ? '–' : cur.result_mark})를 지울까요?`)) return;
+        he.undo = { eid, bar, attempt, prev: cur.result_mark, label: `${laneOf(eid)} ${nameOf(eid)} ${fmtDist(bar)} ${attempt}차 지움` };
+        await toggleHeightMark(eid, bar, attempt, '');
         renderHeightContent();
     };
     window.heUndo = async function () {
         const u = he.undo; if (!u) return; he.undo = null;
         await toggleHeightMark(u.eid, u.bar, u.attempt, u.prev === 'PASS' ? '-' : (u.prev || ''));
-        he.sel = { eid: u.eid, attempt: u.attempt };
         renderHeightContent();
     };
-    function heRenderPad() {
-        const content = document.getElementById('height-content'); if (!content) return;
-        let pad = content.querySelector('.fe-pad');
-        if (!pad) { pad = document.createElement('div'); pad.className = 'fe-pad'; content.appendChild(pad); }
-        const bar = heBar();
+    function heRenderList(content) {
+        let box = content.querySelector('.fe-hlist');
+        if (!box) { box = document.createElement('div'); box.className = 'fe-hlist'; content.appendChild(box); }
         const hs = state._heightBarList || [];
-        const i = hs.indexOf(bar);
-        const pend = bar != null ? hePending(bar) : [];
-        if (!he.sel && pend.length) he.sel = { eid: pend[0].row.event_entry_id, attempt: pend[0].attempt };
-        const cur = he.sel ? pend.find(p => p.row.event_entry_id === he.sel.eid) : null;
-        const order = pend.slice(0, 3);
-        let body;
-        if (bar == null) body = `<div class="fe-empty">위의 '높이 추가'로 바 높이를 먼저 입력하세요</div>`;
-        else {
-            const barUi = `<div class="fe-bar"><button onclick="heSetBar(-1)" ${i <= 0 ? 'disabled' : ''}>‹ ${i > 0 ? fmtDist(hs[i - 1]) : ''}</button><div class="h">${fmtDist(bar)}<small>현재 바</small></div><button onclick="heSetBar(1)" ${i >= hs.length - 1 ? 'disabled' : ''}>${i < hs.length - 1 ? fmtDist(hs[i + 1]) : ''} ›</button></div>`;
-            if (!cur) body = `${barUi}<div class="fe-empty">${pend.length ? '표에서 선수를 누르세요' : '이 높이는 전원 완료 — › 로 다음 높이'}</div>`;
-            else {
-                const d = cur.row.hd[bar] || {};
-                const dots = [1, 2, 3].map(k => `<i class="${d[k] === 'O' ? 'o' : d[k] === 'X' ? 'x' : (d[k] ? 'p' : '')}"></i>`).join('');
-                body = `${barUi}
-                <div class="fe-who"><b>${laneOf(cur.row.event_entry_id)} · ${esc(cur.row.name)}</b><span>${fmtDist(bar)} · ${cur.attempt}차 시도${cur.row.best != null ? ' · 최고 ' + fmtDist(cur.row.best) : ''}</span></div>
-                <div class="fe-tries">${dots}<span>${cur.attempt === 3 ? '마지막 시도' : cur.attempt + '차'}</span></div>
-                <div class="fe-hbtns"><button class="o" onclick="heMark('O')">O</button><button class="x" onclick="heMark('X')">X</button><button onclick="heMark('-')">–</button></div>
-                <div class="fe-order">${order.map((p, k) => `<div class="${k === 0 ? 'cur' : ''}"><span>${k === 0 ? '지금' : k === 1 ? '다음' : '그다음'}</span>${laneOf(p.row.event_entry_id)} ${esc(p.row.name)} · ${p.attempt}차</div>`).join('')}</div>
-                <div class="fe-hint">한 번 탭 = 저장 · O 통과 · X 실패(3회면 탈락) · – 패스</div>`;
+        const bar = heBar();
+        if (bar == null) { box.innerHTML = '<div class="fe-empty">위의 \'높이 추가\'로 바 높이를 먼저 입력하세요</div>'; return; }
+        const rows = heRows();
+        const chips = hs.map(h => `<button class="${h === bar ? 'now' : ''}" onclick="heSetBar(${h})">${fmtDist(h)}</button>`).join('');
+        const active = rows.filter(r => !r.elim && !(Object.values(r.hd[bar] || {}).includes('O')) && !(Object.values(r.hd[bar] || {}).some(m => m === 'PASS' || m === '-')) && Object.keys(r.hd[bar] || {}).length < 3);
+        let html = `<div class="fe-hbar"><span class="lbl">현재 바</span><div class="chips">${chips}</div><span class="cnt">남은 선수 ${active.length}</span></div>`;
+        rows.forEach(r => {
+            const d = r.hd[bar] || {};
+            const n = Object.keys(d).length;
+            const cleared = Object.values(d).includes('O');
+            const passed = Object.values(d).some(m => m === 'PASS' || m === '-');
+            const done = r.elim || cleared || passed || n >= 3;
+            // 이전 높이 요약 (현재 바 제외, 시도한 높이만)
+            const prev = hs.filter(h => h < bar && r.hd[h]).map(h => { const m = [1, 2, 3].map(k => r.hd[h][k]).filter(Boolean).map(k => k === 'PASS' ? '–' : k).join(''); return `<i><b>${fmtDist(h)}</b>${m.replace(/O/g, '<em class="o">O</em>').replace(/X/g, '<em class="x">X</em>')}</i>`; }).join('');
+            const dots = [1, 2, 3].map(k => { const m = d[k]; const cls = m === 'O' ? 'o' : m === 'X' ? 'x' : (m ? 'p' : ''); const txt = m === 'O' ? 'O' : m === 'X' ? 'X' : (m ? '–' : ''); return `<i class="${cls}" ${m ? `onclick="heClearMark(${r.event_entry_id},${k})" title="이 시도 지우기"` : ''}>${txt}</i>`; }).join('');
+            let status = '';
+            if (r.sc) status = `<span class="st out">${r.sc}</span>`;
+            else if (r.elim) status = `<span class="st out">탈락${r.best != null ? ' · 최고 ' + fmtDist(r.best) : ''}</span>`;
+            else if (cleared) status = `<span class="st ok">통과</span>`;
+            else if (passed) status = `<span class="st">패스</span>`;
+            const btns = done ? '' : `<div class="btns"><button class="o" onclick="heMarkRow(${r.event_entry_id},'O')">O</button><button class="x" onclick="heMarkRow(${r.event_entry_id},'X')">X</button><button class="p" onclick="heMarkRow(${r.event_entry_id},'-')">–</button></div>`;
+            html += `<div class="hrow ${done ? 'done' : ''} ${r.elim ? 'off' : ''}">
+                <div class="no">${r.lane_number || '—'}</div>
+                <div class="who"><div class="nm">${esc(r.name)}<small>#${typeof bib === 'function' ? bib(r.bib_number) : r.bib_number}</small></div><div class="prev">${prev || '<i class="none">첫 높이</i>'}</div></div>
+                <div class="cur"><div class="dots">${dots}</div>${status}</div>
+                ${btns}
+            </div>`;
+        });
+        html += `<div class="fe-undo"><span>${he.undo ? '방금 저장: <b>' + esc(he.undo.label) + '</b>' : '&nbsp;'}</span>${he.undo ? '<button onclick="heUndo()">되돌리기</button>' : ''}</div>`;
+        box.innerHTML = html;
+    }
+    // 표 모드: 순위·순번·이름 열 고정 (가로 스크롤 시 이름이 사라지던 문제)
+    function heStickyCols(content) {
+        const table = content.querySelector('.height-toggle-table'); if (!table) return;
+        const rows = table.querySelectorAll('tr');
+        rows.forEach(tr => {
+            let left = 0;
+            for (let k = 0; k < 3 && k < tr.children.length; k++) {
+                const c = tr.children[k];
+                c.style.position = 'sticky'; c.style.left = left + 'px'; c.style.zIndex = '2';
+                c.style.background = c.tagName === 'TH' ? '' : (getComputedStyle(tr).backgroundColor === 'rgba(0, 0, 0, 0)' ? '#fff' : getComputedStyle(tr).backgroundColor);
+                left += c.getBoundingClientRect().width;
             }
-        }
-        pad.innerHTML = `<button class="fe-close" onclick="fePadToggle()" title="키패드 끄기">×</button>${body}
-            <div class="fe-undo"><span>${he.undo ? '방금 저장: <b>' + esc(he.undo.label) + '</b>' : '&nbsp;'}</span>${he.undo ? '<button onclick="heUndo()">되돌리기</button>' : ''}</div>`;
+        });
     }
     const _origRenderHeight = window.renderHeightContent;
     window.renderHeightContent = function () {
@@ -401,27 +446,14 @@
         if (bar && !bar.querySelector('.fe-toggle-btn')) {
             const b = document.createElement('button');
             b.className = 'btn btn-xs ' + (on ? 'btn-primary' : 'btn-outline') + ' fe-toggle-btn';
-            b.textContent = on ? '키패드 켜짐' : '키패드'; b.onclick = fePadToggle;
+            b.textContent = on ? '터치 입력 켜짐' : '터치 입력'; b.title = '높이별 큰 버튼 입력 / 표 입력 전환'; b.onclick = fePadToggle;
             bar.appendChild(b);
         }
-        content.classList.toggle('fe-on', on);
-        if (!on) return;
-        const cur = heBar();
-        // 기본 선택(다음 시도 선수)을 표 강조 전에 확정
-        if (cur != null) { const pend = hePending(cur); if (he.sel && !pend.some(p => p.row.event_entry_id === he.sel.eid)) he.sel = null; if (!he.sel && pend.length) he.sel = { eid: pend[0].row.event_entry_id, attempt: pend[0].attempt }; }
-        const table = content.querySelector('.height-toggle-table');
-        if (table && cur != null) {
-            const ths = [...table.querySelectorAll('thead th')];
-            let colIdx = -1;
-            ths.forEach((th, k) => { const t = th.childNodes[0] && th.childNodes[0].textContent ? th.childNodes[0].textContent.trim() : ''; if (t === fmtDist(cur)) { th.classList.add('fe-now'); colIdx = k; } });
-            table.querySelectorAll('tbody tr').forEach(tr => {
-                const tds = tr.children; if (colIdx >= 0 && tds[colIdx]) tds[colIdx].classList.add('fe-now');
-                const inp = tr.querySelector('.height-rank-input, .sc-select');
-                const eid = inp ? +inp.dataset.eid : null;
-                if (eid != null && he.sel && he.sel.eid === eid) tr.classList.add('fe-selrow');
-                if (eid != null) tr.querySelectorAll('td').forEach((td, k) => { if (k <= 2) { td.style.cursor = 'pointer'; td.addEventListener('click', ev => { if (ev.target.closest('input,select,button')) return; heSelect(eid); }); } });
-            });
-        }
-        heRenderPad();
+        content.classList.remove('fe-on');
+        content.classList.toggle('fe-hl', on);
+        const wrap = content.querySelector('.height-scroll-wrap');
+        if (!on) { if (wrap) wrap.style.display = ''; const box = content.querySelector('.fe-hlist'); if (box) box.remove(); heStickyCols(content); return; }
+        if (wrap) wrap.style.display = 'none';
+        heRenderList(content);
     };
 })();
