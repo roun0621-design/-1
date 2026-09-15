@@ -2116,7 +2116,25 @@ function _scAttr(evt, r, record, rank, extra) {
         compDate: (document.querySelector('.comp-info-dates')?.textContent || '').trim()
     };
     if (extra) Object.assign(payload, extra);
+    // 신기록(NR/DR/CR) — 결과표 배지와 같은 판정(_recLabelText)을 카드에도 싣는다. 추풍(w) 기록은 참고기록이라 제외.
+    if (!payload.records && !(extra && extra.windAided)) {
+        const num = (extra && extra.recNum != null) ? extra.recNum : (r.time_seconds ?? r.best ?? r.total);
+        const lbl = (num != null && isFinite(num)) ? _recLabelText(Number(num)) : '';
+        if (lbl) payload.records = lbl.split(' ').filter(Boolean).map(code => ({ code, label: _scRecordLabel(code, evt) }));
+    }
+    delete payload.windAided; delete payload.recNum;
     return ` data-sc="${encodeURIComponent(JSON.stringify(payload))}"`;
+}
+// 카드용 신기록 한글 표기: NR 한국신기록 / CR 대회신기록 / DR 한국{부문}신기록 (대학·실업·고등…)
+function _scRecordLabel(code, evt) {
+    if (code === 'NR') return '한국신기록';
+    if (code === 'CR') return '대회신기록';
+    if (code === 'DR') {
+        const d = String(evt?.division || '').replace(/부$/, '');
+        const nm = d === '일반' ? '실업' : d;
+        return nm ? `한국${nm}신기록` : '부문신기록';
+    }
+    return code;
 }
 
 // (안내문 "기록을 누르면 공유 카드를…" 은 제거 — 힌트는 두 줄 행 오른쪽의 골드 › 와 첫 열람 숨쉬기 애니메이션뿐)
@@ -2181,7 +2199,7 @@ function renderTrackResults(data, relayMembers) {
                 }
             }
             const _scRec = hasRec ? formatTime(r.time_seconds) : '';
-            const scAttr = _scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null);
+            const scAttr = _scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null, { windAided: _isWindAided2 });
             const rankHtml = r.status_code
                 ? `<div class="rr-rank rr-rank-st sc-${r.status_code}">${r.status_code}</div>`
                 : `<div class="rr-rank${r.rank === 1 ? ' rr-rank-1' : ''}">${r.rank}</div>`;
@@ -2247,7 +2265,7 @@ function _rrFieldDistList(rows, needsWind, opts) {
             const wind = needsWind ? `<small>${(has && !foul && !pass && r.attWind[i] != null) ? formatWind(r.attWind[i]) : '&nbsp;'}</small>` : '';
             cells += `<div class="${cls}"><span class="n">${i}</span>${val}${wind}</div>`;
         }
-        const scAttr = (!live && hasRec) ? _scAttr(evt, r, formatHeight(r.best), rankNum) : '';
+        const scAttr = (!live && hasRec) ? _scAttr(evt, r, formatHeight(r.best), rankNum, { windAided: bwa }) : '';
         return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr}>
             ${_rrFieldRankHtml(r.status_code, rankNum)}
             <div class="rr-who"><span class="rr-name">${r.name}</span><span class="rr-team">${r.team || ''}</span></div>
@@ -2459,7 +2477,7 @@ function renderFieldDistResults(data) {
                     if (_bwa) rmk = '참고기록';
                     const rmkSt = _bwa ? 'color:var(--accent);font-weight:600;' : '';
                     const _scRec = (!r.status_code && r.best != null) ? formatHeight(r.best) : '';
-                    return `<tr class="field-row1"${_scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null)}>
+                    return `<tr class="field-row1"${_scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null, { windAided: _bwa })}>
                         <td rowspan="2">${rkDisp}</td><td rowspan="2">${r.lane_number || '—'}</td>
                         <td style="text-align:left;">${r.name}</td><td><strong>${bib(r.bib_number)}</strong></td>
                         ${distCells}<td rowspan="2" class="best-cell att-col-best">${bestDisp}<div class="best-wind">${bestWindDisp}</div></td>

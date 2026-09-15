@@ -91,6 +91,13 @@ function _scInjectStyles() {
 .sc-div { margin-top:20px; font-size:30px; font-weight:400; color:#9a9a9a; letter-spacing:-0.5px; }
 .sc-record { font-family:'SCNum',sans-serif; font-size:206px; line-height:1;
     letter-spacing:-6px; margin-top:118px; color:#111; }
+/* 신기록 배지 — 부문 줄과 큰 기록 사이. 있으면 기록의 윗 여백을 그만큼 줄여 전체 높이를 지킨다 */
+.sc-recs { margin-top:52px; display:flex; flex-wrap:wrap; gap:14px; }
+.sc-recs span { display:inline-flex; align-items:center; gap:14px; padding:12px 26px; border-radius:999px;
+    font-size:32px; font-weight:700; letter-spacing:-0.5px; color:#fff; line-height:1; }
+.sc-recs span i { font-family:'SCNum',sans-serif; font-style:normal; font-size:26px; opacity:0.85; letter-spacing:1px; }
+.sc-recs .sc-rb-NR { background:#c0392b; } .sc-recs .sc-rb-DR { background:#2b6cb0; } .sc-recs .sc-rb-CR { background:#27ae60; }
+.sc-has-recs .sc-record { margin-top:44px; }
 .sc-record.sc-record-sm { font-size:150px; letter-spacing:-4px; }
 .sc-name { margin-top:262px; font-size:52px; font-weight:700; letter-spacing:-1.5px; }
 /* 혼성경기(10종/7종): 총점 아래에 세부 기록만 나열한다.
@@ -146,6 +153,9 @@ function _scBuildCard(d) {
     const ev = _scEventLabel(d.eventName);
     const marks = Array.isArray(d.marks) ? d.marks : null;
     if (marks && marks.length) card.classList.add('sc-has-marks');
+    const recs = Array.isArray(d.records) ? d.records.filter(x => x && (x.code || x.label)) : [];
+    if (recs.length) card.classList.add('sc-has-recs');
+    const recsHtml = recs.length ? `<div class="sc-recs">${recs.map(x => `<span class="sc-rb-${_scEsc(x.code || '')}">${_scEsc(x.label || x.code)}<i>${_scEsc(x.code || '')}</i></span>`).join('')}</div>` : '';
 
     // 순위 + 레인/No. 을 점으로 이어 한 줄로 (항목이 늘어도 레이아웃이 안 깨진다)
     // 혼성경기는 세부 종목마다 레인이 달라 종합 카드에 레인 번호가 의미 없다 → 순위만.
@@ -172,6 +182,7 @@ function _scBuildCard(d) {
     card.innerHTML = `
         <div class="sc-event ${ev.isKo ? 'sc-event-ko' : ''}">${_scEsc(ev.text)}</div>
         ${d.division ? `<div class="sc-div">${_scEsc(d.division)}</div>` : ''}
+        ${recsHtml}
         <div class="${recCls}">${_scEsc(recStr)}</div>
         ${marksHtml}
         <div class="sc-name">${_scEsc(d.name)}</div>
@@ -230,7 +241,7 @@ function _scRenderPreview() {
 // ------------------------------------------------------------
 // 카드 팝업 열기
 // payload: { eventName, division, record, name, team, rank, laneLabel,
-//            laneNumber, competition }
+//            laneNumber, competition, records?: [{code:'NR'|'DR'|'CR', label}] }
 // ------------------------------------------------------------
 function openShareCard(payload) {
     _scInjectStyles();
