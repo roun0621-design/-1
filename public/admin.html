@@ -7217,6 +7217,20 @@ POST /api/external/event-result-link/batch<br>
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fcInitDrop); else fcInitDrop();
 
         function fcEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+        // 응답을 JSON 으로 읽되, 프록시(nginx) 오류 페이지처럼 JSON 이 아니면 원인이 보이는 오류로 바꿈
+        // (사파리는 resp.json() 실패 시 "The string did not match the expected pattern." 만 보여 줘서 원인을 알 수 없음)
+        async function fcReadJson(resp) {
+            const text = await resp.text();
+            try { return JSON.parse(text); }
+            catch (e) {
+                const hint = resp.status === 413 ? ' 업로드 용량 제한에 걸렸습니다. 서버 nginx 의 client_max_body_size 를 20m 이상으로 올려 주세요.'
+                    : (resp.status === 502 || resp.status === 504) ? ' 프록시 응답 시간 제한(proxy_read_timeout)에 걸렸을 수 있습니다.'
+                    : resp.status === 404 ? ' 서버에 이 기능이 배포되지 않았거나 경로가 다릅니다.' : '';
+                const err = new Error(`서버가 JSON 이 아닌 응답을 보냈습니다 (HTTP ${resp.status}).${hint}`);
+                err.status = resp.status;
+                throw err;
+            }
+        }
         function fcFmtWind(w) { if (w == null) return ''; const v = Number(w); return (v > 0 ? '+' : '') + v.toFixed(1); }
         function fcIssues(issues) {
             if (!issues || !issues.length) return '';
@@ -7243,7 +7257,7 @@ POST /api/external/event-result-link/batch<br>
                 fd.append('competition_id', _selectedCompId);
                 fd.append('file', file);
                 const resp = await fetch('/api/field-card/preview', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
-                const data = await resp.json();
+                const data = await fcReadJson(resp);
                 if (!resp.ok || !data.success) throw new Error(data.error || '미리보기 실패');
                 _fcPreview = data;
                 fcRender(data);
@@ -7335,8 +7349,8 @@ POST /api/external/event-result-link/batch<br>
             fcTranscribe(imgs);
         }
         // 브라우저에서 긴 변 2576px JPEG 로 축소 (업로드·비용 절감, EXIF 회전 반영)
-        async function fcShrinkImage(file) {
-            const MAX = 2576;
+        async function fcShrinkImage(file, maxEdge = 2576, quality = 0.88) {
+            const MAX = maxEdge;
             let bmp;
             try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
             catch (e) { throw new Error(`${file.name}: 브라우저가 읽지 못하는 형식입니다. HEIC 라면 JPEG 로 변환해 주세요.`); }
@@ -7345,7 +7359,7 @@ POST /api/external/event-result-link/batch<br>
             const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
             cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
             if (bmp.close) bmp.close();
-            const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
+            const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', quality));
             if (!blob) throw new Error(`${file.name}: 이미지 변환 실패`);
             return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
         }
@@ -7360,13 +7374,26 @@ POST /api/external/event-result-link/batch<br>
             const list = document.getElementById('fc-preview-list');
             list.innerHTML = `<div style="color:var(--text-muted);padding:12px;">사진 ${imgs.length}장을 AI 로 전사하는 중입니다… 보통 10~30초 걸립니다.</div>`;
             try {
-                const fd = new FormData();
-                fd.append('admin_key', AK());
-                fd.append('competition_id', _selectedCompId);
-                for (const f of imgs) fd.append('images', await fcShrinkImage(f));
-                const resp = await fetch('/api/field-card/transcribe', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
-                const data = await resp.json();
+                const send = async (maxEdge, quality) => {
+                    const fd = new FormData();
+                    fd.append('admin_key', AK());
+                    fd.append('competition_id', _selectedCompId);
+                    let total = 0;
+                    for (const f of imgs) { const sf = await fcShrinkImage(f, maxEdge, quality); total += sf.size; fd.append('images', sf); }
+                    const resp = await fetch('/api/field-card/transcribe', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
+                    return { resp, total };
+                };
+                let { resp, total } = await send(2576, 0.88);
+                let shrunkNote = '';
+                if (resp.status === 413) {
+                    // 프록시 업로드 용량 제한 → 더 작게 줄여 한 번 더 (판독 정밀도는 조금 낮아짐)
+                    list.innerHTML = `<div style="color:var(--text-muted);padding:12px;">업로드 용량 제한(HTTP 413)으로 사진을 더 작게 줄여 다시 보냅니다… (원본 전송 ${(total / 1048576).toFixed(1)}MB)</div>`;
+                    ({ resp, total } = await send(1800, 0.75));
+                    shrunkNote = `업로드 용량 제한 때문에 사진을 1800px 로 줄여 전송했습니다 (${(total / 1048576).toFixed(1)}MB). 판독 정밀도를 위해 서버 nginx 의 client_max_body_size 를 20m 이상으로 올리는 것을 권장합니다.`;
+                }
+                const data = await fcReadJson(resp);
                 if (!resp.ok || !data.success) throw new Error(data.error || '전사 실패');
+                if (shrunkNote) data.transcription = Object.assign({}, data.transcription, { notes: [...((data.transcription && data.transcription.notes) || []), shrunkNote] });
                 // 전사 결과 xlsx 를 파일로 보관 → 저장 실행은 xlsx 경로(/import)와 동일
                 const bytes = Uint8Array.from(atob(data.xlsx_base64), c => c.charCodeAt(0));
                 _fcFile = new File([bytes], data.xlsx_filename, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -7413,7 +7440,7 @@ POST /api/external/event-result-link/batch<br>
                 fd.append('competition_id', _selectedCompId);
                 fd.append('file', _fcFile);
                 const resp = await fetch('/api/field-card/import', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
-                const data = await resp.json();
+                const data = await fcReadJson(resp);
                 if (!resp.ok || !data.success) throw new Error(data.error || '저장 실패');
                 let html = '<div style="border:1px solid #5b7fb5;background:#eef3fa;border-radius:8px;padding:12px;"><strong style="color:#3d5a8a;">필드 기록카드 저장 완료</strong><br><br>';
                 for (const r of data.results) {
