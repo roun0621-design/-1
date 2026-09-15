@@ -95,3 +95,13 @@ require('./lib/routes/<domain>')(app, { db, isAdminKey, opLog });
 
 - 동작 동일 추출 (인증 없음 — 심판 화면용, 운영 정책상 키 미요구)
 - GET `/api/qualifications`는 dashboard/results 조회용
+
+### ✅ field_card_import 신규 모듈 (9/15)
+
+server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/routes/field_card_import.js`, 4 라우트).
+- 파서/계산/검산은 `lib/fieldCardImport.js` 순수 함수로 분리 → DB 없이 단위 테스트 (`tests/lib/fieldCardImport.test.js`)
+- deps: `db, isAdminKey, opLog, broadcastSSE, audit, upload, recx{normBib,divToken,genderOf,round}, runRecordCompareHook`
+- `recx` 는 server.js 의 기록 엑셀 가져오기 정규화 헬퍼(`_recx*`)를 그대로 주입 — 종별/성별/라운드 해석 규칙 단일화
+- `runRecordCompareHook` 은 `lib/routes/results.js` 의 mount 반환값으로 노출 (신기록 감지 경로 재사용)
+- 문서: `docs/FIELD_CARD_IMPORT.md`
+- 사진 → 서버 AI 전사(`/api/field-card/transcribe`)는 `lib/fieldCardVision.js` 가 Claude API 호출과 카드 JSON → 시트 변환을 담당하고, 라우트는 같은 모듈에 있음. 의존성 `@anthropic-ai/sdk` 추가 (9/15)

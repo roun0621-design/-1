@@ -2640,7 +2640,7 @@ app.get('/api/heats/:id/entries', async (req, res) => {
 // RESULTS
 // ============================================================
 // RESULTS 라우트들은 lib/routes/results.js 로 추출됨 (10차)
-require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit, parseDbTimestampMs, DECATHLON_KEYS, HEPTATHLON_KEYS });
+const _resultsRoutes = require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit, parseDbTimestampMs, DECATHLON_KEYS, HEPTATHLON_KEYS });
 // ============================================================
 app.post('/api/heats/:id/wind', async (req, res) => {
     const { wind } = req.body;
@@ -7746,6 +7746,16 @@ app.post('/api/timing-txt/import', upload.array('files', 100), async (req, res) 
         console.error('[timing-txt/import]', err);
         res.status(500).json({ error: err.message });
     } finally { for (const f of (req.files || [])) { try { fs.unlinkSync(f.path); } catch (e) {} } }
+});
+
+// ============================================================
+// 필드 수기 기록카드 가져오기 — lib/routes/field_card_import.js
+// (투척·수평도약·수직도약 카드 → AI 전사 xlsx → 시기별 저장. 정규화 헬퍼는 기록 엑셀 가져오기와 공유)
+// ============================================================
+require('./lib/routes/field_card_import')(app, {
+    db, isAdminKey, opLog, broadcastSSE, audit, upload,
+    recx: { normBib: _recxNormBib, divToken: _recxDivToken, genderOf: _recxGenderOf, round: _recxRound },
+    runRecordCompareHook: _resultsRoutes && _resultsRoutes.runRecordCompareHook,
 });
 
 /**

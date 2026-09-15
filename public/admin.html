@@ -284,6 +284,30 @@
             margin-top:8px; padding-top:7px; border-top:1px dashed #ddd;
             font-size:12px; color:#555;
         }
+
+    /* ── 필드 기록카드 가져오기 (수기 기록지 → AI 전사 xlsx) ── */
+    .fc-drop { border:2px dashed #b7c6de; border-radius:10px; padding:22px 14px; text-align:center; cursor:pointer; background:#fbfcfe; transition:background .15s, border-color .15s; }
+    .fc-drop:hover, .fc-drop.over { background:#eef3fa; border-color:#5b7fb5; }
+    .fc-table { width:100%; font-size:11px; border-collapse:collapse; }
+    .fc-table th, .fc-table td { padding:3px 5px; border-top:1px solid #f0f0f0; text-align:center; white-space:nowrap; vertical-align:top; }
+    .fc-table th { background:#f7f8fa; font-weight:600; }
+    .fc-table td.l, .fc-table th.l { text-align:left; }
+    .fc-cell-foul { color:#c0392b; font-weight:600; }
+    .fc-cell-pass { color:#888; }
+    .fc-wind { display:block; font-size:9px; color:#6b7280; }
+    .fc-existing { display:block; font-size:9.5px; color:#9ca3af; }
+    .fc-row-error td { background:#fef2f2; }
+    .fc-row-warn td { background:#fffbeb; }
+    .fc-row-skip td { color:#9ca3af; }
+    .fc-issue { font-size:10.5px; padding:1px 0 1px 8px; white-space:normal; }
+    .fc-issue.error { color:#dc2626; }
+    .fc-issue.warn { color:#b45309; }
+    .fc-issue.info { color:#6b7280; }
+    .fc-badge { display:inline-block; padding:0 6px; border-radius:10px; font-size:10px; font-weight:700; }
+    .fc-badge.changed { background:#fef3c7; color:#92400e; }
+    .fc-badge.same { background:#f3f4f6; color:#6b7280; }
+    .fc-badge.skip { background:#fee2e2; color:#991b1b; }
+    .fc-badge.new { background:#dcfce7; color:#166534; }
     </style>
 </head>
 <body>
@@ -807,6 +831,46 @@
                         </div>
                     </div>
                     <div id="tt-result" style="display:none;margin-top:16px;"></div>
+                </div>
+
+                <!-- 필드 수기 기록카드 가져오기 (사진 → AI 전사 xlsx → 시기별 저장) -->
+                <div class="admin-card" style="border-left:4px solid #5b7fb5;">
+                    <h4 style="color:#3d5a8a;">필드 기록카드 가져오기 <span class="t-sm t-muted">Field Record Card Import (수기 기록지 → AI 전사 xlsx)</span></h4>
+                    <p class="t-help-lg">
+                        심판 수기 기록카드 <strong>사진을 그대로 드롭하면 서버가 AI 로 전사</strong>하고, <strong>배번 기준</strong>으로 종목·조·선수를 매칭해
+                        시기별 기록·풍속·높이 O/X 를 저장합니다. ChatGPT/Claude 로 직접 만든 <strong>xlsx</strong> 를 올려도 됩니다.
+                        카드의 <strong>최고기록·순위는 저장하지 않고 계산값과 대조(검산)</strong>해 다르면 경고로 표시합니다.
+                    </p>
+                    <div style="background:#eef3fa;border:1px solid #cfdcee;border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                        <strong>표기:</strong> 기록 <code>36.20</code> · 파울 <code>X</code> · 패스 <code>-</code> · 시도 없음 빈칸 · 풍속 <code>+0.8</code> (유효 시기만, 파울·패스는 빈칸) · 높이 <code>O / XO / XXO / XXX / -</code> · 기록구분 <code>DNS / DNF / DQ / NM</code><br>
+                        <span style="color:#3d5a8a;">저장 규칙: 파일에 기록이 있는 선수만 그 선수의 시기 전체를 파일대로 교체 · 빈 행과 파일에 없는 선수는 그대로 · 오류 행(인식 불가·매칭 실패)은 건너뜀 · 관리자 키 필요</span><br>
+                        <span style="color:#6b7280;">사진 전사: 서버 .env 의 <code>ANTHROPIC_API_KEY</code> 필요 · 카드 1장에 약 100원 · 사진은 브라우저에서 긴 변 2,576px JPEG 로 줄여 전송 · 판독이 불확실한 셀은 경고로 표시</span>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+                        <span class="t-sm t-muted">양식 다운로드:</span>
+                        <a class="btn btn-sm btn-outline" href="/api/field-card/template?kind=throw">투척</a>
+                        <a class="btn btn-sm btn-outline" href="/api/field-card/template?kind=horizontal">수평도약 (기록+풍속)</a>
+                        <a class="btn btn-sm btn-outline" href="/api/field-card/template?kind=vertical">수직도약</a>
+                        <button class="btn btn-sm btn-outline" onclick="fcCopyPrompt()">AI 전사 프롬프트 복사</button>
+                    </div>
+                    <div id="fc-drop" class="fc-drop" onclick="document.getElementById('fc-file').click()">
+                        <div style="font-size:22px;">📷</div>
+                        <div style="font-weight:600;">여기에 카드 사진 또는 xlsx 파일을 끌어다 놓거나 클릭해서 선택</div>
+                        <div class="t-sm t-muted">사진은 한 번에 4장까지 (멀리뛰기·세단뛰기는 기록표와 풍속표를 함께) · xlsx 는 투척 · 수평도약 · 수직도약 양식 모두 가능</div>
+                        <input type="file" id="fc-file" accept=".xlsx,.xls,image/*" multiple style="display:none;" onchange="fcHandleFiles(this.files)">
+                    </div>
+                    <div id="fc-preview-area" style="display:none;margin-top:12px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+                            <h4 style="font-size:14px;margin:0;">미리보기 <span id="fc-file-name" class="t-sm t-muted"></span></h4>
+                            <span id="fc-summary" class="t-sm"></span>
+                        </div>
+                        <div id="fc-preview-list"></div>
+                        <div style="margin-top:12px;display:flex;gap:8px;">
+                            <button class="btn btn-primary" id="fc-import-btn" onclick="fcImport()">기록 저장 실행</button>
+                            <button class="btn btn-outline" onclick="fcCancel()">취소</button>
+                        </div>
+                    </div>
+                    <div id="fc-result" style="display:none;margin-top:16px;"></div>
                 </div>
 
                 <!-- 합동 종목 관리 (Joint Group Management — Multi-event) -->
@@ -7137,6 +7201,242 @@ POST /api/external/event-result-link/batch<br>
             _ttFiles = [];
             document.getElementById('tt-preview-area').style.display = 'none';
             document.getElementById('tt-files').value = '';
+        }
+
+        // ── 필드 수기 기록카드 가져오기 (사진 → AI 전사 xlsx → 시기별 저장) ──────────
+        // 서버: lib/routes/field_card_import.js, 파서: lib/fieldCardImport.js
+        let _fcFile = null, _fcPreview = null;
+        function fcInitDrop() {
+            const dz = document.getElementById('fc-drop');
+            if (!dz || dz._fcBound) return;
+            dz._fcBound = true;
+            ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dz.classList.add('over'); }));
+            ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('over'); }));
+            dz.addEventListener('drop', e => { fcHandleFiles(e.dataTransfer && e.dataTransfer.files); });
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fcInitDrop); else fcInitDrop();
+
+        function fcEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+        function fcFmtWind(w) { if (w == null) return ''; const v = Number(w); return (v > 0 ? '+' : '') + v.toFixed(1); }
+        function fcIssues(issues) {
+            if (!issues || !issues.length) return '';
+            return issues.map(i => `<div class="fc-issue ${i.level}">${i.level === 'error' ? '✕' : i.level === 'warn' ? '⚠' : 'ⓘ'} ${fcEsc(i.msg)}</div>`).join('');
+        }
+        function fcCountIssues(g, level) {
+            return g.issues.filter(i => i.level === level).length + g.rows.reduce((s, r) => s + r.issues.filter(i => i.level === level).length, 0);
+        }
+        function fcGroupOk(g) { return g.matchStatus === 'matched' && !g.issues.some(i => i.level === 'error'); }
+
+        async function fcPreview(file) {
+            if (!file) return;
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            _fcFile = file; _fcPreview = null;
+            document.getElementById('fc-file-name').textContent = file.name;
+            document.getElementById('fc-result').style.display = 'none';
+            document.getElementById('fc-preview-area').style.display = 'block';
+            document.getElementById('fc-summary').textContent = '';
+            const list = document.getElementById('fc-preview-list');
+            list.innerHTML = '<div style="color:var(--text-muted);padding:12px;">파싱·매칭·검산 중...</div>';
+            try {
+                const fd = new FormData();
+                fd.append('admin_key', AK());
+                fd.append('competition_id', _selectedCompId);
+                fd.append('file', file);
+                const resp = await fetch('/api/field-card/preview', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
+                const data = await resp.json();
+                if (!resp.ok || !data.success) throw new Error(data.error || '미리보기 실패');
+                _fcPreview = data;
+                fcRender(data);
+            } catch (e) {
+                list.innerHTML = `<div style="color:red;">오류: ${fcEsc(e.message)}</div>`;
+            }
+        }
+        function fcRender(data) {
+            const ROUND_L = { preliminary: '예선', semifinal: '준결승', final: '결승' };
+            let html = '';
+            let totalImport = 0, totalWarn = 0, totalErr = 0;
+            if (data.issues && data.issues.length) html += `<div style="margin-bottom:8px;">${fcIssues(data.issues)}</div>`;
+            for (const g of data.groups) {
+                const ok = fcGroupOk(g);
+                const hi = g.heatInfo;
+                const target = hi ? `${hi.event_name} ${ROUND_L[hi.round_type] || hi.round_type} ${hi.gender === 'M' ? '남자' : hi.gender === 'F' ? '여자' : '혼성'} ${hi.heat_number}조` : '';
+                const willN = ok ? g.rows.filter(r => r.will_import).length : 0;
+                const changedN = ok ? g.rows.filter(r => r.will_import && r.changed).length : 0;
+                totalImport += willN;
+                totalWarn += fcCountIssues(g, 'warn');
+                totalErr += fcCountIssues(g, 'error');
+                const statusLabel = ok ? `${willN}명 저장 예정 (변경 ${changedN}명)` : (g.matchStatus === 'not_found' ? '종목/조 매칭 실패' : g.matchStatus === 'kind_mismatch' ? '양식 불일치' : '오류로 건너뜀');
+                html += `<div style="border:1px solid ${ok ? 'var(--gray)' : '#fca5a5'};background:${ok ? '#fff' : '#fef2f2'};border-radius:8px;padding:12px;margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+                        <strong>${fcEsc(g.label)}</strong>
+                        <span style="font-size:12px;font-weight:600;color:${ok ? '#3d5a8a' : '#dc2626'};">${statusLabel}</span>
+                    </div>
+                    ${target ? `<div class="t-help" style="margin-bottom:4px;">→ ${fcEsc(target)}${hi.needs_wind ? ' <span style="color:#3d5a8a;">(풍속 종목)</span>' : ''}</div>` : ''}
+                    ${fcIssues(g.issues)}
+                    <div style="overflow-x:auto;margin-top:6px;">${fcTable(g)}</div>
+                </div>`;
+            }
+            document.getElementById('fc-preview-list').innerHTML = html || '<div class="t-muted">데이터 없음</div>';
+            document.getElementById('fc-summary').innerHTML = `저장 예정 <strong>${totalImport}</strong>명 · 경고 <strong style="color:#b45309;">${totalWarn}</strong>건 · 오류 <strong style="color:#dc2626;">${totalErr}</strong>건`;
+            document.getElementById('fc-import-btn').disabled = totalImport === 0;
+        }
+        function fcTable(g) {
+            const isH = g.kind === 'height';
+            const cols = isH ? (g.heights || []).map(h => Number(h).toFixed(2)) : ['1차', '2차', '3차', '4차', '5차', '6차'];
+            let h = `<table class="fc-table"><thead><tr><th>순서</th><th>배번</th><th class="l">성명(카드)</th><th class="l">성명(DB)</th>${cols.map(c => `<th>${c}</th>`).join('')}<th>최고<br><span style="font-weight:400;">계산 / 카드</span></th><th>순위<br><span style="font-weight:400;">계산 / 카드</span></th><th>구분</th><th>상태</th></tr></thead><tbody>`;
+            for (const r of g.rows) {
+                const err = r.issues.some(i => i.level === 'error');
+                const warn = r.issues.some(i => i.level === 'warn');
+                const cls = [err ? 'fc-row-error' : (warn ? 'fc-row-warn' : ''), !r.will_import ? 'fc-row-skip' : ''].join(' ').trim();
+                const cells = cols.map((c, idx) => {
+                    if (isH) {
+                        const v = (r.marks && r.marks[c]) || '';
+                        const ex = r.existing && r.existing.marks ? (r.existing.marks[c] || '') : null;
+                        return `<td>${fcEsc(v)}${ex != null && ex !== v ? `<span class="fc-existing">기존 ${fcEsc(ex || '·')}</span>` : ''}</td>`;
+                    }
+                    const a = r.attempts[String(idx + 1)];
+                    const ex = r.existing && r.existing.attempts ? r.existing.attempts[String(idx + 1)] : null;
+                    let body = '';
+                    if (a) body = a.kind === 'foul' ? '<span class="fc-cell-foul">X</span>' : a.kind === 'pass' ? '<span class="fc-cell-pass">-</span>' : fcEsc(a.disp);
+                    if (a && a.wind != null) body += `<span class="fc-wind">${fcFmtWind(a.wind)}</span>`;
+                    const exDisp = ex ? (Number(ex.value) === 0 ? 'X' : Number(ex.value) === -1 ? '-' : Number(ex.value).toFixed(2)) : '·';
+                    const newDisp = a ? (a.kind === 'valid' ? Number(a.value).toFixed(2) : a.kind === 'foul' ? 'X' : '-') : '·';
+                    if (r.existing && exDisp !== newDisp) body += `<span class="fc-existing">기존 ${exDisp}</span>`;
+                    return `<td>${body}</td>`;
+                }).join('');
+                const best = r.computed.best != null ? Number(r.computed.best).toFixed(2) : '–';
+                const cardBest = r.card.bestNM ? 'NM' : (r.card.best != null ? Number(r.card.best).toFixed(2) : '–');
+                const bestMis = r.card.best != null && r.computed.best != null && Math.abs(r.card.best - r.computed.best) > 0.005;
+                const rank = r.computed.rank != null ? r.computed.rank : '–';
+                const cardRank = r.card.rank != null ? r.card.rank : '–';
+                const rankMis = r.card.rank != null && r.computed.rank != null && r.card.rank !== r.computed.rank;
+                const badge = !r.db ? '<span class="fc-badge skip">매칭실패</span>'
+                    : !r.has_data ? '<span class="fc-badge same">빈 행</span>'
+                    : err ? '<span class="fc-badge skip">건너뜀</span>'
+                    : !r.existing ? '<span class="fc-badge new">신규</span>'
+                    : r.changed ? '<span class="fc-badge changed">변경</span>' : '<span class="fc-badge same">동일</span>';
+                h += `<tr class="${cls}"><td>${r.order || ''}</td><td>${fcEsc(r.bib)}</td><td class="l">${fcEsc(r.name)}</td><td class="l">${r.db ? fcEsc(r.db.name) : '<span style="color:#dc2626;">–</span>'}</td>${cells}
+                    <td>${best}${r.computed.bestWind != null ? `<span class="fc-wind">${fcFmtWind(r.computed.bestWind)}</span>` : ''}<span class="fc-existing" style="color:${bestMis ? '#dc2626' : '#9ca3af'};">카드 ${cardBest}</span></td>
+                    <td>${rank}<span class="fc-existing" style="color:${rankMis ? '#dc2626' : '#9ca3af'};">카드 ${cardRank}</span></td>
+                    <td>${fcEsc(r.status || '')}</td><td>${badge}</td></tr>`;
+                if (r.issues.length) h += `<tr class="${cls}"><td colspan="${cols.length + 8}" class="l">${fcIssues(r.issues)}</td></tr>`;
+            }
+            return h + '</tbody></table>';
+        }
+        // 드롭/선택된 파일 분기: xlsx 면 미리보기, 사진이면 서버 AI 전사
+        function fcHandleFiles(fileList) {
+            const arr = Array.from(fileList || []);
+            if (!arr.length) return;
+            const xlsx = arr.find(f => /\.xlsx?$/i.test(f.name));
+            if (xlsx) { fcPreview(xlsx); return; }
+            const imgs = arr.filter(f => /^image\//i.test(f.type) || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(f.name));
+            if (!imgs.length) { toast('xlsx 파일이나 카드 사진을 올려 주세요.', 'error'); return; }
+            if (imgs.length > 4) { toast('사진은 한 번에 4장까지 올릴 수 있습니다.', 'error'); return; }
+            fcTranscribe(imgs);
+        }
+        // 브라우저에서 긴 변 2576px JPEG 로 축소 (업로드·비용 절감, EXIF 회전 반영)
+        async function fcShrinkImage(file) {
+            const MAX = 2576;
+            let bmp;
+            try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+            catch (e) { throw new Error(`${file.name}: 브라우저가 읽지 못하는 형식입니다. HEIC 라면 JPEG 로 변환해 주세요.`); }
+            const scale = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+            const w = Math.max(1, Math.round(bmp.width * scale)), h = Math.max(1, Math.round(bmp.height * scale));
+            const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+            cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
+            if (bmp.close) bmp.close();
+            const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
+            if (!blob) throw new Error(`${file.name}: 이미지 변환 실패`);
+            return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+        }
+        async function fcTranscribe(imgs) {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            _fcFile = null; _fcPreview = null;
+            document.getElementById('fc-file-name').textContent = imgs.map(f => f.name).join(', ');
+            document.getElementById('fc-result').style.display = 'none';
+            document.getElementById('fc-preview-area').style.display = 'block';
+            document.getElementById('fc-summary').textContent = '';
+            document.getElementById('fc-import-btn').disabled = true;
+            const list = document.getElementById('fc-preview-list');
+            list.innerHTML = `<div style="color:var(--text-muted);padding:12px;">사진 ${imgs.length}장을 AI 로 전사하는 중입니다… 보통 10~30초 걸립니다.</div>`;
+            try {
+                const fd = new FormData();
+                fd.append('admin_key', AK());
+                fd.append('competition_id', _selectedCompId);
+                for (const f of imgs) fd.append('images', await fcShrinkImage(f));
+                const resp = await fetch('/api/field-card/transcribe', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
+                const data = await resp.json();
+                if (!resp.ok || !data.success) throw new Error(data.error || '전사 실패');
+                // 전사 결과 xlsx 를 파일로 보관 → 저장 실행은 xlsx 경로(/import)와 동일
+                const bytes = Uint8Array.from(atob(data.xlsx_base64), c => c.charCodeAt(0));
+                _fcFile = new File([bytes], data.xlsx_filename, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                _fcPreview = data;
+                fcRender(data);
+                fcRenderTranscriptionMeta(data.transcription || {}, _fcFile);
+            } catch (e) {
+                list.innerHTML = `<div style="color:red;padding:12px;">오류: ${fcEsc(e.message)}</div>`;
+            }
+        }
+        let _fcXlsxUrl = null;
+        function fcRenderTranscriptionMeta(t, file) {
+            if (_fcXlsxUrl) { try { URL.revokeObjectURL(_fcXlsxUrl); } catch (e) {} }
+            _fcXlsxUrl = URL.createObjectURL(file);
+            const usage = t.usage || {};
+            const cost = t.cost_usd != null ? `약 $${Number(t.cost_usd).toFixed(3)}` : '';
+            const notes = Array.isArray(t.notes) ? t.notes : [];
+            const html = `<div style="border:1px solid #cfdcee;background:#eef3fa;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;">
+                <div><strong>AI 전사 완료</strong> · 카드 ${t.cards || 0}장 · 판독 불확실 셀 <strong style="color:${t.uncertain_cells ? '#b45309' : '#6b7280'};">${t.uncertain_cells || 0}</strong>개
+                    <span class="t-muted">· ${fcEsc(t.model || '')} · 토큰 ${usage.input_tokens || 0}/${usage.output_tokens || 0}${cost ? ' · ' + cost : ''}</span>
+                    ${notes.length ? `<div class="t-help" style="margin-top:4px;">AI 메모: ${fcEsc(notes.join(' / '))}</div>` : ''}</div>
+                <a class="btn btn-sm btn-outline" href="${_fcXlsxUrl}" download="${fcEsc(file.name)}">전사 결과 xlsx 내려받기</a>
+            </div>
+            <div class="t-help" style="margin-bottom:8px;">경고가 난 셀을 사진과 대조하세요. 값을 고쳐야 하면 xlsx 를 내려받아 수정한 뒤 다시 드롭하면 되고, 그대로 맞으면 아래 버튼으로 바로 저장합니다.</div>`;
+            document.getElementById('fc-preview-list').insertAdjacentHTML('afterbegin', html);
+        }
+        function fcCancel() {
+            _fcFile = null; _fcPreview = null;
+            if (_fcXlsxUrl) { try { URL.revokeObjectURL(_fcXlsxUrl); } catch (e) {} _fcXlsxUrl = null; }
+            document.getElementById('fc-preview-area').style.display = 'none';
+            document.getElementById('fc-file').value = '';
+        }
+        async function fcImport() {
+            if (!_fcFile || !_fcPreview) { toast('파일을 먼저 올려 주세요.', 'error'); return; }
+            const n = _fcPreview.groups.reduce((s, g) => s + (fcGroupOk(g) ? g.rows.filter(r => r.will_import).length : 0), 0);
+            const w = _fcPreview.groups.reduce((s, g) => s + fcCountIssues(g, 'warn'), 0);
+            if (!confirm(`${n}명의 기록을 저장합니다.${w ? `\n경고 ${w}건이 있습니다 — 종이 카드와 대조했는지 확인하세요.` : ''}\n\n파일에 기록이 있는 선수는 시기 전체가 파일대로 교체됩니다. 계속할까요?`)) return;
+            const box = document.getElementById('fc-result');
+            box.style.display = 'block';
+            box.innerHTML = '<div style="color:var(--text-muted);padding:12px;">저장 중...</div>';
+            try {
+                const fd = new FormData();
+                fd.append('admin_key', AK());
+                fd.append('competition_id', _selectedCompId);
+                fd.append('file', _fcFile);
+                const resp = await fetch('/api/field-card/import', { method: 'POST', headers: { 'x-admin-key': AK() }, body: fd });
+                const data = await resp.json();
+                if (!resp.ok || !data.success) throw new Error(data.error || '저장 실패');
+                let html = '<div style="border:1px solid #5b7fb5;background:#eef3fa;border-radius:8px;padding:12px;"><strong style="color:#3d5a8a;">필드 기록카드 저장 완료</strong><br><br>';
+                for (const r of data.results) {
+                    if (r.error) html += `<div style="margin-bottom:6px;"><strong>${fcEsc(r.label)}</strong> — <span style="color:red;">${fcEsc(r.error)}</span></div>`;
+                    else html += `<div style="margin-bottom:6px;"><strong>${fcEsc(r.label)}</strong> — <span style="color:#3d5a8a;">${r.imported}명 저장</span>${r.skipped > 0 ? `<span style="color:#f59e0b;"> / ${r.skipped}명 건너뜀</span>` : ''}</div>`;
+                }
+                html += '<div class="t-help" style="margin-top:8px;">기록 페이지에서 종이 카드와 한 번 더 대조하세요. 경고가 났던 셀부터 확인하면 빠릅니다.</div></div>';
+                box.innerHTML = html;
+                fcCancel();
+                if (typeof loadEvents === 'function') loadEvents();
+            } catch (e) {
+                box.innerHTML = `<div style="color:red;padding:12px;">오류: ${fcEsc(e.message)}</div>`;
+            }
+        }
+        async function fcCopyPrompt() {
+            try {
+                const resp = await fetch('/api/field-card/prompt');
+                const text = await resp.text();
+                await navigator.clipboard.writeText(text);
+                toast('AI 전사 프롬프트를 복사했습니다. ChatGPT/Claude 에 카드 사진과 함께 붙여넣으세요.');
+            } catch (e) {
+                window.open('/api/field-card/prompt', '_blank');
+            }
         }
 
         async function sbImportFiles() {
