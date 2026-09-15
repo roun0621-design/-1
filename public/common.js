@@ -2028,15 +2028,21 @@ async function openTimetable(compId) {
         // - results page: openResultDetail
         // - other pages: navigate to dashboard with event hash
         window._ttOpenResult = function(eventId) {
-            const overlay = document.getElementById('timetable-overlay');
-            if (overlay) overlay.remove();
+            // 시간표는 닫지 않는다 — 결과 창만 위에 띄우고, 닫으면 스크롤 위치 그대로인 시간표로 돌아온다.
+            // 결과 오버레이(z-index 500)가 시간표 오버레이(100000) 아래 깔리지 않도록 위로 올린다.
+            const lift = () => {
+                const ro = document.getElementById('result-overlay') || document.querySelector('.result-detail-overlay');
+                if (ro) ro.style.zIndex = '100001';
+            };
             if (typeof openResult === 'function') {
-                openResult(eventId);
+                openResult(eventId); lift(); setTimeout(lift, 50);
             } else if (typeof openLiveResult === 'function') {
-                openLiveResult(eventId);
+                openLiveResult(eventId); lift(); setTimeout(lift, 50);
             } else if (typeof openResultDetail === 'function') {
-                openResultDetail(eventId);
+                openResultDetail(eventId); lift(); setTimeout(lift, 50);
             } else {
+                const overlay = document.getElementById('timetable-overlay');
+                if (overlay) overlay.remove();
                 window.location.href = '/dashboard.html?event=' + eventId;
             }
         };
