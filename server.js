@@ -7753,7 +7753,7 @@ app.post('/api/timing-txt/import', upload.array('files', 100), async (req, res) 
 // (투척·수평도약·수직도약 카드 → AI 전사 xlsx → 시기별 저장. 정규화 헬퍼는 기록 엑셀 가져오기와 공유)
 // ============================================================
 require('./lib/routes/field_card_import')(app, {
-    db, isAdminKey, opLog, broadcastSSE, audit, upload,
+    db, isAdminKey, isOperationKey, opLog, broadcastSSE, audit, upload, requireAdminAfterCompEnd,
     recx: { normBib: _recxNormBib, divToken: _recxDivToken, genderOf: _recxGenderOf, round: _recxRound },
     runRecordCompareHook: _resultsRoutes && _resultsRoutes.runRecordCompareHook,
 });

@@ -1471,6 +1471,7 @@ function renderFieldDistanceContent() {
         <button class="btn btn-xs ${!isRank && !isView ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('input')" title="스몰넘버 순서">No.순</button>
         <button class="btn btn-xs ${isRank ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('rank')" title="기록순">기록순</button>
         <button class="btn btn-xs ${isView ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('view')" title="조망 모드">조망</button>
+        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="openFieldCardUpload()" title="수기 기록카드 사진을 올려 AI 로 전사하고 표에서 확인·수정 후 저장">📷 기록카드</button>
     </div>`;
 
     content.innerHTML = `
@@ -1643,6 +1644,30 @@ function renderFieldDistanceContent() {
     // Auto-focus the active input if it exists
     const activeInput = content.querySelector('.field-dist-input');
     if (activeInput) setTimeout(() => activeInput.focus(), 30);
+}
+
+// ============================================================
+// 필드 기록카드 업로드 (사진/xlsx → AI 전사 → 표에서 수정 → 저장) — public/field-card-upload.js
+// 종목·조는 현재 화면으로 고정, 선수는 배번으로 매칭. 관리자 키 또는 운영키 필요.
+// ============================================================
+function openFieldCardUpload() {
+    const evt = state.selectedEvent, hid = state.heatId;
+    if (!evt || !hid) { alert('종목과 조를 먼저 선택하세요.'); return; }
+    if (typeof FieldCardUpload === 'undefined') { alert('업로드 모듈이 로드되지 않았습니다. 페이지를 새로고침해 주세요.'); return; }
+    let key = localStorage.getItem('pace_admin_key') || sessionStorage.getItem('admin_key') || localStorage.getItem('admin_key')
+        || localStorage.getItem('op_key') || localStorage.getItem('accessKey') || '';
+    if (!key) { key = prompt('운영키 또는 관리자 키를 입력하세요'); if (!key) return; localStorage.setItem('op_key', key); }
+    const heat = (state.heats || []).find(h => h.id === hid);
+    FieldCardUpload.open({
+        competitionId: evt.competition_id, heatId: hid, key,
+        eventName: evt.name, gender: evt.gender, division: evt.division || '', roundType: evt.round_type,
+        heatNumber: heat ? heat.heat_number : '', category: evt.category,
+        needsWind: requiresWindMeasurement(evt.name, 'field_distance'),
+        onSaved: async () => {
+            if (evt.category === 'field_height') await loadFieldHeightData();
+            else await loadFieldDistanceData();
+        },
+    });
 }
 
 function getTop8Ids(rows) {
@@ -2408,6 +2433,7 @@ function renderHeightContent() {
         <span style="font-size:11px;font-weight:700;color:var(--text-muted);">정렬:</span>
         <button class="btn btn-xs ${!isRank ? 'btn-primary' : 'btn-outline'}" onclick="setHeightMode('input')" title="레인 순서">No.순</button>
         <button class="btn btn-xs ${isRank ? 'btn-primary' : 'btn-outline'}" onclick="setHeightMode('rank')" title="순위별 정렬">순위순</button>
+        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="openFieldCardUpload()" title="수기 기록카드 사진을 올려 AI 로 전사하고 표에서 확인·수정 후 저장">📷 기록카드</button>
     </div>`;
 
     let hdr = '<th>RANK</th><th>No.</th><th>NAME / BIB</th>';

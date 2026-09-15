@@ -7,7 +7,18 @@
 
 ## 1. 운영 흐름
 
-### 1-1. 사진 드롭 (기본 — 서버 AI 전사)
+### 1-0. 기록 입력창에서 올리기 (기본 — 종목·조 고정)
+
+기록 입력창(record.html)에서 필드 종목의 조를 열면 정렬 버튼 옆에 **📷 기록카드** 버튼이 있다 (`public/field-card-upload.js`).
+
+1. 버튼을 누르면 업로드 창이 뜬다. 카드 사진을 **여러 장 차례로** 올리거나(멀리뛰기·세단뛰기는 기록표 + 풍속표), 카메라로 바로 찍거나, xlsx 를 고른 뒤 **전사 시작**.
+2. 서버가 AI 로 전사하면서 종목·조를 이 화면으로 고정하고(카드의 종목명은 무시), 선수만 배번 → 순서 → 성명 순으로 맞춘다. 풍속 카드는 같은 선수 행에 합쳐진다.
+3. 결과가 **편집 가능한 표**로 뜬다. 노란 칸은 AI 가 확신하지 못한 셀, 빨간 칸은 매칭 실패. 배번·성명·순서·기록·풍속·높이 마크·기록구분을 고치면 **자동으로 다시 매칭·검산**한다. 행 추가/삭제, 카드에 없는 선수 추가(칩 클릭)도 된다.
+4. **저장**. 관리자 키 또는 운영키가 필요하고(없으면 입력창이 뜸), 대회가 종료되었으면 관리자만 저장할 수 있다.
+
+서버 API: `POST /api/field-card/transcribe|preview` 에 `heat_id` 를 주면 조 고정 모드가 되고 편집용 `card` 를 함께 돌려준다. 편집 후에는 `POST /api/field-card/analyze-json` / `import-json` 에 `{ heat_id, card }` 를 보낸다.
+
+### 1-1. 관리자 페이지에서 일괄 올리기 (사진 드롭 — 서버 AI 전사)
 
 1. 경기 종료 후 기록실이 카드를 **정면에서 그림자 없이** 촬영한다. 멀리뛰기·세단뛰기는 기록표와 풍속표 두 장.
 2. 관리자 페이지 → "필드 기록카드 가져오기" 드롭존에 사진을 끌어다 놓는다 (한 번에 4장까지). 브라우저가 긴 변 2,576px JPEG 로 줄여 올린다.
@@ -52,7 +63,7 @@ HEIC 사진은 브라우저(사파리 외)가 읽지 못하므로 아이폰은 "
 | 파울 | `X` | `distance_meters = 0` |
 | 패스 | `-` | `distance_meters = -1` |
 | 시도 없음 (4~6차 미진출 등) | 빈칸 | row 없음 |
-| 풍속 | `+0.8` `-0.9` `0.0` — **유효 시기에만** | `result.wind` (파울·패스 시기는 NULL, 값이 있어도 무시) |
+| 풍속 | `+0.8` `-0.9` `0.0` — **유효 시기에만**. 부호는 칸 앞에 인쇄된 +/- 중 심판이 **동그라미 친 쪽** (AI 프롬프트에 명시, 확신 없으면 + 로 적고 불확실 표시) | `result.wind` (파울·패스 시기는 NULL, 값이 있어도 무시) |
 | 높이 시도 | `O` `XO` `XXO` `XXX` `-` `X-` `XX-` | `height_attempt` 에 시도별 1행 (`O`/`X`/`PASS`) |
 | 기록구분 | `DNS` `DNF` `DQ` `NM` (순위 칸의 DNS 도 인식) | `result` 의 `attempt_number NULL` 행 `status_code` |
 | 최고기록·순위 | 카드에 적힌 값 그대로 | **저장하지 않음** — 계산값과 대조만 |
@@ -94,6 +105,11 @@ HEIC 사진은 브라우저(사파리 외)가 읽지 못하므로 아이폰은 "
 | POST | `/api/field-card/preview` | multipart `file`, `competition_id`, `admin_key`(또는 `x-admin-key`) → `{ groups:[{ label, kind, matchStatus, heatInfo, heights, issues, rows }], issues }` |
 | POST | `/api/field-card/transcribe` | multipart `images`(≤4장, JPEG/PNG/WebP), `competition_id`, `admin_key`, 선택 `hint` → 미리보기와 같은 `groups/issues` + `xlsx_base64`, `xlsx_filename`, `transcription{ cards, model, usage, cost_usd, uncertain_cells, images, notes }`. 503 = 키 미설정, 422 = 카드 인식 실패/거부/응답 잘림, 502 = API 호출 실패 |
 | POST | `/api/field-card/import` | 같은 입력 → `{ results:[{ label, imported, skipped, issues, rows }], issues }`. transcribe 응답의 xlsx 를 그대로 올리면 된다 |
+| POST | `/api/field-card/analyze-json` | JSON `{ heat_id, competition_id?, admin_key, card }` → 조 고정 재매칭·재검산 `{ groups, issues, card, target }`. `groups[0].unmatched_entries` 는 카드에 없는 선수 |
+| POST | `/api/field-card/import-json` | 같은 입력 → 저장 `{ results, issues }` |
+
+`heat_id` 가 있는 요청은 관리자 키 또는 운영키(`admin_key` / `key` / `x-admin-key`)를 받는다. 없는 일괄 요청은 관리자 키만. 종료된 대회는 관리자만 저장(전역 종료 잠금 + `requireAdminAfterCompEnd`).
+편집용 `card`: `{ kind:'distance'|'height', bar_heights:[], athletes:[{ order, bib, name, team, attempts[6], winds[6], marks[], best, rank, status, remark, uncertain[] }] }`.
 
 `rows[]` 주요 필드: `attempts{n:{kind,value,wind,disp}}`, `marks{"1.55":"XO"}`, `computed{best,rank,bestWind}`, `card{best,bestNM,rank}`, `status`, `db{event_entry_id,name,bib,lane}`, `match_method`, `existing`, `changed`, `will_import`, `issues[{level,msg}]`.
 
@@ -110,3 +126,4 @@ HEIC 사진은 브라우저(사파리 외)가 읽지 못하므로 아이폰은 "
 - `tests/lib/fieldCardVision.test.js` — 이미지 축소, 요청 형태(구조화 출력·폴백), 오류 코드, 카드 JSON → 시트 변환 (가짜 클라이언트, 실제 호출 없음)
 - `tests/api/31_field_card_import.test.js` — 투척/수평도약/수직도약/혼성 세부종목 미리보기·저장·재업로드·오류 처리
 - `tests/api/32_field_card_transcribe.test.js` — 사진 → 전사(픽스처) → 미리보기 → xlsx → 저장, 403/400/503/422
+- `tests/api/33_field_card_heat_mode.test.js` — 조 고정 모드: 운영키, 풍속 카드 병합, 배번 수정 재매칭, analyze-json/import-json, 종료 대회 잠금
