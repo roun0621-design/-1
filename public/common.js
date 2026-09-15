@@ -2047,19 +2047,23 @@ async function openTimetable(compId) {
             }
         };
         window._ttGoToEvent = function(eventId) {
-            // Close timetable overlay and navigate to event
+            // 대시보드/결과 페이지: 시간표는 그대로 두고 명단·결과 창만 위에 띄운다 (닫으면 시간표로 복귀, 스크롤 유지)
+            // 소집실/기록입력: 페이지 안에서 종목을 바꾸는 것이므로 시간표를 닫는다
+            const page = location.pathname;
+            const lift = () => {
+                const ro = document.getElementById('result-overlay') || document.querySelector('.result-detail-overlay');
+                if (ro) ro.style.zIndex = '100001';
+            };
+            if (page.includes('dashboard') && typeof openLiveResult === 'function') {
+                openLiveResult(eventId); lift(); setTimeout(lift, 50); return;
+            }
+            if (page.includes('results') && typeof openResultDetail === 'function') {
+                openResultDetail(eventId); lift(); setTimeout(lift, 50); return;
+            }
             const overlay = document.getElementById('timetable-overlay');
             if (overlay) overlay.remove();
-            // Determine current page and trigger event selection
-            const page = location.pathname;
-            if (page.includes('dashboard')) {
-                if (typeof openLiveResult === 'function') openLiveResult(eventId);
-            } else if (page.includes('callroom')) {
+            if (page.includes('callroom') || page.includes('record')) {
                 if (typeof selectEvent === 'function') selectEvent(eventId);
-            } else if (page.includes('record')) {
-                if (typeof selectEvent === 'function') selectEvent(eventId);
-            } else if (page.includes('results')) {
-                if (typeof openResultDetail === 'function') openResultDetail(eventId);
             } else {
                 // Fallback: go to dashboard with event
                 window.location.href = '/dashboard.html?event=' + eventId;
