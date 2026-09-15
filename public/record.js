@@ -709,12 +709,27 @@ function showPlaceholder() {
         </div>`;
 }
 
+// 종목명으로 세부종목의 실제 카테고리 추정 (잘못된 category 방어용)
+function _guessSubCategory(name) {
+    const n = (name || '').replace(/^\[.*?\]\s*/, '').replace(/\s+/g, '');
+    if (/높이뛰기|장대높이뛰기/.test(n)) return 'field_height';
+    if (/멀리뛰기|세단뛰기|포환던지기|원반던지기|창던지기|해머던지기|던지기|뛰기/.test(n)) return 'field_distance';
+    return 'track'; // 100mH/200m/800m 등
+}
+
 async function renderDetail() {
     const evt = state.selectedEvent;
     if (!evt) return showPlaceholder();
 
     state.heats = await API.getHeats(evt.id);
-    const cat = evt.category;
+    let cat = evt.category;
+
+    // 방어: 세부종목(parent_event_id 있음)은 절대 combined 가 될 수 없음.
+    // category 가 'combined'(또는 누락)로 잘못 저장된 트랙/필드 세부종목을 종목명으로 올바르게 라우팅.
+    // (이 버그로 트랙 세부종목 클릭 시 종합순위 화면만 떠서 기록 입력이 안 되던 문제 해결)
+    if (evt.parent_event_id && (cat === 'combined' || !cat)) {
+        cat = _guessSubCategory(evt.name);
+    }
 
     if (cat === 'track' || cat === 'relay' || cat === 'road') await renderTrackDetail(evt);
     else if (cat === 'field_distance') await renderFieldDistanceDetail(evt);
@@ -934,7 +949,7 @@ async function renderTrackTable() {
                     <td><strong>${bib(r.bib_number)}</strong></td>
                     <td style="text-align:left;">${jointBadgeHTML(r)}${r.name}${qualBadge}${relayMemberHtml}</td>
                     <td style="font-size:12px;text-align:left;">${r.team || ''}</td>
-                    <td><input class="track-time-input ${savedClass}" data-eid="${r.event_entry_id}" data-row="${idx}"
+                    <td><input class="track-time-input ${savedClass}" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-row="${idx}"
                         value="${displayVal}" placeholder="${placeholder}" ${r.status_code ? 'disabled' : ''}
                         onkeydown="trackInlineKeydown(event,this)" oninput="trackInlineInput(this)" onfocus="this.select()"></td>
                     <td><select class="sc-select" data-eid="${r.event_entry_id}" onchange="setStatusCode(this)" title="DQ=실격, DNS=불출발, DNF=미완주, NM=기록없음">
@@ -1456,6 +1471,7 @@ function renderFieldDistanceContent() {
         <button class="btn btn-xs ${!isRank && !isView ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('input')" title="스몰넘버 순서">No.순</button>
         <button class="btn btn-xs ${isRank ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('rank')" title="기록순">기록순</button>
         <button class="btn btn-xs ${isView ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('view')" title="조망 모드">조망</button>
+        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="openFieldCardUpload()" title="수기 기록카드 사진을 올려 AI 로 전사하고 표에서 확인·수정 후 저장">📷 기록카드</button>
     </div>`;
 
     content.innerHTML = `
@@ -1487,7 +1503,10 @@ function renderFieldDistanceContent() {
                         const cls = top8.has(r.event_entry_id) ? 'top8-highlight' : '';
                         const zebraCls = needsWind ? '' : (rowIdx % 2 === 1 ? 'field-row-odd' : '');
                         // === ROW 1: Name + Distance records ===
-                        const isStatusDisabled = !!r.status_code;
+                        // DNS/DNF/DQ 는 시도 입력이 의미 없어 잠그지만, NM(파울/패스로 유효기록 없음)은
+                        // 선수가 시기를 치른 상태라 수정 가능해야 함 → NM 은 입력칸을 잠그지 않는다.
+                        // (NM 자동판정이 입력칸을 잠가 패스를 실제 기록으로 못 고치던 deadlock 해결)
+                        const isStatusDisabled = !!r.status_code && r.status_code !== 'NM';
                         let distCells = '';
                         for (let i = 1; i <= maxAttempts; i++) {
                             const v = r.attempts[i];
@@ -1502,7 +1521,7 @@ function renderFieldDistanceContent() {
                                 distCells += `<td class="attempt-cell ${attColCls}" style="opacity:0.3;text-align:center;">—</td>`;
                             } else if (isActive && !isView) {
                                 distCells += `<td class="attempt-cell attempt-cell-editing ${attColCls}" data-entry="${r.event_entry_id}" data-attempt="${i}">
-                                    <input class="field-dist-input" type="text" data-eid="${r.event_entry_id}" data-att="${i}" data-row="${rowIdx}"
+                                    <input class="field-dist-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-att="${i}" data-row="${rowIdx}"
                                         value="${hasVal && !isFoul && !isPass ? v.toFixed(2) : (isPass ? '-' : '')}" placeholder="0.00 / X / -"
                                         onkeydown="fieldInlineKeydown(event,this)" oninput="fieldInlineChange(this)" onblur="fieldInlineBlur(this)" onfocus="this.select()" autofocus>
                                     <button class="btn btn-xs btn-danger foul-inline-btn" onclick="fieldInlineFoul(${r.event_entry_id},${i})" title="파울 (X)">X</button>
@@ -1563,11 +1582,12 @@ function renderFieldDistanceContent() {
                                             onkeydown="fieldWindKeydown2(event,this)" onblur="windCellBlur(this)" onfocus="this.select()" autofocus>
                                     </td>`;
                                 } else {
+                                    // 기록(거리) 입력 전에도 풍속 먼저 입력 가능 — 풍속계가 먼저 나오는 현장 순서
                                     let wDisp = '';
-                                    if (hasVal && !isFoul && !isPass && r.attWind && r.attWind[i] != null) {
+                                    if (!isFoul && !isPass && r.attWind && r.attWind[i] != null) {
                                         wDisp = formatWind(r.attWind[i]);
                                     }
-                                    const wClickAttr = (isView || !hasVal || isFoul || isPass) ? '' : `onclick="activateWindCell(${r.event_entry_id},${i})"`;
+                                    const wClickAttr = (isView || isFoul || isPass) ? '' : `onclick="activateWindCell(${r.event_entry_id},${i})"`;
                                     windCells += `<td class="wind-cell ${wAttColCls}" ${wClickAttr}>${wDisp}</td>`;
                                 }
                             } else {
@@ -1624,6 +1644,30 @@ function renderFieldDistanceContent() {
     // Auto-focus the active input if it exists
     const activeInput = content.querySelector('.field-dist-input');
     if (activeInput) setTimeout(() => activeInput.focus(), 30);
+}
+
+// ============================================================
+// 필드 기록카드 업로드 (사진/xlsx → AI 전사 → 표에서 수정 → 저장) — public/field-card-upload.js
+// 종목·조는 현재 화면으로 고정, 선수는 배번으로 매칭. 관리자 키 또는 운영키 필요.
+// ============================================================
+function openFieldCardUpload() {
+    const evt = state.selectedEvent, hid = state.heatId;
+    if (!evt || !hid) { alert('종목과 조를 먼저 선택하세요.'); return; }
+    if (typeof FieldCardUpload === 'undefined') { alert('업로드 모듈이 로드되지 않았습니다. 페이지를 새로고침해 주세요.'); return; }
+    let key = localStorage.getItem('pace_admin_key') || sessionStorage.getItem('admin_key') || localStorage.getItem('admin_key')
+        || localStorage.getItem('op_key') || localStorage.getItem('accessKey') || '';
+    if (!key) { key = prompt('운영키 또는 관리자 키를 입력하세요'); if (!key) return; localStorage.setItem('op_key', key); }
+    const heat = (state.heats || []).find(h => h.id === hid);
+    FieldCardUpload.open({
+        competitionId: evt.competition_id, heatId: hid, key,
+        eventName: evt.name, gender: evt.gender, division: evt.division || '', roundType: evt.round_type,
+        heatNumber: heat ? heat.heat_number : '', category: evt.category,
+        needsWind: requiresWindMeasurement(evt.name, 'field_distance'),
+        onSaved: async () => {
+            if (evt.category === 'field_height') await loadFieldHeightData();
+            else await loadFieldDistanceData();
+        },
+    });
 }
 
 function getTop8Ids(rows) {
@@ -1875,21 +1919,19 @@ function fieldWindKeydown(e, windInp) {
 async function saveFieldWind(entryId, attempt, wind) {
     if (!confirmCompletedEdit()) return;
     try {
-        const existing = state.results.find(r => r.event_entry_id === entryId && r.attempt_number === attempt);
-        if (existing) {
-            const hid = getSaveHeatId(entryId); // [JOINT]
-            await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: existing.distance_meters, wind });
-            let allResults = await API.getResults(state.heatId);
-            if (isJointMode()) {
-                const extraR = await fetchJointExtraResults();
-                allResults = allResults.concat(extraR);
-            }
-            state.results = allResults;
-            state._activeWindCell = null;
-            state._activeFieldCell = null;
-            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 풍속 저장');
-            renderFieldDistanceContent();
+        // 기록이 아직 없어도 풍속만 먼저 저장 가능 (distance_meters 미전송 → 기존값 유지 / 신규는 NULL)
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, wind });
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
         }
+        state.results = allResults;
+        state._activeWindCell = null;
+        state._activeFieldCell = null;
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 풍속 저장');
+        renderFieldDistanceContent();
     } catch (err) {
         console.error('saveFieldWind error:', err);
     }
@@ -2116,6 +2158,22 @@ function setupFieldModal() { /* No longer used — inline editing replaces modal
 // ============================================================
 // FIELD HEIGHT DETAIL — redesigned: empty start, add-height button, O/X/- toggle
 // ============================================================
+// 수직도약 순위결정전(동기록) — RANK 칸에 직접 입력한 순위 저장
+async function saveHeightManualRank(inp) {
+    if (!confirmCompletedEdit()) return;
+    const eid = +inp.dataset.eid;
+    const raw = (inp.value || '').trim();
+    const val = raw === '' ? null : parseInt(raw);
+    if (raw !== '' && (isNaN(val) || val < 1)) { showToast('순위는 1 이상의 숫자로 입력하세요.', 'error'); return; }
+    try {
+        await API.setManualRank(eid, val);
+        // 새 순위로 정렬 반영
+        if (state.selectedEvent) await renderFieldHeightDetail(state.selectedEvent);
+    } catch (e) {
+        showToast((e && (e.error || e.message)) || '순위 저장 실패', 'error');
+    }
+}
+
 async function renderFieldHeightDetail(evt) {
     let parentLink = '';
     if (evt.parent_event_id) {
@@ -2355,6 +2413,8 @@ function renderHeightContent() {
         if (r.bestHeight == null) r.rank = null;
         else { const f = rankedH.find(x => x.event_entry_id === r.event_entry_id); if (f) r.rank = f.rank; }
     });
+    // 수동 순위(순위결정전/동기록 시 직접 입력) override — 계산 순위를 덮어씀
+    rows.forEach(r => { if (r.manual_rank != null && r.manual_rank !== '') r.rank = Number(r.manual_rank); });
 
     // Sort: rank mode puts ranked athletes first by rank, then unranked
     const sorted = isRank
@@ -2373,14 +2433,17 @@ function renderHeightContent() {
         <span style="font-size:11px;font-weight:700;color:var(--text-muted);">정렬:</span>
         <button class="btn btn-xs ${!isRank ? 'btn-primary' : 'btn-outline'}" onclick="setHeightMode('input')" title="레인 순서">No.순</button>
         <button class="btn btn-xs ${isRank ? 'btn-primary' : 'btn-outline'}" onclick="setHeightMode('rank')" title="순위별 정렬">순위순</button>
+        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="openFieldCardUpload()" title="수기 기록카드 사진을 올려 AI 로 전사하고 표에서 확인·수정 후 저장">📷 기록카드</button>
     </div>`;
 
     let hdr = '<th>RANK</th><th>No.</th><th>NAME / BIB</th>';
     heights.forEach(h => { hdr += `<th class="height-col-header" style="font-size:10px;">${formatHeight(h)}<br><button class="btn-bar-delete" onclick="deleteBarHeight(${h})" title="${formatHeight(h)} 삭제">&times;</button></th>`; });
     hdr += '<th>최고</th><th>상태</th>';
 
+    // 높이 열이 늘어나면 표가 화면보다 넓어진다 → 가로 스크롤 래퍼로 감싼다 (없으면 상위 overflow-x:hidden 에 잘려 드래그 불가)
     document.getElementById('height-content').innerHTML = `
         ${sortBtns}
+        <div class="matrix-scroll-wrap height-scroll-wrap">
         <table class="data-table field-table height-toggle-table">
             <thead><tr>${hdr}</tr></thead>
             <tbody>${sorted.map(r => {
@@ -2417,9 +2480,13 @@ function renderHeightContent() {
                         cells += `<td class="height-toggle-cell">${cellContent}</td>`;
                     });
                 }
-                // Rank display
+                // Rank display — 순위결정전(동기록) 대비 직접 타이핑 가능한 입력칸.
+                //   비우면 자동순위로 복귀, 숫자 입력 시 수동 순위로 고정.
                 const rankDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` :
-                    (r.rank || '—');
+                    `<input class="height-rank-input" type="text" inputmode="numeric" value="${r.rank != null ? r.rank : ''}"
+                        data-eid="${r.event_entry_id}" placeholder="—" title="순위결정전 시 직접 입력 (비우면 자동)"
+                        onchange="saveHeightManualRank(this)" onfocus="this.select()"
+                        style="width:40px;text-align:center;padding:3px 2px;border:1px solid #d1d5db;border-radius:5px;font-weight:700;font-size:13px;background:${r.manual_rank != null ? '#fffbea' : '#fff'};">`;
                 // Status dropdown
                 const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" onchange="setFieldHeightStatusCode(this)" title="DNS=불출전, DNF=미완주, DQ=실격, NM=기록없음" ${r._isNoShow ? 'disabled' : ''}>
                     <option value="">—</option><option value="DNS" ${r.status_code==='DNS'?'selected':''}>DNS</option>
@@ -2441,7 +2508,8 @@ function renderHeightContent() {
                     <td>${statusCell}</td>
                 </tr>`;
             }).join('')}</tbody>
-        </table>`;
+        </table>
+        </div>`;
 }
 
 // Toggle height sort mode
@@ -2455,7 +2523,8 @@ function setHeightMode(mode) {
 //     · 옵티미스틱 머지 제거 → 서버 응답으로만 state 갱신 (race 의 근원 차단)
 //     · 클릭 시 즉시 버튼 disabled (busy 표시) → 서버 호출 → reload → 렌더
 //     · cycle: empty → X → O → '-' (pass) → empty
-async function toggleHeightMark(entryId, barHeight, attemptNumber) {
+// forceMark: 'O' | 'X' | '-' | '' 를 주면 순환 대신 그 값으로 지정 (터치 키패드 패널 record-fieldpad.js 에서 사용)
+async function toggleHeightMark(entryId, barHeight, attemptNumber, forceMark) {
     const cellKey = _heightCellKey(entryId, barHeight, attemptNumber);
     return _heightCellRunSerial(cellKey, async () => {
         // 직렬화 락 안에 들어왔으므로 직전 작업은 이미 완료 → state 최신.
@@ -2463,7 +2532,7 @@ async function toggleHeightMark(entryId, barHeight, attemptNumber) {
             a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
         );
         const currentMark = current ? current.result_mark : '';
-        const newMark = _heightNextMark(currentMark);
+        const newMark = (forceMark !== undefined && forceMark !== null) ? forceMark : _heightNextMark(currentMark);
 
         _heightCellMarkBusy(cellKey, true);
         renderHeightContent(); // busy 표시 즉시 반영
@@ -3050,7 +3119,7 @@ function _renderSubTrack(area, evt, entries, results, heatId, parentId) {
             return `<tr class="${r.status_code ? 'row-status-code' : ''}">
                 <td>${r.status_code ? scBadge : (r.rank || '—')}</td><td><strong>${bib(r.bib_number)}</strong></td>
                 <td style="text-align:left;">${r.name}</td><td style="font-size:12px;text-align:left;">${r.team||''}</td>
-                <td><input class="track-time-input" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" data-row="${idx}"
+                <td><input class="track-time-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" data-row="${idx}"
                     value="${cv}" placeholder="${ph}" ${cv ? 'class="track-time-input has-value"' : ''} ${r.status_code ? 'disabled' : ''}
                     onkeydown="_cSubTrackKey(event,this)" onfocus="this.select()"></td>
                 <td><select class="sc-select" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" onchange="_cSubTrackSetStatus(this)" title="DQ=실격, DNS=불출발, DNF=미완주">
@@ -3317,7 +3386,7 @@ function _cSubFieldRender(area) {
                                 distCells += `<td class="attempt-cell ${attCls}" style="opacity:0.3;text-align:center;">—</td>`;
                             } else if (isActive) {
                                 distCells += `<td class="attempt-cell attempt-cell-editing ${attCls}" data-entry="${r.event_entry_id}" data-attempt="${i}">
-                                    <input class="field-dist-input" type="text" data-eid="${r.event_entry_id}" data-att="${i}" data-hid="${heatId}" data-pid="${parentId}" data-row="${rowIdx}"
+                                    <input class="field-dist-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-att="${i}" data-hid="${heatId}" data-pid="${parentId}" data-row="${rowIdx}"
                                         value="${hasVal && !isFoul ? v.toFixed(2) : ''}" placeholder="0.00"
                                         onkeydown="_cSubFieldKeydown(event,this)" oninput="_cSubFieldChange(this)" onblur="_cSubFieldBlur(this)" onfocus="this.select()" autofocus>
                                     <button class="btn btn-xs btn-danger foul-inline-btn" onclick="_cSubFieldFoul(${r.event_entry_id},${i},${heatId},${parentId})" title="파울 (X)">X</button>
@@ -3354,10 +3423,10 @@ function _cSubFieldRender(area) {
                                     </td>`;
                                 } else {
                                     let wDisp = '';
-                                    if (hasVal && !isFoul && r.attWind && r.attWind[i] != null) {
+                                    if (!isFoul && r.attWind && r.attWind[i] != null) {
                                         wDisp = formatWind(r.attWind[i]);
                                     }
-                                    const wClickAttr = (!hasVal || isFoul) ? '' : `onclick="_cSubFieldWindActivate(${r.event_entry_id},${i})"`;
+                                    const wClickAttr = isFoul ? '' : `onclick="_cSubFieldWindActivate(${r.event_entry_id},${i})"`;
                                     windCells += `<td class="wind-cell ${wAttCls}" ${wClickAttr}>${wDisp}</td>`;
                                 }
                             }
@@ -3571,7 +3640,8 @@ async function _cSubFieldSaveAll() {
         if (hasStatusCode) continue; // already has status
         const attemptResults = er.filter(r => r.attempt_number != null);
         if (attemptResults.length === 0) continue; // no attempts yet
-        const allFoul = attemptResults.every(r => r.distance_meters === 0 || r.distance_meters === null);
+        // distance NULL 은 '풍속만 먼저 입력된 빈 시기' 이므로 파울로 세지 않는다
+        const allFoul = attemptResults.every(r => r.distance_meters === 0);
         const hasValidDist = attemptResults.some(r => r.distance_meters != null && r.distance_meters > 0);
         // If all attempts are fouls (distance=0) and there are enough attempts, auto-NM
         // 10종/7종 필드종목은 3회 시기 (예: 원반, 포환, 창던지기, 멀리뛰기)
@@ -3648,13 +3718,11 @@ function _cSubFieldWindBlur(inp) {
 
 async function _cSubFieldWindSave(entryId, attempt, wind, heatId, parentId) {
     try {
-        const existing = _cSubFieldData.results.find(r => r.event_entry_id === entryId && r.attempt_number === attempt);
-        if (existing) {
-            await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: existing.distance_meters, wind });
-            _cSubFieldData.results = await API.getResults(heatId);
-            _cSubFieldWindActive = null;
-            _cSubFieldRender();
-        }
+        // 기록 입력 전에도 풍속만 먼저 저장 가능
+        await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, wind });
+        _cSubFieldData.results = await API.getResults(heatId);
+        _cSubFieldWindActive = null;
+        _cSubFieldRender();
     } catch(err) { console.error('_cSubFieldWindSave error:', err); }
 }
 
@@ -4418,7 +4486,10 @@ async function saveLaneReview(finalEventId) {
         // Save all lane assignments
         const resp = await fetch('/api/lanes/bulk-update', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-key': localStorage.getItem('pace_admin_key') || ''
+            },
             body: JSON.stringify({ assignments })
         });
         if (!resp.ok) {
@@ -4558,13 +4629,9 @@ async function completeRound() {
                 ? `높이 시기가 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(패스/탈락 선수도 최소 한 번의 시기 기록이 필요합니다)\n계속 완료하시겠습니까?`
                 : isFieldDist
                 ? `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(예선탈락 등으로 일부 시기만 진행한 선수가 있을 수 있습니다)\n그래도 경기를 완료하시겠습니까?`
-                : `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n모든 선수의 기록 또는 상태코드(DQ/DNS/DNF/NM)를 입력한 후 경기를 완료하세요.`;
-            if (isHeight || isFieldDist) {
-                if (!confirm(msg)) return;
-            } else {
-                alert(msg);
-                return;
-            }
+                : `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(기록/상태코드 없이도 완료할 수 있으며, 완료 후 관리자가 되돌릴 수 있습니다)\n그래도 경기를 완료하시겠습니까?`;
+            // 기록이 없어도 강제 완료 허용 (현장 요청) — 확인만 받는다
+            if (!confirm(msg)) return;
         }
     } catch(e) { console.error(e); }
 
@@ -4892,15 +4959,23 @@ function closeFieldZoomModal() {
 // RESET EVENT RESULTS — 종목 기록 전체 초기화 (10종/7종 + 일반 종목)
 // ============================================================
 async function resetSubEventResults(eventId, eventName) {
-    if (!confirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.\n정말 초기화하시겠습니까?`)) return;
+    // 합동 종목이면 다른 대회 멤버의 기록도 같이 지운다 (화면에 함께 보이므로 이것만 지우면 "안 지워진 것"처럼 보임)
+    const joint = (typeof isJointMode === 'function' && eventId === state.selectedEventId && isJointMode());
+    const jointNote = joint ? `\n\n※ 합동 종목: 함께 표시되는 다른 대회(${_jointOtherMembers().map(m => m.federation || m.comp_name || '').filter(Boolean).join(', ') || '멤버'})의 기록도 함께 초기화됩니다.` : '';
+    if (!confirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.${jointNote}\n정말 초기화하시겠습니까?`)) return;
     if (!confirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
 
     try {
         showToast('기록 초기화 중...', 'info', 2000);
-        const result = await API.resetSubEvent(eventId);
-        showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제)`, 'success', 4000);
+        const result = await API.resetSubEvent(eventId, joint);
+        // 화면 상태도 즉시 비움 (되돌아오는 재조회가 늦어도 옛 기록이 남아 보이지 않게)
+        state.results = []; state.heightAttempts = [];
+        if (window._fe) { _fe.sel = null; _fe.undo = null; _fe.lastAttemptInit = false; }
+        if (window._he) { _he.undo = null; }
+        showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제${result.jointEvents ? `, 합동 ${result.jointEvents}종목 포함` : ''})`, 'success', 4000);
         // Reload the event list and current event data
-        await loadEventsAndMatrix();
+        state.events = await API.getAllEvents(getCompetitionId());
+        renderMatrix();
         if (state.selectedEventId) {
             await selectEvent(state.selectedEventId);
         }

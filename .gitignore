@@ -1,5 +1,11 @@
 node_modules/
 .env
+.env.*
+# Firebase 서비스계정/비공개 키 — 절대 커밋 금지
+*firebase*adminsdk*.json
+firebase-sa.json
+*-service-account*.json
+secrets/
 db/competition.db
 db/competition.db-shm
 db/competition.db-wal
@@ -15,11 +21,14 @@ uploads/
 !public/PACERISE_upload_template.xlsx
 !public/template_men.xlsx
 !public/template_women.xlsx
+!public/PACERISE_records_template.xlsx
 ktfl_sample.pdf
 public/ktfl_p*.png
 .png test files
 *.png
 !public/icons/og-image.png
+!public/images/*.png
+!public/brand/*.png
 db/pacerise.db
 db/*.db
 !db/init.js

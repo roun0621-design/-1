@@ -439,11 +439,14 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================
 async function api(method, path, body) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
-    // Auto-inject admin_key for write operations to result/height endpoints
-    if (body && (method === 'POST' || method === 'PUT' || method === 'DELETE') &&
-        (path.includes('/api/results') || path.includes('/api/height-attempts'))) {
+    // Auto-inject admin_key for all write operations (body + x-admin-key header —
+    // header covers body-less POSTs like /api/wa-correct/:id)
+    if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
         const storedKey = localStorage.getItem('pace_admin_key') || '';
-        if (storedKey && !body.admin_key) body.admin_key = storedKey;
+        if (storedKey) {
+            opts.headers['x-admin-key'] = storedKey;
+            if (body && !body.admin_key) body.admin_key = storedKey;
+        }
     }
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(path, opts);
@@ -494,8 +497,8 @@ const API = {
     deleteFederation: (id, adminKey) => api('DELETE', `/api/federations/${id}`, { admin_key: adminKey }),
     reorderFederations: (order, adminKey) => api('PUT', '/api/federations/reorder', { order, admin_key: adminKey }),
 
-    // Home Popups
-    getHomePopups: () => api('GET', '/api/home-popups'),
+    // Home Popups (compId 지정 시 그 대회 전용, 'common' 이면 공통만, 없으면 전체)
+    getHomePopups: (compId) => api('GET', '/api/home-popups' + (compId != null && compId !== '' ? '?competition_id=' + encodeURIComponent(compId) : '')),
     createHomePopup: (data, adminKey) => api('POST', '/api/home-popups', { ...data, admin_key: adminKey }),
     updateHomePopup: (id, data, adminKey) => api('PUT', `/api/home-popups/${id}`, { ...data, admin_key: adminKey }),
     deleteHomePopup: (id, adminKey) => api('DELETE', `/api/home-popups/${id}`, { admin_key: adminKey }),
@@ -516,8 +519,9 @@ const API = {
         if (seriesId) p.set('series_id', String(seriesId));
         return api('GET', '/api/event-records/lookup?' + p.toString());
     },
+    setManualRank: (entryId, rank) => api('PATCH', `/api/event-entries/${entryId}/manual-rank`, { manual_rank: rank }),
     deleteResult: body => api('DELETE', '/api/results', body),
-    resetSubEvent: eventId => api('POST', '/api/results/reset-sub-event', { event_id: eventId }),
+    resetSubEvent: (eventId, includeJoint) => api('POST', '/api/results/reset-sub-event', { event_id: eventId, include_joint: !!includeJoint }),
     updateEntryStatus: (id, st) => api('PATCH', `/api/event-entries/${id}/status`, { status: st }),
     checkinBarcode: (bc, eid) => api('POST', '/api/callroom/checkin', { barcode: bc, event_id: eid }),
     cancelCheckin: (id) => api('PATCH', `/api/event-entries/${id}/status`, { status: 'registered' }),
@@ -783,21 +787,150 @@ async function renderCompInfoBar(containerId) {
         }
         const role = localStorage.getItem('pace_role') || 'viewer';
         // Shared button style for comp-info-bar action buttons
-        const _cibBtnBase = 'white-space:nowrap;font-size:13px;font-weight:700;padding:7px 16px;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;';
+        // (간격은 .comp-info-actions 의 gap 이 담당 — 버튼 자체엔 margin 없음)
+        const _cibBtnBase = 'white-space:nowrap;font-size:12px;font-weight:600;padding:3px 13px;border:none;border-radius:999px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.2px;';
         const docBtnHtml = role !== 'viewer'
-            ? `<button id="comp-doc-btn" style="${_cibBtnBase}margin-left:auto;background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
+            ? `<button id="comp-doc-btn" style="${_cibBtnBase}background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
             : '';
         // 대시보드 모드에서는 히어로 카드가 시간표 진입점을 대체하므로 상단 버튼 숨김
         const isDashboardMode = document.body.classList.contains('dashboard-mode');
-        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}${role === 'viewer' ? 'margin-left:auto;' : 'margin-left:6px;'}background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
-        el.innerHTML = `<span class="comp-info-name">${info.name || ''}</span>
-            ${fedBadge}
-            <span class="comp-info-sep">|</span>
-            <span class="comp-info-dates">${info.dates || ''}</span>
-            <span class="comp-info-sep">|</span>
-            <span class="comp-info-venue">${info.venue || ''}</span>
-            ${docBtnHtml}${ttBtnHtml}`;
+        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
+        // 정보(줄1) 와 액션 버튼(줄2) 을 분리 → 대회명이 길어도 버튼이 항상 한 줄에 나란히
+        el.innerHTML = `<div class="comp-info-main">
+                <span class="comp-info-name">${info.name || ''}</span>
+                ${fedBadge}
+                <span class="comp-info-sep">|</span>
+                <span class="comp-info-dates">${info.dates || ''}</span>
+                <span class="comp-info-sep">|</span>
+                <span class="comp-info-venue">${info.venue || ''}</span>
+            </div>
+            <div class="comp-info-actions" id="comp-info-actions">${docBtnHtml}${ttBtnHtml}</div>`;
     } catch (e) {}
+}
+
+// ============================================================
+// Competition Notice Popup (대회별 공지 팝업)
+//   - 대시보드 대회명 줄의 [공지] 버튼 + 진입 시 자동 노출("오늘 하루 보지 않음" 지원)
+//   - 홈(index.html)의 공통 팝업과 분리: 여기선 competition_id 가 그 대회인 팝업만 다룸
+// ============================================================
+let _cnPopupQueue = [];
+let _cnPopupIndex = 0;
+let _cnAllPopups = [];
+
+function _cnApplicable(p, ignoreDismiss) {
+    const role = localStorage.getItem('pace_role') || 'viewer';
+    const isAdmin = role === 'admin' || role === 'operation';
+    const today = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
+    if (!p.is_active) return false;
+    if (p.popup_type === 'admin' && !isAdmin) return false;
+    if (p.show_from && today < p.show_from) return false;
+    if (p.show_until && today > p.show_until) return false;
+    if (!ignoreDismiss) {
+        const d = localStorage.getItem(`popup_dismiss_${p.id}`);
+        if (d && (now - parseInt(d)) < 24 * 60 * 60 * 1000) return false;
+    }
+    return true;
+}
+
+function _cnBuildHtml(p, idx, total) {
+    const hasNext = idx < total - 1;
+    const counter = total > 1 ? `<span style="font-size:10px;color:var(--text-muted);margin-left:8px;">(${idx + 1}/${total})</span>` : '';
+    let html = `<div style="text-align:center;margin-bottom:16px;">
+        <div style="font-family:'Audiowide',sans-serif;font-size:18px;letter-spacing:2px;">${p.title || '공지'} ${counter}</div>
+        ${p.subtitle ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${(p.subtitle || '').replace(/\n/g, '<br>')}</div>` : ''}
+    </div>`;
+    // 소개 문구: 줄바꿈(\n)을 <br>로 변환 (기존 홈 팝업 버그와 동일하게 여기서도 처리)
+    if (p.intro_text) html += `<div style="font-size:13px;line-height:1.6;margin-bottom:16px;">${(p.intro_text || '').replace(/\n/g, '<br>')}</div>`;
+    (p.sections || []).filter(s => s.is_active !== 0).forEach(s => {
+        html += `<details style="margin-bottom:8px;border:1px solid var(--gray);border-radius:8px;overflow:hidden;">
+            <summary style="padding:10px 14px;font-weight:600;font-size:13px;cursor:pointer;background:#f9fafb;">${s.title || ''}</summary>
+            <div style="padding:10px 14px;font-size:12px;line-height:1.7;">${(s.content || '').replace(/\n/g, '<br>')}</div>
+            ${s.link_btn_text ? `<div style="padding:0 14px 10px;"><a href="${s.link_btn_url || '#'}" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="font-size:12px;color:var(--primary);font-weight:600;text-decoration:none;">${s.link_btn_text} →</a></div>` : ''}
+        </details>`;
+    });
+    if (p.bottom_btn_active && p.bottom_btn_text) {
+        html += `<div style="margin-top:16px;padding:16px;background:#f0f9ff;border-radius:8px;text-align:center;border:1px solid #c0c0c0;">
+            <div style="font-size:14px;font-weight:600;">${p.bottom_btn_text}</div>
+            ${p.bottom_btn_desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${p.bottom_btn_desc}</div>` : ''}
+            ${p.bottom_btn_link ? `<div style="margin-top:8px;"><a href="${p.bottom_btn_link}" onclick="event.stopPropagation();_cnClose();" style="display:inline-block;padding:8px 20px;background:var(--green);color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;">이동 →</a></div>` : ''}
+        </div>`;
+    }
+    html += `<div style="display:flex;gap:8px;justify-content:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--gray);">
+        <button class="btn btn-ghost" onclick="dismissCompNoticeToday(${p.id})" style="font-size:12px;">오늘 하루 보지 않음</button>
+        ${hasNext
+            ? `<button class="btn btn-primary" onclick="showCompNoticeNext()" style="font-size:12px;">다음 →</button>`
+            : `<button class="btn btn-primary" onclick="_cnClose()" style="font-size:12px;">닫기</button>`}
+    </div>`;
+    return html;
+}
+
+function _cnClose() {
+    const ov = document.getElementById('comp-notice-overlay');
+    if (ov) ov.remove();
+}
+
+function _cnRender(p) {
+    _cnClose();
+    const overlay = document.createElement('div');
+    overlay.id = 'comp-notice-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.onclick = (e) => { if (e.target === overlay) _cnClose(); };
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+    box.innerHTML = _cnBuildHtml(p, _cnPopupIndex, _cnPopupQueue.length);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+}
+
+function showCompNoticeNext() {
+    _cnPopupIndex++;
+    if (_cnPopupIndex < _cnPopupQueue.length) _cnRender(_cnPopupQueue[_cnPopupIndex]);
+    else _cnClose();
+}
+
+function dismissCompNoticeToday(id) {
+    localStorage.setItem(`popup_dismiss_${id}`, Date.now().toString());
+    showCompNoticeNext();
+}
+
+// 버튼 클릭 → dismiss 무시하고 이 대회의 모든(노출가능) 공지 표시
+function openCompNoticePopup() {
+    const list = _cnAllPopups.filter(p => _cnApplicable(p, true));
+    if (!list.length) { if (typeof toast === 'function') toast('등록된 공지가 없습니다.'); return; }
+    _cnPopupQueue = list; _cnPopupIndex = 0; _cnRender(list[0]);
+}
+
+function renderCompNoticeButton() {
+    const bar = document.getElementById('comp-info-actions') || document.getElementById('comp-info-bar');
+    if (!bar) return;
+    let btn = document.getElementById('comp-notice-btn');
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'comp-notice-btn';
+        btn.style.cssText = 'white-space:nowrap;font-size:12px;font-weight:600;padding:3px 13px;border:none;border-radius:999px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.2px;background:linear-gradient(135deg,#e0574f,#b23b34);box-shadow:0 2px 6px rgba(178,59,52,0.3);';
+        btn.textContent = '공지';
+        btn.onmouseover = () => { btn.style.transform = 'translateY(-1px)'; };
+        btn.onmouseout = () => { btn.style.transform = ''; };
+        btn.onclick = openCompNoticePopup;
+        bar.appendChild(btn);
+    }
+}
+
+// 대시보드 등에서 호출: 이 대회의 공지 로드 → 버튼 표시 + 진입 자동노출
+async function initCompNoticePopup() {
+    try {
+        const compId = getCompetitionId();
+        if (!compId) return;
+        const popups = await API.getHomePopups(compId);
+        if (!Array.isArray(popups)) return;
+        _cnAllPopups = popups;
+        // 노출 가능한 공지가 하나라도 있으면 버튼 표시
+        if (popups.some(p => _cnApplicable(p, true))) renderCompNoticeButton();
+        // 자동 노출 (오늘 하루 보지 않음 반영)
+        const auto = popups.filter(p => _cnApplicable(p, false));
+        if (auto.length) { _cnPopupQueue = auto; _cnPopupIndex = 0; _cnRender(auto[0]); }
+    } catch (e) { /* noop */ }
 }
 
 // ============================================================
@@ -944,6 +1077,8 @@ function renderPageNav(currentPage) {
         btnGroup.appendChild(backBtn);
         btnGroup.appendChild(fwdBtn);
         btnGroup.appendChild(refreshBtn);
+        // ── i18n 언어 스위처를 헤더 버튼그룹에 끼워넣음 (PaceI18n 로드된 페이지만) ──
+        try { if (window.PaceI18n) window.PaceI18n.mountSwitcher(btnGroup); } catch (e) {}
         btnGroup.appendChild(loginBtn);
         headerInner.appendChild(btnGroup);
 
@@ -964,6 +1099,21 @@ function renderPageNav(currentPage) {
         headerTitle.style.cursor = 'pointer';
         headerTitle.addEventListener('click', () => { window.location.href = '/'; });
         headerTitle.dataset.linked = '1';
+    }
+
+    // ── 행사(event) 모드: 화이트라벨 전용 최소 네비 ──
+    //   일반 운영 메뉴(노출관리/모니터/소집실/관리)는 숨겨 전문 운영과 분리 유지.
+    //   viewer = 대시보드만, 운영진(operation/admin) = 대시보드 + 기록입력.
+    if (window.__EVENT_MODE) {
+        const slug = encodeURIComponent(window.__EVENT_SLUG || '');
+        const evPages = [{ key: 'dashboard', label: '대시보드', href: '/e/' + slug }];
+        if (role === 'admin' || role === 'operation') {
+            evPages.push({ key: 'record', label: '기록입력', href: '/e/' + slug + '/record' });
+        }
+        nav.innerHTML = evPages.map(p =>
+            `<a href="${p.href}" class="nav-link ${p.key === currentPage ? 'active' : ''}" data-page-key="${p.key}">${p.label}</a>`
+        ).join('');
+        return;
     }
 
     let pages;
@@ -989,8 +1139,18 @@ function renderPageNav(currentPage) {
         ];
     }
     nav.innerHTML = pages.map(p =>
-        `<a href="${p.href}" class="nav-link ${p.key === currentPage ? 'active' : ''}" data-page-key="${p.key}">${p.label}</a>`
+        `<a href="${p.href}" class="nav-link ${p.key === currentPage ? 'active' : ''}" data-page-key="${p.key}" data-i18n="nav.${p.key}">${p.label}</a>`
     ).join('');
+
+    // ── i18n: 동적 메뉴 번역 + 헤더 로그인 버튼 앞에 언어 스위처 마운트 ──
+    // (index 처럼 로그인 버튼이 정적 HTML 이라 header 빌드 블록을 건너뛰는 페이지 대응)
+    try {
+        if (window.PaceI18n) {
+            window.PaceI18n.apply();
+            var _lb = document.getElementById('header-login-btn');
+            if (_lb) window.PaceI18n.mountSwitcherBefore(_lb);
+        }
+    } catch (e) {}
 
     // ── Build mobile menu (once) ──
     _buildMobileMenu(pages, currentPage, role);
@@ -1129,6 +1289,9 @@ function _buildMobileMenu(pages, currentPage, role) {
         <div class="mobile-menu-nav">${navLinks}</div>
         <div class="mobile-menu-footer">
             <div class="mobile-menu-divider"></div>
+            <button class="mm-action" onclick="mobileMenuPush()">
+                <span>🔔 경기 알림 받기</span>
+            </button>
             <button class="mm-action" style="${loginColor}" onclick="mobileMenuLogin()">
                 <span>${loginLabel}</span>
             </button>
@@ -1153,6 +1316,16 @@ function closeMobileMenu() {
     if (menu) menu.classList.remove('open');
     if (overlay) { overlay.classList.remove('open'); setTimeout(() => { overlay.style.display = ''; }, 250); }
     document.body.style.overflow = '';
+}
+
+function mobileMenuPush() {
+    closeMobileMenu();
+    if (window.PaceRisePush && window.PaceRisePush.enable) {
+        window.PaceRisePush.enable();
+    } else {
+        // 푸시 모듈이 없는 페이지 → 대시보드(홈)로 이동해서 알림 받기
+        location.href = '/dashboard.html';
+    }
 }
 
 async function mobileMenuLogin() {
@@ -1356,7 +1529,13 @@ function showToast(message, type = 'success', duration = 2000) {
     const toast = document.createElement('div');
     const bg = type === 'success' ? 'var(--green)' : type === 'error' ? '#8b1a2a' : '#b79f58';
     toast.style.cssText = `background:${bg};color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.15);opacity:0;transform:translateY(10px);transition:all 0.25s ease;pointer-events:auto;`;
-    toast.textContent = message;
+    // 코드에서 박아 넣는 아이콘(<svg …>) 으로 시작하는 메시지만 HTML 로 렌더 — 그 외(서버 에러 문자열 등)는 텍스트
+    if (/^\s*<svg\b/i.test(String(message))) {
+        toast.innerHTML = message;
+        toast.style.display = 'flex'; toast.style.alignItems = 'center'; toast.style.gap = '6px';
+    } else {
+        toast.textContent = message;
+    }
     container.appendChild(toast);
     requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
     setTimeout(() => {
@@ -1371,25 +1550,44 @@ function showToast(message, type = 'success', duration = 2000) {
 // ============================================================
 (function() {
     let _modalStack = [];
+    // 🐛 BUGFIX (2026-06): popstate 와 popModalState 가 서로를 트리거하면서
+    // history.back() 이 한 번 더 호출되어 페이지 자체를 떠나거나
+    // iframe navigation 과 충돌해 about:blank 새 창이 뜨는 문제 발생.
+    // → "프로그램에 의해 호출된 history.back()" 인지 "사용자의 뒤로가기" 인지 구분 필요.
+    let _suppressNextPopstate = false;
 
     // Push a modal state: call this when opening any overlay/modal
     window.pushModalState = function(closeCallback) {
         _modalStack.push(closeCallback);
-        history.pushState({ modal: true, depth: _modalStack.length }, '');
+        try { history.pushState({ modal: true, depth: _modalStack.length }, ''); } catch(e) {}
     };
-    // Pop a modal state: call this when closing a modal normally
+    // Pop a modal state: call this when closing a modal normally (X 버튼 등)
     window.popModalState = function() {
         if (_modalStack.length > 0) {
             _modalStack.pop();
-            // Silently go back to remove the history entry we pushed
-            try { history.back(); } catch(e) {}
+            // 우리가 history.back() 을 호출하면 popstate 가 자동 발생.
+            // 그 popstate 는 "닫기 콜백을 다시 호출하지 말아야" 한다 (이미 닫는 중).
+            _suppressNextPopstate = true;
+            try { history.back(); } catch(e) { _suppressNextPopstate = false; }
         }
     };
 
     window.addEventListener('popstate', function(e) {
+        // 우리가 직접 history.back() 호출해서 발생한 popstate 는 무시
+        // (modal 은 이미 닫혀 있음, 또 닫으면 한 단계 더 뒤로 가서 페이지 이탈)
+        if (_suppressNextPopstate) {
+            _suppressNextPopstate = false;
+            return;
+        }
+        // 사용자가 직접 뒤로가기 (Android 하드웨어 / iOS 스와이프) — modal 닫기
         if (_modalStack.length > 0) {
             const closeFn = _modalStack.pop();
-            if (closeFn) closeFn();
+            if (closeFn) {
+                // closeFn 안에서 또 popModalState 가 호출될 수 있으므로 가드
+                _suppressNextPopstate = true;  // 이번 pop 으로 인한 추가 history.back 차단
+                try { closeFn(); } catch(err) { console.error('[modal] close error:', err); }
+                _suppressNextPopstate = false;
+            }
         }
     });
 })();
@@ -1397,7 +1595,7 @@ function showToast(message, type = 'success', duration = 2000) {
 // ============================================================
 // PWA Service Worker Registration + Offline Sync
 // ============================================================
-const _EXPECTED_SW_VERSION = 'pacerise-v46';
+const _EXPECTED_SW_VERSION = 'pacerise-v131';
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         // Force update: clear old caches that don't match current version
@@ -1552,7 +1750,22 @@ async function openTimetable(compId) {
         </div>`;
 
         const contentHtml = `<div id="tt-content" style="overflow-y:auto;padding:16px 22px 22px;flex:1;"></div>`;
-        modal.innerHTML = headerHtml + contentHtml;
+        // 시간표 행 반응형 레이아웃 — 데스크톱 1줄 정렬 / 모바일(≤600px) 2줄 스택(종목명 잘림 방지)
+        const styleHtml = `<style>
+            .tt-row{display:grid;align-items:center;gap:4px 8px;padding:9px 12px;
+                grid-template-columns:44px 170px minmax(0,1fr) auto;
+                grid-template-areas:"time front name tail";}
+            .tt-time{grid-area:time;font-weight:700;color:#333;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+            .tt-front{grid-area:front;display:flex;flex-wrap:wrap;gap:3px;align-items:center;overflow:hidden;}
+            .tt-name{grid-area:name;font-weight:600;font-size:13px;color:#222;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+            .tt-tail{grid-area:tail;display:flex;gap:3px;align-items:center;justify-self:end;flex-shrink:0;}
+            @media (max-width:600px){
+                .tt-row{grid-template-columns:44px minmax(0,1fr) auto;row-gap:5px;
+                    grid-template-areas:"time name tail" "gut front front";}
+                .tt-name{font-size:14px;}
+            }
+        </style>`;
+        modal.innerHTML = styleHtml + headerHtml + contentHtml;
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
 
@@ -1664,6 +1877,53 @@ async function openTimetable(compId) {
                 });
             }
 
+            // ── 타임테이블 뱃지 헬퍼: 부별/성별/라운드를 앞쪽 뱃지로 분해 ──
+            const _ttBadge = (txt, fg, bg) => txt ? `<span style="display:inline-block;font-size:10px;font-weight:700;color:${fg};background:${bg};padding:1px 6px;border-radius:8px;white-space:nowrap;line-height:1.6;">${txt}</span>` : '';
+            // 부별/성별 분리: "실업(남)"→{div:'실업',gender:'남'}, "남고"→{고등부,남}, "남자 일반부"→{일반부,남}
+            const _ttSplitCategory = (cat) => {
+                const s = (cat || '').trim();
+                if (!s) return { div: '', gender: '' };
+                const G = t => /^남/.test(t) ? '남' : /^여/.test(t) ? '여' : '혼';
+                let m = s.match(/^(.*?)\s*\(\s*(남자?|여자?|혼성?)\s*\)\s*$/);   // "실업(남)" / "선수권(남)"
+                if (m) return { div: m[1].trim(), gender: G(m[2]) };
+                m = s.match(/^([남여])\s*([초중고대일])$/);                       // "남고" "여중"
+                if (m) { const mp = { '초':'초등부','중':'중등부','고':'고등부','대':'대학부','일':'일반부' }; return { div: mp[m[2]], gender: m[1] }; }
+                m = s.match(/(남자|여자|혼성|남|여|혼)/);                          // "남자 일반부"
+                if (m) { const div = s.replace(/(남자|여자|혼성|남|여|혼)/g, '').replace(/\s+/g, ' ').trim(); return { div: div || s, gender: G(m[1]) }; }
+                return { div: s, gender: '' };
+            };
+            // 라운드 정규화(앞쪽 뱃지): 5-1+3→예선, 결승(+조), 7/10/5종은 예선결승 없음 → 그대로 앞에
+            const _ttRoundFront = (round) => {
+                const r = (round || '').trim();
+                const cb = r.match(/(10종|7종|5종)/);
+                if (cb) return { label: cb[1], fg: '#4a148c', bg: '#f3e5f5' };
+                if (/종경기|기록경기/.test(r)) return { label: '기록경기', fg: '#4a148c', bg: '#f3e5f5' };
+                if (/결승/.test(r)) { const j = r.match(/(\d+)\s*조/); return { label: j ? `결승 ${j[1]}조` : '결승', fg: '#b71c1c', bg: '#ffebee' }; }
+                if (/준결승|^준/.test(r)) return { label: '준결승', fg: '#e65100', bg: '#fff3e0' };
+                if (/예선/.test(r) || /^\d+-\d+\+\d+$/.test(r)) return { label: '예선', fg: '#1565c0', bg: '#e3f2fd' };
+                return { label: r, fg: '#555', bg: '#f0f0f0' };
+            };
+            // 부(division)→색: admin.html divBadgeColor 와 동일 팔레트(앱 전체 색 일관)
+            const _ttDivColor = (d) => {
+                const exact = {
+                    '중등부':{fg:'#1565c0',bg:'#e3f2fd'}, '고등부':{fg:'#e65100',bg:'#fff3e0'},
+                    '대학부':{fg:'#6a1b9a',bg:'#f3e5f5'}, '일반부':{fg:'#2e7d32',bg:'#e8f5e9'},
+                    '국제':{fg:'#00695c',bg:'#e0f7fa'},
+                };
+                const raw = (d||'').trim();
+                if (exact[raw]) return exact[raw];
+                const s = raw.replace(/\s/g,'');
+                if (!s) return { fg:'#555', bg:'#eef0f3' };
+                if (/초/.test(s))             return { fg:'#00695c', bg:'#e0f2f1' };
+                if (/중/.test(s))             return { fg:'#1565c0', bg:'#e3f2fd' };
+                if (/고/.test(s))             return { fg:'#e65100', bg:'#fff3e0' };
+                if (/대학|대$/.test(s))       return { fg:'#4a148c', bg:'#f3e5f5' };
+                if (/일반|실업/.test(s))      return { fg:'#1b5e20', bg:'#e8f5e9' };
+                if (/선수권/.test(s))         return { fg:'#5d4037', bg:'#efebe9' };
+                if (/마스터|master/i.test(s)) return { fg:'#37474f', bg:'#eceff1' };
+                if (/국제|inter/i.test(s))    return { fg:'#006064', bg:'#e0f7fa' };
+                return { fg:'#6a1b9a', bg:'#f3e5f5' };
+            };
             let html = '';
             const sections = [
                 { key: 'track', label: '트랙 경기', badgeCls: 'ico ico-track', badgeText: 'TRACK', color: '#6b6b6b', bg: '#f0f0f0', border: '#c0c0c0' },
@@ -1685,25 +1945,26 @@ async function openTimetable(compId) {
                 items.forEach((item, idx) => {
                     const borderBottom = idx < items.length - 1 ? 'border-bottom:1px solid #f5f5f5;' : '';
                     const isHighlighted = closestEventId === ('tt-item-' + item.id);
-                    const highlightStyle = isHighlighted ? 'background:#f5f0e0 !important;border-left:3px solid #b79f58;' : '';
                     const nowBadge = isHighlighted ? '<span style="background:#b79f58;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;">NOW</span>' : '';
                     // Call Room badge: show only within callroom_time -10min ~ +5min (KST)
                     const crBadge = isCallRoomWindow(item.callroom_time, item.scheduled_date) ? '<span class="ico-callroom" style="margin-left:4px;">Call Room</span>' : '';
                     const hasLink = !!item.event_id;
-                    const defaultBg = idx % 2 && !isHighlighted ? '#fafbfc' : '';
-                    const hoverBg = hasLink ? '#f8f4ea' : '';
-                    const restoreBg = isHighlighted ? '#f5f0e0' : defaultBg;
-                    // Build combined event name: "종별 종목명 라운드명" (e.g., "남고 100m 예선")
+                    // 앞쪽 3뱃지: [부별][성별][라운드/복합] — 부는 부별 색, 성별/라운드도 색 구분
+                    const _cat = _ttSplitCategory(item.category);
+                    const _dcol = _ttDivColor(_cat.div);
+                    const _gst = _cat.gender === '남' ? { fg: '#1565c0', bg: '#e3f2fd' } : _cat.gender === '여' ? { fg: '#c2185b', bg: '#fde7ef' } : { fg: '#6a1b9a', bg: '#f3e5f5' };
+                    const _rd = _ttRoundFront(item.round);
+                    const _frontBadges = _ttBadge(_cat.div, _dcol.fg, _dcol.bg) + _ttBadge(_cat.gender, _gst.fg, _gst.bg) + _ttBadge(_rd.label, _rd.fg, _rd.bg);
+                    // 성별 → 행 배경 은은한 틴트(남=남색 / 여=버건디 / 혼=보라) + 좌측 보더. NOW 하이라이트가 최우선.
+                    const _grow = _cat.gender === '남' ? { bg:'#f3f6fc', bar:'#1a2a5e' } : _cat.gender === '여' ? { bg:'#fbf4f6', bar:'#8a1f3d' } : { bg:'#f8f5fb', bar:'#6a1b9a' };
+                    const rowBg = isHighlighted ? '#f5f0e0' : _grow.bg;
+                    const rowBar = isHighlighted ? '#b79f58' : _grow.bar;
+                    const hoverBg = hasLink ? '#f1ead7' : rowBg;
+                    // 뒤쪽 가변 뱃지: 상태(명단/LIVE/결과보기) + 괄호(A,B) + 결과링크
                     const _roundFull = (item.round || '').trim();
                     const _bracketMatch = _roundFull.match(/\(([^)]+)\)/);
-                    const _roundBase = _roundFull.replace(/\([^)]*\)/g, '').trim();
-                    const _eventFullName = `${item.category || ''} ${item.event_name}${_roundBase ? ' ' + _roundBase : ''}`.trim();
-                    // Right-aligned tags: result link badge + status badge + round badge + bracket info (color-coded)
                     const _resultTag = item.result_url ? `<span style="color:#fff;font-size:9px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window.open('${(item.result_url||'').replace(/'/g,"\\'")}','_blank')">결과</span>` : '';
                     const _bracketTag = _bracketMatch ? `<span style="color:#8a7640;font-size:10px;font-weight:600;background:#f8f4ea;padding:1px 6px;border-radius:8px;white-space:nowrap;">(${_bracketMatch[1]})</span>` : '';
-                    const _roundColorMap = { '예선': { color: '#1565c0', bg: '#e3f2fd' }, '준결승': { color: '#e65100', bg: '#fff3e0' }, '결승': { color: '#b71c1c', bg: '#ffebee' }, '기록경기': { color: '#4a148c', bg: '#f3e5f5' } };
-                    const _rbc = _roundColorMap[_roundBase] || { color: '#555', bg: '#f0f0f0' };
-                    const _roundBadge = _roundBase ? `<span style="color:${_rbc.color};font-size:10px;font-weight:600;background:${_rbc.bg};padding:1px 6px;border-radius:8px;white-space:nowrap;">${_roundBase}</span>` : '';
                     // Status badge based on round_status (so operators can see at a glance whether records are entered)
                     let _statusTag = '';
                     if (item.event_id && item.round_status) {
@@ -1729,10 +1990,11 @@ async function openTimetable(compId) {
                             clickAction = `onclick="window._ttGoToEvent(${item.event_id})"`;
                         }
                     }
-                    html += `<div id="tt-item-${item.id}" ${clickAction} style="display:flex;align-items:center;gap:8px;padding:9px 12px;${borderBottom}${defaultBg ? 'background:' + defaultBg + ';' : ''}${highlightStyle}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${restoreBg}'"` : ''}>
-                        <span style="font-weight:700;color:#333;font-size:13px;font-variant-numeric:tabular-nums;min-width:48px;white-space:nowrap;">${item.time}${nowBadge}</span>
-                        <span style="flex:1;font-weight:600;font-size:13px;color:#222;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_eventFullName}${crBadge}</span>
-                        <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;">${_resultTag}${_statusTag}${_roundBadge}${_bracketTag}</div>
+                    html += `<div id="tt-item-${item.id}" class="tt-row" ${clickAction} style="background:${rowBg};border-left:3px solid ${rowBar};${borderBottom}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${rowBg}'"` : ''}>
+                        <span class="tt-time">${item.time}</span>
+                        <div class="tt-front">${_frontBadges}</div>
+                        <span class="tt-name">${item.event_name}${crBadge}</span>
+                        <div class="tt-tail">${nowBadge}${_statusTag}${_bracketTag}${_resultTag}</div>
                     </div>`;
                 });
 
@@ -2184,3 +2446,131 @@ function _showConflictModal(conflicts) {
     document.getElementById('pr-conflict-modal-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
+
+// ============================================================
+// 앱 설치 유도 배너 (홈·대시보드) — 링크로 들어온 모바일 브라우저 사용자에게만
+//   · 앱(standalone/TWA)에서 열었으면 표시 안 함
+//   · iOS Safari 는 <meta name="apple-itunes-app"> 의 시스템 Smart App Banner 가 뜨므로 중복 표시 안 함
+//   · 닫으면 7일간 숨김 (localStorage). 데스크톱은 표시 안 함.
+// ============================================================
+(function () {
+    const STORE = {
+        android: 'https://play.google.com/store/apps/details?id=com.pacerise.node',
+        ios: 'https://apps.apple.com/kr/app/pace-rise-node/id6784736644',
+    };
+    const DISMISS_KEY = 'pr_app_banner_dismissed_at';
+    const DISMISS_DAYS = 7;
+
+    function shouldShow() {
+        const p = location.pathname;
+        const onHome = p === '/' || p === '/index.html';
+        const onDash = p === '/dashboard.html' || p.startsWith('/e/');
+        if (!onHome && !onDash) return false;
+        const ua = navigator.userAgent || '';
+        const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const isAndroid = /Android/.test(ua);
+        if (!isIOS && !isAndroid) return false;
+        // 이미 앱으로 보는 중
+        try { if (window.matchMedia('(display-mode: standalone)').matches) return false; } catch (e) {}
+        if (navigator.standalone === true) return false;
+        if ((document.referrer || '').startsWith('android-app://')) return false;
+        // iOS Safari 본체 → 시스템 Smart App Banner 에 맡김 (인앱 브라우저·Chrome 등은 자체 배너)
+        if (isIOS && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|KAKAOTALK|NAVER|Instagram|Line\/|whale|DaumApps|FBAN|FBAV/i.test(ua)) return false;
+        try {
+            const t = parseInt(localStorage.getItem(DISMISS_KEY) || '0', 10);
+            if (t && Date.now() - t < DISMISS_DAYS * 86400000) return false;
+        } catch (e) {}
+        return true;
+    }
+
+    function render() {
+        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const href = isIOS ? STORE.ios : STORE.android;
+        const css = document.createElement('style');
+        css.textContent = `
+            .pr-app-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9500; display: flex; align-items: center; gap: 10px;
+                padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+                background: #fff; border-top: 1px solid #e8dfc0; box-shadow: 0 -6px 20px rgba(38,35,36,.10);
+                font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+            .pr-app-banner img { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; }
+            .pr-app-banner .t { flex: 1 1 auto; min-width: 0; line-height: 1.3; }
+            .pr-app-banner .t b { display: block; font-size: 13px; color: #262324; letter-spacing: -0.01em; }
+            .pr-app-banner .t span { display: block; font-size: 11px; color: #7a746e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .pr-app-banner .get { flex: 0 0 auto; background: #b79f58; color: #fff; font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 999px; text-decoration: none; letter-spacing: .02em; }
+            .pr-app-banner .x { flex: 0 0 auto; width: 30px; height: 30px; border: none; background: none; color: #9a938d; font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }
+            body.pr-app-banner-on { padding-bottom: 64px; }
+            body.pr-app-banner-on .events-scroll { padding-bottom: 72px; }
+        `;
+        document.head.appendChild(css);
+        const el = document.createElement('div');
+        el.className = 'pr-app-banner';
+        el.setAttribute('role', 'complementary');
+        el.innerHTML = `<img src="/icons/icon-192.png" alt="">
+            <div class="t"><b>PACE RISE : Node 앱</b><span>실시간 기록 알림 · 더 빠른 결과 확인</span></div>
+            <a class="get" href="${href}" target="_blank" rel="noopener">앱 받기</a>
+            <button class="x" aria-label="닫기">&times;</button>`;
+        el.querySelector('.x').addEventListener('click', () => {
+            try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {}
+            el.remove();
+            document.body.classList.remove('pr-app-banner-on');
+        });
+        el.querySelector('.get').addEventListener('click', () => {
+            try { if (typeof gtag === 'function') gtag('event', 'app_banner_click', { platform: isIOS ? 'ios' : 'android', page: location.pathname }); } catch (e) {}
+        });
+        document.body.appendChild(el);
+        document.body.classList.add('pr-app-banner-on');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => { try { if (shouldShow()) render(); } catch (e) { /* 배너는 실패해도 페이지에 영향 없음 */ } });
+})();
+
+// ============================================================
+// 마우스 드래그 스크롤 (전 페이지 공통)
+//   손가락으로 끄는 것처럼, 마우스로 눌러 끌어도 가로/세로로 넘치는 상자가 따라온다.
+//   대상: 눌린 지점에서 위로 올라가며 처음 만나는 overflow auto/scroll 이고 실제로 넘치는 요소.
+//   입력창·링크·select 위에서 시작한 드래그는 무시(기존 동작 유지). 버튼 위 시작은 허용(드래그면 click 삼킴). 4px 이상 움직였을 때만 드래그로 간주,
+//   드래그 뒤 따라오는 click 은 한 번 삼킨다(셀 클릭 오작동 방지).
+// ============================================================
+(function () {
+    if (typeof document === 'undefined') return;
+    // 버튼 위에서 시작한 드래그도 허용 (버튼은 click 으로만 동작하고, 드래그면 click 을 삼키므로 안전) — 표가 버튼으로 가득한 높이뛰기 표 대응
+    const SKIP = /^(INPUT|TEXTAREA|SELECT|A|LABEL)$/;
+    function scrollBoxFrom(el) {
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+            if (n.nodeType !== 1) continue;
+            const cs = getComputedStyle(n);
+            const ox = /(auto|scroll)/.test(cs.overflowX), oy = /(auto|scroll)/.test(cs.overflowY);
+            if ((ox && n.scrollWidth > n.clientWidth + 1) || (oy && n.scrollHeight > n.clientHeight + 1)) return n;
+        }
+        return null;
+    }
+    let box = null, sx = 0, sy = 0, sl = 0, st = 0, dragged = false;
+    document.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        const t = e.target;
+        if (!t || SKIP.test(t.tagName) || t.closest('input,textarea,select,a,label,[contenteditable="true"]')) return;
+        box = scrollBoxFrom(t); if (!box) return;
+        sx = e.clientX; sy = e.clientY; sl = box.scrollLeft; st = box.scrollTop; dragged = false;
+    });
+    document.addEventListener('mousemove', function (e) {
+        if (!box) return;
+        const dx = e.clientX - sx, dy = e.clientY - sy;
+        if (!dragged && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+        if (!dragged) { dragged = true; document.documentElement.classList.add('is-drag-scrolling'); }
+        box.scrollLeft = sl - dx; box.scrollTop = st - dy;
+        e.preventDefault();
+    });
+    function end() {
+        if (!box) return;
+        box = null;
+        document.documentElement.classList.remove('is-drag-scrolling');
+        if (dragged) {
+            // 드래그로 끝난 mouseup 뒤의 click 한 번 삼키기
+            const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); document.removeEventListener('click', swallow, true); };
+            document.addEventListener('click', swallow, true);
+            setTimeout(() => document.removeEventListener('click', swallow, true), 300);
+        }
+    }
+    document.addEventListener('mouseup', end);
+    document.addEventListener('mouseleave', end);
+})();
