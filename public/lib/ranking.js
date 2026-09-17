@@ -105,5 +105,37 @@
         return ids;
     }
 
-    return { normMark, heightStats, compareHeight, distanceStats, compareDistance, assignRanks, topNIds };
+    /**
+     * 다음 라운드 진출자 자동 선정 (WA TR 20.3 · 21): 조별 상위 qPerHeat 명은 Q(순위), 나머지 중 기록 상위 qTotal 명은 q(기록).
+     *   - DQ/DNF/DNS 등 상태코드가 있거나 기록이 없는 선수는 대상이 아니다
+     *   - 마지막 자리에 1/1000초까지 같은 선수가 걸리면 ties 로 돌려준다 → 자동으로 가르지 않는다.
+     *     (규정: 레인이 남으면 모두 진출, 아니면 추첨 — 심판장이 결정할 일)
+     * rows: [{event_entry_id, heat_number, time_seconds, status_code}]
+     */
+    function autoQualify(rows, qPerHeat, qTotal) {
+        const ms = t => Math.round(t * 1000);
+        const valid = (rows || []).filter(r => typeof r.time_seconds === 'number' && r.time_seconds > 0 && !r.status_code);
+        const Q = new Set(), q = new Set(), ties = [];
+        const byHeat = {};
+        valid.forEach(r => { (byHeat[r.heat_number] = byHeat[r.heat_number] || []).push(r); });
+        for (const hn of Object.keys(byHeat)) {
+            const sorted = byHeat[hn].slice().sort((a, b) => a.time_seconds - b.time_seconds);
+            const n = Math.min(qPerHeat || 0, sorted.length);
+            for (let i = 0; i < n; i++) Q.add(sorted[i].event_entry_id);
+            if (n > 0 && sorted[n] && ms(sorted[n].time_seconds) === ms(sorted[n - 1].time_seconds)) {
+                ties.push({ type: 'Q', heat_number: Number(hn), time_seconds: sorted[n - 1].time_seconds, ids: sorted.filter(r => ms(r.time_seconds) === ms(sorted[n - 1].time_seconds)).map(r => r.event_entry_id) });
+            }
+        }
+        if (qTotal > 0) {
+            const rest = valid.filter(r => !Q.has(r.event_entry_id)).sort((a, b) => a.time_seconds - b.time_seconds);
+            const n = Math.min(qTotal, rest.length);
+            for (let i = 0; i < n; i++) q.add(rest[i].event_entry_id);
+            if (n > 0 && rest[n] && ms(rest[n].time_seconds) === ms(rest[n - 1].time_seconds)) {
+                ties.push({ type: 'q', heat_number: null, time_seconds: rest[n - 1].time_seconds, ids: rest.filter(r => ms(r.time_seconds) === ms(rest[n - 1].time_seconds)).map(r => r.event_entry_id) });
+            }
+        }
+        return { Q, q, ties };
+    }
+
+    return { normMark, heightStats, compareHeight, distanceStats, compareDistance, assignRanks, topNIds, autoQualify };
 });

@@ -264,7 +264,9 @@ function detectBrokenRecordsClient(newVal, records, direction) {
         if (!rec) continue;
         const oldVal = parseRecordValueClient(rec.record_value);
         if (oldVal == null) continue;
-        if (direction === 'lower' && newVal < oldVal) broken.push(label);
+        // 공식 기록은 1/100초로 올림(WA TR 19.24) — 10.213 은 10.22 와 동률이지 경신이 아니다 (서버 recordCompare.officialTime 과 동일)
+        const cmpVal = direction === 'lower' ? Math.ceil(Math.round(newVal * 1000) / 10 - 1e-9) / 100 : newVal;
+        if (direction === 'lower' && cmpVal < oldVal) broken.push(label);
         else if (direction === 'higher' && newVal > oldVal) broken.push(label);
     }
     return broken;

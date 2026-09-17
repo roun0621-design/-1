@@ -97,3 +97,27 @@ describe('거리 종목 (TR 25.22 · 25.6)', () => {
         expect(R.topNIds([{ event_entry_id: 1, best: null, sortedValid: [] }], 8).size).toBe(0);   // 기록 없는 선수는 포함하지 않는다
     });
 });
+
+describe('다음 라운드 진출자 자동 선정 (TR 20.3 · 21)', () => {
+    const row = (id, heat, t, sc) => ({ event_entry_id: id, heat_number: heat, time_seconds: t, status_code: sc || '' });
+    it('조별 상위 N = Q, 나머지 기록순 = q. Q 가 아닌 선수는 아무리 빨라도 q', () => {
+        const rows = [row(1, 1, 10.50), row(2, 1, 10.60), row(3, 1, 10.70), row(4, 2, 10.90), row(5, 2, 10.95), row(6, 2, 11.20)];
+        const r = R.autoQualify(rows, 2, 1);
+        expect([...r.Q].sort()).toEqual([1, 2, 4, 5]);
+        expect([...r.q]).toEqual([3]);
+        expect(r.ties).toEqual([]);
+    });
+    it('DQ·DNF·기록 없는 선수는 선정 대상이 아니다 (DQ 에 기록이 남아 있어도)', () => {
+        const rows = [row(1, 1, 10.40, 'DQ'), row(2, 1, 10.60), row(3, 1, null), row(4, 1, 10.80)];
+        const r = R.autoQualify(rows, 2, 0);
+        expect([...r.Q].sort()).toEqual([2, 4]);
+    });
+    it('마지막 자리 동기록(1/1000초까지 같음)은 경고로 돌려준다 — Q 와 q 모두', () => {
+        const rows = [row(1, 1, 10.50), row(2, 1, 10.612), row(3, 1, 10.612), row(4, 2, 10.70), row(5, 2, 10.80), row(6, 2, 10.80), row(7, 2, 10.80)];
+        const r = R.autoQualify(rows, 2, 1);
+        expect(r.ties.find(t => t.type === 'Q' && t.heat_number === 1).ids.sort()).toEqual([2, 3]);
+        expect(r.ties.find(t => t.type === 'Q' && t.heat_number === 2).ids.sort()).toEqual([5, 6, 7]);
+        // 1/100 은 같아도 1/1000 이 다르면 동률이 아니다
+        expect(R.autoQualify([row(1, 1, 10.611), row(2, 1, 10.619)], 1, 0).ties).toEqual([]);
+    });
+});

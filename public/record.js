@@ -4117,7 +4117,9 @@ async function loadAllHeatsForQual() {
                 ...e,
                 heat_id: heat.id,
                 heat_number: heat.heat_number,
-                time_seconds: r ? r.time_seconds : null,
+                // 상태코드(DQ/DNF/DNS)가 있으면 기록이 남아 있어도 진출 대상이 아니다 — 예전엔 status_code 를 안 실어 DQ 선수도 자동 선정됐다
+                time_seconds: (r && !r.status_code) ? r.time_seconds : null,
+                status_code: r ? (r.status_code || '') : '',
                 qual: null // Q, q, or null
             });
         });
@@ -4220,34 +4222,22 @@ function autoAssignQualification() {
     const qPerHeat = parseInt(document.getElementById('qual-auto-Q-per-heat')?.value) || 0;
     const qTotal = parseInt(document.getElementById('qual-auto-q-total')?.value) || 0;
 
-    // Reset all
-    _qualAllRows.forEach(r => r.qual = null);
-
-    // Group by heat
-    const heatGroups = {};
-    _qualAllRows.forEach(r => {
-        if (!heatGroups[r.heat_number]) heatGroups[r.heat_number] = [];
-        heatGroups[r.heat_number].push(r);
-    });
-
-    // Assign Q: top N per heat (by time, ascending)
-    const qAssignedIds = new Set();
-    for (const [hNum, rows] of Object.entries(heatGroups)) {
-        const sorted = rows.filter(r => r.time_seconds != null).sort((a, b) => a.time_seconds - b.time_seconds);
-        for (let i = 0; i < Math.min(qPerHeat, sorted.length); i++) {
-            sorted[i].qual = 'Q';
-            qAssignedIds.add(sorted[i].event_entry_id);
-        }
-    }
-
-    // Assign q: remaining athletes sorted by time, take top qTotal
-    if (qTotal > 0) {
-        const remaining = _qualAllRows
-            .filter(r => r.time_seconds != null && !qAssignedIds.has(r.event_entry_id))
-            .sort((a, b) => a.time_seconds - b.time_seconds);
-        for (let i = 0; i < Math.min(qTotal, remaining.length); i++) {
-            remaining[i].qual = 'q';
-        }
+    // 선정 규칙은 공용 모듈(public/lib/ranking.js · WA TR 20.3/21):
+    //   상태코드(DQ/DNF…) 선수 제외, 마지막 자리 동기록(1/1000초)은 자동으로 가르지 않고 경고로 알린다.
+    _qualAllRows.forEach(r => { r.qual = null; r.tieWarn = false; });
+    const _aq = PaceRanking.autoQualify(_qualAllRows, qPerHeat, qTotal);
+    _qualAllRows.forEach(r => { if (_aq.Q.has(r.event_entry_id)) r.qual = 'Q'; else if (_aq.q.has(r.event_entry_id)) r.qual = 'q'; });
+    const _sec = document.getElementById('track-qual-section');
+    if (_sec) {
+        let warn = document.getElementById('qual-tie-warning');
+        if (!warn) { warn = document.createElement('div'); warn.id = 'qual-tie-warning'; warn.style.cssText = 'margin:8px 0;padding:10px 12px;border-radius:8px;background:#fdecea;border:1.5px solid #d32f2f;color:#8b1a1a;font-size:13px;font-weight:600;line-height:1.6;'; _sec.insertBefore(warn, _sec.firstChild); }
+        if (_aq.ties.length) {
+            const nameOf = id => { const r = _qualAllRows.find(x => x.event_entry_id === id); return r ? `${r.name}(${r.heat_number}조 ${formatTime(r.time_seconds)})` : id; };
+            _aq.ties.forEach(t => t.ids.forEach(id => { const r = _qualAllRows.find(x => x.event_entry_id === id); if (r) r.tieWarn = true; }));
+            warn.innerHTML = '⚠️ 진출 마지막 자리에 동기록이 있습니다 — 자동 선정은 앞 순서대로만 넣었으니 심판장 결정(레인 여유 시 모두 진출 / 추첨)에 따라 직접 조정하세요.<br>' +
+                _aq.ties.map(t => `· ${t.type === 'Q' ? t.heat_number + '조 순위 진출(Q)' : '기록 진출(q)'}: ${t.ids.map(nameOf).join(' = ')}`).join('<br>');
+            warn.style.display = 'block';
+        } else warn.style.display = 'none';
     }
 
     // Re-render

@@ -96,6 +96,34 @@ describe('기준 기록·동기록·상태코드', () => {
     });
 });
 
+describe('공식 기록 환산 (TR 19.24)', () => {
+    const { officialTime } = require('../../lib/recordCompare');
+    it('1/1000초는 1/100초로 올림, 도로는 1초로 올림', () => {
+        expect(officialTime(10.213, 'track')).toBe(10.22);
+        expect(officialTime(10.210, 'track')).toBe(10.21);
+        expect(officialTime(10.2, 'track')).toBe(10.2);
+        expect(officialTime(45.001, 'relay')).toBe(45.01);
+        expect(officialTime(7565.2, 'road')).toBe(7566);
+        expect(officialTime(7565, 'road')).toBe(7565);
+    });
+    it('10.493(공식 10.50)은 CR 10.50 과 동률 → 감지 안 함, 10.489(공식 10.49)는 감지', async () => {
+        const e = await mkEvent('100m', 'track', { round: 'final', parent: null, sort: 9 }).catch(async () => null);
+        // 같은 대회에 100m 결승이 이미 있으므로 별도 대회로
+        const c = await db.run("INSERT INTO competition (name, start_date, end_date, venue, status, series_id) VALUES (?,?,?,?, 'active', ?)", 'REC_OFF_' + stamp, '2026-01-01', '2099-12-31', 'x', fx.seriesId);
+        let r = await db.run("INSERT INTO event (competition_id, name, category, gender, round_type, round_status) VALUES (?,?, 'track', 'M', 'final', 'in_progress')", c.lastInsertRowid, '100m'); const evId = r.lastInsertRowid;
+        r = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?,1)', evId); const heatId = r.lastInsertRowid;
+        r = await db.run("INSERT INTO athlete (competition_id, name, bib_number, team, gender) VALUES (?,?,?,?, 'M')", c.lastInsertRowid, '천분', '9', 'T');
+        r = await db.run("INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?,?, 'registered')", evId, r.lastInsertRowid); const entry = r.lastInsertRowid;
+        await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?,?,4)', heatId, entry);
+        await upsert({ heat_id: heatId, event_entry_id: entry, time_seconds: 10.493 });
+        expect(await pending(evId)).toEqual([]);
+        await upsert({ heat_id: heatId, event_entry_id: entry, time_seconds: 10.489 });
+        const p = await pending(evId);
+        expect(p.length).toBe(1);
+        expect(p[0].new_value_num).toBeCloseTo(10.49, 5);
+    });
+});
+
 describe('종합경기 평균 풍속', () => {
     it('풍속 세부종목 평균이 +2.0 을 넘으면 총점이 기준을 넘어도 감지하지 않는다 → 평균이 내려가면 감지', async () => {
         const pr = await db.run("INSERT INTO event (competition_id, name, category, gender, round_type, round_status) VALUES (?,?, 'combined', 'M', 'final', 'in_progress')", fx.compId, '10종경기');
