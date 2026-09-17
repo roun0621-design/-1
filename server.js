@@ -1135,6 +1135,23 @@ if (!db.isAsync) {
         db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_entry_id) WHERE attempt_number IS NULL`);
     } catch (e) { console.warn('[DB Migration] ux_result_no_attempt 생성 실패:', e.message); }
 }
+// (2026-09) 계주 종목명 표기 통일: 저장값에 '4X100mR'(대문자 X)와 '4×800mR'(곱셈 기호)가 섞여 있었다 → 모두 '4X…mR'.
+//   종목명이 들어간 전광판 키(heat.scoreboard_key)도 함께 바꾼다. 같은 대회에 두 표기가 모두 있으면(유니크 충돌) 그 행은 건너뛴다.
+if (!db.isAsync) {
+    try {
+        const rows = db.raw.prepare("SELECT id, name FROM event WHERE name LIKE '%4×%'").all();
+        let done = 0;
+        for (const r of rows) {
+            const to = r.name.replace(/4×/g, '4X');
+            try {
+                db.raw.prepare('UPDATE event SET name=? WHERE id=?').run(to, r.id);
+                db.raw.prepare("UPDATE heat SET scoreboard_key=REPLACE(scoreboard_key, ?, ?) WHERE event_id=? AND scoreboard_key LIKE '%4×%'").run(r.name, to, r.id);
+                done++;
+            } catch (e) { console.warn(`[DB Migration] 계주 표기 통일 건너뜀 (event ${r.id} ${r.name}): ${e.message}`); }
+        }
+        if (done) console.log(`[DB Migration] 계주 종목명 표기 통일: ${done}건 (4× → 4X)`);
+    } catch (e) { console.warn('[DB Migration] 계주 표기 통일 실패:', e.message); }
+}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_height_attempt_heat ON height_attempt(heat_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_combined_score_entry ON combined_score(event_entry_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_relay_member_entry ON relay_member(event_entry_id)`); } catch(e) {}
@@ -2093,11 +2110,13 @@ function fedEventColIdx(headers) {
 const FED_RELAY_MAP = {
     '400mR':{name:'4X100mR',category:'relay'},'1600mR':{name:'4X400mR',category:'relay'},
     'Mixed':{name:'4X400mR(Mixed)',category:'relay',gender:'X'},
-    '4 x 1500mR':{name:'4×1500mR',category:'relay'},'4 x 800mR':{name:'4×800mR',category:'relay'},
+    '4 x 1500mR':{name:'4X1500mR',category:'relay'},'4 x 800mR':{name:'4X800mR',category:'relay'},
     '4x100mR':{name:'4X100mR',category:'relay'},'4x400mR':{name:'4X400mR',category:'relay'},
-    '4x800mR':{name:'4×800mR',category:'relay'},'4x1500mR':{name:'4×1500mR',category:'relay'},
+    '4x800mR':{name:'4X800mR',category:'relay'},'4x1500mR':{name:'4X1500mR',category:'relay'},
     '4X100mR':{name:'4X100mR',category:'relay'},'4X400mR':{name:'4X400mR',category:'relay'},
-    '4X800mR':{name:'4×800mR',category:'relay'},
+    '4X800mR':{name:'4X800mR',category:'relay'},
+    '4X1500mR':{name:'4X1500mR',category:'relay'},'4×800mR':{name:'4X800mR',category:'relay'},'4×1500mR':{name:'4X1500mR',category:'relay'},
+    '4×100mR':{name:'4X100mR',category:'relay'},'4×400mR':{name:'4X400mR',category:'relay'},
     '4x400mR(Mixed)':{name:'4X400mR(Mixed)',category:'relay',gender:'X'},
     '4X400mR(Mixed)':{name:'4X400mR(Mixed)',category:'relay',gender:'X'},
 };
@@ -6143,8 +6162,8 @@ function normalizeEventName(raw) {
         '4x400mR': '4X400mR', '4X400mR': '4X400mR', '4 x 400mR': '4X400mR',
         '4x400mR(Mixed)': '4X400mR(Mixed)', 'Mixed 4x400mR': '4X400mR(Mixed)', 'Mixed4x400mR': '4X400mR(Mixed)',
         '4x400mR Mixed': '4X400mR(Mixed)', '4X400mR Mixed': '4X400mR(Mixed)', '4 x 400mR Mixed': '4X400mR(Mixed)',
-        '4x1500mR': '4×1500mR', '4X1500mR': '4×1500mR', '4 x 1500mR': '4×1500mR',
-        '4x800mR': '4×800mR', '4X800mR': '4×800mR', '4 x 800mR': '4×800mR',
+        '4x1500mR': '4X1500mR', '4X1500mR': '4X1500mR', '4 x 1500mR': '4X1500mR', '4×1500mR': '4X1500mR',
+        '4x800mR': '4X800mR', '4X800mR': '4X800mR', '4 x 800mR': '4X800mR', '4×800mR': '4X800mR',
     };
     return map[s] || s;
 }

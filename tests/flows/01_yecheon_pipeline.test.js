@@ -244,3 +244,14 @@ describe('기록표 (NR/DR/CR)', () => {
         }
     });
 });
+
+describe('계주 종목명 표기 (Phase 6 용어 통일)', () => {
+    it("저장된 종목명에 곱셈 기호(4×)가 없다 — 모두 '4X…mR'", async () => {
+        const { db } = require('../../server.js');
+        const bad = await db.all("SELECT name FROM event WHERE name LIKE '%4×%'");
+        expect(bad.map(r => r.name)).toEqual([]);
+        const relays = (await db.all("SELECT DISTINCT name FROM event WHERE category='relay' AND name LIKE '4%'")).map(r => r.name);
+        expect(relays.length).toBeGreaterThan(0);
+        for (const n of relays) expect(n).toMatch(/^4X\d+mR(\(Mixed\))?$/);
+    });
+});
