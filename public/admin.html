@@ -2344,7 +2344,7 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                         <div>
                             <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">파일 형식</label>
-                            <select id="cert-format-select" style="width:100%;padding:6px 8px;border:1px solid var(--gray);border-radius:6px;" title="워드(.docx)는 워드·한글에서 열어 내용을 고칠 수 있습니다. 제목·본문·수여자 문구는 아래 양식 편집에서 바꿉니다.">
+                            <select id="cert-format-select" style="width:100%;padding:6px 8px;border:1px solid var(--gray);border-radius:6px;" title="워드(.docx)는 워드·한글에서 열어 내용을 고칠 수 있습니다. 워드는 아래 '워드 상장 양식'을 쓰고, PDF 는 '양식 관리'의 양식을 씁니다.">
                                 <option value="pdf">PDF (디자인 그대로 인쇄)</option>
                                 <option value="docx">워드 .docx (열어서 내용 수정 가능)</option>
                             </select>
@@ -2393,9 +2393,64 @@ POST /api/external/event-result-link/batch<br>
                     </div>
                 </div>
 
+                <!-- W. 워드 상장 양식 (현장 인쇄용) — PDF 양식과 별개 -->
+                <div class="admin-card" style="border-left:4px solid #2b579a;">
+                    <h4 style="color:#2b579a;margin-bottom:6px;">워드 상장 양식 <span style="font-size:11px;font-weight:600;color:#fff;background:#2b579a;border-radius:4px;padding:2px 6px;vertical-align:middle;">현장 인쇄용</span></h4>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6;">
+                        기록입력 화면의 <b>상장 출력</b> 버튼과 위 일괄 발급의 <b>워드(.docx)</b> 형식이 쓰는 양식입니다. 받은 파일은 워드·한글에서 열어 고칠 수 있습니다.<br>
+                        아래 <b>양식 관리</b>(PDF)는 문자로 보내는 기록증·상장용이며 이 양식과는 별개입니다.
+                    </p>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:12px;">
+                        <label style="display:flex;align-items:center;gap:4px;"><input type="radio" name="awd-scope" value="comp" checked onchange="awdLoad()"> 선택한 대회 전용</label>
+                        <label style="display:flex;align-items:center;gap:4px;"><input type="radio" name="awd-scope" value="global" onchange="awdLoad()"> 전체 기본 (모든 대회)</label>
+                        <span id="awd-source" style="margin-left:auto;font-weight:600;color:#2b579a;"></span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px 14px;font-size:12px;">
+                        <div><label class="t-xs">제목</label><input type="text" id="awd-title_text" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">순위 표기</label><select id="awd-rank_label_style" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"><option value="numeric">1위 · 2위 · 3위</option><option value="mixed">우승 · 준우승 · 3위</option><option value="ordinal">우승 · 준우승 · N위</option></select></div>
+                        <div><label class="t-xs">발급번호 형식 <span class="t-muted">{year} {seq} {event}</span></label><input type="text" id="awd-serial_format" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">발급번호 시작</label><input type="number" id="awd-serial_start" min="1" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div style="grid-column:1/-1;"><label class="t-xs">본문 <span class="t-muted">변수: {competition_name} {event_name} {rank_label} {athlete_name} {team} {record_value} {date} · 줄바꿈 그대로 반영</span></label>
+                            <textarea id="awd-body_template" rows="4" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;font-family:inherit;line-height:1.6;"></textarea></div>
+                        <div style="grid-column:1/-1;"><label class="t-xs">계주(단체) 본문 <span class="t-muted">수상자가 팀일 때 — 같은 변수 사용</span></label>
+                            <textarea id="awd-body_template_team" rows="3" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;font-family:inherit;line-height:1.6;"></textarea></div>
+                        <div><label class="t-xs">시상일 <span class="t-muted">비우면 출력하는 날</span></label><input type="text" id="awd-award_date" placeholder="예) 2026년 9월 16일" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">수여 기관</label><input type="text" id="awd-signer_org" placeholder="예) 한국실업육상연맹" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">직함</label><input type="text" id="awd-signer_title" placeholder="회장" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">성명</label><input type="text" id="awd-signer_name" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">직인 자리 표시 <span class="t-muted">비우면 없음</span></label><input type="text" id="awd-seal_mark" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">글꼴 <span class="t-muted">PC 에 없으면 기본 글꼴</span></label><select id="awd-font_family" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></select></div>
+                        <div><label class="t-xs">용지 방향</label><select id="awd-paper_orientation" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"><option value="portrait">A4 세로</option><option value="landscape">A4 가로</option></select></div>
+                        <div><label class="t-xs">테두리</label><div style="display:flex;gap:6px;"><select id="awd-border_style" style="flex:1;padding:6px;border:1px solid var(--gray);border-radius:6px;"><option value="double">이중선</option><option value="single">한 줄</option><option value="none">없음</option></select><input type="color" id="awd-border_color" style="width:44px;height:32px;padding:2px;border:1px solid var(--gray);border-radius:6px;"></div></div>
+                        <div style="grid-column:1/-1;"><label class="t-xs">글자 크기 (pt)</label>
+                            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                                <span>제목 <input type="number" id="awd-title_size" style="width:58px;padding:4px;border:1px solid var(--gray);border-radius:4px;"></span>
+                                <span>항목 <input type="number" id="awd-field_size" style="width:58px;padding:4px;border:1px solid var(--gray);border-radius:4px;"></span>
+                                <span>본문 <input type="number" id="awd-body_size" style="width:58px;padding:4px;border:1px solid var(--gray);border-radius:4px;"></span>
+                                <span>날짜 <input type="number" id="awd-date_size" style="width:58px;padding:4px;border:1px solid var(--gray);border-radius:4px;"></span>
+                                <span>수여자 <input type="number" id="awd-signer_size" style="width:58px;padding:4px;border:1px solid var(--gray);border-radius:4px;"></span>
+                            </div></div>
+                        <div style="grid-column:1/-1;"><label class="t-xs">표시할 항목</label>
+                            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                                <label><input type="checkbox" id="awd-show_serial"> 발급번호</label><label><input type="checkbox" id="awd-show_event"> 종목</label><label><input type="checkbox" id="awd-show_rank"> 순위</label>
+                                <label><input type="checkbox" id="awd-show_record"> 기록</label><label><input type="checkbox" id="awd-show_wind"> 풍속</label><label><input type="checkbox" id="awd-show_team"> 소속</label>
+                                <label><input type="checkbox" id="awd-show_members"> 계주 선수 명단</label><label><input type="checkbox" id="awd-show_date"> 날짜</label>
+                            </div></div>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;">
+                        <button class="btn btn-sm btn-outline" onclick="awdResetDefaults()" title="화면의 값을 기본 양식으로 채웁니다 (저장은 따로)">기본값 채우기</button>
+                        <button class="btn btn-sm btn-outline" id="awd-delete-btn" onclick="awdDelete()" style="color:#c0392b;border-color:#c0392b;display:none;">이 대회 양식 삭제</button>
+                        <span id="awd-status" style="font-size:12px;font-weight:600;color:var(--green);"></span>
+                        <div style="margin-left:auto;display:flex;gap:8px;">
+                            <button class="btn btn-sm btn-outline" onclick="awdPreview()">미리보기 (워드 받기)</button>
+                            <button class="btn btn-sm btn-primary" onclick="awdSave()">저장</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- B. 양식 관리 -->
                 <div class="admin-card">
-                    <h4>양식 관리</h4>
+                    <h4>양식 관리 <span style="font-size:11px;font-weight:600;color:#7a5a20;background:#f5ecd6;border-radius:4px;padding:2px 6px;vertical-align:middle;">PDF · 문자 발송용</span></h4>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">시상장·완주증·단체상 등 여러 양식을 저장해두고 발급 시 선택할 수 있습니다.</p>
                     <div id="cert-template-list" style="margin-bottom:12px;"></div>
                     <button class="btn btn-sm btn-primary" onclick="openCertTemplateEditor(null)">+ 새 양식 추가</button>
@@ -10867,7 +10922,76 @@ POST /api/external/event-result-link/batch<br>
         function _certGenderRank(g) { return g === 'M' ? 0 : g === 'F' ? 1 : g === 'X' ? 2 : 3; }
         let _certRenderedGroups = [];   // 현재 필터로 화면에 보이는 종목 그룹
 
+        // ── 워드 상장 양식 (현장 인쇄용) ─────────────────────────────────
+        const AWD_TEXT = ['title_text', 'rank_label_style', 'serial_format', 'serial_start', 'body_template', 'body_template_team', 'award_date', 'signer_org', 'signer_title', 'signer_name', 'seal_mark', 'font_family', 'paper_orientation', 'border_style', 'border_color', 'title_size', 'field_size', 'body_size', 'date_size', 'signer_size'];
+        const AWD_BOOL = ['show_serial', 'show_event', 'show_rank', 'show_record', 'show_wind', 'show_team', 'show_members', 'show_date'];
+        let _awdDefaults = null;
+        const awdScopeCompId = () => (document.querySelector('input[name="awd-scope"]:checked')?.value === 'global' ? null : (_selectedCompId || null));
+        function awdFill(cfg) {
+            AWD_TEXT.forEach(k => { const el = document.getElementById('awd-' + k); if (el) el.value = cfg[k] == null ? '' : cfg[k]; });
+            AWD_BOOL.forEach(k => { const el = document.getElementById('awd-' + k); if (el) el.checked = !!cfg[k]; });
+        }
+        function awdCollect() {
+            const cfg = {};
+            AWD_TEXT.forEach(k => { const el = document.getElementById('awd-' + k); if (el) cfg[k] = el.value; });
+            AWD_BOOL.forEach(k => { const el = document.getElementById('awd-' + k); if (el) cfg[k] = el.checked ? 1 : 0; });
+            return cfg;
+        }
+        async function awdLoad() {
+            if (!document.getElementById('awd-title_text')) return;
+            try {
+                const compId = awdScopeCompId();
+                const res = await fetch('/api/award-docx-template' + (compId ? `?competition_id=${compId}` : ''), { headers: { 'x-admin-key': AK() } });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '불러오기 실패');
+                _awdDefaults = data.defaults;
+                const sel = document.getElementById('awd-font_family');
+                const fonts = (data.fonts || []).slice(); if (data.config.font_family && !fonts.includes(data.config.font_family)) fonts.unshift(data.config.font_family);
+                sel.innerHTML = fonts.map(f => `<option value="${f}">${f}</option>`).join('');
+                awdFill(data.config);
+                const isGlobalScope = !compId;
+                document.getElementById('awd-source').textContent =
+                    data.source === 'competition' ? '이 대회 전용 양식 사용 중'
+                    : data.source === 'global' ? (isGlobalScope ? '전체 기본 양식 (저장됨)' : '전체 기본 양식 사용 중 — 저장하면 이 대회 전용이 됩니다')
+                    : (isGlobalScope ? '내장 기본 양식 (아직 저장한 적 없음)' : '내장 기본 양식 사용 중 — 저장하면 이 대회 전용이 됩니다');
+                document.getElementById('awd-delete-btn').style.display = (!isGlobalScope && data.source === 'competition') ? '' : 'none';
+            } catch (e) { toast('워드 상장 양식: ' + e.message, 'error'); }
+        }
+        function awdResetDefaults() { if (_awdDefaults) { awdFill(_awdDefaults); document.getElementById('awd-status').textContent = '기본값을 채웠습니다 — 저장해야 반영됩니다'; } }
+        async function awdSave() {
+            const compId = awdScopeCompId();
+            if (!compId && document.querySelector('input[name="awd-scope"]:checked')?.value !== 'global') { toast('대회를 먼저 선택하세요 (또는 "전체 기본"을 고르세요)', 'error'); return; }
+            try {
+                const res = await fetch('/api/award-docx-template', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-admin-key': AK() }, body: JSON.stringify({ admin_key: AK(), competition_id: compId, config: awdCollect() }) });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '저장 실패');
+                toast('워드 상장 양식 저장 완료');
+                document.getElementById('awd-status').textContent = '';
+                awdLoad();
+            } catch (e) { toast('저장 실패: ' + e.message, 'error'); }
+        }
+        async function awdDelete() {
+            const compId = awdScopeCompId(); if (!compId) return;
+            if (!confirm('이 대회 전용 워드 상장 양식을 삭제하고 전체 기본 양식으로 되돌릴까요?')) return;
+            try {
+                const res = await fetch(`/api/award-docx-template?competition_id=${compId}`, { method: 'DELETE', headers: { 'x-admin-key': AK() } });
+                if (!res.ok) throw new Error((await res.json()).error || '삭제 실패');
+                toast('이 대회 양식을 삭제했습니다'); awdLoad();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+        async function awdPreview() {
+            const st = document.getElementById('awd-status'); st.textContent = '미리보기 만드는 중…';
+            try {
+                const res = await fetch('/api/award-docx-template/preview', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': AK() }, body: JSON.stringify({ admin_key: AK(), competition_id: _selectedCompId || null, config: awdCollect() }) });
+                if (!res.ok) throw new Error((await res.json()).error || '미리보기 실패');
+                const blob = await res.blob(); const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob); a.download = '상장_미리보기.docx'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                st.textContent = '미리보기 파일을 받았습니다 (개인 1쪽 + 계주 1쪽)';
+            } catch (e) { st.textContent = ''; toast(e.message, 'error'); }
+        }
+
         async function loadCertTemplates() {
+            awdLoad();
             try {
                 const url = `/api/admin/certificate-templates?admin_key=${encodeURIComponent(AK())}` +
                             (_selectedCompId ? `&competition_id=${_selectedCompId}` : '');

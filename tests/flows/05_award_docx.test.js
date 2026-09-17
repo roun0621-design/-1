@@ -1,10 +1,10 @@
 /**
  * 상장 워드(.docx) 출력 — 경기 완료 후 기록입력 화면의 "상장 출력" 버튼 (POST /api/certificates/event-award)
- *   편집 가능한 파일: 워드·한글에서 열린다. 문구는 상장관리 양식(title_text·body_template·signer_*)을 쓴다.
+ *   편집 가능한 파일: 워드·한글에서 열린다. 문구는 '워드 상장 양식'(/api/award-docx-template) — PDF 양식(certificate_template)과 별개.
  */
 const request = require('supertest');
 const JSZip = require('jszip');
-let app, db; const fx = {}; const OP = 'testopkey';
+let app, db; const fx = {}; const OP = 'testopkey', ADMIN = 'testadmin1234';
 const binary = (res, cb) => { const chunks = []; res.on('data', c => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks))); };
 const docText = async (buf) => { const zip = await JSZip.loadAsync(buf); const xml = await zip.file('word/document.xml').async('string'); return { xml, text: xml.replace(/<w:br\/>/g, '\n').replace(/<[^>]+>/g, ''), files: Object.keys(zip.files) }; };
 
@@ -31,7 +31,24 @@ describe('상장 워드 출력', () => {
         const res = await request(app).post('/api/certificates/event-award').set('x-admin-key', OP).send({ event_id: r.lastInsertRowid });
         expect(res.status).toBe(400);
     });
-    it('1~3위: 공동 2위 두 명 포함 3장, 4위는 제외 — 양식 문구·수여자·기록·풍속이 들어간다', async () => {
+    it('저장한 양식이 없어도 내장 기본 양식으로 바로 나온다 (PDF 양식의 문구는 쓰지 않는다)', async () => {
+        const res = await request(app).post('/api/certificates/event-award').set('x-admin-key', OP).send({ event_id: fx.ev, rank_to: 1 }).buffer(true).parse(binary);
+        expect(res.status).toBe(200);
+        const d = await docText(res.body);
+        expect(d.text).toContain('우수한 성적을'); expect(d.text).toContain('회장');
+        expect(d.text).not.toContain('한국실업육상연맹');       // certificate_template 의 수여 기관 — 워드 양식과 무관
+    });
+    it('워드 상장 양식 저장: 관리자만, 운영키는 읽기만', async () => {
+        const cfg = { signer_org: '한국실업육상연맹', signer_name: '홍길동', award_date: '2026년 9월 16일', serial_format: '제 {year}-{seq} 호', serial_start: 41,
+            body_template: '위 선수는 {competition_name}\n{event_name} 종목에서 {rank_label}의 성적을 거두었기에\n이 상장을 수여합니다.' };
+        expect((await request(app).put('/api/award-docx-template').set('x-admin-key', OP).send({ competition_id: fx.comp, config: cfg })).status).toBe(403);
+        const r = await request(app).put('/api/award-docx-template').set('x-admin-key', ADMIN).send({ competition_id: fx.comp, config: { ...cfg, title_size: 999, unknown_key: 'x' } });
+        expect(r.status).toBe(200);
+        expect(r.body.config.title_size).toBe(90); expect(r.body.config.unknown_key).toBeUndefined();     // 범위 보정 · 모르는 키 제거
+        const g = await request(app).get('/api/award-docx-template').query({ competition_id: fx.comp }).set('x-admin-key', OP);
+        expect(g.body.source).toBe('competition'); expect(g.body.config.signer_org).toBe('한국실업육상연맹');
+    });
+    it('1~3위: 공동 2위 두 명 포함 3장, 4위는 제외 — 양식 문구·수여자·기록·풍속·시상일·발급번호', async () => {
         const res = await request(app).post('/api/certificates/event-award').set('x-admin-key', OP).send({ event_id: fx.ev, rank_to: 3 }).buffer(true).parse(binary);
         expect(res.status).toBe(200);
         expect(res.headers['content-type']).toContain('wordprocessingml');
@@ -45,14 +62,47 @@ describe('상장 워드 출력', () => {
         expect((d.text.match(/2위/g) || []).length).toBeGreaterThanOrEqual(2);           // 공동 2위 두 명
         expect(d.text).toContain('10.31'); expect(d.text).toContain('풍속 +1.2');
         expect(d.text).toContain('한국실업육상연맹'); expect(d.text).toContain('홍길동');
-        expect(d.text).toContain('2026년 9월 14일');                                      // 상장 날짜 = 대회 시작일
+        expect(d.text).toContain('2026년 9월 16일');                                      // 양식의 시상일
+        for (const n of ['제 2026-041 호', '제 2026-042 호', '제 2026-043 호']) expect(d.text).toContain(n);
     });
-    it('상장관리에서 문구를 바꾸면 그대로 반영된다', async () => {
-        await db.run("UPDATE certificate_template SET title_text='표 창 장', body_template='{athlete_name} 선수의 {record_value} 기록을 기립니다.' WHERE id=?", fx.tpl);
+    it('양식을 바꾸면 그대로 반영된다 — 제목·본문·표시 항목·순위 표기·글꼴', async () => {
+        await request(app).put('/api/award-docx-template').set('x-admin-key', ADMIN).send({ competition_id: fx.comp, config: {
+            title_text: '표 창 장', body_template: '{athlete_name} 선수의 {record_value} 기록을 기립니다.', show_wind: 0, show_serial: 0, rank_label_style: 'mixed', font_family: '궁서', seal_mark: '' } });
         const res = await request(app).post('/api/certificates/event-award').set('x-admin-key', OP).send({ event_id: fx.ev, rank_to: 1 }).buffer(true).parse(binary);
         const d = await docText(res.body);
         expect(d.text).toContain('표 창 장');
         expect(d.text).toContain('김일등 선수의 10.31 기록을 기립니다.');
+        expect(d.text).toContain('우승'); expect(d.text).not.toContain('풍속'); expect(d.text).not.toContain('호'); expect(d.text).not.toContain('(직인)');
+        expect(d.xml).toContain('w:eastAsia="궁서"');
+    });
+    it('대회 양식을 지우면 전체 기본 → 내장 기본 순으로 돌아간다', async () => {
+        await request(app).put('/api/award-docx-template').set('x-admin-key', ADMIN).send({ competition_id: null, config: { signer_org: '전체기본연맹' } });
+        const del = await request(app).delete('/api/award-docx-template').query({ competition_id: fx.comp }).set('x-admin-key', ADMIN);
+        expect(del.body.source).toBe('global'); expect(del.body.config.signer_org).toBe('전체기본연맹');
+        await request(app).delete('/api/award-docx-template').set('x-admin-key', ADMIN);       // 전체 기본도 삭제 (다른 테스트에 영향 없게)
+        expect((await request(app).get('/api/award-docx-template').set('x-admin-key', ADMIN)).body.source).toBe('builtin');
+    });
+    it('계주: 팀이 수상자 — 소속과 선수 명단이 들어간다', async () => {
+        let r = await db.run("INSERT INTO event (competition_id, name, category, gender, division, round_type, round_status) VALUES (?,?, 'relay', 'M', '일반', 'final', 'completed')", fx.comp, '4x100mR'); const ev = r.lastInsertRowid;
+        const h = (await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?,1)', ev)).lastInsertRowid;
+        const team = (await db.run("INSERT INTO athlete (competition_id, name, bib_number, team, gender, barcode) VALUES (?, '광주광역시청', '광주광역시청', '광주광역시청', 'M', 'RELAY_광주광역시청')", fx.comp)).lastInsertRowid;
+        const ee = (await db.run("INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?,?, 'checked_in')", ev, team)).lastInsertRowid;
+        await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?,?,4)', h, ee);
+        await db.run('INSERT INTO result (heat_id, event_entry_id, time_seconds) VALUES (?,?,?)', h, ee, 39.85);
+        let leg = 1; for (const n of ['일번주자', '이번주자', '삼번주자', '사번주자']) {
+            const a = (await db.run("INSERT INTO athlete (competition_id, name, bib_number, team, gender) VALUES (?,?,?, '광주광역시청', 'M')", fx.comp, n, 'R' + leg)).lastInsertRowid;
+            await db.run('INSERT INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)', ee, a, leg++);
+        }
+        const d = await docText((await request(app).post('/api/certificates/event-award').set('x-admin-key', OP).send({ event_id: ev, rank_to: 1 }).buffer(true).parse(binary)).body);
+        expect(d.text).toContain('선    수 :'); expect(d.text).toContain('일번주자  이번주자  삼번주자  사번주자');
+        expect(d.text).not.toContain('성    명 :');
+    });
+    it('미리보기: 저장하지 않은 설정으로 개인 1쪽 + 계주 1쪽', async () => {
+        const res = await request(app).post('/api/award-docx-template/preview').set('x-admin-key', ADMIN).send({ config: { title_text: '미 리 보 기', paper_orientation: 'landscape' } }).buffer(true).parse(binary);
+        expect(res.status).toBe(200);
+        const d = await docText(res.body);
+        expect(d.text).toContain('미 리 보 기'); expect(d.text).toContain('홍길동'); expect(d.text).toContain('선    수 :');
+        expect(d.xml).toContain('w:orient="landscape"');
     });
     it('관리자 일괄 발급도 format=docx 지원', async () => {
         const res = await request(app).post('/api/admin/certificates/generate').send({ admin_key: 'testadmin1234', template_id: fx.tpl, competition_id: fx.comp, event_ids: [fx.ev], rank_from: 1, rank_to: 2, format: 'docx' }).buffer(true).parse(binary);

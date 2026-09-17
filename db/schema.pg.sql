@@ -713,3 +713,10 @@ CREATE INDEX IF NOT EXISTS ux_timetable_full ON timetable(competition_id, day, s
 
 -- 트랙 기록(attempt_number IS NULL) 중복 방지 — UNIQUE(heat_id,event_entry_id,attempt_number) 는 NULL 에 효력이 없다
 CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_entry_id) WHERE attempt_number IS NULL;
+
+-- 워드 상장 양식 (현장 인쇄용) — scope_key: 'global' | 'c<대회id>', config: JSON (lib/awardDocxTemplate.js)
+CREATE TABLE IF NOT EXISTS award_docx_template (
+    scope_key TEXT PRIMARY KEY,
+    config TEXT NOT NULL,
+    updated_at TEXT
+);
