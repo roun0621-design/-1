@@ -4514,7 +4514,8 @@ function _buildCompleteUI(evt) {
     // NOTE: 한글 깨짐 이슈로 "결과 이미지" 다운로드 버튼은 제거함 (PDF 결과지로 대체)
     if (evt.round_status === 'completed') {
         return `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:12px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 경기 완료됨</div>
-                <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`;
+                <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>
+                ${(evt.round_type === 'final' && !evt.parent_event_id) ? `<button class="btn btn-primary btn-sm" onclick="downloadAwardDocx()" title="1~3위 상장을 워드 파일(.docx)로 받습니다. 워드·한글에서 열어 내용을 고칠 수 있고, 문구는 관리자 → 상장관리에서 바꿉니다">상장 출력</button>` : ''}`;
     }
     return `<button class="btn btn-success btn-sm" onclick="completeRound()" title="모든 기록이 저장된 후 경기를 최종 완료 처리합니다">경기 완료</button>`;
 }
@@ -5093,3 +5094,33 @@ document.addEventListener('DOMContentLoaded', () => {
     let saved = false; try { saved = localStorage.getItem('rec_sidebar_collapsed') === '1'; } catch (e) {}
     _applyRecordSidebar(saved);
 });
+
+// ============================================================
+// 상장 출력 — 경기 완료된 결승 종목의 입상자 상장을 워드(.docx)로 받는다
+//   편집 가능한 파일이라 현장에서 문구·직인 자리를 고쳐 인쇄할 수 있다. 양식 문구는 관리자 → 상장관리.
+// ============================================================
+async function downloadAwardDocx() {
+    const evt = state.selectedEvent;
+    if (!evt) return;
+    const ans = prompt('몇 위까지 상장을 출력할까요? (예: 3 → 1~3위, 동순위는 모두 포함)', '3');
+    if (ans === null) return;
+    const to = Math.max(1, parseInt(ans, 10) || 3);
+    try {
+        showToast('상장 파일을 만드는 중…', 'info', 2000);
+        const res = await fetch('/api/certificates/event-award', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event_id: evt.id, rank_from: 1, rank_to: to, format: 'docx', admin_key: localStorage.getItem('pace_admin_key') || '' })
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || '생성 실패'); }
+        const blob = await res.blob();
+        const gl = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `상장_${gl}_${evt.name}.docx`;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+        showToast('상장 파일을 내려받았습니다 (워드·한글에서 열립니다)', 'success', 3500);
+    } catch (e) {
+        showToast('상장 출력 실패: ' + (e.message || e), 'error', 4500);
+    }
+}

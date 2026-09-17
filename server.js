@@ -11850,7 +11850,7 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
 //     GET    /api/admin/certificates/log
 //   헬퍼 getEventResultsForCert 는 모듈에서 반환받아 SMS 라우트 마운트 시 주입.
 const _certMod = require('./lib/routes/certificate')(app, {
-    db, isAdminKey,
+    db, isAdminKey, isOperationKey,
     generateCertificatePdf, generateCertificateBatch,
     upload,
     publicDir: path.join(__dirname, 'public'),

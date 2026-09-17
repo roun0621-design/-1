@@ -2342,6 +2342,13 @@ POST /api/external/event-result-link/batch<br>
                                 <option value="record">기록증 (기록 있는 출전자 전원)</option>
                             </select>
                         </div>
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">파일 형식</label>
+                            <select id="cert-format-select" style="width:100%;padding:6px 8px;border:1px solid var(--gray);border-radius:6px;" title="워드(.docx)는 워드·한글에서 열어 내용을 고칠 수 있습니다. 제목·본문·수여자 문구는 아래 양식 편집에서 바꿉니다.">
+                                <option value="pdf">PDF (디자인 그대로 인쇄)</option>
+                                <option value="docx">워드 .docx (열어서 내용 수정 가능)</option>
+                            </select>
+                        </div>
                         <div id="cert-rank-scope-wrap">
                             <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">순위 기준</label>
                             <select id="cert-rank-scope" style="width:100%;padding:6px 8px;border:1px solid var(--gray);border-radius:6px;">
@@ -11056,6 +11063,7 @@ POST /api/external/event-result-link/batch<br>
             const rankTo = parseInt(document.getElementById('cert-rank-to').value || 3, 10);
             const includeFinishers = document.getElementById('cert-include-finishers').checked;
             const selectedIds = Array.from(_certSelectedIds).map(v => parseInt(v, 10));
+            const fmt = (document.getElementById('cert-format-select') || {}).value || 'pdf';
 
             const status = document.getElementById('cert-gen-status');
             if (status) status.textContent = '생성 중...';
@@ -11074,6 +11082,7 @@ POST /api/external/event-result-link/batch<br>
                         rank_to: rankTo,
                         include_finishers: includeFinishers,
                         mode,
+                        format: fmt,
                     })
                 });
                 if (!res.ok) {
@@ -11082,6 +11091,15 @@ POST /api/external/event-result-link/batch<br>
                 }
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
+                if (fmt === 'docx') {
+                    // 워드 파일은 새 창에서 열 수 없으므로 내려받는다 (워드·한글에서 열어 내용 수정 가능)
+                    const a = document.createElement('a'); a.href = url; a.download = `상장_${selectedIds.length || '전체'}종목.docx`;
+                    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
+                    if (status) status.textContent = '완료 — 워드 파일을 내려받았습니다';
+                    setTimeout(() => { if (status) status.textContent = ''; }, 4000);
+                    loadCertLog();
+                    return;
+                }
                 window.open(url, '_blank');
                 if (status) status.textContent = '완료 — 새 창에서 PDF가 열립니다';
                 setTimeout(() => { if (status) status.textContent = ''; }, 4000);
