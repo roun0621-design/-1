@@ -132,6 +132,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof guardEndedCompForOperation === 'function') await guardEndedCompForOperation('record');
 
     // ─── 오프라인 동기화 완료 시 현재 화면 데이터 다시 fetch (옵티미스틱 값을 서버 값으로 reconcile)
+    // 실시간 연결(SSE)이 끊겼다 다시 붙으면 그 사이의 변경을 놓쳤을 수 있다 → 입력 중이 아닐 때만 현재 화면을 다시 읽는다
+    if (typeof onSSEReconnect === 'function') onSSEReconnect(() => {
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && ae.value) return;   // 입력 중인 값은 건드리지 않는다
+        if (typeof window.onSyncComplete === 'function') window.onSyncComplete();
+    });
     window.onSyncComplete = async function() {
         try {
             if (state.selectedEvent) {
@@ -1060,6 +1066,7 @@ async function saveSingleTrackInline(inp, doRerender = true) {
 }
 
 async function saveAllTrackInline() {
+    let _failCnt = 0;
     if (!confirmCompletedEdit()) return;
     const inputs = document.querySelectorAll('.track-time-input');
     for (const inp of inputs) {
@@ -1071,9 +1078,11 @@ async function saveAllTrackInline() {
         try {
             await API.upsertResult({ heat_id: hid, event_entry_id: eid, time_seconds: v });
             delete state._pendingInlineTrack[eid];
-        } catch (err) { inp.classList.remove('saving'); inp.disabled = false; inp.classList.add('error'); showToast(err.error || '저장 실패', 'error'); }
+        } catch (err) { _failCnt++; inp.classList.remove('saving'); inp.disabled = false; inp.classList.add('error'); showToast(err.error || '저장 실패', 'error'); }
     }
     if (Object.keys(state._pendingInlineTrack).length === 0) clearUnsaved();
+    // 실패가 있었는데 '전체 저장 완료'라고 알리면 안 된다 — 실패한 칸(빨간 테두리)은 그대로 두고 건수를 알린다
+    if (_failCnt > 0) { showToast(`${_failCnt}건이 저장되지 않았습니다 — 빨간 칸을 확인하고 다시 저장하세요`, 'error', 7000); return; }
     showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 전체 저장 완료');
     await loadTrackHeatData();
     if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
@@ -1107,7 +1116,7 @@ async function saveHeatWind() {
         // Hide inline warning
         const warnEl = document.getElementById('wind-warning-inline');
         if (warnEl) warnEl.style.display = 'none';
-    } catch (e) { console.error(e); }
+    } catch (e) { _recSaveFailed('풍속', e); }
 }
 async function loadHeatWind() {
     const inp = document.getElementById('heat-wind-input');
@@ -1172,7 +1181,9 @@ async function setStatusCode(sel) {
     const sc = sel.value;
     const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
     try {
-        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, time_seconds: sc ? null : undefined });
+        const _saved = await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, time_seconds: sc ? null : undefined });
+        // 오프라인이라 기기에 임시 저장된 경우: 서버에서 다시 읽으면 '예전에 받아둔 값'이 와서 방금 바꾼 상태가 되돌아간 것처럼 보인다 → 화면 값만 반영하고 끝낸다
+        if (_saved && _saved.queued) { _optimisticUpsertResult(eid, null, { heat_id: hid, status_code: sc, ...(sc ? { time_seconds: null } : {}) }); renderTrackTable(); return; }
         // [JOINT] 합동모드면 현재 heat + joint extras 모두 재로딩, 아니면 기존 heat 만
         let allResults = await API.getResults(state.heatId);
         if (isJointMode()) {
@@ -1185,7 +1196,20 @@ async function setStatusCode(sel) {
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         }
-    } catch (e) { console.error(e); }
+    } catch (e) { _recSaveFailed('선수 상태', e, true); }
+}
+// 저장 실패 알림 — 예전엔 console.error 만 하고 넘어가(또는 인자가 틀린 showBanner 호출이 catch 안에서 다시 터져) 화면에는 값이 남아 있는데
+//   서버에는 없는 상태가 조용히 생겼다. 실패를 크게 알리고, 화면에 먼저 그려둔 값이 있으면 서버 값으로 되돌린다.
+async function _recSaveFailed(what, err, reload) {
+    console.error('[record] save failed:', what, err);
+    const reason = (err && (err.error || err.message)) || '네트워크 오류';
+    showToast(`${what} 저장 실패 — ${reason}`, 'error', 7000);
+    if (!reload || !state.heatId) return;
+    try {
+        state.results = await API.getResults(state.heatId);
+        if (typeof renderFieldDistanceContent === 'function' && state.selectedEvent && state.selectedEvent.category === 'field_distance') renderFieldDistanceContent();
+        else if (typeof renderTrackTable === 'function' && state.selectedEvent && (state.selectedEvent.category === 'track' || state.selectedEvent.category === 'relay' || state.selectedEvent.category === 'road')) renderTrackTable();
+    } catch (e) { /* 서버에 닿지 않으면 되돌릴 값도 없다 — 알림만 남긴다 */ }
 }
 async function saveRemark(inp) {
     if (!confirmCompletedEdit()) return;
@@ -1193,7 +1217,7 @@ async function saveRemark(inp) {
     const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
     try {
         await API.upsertResult({ heat_id: hid, event_entry_id: eid, remark: inp.value.trim() });
-    } catch (e) { console.error(e); }
+    } catch (e) { _recSaveFailed('비고', e); }
 }
 
 // Status code for standalone field distance events (DNS/DNF/DQ/NM)
@@ -1220,7 +1244,7 @@ async function setFieldDistStatusCode(sel) {
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         }
-    } catch (e) { console.error('setFieldDistStatusCode error:', e); }
+    } catch (e) { _recSaveFailed('선수 상태', e, true); }
 }
 
 // Status code for standalone field height events (DNS/DNF/DQ)
@@ -1251,7 +1275,7 @@ async function setFieldHeightStatusCode(sel) {
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         }
-    } catch (e) { console.error('setFieldHeightStatusCode error:', e); }
+    } catch (e) { _recSaveFailed('선수 상태', e, true); }
 }
 
 // Status code for combined sub-event field height (DNS/DNF/DQ)
@@ -1923,9 +1947,7 @@ async function saveFieldWind(entryId, attempt, wind) {
         state._activeFieldCell = null;
         showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 풍속 저장');
         renderFieldDistanceContent();
-    } catch (err) {
-        console.error('saveFieldWind error:', err);
-    }
+    } catch (err) { _recSaveFailed('풍속', err, true); }
 }
 
 async function saveFieldInline(entryId, attempt, distance) {
@@ -1965,8 +1987,7 @@ async function saveFieldInline(entryId, attempt, distance) {
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
     } catch (err) {
-        console.error('saveFieldInline error:', err);
-        showBanner('저장 실패', 'error');
+        _recSaveFailed('기록', err, true);
     }
 }
 
@@ -2034,7 +2055,7 @@ async function fieldDblClickFoul(entryId, attempt) {
         showFoulNotice();
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
-    } catch (err) { console.error('fieldDblClickFoul error:', err); }
+    } catch (err) { _recSaveFailed('파울', err, true); }
 }
 
 // Show foul notice banner
@@ -3553,7 +3574,7 @@ async function _cSubFieldSave(entryId, attempt, distance, heatId, parentId) {
             _cSubFieldRender();
         }
         await syncCombinedFromSubEvent(parentId);
-    } catch (err) { console.error('_cSubFieldSave error:', err); showBanner('저장 실패', 'error'); }
+    } catch (err) { _recSaveFailed('기록', err, true); }
 }
 
 async function _cSubFieldFoul(entryId, attempt, heatId, parentId) {
@@ -3570,7 +3591,7 @@ async function _cSubFieldFoul(entryId, attempt, heatId, parentId) {
         }
         showFoulNotice();
         await syncCombinedFromSubEvent(parentId);
-    } catch (err) { console.error('_cSubFieldFoul error:', err); }
+    } catch (err) { _recSaveFailed('파울', err, true); }
 }
 
 async function _cSubFieldDblFoul(entryId, attempt, heatId, parentId) {

@@ -386,16 +386,17 @@ function _updateOfflineBanner() {
 window.addEventListener('online', () => {
     _offlineState.online = true;
     _updateOfflineBanner();
-    // 온라인 복귀 시 SW에 동기화 요청
-    if (navigator.serviceWorker?.controller) {
-        const ch = new MessageChannel();
-        ch.port1.onmessage = () => {
-            _checkPendingQueue();
-            setTimeout(() => { _offlineState.pendingCount = 0; _updateOfflineBanner(); }, 2000);
-        };
-        navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC' }, [ch.port2]);
-    }
+    _triggerOfflineSync();
 });
+// 대기 중인 오프라인 입력을 서버로 보낸다. 'online' 이벤트만 믿으면 안 된다 — 경기장 Wi-Fi 는 AP 에 붙은 채로 끊겨
+// navigator.onLine 이 바뀌지 않는다. 그래서 페이지를 열 때, 대기 건이 있는 동안 15초마다, 그리고 저장이 한 번 성공할 때마다 시도한다.
+function _triggerOfflineSync() {
+    if (!navigator.serviceWorker?.controller) return;
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => _checkPendingQueue();      // 남은 건수를 실제 큐에서 다시 읽는다 (예전엔 2초 뒤 무조건 0 으로 표시했다)
+    navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC' }, [ch.port2]);
+}
+setInterval(() => { if (_offlineState.pendingCount > 0) _triggerOfflineSync(); }, 15000);
 window.addEventListener('offline', () => {
     _offlineState.online = false;
     _updateOfflineBanner();
@@ -434,6 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
     _createOfflineBanner();
     _updateOfflineBanner();
     _checkPendingQueue();
+    setTimeout(() => { if (_offlineState.pendingCount > 0) _triggerOfflineSync(); }, 1500);
 });
 
 // ============================================================
@@ -520,7 +522,7 @@ async function api(method, path, body) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
     // Auto-inject admin_key for all write operations (body + x-admin-key header —
     // header covers body-less POSTs like /api/wa-correct/:id)
-    if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
+    if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
         const storedKey = localStorage.getItem('pace_admin_key') || '';
         if (storedKey) {
             opts.headers['x-admin-key'] = storedKey;
@@ -548,6 +550,7 @@ async function api(method, path, body) {
     }
     const data = await res.json();
     if (!res.ok) throw { status: res.status, ...data };
+    if (method !== 'GET' && _offlineState.pendingCount > 0) _triggerOfflineSync();   // 방금 서버에 닿았다 → 밀린 입력도 보낸다
     return data;
 }
 
@@ -1691,20 +1694,10 @@ function showToast(message, type = 'success', duration = 2000) {
 // ============================================================
 // PWA Service Worker Registration + Offline Sync
 // ============================================================
-const _EXPECTED_SW_VERSION = 'pacerise-v131';
+// (2026-09) 여기 있던 '_EXPECTED_SW_VERSION 과 다른 캐시 삭제' 블록은 상수가 v131 에 멈춰 있어, 페이지를 열 때마다
+//   현재 캐시(sw.js 의 CACHE_NAME)를 지우고 있었다 → 오프라인에서 새로고침하면 화면이 뜨지 않는다. 오래된 캐시 정리는 sw.js 의 activate 가 한다.
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        // Force update: clear old caches that don't match current version
-        if (window.caches) {
-            caches.keys().then(keys => {
-                keys.forEach(k => {
-                    if (k.startsWith('pacerise-') && k !== _EXPECTED_SW_VERSION) {
-                        caches.delete(k);
-                        console.log('[SW] Deleted stale cache:', k);
-                    }
-                });
-            });
-        }
         navigator.serviceWorker.register('/sw.js').then(reg => {
             // Force SW update check
             reg.update().catch(() => {});
@@ -1723,16 +1716,22 @@ if ('serviceWorker' in navigator) {
             // Listen for offline queue messages from SW
             navigator.serviceWorker.addEventListener('message', (event) => {
                 if (event.data.type === 'OFFLINE_QUEUED') {
-                    showToast('Offline: queued for sync', 'warning', 3000);
+                    showToast('연결이 끊겨 기기에 임시 저장했습니다 — 연결되면 자동 전송됩니다', 'warning', 3500);
+                    _checkPendingQueue();
                     _updateOfflineBadge();
                 }
                 if (event.data.type === 'SYNC_COMPLETE') {
                     const { synced, failed, conflicts } = event.data;
                     if (synced > 0) showToast(`동기화 완료: ${synced}건`, 'success', 3000);
-                    if (failed > 0) showToast(`${failed}건 동기화 실패`, 'error', 3000);
+                    if (failed > 0 && !(event.data.dropped || []).length) showToast(`${failed}건은 아직 전송되지 않았습니다 — 자동으로 다시 시도합니다`, 'warning', 4000);
+                    _checkPendingQueue();
                     // ─── 운영진 기록과 충돌해서 거부된 항목 알림 ───
                     if (Array.isArray(conflicts) && conflicts.length > 0) {
                         _showConflictModal(conflicts);
+                    }
+                    // ─── 서버가 거부해 반영되지 않은 오프라인 입력 (종료된 대회, 소집 미완료 등) — 조용히 사라지지 않게 목록으로 보여준다
+                    if (Array.isArray(event.data.dropped) && event.data.dropped.length > 0) {
+                        _showDroppedModal(event.data.dropped);
                     }
                     _updateOfflineBadge();
                     // 페이지에 있는 record/results 데이터 갱신 트리거 (있을 때만)
@@ -2496,6 +2495,43 @@ window.prInitFontSize = function(targetSelector) {
 // ============================================================
 // OFFLINE SYNC CONFLICT MODAL — 운영진 기록과 충돌해서 거부된 항목 표시
 // ============================================================
+// 서버가 거부한 오프라인 입력 목록. 심판이 '무엇이' 반영되지 않았는지 알아야 다시 입력할 수 있다.
+function _showDroppedModal(dropped) {
+    const existing = document.getElementById('pr-dropped-modal'); if (existing) existing.remove();
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const valueOf = b => {
+        if (!b || typeof b !== 'object') return '-';
+        if (b.result_mark != null) return `높이 ${b.bar_height}m ${b.attempt_number || '?'}차 → ${b.result_mark || '(지움)'}`;
+        if (b.distance_meters != null) return `거리 ${b.distance_meters}m${b.attempt_number ? ` (${b.attempt_number}차)` : ''}`;
+        if (b.time_seconds != null) return `시간 ${b.time_seconds}초`;
+        if (b.status_code != null) return `상태 ${b.status_code || '(해제)'}`;
+        if (b.wind != null) return `풍속 ${b.wind}`;
+        if (b.status != null) return `소집 상태 ${b.status}`;
+        if (b.barcode != null) return `소집 출석 ${b.barcode}`;
+        if (b.memo != null) return `메모 "${b.memo}"`;
+        if (b.manual_rank !== undefined) return `수동 순위 ${b.manual_rank}`;
+        return '-';
+    };
+    const when = t => { try { return new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch (e) { return ''; } };
+    const rows = dropped.map(d => `<div style="border:1px solid #f0d4d4;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fff;">
+        <div style="font-weight:700;color:#333;font-size:14px;">${esc(valueOf(d.body))}</div>
+        <div style="font-size:12px;color:#888;margin-top:3px;">입력 ${esc(when(d.offline_input_at))}${d.body && d.body.event_entry_id ? ` · 선수 항목 #${esc(d.body.event_entry_id)}` : ''}</div>
+        <div style="font-size:12px;color:#c62828;margin-top:3px;">사유: ${esc(d.error || ('서버 응답 ' + d.status))}</div></div>`).join('');
+    const overlay = document.createElement('div');
+    overlay.id = 'pr-dropped-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML = `<div style="background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.3);">
+        <div style="padding:18px 20px;background:#fdecea;border-bottom:1px solid #f5c6c0;">
+            <div style="font-size:18px;font-weight:700;color:#b71c1c;">반영되지 않은 입력 ${dropped.length}건</div>
+            <div style="font-size:13px;color:#7f1d1d;margin-top:6px;line-height:1.5;">연결이 끊긴 동안 입력한 아래 값은 서버가 받아들이지 않아 <b>저장되지 않았습니다.</b> 화면의 값을 확인하고 필요하면 다시 입력하세요.</div>
+        </div>
+        <div style="padding:14px 20px;overflow-y:auto;flex:1;background:#fafafa;">${rows}</div>
+        <div style="padding:14px 20px;border-top:1px solid #eee;text-align:right;"><button type="button" id="pr-dropped-modal-close" style="padding:10px 24px;background:#2d9d78;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;">확인</button></div>
+    </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('pr-dropped-modal-close').addEventListener('click', () => overlay.remove());
+}
+
 function _showConflictModal(conflicts) {
     if (!Array.isArray(conflicts) || conflicts.length === 0) return;
 

@@ -56,6 +56,7 @@ const { getDb } = require('./lib/db');
 const { detectRecordBreaks, detectCombinedRecordBreaks, normalizeEventName: normalizeEventNameServer } = require('./lib/recordCompare');
 const WebSocket = require('ws');
 const PDFDocument = require('pdfkit');
+const code128 = require('./lib/code128');
 const { createCanvas, registerFont } = require('canvas');
 const http = require('http');
 const crypto = require('crypto');
@@ -79,7 +80,11 @@ for (const m of ['single', 'array', 'fields', 'any', 'none']) {
             for (const f of [].concat(req.file || [], req.files || [])) { try { fs.unlinkSync(f.path); } catch (e) {} }
             return res.status(403).json({ error: '인증 키가 필요합니다. (운영키 또는 관리자 로그인)' });
         }
-        next();
+        // 종료 잠금(멀티파트): competition_id 가 폼 필드로 오므로 여기서 검사한다
+        _blockedByCompEnd(req, res).then(blocked => {
+            if (!blocked) return next();
+            for (const f of [].concat(req.file || [], req.files || [])) { try { fs.unlinkSync(f.path); } catch (e) {} }
+        }).catch(() => next());
     }); };
 }
 
@@ -172,6 +177,7 @@ function cleanOldBackups() {
         const cutoff = Date.now() - BACKUP_MAX_DAYS * 24 * 60 * 60 * 1000;
         fs.readdirSync(BACKUP_DIR)
             .filter(f => f.startsWith('backup_') && f.endsWith('.db'))
+            .filter(f => !/^backup_final/.test(f))      // 대회 종료 스냅샷(final<대회id>)은 영구 보관 — 7일 뒤 그 대회의 마지막 상태가 사라지지 않게
             .forEach(f => {
                 const fpath = path.join(BACKUP_DIR, f);
                 if (fs.statSync(fpath).mtimeMs < cutoff) {
@@ -204,14 +210,17 @@ function _lastBackupAgeMs(tag) {
     } catch(e) { return Infinity; }
 }
 
+// 테스트처럼 require 로 불러온 경우엔 스케줄러를 돌리지 않는다 (임시 DB 의 백업이 backups/ 에 쌓여 watchdog 판단을 흐렸다)
+const _BACKUP_SCHEDULER_ON = require.main === module;
+
 // 매일 새벽 3시 (KST = UTC+9 → UTC 18시) 정시 daily 백업
-cron.schedule('0 18 * * *', () => performBackup('daily'));
+if (_BACKUP_SCHEDULER_ON) cron.schedule('0 18 * * *', () => performBackup('daily'));
 
 // 매 시각 정시 hourly 백업
-cron.schedule('0 * * * *', () => performBackup('hourly'));
+if (_BACKUP_SCHEDULER_ON) cron.schedule('0 * * * *', () => performBackup('hourly'));
 
 // 5분마다 watchdog — cron 이 놓친 백업을 자동 복구
-setInterval(() => {
+if (_BACKUP_SCHEDULER_ON) setInterval(() => {
     try {
         // daily: 마지막 daily 백업 후 24시간 이상 지났으면 즉시 실행
         if (_lastBackupAgeMs('daily') >= 24 * 60 * 60 * 1000) {
@@ -227,7 +236,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // 서버 시작 시 1회 백업 + 시작 직후 hourly/daily 가 비어있으면 즉시 생성
-setTimeout(() => {
+if (_BACKUP_SCHEDULER_ON) setTimeout(() => {
     performBackup('startup');
     // 시작 시점에 daily/hourly 가 너무 오래된 상태면 즉시 부트스트랩
     if (_lastBackupAgeMs('daily') >= 24 * 60 * 60 * 1000) performBackup('daily');
@@ -366,6 +375,8 @@ const COMP_END_GUARD_EXEMPT = [
     /^\/api\/operation-log/,
     /^\/api\/audit-log/,
     /^\/api\/push\//,   // 푸시 토큰 등록/해제는 대회 데이터 수정이 아님 — 종료 대회에서도 허용
+    /^\/api\/certificates?\//,   // 상장·기록증 발급은 대회 데이터를 바꾸지 않는다 — 시상은 종료 뒤에도 이어진다
+    /^\/api\/auth\//,
 ];
 async function _extractCompetitionIdFromRequest(req) {
     try {
@@ -375,6 +386,24 @@ async function _extractCompetitionIdFromRequest(req) {
 
         const b = req.body || {};
         const q = req.query || {};
+
+        // URL 의 id — 이 미들웨어는 라우트 매칭 전이라 req.params 가 비어 있다. 경로에서 직접 읽는다.
+        //   (예전엔 /api/heats/:id/wind, /api/events/:id/complete, /api/event-entries/:id/memo 처럼 본문에 id 가 없는 요청은 잠금을 그냥 통과했다)
+        const mPath = req.path.match(/^\/api\/(events|heats|event-entries|heat-entries|athletes|results|height-attempts|joint-groups|relay-members|pacing|wa-correct)\/(\d+)(?:\/|$)/);
+        if (mPath) {
+            const id = parseInt(mPath[2]);
+            const SQL = {
+                'events': 'SELECT competition_id FROM event WHERE id=?',
+                'heats': 'SELECT e.competition_id AS competition_id FROM heat h JOIN event e ON e.id=h.event_id WHERE h.id=?',
+                'event-entries': 'SELECT e.competition_id AS competition_id FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.id=?',
+                'heat-entries': 'SELECT e.competition_id AS competition_id FROM heat_entry he JOIN heat h ON h.id=he.heat_id JOIN event e ON e.id=h.event_id WHERE he.id=?',
+                'athletes': 'SELECT competition_id FROM athlete WHERE id=?',
+                'results': 'SELECT e.competition_id AS competition_id FROM result r JOIN heat h ON h.id=r.heat_id JOIN event e ON e.id=h.event_id WHERE r.id=?',
+                'height-attempts': 'SELECT e.competition_id AS competition_id FROM height_attempt ha JOIN heat h ON h.id=ha.heat_id JOIN event e ON e.id=h.event_id WHERE ha.id=?',
+                'joint-groups': 'SELECT competition_id FROM joint_group WHERE id=?',
+            }[mPath[1]];
+            if (SQL) { try { const r = await db.get(SQL, id); if (r && r.competition_id) return r.competition_id; } catch (e) { /* 테이블/열이 없으면 아래 단계로 */ } }
+        }
 
         // 직접 competition_id
         const direct = b.competition_id || q.competition_id || b.comp_id || q.comp_id;
@@ -403,6 +432,16 @@ async function _extractCompetitionIdFromRequest(req) {
             const ee = await db.get('SELECT e.competition_id AS competition_id FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.id=?', entryId);
             if (ee) return ee.competition_id;
         }
+        // heat_entry_id → heat_entry→heat→event
+        if (b.heat_entry_id) {
+            const he = await db.get('SELECT e.competition_id AS competition_id FROM heat_entry he JOIN heat h ON h.id=he.heat_id JOIN event e ON e.id=h.event_id WHERE he.id=?', b.heat_entry_id);
+            if (he) return he.competition_id;
+        }
+        // event_ids: [..] (소집 일괄 처리 등) → 첫 종목 기준
+        if (Array.isArray(b.event_ids) && b.event_ids.length) {
+            const ev = await db.get('SELECT competition_id FROM event WHERE id=?', b.event_ids[0]);
+            if (ev) return ev.competition_id;
+        }
         // athlete_id → athlete.competition_id
         const athId = b.athlete_id || q.athlete_id;
         if (athId) {
@@ -412,29 +451,27 @@ async function _extractCompetitionIdFromRequest(req) {
     } catch (e) { /* 추출 실패는 통과시킴 */ }
     return null;
 }
-app.use(async (req, res, next) => {
-    if (!WRITE_METHODS.has(req.method)) return next();
-    // 정적 자원이나 API 외부 요청은 통과
-    if (!req.path.startsWith('/api/')) return next();
-    // 면제 경로
-    for (const re of COMP_END_GUARD_EXEMPT) if (re.test(req.path)) return next();
-    // 키 추출 (본문 / 쿼리)
-    const key = (req.body && (req.body.admin_key || req.body.operation_key || req.body.key))
-            || (req.query && (req.query.admin_key || req.query.key));
-    // 관리자 키는 무조건 통과
-    if (key && isAdminKey(key)) return next();
-    // competition_id 추출 시도
+// 종료 잠금 판정 — 막아야 하면 응답을 보내고 true. (전역 미들웨어 + multer 래퍼가 함께 쓴다: 멀티파트는 파싱 뒤에야 본문을 볼 수 있다)
+async function _blockedByCompEnd(req, res) {
+    for (const re of COMP_END_GUARD_EXEMPT) if (re.test(req.path)) return false;
+    // 키: 본문·헤더(x-admin-key)·쿼리 — 예전엔 헤더를 보지 않아 헤더로만 키를 보내는 관리자 요청이 종료 후 막혔다
+    const key = _writeKeyOf(req);
+    if (key && isAdminKey(key)) return false;
     const compId = await _extractCompetitionIdFromRequest(req);
-    if (!compId) return next(); // 추출 못 하면 통과
+    if (!compId) return false; // 추출 못 하면 통과 (라우트별 가드에 위임)
     try {
         if (await isCompetitionEnded(compId)) {
-            return res.status(403).json({
-                error: '대회가 종료되었습니다. 관리자 권한으로만 수정할 수 있습니다.',
-                competition_ended: true,
-                competition_id: compId,
-            });
+            res.status(403).json({ error: '대회가 종료되었습니다. 관리자 권한으로만 수정할 수 있습니다.', competition_ended: true, competition_id: compId });
+            return true;
         }
     } catch (e) { /* 가드 실패 시 통과 (가용성 우선) */ }
+    return false;
+}
+app.use(async (req, res, next) => {
+    if (!WRITE_METHODS.has(req.method)) return next();
+    if (!req.path.startsWith('/api/')) return next();
+    if (/^multipart\/form-data/i.test(req.headers['content-type'] || '')) return next();   // multer 래퍼에서 검사
+    if (await _blockedByCompEnd(req, res)) return;
     next();
 });
 
@@ -2626,7 +2663,7 @@ app.post('/api/admin/verify', authLimiter, async (req, res) => {
 // COMPETITIONS CRUD — lib/routes/competitions.js 로 추출
 // ============================================================
 require("./lib/routes/competitions")(app, {
-    db, isAdminKey, isOperationKey, isAdminOrManager, opLog, broadcastSSE, kstNow
+    db, isAdminKey, isOperationKey, isAdminOrManager, opLog, broadcastSSE, kstNow, performBackup
 });
 
 
@@ -2952,12 +2989,15 @@ require("./lib/routes/combined_scores")(app, {
 // ============================================================
 app.get('/api/barcode/:code', async (req, res) => {
     const raw = req.params.code.trim();
+    // ?competition_id= 를 주면 그 대회 선수만 본다 — 대회가 여러 개면 같은 배번이 다른 대회 선수로 잡히기 때문
+    const _scope = req.query.competition_id ? Number(req.query.competition_id) : null;
+    const _one = (col, v, extra = '') => _scope ? db.get(`SELECT * FROM athlete WHERE ${col}=?${extra} AND competition_id=?`, v, _scope) : db.get(`SELECT * FROM athlete WHERE ${col}=?${extra}`, v);
 
     // W/w prefix → female athlete by bib
     const wMatch = raw.match(/^[Ww][-]?(\d+)$/);
     if (wMatch) {
         const bibNum = wMatch[1].replace(/^0+/, '') || '0';
-        const a = await db.get("SELECT * FROM athlete WHERE bib_number=? AND gender='F'", bibNum);
+        const a = await _one('bib_number', bibNum, " AND gender='F'");
         if (!a) return res.status(404).json({ error: 'Barcode not found' });
         return res.json(a);
     }
@@ -2975,12 +3015,12 @@ app.get('/api/barcode/:code', async (req, res) => {
     }
     let a = null;
     for (const v of variants) {
-        a = await db.get('SELECT * FROM athlete WHERE barcode=?', v);
+        a = await _one('barcode', v);
         if (a) break;
     }
     if (!a) {
         for (const v of variants) {
-            a = await db.get('SELECT * FROM athlete WHERE bib_number=?', v);
+            a = await _one('bib_number', v);
             if (a) break;
         }
     }
@@ -3222,7 +3262,7 @@ app.post('/api/events/:id/complete', async (req, res) => {
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
     if (forced || noRecords) opLog(`${event.name} ${roundL} 강제 완료 (${forced ? '진행중 아님: ' + event.round_status : ''}${forced && noRecords ? ', ' : ''}${noRecords ? '기록 없음' : ''}) - ${judge_name}`, 'completion', judge_name, event.competition_id);
     // 관심 종목 알림 — 경기완료(결과 확정)
-    notifyEventInterest(event, { kind: 'result', title: `${gL} ${event.name} 결과 발표`, body: `${roundL} 경기가 완료되어 결과가 올라왔습니다.` }).catch(() => {});
+    notifyEventInterest(event, { kind: 'result', title: `${gL} ${event.division ? event.division + ' ' : ''}${event.name} 결과 발표`, body: `${roundL} 경기가 완료되어 결과가 올라왔습니다.` }).catch(() => {});
     opLog(`${event.name} ${roundL} 경기완료 - ${judge_name}`, 'completion', judge_name, event.competition_id);
     res.json({ success: true, event: await db.get('SELECT * FROM event WHERE id=?', event.id) });
 });
@@ -3285,7 +3325,7 @@ app.post('/api/events/:id/callroom-complete', async (req, res) => {
     broadcastSSE('callroom_complete', { event_id: event.id, judge_name: performer, heat_id: heat_id || null });
     // 관심 종목 알림 — 소집 완료
     { const _gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
-      notifyEventInterest(event, { kind: 'callroom', title: `${_gL} ${event.name} 소집 완료`, body: `소집이 완료되어 곧 경기가 시작됩니다.` }).catch(() => {}); }
+      notifyEventInterest(event, { kind: 'callroom', title: `${_gL} ${event.division ? event.division + ' ' : ''}${event.name} 소집 완료`, body: `소집이 완료되어 곧 경기가 시작됩니다.` }).catch(() => {}); }
     opLog(`${event.name} ${roundL}${heatLabel} 소집 완료 - ${performer}`, 'callroom', performer, event.competition_id);
     res.json({ success: true, dns_auto: dnsCount });
 });
@@ -4798,6 +4838,8 @@ app.get('/api/admin/db-backup/status', (req, res) => {
             total_size_bytes: files.reduce((s, f) => s + f.size, 0),
             backup_dir: BACKUP_DIR,
             max_retention_days: BACKUP_MAX_DAYS,
+            offsite_s3: backupS3.isConfigured(),      // false 면 서버 디스크가 유일한 사본
+            final_snapshots: files.filter(f => /^final/.test(f.tag)).map(f => f.name),
             by_tag: tagStats,
             recent_10: files.slice(0, 10).map(f => ({
                 name: f.name, tag: f.tag,
@@ -4817,10 +4859,10 @@ app.get('/api/admin/db-backup/status', (req, res) => {
     }
 });
 
-app.post('/api/admin/db-backup/trigger', (req, res) => {
+app.post('/api/admin/db-backup/trigger', async (req, res) => {
     if (!isOperationKey(req.body.admin_key)) return res.status(403).json({ error: '운영키가 필요합니다.' });
     const tag = (req.body.tag || 'manual').replace(/[^a-z0-9]/gi, '').slice(0, 20) || 'manual';
-    const file = performBackup(tag);
+    const file = await performBackup(tag);      // async — await 가 없어 path.basename(Promise) 로 항상 500 이었다
     if (!file) return res.status(500).json({ error: '백업 생성 실패' });
     res.json({ success: true, file: path.basename(file), tag });
 });
@@ -4984,7 +5026,7 @@ app.post('/api/admin/full-backup/preview', _fullBackupUpload.single('file'), (re
 // POST /api/admin/full-backup/restore
 // ZIP 업로드 → 즉시 복원. 매우 위험.
 // confirm='RESTORE'를 명시적으로 받음. 복원 직전 자동 안전 백업 수행.
-app.post('/api/admin/full-backup/restore', _fullBackupUpload.single('file'), (req, res) => {
+app.post('/api/admin/full-backup/restore', _fullBackupUpload.single('file'), async (req, res) => {
     _applyJwtBridge(req); // multer 가 req.body 를 새로 만들므로 JWT 브리지 재주입
     if (db.isAsync) {
         try { if (req.file) fs.unlinkSync(req.file.path); } catch(_) {}
@@ -5017,7 +5059,7 @@ app.post('/api/admin/full-backup/restore', _fullBackupUpload.single('file'), (re
         let rollbackFile = null;
         try {
             try { db.raw.exec('PRAGMA wal_checkpoint(TRUNCATE);'); } catch(_) {}
-            rollbackFile = performBackup('prerestore');
+            rollbackFile = await performBackup('prerestore');   // await 누락 → 복원이 백업 완료 전에 시작될 수 있었다
             console.log('[FullRestore] 복원 전 자동 백업:', rollbackFile);
         } catch (e) {
             console.warn('[FullRestore] 자동 백업 실패(무시):', e.message);
@@ -10796,9 +10838,34 @@ function formatTimeForPDF(s) {
 app.get('/api/documents/ad-card/:compId', async (req, res) => {
     const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
-    const athletes = await db.all(`SELECT * FROM athlete WHERE competition_id=? ORDER BY ${orderByBibSql()}`, comp.id);
+    let athletes = await db.all(`SELECT * FROM athlete WHERE competition_id=? ORDER BY ${orderByBibSql()}`, comp.id);
+    // 참가 종목을 한 번에 읽는다 (선수마다 조회하지 않는다). 예선·결승처럼 같은 종목의 라운드는 한 줄로 합친다.
+    const _entryRows = await db.all(`
+        SELECT ee.athlete_id, e.id AS event_id, e.name, e.category FROM event_entry ee
+        JOIN event e ON e.id = ee.event_id
+        WHERE e.competition_id = ? AND e.parent_event_id IS NULL
+        ORDER BY e.sort_order, e.id`, comp.id);
+    const _eventsOf = new Map();
+    for (const r of _entryRows) { if (!_eventsOf.has(r.athlete_id)) _eventsOf.set(r.athlete_id, []); _eventsOf.get(r.athlete_id).push(r); }
+    // 계주 팀은 athlete 테이블에 '가상 선수'로 들어 있다 — 사람에게 주는 ID카드 대상이 아니다
+    const _isRelayTeam = a => /^RELAY_/.test(a.barcode || '') || ((_eventsOf.get(a.id) || []).length > 0 && (_eventsOf.get(a.id) || []).every(e => e.category === 'relay') && a.name === a.team);
+    athletes = athletes.filter(a => !_isRelayTeam(a));
+    // 필터: ?team= / ?gender=M|F / ?event_id= / ?athlete_ids=1,2,3 — 추가 등록·분실 재발급 때 전체를 다시 뽑지 않도록
+    if (req.query.team) athletes = athletes.filter(a => (a.team || '') === String(req.query.team));
+    if (req.query.gender) athletes = athletes.filter(a => a.gender === String(req.query.gender).toUpperCase());
+    if (req.query.event_id) { const eid = Number(req.query.event_id); athletes = athletes.filter(a => (_eventsOf.get(a.id) || []).some(e => e.event_id === eid)); }
+    if (req.query.athlete_ids) { const ids = new Set(String(req.query.athlete_ids).split(',').map(Number)); athletes = athletes.filter(a => ids.has(a.id)); }
     if (athletes.length === 0) return res.status(404).json({ error: 'No athletes found' });
     const tpl = (await getDocTemplate(comp.id)).ad_card;
+    // 바코드는 소집실 스캔에 쓰인다. 설정 화면이 없어 저장값(false)은 사용자의 선택이 아니므로 기본으로 넣고, ?barcode=0 일 때만 뺀다.
+    const showBarcode = String(req.query.barcode || '') !== '0';
+    const barcodeValueOf = a => {
+        const bc = String(a.barcode || '').trim();
+        if (bc && code128.encode(bc)) return bc;
+        const bib = String(a.bib_number || '').trim();
+        if (!bib || !code128.encode(bib)) return '';
+        return a.gender === 'F' ? `W${bib}` : bib;      // 남녀 배번이 겹치는 대회가 있어 여자는 W 접두(소집실 스캔 규칙과 동일)
+    };
 
     const cardsPerPage = tpl.cards_per_page || 4;
     const bibSize = tpl.bib_font_size || 48;
@@ -10847,7 +10914,7 @@ app.get('/api/documents/ad-card/:compId', async (req, res) => {
 
         // Competition name on band
         pdfFont(doc, true).fontSize(cardsPerPage === 1 ? 12 : 8).fillColor('#fff');
-        doc.text(comp.name, x + 10, y + 6, { width: CARD_W - 20, align: 'center' });
+        doc.text(comp.name, x + 10, y + 6, { width: CARD_W - 20, align: 'center', height: cardsPerPage === 1 ? 16 : 12, ellipsis: true });
         pdfFont(doc, false).fontSize(cardsPerPage === 1 ? 8 : 6).fillColor('#fff');
         doc.text('ACCREDITATION / AD CARD', x + 10, y + (cardsPerPage === 1 ? 26 : 22), { width: CARD_W - 20, align: 'center' });
 
@@ -10865,14 +10932,17 @@ app.get('/api/documents/ad-card/:compId', async (req, res) => {
         // Name (conditional)
         if (tpl.show_name !== false) {
             pdfFont(doc, true).fontSize(nameSize).fillColor('#333');
-            doc.text(athlete.name || '', centerX, contentY, { width: contentW, align: 'center' });
+            // 긴 이름(외국 선수 등)은 잘라내지 않고 글자를 줄여 한 줄에 맞춘다
+            let _ns = nameSize;
+            while (_ns > 9 && doc.widthOfString(athlete.name || '') > contentW) { _ns -= 1; doc.fontSize(_ns); }
+            doc.text(athlete.name || '', centerX, contentY + (nameSize - _ns) / 2, { width: contentW, align: 'center', height: _ns + 6, ellipsis: true });
             contentY += nameSize + 10;
         }
 
         // Team (conditional)
         if (tpl.show_team !== false) {
             pdfFont(doc, false).fontSize(cardsPerPage === 1 ? 14 : 11).fillColor('#666');
-            doc.text(athlete.team || '', centerX, contentY, { width: contentW, align: 'center' });
+            doc.text(athlete.team || '', centerX, contentY, { width: contentW, align: 'center', height: cardsPerPage === 1 ? 20 : 15, ellipsis: true });
             contentY += (cardsPerPage === 1 ? 24 : 18);
         }
 
@@ -10886,12 +10956,8 @@ app.get('/api/documents/ad-card/:compId', async (req, res) => {
 
         // Events enrolled (conditional)
         if (tpl.show_events !== false) {
-            const events = await db.all(`
-                SELECT e.name, e.gender, e.round_type FROM event_entry ee
-                JOIN event e ON e.id = ee.event_id
-                WHERE ee.athlete_id = ? AND e.competition_id = ? AND e.parent_event_id IS NULL
-                ORDER BY e.sort_order
-            `, athlete.id, comp.id);
+            const _seen = new Set();
+            const events = (_eventsOf.get(athlete.id) || []).filter(e => !_seen.has(e.name) && _seen.add(e.name));
 
             contentY += 5;
             pdfFont(doc, true).fontSize(7).fillColor('#999');
@@ -10908,13 +10974,14 @@ app.get('/api/documents/ad-card/:compId', async (req, res) => {
             }
         }
 
-        // Barcode placeholder (conditional)
-        if (tpl.show_barcode) {
-            const barcodeY = y + CARD_H - 55;
-            pdfFont(doc, false).fontSize(7).fillColor('#666');
-            doc.text('|||||||||||||||||||||||', centerX, barcodeY, { width: contentW, align: 'center', characterSpacing: 2 });
-            pdfFont(doc, false).fontSize(6).fillColor('#888');
-            doc.text(athlete.barcode || athlete.bib_number || '', centerX, barcodeY + 12, { width: contentW, align: 'center' });
+        // 바코드 (Code 128) — 소집실 스캐너가 읽는 값: 등록된 바코드, 없으면 배번(여자는 W 접두)
+        if (showBarcode) {
+            const bcVal = barcodeValueOf(athlete);
+            const barcodeY = y + CARD_H - (cardsPerPage === 1 ? 110 : 80);
+            if (bcVal && code128.drawPdf(doc, bcVal, centerX, barcodeY, { width: contentW, height: cardsPerPage === 1 ? 44 : 28 })) {
+                pdfFont(doc, false).fontSize(cardsPerPage === 1 ? 9 : 7).fillColor('#555');
+                doc.text(bcVal, centerX, barcodeY + (cardsPerPage === 1 ? 48 : 31), { width: contentW, align: 'center' });
+            }
         }
 
         // Footer with comp venue & dates

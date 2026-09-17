@@ -77,13 +77,18 @@
     // 관심 종목(즐겨찾기)을 서버에 동기화 — 토큰이 있을 때만
     function syncFavorites() {
         if (!_token) return;
+        // 즐겨찾기 기능이 없는 화면(관리자 등)에서는 동기화하지 않는다 — 예전엔 빈 목록을 보내 그 기기의 관심 종목을 지웠다
+        if (typeof window.getFavorites !== 'function') return;
         var keys = [];
-        try { if (window.getFavorites) keys = window.getFavorites() || []; } catch (e) {}
+        try { keys = window.getFavorites() || []; } catch (e) { return; }
         var compId = currentCompId();
+        // 바뀐 게 없으면 보내지 않는다 (페이지를 열 때마다 서버 DB 에 삭제+삽입이 일어나 기록 입력과 쓰기 경합을 했다)
+        var sig = _token.slice(-16) + '|' + (compId || '') + '|' + keys.slice().sort().join(',');
+        try { if (localStorage.getItem('pr_push_fav_sig') === sig) return; } catch (e) {}
         fetch('/api/push/interests', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: _token, competition_id: compId, keys: keys })
-        }).catch(function () {});
+        }).then(function (r) { if (r && r.ok) { try { localStorage.setItem('pr_push_fav_sig', sig); } catch (e) {} } }).catch(function () {});
     }
 
     // 버튼에서 호출 — 권한 요청 포함. 결과를 alert로 명확히 보여줌(모바일 디버깅).
