@@ -638,7 +638,8 @@
                         A열: <code>성별(남/여/혼성)</code> | B열: <code>종목</code> | C열: <code>라운드(예선/결승)</code><br>
                         D열: <code>조</code> | E열: <code>그룹(A/B)</code> — 5000m/10000m만 해당<br>
                         F열: <code>순서(레인)</code> | G열: <code>배번</code> | H열: <code>성명</code> | I열: <code>소속</code><br>
-                        <span style="color:#6b7280;">릴레이: 배번 비우고 성명에 팀명 입력 | 배번 비워두면 NULL 저장 (자동 배정 없음)</span>
+                        <span style="color:#6b7280;">릴레이: 배번 비우고 성명에 팀명 입력 | 배번 비워두면 NULL 저장 (자동 배정 없음)</span><br>
+                        <span style="color:#0e7c66;font-weight:600;">연맹에서 받은 '데일리 조편성' 원본(▣ 종목 머리글이 있는 엑셀)은 고치지 않고 그대로 올려도 됩니다 — 자동으로 이 양식으로 바꿔 미리보기를 보여줍니다.</span>
                     </div>
                     <div style="display:flex;flex-direction:column;gap:12px;">
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -5429,7 +5430,7 @@ POST /api/external/event-result-link/batch<br>
                 // 라운드 자동 병합 경고 표시
                 if (data.mergeWarnings && data.mergeWarnings.length > 0) {
                     html += `<div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:6px;padding:10px 14px;margin-bottom:14px;">`;
-                    html += `<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 라운드 자동 보정 (엑셀 입력 오류 감지)</div>`;
+                    html += `<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ${data.sourceFormat === 'federation_daily' ? '연맹 데일리 자동 변환 · 확인할 내용' : '라운드 자동 보정 (엑셀 입력 오류 감지)'}</div>`;
                     for (const w of data.mergeWarnings) {
                         html += `<div style="font-size:11px;color:#78350f;margin-bottom:3px;">• ${w}</div>`;
                     }

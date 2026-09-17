@@ -6259,13 +6259,21 @@ async function findHeatAssignmentEvent(competition_id, group) {
 }
 
 // Parse heat assignment Excel: returns grouped events
-function parseHeatAssignmentExcel(filePath) {
+//   roster(선택): 그 대회 선수 목록 — 연맹 데일리 양식(▣ 섹션형)을 표로 바꿀 때 성명·소속을 명단 기준으로 맞춘다
+function parseHeatAssignmentExcel(filePath, roster) {
     const wb = XLSX.readFile(filePath);
     // Try to find sheet named '조편성', otherwise use first sheet
     const sheetName = wb.SheetNames.find(n => n.includes('조편성')) || wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-    if (rows.length < 2) throw new Error('데이터가 없습니다.');
+    let rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    // 연맹 '데일리 조편성' 원본(▣ 섹션형)을 그대로 올린 경우 → 표준 표로 변환해서 아래 흐름을 그대로 탄다
+    let _fedDaily = null;
+    {
+        const asText = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+        _fedDaily = require('./lib/federationDaily').convertIfFederationDaily(asText, roster || []);
+        if (_fedDaily) rows = _fedDaily.aoa;
+    }
+    if (rows.length < 2) throw new Error(_fedDaily ? '연맹 데일리 양식으로 인식했지만 선수 행을 찾지 못했습니다. (▣ 종목 머리글과 레인·번호·성명·소속 열을 확인하세요)' : '데이터가 없습니다.');
 
     // Detect headers
     const headers = rows[0].map(h => String(h || '').trim());
@@ -6392,7 +6400,10 @@ function parseHeatAssignmentExcel(filePath) {
         }
     }
 
-    return { eventGroups, totalRows: dataRows.length, sheetName, mergeWarnings };
+    if (_fedDaily) {
+        mergeWarnings.unshift(`연맹 데일리 양식을 자동 변환했습니다: ${_fedDaily.eventCount}개 종목 · ${_fedDaily.rowCount}행`, ..._fedDaily.notes.map(n => '[데일리] ' + n));
+    }
+    return { eventGroups, totalRows: dataRows.length, sheetName, mergeWarnings, sourceFormat: _fedDaily ? 'federation_daily' : 'table' };
 }
 
 // PREVIEW API — Compare Excel data with DB, show changes
@@ -6403,7 +6414,8 @@ app.post('/api/heat-assignment/preview', upload.single('file'), async (req, res)
     if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
 
     try {
-        const { eventGroups, totalRows, sheetName, mergeWarnings } = parseHeatAssignmentExcel(req.file.path);
+        const _roster = await db.all('SELECT name, bib_number, team, gender FROM athlete WHERE competition_id=?', competition_id);
+        const { eventGroups, totalRows, sheetName, mergeWarnings, sourceFormat } = parseHeatAssignmentExcel(req.file.path, _roster);
         
         const preview = [];
         
@@ -6600,7 +6612,8 @@ app.post('/api/heat-assignment/preview', upload.single('file'), async (req, res)
             totalRows,
             eventCount: eventGroups.size,
             preview,
-            mergeWarnings: mergeWarnings || []
+            mergeWarnings: mergeWarnings || [],
+            sourceFormat
         });
     } catch (err) {
         console.error('[Heat Assignment Preview Error]', err);
@@ -6630,7 +6643,8 @@ app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) =
             return res.status(400).json({ success: false, error: `대회를 찾을 수 없습니다 (ID: ${competition_id})` });
         }
 
-        const { eventGroups, mergeWarnings } = parseHeatAssignmentExcel(req.file.path);
+        const _roster = await db.all('SELECT name, bib_number, team, gender FROM athlete WHERE competition_id=?', competition_id);
+        const { eventGroups, mergeWarnings } = parseHeatAssignmentExcel(req.file.path, _roster);
         const stats = { updated: 0, skipped: 0, skippedUnchanged: 0, skippedHasResults: 0, notFound: 0, athletesAdded: 0, entriesCreated: 0, eventsCreated: 0 };
         let roundChangedAny = false;
 

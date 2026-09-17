@@ -255,3 +255,33 @@ describe('계주 종목명 표기 (Phase 6 용어 통일)', () => {
         for (const n of relays) expect(n).toMatch(/^4X\d+mR(\(Mixed\))?$/);
     });
 });
+
+describe('연맹 데일리 원본(▣ 섹션형)을 그대로 업로드 (Phase 5)', () => {
+    const FD = require('../../lib/federationDaily');
+    const XLSX = require('xlsx');
+    const sheet = f => { const wb = XLSX.readFile(f); return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false }); };
+    it('양식 판별: 연맹 데일리는 true, 시스템 표는 false', () => {
+        expect(FD.isFederationDaily(sheet(path.join(FX, 'pro', 'src_federation_daily_day3.xlsx')))).toBe(true);
+        expect(FD.isFederationDaily(sheet(path.join(FX, 'pro', '3_daily_day3.xlsx')))).toBe(false);
+    });
+    it('실업 3일차: A열 공백 보정 · 5000m "▣ A/▣ B" 그룹 순서 이어 매기기 · 계주 팀 행', () => {
+        const out = FD.convertIfFederationDaily(sheet(path.join(FX, 'pro', 'src_federation_daily_day3.xlsx')), []);
+        const key = r => r.slice(0, 9).map(x => String(x).trim()).join('|');
+        expect(new Set(out.aoa.slice(1).map(key))).toEqual(new Set(sheet(path.join(FX, 'pro', '3_daily_day3.xlsx')).slice(1).map(key)));
+        const g5000 = out.aoa.filter(r => r[1] === '5000m' && r[0] === '남');
+        expect(new Set(g5000.map(r => r[4]))).toEqual(new Set(['A', 'B']));
+        expect(g5000.map(r => r[5])).toEqual(g5000.map((_, i) => i + 1));          // 순서: A 1..n → B 이어서
+    });
+    for (const [key, file, std] of [['univ', 'src_federation_daily_day3.xlsx', '3_daily_day3.xlsx'], ['pro', 'src_federation_daily_day3.xlsx', '3_daily_day3.xlsx'], ['univ', 'src_federation_daily_day2.xlsx', '3_daily_day2.xlsx']]) {
+        it(`${key} ${file}: 미리보기 결과가 손으로 변환해 올렸던 파일과 같다 (동명이인 표기는 명단으로 맞춘다)`, async () => {
+            const a = await post('/api/heat-assignment/preview', { competition_id: ids[key] }, path.join(FX, key, file));
+            const b = await post('/api/heat-assignment/preview', { competition_id: ids[key] }, path.join(FX, key, std));
+            expect(a.status).toBe(200); expect(a.body.sourceFormat).toBe('federation_daily'); expect(b.body.sourceFormat).toBe('table');
+            expect(a.body.mergeWarnings[0]).toContain('연맹 데일리 양식을 자동 변환');
+            expect(a.body.eventCount).toBe(b.body.eventCount);
+            expect(a.body.totalRows).toBe(b.body.totalRows);
+            const slim = p => p.map(x => ({ n: x.eventName, g: x.gender, r: x.round, s: x.status, c: x.excelEntries, ch: (x.changes || []).length })).sort((x, y) => JSON.stringify(x).localeCompare(JSON.stringify(y)));
+            expect(slim(a.body.preview)).toEqual(slim(b.body.preview));
+        });
+    }
+});
