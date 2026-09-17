@@ -1176,6 +1176,13 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .record-dashboard { grid-template-columns: 1fr; }
 }
 
+/* 종목 목록(왼쪽 패널) 접기 — 필드 종목처럼 입력 화면이 넓어야 할 때. 상태는 기기에 저장(rec_sidebar_collapsed) */
+.record-dashboard.sb-collapsed { grid-template-columns: minmax(0, 1fr); }
+.record-dashboard.sb-collapsed .record-matrix-panel { display: none; }
+.sb-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+.sb-toggle[aria-expanded="false"] { background: var(--primary, #b79f58); color: #fff; border-color: var(--primary, #b79f58); }
+@media (max-width: 600px) { .sb-toggle .sb-toggle-label { display: none; } }
+
 /* Matrix Panel (Left) */
 .callroom-matrix-panel,
 .record-matrix-panel {

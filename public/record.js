@@ -5076,3 +5076,30 @@ function cancelPrefetchAllEvents() {
     const txt = document.getElementById('prefetch-status-text');
     if (txt) txt.textContent = '취소 중…';
 }
+
+// ============================================================
+// 종목 목록(왼쪽 패널) 접기/펼치기
+//   필드 종목은 입력 목록+키패드가 넓은 폭을 쓰므로 목록을 접어 화면을 넓힌다. 상태는 기기에 저장.
+// ============================================================
+function _applyRecordSidebar(collapsed) {
+    const dash = document.querySelector('.record-dashboard');
+    const btn = document.getElementById('sb-toggle');
+    if (!dash) return;
+    dash.classList.toggle('sb-collapsed', !!collapsed);
+    if (btn) {
+        btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        const lbl = btn.querySelector('.sb-toggle-label');
+        if (lbl) lbl.textContent = collapsed ? '종목 목록 펼치기' : '종목 목록 접기';
+    }
+}
+function toggleRecordSidebar(force) {
+    const dash = document.querySelector('.record-dashboard');
+    if (!dash) return;
+    const next = typeof force === 'boolean' ? force : !dash.classList.contains('sb-collapsed');
+    try { localStorage.setItem('rec_sidebar_collapsed', next ? '1' : '0'); } catch (e) {}
+    _applyRecordSidebar(next);
+}
+document.addEventListener('DOMContentLoaded', () => {
+    let saved = false; try { saved = localStorage.getItem('rec_sidebar_collapsed') === '1'; } catch (e) {}
+    _applyRecordSidebar(saved);
+});
