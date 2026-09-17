@@ -59,6 +59,13 @@
             isNM: best == null && elim,
         };
     }
+    /** DB 행 배열([{bar_height, attempt_number, result_mark}])에서 바로 통계를 낸다 (서버 문서 생성용) */
+    function heightStatsFromAttempts(attempts) {
+        const hd = {};
+        (attempts || []).slice().sort((a, b) => (a.bar_height - b.bar_height) || (a.attempt_number - b.attempt_number))
+            .forEach(a => { (hd[a.bar_height] = hd[a.bar_height] || []).push(a.result_mark); });
+        return heightStats(hd);
+    }
     function compareHeight(a, b) {
         if (a.best == null && b.best == null) return 0;
         if (a.best == null) return 1;
@@ -137,5 +144,5 @@
         return { Q, q, ties };
     }
 
-    return { normMark, heightStats, compareHeight, distanceStats, compareDistance, assignRanks, topNIds, autoQualify };
+    return { normMark, heightStats, heightStatsFromAttempts, compareHeight, distanceStats, compareDistance, assignRanks, topNIds, autoQualify };
 });

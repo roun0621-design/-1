@@ -10194,6 +10194,8 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                     }
                 }
             }
+            // 카운트백은 공용 규칙(public/lib/ranking.js · WA TR 26.8): '마지막으로 넘은 높이까지'의 실패 수 — 예전엔 경기 전체 실패 수로 계산했다
+            { const _hs = require('./public/lib/ranking').heightStatsFromAttempts(myAttempts); totalMisses = _hs.totalFails; missesAtBest = _hs.failsAtBest; }
             // Also check result table for status
             const results = await db.all('SELECT * FROM result WHERE heat_id=? AND event_entry_id=?', heat.id, e.event_entry_id);
             let status = results.find(r => r.status_code && r.status_code !== '')?.status_code || '';
@@ -10362,6 +10364,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
             });
 
             // Sort by best distance descending
+            athleteData.forEach(a => { a.sortedValid = (a.attempts || []).map(x => x.dist).filter(d => typeof d === 'number' && d > 0).sort((x, y) => y - x); });
             athleteData.sort((a, b) => {
                 const aS = ['DNS','DNF','DQ','NM'].includes(a.status_code);
                 const bS = ['DNS','DNF','DQ','NM'].includes(b.status_code);
@@ -10370,8 +10373,11 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                 if (a.best == null && b.best == null) return 0;
                 if (a.best == null) return 1;
                 if (b.best == null) return -1;
-                return b.best - a.best;
+                // 최고 기록이 같으면 2·3번째 기록으로 (WA TR 25.22 · public/lib/ranking.js) — 예전엔 최고 기록만 비교해 동률 순서가 임의였다
+                return require('./public/lib/ranking').compareDistance(a, b);
             });
+            // 순위: 동률이면 같은 순위, 다음 순위는 건너뜀 (예전엔 rank++ 로 무조건 1씩 증가)
+            require('./public/lib/ranking').assignRanks(athleteData.filter(a => !['DNS','DNF','DQ','NM'].includes(a.status_code)), require('./public/lib/ranking').compareDistance);
 
             // Heat label
             if (heats.length > 1) {
@@ -10420,7 +10426,7 @@ app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
                     if (hasWind) curY += 12;
                 }
                 const special = ['DNS','DNF','DQ','NM'].includes(ath.status_code);
-                if (!special && ath.best != null) rank++;
+                if (!special && ath.best != null) rank = ath.rank != null ? ath.rank : rank + 1;
 
                 // Row border
                 doc.save();
@@ -11421,6 +11427,8 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
             totalMisses += misses;
             if (attH.some(a => a.result_mark === 'O')) { bestCleared = h; missesAtBest = misses; }
           }
+          // 카운트백은 공용 규칙(public/lib/ranking.js · WA TR 26.8): '마지막으로 넘은 높이까지'의 실패 수 — 예전엔 경기 전체 실패 수로 계산했다
+          { const _hs = require('./public/lib/ranking').heightStatsFromAttempts(myAttempts); totalMisses = _hs.totalFails; missesAtBest = _hs.failsAtBest; }
           const results = await db.all('SELECT * FROM result WHERE heat_id=? AND event_entry_id=?', heat.id, e.event_entry_id);
           let status = results.find(r => r.status_code && ['DNS','DNF','DQ','NM'].includes(r.status_code))?.status_code || '';
           if (!status && e.status === 'no_show') status = 'DNS';
@@ -11490,7 +11498,7 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
               r.status_code === 'X' || r.status_code === 'FOUL' || r.distance_meters === 0
             );
             if (!status && best === null && allFoulRecs) status = 'NM';
-            allEntries.push({ ...e, best, bestWind, status_code: status });
+            allEntries.push({ ...e, best, bestWind, status_code: status, sortedValid: recs.filter(r => r.distance_meters != null && r.distance_meters > 0 && r.status_code !== 'X' && r.status_code !== 'FOUL').map(r => r.distance_meters).sort((x, y) => y - x) });
           }
         }
 
@@ -11500,7 +11508,8 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           if (aS && !bS) return 1; if (!aS && bS) return -1;
           if (a.best == null && b.best == null) return 0;
           if (a.best == null) return 1; if (b.best == null) return -1;
-          return b.best - a.best;
+          // 최고 기록이 같으면 2·3번째 기록으로 (WA TR 25.22 · public/lib/ranking.js) — 예전엔 최고 기록만 비교해 동률 순서가 임의였다
+          return require('./public/lib/ranking').compareDistance(a, b);
         });
 
         // 투척+도약 모두 "15m09" 형식 사용 (fmtJumpCm은 cm정수 "1509"로 변환되어 오류)
