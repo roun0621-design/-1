@@ -917,7 +917,7 @@ async function showRelayMembers(teamName) {
         window._relayAvailableAthletes = availableAthletes;
         window._relayEventEntryId = eventEntryId;
         window._relayTeamName = teamName;
-    } catch (err) { alert('선수 명단 로드 실패: ' + (err.error || err.message)); }
+    } catch (err) { uiAlert('선수 명단 로드 실패: ' + (err.error || err.message)); }
 }
 
 function _renderRelayAddList(list, eventEntryId, teamName) {
@@ -973,7 +973,7 @@ async function applyRelayReorder(teamName) {
         // Refresh modal to show new order
         document.getElementById('relay-members-modal')?.remove();
         await showRelayMembers(teamName);
-    } catch(e) { alert('순서 변경 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('순서 변경 실패: ' + (e.error || e.message)); }
 }
 
 async function addRelayMemberToTeam(eventEntryId, athleteId, teamName) {
@@ -987,7 +987,7 @@ async function addRelayMemberToTeam(eventEntryId, athleteId, teamName) {
         // Refresh modal only (not the background)
         document.getElementById('relay-members-modal')?.remove();
         await showRelayMembers(teamName);
-    } catch(e) { alert('추가 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('추가 실패: ' + (e.error || e.message)); }
 }
 
 async function removeRelayMemberFromTeam(eventEntryId, athleteId, teamName) {
@@ -998,7 +998,7 @@ async function removeRelayMemberFromTeam(eventEntryId, athleteId, teamName) {
         // Refresh modal only (background refreshes on close)
         document.getElementById('relay-members-modal')?.remove();
         await showRelayMembers(teamName);
-    } catch(e) { alert('제거 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('제거 실패: ' + (e.error || e.message)); }
 }
 
 // changeRelayMemberOrder is no longer called on individual input change.
@@ -1010,7 +1010,7 @@ async function changeRelayMemberOrder(eventEntryId, athleteId, newLeg, teamName)
     try {
         await api('PUT', '/api/relay-members/order', { event_entry_id: eventEntryId, members: [{ athlete_id: athleteId, leg_order: leg }] });
         showToast(`주자 순서 → ${leg}번으로 변경`);
-    } catch(e) { alert('순서 변경 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('순서 변경 실패: ' + (e.error || e.message)); }
 }
 
 // ============================================================
@@ -1081,7 +1081,7 @@ async function doAddAthlete(athleteId) {
         const row = document.getElementById(`add-ath-row-${athleteId}`);
         if (row) { row.style.opacity = '0.3'; row.querySelector('button').disabled = true; row.querySelector('button').textContent = '추가됨'; }
         await loadCallroomHeatData();
-    } catch (e) { alert('추가 실패: ' + (e.error || '')); }
+    } catch (e) { uiAlert('추가 실패: ' + (e.error || '')); }
 }
 
 // ============================================================
@@ -1401,7 +1401,7 @@ async function printCallroom(mode) {
 // ============================================================
 async function exportCallroomExcel() {
     if (!crSelectedEvent || !crHeats || crHeats.length === 0) return;
-    if (typeof XLSX === 'undefined') { alert('엑셀 라이브러리를 불러올 수 없습니다.'); return; }
+    if (typeof XLSX === 'undefined') { uiAlert('엑셀 라이브러리를 불러올 수 없습니다.'); return; }
 
     const evt = crSelectedEvent;
     const gL = { M: '남자', F: '여자', X: '혼성' }[evt.gender] || '';
@@ -1546,7 +1546,7 @@ async function exportCallroomExcel() {
 function openBatchCallroom() {
     if (document.getElementById('batch-callroom-modal')) return;
     const evts = (allEvents || []).filter(e => !e.parent_event_id);
-    if (evts.length === 0) { alert('등록된 종목이 없습니다.'); return; }
+    if (evts.length === 0) { uiAlert('등록된 종목이 없습니다.'); return; }
     const gL = g => g === 'M' ? '남' : g === 'F' ? '여' : '혼성';
     const rL = r => ({ preliminary: '예선', semifinal: '준결승', final: '결승' }[r] || r);
     const stat = e => e.round_status === 'completed'
@@ -1612,14 +1612,14 @@ function bcSelectAll(v) {
 function bcCount() { const n = document.querySelectorAll('#batch-callroom-modal .bc-evt:checked').length; const el = document.getElementById('bc-count'); if (el) el.textContent = n + '개 선택'; }
 async function bcRun(mode) {
     const ids = [...document.querySelectorAll('#batch-callroom-modal .bc-evt:checked')].map(cb => parseInt(cb.value));
-    if (!ids.length) { alert('종목을 선택하세요.'); return; }
+    if (!ids.length) { uiAlert('종목을 선택하세요.'); return; }
     const judge = (document.getElementById('bc-judge') && document.getElementById('bc-judge').value || '').trim();
     const lab = mode === 'complete' ? '소집완료' : '소집 되돌리기';
     if (!confirm(`선택한 ${ids.length}개 종목을 일괄 ${lab} 하시겠습니까?`)) return;
     const url = mode === 'complete' ? '/api/events/callroom-complete-batch' : '/api/events/callroom-revert-batch';
     try {
         const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_ids: ids, judge_name: judge }) }).then(x => x.json());
-        if (r.error) { alert(r.error); return; }
+        if (r.error) { uiAlert(r.error); return; }
         const cnt = mode === 'complete' ? r.completed : r.reverted;
         const blk = (r.skipped || r.blocked || []);
         let msg = `${cnt}개 종목 ${lab} 완료`;
@@ -1627,9 +1627,9 @@ async function bcRun(mode) {
             const reasons = { not_found: '없음', completed: '경기완료', not_in_progress: '진행중 아님', has_results: '기록있음' };
             msg += `\n제외 ${blk.length}개 (${blk.map(b => reasons[b.reason] || b.reason).join(', ')})`;
         }
-        alert(msg);
+        uiAlert(msg);
         closeBatchCallroom();
         allEvents = await API.getAllEvents(getCompetitionId());
         renderMatrix();
-    } catch (e) { alert('오류: ' + e.message); }
+    } catch (e) { uiAlert('오류: ' + e.message); }
 }

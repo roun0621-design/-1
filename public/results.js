@@ -319,7 +319,7 @@ async function downloadAllGroups(format) {
     if (!rSelectedEvent) return;
     try {
         const data = await API.getFullResults(rSelectedEvent.id);
-        if (!data || !data.heats || data.heats.length === 0) { alert('데이터가 없습니다.'); return; }
+        if (!data || !data.heats || data.heats.length === 0) { uiAlert('데이터가 없습니다.'); return; }
 
         const evt = data.event;
         const gL = { M: '남자', F: '여자', X: '혼성' }[evt.gender] || '';
@@ -365,7 +365,7 @@ async function downloadAllGroups(format) {
             w.document.write(`<html><head><title>${fileName}</title></head><body>${allHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
             w.document.close();
         }
-    } catch (e) { console.error(e); alert('다운로드 실패'); }
+    } catch (e) { console.error(e); uiAlert('다운로드 실패'); }
 }
 
 function buildHeatRows(evt, heat) {
@@ -1393,12 +1393,12 @@ function exportExcel() {
 async function exportPNG() {
     const el = document.getElementById('results-content');
     if (!el) return;
-    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const a = document.createElement('a'); a.download = `${rSelectedEvent ? rSelectedEvent.name : 'results'}.png`; a.href = c.toDataURL('image/png'); a.click(); } catch (e) { alert('이미지 생성 실패'); }
+    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const a = document.createElement('a'); a.download = `${rSelectedEvent ? rSelectedEvent.name : 'results'}.png`; a.href = c.toDataURL('image/png'); a.click(); } catch (e) { uiAlert('이미지 생성 실패'); }
 }
 async function exportPDF() {
     const el = document.getElementById('results-content');
     if (!el) return;
-    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const w = window.open('', '_blank'); w.document.write(`<html><head><title>Results</title></head><body style="margin:0;padding:20px;"><img src="${c.toDataURL('image/png')}" style="max-width:100%;"><script>window.onload=function(){window.print();}<\/script></body></html>`); w.document.close(); } catch (e) { alert('PDF 생성 실패'); }
+    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const w = window.open('', '_blank'); w.document.write(`<html><head><title>Results</title></head><body style="margin:0;padding:20px;"><img src="${c.toDataURL('image/png')}" style="max-width:100%;"><script>window.onload=function(){window.print();}<\/script></body></html>`); w.document.close(); } catch (e) { uiAlert('PDF 생성 실패'); }
 }
 
 // IO 1080x1350 PNG generator removed — was 882 lines of unreachable code.

@@ -342,7 +342,7 @@
     </div>
 
     <script src="/i18n.js?v=3"></script>
-    <script src="common.js?v=100"></script>
+    <script src="common.js?v=101"></script>
     <script src="/lib/auth-client.js?v=1"></script>
     <script>
         renderPageNav('home');
@@ -560,7 +560,7 @@
             try {
                 await API.setCompetitionHomeVisibility(id, hide ? 'hidden' : 'auto', currentKey);
                 await _afterVisibilityChange();
-            } catch (e) { alert('숨김 변경 실패: ' + (e.message || e)); }
+            } catch (e) { uiAlert('숨김 변경 실패: ' + (e.message || e)); }
         }
         async function hideFed(ev, code, hide) {
             if (ev) { ev.stopPropagation(); ev.preventDefault(); }
@@ -570,7 +570,7 @@
             try {
                 await API.setFederationHidden(f.id, hide, currentKey);
                 await _afterVisibilityChange();
-            } catch (e) { alert('연맹 숨김 변경 실패: ' + (e.message || e)); }
+            } catch (e) { uiAlert('연맹 숨김 변경 실패: ' + (e.message || e)); }
         }
 
         function renderCompsByYear() {
@@ -879,12 +879,12 @@
             const mode = document.getElementById('new-comp-mode').value;
             const division_type = document.getElementById('new-comp-division').value;
             const video_url = document.getElementById('new-comp-video').value.trim();
-            if (!name || !start || !end) { alert('대회명, 시작일, 종료일은 필수입니다.'); return; }
+            if (!name || !start || !end) { uiAlert('대회명, 시작일, 종료일은 필수입니다.'); return; }
             try {
                 await API.createCompetition({ name, start_date: start, end_date: end, venue, federation, mode, division_type, video_url }, currentKey);
                 closeAddComp();
                 await loadCompetitions();
-            } catch (e) { alert(e.error || '생성 실패'); }
+            } catch (e) { uiAlert(e.error || '생성 실패'); }
         }
         document.getElementById('add-comp-modal').addEventListener('click', e => { if (e.target === document.getElementById('add-comp-modal')) closeAddComp(); });
 

@@ -882,9 +882,9 @@
                             <span id="fc-summary" class="t-sm"></span>
                         </div>
                         <div id="fc-preview-list"></div>
-                        <div style="margin-top:12px;display:flex;gap:8px;">
-                            <button class="btn btn-primary" id="fc-import-btn" onclick="fcImport()">기록 저장 실행</button>
+                        <div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px;">
                             <button class="btn btn-outline" onclick="fcCancel()">취소</button>
+                            <button class="btn btn-primary" id="fc-import-btn" onclick="fcImport()">기록 저장 실행</button>
                         </div>
                     </div>
                     <div id="fc-result" style="display:none;margin-top:16px;"></div>
@@ -2792,7 +2792,7 @@ POST /api/external/event-result-link/batch<br>
 
     <script src="lib/xlsx.full.min.js"></script>
     <script src="/lib/auth-client.js?v=1"></script>
-    <script src="common.js?v=100"></script>
+    <script src="common.js?v=101"></script>
     <script>
         renderPageNav('admin');
         // [정책] 종료된 대회 + 운영진(operation) → 진입 차단, dashboard 로 리다이렉트
@@ -3242,14 +3242,14 @@ POST /api/external/event-result-link/batch<br>
                 });
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) {
-                    alert('역할 변경 실패: ' + (data.error || ('HTTP ' + res.status)));
+                    uiAlert('역할 변경 실패: ' + (data.error || ('HTTP ' + res.status)));
                     await adminUsers_reload();
                     return;
                 }
                 // 색상/세션 회수 안내
                 await adminUsers_reload();
             } catch (e) {
-                alert('네트워크 오류: ' + (e.message || e));
+                uiAlert('네트워크 오류: ' + (e.message || e));
                 await adminUsers_reload();
             }
         }
@@ -3264,17 +3264,17 @@ POST /api/external/event-result-link/batch<br>
                     body: JSON.stringify({ active: nextActive })
                 });
                 const data = await res.json().catch(() => ({}));
-                if (!res.ok) { alert(action + ' 실패: ' + (data.error || ('HTTP ' + res.status))); return; }
+                if (!res.ok) { uiAlert(action + ' 실패: ' + (data.error || ('HTTP ' + res.status))); return; }
                 await adminUsers_reload();
             } catch (e) {
-                alert('네트워크 오류: ' + (e.message || e));
+                uiAlert('네트워크 오류: ' + (e.message || e));
             }
         }
 
         async function adminUsers_resetPassword(id, uname) {
             const newPw = prompt(`'${uname}' 계정의 새 비밀번호를 입력하세요 (8자 이상):`);
             if (!newPw) return;
-            if (newPw.length < 8) { alert('8자 이상이어야 합니다.'); return; }
+            if (newPw.length < 8) { uiAlert('8자 이상이어야 합니다.'); return; }
             try {
                 const res = await _adminUsersAuthFetch(`/api/admin/users/${id}`, {
                     method: 'PUT',
@@ -3282,10 +3282,10 @@ POST /api/external/event-result-link/batch<br>
                     body: JSON.stringify({ password: newPw })
                 });
                 const data = await res.json().catch(() => ({}));
-                if (!res.ok) { alert('비밀번호 재설정 실패: ' + (data.error || ('HTTP ' + res.status))); return; }
-                alert(`✓ '${uname}' 비밀번호가 재설정되었습니다.\n(해당 사용자의 모든 세션이 회수됨)`);
+                if (!res.ok) { uiAlert('비밀번호 재설정 실패: ' + (data.error || ('HTTP ' + res.status))); return; }
+                uiAlert(`✓ '${uname}' 비밀번호가 재설정되었습니다.\n(해당 사용자의 모든 세션이 회수됨)`);
             } catch (e) {
-                alert('네트워크 오류: ' + (e.message || e));
+                uiAlert('네트워크 오류: ' + (e.message || e));
             }
         }
 
@@ -3296,10 +3296,10 @@ POST /api/external/event-result-link/batch<br>
                     method: 'POST'
                 });
                 const data = await res.json().catch(() => ({}));
-                if (!res.ok) { alert('세션 회수 실패: ' + (data.error || ('HTTP ' + res.status))); return; }
-                alert(`✓ '${uname}' 의 모든 세션이 회수되었습니다.`);
+                if (!res.ok) { uiAlert('세션 회수 실패: ' + (data.error || ('HTTP ' + res.status))); return; }
+                uiAlert(`✓ '${uname}' 의 모든 세션이 회수되었습니다.`);
             } catch (e) {
-                alert('네트워크 오류: ' + (e.message || e));
+                uiAlert('네트워크 오류: ' + (e.message || e));
             }
         }
 
@@ -3785,9 +3785,9 @@ POST /api/external/event-result-link/batch<br>
                     <div class="admin-form-group"><label>바코드</label><input id="new-ath-barcode" style="width:100px;"></div>
                     <div class="admin-form-group"><label>휴대폰</label><input id="new-ath-phone" placeholder="01012345678" style="width:140px;"></div>
                 </div>
-                <div style="display:flex;gap:8px;margin-top:12px;">
-                    <button class="btn btn-primary" onclick="addAthlete()">추가</button>
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
                     <button class="btn btn-ghost" onclick="selectAthlete(_athSelectedId || 0)">취소</button>
+                    <button class="btn btn-primary" onclick="addAthlete()">추가</button>
                 </div>`;
             setTimeout(() => document.getElementById('new-ath-name')?.focus(), 100);
         }
@@ -4178,9 +4178,9 @@ POST /api/external/event-result-link/batch<br>
                     </div>
                 </div>
                 <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">* 정렬순서는 표준 육상 순서로 자동 적용됩니다. 부(Division)는 같은 종목명이라도 부별로 별도 행으로 관리됩니다.</p>
-                <div style="display:flex;gap:8px;margin-top:12px;">
-                    <button class="btn btn-primary" onclick="addEvent()">추가</button>
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
                     <button class="btn btn-ghost" onclick="closeEvtModal()">취소</button>
+                    <button class="btn btn-primary" onclick="addEvent()">추가</button>
                 </div>
             </div>`;
             setTimeout(() => document.getElementById('new-evt-name')?.focus(), 100);
@@ -5757,8 +5757,8 @@ POST /api/external/event-result-link/batch<br>
                             <div><label class="t-sm t-muted">카테고리</label>
                                 <select id="em-sub-category" style="padding:4px 8px;border:1px solid var(--gray);border-radius:4px;font-size:12px;">
                                     <option value="track">Track</option><option value="field_distance">Field 거리</option><option value="field_height">Field 높이</option></select></div>
-                            <button class="btn btn-xs btn-primary" onclick="emAddSubEvent()">추가</button>
                             <button class="btn btn-xs btn-ghost" onclick="document.getElementById('em-sub-add-form').style.display='none'">취소</button>
+                            <button class="btn btn-xs btn-primary" onclick="emAddSubEvent()">추가</button>
                         </div>
                     </div>
                     <div id="em-sub-list" style="max-height:260px;overflow-y:auto;font-size:12px;"></div>
@@ -5877,14 +5877,14 @@ POST /api/external/event-result-link/batch<br>
         async function emAddSubEvent() {
             const name = document.getElementById('em-sub-name').value.trim();
             const category = document.getElementById('em-sub-category').value;
-            if (!name) return alert('종목명을 입력하세요.');
+            if (!name) return uiAlert('종목명을 입력하세요.');
             try {
                 await api('POST', `/api/events/${_emEventId}/sub-events`, { admin_key: AK(), name, category });
                 document.getElementById('em-sub-add-form').style.display = 'none';
                 toast('세부종목 추가 완료');
                 await emLoadSubEvents(_emEventId);
                 await loadEvents();
-            } catch (e) { alert('오류: ' + (e.error || e.message)); }
+            } catch (e) { uiAlert('오류: ' + (e.error || e.message)); }
         }
         async function emUpdateSubName(parentId, subId, newName) {
             if (!newName.trim()) return;
@@ -6927,7 +6927,7 @@ POST /api/external/event-result-link/batch<br>
                 window._relayAdminEEId = eventEntryId;
                 window._relayAdminTeam = teamName;
                 window._relayAdminEventId = eventId;
-            } catch (err) { alert('선수 명단 로드 실패: ' + (err.error || err.message || err)); }
+            } catch (err) { uiAlert('선수 명단 로드 실패: ' + (err.error || err.message || err)); }
         }
 
         function _renderRelayAdminAddList(list, eeId, teamName, eventId) {
@@ -6968,7 +6968,7 @@ POST /api/external/event-result-link/batch<br>
                 document.getElementById('relay-admin-modal')?.remove();
                 await openRelayMemberModal(eeId, teamName, eventId);
                 if (_emSelectedHeatId) loadEmHeatEntries(_emSelectedHeatId);
-            } catch(e) { alert('추가 실패: ' + (e.error || e.message || e)); }
+            } catch(e) { uiAlert('추가 실패: ' + (e.error || e.message || e)); }
         }
 
         async function removeRelayAdmin(eeId, athleteId, teamName, eventId) {
@@ -6979,7 +6979,7 @@ POST /api/external/event-result-link/batch<br>
                 document.getElementById('relay-admin-modal')?.remove();
                 await openRelayMemberModal(eeId, teamName, eventId);
                 if (_emSelectedHeatId) loadEmHeatEntries(_emSelectedHeatId);
-            } catch(e) { alert('제거 실패: ' + (e.error || e.message || e)); }
+            } catch(e) { uiAlert('제거 실패: ' + (e.error || e.message || e)); }
         }
 
         async function changeRelayLegOrder(eeId, athleteId, newLeg, teamName, eventId) {
@@ -6990,7 +6990,7 @@ POST /api/external/event-result-link/batch<br>
                 toast(`주자 순서 → ${leg}번으로 변경`);
                 // Don't re-render modal — just background refresh
                 if (_emSelectedHeatId) loadEmHeatEntries(_emSelectedHeatId);
-            } catch(e) { alert('순서 변경 실패: ' + (e.error || e.message || e)); }
+            } catch(e) { uiAlert('순서 변경 실패: ' + (e.error || e.message || e)); }
         }
 
         // ============================================================
@@ -7831,11 +7831,11 @@ POST /api/external/event-result-link/batch<br>
         function jgNextStep() {
             if (_jgStep === 1) {
                 const name = document.getElementById('jg-create-name').value.trim();
-                if (!name) return alert('그룹 이름을 입력하세요.');
+                if (!name) return uiAlert('그룹 이름을 입력하세요.');
             }
             if (_jgStep === 2) {
                 const checked = document.querySelectorAll('.jg-comp-cb:checked');
-                if (checked.length < 2) return alert('대회를 2개 이상 선택하세요.');
+                if (checked.length < 2) return uiAlert('대회를 2개 이상 선택하세요.');
             }
             if (_jgStep < 3) { _jgStep++; jgUpdateStepUI(); if (_jgStep === 3) jgRenderEvents(); }
         }
@@ -7990,9 +7990,9 @@ POST /api/external/event-result-link/batch<br>
         // ── 그룹 생성
         async function jgCreateGroup() {
             const checked = [...document.querySelectorAll('.jg-evt-cb:checked')];
-            if (checked.length === 0) return alert('합동으로 묶을 종목을 선택하세요.');
+            if (checked.length === 0) return uiAlert('합동으로 묶을 종목을 선택하세요.');
             const baseName = document.getElementById('jg-create-name').value.trim();
-            if (!baseName) return alert('그룹 이름을 입력하세요.');
+            if (!baseName) return uiAlert('그룹 이름을 입력하세요.');
             const useSuffix = checked.length > 1;
             let createdCount = 0;
             try {
@@ -8007,7 +8007,7 @@ POST /api/external/event-result-link/batch<br>
                 jgCloseModal();
                 toast(`${createdCount}개 합동 그룹 생성 완료`);
                 jgLoadGroups();
-            } catch(e) { alert('오류: ' + (e.error || e.message)); }
+            } catch(e) { uiAlert('오류: ' + (e.error || e.message)); }
         }
 
         async function jgUpdateKey(groupId, newKey) {
@@ -8134,7 +8134,7 @@ POST /api/external/event-result-link/batch<br>
                     dry_run: true,
                 });
             } catch(e) {
-                alert('병합 미리보기 실패: ' + (e.error || e.message));
+                uiAlert('병합 미리보기 실패: ' + (e.error || e.message));
                 return;
             }
             const s = preview.summary;
@@ -8162,7 +8162,7 @@ POST /api/external/event-result-link/batch<br>
                 jgShowDupModal();  // 진단 모달 새로고침
                 jgLoadGroups();    // 합동 그룹 목록도 새로고침
             } catch(e) {
-                alert('병합 실패: ' + (e.error || e.message));
+                uiAlert('병합 실패: ' + (e.error || e.message));
             }
         }
         async function jgRunCleanup() {
@@ -8179,7 +8179,7 @@ POST /api/external/event-result-link/batch<br>
                 jgShowDupModal();
                 jgLoadGroups();
             } catch(e) {
-                alert('정리 실패: ' + (e.error || e.message));
+                uiAlert('정리 실패: ' + (e.error || e.message));
             }
         }
 
@@ -8255,13 +8255,13 @@ POST /api/external/event-result-link/batch<br>
         }
         async function jgSubmitAddMembers() {
             const ids = [...document.querySelectorAll('.jg-addmem-cb:checked')].map(cb => parseInt(cb.value));
-            if (ids.length === 0) return alert('추가할 종목을 선택하세요.');
+            if (ids.length === 0) return uiAlert('추가할 종목을 선택하세요.');
             try {
                 await api('POST', `/api/joint-groups/${_jgCurrentGroupId}/members`, { admin_key: AK(), event_ids: ids });
                 document.getElementById('jg-addmem-modal').style.display = 'none';
                 toast(`${ids.length}개 종목 추가 완료`);
                 jgLoadGroups();
-            } catch(e) { alert('추가 실패: ' + (e.error || e.message)); }
+            } catch(e) { uiAlert('추가 실패: ' + (e.error || e.message)); }
         }
 
         // ── Helpers: HTML escape
@@ -10350,7 +10350,7 @@ POST /api/external/event-result-link/batch<br>
                     setTimeout(() => { try { loadMatchingDiagnostic(); } catch(e) {} }, 500);
                 }
             } catch (e) {
-                alert('정규화 실패: ' + (e.message || String(e)));
+                uiAlert('정규화 실패: ' + (e.message || String(e)));
             }
         }
         function _showNormalizeResult(data) {
@@ -11451,7 +11451,7 @@ POST /api/external/event-result-link/batch<br>
                 cert_url: 'https://pace-rise-node.com/c/(자동생성링크)'
             };
             const out = tpl.replace(/\{(\w+)\}/g, (m, k) => sample[k] !== undefined ? sample[k] : '');
-            alert('샘플 변환 결과:\n\n' + out);
+            uiAlert('샘플 변환 결과:\n\n' + out);
         }
 
         function updateSmsSendMeta() {
@@ -11759,6 +11759,6 @@ POST /api/external/event-result-link/batch<br>
             }
         }
     </script>
-    <script src="push.js?v=11"></script>
+    <script src="push.js?v=12"></script>
 </body>
 </html>

@@ -1676,8 +1676,8 @@ function renderFieldDistanceContent() {
 // ============================================================
 function openFieldCardUpload() {
     const evt = state.selectedEvent, hid = state.heatId;
-    if (!evt || !hid) { alert('종목과 조를 먼저 선택하세요.'); return; }
-    if (typeof FieldCardUpload === 'undefined') { alert('업로드 모듈이 로드되지 않았습니다. 페이지를 새로고침해 주세요.'); return; }
+    if (!evt || !hid) { uiAlert('종목과 조를 먼저 선택하세요.'); return; }
+    if (typeof FieldCardUpload === 'undefined') { uiAlert('업로드 모듈이 로드되지 않았습니다. 페이지를 새로고침해 주세요.'); return; }
     let key = localStorage.getItem('pace_admin_key') || sessionStorage.getItem('admin_key') || localStorage.getItem('admin_key')
         || localStorage.getItem('op_key') || localStorage.getItem('accessKey') || '';
     if (!key) { key = prompt('운영키 또는 관리자 키를 입력하세요'); if (!key) return; localStorage.setItem('op_key', key); }
@@ -2281,7 +2281,7 @@ async function deleteBarHeight(barHeight) {
                     } catch (err) { console.warn('[joint] delete-bar failed for', m.event_id, err); }
                 }
             }
-        } catch (err) { alert('삭제 실패: ' + (err.error || '')); return; }
+        } catch (err) { uiAlert('삭제 실패: ' + (err.error || '')); return; }
     }
     // Remove from local bar list
     state._heightBarList = state._heightBarList.filter(x => x !== h);
@@ -2997,7 +2997,7 @@ async function revertCombinedComplete() {
                 await renderCombinedDetail(freshEvt);
                 showToast('이미 되돌려진 상태입니다.', 'info', 2000);
             } else {
-                alert(e.error || '완료 취소 실패: 관리자 키를 확인하세요.');
+                uiAlert(e.error || '완료 취소 실패: 관리자 키를 확인하세요.');
             }
         }
     });
@@ -3912,7 +3912,7 @@ async function _cSubHeightDeleteBar(barHeight) {
             const key = localStorage.getItem('op_key') || prompt('운영키를 입력하세요');
             if (!key) return;
             await api('POST', '/api/height-attempts/delete-bar', { heat_id: _cSubHeightData.heatId, bar_height: h, admin_key: key });
-        } catch (err) { alert('삭제 실패: ' + (err.error || '')); return; }
+        } catch (err) { uiAlert('삭제 실패: ' + (err.error || '')); return; }
     }
     _cSubHeightBarList = _cSubHeightBarList.filter(x => x !== h);
     _cSubHeightData.attempts = await API.getHeightAttempts(_cSubHeightData.heatId);
@@ -4350,7 +4350,7 @@ function toggleQual(entryId) {
 
 async function approveQualification() {
     const qualified = _qualAllRows.filter(r => r.qual === 'Q' || r.qual === 'q');
-    if (qualified.length === 0) { alert('진출자가 선택되지 않았습니다. Q 또는 q를 지정하세요.'); return; }
+    if (qualified.length === 0) { uiAlert('진출자가 선택되지 않았습니다. Q 또는 q를 지정하세요.'); return; }
     const groupCount = parseInt(document.getElementById('final-group-count')?.value) || 1;
     if (!confirm(`결승 ${groupCount}개 조로 ${qualified.length}명을 확정하고 결승 라운드를 생성합니다.\nWA 규정에 따라 서펜타인 시딩 및 레인 배정이 적용됩니다.\n계속하시겠습니까?`)) return;
 
@@ -4371,9 +4371,9 @@ async function approveQualification() {
         if (res.final_event_id) {
             await showLaneAssignmentReview(res.final_event_id, res.count);
         } else {
-            alert(`결승 생성 완료 (${res.count}명 진출, ${groupCount}개 조)`);
+            uiAlert(`결승 생성 완료 (${res.count}명 진출, ${groupCount}개 조)`);
         }
-    } catch (e) { alert('결승 생성 실패: ' + (e.error || '')); }
+    } catch (e) { uiAlert('결승 생성 실패: ' + (e.error || '')); }
     renderAuditLog();
 }
 
@@ -4382,7 +4382,7 @@ async function showLaneAssignmentReview(finalEventId, athleteCount) {
     try {
         const data = await fetch(`/api/events/${finalEventId}/lane-assignments`).then(r => r.json());
         if (!data.heats || data.heats.length === 0) {
-            alert(`결승 생성 완료 (${athleteCount}명 진출)`);
+            uiAlert(`결승 생성 완료 (${athleteCount}명 진출)`);
             return;
         }
 
@@ -4451,7 +4451,7 @@ async function showLaneAssignmentReview(finalEventId, athleteCount) {
 
     } catch (err) {
         console.error('Lane assignment review error:', err);
-        alert(`결승 생성 완료 (${athleteCount}명 진출)\n레인 배정 확인 중 오류 발생`);
+        uiAlert(`결승 생성 완료 (${athleteCount}명 진출)\n레인 배정 확인 중 오류 발생`);
     }
 }
 
@@ -4502,7 +4502,7 @@ async function saveLaneReview(finalEventId) {
 
 async function approveSemifinalQualification() {
     const qualified = _qualAllRows.filter(r => r.qual === 'Q' || r.qual === 'q');
-    if (qualified.length === 0) { alert('진출자가 선택되지 않았습니다. Q 또는 q를 지정하세요.'); return; }
+    if (qualified.length === 0) { uiAlert('진출자가 선택되지 않았습니다. Q 또는 q를 지정하세요.'); return; }
     const groupCount = parseInt(document.getElementById('semi-group-count')?.value) || 2;
     if (!confirm(`준결승 ${groupCount}개 조로 ${qualified.length}명을 확정하고 준결승 라운드를 생성합니다.\n계속하시겠습니까?`)) return;
 
@@ -4522,9 +4522,9 @@ async function approveSemifinalQualification() {
         if (res.semi_event_id) {
             await showLaneAssignmentReview(res.semi_event_id, res.count);
         } else {
-            alert(`준결승 생성 완료 (${res.count}명, ${groupCount}개 조)`);
+            uiAlert(`준결승 생성 완료 (${res.count}명, ${groupCount}개 조)`);
         }
-    } catch (e) { alert('준결승 생성 실패: ' + (e.error || '')); }
+    } catch (e) { uiAlert('준결승 생성 실패: ' + (e.error || '')); }
     renderAuditLog();
 }
 
@@ -4575,7 +4575,7 @@ async function revertRoundComplete() {
                 await renderDetail();
                 showToast('이미 되돌려진 상태입니다.', 'info', 2000);
             } else {
-                alert(e.error || '완료 취소 실패: 관리자 키를 확인하세요.');
+                uiAlert(e.error || '완료 취소 실패: 관리자 키를 확인하세요.');
             }
         }
     });
@@ -4721,7 +4721,7 @@ async function openManualHeatEditUI() {
     // First, find the latest created event
     const events = await API.getAllEvents(getCompetitionId());
     const parentEvt = state.selectedEvent;
-    if (!parentEvt) { alert('종목을 먼저 선택하세요.'); return; }
+    if (!parentEvt) { uiAlert('종목을 먼저 선택하세요.'); return; }
     
     // Find the latest semifinal or final for this event
     const related = events.filter(e => 
@@ -4730,14 +4730,14 @@ async function openManualHeatEditUI() {
     ).sort((a, b) => b.id - a.id);
     
     const targetEvt = related[0];
-    if (!targetEvt) { alert('생성된 준결승/결승이 없습니다.'); return; }
+    if (!targetEvt) { uiAlert('생성된 준결승/결승이 없습니다.'); return; }
     
     await showHeatEditModal(targetEvt);
 }
 
 async function showHeatEditModal(evt) {
     if (!evt) evt = state.selectedEvent;
-    if (!evt) { alert('종목을 먼저 선택하세요.'); return; }
+    if (!evt) { uiAlert('종목을 먼저 선택하세요.'); return; }
     try {
         const allocData = await API.getHeatAllocations(evt.id);
         const heats = allocData.heats;
@@ -4801,7 +4801,7 @@ async function showHeatEditModal(evt) {
         document.body.appendChild(modal);
     } catch (e) {
         console.error(e);
-        alert('조 편성 데이터를 불러올 수 없습니다: ' + (e.error || e.message));
+        uiAlert('조 편성 데이터를 불러올 수 없습니다: ' + (e.error || e.message));
     }
 }
 
@@ -4816,7 +4816,7 @@ async function autoCorrectWAFromModal(eventId) {
         } else {
             showToast('WA 규정 위반 없음', 'success');
         }
-    } catch(e) { alert('자동 수정 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('자동 수정 실패: ' + (e.error || e.message)); }
 }
 
 async function validateWARegulations() {
@@ -4832,7 +4832,7 @@ async function validateWARegulations() {
                 await autoCorrectWAFromModal(state.selectedEvent.id);
             }
         }
-    } catch(e) { alert('검증 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('검증 실패: ' + (e.error || e.message)); }
 }
 
 async function saveManualHeatEdit(eventId) {
@@ -4878,7 +4878,7 @@ async function saveManualHeatEdit(eventId) {
         // Refresh the current view
         if (state.selectedEventId) await selectEvent(state.selectedEventId);
     } catch (e) {
-        alert('저장 실패: ' + (e.error || e.message));
+        uiAlert('저장 실패: ' + (e.error || e.message));
     }
 }
 

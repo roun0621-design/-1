@@ -2716,3 +2716,99 @@ function _showConflictModal(conflicts) {
     document.addEventListener('mouseup', end);
     document.addEventListener('mouseleave', end);
 })();
+
+// ============================================================
+// 파일 끌어다 놓기 — 모든 파일 선택 칸 공통 (2026-09 사용성 점검)
+//   업로드 칸 31곳 중 끌어다 놓기가 되는 곳은 3곳뿐이었다. 칸마다 따로 만들지 않고 여기서 한 번에 처리한다:
+//   파일을 끌고 들어오면 마우스 아래에서 위로 올라가며 '파일 선택 칸이 정확히 하나 들어 있는 영역'을 찾고, 놓으면 그 칸에 파일을 넣은 뒤
+//   change 이벤트를 낸다 → 기존 업로드 코드(버튼·미리보기)는 그대로 동작한다. 자체 드롭 영역(.txt/.lif/기록카드)은 이벤트 전파를 막으므로 영향 없음.
+//   영역 밖에 놓으면 브라우저가 그 파일을 열어 작업 중인 화면이 날아가는데, 그것도 막는다.
+// ============================================================
+(function () {
+    if (typeof document === 'undefined' || window.__prFileDrop) return;
+    window.__prFileDrop = true;
+    const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    function findInput(target) {
+        for (let el = target; el && el !== document.documentElement; el = el.parentElement) {
+            if (el.matches && el.matches('input[type=file]')) return el.disabled ? null : el;
+            const list = el.querySelectorAll ? el.querySelectorAll('input[type=file]:not([disabled])') : [];
+            if (list.length === 1) return list[0];
+            if (list.length > 1) return null;          // 여러 칸이 든 큰 영역 — 어느 칸인지 알 수 없다
+        }
+        return null;
+    }
+    const accepts = (input, file) => {
+        const acc = (input.getAttribute('accept') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        if (!acc.length) return true;
+        const name = file.name.toLowerCase(), type = (file.type || '').toLowerCase();
+        return acc.some(a => a.startsWith('.') ? name.endsWith(a) : a.endsWith('/*') ? type.startsWith(a.slice(0, -1)) : type === a);
+    };
+    let marked = null;
+    const zoneOf = input => { let z = input.parentElement; if (z && z.tagName === 'LABEL' && z.parentElement) z = z.parentElement; return z || input; };
+    const unmark = () => { if (marked) { marked.style.outline = marked._prOutline || ''; marked.style.outlineOffset = ''; marked = null; } };
+    const mark = z => { if (marked === z) return; unmark(); marked = z; z._prOutline = z.style.outline; z.style.outline = '2px dashed #0e7c66'; z.style.outlineOffset = '3px'; };
+
+    document.addEventListener('dragover', e => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        const input = findInput(e.target);
+        if (input) { e.dataTransfer.dropEffect = 'copy'; mark(zoneOf(input)); } else { e.dataTransfer.dropEffect = 'none'; unmark(); }
+    });
+    document.addEventListener('dragleave', e => { if (!e.relatedTarget) unmark(); });
+    document.addEventListener('drop', e => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        unmark();
+        const input = findInput(e.target);
+        if (!input) return;
+        let files = Array.from(e.dataTransfer.files || []);
+        const bad = files.filter(f => !accepts(input, f));
+        files = files.filter(f => accepts(input, f));
+        if (!files.length) { showToast(`이 칸에는 ${input.getAttribute('accept') || '해당 형식의'} 파일만 올릴 수 있습니다`, 'error', 4000); return; }
+        if (!input.multiple) files = files.slice(0, 1);
+        try {
+            const dt = new DataTransfer();
+            files.forEach(f => dt.items.add(f));
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            if (bad.length) showToast(`형식이 맞지 않는 ${bad.length}개 파일은 제외했습니다`, 'warning', 3500);
+        } catch (err) { showToast('이 브라우저에서는 끌어다 놓기를 쓸 수 없습니다 — 파일 선택 버튼을 이용하세요', 'warning', 4000); }
+    });
+})();
+
+// ============================================================
+// 안내창 (uiAlert) — 브라우저 기본 alert() 대체 (2026-09 사용성 점검)
+//   기본 alert 은 브라우저마다 모양이 다르고 주소(도메인)가 제목으로 뜨며, 태블릿 전체화면(PWA)에서는 화면이 멈춘 것처럼 보인다.
+//   같은 모양의 안내창으로 통일한다. 내용에 '실패·오류·없습니다' 등이 있으면 경고색. Enter/Esc/바깥 클릭으로 닫힌다.
+//   ※ 화면을 멈추지 않는다(비차단). 알림 직후 페이지를 옮기는 곳은 기본 alert 을 그대로 쓴다.
+// ============================================================
+function uiAlert(message, opts) {
+    opts = opts || {};
+    const text = String(message == null ? '' : message);
+    const isErr = opts.type ? opts.type === 'error' : /실패|오류|없습니다|않습니다|않았습니다|할 수 없|차단|필수|하세요|해주세요/.test(text);
+    return new Promise(resolve => {
+        const prev = document.getElementById('pr-ui-alert'); if (prev) prev.remove();
+        const ov = document.createElement('div');
+        ov.id = 'pr-ui-alert';
+        ov.setAttribute('role', 'alertdialog'); ov.setAttribute('aria-modal', 'true');
+        ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#fff;border-radius:12px;max-width:420px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3);overflow:hidden;';
+        const body = document.createElement('div');
+        body.style.cssText = `padding:22px 22px 16px;font-size:15px;line-height:1.6;color:#222;white-space:pre-wrap;word-break:keep-all;border-top:4px solid ${isErr ? '#c0392b' : '#2d9d78'};`;
+        body.textContent = text;
+        const foot = document.createElement('div');
+        foot.style.cssText = 'padding:0 16px 16px;display:flex;justify-content:flex-end;';
+        const ok = document.createElement('button');
+        ok.type = 'button'; ok.textContent = '확인';
+        ok.style.cssText = 'padding:10px 28px;background:#2d9d78;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;';
+        foot.appendChild(ok); box.appendChild(body); box.appendChild(foot); ov.appendChild(box);
+        const close = () => { document.removeEventListener('keydown', onKey, true); ov.remove(); resolve(); };
+        const onKey = e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+        ok.addEventListener('click', close);
+        ov.addEventListener('click', e => { if (e.target === ov) close(); });
+        document.addEventListener('keydown', onKey, true);
+        (document.body || document.documentElement).appendChild(ov);
+        try { ok.focus(); } catch (e) {}
+    });
+}

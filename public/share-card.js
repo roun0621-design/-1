@@ -409,7 +409,7 @@ async function _scSave() {
     try {
         _scDownload(await _scBlob());
     } catch (e) {
-        alert('이미지 생성에 실패했습니다.');
+        uiAlert('이미지 생성에 실패했습니다.');
     } finally { _scBusy(false); }
 }
 
@@ -434,6 +434,6 @@ async function _scShare() {
         if (e && e.name === 'NotAllowedError') {        // 조작 권한 만료 → 저장으로 대체
             try { _scDownload(await _scBlob()); return; } catch (e2) {}
         }
-        alert('공유에 실패했습니다.');
+        uiAlert('공유에 실패했습니다.');
     } finally { _scBusy(false); }
 }

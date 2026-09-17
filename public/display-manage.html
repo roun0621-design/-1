@@ -202,7 +202,7 @@
 <!-- Link Edit Modal (hidden) -->
 <div id="link-modal" style="display:none;"></div>
 
-<script src="common.js?v=100"></script>
+<script src="common.js?v=101"></script>
 <script>
 // ═══════════════════════════════════════════════════════════
 // STATE
@@ -1593,8 +1593,8 @@ async function bulkAssignGroup(gi){
             })
         }).then(r=>r.json());
         if(r.success){ toast(`${r.updated}명 매칭 적용`); await loadMatchEditor(); }
-        else alert('실패: ' + (r.error || ''));
-    }catch(e){ alert(e.message); }
+        else uiAlert('실패: ' + (r.error || ''));
+    }catch(e){ uiAlert(e.message); }
 }
 
 async function bulkClearGroup(gi){
@@ -1622,7 +1622,7 @@ async function bulkClearGroup(gi){
             })
         }).then(r=>r.json());
         if(r.success){ toast(`${r.updated}명 매칭 해제`); await loadMatchEditor(); }
-    }catch(e){ alert(e.message); }
+    }catch(e){ uiAlert(e.message); }
 }
 
 async function openSingleAssign(rosterId){
@@ -1641,8 +1641,8 @@ async function openSingleAssign(rosterId){
             body: JSON.stringify({ admin_key: getKey(), roster_id: rosterId, event_id: newId })
         }).then(r=>r.json());
         if(r.success){ toast('매칭 변경 완료'); await loadMatchEditor(); }
-        else alert('실패: ' + (r.error || ''));
-    }catch(e){ alert(e.message); }
+        else uiAlert('실패: ' + (r.error || ''));
+    }catch(e){ uiAlert(e.message); }
 }
 
 async function uploadRoster(inp){
