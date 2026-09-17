@@ -504,11 +504,33 @@ try {
     console.warn('[보안 자가점검] 실행 실패:', e.message);
 }
 
+// .env 가 아니라 '실제 적용 중인' 자격증명(DB system_config)을 점검 — 관리 화면에서 약한 값으로 바꿔도 잡힌다
+function _refreshDbSecurityWarnings() {
+    setTimeout(() => {
+        try {
+            const { _WEAK } = require('./lib/securityCheck');
+            const w = [];
+            const op = ACCESS_KEYS.operation;
+            if (!op || String(op).length < 6 || _WEAK.has(String(op).toLowerCase())) w.push('운영키(기본키)가 약함 — 6자 미만이거나 흔한 값. 관리자 → 접근 키에서 변경하세요');
+            const h = ACCESS_KEYS.adminHash;
+            if (h) for (const c of _WEAK) { if (bcrypt.compareSync(c, h)) { w.push(`관리자 키가 흔한 값("${c}")입니다 — 즉시 변경하세요`); break; } }
+            global.__dbSecurityWarnings = w;
+            if (w.length) { console.warn('[보안 자가점검·DB] ⚠️  ' + w.join(' / ')); }
+        } catch (e) { global.__dbSecurityWarnings = []; }
+    }, 0);
+}
+setTimeout(_refreshDbSecurityWarnings, 1500); // ACCESS_KEYS 초기화 이후
+app.get('/api/admin/security-status', (req, res) => {
+    const k = req.headers['x-admin-key'] || req.query.key;
+    if (!isAdminKey(String(k || ''))) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+    res.json({ warnings: [...(global.__dbSecurityWarnings || []), ...(global.__securityWarnings || []).filter(m => /JWT_SECRET|ADMIN_ID/.test(m))] });
+});
+
 app.get('/api/health', async (req, res) => {
     const mem = process.memoryUsage();
     const base = {
         backend: db.isAsync ? 'postgres' : 'sqlite',
-        security_warnings: (global.__securityWarnings || []).length,
+        security_warnings: (global.__securityWarnings || []).length + (global.__dbSecurityWarnings || []).length,
         authMig: global.__authMigOk ? 'ok' : (global.__authMigError ? 'failed' : 'pending'),
         authMigError: global.__authMigError || null,
         uptime_sec: Math.floor(process.uptime()),
@@ -1707,6 +1729,8 @@ async function _reloadOpKeyCacheAsync() {
     }
 }
 if (!db.isAsync) _loadOpKeyCacheSync();
+// 다른 인스턴스·DB 직접 수정으로 폐기된 운영키가 재시작 전까지 살아있지 않도록 1분마다 다시 읽는다
+setInterval(() => { _reloadOpKeyCacheAsync().catch(() => {}); }, 60 * 1000).unref();
 
 function isOperationKey(key) {
     if (!key) return false;
@@ -2480,30 +2504,58 @@ require('./lib/routes/admin_users')(app, { db, bcrypt, jwtHelpers: require('./li
 // (2026-09) /api/_diag/* 진단 라우트 제거 — jwt_secret·admin_pw 값 미리보기를 응답했고 ?adminKey= 쿼리 인증을 허용했음.
 //   필요 시 서버 셸에서 직접 확인: sqlite3 db/competition.db "select id,username,role,active from app_user"
 
+// ─── 레거시 키 로그인 보호 (2026-09): 실패 누적 잠금 + login_audit 기록 ───
+//   JWT 계정은 5회 실패→10분 잠금이 있었지만 키 로그인 경로는 분당 한도뿐이었다.
+//   IP+심판명 단위로 10분 안에 10회 실패하면 10분 잠금. 성공/실패 모두 login_audit 에 남긴다(username=심판명, 사유 legacy_*).
+const _legacyFails = new Map(); // id → { n, first, until }
+function _legacyId(req, name) { return `${req.ip || ''}|${String(name || '').trim().toLowerCase()}`; }
+function _legacyLockedFor(id) { const r = _legacyFails.get(id); return (r && r.until && r.until > Date.now()) ? Math.ceil((r.until - Date.now()) / 1000) : 0; }
+function _legacyFail(id) {
+    const now = Date.now(); let r = _legacyFails.get(id);
+    if (!r || now - r.first > 10 * 60 * 1000) r = { n: 0, first: now, until: 0 };
+    r.n++; if (r.n >= 10) r.until = now + 10 * 60 * 1000;
+    _legacyFails.set(id, r);
+    if (_legacyFails.size > 5000) for (const [k, v] of _legacyFails) if (now - v.first > 20 * 60 * 1000) _legacyFails.delete(k);
+}
+async function _legacyAudit(req, name, success, reason) {
+    try { await db.run('INSERT INTO login_audit (user_id, username, success, failure_reason, ip, user_agent) VALUES (?,?,?,?,?,?)', null, String(name || '(key-only)').slice(0, 64), success ? 1 : 0, reason, req.ip || null, req.headers['user-agent'] || null); } catch (e) {}
+}
 app.post('/api/auth/verify', authLimiter, async (req, res) => {
     const { key, judge_name } = req.body;
+    const lid = _legacyId(req, judge_name);
+    const wait = _legacyLockedFor(lid);
+    if (wait) { await _legacyAudit(req, judge_name, false, 'legacy_locked'); return res.status(429).json({ error: `로그인 시도가 너무 많습니다. ${Math.ceil(wait / 60)}분 후 다시 시도하세요.` }); }
     // New: judge_name + key login
     if (judge_name && key) {
         const result = await verifyJudgeLogin(judge_name, key);
-        if (result) return res.json({ success: true, role: result.role, label: result.role === 'admin' ? '관리자' : '운영', judge_name: result.judge_name });
+        if (result) { _legacyFails.delete(lid); await _legacyAudit(req, judge_name, true, 'legacy_judge'); return res.json({ success: true, role: result.role, label: result.role === 'admin' ? '관리자' : '운영', judge_name: result.judge_name }); }
+        _legacyFail(lid); await _legacyAudit(req, judge_name, false, 'legacy_bad_key');
         return res.status(403).json({ error: '심판명 또는 운영키가 일치하지 않습니다.' });
     }
-    // Legacy: key-only login (backward compat)
+    // Legacy: key-only (저장된 운영키의 역할 확인용). 관리자 비밀번호는 이 경로로 통과시키지 않는다 —
+    //   "관리자는 /login.html 관리자 탭(JWT)으로만" 정책(verifyJudgeLogin)과 맞춤.
     if (key) {
-        if (isAdminKey(key)) return res.json({ success: true, role: 'admin', label: '관리자', judge_name: '관리자' });
+        if (!_bridgeOf(key) && isAdminKey(key)) { await _legacyAudit(req, null, false, 'legacy_admin_pw_rejected'); return res.status(403).json({ error: '관리자는 로그인 화면의 관리자 탭에서 로그인하세요.' }); }
         if (isOperationKey(key)) {
             const jn = getJudgeName(key);
+            _legacyFails.delete(lid);
             return res.json({ success: true, role: getKeyRole(key) || 'operation', label: '운영', judge_name: jn });
         }
+        _legacyFail(lid); await _legacyAudit(req, null, false, 'legacy_bad_key');
     }
     res.status(403).json({ error: '유효하지 않은 키입니다.' });
 });
-app.post('/api/admin/verify', authLimiter, (req, res) => {
+app.post('/api/admin/verify', authLimiter, async (req, res) => {
     const { admin_key } = req.body;
+    const lid = _legacyId(req, '(admin-verify)');
+    const wait = _legacyLockedFor(lid);
+    if (wait) return res.status(429).json({ error: `시도가 너무 많습니다. ${Math.ceil(wait / 60)}분 후 다시 시도하세요.` });
     if (isOperationKey(admin_key) || isAdminKey(admin_key)) {
         const jn = getJudgeName(admin_key);
+        _legacyFails.delete(lid);
         return res.json({ success: true, judge_name: jn });
     }
+    _legacyFail(lid); await _legacyAudit(req, '(admin-verify)', false, 'legacy_bad_key');
     res.status(403).json({ error: 'Invalid admin key' });
 });
 // /api/staff/verify removed — was never called from any client.
@@ -3967,16 +4019,19 @@ app.get('/api/public/callroom-summary', async (req, res) => {
 app.post('/api/admin/change-keys', (req, res) => {
     const { admin_key, new_operation_key, new_admin_key, new_admin_id, new_record_officer_key } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    if (new_operation_key && new_operation_key.length >= 4) ACCESS_KEYS.operation = new_operation_key;
-    if (new_admin_key && new_admin_key.length >= 4) ACCESS_KEYS.admin = new_admin_key;  // setter hashes automatically
-    if (new_admin_id && new_admin_id.trim()) setConfigKey('admin_id', new_admin_id.trim());
-    // Phase C 확장: 기록위원 키. 빈 문자열 명시 시 비활성, 4자 이상이면 설정
-    if (typeof new_record_officer_key === 'string') {
-        const trimmed = new_record_officer_key.trim();
-        if (trimmed === '' || trimmed.length >= 4) {
-            ACCESS_KEYS.recordOfficer = trimmed;
-        }
-    }
+    // (2026-09) 짧은 값은 조용히 무시하던 것을 명시적 오류로. 최소 길이: 관리자 8 · 운영/기록위원 6, 흔한 값 금지
+    const { _WEAK } = require('./lib/securityCheck');
+    const weak = v => _WEAK.has(String(v).toLowerCase());
+    if (new_admin_key && (String(new_admin_key).length < 8 || weak(new_admin_key))) return res.status(400).json({ error: '관리자 키는 8자 이상이고 흔한 값(1234, admin 등)이 아니어야 합니다.' });
+    if (new_operation_key && (String(new_operation_key).length < 6 || weak(new_operation_key))) return res.status(400).json({ error: '운영키는 6자 이상이고 흔한 값(1234 등)이 아니어야 합니다.' });
+    if (typeof new_record_officer_key === 'string' && new_record_officer_key.trim() !== '' && (new_record_officer_key.trim().length < 6 || weak(new_record_officer_key.trim()))) return res.status(400).json({ error: '기록위원 키는 6자 이상이고 흔한 값이 아니어야 합니다.' });
+    const changed = [];
+    if (new_operation_key) { ACCESS_KEYS.operation = new_operation_key; changed.push('운영키'); }
+    if (new_admin_key) { ACCESS_KEYS.admin = new_admin_key; changed.push('관리자 키'); }  // setter hashes automatically
+    if (new_admin_id && new_admin_id.trim()) { setConfigKey('admin_id', new_admin_id.trim()); changed.push('관리자 ID'); }
+    // Phase C 확장: 기록위원 키. 빈 문자열 명시 시 비활성
+    if (typeof new_record_officer_key === 'string') { ACCESS_KEYS.recordOfficer = new_record_officer_key.trim(); changed.push(new_record_officer_key.trim() ? '기록위원 키' : '기록위원 키 비활성'); }
+    if (changed.length) { try { opLog(`접근 키 변경: ${changed.join(', ')}`, 'security', getJudgeName(admin_key), null); } catch (e) {} _refreshDbSecurityWarnings(); }
     res.json({
         success: true,
         operation_key: ACCESS_KEYS.operation,

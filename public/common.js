@@ -469,6 +469,19 @@ function _jwtRefresh() {
         if (u && u.role && u.role !== 'viewer' && k && k !== 'jwt-session' && localStorage.getItem('pr_refresh_token')) localStorage.setItem('pace_admin_key', 'jwt-session');
     } catch (e) {}
     if (!_isJwtSession()) return;
+    // 관리자·매니저(JWT) 세션은 8시간 무활동이면 자동 로그아웃 (공용 PC·태블릿 방치 대비). 심판 운영키 세션은 대회 중 끊기면 안 되므로 제외.
+    const IDLE_MS = 8 * 60 * 60 * 1000;
+    const touch = () => { try { localStorage.setItem('pace_last_active', String(Date.now())); } catch (e) {} };
+    const idleOut = async () => {
+        try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch (e) {}
+        try { ['pace_admin_key', 'pace_role', 'pace_judge_name', 'pr_auth_user', 'pr_access_token', 'pr_refresh_token', 'pr_refresh_at', 'pace_last_active'].forEach(k => localStorage.removeItem(k)); } catch (e) {}
+        location.href = '/login.html?reason=idle';
+    };
+    let last = 0; try { last = +localStorage.getItem('pace_last_active') || 0; } catch (e) {}
+    if (last && Date.now() - last > IDLE_MS) { idleOut(); return; }
+    touch();
+    let _t = 0; ['click', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => { const n = Date.now(); if (n - _t > 60000) { _t = n; touch(); } }, { passive: true }));
+    setInterval(() => { let l = 0; try { l = +localStorage.getItem('pace_last_active') || 0; } catch (e) {} if (l && Date.now() - l > IDLE_MS) idleOut(); }, 5 * 60 * 1000);
     const due = () => { let at = 0; try { at = +localStorage.getItem('pr_refresh_at') || 0; } catch (e) {} return Date.now() - at > 40 * 60 * 1000; };
     if (due()) _jwtRefresh();
     setInterval(() => { if (_isJwtSession() && due()) _jwtRefresh(); }, 5 * 60 * 1000);

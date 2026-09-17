@@ -518,7 +518,7 @@
                         <h5 style="margin:0 0 10px;font-size:14px;">+ 새 계정 추가</h5>
                         <div class="admin-form-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
                             <div class="admin-form-group"><label>아이디 *</label><input id="new-user-username" placeholder="3-32자, 영문/숫자/._-"></div>
-                            <div class="admin-form-group"><label>비밀번호 *</label><input id="new-user-password" type="password" placeholder="6자 이상"></div>
+                            <div class="admin-form-group"><label>비밀번호 *</label><input id="new-user-password" type="password" placeholder="8자 이상"></div>
                             <div class="admin-form-group"><label>표시 이름</label><input id="new-user-display" placeholder="예: 홍길동"></div>
                             <div class="admin-form-group"><label>이메일</label><input id="new-user-email" type="email" placeholder="optional"></div>
                             <div class="admin-form-group">
@@ -560,6 +560,23 @@
                                 <tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">로딩 중...</td></tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+                            <div class="admin-card" style="scroll-margin-top:20px;">
+                    <h4 style="display:flex;align-items:center;gap:8px;">
+                        <span class="css-icon" style="background:#3b4a5c;color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">L</span>
+                        로그인 이력
+                    </h4>
+                    <p class="t-help-lg">관리자 계정(JWT)과 심판 운영키 로그인의 성공·실패 기록입니다. 같은 IP·심판명으로 10분에 10회 실패하면 10분간 잠깁니다.</p>
+                    <div id="sec-warn-box" style="display:none;background:#fdecea;border:1.5px solid #d32f2f;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#8b1a1a;font-weight:600;"></div>
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                        <label style="font-size:13px;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="audit-only-fail" onchange="loginAudit_reload()"> 실패만</label>
+                        <span id="audit-locked" style="font-size:12px;color:#b3261e;"></span>
+                        <button class="btn btn-sm btn-ghost" style="margin-left:auto;" onclick="loginAudit_reload()">새로고침</button>
+                    </div>
+                    <div class="crud-scroll" style="max-height:420px;">
+                        <table class="crud-table"><thead><tr><th style="width:150px;">시각</th><th>계정/심판명</th><th style="width:70px;">결과</th><th>사유</th><th style="width:130px;">IP</th><th>기기</th></tr></thead>
+                        <tbody id="audit-tbody"><tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">사용자 관리 탭을 열면 불러옵니다</td></tr></tbody></table>
                     </div>
                 </div>
             </div>
@@ -2768,7 +2785,7 @@ POST /api/external/event-result-link/batch<br>
 
     <script src="lib/xlsx.full.min.js"></script>
     <script src="/lib/auth-client.js?v=1"></script>
-    <script src="common.js?v=96"></script>
+    <script src="common.js?v=97"></script>
     <script>
         renderPageNav('admin');
         // [정책] 종료된 대회 + 운영진(operation) → 진입 차단, dashboard 로 리다이렉트
@@ -3082,7 +3099,27 @@ POST /api/external/event-result-link/batch<br>
             } catch(_) { return null; }
         }
 
+        const AUDIT_REASON = { bad_password: '비밀번호 불일치', not_found: '없는 계정', locked: '잠금 상태', inactive: '비활성 계정', missing_fields: '입력 누락', legacy_bad_key: '운영키 불일치', legacy_locked: '잠금 상태(키 로그인)', legacy_judge: '심판 키 로그인', legacy_admin_pw_rejected: '관리자 비번을 키 로그인에 입력' };
+        async function loginAudit_reload() {
+            const tb = document.getElementById('audit-tbody'); if (!tb) return;
+            const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+            try {
+                const only = document.getElementById('audit-only-fail')?.checked ? '&only=fail' : '';
+                const r = await _adminUsersAuthFetch('/api/admin/login-audit?limit=200' + only);
+                if (!r.ok) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e53935;padding:20px;">관리자(JWT) 로그인이 필요합니다</td></tr>'; return; }
+                const d = await r.json();
+                document.getElementById('audit-locked').textContent = d.locked.length ? `잠긴 계정: ${d.locked.map(u => u.username).join(', ')}` : '';
+                tb.innerHTML = d.rows.length ? d.rows.map(x => `<tr><td style="font-size:12px;">${esc(String(x.created_at).replace('T', ' ').slice(0, 19))}</td><td>${esc(x.username || '—')}</td><td>${x.success ? '<span style="color:#2e7d32;font-weight:700;">성공</span>' : '<span style="color:#b3261e;font-weight:700;">실패</span>'}</td><td style="font-size:12px;">${esc(AUDIT_REASON[x.failure_reason] || x.failure_reason || '')}</td><td style="font-size:12px;">${esc(x.ip || '')}</td><td style="font-size:11px;color:#888;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(x.user_agent || '')}">${esc(x.user_agent || '')}</td></tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">기록 없음</td></tr>';
+            } catch (e) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e53935;padding:20px;">불러오기 실패</td></tr>'; }
+            try {
+                const s2 = await fetch('/api/admin/security-status', { headers: { 'x-admin-key': AK() } });
+                const box = document.getElementById('sec-warn-box');
+                if (s2.ok && box) { const w = (await s2.json()).warnings || []; box.style.display = w.length ? 'block' : 'none'; box.innerHTML = w.map(m => '⚠️ ' + esc(m)).join('<br>'); }
+            } catch (e) {}
+        }
+
         async function adminUsers_reload() {
+            loginAudit_reload();
             const tbody = document.getElementById('users-tbody');
             const warn = document.getElementById('users-auth-warning');
             if (!tbody) return;
@@ -3165,7 +3202,7 @@ POST /api/external/event-result-link/batch<br>
 
             if (!u || !p) { showMsg('아이디와 비밀번호는 필수입니다.', '#e53935'); return; }
             if (!/^[A-Za-z0-9_.\-]{3,32}$/.test(u)) { showMsg('아이디는 3-32자 영문/숫자/._- 만 허용됩니다.', '#e53935'); return; }
-            if (p.length < 6) { showMsg('비밀번호는 6자 이상이어야 합니다.', '#e53935'); return; }
+            if (p.length < 8) { showMsg('비밀번호는 8자 이상이어야 합니다.', '#e53935'); return; }
 
             try {
                 const res = await _adminUsersAuthFetch('/api/admin/users', {
@@ -3228,9 +3265,9 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function adminUsers_resetPassword(id, uname) {
-            const newPw = prompt(`'${uname}' 계정의 새 비밀번호를 입력하세요 (6자 이상):`);
+            const newPw = prompt(`'${uname}' 계정의 새 비밀번호를 입력하세요 (8자 이상):`);
             if (!newPw) return;
-            if (newPw.length < 6) { alert('6자 이상이어야 합니다.'); return; }
+            if (newPw.length < 8) { alert('8자 이상이어야 합니다.'); return; }
             try {
                 const res = await _adminUsersAuthFetch(`/api/admin/users/${id}`, {
                     method: 'PUT',
