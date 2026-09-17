@@ -168,7 +168,7 @@
         return laneSorted().filter(e => e.status !== 'no_show').length > 8;
     }
     function top8Set() {
-        const rows = laneSorted().map(e => { const { att } = attemptsOf(e.event_entry_id); const v = Object.values(att).filter(x => x > 0); return { event_entry_id: e.event_entry_id, best: v.length ? Math.max(...v) : null }; });
+        const rows = laneSorted().map(e => { const { att } = attemptsOf(e.event_entry_id); const st = PaceRanking.distanceStats(att); return { event_entry_id: e.event_entry_id, best: st.best, sortedValid: st.sortedValid }; });
         return typeof getTop8Ids === 'function' ? getTop8Ids(rows) : new Set(rows.map(r => r.event_entry_id));
     }
     function eligible(e, attempt) {
@@ -462,9 +462,9 @@
             if (state.results) { const sr = state.results.find(r => r.event_entry_id === e.event_entry_id && r.status_code); if (sr) sc = sr.status_code; }
             if (e.status === 'no_show' && !sc) sc = 'DNS';
             if (sc) elim = true;
-            let fails = 0;
-            heights.forEach(h => { const d = hd[h]; if (!d) return; const x = Object.values(d).filter(m => m === 'X').length; fails += x; if (Object.values(d).includes('O')) best = h; if (x >= 3) elim = true; });
-            if (elim && best == null && !sc && fails >= 3) sc = 'NM';
+            const _hs = PaceRanking.heightStats(hd, heights);   // WA TR 26.2: 3회 '연속' 실패(높이 무관)면 탈락
+            best = _hs.best; if (_hs.eliminated) elim = true;
+            if (_hs.isNM && !sc) sc = 'NM';
             return { ...e, hd, elim, best, sc };
         });
     }

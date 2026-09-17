@@ -1671,18 +1671,9 @@ function openFieldCardUpload() {
 }
 
 function getTop8Ids(rows) {
-    const wb = rows.filter(r => r.best != null).sort((a, b) => b.best - a.best);
-    const ids = new Set();
-    if (wb.length <= 8) { wb.forEach(r => ids.add(r.event_entry_id)); }
-    else {
-        let c = 0;
-        for (let i = 0; i < wb.length; i++) {
-            if (c < 8) { ids.add(wb[i].event_entry_id); c++; }
-            else if (wb[i].best === wb[i - 1].best) ids.add(wb[i].event_entry_id);
-            else break;
-        }
-    }
-    return ids;
+    // WA TR 25.6 — 8위 동률은 두 번째·세 번째 기록으로 가리고, 끝까지 같으면 모두 진출 (공용 모듈)
+    //   예전엔 최고 기록만 같으면 전부 포함시켜, 규정상 탈락인 선수에게도 4~6차 시기를 열어 줬다.
+    return PaceRanking.topNIds(rows.map(r => ({ event_entry_id: r.event_entry_id, best: r.best, sortedValid: r.sortedValid || (r.best != null ? [r.best] : []) })), 8);
 }
 
 // ============================================================
@@ -2378,15 +2369,11 @@ function renderHeightContent() {
         }
         if (isDNS && !status_code) status_code = 'DNS';
         if (status_code) elim = true;
-        // Count total failures and total O for tiebreaking
-        let totalFails = 0, failsAtBest = 0;
-        heights.forEach(h => {
-            const d = hd[h]; if (!d) return;
-            const xCount = Object.values(d).filter(m => m === 'X').length;
-            totalFails += xCount;
-            if (Object.values(d).includes('O')) { best = h; failsAtBest = xCount; }
-            if (xCount >= 3) elim = true;
-        });
+        // 순위 규칙은 공용 모듈(public/lib/ranking.js, WA TR 26.2·26.8) — 3회 '연속' 실패 탈락, 마지막으로 넘은 높이까지의 실패 수로 카운트백
+        const _hs = PaceRanking.heightStats(hd, heights);
+        best = _hs.best;
+        const totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest;
+        if (_hs.eliminated) elim = true;
         // Auto-detect NM
         const isNM = elim && best == null && !isDNS && !status_code;
         if (isNM && !status_code) status_code = 'NM';
@@ -3806,19 +3793,17 @@ function _cSubHeightRender(area) {
             const subResults = _cSubHeightData.attempts; // height attempts don't have status_code, check via API if needed
             if (isDNS && !status_code) status_code = 'DNS';
             if (status_code) elim = true;
-            heights.forEach(h => {
-                const d = hd[h]; if (!d) return;
-                if (Object.values(d).includes('O')) best = h;
-                if (Object.values(d).filter(m => m === 'X').length >= 3) elim = true;
-            });
+            // 순위 규칙은 공용 모듈 (WA TR 26.2·26.8) — 예전엔 이 화면만 카운트백 없이 최고 높이로만 순위를 매겼다
+            const _hs = PaceRanking.heightStats(hd, heights);
+            best = _hs.best; if (_hs.eliminated) elim = true;
             const isNM = elim && best == null && !isDNS && !status_code;
             if (isNM) status_code = 'NM';
-            return { ...e, heightData: hd, bestHeight: best, eliminated: elim, _isNoShow: isDNS, status_code };
+            return { ...e, heightData: hd, bestHeight: best, best, failsAtBest: _hs.failsAtBest, totalFails: _hs.totalFails, eliminated: elim, _isNoShow: isDNS, status_code };
         });
 
-        const rankedH = rows.filter(r => r.bestHeight != null).sort((a, b) => b.bestHeight - a.bestHeight);
+        const rankedH = rows.filter(r => r.bestHeight != null).sort(PaceRanking.compareHeight);
         let rk = 1;
-        rankedH.forEach((r, i) => { r.rank = (i > 0 && rankedH[i - 1].bestHeight === r.bestHeight) ? rankedH[i - 1].rank : rk; rk = i + 2; });
+        rankedH.forEach((r, i) => { r.rank = (i > 0 && PaceRanking.compareHeight(rankedH[i - 1], r) === 0) ? rankedH[i - 1].rank : rk; rk = i + 2; });
         rows.forEach(r => {
             if (r.bestHeight == null) r.rank = null;
             else { const f = rankedH.find(x => x.event_entry_id === r.event_entry_id); if (f) r.rank = f.rank; }

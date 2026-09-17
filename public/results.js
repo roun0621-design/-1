@@ -1078,15 +1078,8 @@ async function renderFieldHeightResults(entries) {
     const rows = entries.map(e => {
         const ea = ha.filter(a => a.event_entry_id === e.event_entry_id);
         const hd = {}; ea.forEach(a => { if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
-        let best = null, totalFails = 0, failsAtBest = 0, hasAttempts = false;
-        hts.forEach(h2 => {
-            const d = hd[h2]; if (!d) return;
-            hasAttempts = true;
-            const xCount = Object.values(d).filter(m => m === 'X').length;
-            totalFails += xCount;
-            if (Object.values(d).includes('O')) { best = h2; failsAtBest = xCount; }
-        });
-        const isNM = best == null && hasAttempts && totalFails >= 3;
+        const _hs = PaceRanking.heightStats(hd, hts);   // 공용 모듈 (WA TR 26.2·26.8)
+        const best = _hs.best, totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest, isNM = _hs.isNM;
         return { ...e, hd, best, totalFails, failsAtBest, isNM };
     }).sort((a, b) => {
         if (a.best == null && b.best == null) return 0;
@@ -1328,15 +1321,8 @@ function _renderCombinedSubHeightResult(area, seDef, entries, attempts) {
         const ea = attempts.filter(a => a.event_entry_id === e.event_entry_id);
         const hd = {};
         ea.forEach(a => { if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
-        let best = null, elim = false, totalFails = 0, failsAtBest = 0;
-        heights.forEach(h => {
-            const d = hd[h]; if (!d) return;
-            const xCount = Object.values(d).filter(m => m === 'X').length;
-            totalFails += xCount;
-            if (Object.values(d).includes('O')) { best = h; failsAtBest = xCount; }
-            if (xCount >= 3) elim = true;
-        });
-        return { ...e, heightData: hd, bestHeight: best, eliminated: elim, totalFails, failsAtBest };
+        const _hs = PaceRanking.heightStats(hd, heights);   // 공용 모듈 (WA TR 26.2·26.8)
+        return { ...e, heightData: hd, bestHeight: _hs.best, eliminated: _hs.eliminated, totalFails: _hs.totalFails, failsAtBest: _hs.failsAtBest };
     });
     const ranked = dataRows.filter(r => r.bestHeight != null).sort((a, b) => {
         if (b.bestHeight !== a.bestHeight) return b.bestHeight - a.bestHeight;

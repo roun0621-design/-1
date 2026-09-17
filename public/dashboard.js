@@ -1577,17 +1577,10 @@ function renderLiveFieldHeightResults(data) {
             const ea = ha.filter(a => a.event_entry_id === e.event_entry_id);
             const hd = {};
             ea.forEach(a => { if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
-            let best = null, elim = false, hasAttempts = false;
-            let totalFails = 0, failsAtBest = 0;
-            hts.forEach(h2 => {
-                const d = hd[h2]; if (!d) return;
-                hasAttempts = true;
-                const xCount = Object.values(d).filter(m => m === 'X').length;
-                totalFails += xCount;
-                if (Object.values(d).includes('O')) { best = h2; failsAtBest = xCount; }
-                if (xCount >= 3) elim = true;
-            });
-            const isNM = elim && best == null && hasAttempts;
+            // 순위 규칙은 공용 모듈(public/lib/ranking.js, WA TR 26.2·26.8)
+            const _hs = PaceRanking.heightStats(hd, hts);
+            const best = _hs.best, totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest;
+            const isNM = _hs.isNM;
             return { ...e, hd, best, isNM, totalFails, failsAtBest };
         }).sort((a, b) => {
             if (a.best == null && b.best == null) return 0;
@@ -2037,16 +2030,9 @@ async function _cResultShowSub(order) {
             });
             // WA tie-break: compute failsAtBest and totalFails
             Object.values(athleteMap).forEach(ath => {
-                let totalFails = 0, failsAtBest = 0;
-                heights.forEach(h => {
-                    const marks = ath.attempts[h];
-                    if (!marks) return;
-                    const xCount = marks.filter(m => m === 'X').length;
-                    totalFails += xCount;
-                    if (marks.includes('O')) failsAtBest = xCount;
-                });
-                ath.totalFails = totalFails;
-                ath.failsAtBest = failsAtBest;
+                const _hs = PaceRanking.heightStats(ath.attempts, heights);   // 공용 모듈 (WA TR 26.8)
+                ath.totalFails = _hs.totalFails;
+                ath.failsAtBest = _hs.failsAtBest;
             });
             const athRows = Object.values(athleteMap).sort((a, b) => {
                 if ((b.maxCleared || 0) !== (a.maxCleared || 0)) return (b.maxCleared || 0) - (a.maxCleared || 0);
@@ -2515,15 +2501,8 @@ function renderFieldHeightResults(data) {
             const ea = ha.filter(a => a.event_entry_id === e.event_entry_id);
             const hd = {};
             ea.forEach(a => { if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
-            let best = null, totalFails = 0, failsAtBest = 0, hasAttempts = false;
-            hts.forEach(h2 => {
-                const d = hd[h2]; if (!d) return;
-                hasAttempts = true;
-                const xCount = Object.values(d).filter(m => m === 'X').length;
-                totalFails += xCount;
-                if (Object.values(d).includes('O')) { best = h2; failsAtBest = xCount; }
-            });
-            const isNM = best == null && hasAttempts && totalFails >= 3;
+            const _hs = PaceRanking.heightStats(hd, hts);   // 공용 모듈 (WA TR 26.2·26.8)
+            const best = _hs.best, totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest, isNM = _hs.isNM;
             return { ...e, hd, best, totalFails, failsAtBest, isNM };
         }).sort((a, b) => {
             if (a.best == null && b.best == null) return 0;
