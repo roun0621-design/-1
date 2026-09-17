@@ -5,6 +5,7 @@
  * DB 격리: tests/setup/global-setup.js 가 임시 SQLite 주입.
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 
 let app, db;
 const fx = {};
@@ -39,7 +40,7 @@ beforeAll(async () => {
 
 describe('합동 종목 기록 초기화', () => {
     it('include_joint 없이는 선택 종목만 초기화 (기존 동작 유지)', async () => {
-        const res = await request(app).post('/api/results/reset-sub-event').send({ event_id: fx.a.evId });
+        const res = await request(app).post('/api/results/reset-sub-event').set('x-admin-key', 'testopkey').send({ event_id: fx.a.evId });
         expect(res.status).toBe(200);
         expect(await cnt(fx.a.heatId)).toBe(0);
         expect(await cnt(fx.b.heatId)).toBe(1);
@@ -47,7 +48,7 @@ describe('합동 종목 기록 초기화', () => {
     });
     it('include_joint=true 면 멤버 종목까지 초기화 + 상태 heats_generated', async () => {
         await db.run('INSERT INTO result (heat_id, event_entry_id, attempt_number, distance_meters) SELECT ?, event_entry_id, 2, 41.0 FROM heat_entry WHERE heat_id=?', fx.a.heatId, fx.a.heatId);
-        const res = await request(app).post('/api/results/reset-sub-event').send({ event_id: fx.a.evId, include_joint: true });
+        const res = await request(app).post('/api/results/reset-sub-event').set('x-admin-key', 'testopkey').send({ event_id: fx.a.evId, include_joint: true });
         expect(res.status).toBe(200);
         expect(res.body.jointEvents).toBe(1);
         expect(res.body.deletedResults).toBe(2);

@@ -9,6 +9,7 @@
  * DB 격리: tests/setup/global-setup.js 가 임시 SQLite 주입.
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 
 let app, db;
 const fx = {};
@@ -40,7 +41,7 @@ const row = () => db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_i
 
 describe('필드 풍속 선입력', () => {
     it('기록 없이 풍속만 저장 → distance NULL, wind 저장', async () => {
-        const res = await request(app).post('/api/results/upsert')
+        const res = await request(app).post('/api/results/upsert').set('x-admin-key', 'testopkey')
             .send({ heat_id: fx.heatId, event_entry_id: fx.entryId, attempt_number: 3, wind: 0.6 });
         expect(res.status).toBe(200);
         const r = await row();
@@ -51,7 +52,7 @@ describe('필드 풍속 선입력', () => {
     });
 
     it('이후 거리 입력(풍속 미전송) → 풍속 유지', async () => {
-        const res = await request(app).post('/api/results/upsert')
+        const res = await request(app).post('/api/results/upsert').set('x-admin-key', 'testopkey')
             .send({ heat_id: fx.heatId, event_entry_id: fx.entryId, attempt_number: 3, distance_meters: 7.02 });
         expect(res.status).toBe(200);
         const r = await row();
@@ -60,7 +61,7 @@ describe('필드 풍속 선입력', () => {
     });
 
     it('풍속만 다시 갱신 → 거리 유지', async () => {
-        const res = await request(app).post('/api/results/upsert')
+        const res = await request(app).post('/api/results/upsert').set('x-admin-key', 'testopkey')
             .send({ heat_id: fx.heatId, event_entry_id: fx.entryId, attempt_number: 3, wind: -1.1 });
         expect(res.status).toBe(200);
         const r = await row();
@@ -69,7 +70,7 @@ describe('필드 풍속 선입력', () => {
     });
 
     it('풍속만 있는 빈 시기는 GET /api/results 에 distance NULL 로 노출 (클라이언트가 미입력으로 취급)', async () => {
-        await request(app).post('/api/results/upsert')
+        await request(app).post('/api/results/upsert').set('x-admin-key', 'testopkey')
             .send({ heat_id: fx.heatId, event_entry_id: fx.entryId, attempt_number: 4, wind: 1.3 });
         const res = await request(app).get(`/api/results?heat_id=${fx.heatId}`);
         expect(res.status).toBe(200);

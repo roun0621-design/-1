@@ -6,6 +6,7 @@
  * 잠복 버그가 숨기 쉽다. 정상 생성 + 가드(자격자 없음)를 고정한다.
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 
 let app, db;
 
@@ -42,7 +43,7 @@ describe('POST /api/events/:id/create-final — WA 시딩/레인', () => {
     it('승인된 자격자로 결승 생성 시 200 + 결승 종목·조·레인 생성', async () => {
         const { compId, eventId } = await buildEventWithQualifiers(6, true);
         const res = await request(app)
-            .post(`/api/events/${eventId}/create-final`)
+            .post(`/api/events/${eventId}/create-final`).set('x-admin-key', 'testopkey')
             .send({})
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(200);
@@ -66,7 +67,7 @@ describe('POST /api/events/:id/create-final — WA 시딩/레인', () => {
     it('승인된 자격자가 없으면 400', async () => {
         const { eventId } = await buildEventWithQualifiers(4, false); // approved=0
         const res = await request(app)
-            .post(`/api/events/${eventId}/create-final`)
+            .post(`/api/events/${eventId}/create-final`).set('x-admin-key', 'testopkey')
             .send({})
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(400);

@@ -5,6 +5,7 @@
  * DB 격리: tests/setup/global-setup.js 가 임시 SQLite 주입.
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 
 let app, db;
 const fx = {};
@@ -31,7 +32,7 @@ beforeAll(async () => {
 
 describe('세부종목 기록 → combined_score 자동 동기화', () => {
     it('100m 11.20 저장 시 부모 combined_score 1번에 WA 점수가 붙는다', async () => {
-        const res = await request(app).post('/api/results/upsert').send({ heat_id: fx.heat, event_entry_id: fx.subEntry, time_seconds: 11.2 });
+        const res = await request(app).post('/api/results/upsert').set('x-admin-key', 'testopkey').send({ heat_id: fx.heat, event_entry_id: fx.subEntry, time_seconds: 11.2 });
         expect(res.status).toBe(200);
         const cs = await db.get('SELECT * FROM combined_score WHERE event_entry_id=? AND sub_event_order=1', fx.parentEntry);
         expect(cs).toBeTruthy();

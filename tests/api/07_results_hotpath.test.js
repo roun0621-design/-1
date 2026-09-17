@@ -7,6 +7,7 @@
  * 실제 기록 저장·갱신·검증을 회귀로 고정한다.
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 
 let app, db;
 let fx = {}; // fixture ids
@@ -55,7 +56,7 @@ beforeAll(async () => {
 describe('POST /api/results/upsert — hot-path', () => {
     it('정상 기록 입력 시 200 + DB 에 저장된다', async () => {
         const res = await request(app)
-            .post('/api/results/upsert')
+            .post('/api/results/upsert').set('x-admin-key', 'testopkey')
             .send({ heat_id: fx.heatId, event_entry_id: fx.entryId, time_seconds: 11.52 })
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(200);
@@ -70,7 +71,7 @@ describe('POST /api/results/upsert — hot-path', () => {
 
     it('같은 엔트리에 재입력하면 새 값으로 갱신된다 (upsert)', async () => {
         const res = await request(app)
-            .post('/api/results/upsert')
+            .post('/api/results/upsert').set('x-admin-key', 'testopkey')
             .send({ heat_id: fx.heatId, event_entry_id: fx.entryId, time_seconds: 11.30 })
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(200);
@@ -86,7 +87,7 @@ describe('POST /api/results/upsert — hot-path', () => {
 
     it('음수/0 등 비정상 기록은 400 으로 거부된다', async () => {
         const res = await request(app)
-            .post('/api/results/upsert')
+            .post('/api/results/upsert').set('x-admin-key', 'testopkey')
             .send({ heat_id: fx.heatId, event_entry_id: fx.entryId, time_seconds: -5 })
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(400);
@@ -94,7 +95,7 @@ describe('POST /api/results/upsert — hot-path', () => {
 
     it('DNS 상태코드는 정상 처리된다', async () => {
         const res = await request(app)
-            .post('/api/results/upsert')
+            .post('/api/results/upsert').set('x-admin-key', 'testopkey')
             .send({ heat_id: fx.heatId, event_entry_id: fx.entryId, status_code: 'DNS' })
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(200);

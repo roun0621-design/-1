@@ -5,6 +5,7 @@
  * 커버리지가 없었다. upsert(ON CONFLICT, SQLite/PG 분기)·시기 기록 저장을 고정.
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 
 let app, db;
 
@@ -40,7 +41,7 @@ describe('POST /api/qualifications/save', () => {
         const ev = await eventOf(c, 'track');
         const e1 = await entryOf(c, ev, 1);
         const res = await request(app)
-            .post('/api/qualifications/save')
+            .post('/api/qualifications/save').set('x-admin-key', 'testopkey')
             .send({ event_id: ev, selections: [{ event_entry_id: e1, selected: 1, qualification_type: 'Q' }] })
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(200);
@@ -54,7 +55,7 @@ describe('POST /api/qualifications/save', () => {
         const c = await comp();
         const ev = await eventOf(c, 'track');
         const e1 = await entryOf(c, ev, 1);
-        const send = (sel) => request(app).post('/api/qualifications/save')
+        const send = (sel) => request(app).post('/api/qualifications/save').set('x-admin-key', 'testopkey')
             .send({ event_id: ev, selections: [{ event_entry_id: e1, selected: sel, qualification_type: 'q' }] })
             .set('Content-Type', 'application/json');
         await send(1);
@@ -75,7 +76,7 @@ describe('POST /api/height-attempts/save', () => {
         await db.run('INSERT INTO heat_entry (heat_id, event_entry_id) VALUES (?,?)', heatId, e1);
 
         const res = await request(app)
-            .post('/api/height-attempts/save')
+            .post('/api/height-attempts/save').set('x-admin-key', 'testopkey')
             .send({ heat_id: heatId, event_entry_id: e1, bar_height: 1.80, attempt_number: 1, result_mark: 'O' })
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(200);
@@ -92,7 +93,7 @@ describe('POST /api/height-attempts/save', () => {
         const r = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)', ev);
         const heatId = r.lastInsertRowid;
         const res = await request(app)
-            .post('/api/height-attempts/save')
+            .post('/api/height-attempts/save').set('x-admin-key', 'testopkey')
             .send({ heat_id: heatId }) // event_entry_id/bar_height/attempt_number 누락
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(400);

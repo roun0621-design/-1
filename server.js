@@ -71,7 +71,16 @@ const _multerUpload = multer({ dest: UPLOAD_TMP, limits: { fileSize: 10 * 1024 *
 // 파싱이 끝난 뒤 한 번 더 주입한다. (호출부 25곳은 그대로 upload.single/array 사용)
 const upload = {};
 for (const m of ['single', 'array', 'fields', 'any', 'none']) {
-    upload[m] = (...a) => { const mw = _multerUpload[m](...a); return (req, res, next) => mw(req, res, (err) => { if (!err) _applyJwtBridge(req); next(err); }); };
+    upload[m] = (...a) => { const mw = _multerUpload[m](...a); return (req, res, next) => mw(req, res, (err) => {
+        if (err) return next(err);
+        _applyJwtBridge(req);
+        // 쓰기 가드(멀티파트): 본문이 파싱된 지금에서야 키를 볼 수 있다. 업로드 라우트는 전부 운영/관리 기능.
+        if (!_hasValidWriteKey(req)) {
+            for (const f of [].concat(req.file || [], req.files || [])) { try { fs.unlinkSync(f.path); } catch (e) {} }
+            return res.status(403).json({ error: '인증 키가 필요합니다. (운영키 또는 관리자 로그인)' });
+        }
+        next();
+    }); };
 }
 
 // ---- KST (한국표준시, UTC+9) Helper ----
@@ -303,6 +312,36 @@ app.use(async (req, res, next) => {
         _applyJwtBridge(req);
     } catch (e) { /* 브리지 실패는 무인증과 동일 */ }
     next();
+});
+
+// ─── 쓰기 가드 (2026-09) ─────────────────────────────────────────────────
+//   점검에서 변경 라우트 40개가 키 검사 없이 열려 있었다: 기록 입력(/api/results/upsert — 진행 중 종목은 누구나 기록을 쓸 수 있었음),
+//   기록 초기화, 결승/준결승 생성, 레인 변경, 소집 처리, 풍속, 진출자 선정, 릴레이 주자, .lif/.txt 가져오기 등.
+//   → /api 의 모든 POST/PUT/PATCH/DELETE 는 유효한 키(운영키·관리자·기록위원 또는 JWT 세션)를 요구한다.
+//   라우트별 세부 권한(관리자 전용 등)은 기존 검사가 그대로 추가로 적용된다.
+//   클라이언트 api() 는 저장된 키를 쓰기 요청에 자동으로 실어 보내므로 로그인한 심판·운영진은 영향이 없다.
+const WRITE_GUARD_PUBLIC = [
+    /^\/api\/auth\//,                          // 로그인·갱신·로그아웃·키 확인
+    /^\/api\/admin\/verify$/,
+    /^\/api\/push\/(register|unregister|interests)$/,   // 관람객 푸시 구독
+    /^\/api\/event\/[^/]+\/(record|send-cert)$/,       // 공개 기록 페이지(슬러그) — 자체 키 검사
+    /^\/api\/external\//,                      // 외부 연동 — 자체 API 키(externalApiAuth)
+];
+function _writeKeyOf(req) {
+    return (req.body && typeof req.body === 'object' && (req.body.admin_key || req.body.operation_key || req.body.key))
+        || req.headers['x-admin-key'] || (req.query && (req.query.admin_key || req.query.key)) || '';
+}
+function _hasValidWriteKey(req) {
+    const k = String(_writeKeyOf(req) || '');
+    return !!k && (isOperationKey(k) || isAdminOrManager(k) || isRecordOfficerKey(k));
+}
+app.use((req, res, next) => {
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) || !req.path.startsWith('/api/')) return next();
+    if (WRITE_GUARD_PUBLIC.some(re => re.test(req.path))) return next();
+    // multipart 는 아직 본문이 없다 → multer 래퍼(upload.*)가 파싱 직후 같은 검사를 한다
+    if (/^multipart\/form-data/i.test(req.headers['content-type'] || '')) return next();
+    if (_hasValidWriteKey(req)) return next();
+    return res.status(403).json({ error: '인증 키가 필요합니다. (운영키 또는 관리자 로그인)' });
 });
 
 // ------------------------------------------------------------
@@ -2024,6 +2063,16 @@ function isShortTrackEvent(eventName) {
     return false;
 }
 
+// 출신 조 안에서의 순위 (트랙: 유효 기록 중 몇 번째로 빠른가). 시드 순서(TR 20.3.2)에 필요. 필드는 null.
+async function _placeInSourceHeat(event, eventEntryId) {
+    if (!['track', 'relay', 'road'].includes(event.category)) return null;
+    const row = await db.get(`SELECT r.heat_id, MIN(r.time_seconds) AS t FROM result r JOIN heat h ON h.id=r.heat_id
+        WHERE h.event_id=? AND r.event_entry_id=? AND r.time_seconds>0 AND (r.status_code IS NULL OR r.status_code='') GROUP BY r.heat_id ORDER BY t LIMIT 1`, event.id, eventEntryId);
+    if (!row || row.t == null) return null;
+    const faster = await db.get(`SELECT COUNT(DISTINCT event_entry_id) AS c FROM result WHERE heat_id=? AND time_seconds>0 AND time_seconds<? AND (status_code IS NULL OR status_code='')`, row.heat_id, row.t);
+    return ((faster && faster.c) || 0) + 1;
+}
+
 // WA Rule 20.4 - Serpentine (zigzag) distribution by performance
 // Athletes sorted by record, distributed across heats in snake order
 // Same-team athletes separated when possible
@@ -2057,18 +2106,16 @@ async function waSeededDistribution(event, qualifiedSels, groupCount, db) {
                 if (r && r.best) { bestPerf = -r.best; sourceHeat = h.heat_number; }
             }
         }
-        athletePerf.push({ ...sel, athlete_id: origEntry.athlete_id, team: athlete ? athlete.team : '', perf: bestPerf, sourceHeat });
+        athletePerf.push({ ...sel, athlete_id: origEntry.athlete_id, team: athlete ? athlete.team : '', perf: bestPerf, sourceHeat, place: await _placeInSourceHeat(event, sel.event_entry_id) });
     }
 
     // WA seeding: Q (순위 진출) first by performance, then q (기록 진출) by performance
     // A q athlete cannot outrank a Q athlete even with a better record
-    const qOrder = { 'Q': 0, 'q': 1, '': 2 };
-    athletePerf.sort((a, b) => {
-        const aQ = qOrder[a.qualification_type] ?? 2;
-        const bQ = qOrder[b.qualification_type] ?? 2;
-        if (aQ !== bQ) return aQ - bQ;
-        return a.perf - b.perf;
-    });
+    //   (TR 20.3.2: Q 안에서는 조 순위가 먼저 — 조 1위들 기록순, 조 2위들 기록순 … — lib/seeding.js)
+    {
+        const ordered = require('./lib/seeding').seedOrder(athletePerf);
+        athletePerf.length = 0; athletePerf.push(...ordered);
+    }
 
     // Serpentine distribution: row 1 L→R, row 2 R→L, etc.
     const groups = Array.from({ length: groupCount }, () => []);
@@ -3335,18 +3382,16 @@ app.post('/api/events/:id/create-final', async (req, res) => {
                 if (r && r.best) bestPerf = -r.best;
             }
         }
-        return { event_entry_id: q.event_entry_id, athlete_id: origEntry.athlete_id, qualification_type: q.qualification_type || '', perf: bestPerf };
+        return { event_entry_id: q.event_entry_id, athlete_id: origEntry.athlete_id, qualification_type: q.qualification_type || '', perf: bestPerf, place: await _placeInSourceHeat(event, q.event_entry_id) };
     }));
 
     // WA seeding: Q (순위 진출) first by performance, then q (기록 진출) by performance
     // A q athlete cannot outrank a Q athlete even with a better record
-    const qOrder = { 'Q': 0, 'q': 1, '': 2 };
-    qualSels.sort((a, b) => {
-        const aQ = qOrder[a.qualification_type] ?? 2;
-        const bQ = qOrder[b.qualification_type] ?? 2;
-        if (aQ !== bQ) return aQ - bQ;   // Q before q before unqualified
-        return a.perf - b.perf;            // within same group: best performance first
-    });
+    //   (TR 20.3.2: Q 안에서는 조 순위가 먼저 — 조 1위들 기록순, 조 2위들 기록순 … — lib/seeding.js)
+    {
+        const ordered = require('./lib/seeding').seedOrder(qualSels);
+        qualSels.length = 0; qualSels.push(...ordered);
+    }
 
     // Fetch the newly created final event for scoreboard key generation
     const finalEvent = await db.get('SELECT * FROM event WHERE id=?', finalEventId);
@@ -3373,7 +3418,7 @@ app.post('/api/events/:id/create-final', async (req, res) => {
             await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
             const groupAthletes = seeded[g] || [];
             // Sort within group by performance for correct WA lane assignment
-            groupAthletes.sort((a, b) => a.perf - b.perf);
+            groupAthletes.sort((a, b) => (a.seedRank || 0) - (b.seedRank || 0) || a.perf - b.perf);   // 시드 순서 유지 (레인 그룹 추첨 기준)
             const lanes = waAssignLanesBulk(groupAthletes, groupAthletes.length, isShortTrack_, event.name);
             for (let idx = 0; idx < groupAthletes.length; idx++) {
                 const ath = groupAthletes[idx];
@@ -3555,7 +3600,7 @@ app.post('/api/events/:id/create-semifinal', async (req, res) => {
             await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
             const groupAthletes = seeded[g] || [];
             // Sort within group by performance for correct WA lane assignment
-            groupAthletes.sort((a, b) => a.perf - b.perf);
+            groupAthletes.sort((a, b) => (a.seedRank || 0) - (b.seedRank || 0) || a.perf - b.perf);   // 시드 순서 유지 (레인 그룹 추첨 기준)
             const lanes = waAssignLanesBulk(groupAthletes, groupAthletes.length, isShortTrack, event.name);
             for (let idx = 0; idx < groupAthletes.length; idx++) {
                 const ath = groupAthletes[idx];

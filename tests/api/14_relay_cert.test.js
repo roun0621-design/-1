@@ -3,6 +3,7 @@
  * 미검증이던 두 도메인의 기본 CRUD·인증 가드를 고정.
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 
 let app, db;
 const ADMIN_KEY = 'testadmin1234';
@@ -29,7 +30,7 @@ describe('릴레이 구성원', () => {
         r = await db.run("INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?,?, 'registered')", ev, athleteId);
         const teamEntry = r.lastInsertRowid;
 
-        const res = await request(app).post('/api/relay-members')
+        const res = await request(app).post('/api/relay-members').set('x-admin-key', 'testopkey')
             .send({ event_entry_id: teamEntry, athlete_id: athleteId, leg_order: 1 })
             .set('Content-Type', 'application/json');
         expect(res.status).not.toBe(500);
@@ -45,7 +46,7 @@ describe('릴레이 구성원', () => {
 describe('인증서(상장) 양식', () => {
     it('양식 생성(관리자) → 200/201 + 목록 조회', async () => {
         const c = await comp();
-        const res = await request(app).post('/api/admin/certificate-templates')
+        const res = await request(app).post('/api/admin/certificate-templates').set('x-admin-key', 'testopkey')
             .send({ admin_key: ADMIN_KEY, competition_id: c, name: '테스트상장', kind: 'medalist' })
             .set('Content-Type', 'application/json');
         expect(res.status).not.toBe(500);
@@ -57,7 +58,7 @@ describe('인증서(상장) 양식', () => {
 
     it('관리자 키 없으면 403', async () => {
         const c = await comp();
-        const res = await request(app).post('/api/admin/certificate-templates')
+        const res = await request(app).post('/api/admin/certificate-templates').set('x-admin-key', 'testopkey')
             .send({ competition_id: c, name: '무권한', kind: 'medalist' })
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(403);

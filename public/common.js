@@ -437,6 +437,32 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================
 // API + Response Cache (loading optimisation)
 // ============================================================
+// ── 쓰기 요청에 저장된 키 자동 첨부 (2026-09 서버 쓰기 가드 대응) ─────────────
+//   서버는 /api 의 모든 POST/PUT/PATCH/DELETE 에 유효한 키를 요구한다. api() 는 원래 키를 실어 보내지만,
+//   화면 곳곳의 직접 fetch(업로드 FormData 등)가 빠뜨려도 막히지 않도록 같은 출처의 쓰기 요청에 x-admin-key 를 붙인다.
+(function _attachKeyToWrites() {
+    if (typeof window === 'undefined' || !window.fetch || window.__paceFetchPatched) return;
+    window.__paceFetchPatched = true;
+    const _fetch = window.fetch;
+    window.fetch = function (input, init) {
+        try {
+            const isReq = (typeof Request !== 'undefined') && (input instanceof Request);
+            const method = String((init && init.method) || (isReq ? input.method : 'GET')).toUpperCase();
+            if (method !== 'GET' && method !== 'HEAD') {
+                const u = new URL(isReq ? input.url : String(input), location.href);
+                if (u.origin === location.origin && u.pathname.startsWith('/api/') && !u.pathname.startsWith('/api/auth/')) {
+                    const k = localStorage.getItem('pace_admin_key') || '';
+                    if (k) {
+                        const h = new Headers((init && init.headers) || (isReq ? input.headers : undefined));
+                        if (!h.has('x-admin-key')) { h.set('x-admin-key', k); init = Object.assign({}, init, { headers: h }); }
+                    }
+                }
+            }
+        } catch (e) { /* 헤더에 못 넣는 문자(한글 키 등)면 본문 키에 맡긴다 */ }
+        return _fetch.call(this, input, init);
+    };
+})();
+
 // ── JWT 세션 유지 (관리자·매니저 로그인) ─────────────────────────────────
 //   login.html 은 비밀번호 대신 표식 'jwt-session' 만 pace_admin_key 에 둔다. 실제 인증은 HttpOnly 쿠키(pr_access, 1시간)이고
 //   서버의 JWT 브리지가 레거시 키 검사를 통과시킨다. 쿠키가 만료되기 전에 주기적으로 갱신한다.

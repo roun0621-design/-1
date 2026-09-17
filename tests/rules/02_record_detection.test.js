@@ -7,6 +7,7 @@
  *  - 종합경기: 풍속 세부종목 평균 +2.0 초과면 참고기록
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 let app, db;
 const fx = {};
 const stamp = Date.now();
@@ -24,7 +25,7 @@ async function mkEntry(evId, heatId, athleteId, lane) {
     return ee.lastInsertRowid;
 }
 const pending = (evId) => db.all("SELECT record_type, new_value_num, wind FROM record_breaking_log WHERE event_id=? AND status='pending' ORDER BY record_type", evId);
-const upsert = (body) => request(app).post('/api/results/upsert').send(body);
+const upsert = (body) => request(app).post('/api/results/upsert').set('x-admin-key', 'testopkey').send(body);
 
 beforeAll(async () => {
     const mod = require('../../server.js'); app = mod.app; db = mod.db;
@@ -43,14 +44,14 @@ describe('트랙 풍속 (조 풍속 기준)', () => {
     it('추풍(+2.4)인 조의 10.40 은 감지되지 않는다', async () => {
         const e = await mkEvent('100m', 'track'); fx.e1 = e;
         const entry = await mkEntry(e.evId, e.heatId, fx.ath[0], 4);
-        await request(app).post(`/api/heats/${e.heatId}/wind`).send({ wind: 2.4 });
+        await request(app).post(`/api/heats/${e.heatId}/wind`).set('x-admin-key', 'testopkey').send({ wind: 2.4 });
         const r = await upsert({ heat_id: e.heatId, event_entry_id: entry, time_seconds: 10.40 });
         expect(r.status).toBe(200);
         expect(await pending(e.evId)).toEqual([]);
         fx.e1entry = entry;
     });
     it('풍속을 +1.9 로 고치면 다시 감지된다 (CR)', async () => {
-        const r = await request(app).post(`/api/heats/${fx.e1.heatId}/wind`).send({ wind: 1.9 });
+        const r = await request(app).post(`/api/heats/${fx.e1.heatId}/wind`).set('x-admin-key', 'testopkey').send({ wind: 1.9 });
         expect(r.status).toBe(200);
         const p = await pending(fx.e1.evId);
         expect(p.map(x => x.record_type)).toEqual(['competition']);
@@ -58,12 +59,12 @@ describe('트랙 풍속 (조 풍속 기준)', () => {
         expect(p[0].wind).toBeCloseTo(1.9, 5);
     });
     it('기록이 먼저, 풍속(+3.1)이 나중에 들어오면 대기 중 감지가 제거된다', async () => {
-        const r = await request(app).post(`/api/heats/${fx.e1.heatId}/wind`).send({ wind: 3.1 });
+        const r = await request(app).post(`/api/heats/${fx.e1.heatId}/wind`).set('x-admin-key', 'testopkey').send({ wind: 3.1 });
         expect(r.body.record_recheck.removed).toBe(1);
         expect(await pending(fx.e1.evId)).toEqual([]);
     });
     it('+2.0 정확히는 허용 (초과만 참고기록)', async () => {
-        await request(app).post(`/api/heats/${fx.e1.heatId}/wind`).send({ wind: 2.0 });
+        await request(app).post(`/api/heats/${fx.e1.heatId}/wind`).set('x-admin-key', 'testopkey').send({ wind: 2.0 });
         expect((await pending(fx.e1.evId)).length).toBe(1);
     });
 });
@@ -104,7 +105,7 @@ describe('종합경기 평균 풍속', () => {
         const s1 = await mkEvent('[10종] 100m', 'track', { parent, sort: 1 });
         const s2 = await mkEvent('[10종] 멀리뛰기', 'field_distance', { parent, sort: 2 });
         const e1 = await mkEntry(s1.evId, s1.heatId, fx.ath[2], 4), e2 = await mkEntry(s2.evId, s2.heatId, fx.ath[2], 1);
-        await request(app).post(`/api/heats/${s1.heatId}/wind`).send({ wind: 3.0 });
+        await request(app).post(`/api/heats/${s1.heatId}/wind`).set('x-admin-key', 'testopkey').send({ wind: 3.0 });
         await upsert({ heat_id: s1.heatId, event_entry_id: e1, time_seconds: 10.80 });
         await upsert({ heat_id: s2.heatId, event_entry_id: e2, attempt_number: 1, distance_meters: 7.20, wind: 3.0 });
         expect(await pending(parent)).toEqual([]);           // 평균 (3.0+3.0)/2 = +3.0 → 참고기록

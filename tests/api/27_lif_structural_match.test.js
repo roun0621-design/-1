@@ -11,6 +11,7 @@
  * DB 격리: tests/setup/global-setup.js 가 임시 SQLite 주입.
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 
 let app, db;
 const fx = {};
@@ -54,7 +55,7 @@ const LIF_HDR = '1,1,3,남자 실업부 100 결승,+0.8,m/s,,,,,,2026-09-14 10:0
 
 describe('.lif 구조 매칭 폴백', () => {
     it('preview: 키 불일치("남자 실업부 100 결승") → 100m 결승 조로 구조 매칭 (100mH 아님)', async () => {
-        const res = await request(app).post('/api/scoreboard/preview')
+        const res = await request(app).post('/api/scoreboard/preview').set('x-admin-key', 'testopkey')
             .field('competition_id', String(fx.compId))
             .attach('files', lifBuffer([LIF_HDR, '1,007,3,,김철수,테스트팀,10.52,,10.52', '2,12,4,,이영희,테스트팀,10.80,,0.28']), 'r.lif');
         expect(res.status).toBe(200);
@@ -69,7 +70,7 @@ describe('.lif 구조 매칭 폴백', () => {
     });
 
     it('import: 기록이 100m 조에 저장되고 허들 조는 건드리지 않는다', async () => {
-        const res = await request(app).post('/api/scoreboard/import')
+        const res = await request(app).post('/api/scoreboard/import').set('x-admin-key', 'testopkey')
             .field('competition_id', String(fx.compId))
             .attach('files', lifBuffer([LIF_HDR, '1,007,3,,김철수,테스트팀,10.52,,10.52', '2,12,4,,이영희,테스트팀,10.80,,0.28']), 'r.lif');
         expect(res.status).toBe(200);
@@ -81,7 +82,7 @@ describe('.lif 구조 매칭 폴백', () => {
     });
 
     it('정확한 키는 여전히 키 매칭(via=key)', async () => {
-        const res = await request(app).post('/api/scoreboard/preview')
+        const res = await request(app).post('/api/scoreboard/preview').set('x-admin-key', 'testopkey')
             .field('competition_id', String(fx.compId))
             .attach('files', lifBuffer(['1,1,4,남자 일반부 100mH 결승,,,,,,,,2026-09-14 10:00:00', '1,7,3,,허들러,테스트팀,13.90,,13.90']), 'h.lif');
         expect(res.status).toBe(200);
@@ -90,7 +91,7 @@ describe('.lif 구조 매칭 폴백', () => {
     });
 
     it('종목 자체가 없으면 여전히 not_found', async () => {
-        const res = await request(app).post('/api/scoreboard/preview')
+        const res = await request(app).post('/api/scoreboard/preview').set('x-admin-key', 'testopkey')
             .field('competition_id', String(fx.compId))
             .attach('files', lifBuffer(['1,1,5,남자 실업부 400 결승,,,,,,,,2026-09-14 10:00:00', '1,7,3,,김철수,테스트팀,48.00,,48.00']), 'x.lif');
         expect(res.status).toBe(200);

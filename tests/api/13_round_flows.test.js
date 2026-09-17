@@ -3,6 +3,7 @@
  * 미검증이던 쓰기 경로를 픽스처로 두드려 500 크래시·회귀 방지.
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 
 let app, db;
 const ADMIN_KEY = 'testadmin1234'; // global-setup ADMIN_PW
@@ -35,7 +36,7 @@ describe('POST /api/events/:id/create-semifinal', () => {
             await db.run('INSERT INTO result (heat_id, event_entry_id, time_seconds) VALUES (?,?,?)', heat, entry, 11 + i * 0.1);
             selections.push({ event_entry_id: entry, selected: 1 });
         }
-        const res = await request(app).post(`/api/events/${ev}/create-semifinal`)
+        const res = await request(app).post(`/api/events/${ev}/create-semifinal`).set('x-admin-key', 'testopkey')
             .send({ group_count: 1, selections }).set('Content-Type', 'application/json');
         expect(res.status).not.toBe(500);
         expect(res.status).toBe(200);
@@ -46,7 +47,7 @@ describe('POST /api/events/:id/create-semifinal', () => {
     it('자격자(selected) 없으면 400', async () => {
         const c = await comp();
         const r = await db.run("INSERT INTO event (competition_id, name, category, gender, round_type, round_status) VALUES (?,?, 'track', 'M', 'preliminary', 'in_progress')", c, '200m');
-        const res = await request(app).post(`/api/events/${r.lastInsertRowid}/create-semifinal`)
+        const res = await request(app).post(`/api/events/${r.lastInsertRowid}/create-semifinal`).set('x-admin-key', 'testopkey')
             .send({ group_count: 1, selections: [{ event_entry_id: 1, selected: 0 }] }).set('Content-Type', 'application/json');
         expect(res.status).toBe(400);
     });
@@ -63,7 +64,7 @@ describe('POST /api/events/:id/callroom-complete', () => {
         r = await db.run("INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?,?, 'registered')", ev, r.lastInsertRowid);
         await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?,?,1)', heat, r.lastInsertRowid);
 
-        const res = await request(app).post(`/api/events/${ev}/callroom-complete`)
+        const res = await request(app).post(`/api/events/${ev}/callroom-complete`).set('x-admin-key', 'testopkey')
             .send({ judge_name: '심판A', heat_id: heat }).set('Content-Type', 'application/json');
         expect(res.status).not.toBe(500);
         expect(res.status).toBe(200);
@@ -76,7 +77,7 @@ describe('POST /api/events/:id/sub-events', () => {
     it('혼성 부모에 세부종목 추가 → 200', async () => {
         const c = await comp();
         const r = await db.run("INSERT INTO event (competition_id, name, category, gender, round_type, round_status) VALUES (?,?, 'combined', 'M', 'final', 'in_progress')", c, '10종경기');
-        const res = await request(app).post(`/api/events/${r.lastInsertRowid}/sub-events`)
+        const res = await request(app).post(`/api/events/${r.lastInsertRowid}/sub-events`).set('x-admin-key', 'testopkey')
             .send({ admin_key: ADMIN_KEY, name: '100m', category: 'track' }).set('Content-Type', 'application/json');
         expect(res.status).not.toBe(500);
         expect(res.status).toBe(200);
@@ -85,7 +86,7 @@ describe('POST /api/events/:id/sub-events', () => {
     it('관리자 키 없으면 403', async () => {
         const c = await comp();
         const r = await db.run("INSERT INTO event (competition_id, name, category, gender, round_type, round_status) VALUES (?,?, 'combined', 'M', 'final', 'in_progress')", c, '7종경기');
-        const res = await request(app).post(`/api/events/${r.lastInsertRowid}/sub-events`)
+        const res = await request(app).post(`/api/events/${r.lastInsertRowid}/sub-events`).set('x-admin-key', 'testopkey')
             .send({ name: '100m', category: 'track' }).set('Content-Type', 'application/json');
         expect(res.status).toBe(403);
     });

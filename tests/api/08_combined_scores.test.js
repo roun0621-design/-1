@@ -7,6 +7,7 @@
  *   - 종료된 대회: 비관리자 저장 차단(403) ← 잠금 정상 작동
  */
 const request = require('supertest');
+// (2026-09) 쓰기 가드: 모든 변경 요청은 운영키가 필요 → 테스트도 심판 세션처럼 x-admin-key 를 보낸다
 
 let app, db;
 
@@ -38,7 +39,7 @@ describe('POST /api/combined-scores/save', () => {
     it('진행중 대회: 점수 저장 시 200 + DB 반영 (500 크래시 없음)', async () => {
         const { entryId } = await makeFixture('active', '2099-12-31');
         const res = await request(app)
-            .post('/api/combined-scores/save')
+            .post('/api/combined-scores/save').set('x-admin-key', 'testopkey')
             .send({ event_entry_id: entryId, sub_event_name: '100m', sub_event_order: 1, raw_record: 11.5, wa_points: 900 })
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(200);
@@ -51,7 +52,7 @@ describe('POST /api/combined-scores/save', () => {
     it('종료된 대회: 비관리자 저장은 차단된다 (종료-잠금 정상 작동)', async () => {
         const { entryId } = await makeFixture('completed', '2020-01-01');
         const res = await request(app)
-            .post('/api/combined-scores/save')
+            .post('/api/combined-scores/save').set('x-admin-key', 'testopkey')
             .send({ event_entry_id: entryId, sub_event_name: '100m', sub_event_order: 1, raw_record: 11.5, wa_points: 900 })
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(403); // requireAdminAfterCompEnd 가 차단
