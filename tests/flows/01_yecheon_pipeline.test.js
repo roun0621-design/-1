@@ -61,6 +61,22 @@ describe('1단계 연맹 명단', () => {
     });
 });
 
+describe('종합경기 세부종목 순서 (점수식은 순서로 선택된다)', () => {
+    // results.js·combined_scores.js 는 세부종목의 '순서(sort_order)'로 WA 점수식을 고른다.
+    // 순서가 어긋나면 멀리뛰기 기록에 포환 점수식이 적용되는 식으로 조용히 틀린 점수가 나온다 → 생성 순서를 고정.
+    const DEC = ['100m', '멀리뛰기', '포환던지기', '높이뛰기', '400m', '110mH', '원반던지기', '장대높이뛰기', '창던지기', '1500m'];
+    const HEP = ['100mH', '높이뛰기', '포환던지기', '200m', '멀리뛰기', '창던지기', '800m'];
+    it('10종·7종 세부종목이 WA 규정 순서로 생성된다', async () => {
+        for (const compId of [ids.univ, ids.pro]) {
+            for (const [pname, want] of [['10종경기', DEC], ['7종경기', HEP]]) {
+                const parent = await one('SELECT id FROM event WHERE competition_id=? AND name=?', compId, pname);
+                const subs = await q('SELECT name FROM event WHERE parent_event_id=? ORDER BY sort_order, id', parent.id);
+                expect(subs.map(x => norm(x.name.replace(/^\[[^\]]+\]\s*/, ''))), pname).toEqual(want.map(norm));
+            }
+        }
+    });
+});
+
 describe('2단계 사전 조편성', () => {
     it('대학: 45 갱신 · 종목 신규 0 · 라운드 변경 1', async () => {
         const r = await post('/api/heat-assignment/apply', { competition_id: ids.univ }, path.join(FX, 'univ', '2_heat_assignment.xlsx'));

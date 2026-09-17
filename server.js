@@ -2693,7 +2693,10 @@ app.post('/api/heats/:id/wind', async (req, res) => {
     }
     await db.run('UPDATE heat SET wind=? WHERE id=?', windValue, heat.id);
     broadcastSSE('wind_update', { heat_id: heat.id, wind: windValue });
-    res.json({ success: true, wind: windValue });
+    // 풍속이 바뀌면 이 조의 신기록 판정을 다시 (추풍이면 대기 중 감지 제거, 허용 풍속이면 재감지)
+    let recheck = null;
+    try { recheck = await _resultsRoutes.reevaluateHeatRecords(heat.id); } catch (e) { console.error('[wind] 신기록 재판정 실패:', e && e.message); }
+    res.json({ success: true, wind: windValue, record_recheck: recheck });
 });
 app.get('/api/heats/:id/wind', async (req, res) => {
     const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
@@ -15097,7 +15100,7 @@ function migrateNormalizeDivisionAndRound() {
 // Export app/server for tests; only auto-listen when run directly (node server.js)
 // db 도 노출 — 테스트에서 격리 DB에 픽스처를 직접 삽입하기 위함 (운영에선 미사용)
 if (require.main !== module) {
-    module.exports = { app, server, db };
+    module.exports = { app, server, db, calcWAPoints, WA_TABLES, DECATHLON_KEYS, HEPTATHLON_KEYS };
 } else
 server.listen(PORT, '0.0.0.0', async () => {
     // PG 모드: boot 시 1회 async 캐시 로드 (SQLite는 boot 직후 sync 로드 완료됨)
