@@ -5016,12 +5016,28 @@ POST /api/external/event-result-link/batch<br>
             if (!compId) { toast('대회를 선택하세요', 'error'); return; }
             statusEl.innerHTML = '<span style="color:var(--green);">업로드 중...</span>';
             try {
-                const form = new FormData();
-                form.append('file', fileInput.files[0]);
-                form.append('competition_id', compId);
-                form.append('admin_key', AK());
-                const r = await fetch('/api/timetable/upload', { method: 'POST', body: form }).then(res => res.json());
+                const file = fileInput.files[0];
+                const send = async (mode) => {
+                    const form = new FormData();
+                    form.append('file', file);
+                    form.append('competition_id', compId);
+                    form.append('admin_key', AK());
+                    if (mode) form.append('overwrite_mode', mode);
+                    return fetch('/api/timetable/upload', { method: 'POST', body: form }).then(res => res.json());
+                };
+                let r = await send();
                 if (r.error) throw r;
+                // 지난 일차만 들어 있어 아무것도 반영되지 않은 경우 → 분명히 알리고, 원하면 강제 덮어쓰기로 다시 올린다
+                if (r.needs_force) {
+                    if (confirm(r.message + '\n\n지금 강제 덮어쓰기로 다시 올릴까요? (해당 일차의 기존 시간표가 파일 내용으로 교체됩니다)')) {
+                        r = await send('force');
+                        if (r.error) throw r;
+                    } else {
+                        statusEl.innerHTML = `<span style="color:var(--danger);font-weight:600;">${r.message}</span>`;
+                        toast('반영된 내용이 없습니다', 'error');
+                        return;
+                    }
+                }
                 statusEl.innerHTML = `<span style="color:var(--green);font-weight:600;">${r.message}</span>`;
                 fileInput.value = '';
                 loadTimetableInfo();

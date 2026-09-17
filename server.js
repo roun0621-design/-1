@@ -3071,25 +3071,30 @@ app.post('/api/callroom/checkin', async (req, res) => {
     }
     const variantArr = [...variants];
 
-    async function findAthlete(scope) {
-        for (const v of variantArr) {
-            const a = scope
-                ? await db.get('SELECT * FROM athlete WHERE barcode=? AND competition_id=?', v, scope)
-                : await db.get('SELECT * FROM athlete WHERE barcode=?', v);
-            if (a) return a;
+    // (2026-09) 후보를 '전부' 모은 뒤 고른다. 남·여가 같은 배번을 쓰는 대회가 많은데(예천: 남 25·여 25 모두 존재)
+    //   예전엔 배번이 같은 첫 선수를 그대로 써서, 여자 100m 소집에서 "25"를 치면 남자 25번이 다른 종목에 출석 처리됐다.
+    //   우선순위: ① 지금 소집 중인 종목에 등록된 선수 ② 그 종목과 성별이 같은 선수 ③ 첫 후보
+    async function findCandidates(scope) {
+        const out = []; const seen = new Set();
+        const push = rows => { for (const a of rows || []) if (!seen.has(a.id)) { seen.add(a.id); out.push(a); } };
+        for (const v of variantArr) push(scope ? await db.all('SELECT * FROM athlete WHERE barcode=? AND competition_id=?', v, scope) : await db.all('SELECT * FROM athlete WHERE barcode=?', v));
+        for (const v of variantArr) push(scope ? await db.all('SELECT * FROM athlete WHERE bib_number=? AND competition_id=?', v, scope) : await db.all('SELECT * FROM athlete WHERE bib_number=?', v));
+        return out;
+    }
+    async function pickAthlete(cands) {
+        if (!cands.length) return null;
+        if (event_id) {
+            for (const a of cands) { if (await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, a.id)) return a; }
+            const ev = await db.get('SELECT gender FROM event WHERE id=?', event_id);
+            if (ev && ev.gender && ev.gender !== 'X') { const g = cands.find(a => a.gender === ev.gender); if (g) return g; }
         }
-        for (const v of variantArr) {
-            const a = scope
-                ? await db.get('SELECT * FROM athlete WHERE bib_number=? AND competition_id=?', v, scope)
-                : await db.get('SELECT * FROM athlete WHERE bib_number=?', v);
-            if (a) return a;
-        }
-        return null;
+        return cands[0];
     }
 
     let athlete = null;
-    if (competition_id) athlete = await findAthlete(competition_id);
-    if (!athlete) athlete = await findAthlete(null);
+    if (competition_id) athlete = await pickAthlete(await findCandidates(competition_id));
+    // 대회를 알 수 없을 때만 전체에서 찾는다 (대회가 정해져 있는데 다른 대회 선수를 출석 처리하면 안 된다)
+    if (!athlete && !competition_id) athlete = await pickAthlete(await findCandidates(null));
     if (!athlete) return res.status(404).json({ error: '선수를 찾을 수 없습니다', barcode });
     return await continueCheckin(res, athlete, event_id, competition_id);
 });

@@ -188,6 +188,13 @@ describe('3단계 당일 조편성 — 3일차', () => {
 });
 
 describe('시간표 (스마트 머지)', () => {
+    it('지난 일차만 든 파일을 스마트 모드로 올리면 "반영 없음"을 분명히 알린다 (needs_force)', async () => {
+        const r = await post('/api/timetable/upload', { competition_id: ids.univ }, path.join(FX, 'univ', 'timetable.xlsx'));
+        expect(r.status).toBe(200);
+        expect(r.body.needs_force).toBe(true);
+        expect(r.body.message).toContain('반영된 내용이 없습니다');
+        expect((await one('SELECT COUNT(*) c FROM timetable WHERE competition_id=?', ids.univ)).c).toBe(0);
+    });
     it('대학: 1일차 26 · 2일차 18 · 3일차 7 행, 미연결은 결승 대기·출전자 없음뿐', async () => {
         // 스마트 머지는 '오늘' 기준 지난 일차를 보존하므로(대회가 끝난 뒤엔 아무것도 안 올라감) 회귀 테스트는 force 로 올린다 — Phase 3 이슈 #2
         const r = await post('/api/timetable/upload', { competition_id: ids.univ, overwrite_mode: 'force' }, path.join(FX, 'univ', 'timetable.xlsx'));
