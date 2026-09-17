@@ -437,6 +437,44 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================
 // API + Response Cache (loading optimisation)
 // ============================================================
+// ── JWT 세션 유지 (관리자·매니저 로그인) ─────────────────────────────────
+//   login.html 은 비밀번호 대신 표식 'jwt-session' 만 pace_admin_key 에 둔다. 실제 인증은 HttpOnly 쿠키(pr_access, 1시간)이고
+//   서버의 JWT 브리지가 레거시 키 검사를 통과시킨다. 쿠키가 만료되기 전에 주기적으로 갱신한다.
+function _isJwtSession() { try { return localStorage.getItem('pace_admin_key') === 'jwt-session'; } catch (e) { return false; } }
+let _jwtRefreshing = null;
+function _jwtRefresh() {
+    if (_jwtRefreshing) return _jwtRefreshing;
+    _jwtRefreshing = (async () => {
+        try {
+            let rt = null; try { rt = localStorage.getItem('pr_refresh_token'); } catch (e) {}
+            const r = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: rt ? JSON.stringify({ refresh_token: rt }) : '{}' });
+            if (!r.ok) return false;
+            const d = await r.json().catch(() => ({}));
+            try {
+                if (d.access_token && localStorage.getItem('pr_access_token') != null) localStorage.setItem('pr_access_token', d.access_token);
+                if (d.refresh_token && localStorage.getItem('pr_refresh_token') != null) localStorage.setItem('pr_refresh_token', d.refresh_token);
+                localStorage.setItem('pr_refresh_at', String(Date.now()));
+            } catch (e) {}
+            return true;
+        } catch (e) { return false; } finally { setTimeout(() => { _jwtRefreshing = null; }, 0); }
+    })();
+    return _jwtRefreshing;
+}
+(function _jwtKeepAlive() {
+    if (typeof window === 'undefined') return;
+    // 이전 버전은 JWT 로그인 때 관리자 비밀번호 평문을 pace_admin_key 에 저장했다 → JWT 세션이 있으면 표식으로 교체해 지운다
+    try {
+        const u = JSON.parse(localStorage.getItem('pr_auth_user') || 'null');
+        const k = localStorage.getItem('pace_admin_key');
+        if (u && u.role && u.role !== 'viewer' && k && k !== 'jwt-session' && localStorage.getItem('pr_refresh_token')) localStorage.setItem('pace_admin_key', 'jwt-session');
+    } catch (e) {}
+    if (!_isJwtSession()) return;
+    const due = () => { let at = 0; try { at = +localStorage.getItem('pr_refresh_at') || 0; } catch (e) {} return Date.now() - at > 40 * 60 * 1000; };
+    if (due()) _jwtRefresh();
+    setInterval(() => { if (_isJwtSession() && due()) _jwtRefresh(); }, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && _isJwtSession() && due()) _jwtRefresh(); });
+})();
+
 async function api(method, path, body) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
     // Auto-inject admin_key for all write operations (body + x-admin-key header —
@@ -449,7 +487,13 @@ async function api(method, path, body) {
         }
     }
     if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(path, opts);
+    let res = await fetch(path, opts);
+    // JWT 세션(관리자 로그인): 액세스 토큰(1시간) 만료로 401/403 이면 한 번 갱신 후 재시도
+    //   (403 은 정당한 권한 거부일 수도 있으므로, 마지막 갱신이 5분 넘었을 때만 시도 → 토큰 회전 남발 방지)
+    if ((res.status === 401 || res.status === 403) && _isJwtSession() && !path.startsWith('/api/auth/')) {
+        let at = 0; try { at = +localStorage.getItem('pr_refresh_at') || 0; } catch (e) {}
+        if (Date.now() - at > 5 * 60 * 1000 && await _jwtRefresh()) res = await fetch(path, opts);
+    }
     // SW가 오프라인 큐잉한 응답 감지
     if (res.headers.get('X-Offline') === 'true') {
         const data = await res.json();

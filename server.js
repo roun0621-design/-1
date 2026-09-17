@@ -66,7 +66,13 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const UPLOAD_TMP = '/tmp/uploads/';
 if (!fs.existsSync(UPLOAD_TMP)) fs.mkdirSync(UPLOAD_TMP, { recursive: true });
-const upload = multer({ dest: UPLOAD_TMP, limits: { fileSize: 10 * 1024 * 1024 } });
+const _multerUpload = multer({ dest: UPLOAD_TMP, limits: { fileSize: 10 * 1024 * 1024 } });
+// multer 는 req.body 를 새로 만들기 때문에, JWT 브리지(_applyJwtBridge)가 넣어둔 admin_key 가 사라진다 →
+// 파싱이 끝난 뒤 한 번 더 주입한다. (호출부 25곳은 그대로 upload.single/array 사용)
+const upload = {};
+for (const m of ['single', 'array', 'fields', 'any', 'none']) {
+    upload[m] = (...a) => { const mw = _multerUpload[m](...a); return (req, res, next) => mw(req, res, (err) => { if (!err) _applyJwtBridge(req); next(err); }); };
+}
 
 // ---- KST (한국표준시, UTC+9) Helper ----
 function kstNow() {
@@ -221,6 +227,13 @@ setTimeout(() => {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+// 프록시(nginx 등) 뒤에서 req.ip 가 실제 클라이언트 IP 가 되도록. 미설정이면 모든 요청이 프록시 IP 하나로 잡혀
+// 레이트리밋이 전 사용자 공용이 되고, X-Forwarded-For 를 직접 읽으면 클라이언트가 IP 를 조작할 수 있다.
+//   TRUST_PROXY: 홉 수(기본 1) | 'false'(프록시 없음) | 'true' | 서브넷 문자열
+{
+    const tp = process.env.TRUST_PROXY;
+    app.set('trust proxy', tp == null || tp === '' ? 1 : (tp === 'false' ? false : tp === 'true' ? true : (/^\d+$/.test(tp) ? parseInt(tp, 10) : tp)));
+}
 
 // ---- Security Middleware ----
 app.use(helmet({
@@ -240,7 +253,7 @@ app.use(rateLimit({
 // 인증 API는 더 엄격하게 제한 (무차별 대입 방지)
 const authLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 30,               // 1분에 30회
+    max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '30', 10),   // 1분에 30회 (테스트는 한 IP 에서 로그인이 몰리므로 global-setup 이 상향)
     message: { error: '로그인 시도가 너무 많습니다. 1분 후 다시 시도하세요.' }
 });
 
@@ -248,6 +261,49 @@ app.use(compression());
 app.use(express.json());
 // AUTH Phase 2: JWT 쿠키 파싱 (HttpOnly access_token / refresh_token)
 try { app.use(require('cookie-parser')()); } catch (e) { console.warn('[auth] cookie-parser 미설치:', e.message); }
+
+// ─── JWT → 레거시 키 브리지 (2026-09 인증 정리) ─────────────────────────────
+//   라우트 ~90곳이 isAdminKey(req.query.key / body.admin_key / x-admin-key) 로 권한을 검사한다.
+//   관리자가 JWT(쿠키 pr_access 또는 Authorization: Bearer)로 로그인했으면, 요청마다 1회용 내부 토큰을 만들어
+//   그 자리들에 넣어 준다 → 브라우저가 관리자 비밀번호를 보관·전송할 필요가 없어진다.
+//   · 토큰은 'jwtb:' + 난수, 서버 메모리에만 있고 응답이 끝나면 폐기 (밖으로 나가지 않음)
+//   · 쿠키로 인증된 변경 요청은 Origin 이 같은 호스트일 때만 브리지 (CSRF 방지)
+//   · viewer 역할은 브리지하지 않음
+const _bridgeTokens = new Map(); // token → { role, name, userId }
+function _bridgeOf(key) { return (typeof key === 'string' && key.startsWith('jwtb:')) ? (_bridgeTokens.get(key) || null) : null; }
+function _applyJwtBridge(req) {
+    const t = req && req._bridgeToken;
+    if (!t) return;
+    req.headers['x-admin-key'] = t;
+    if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) req.body.admin_key = t;
+    // Express 5 의 req.query 는 매번 다시 파싱하는 getter → 인스턴스 속성으로 덮어써야 값이 유지된다
+    const qv = Object.assign({}, req.query, { key: t, admin_key: t });
+    Object.defineProperty(req, 'query', { value: qv, writable: true, configurable: true, enumerable: true });
+}
+app.use(async (req, res, next) => {
+    try {
+        if (!req.path.startsWith('/api/') || req.path.startsWith('/api/auth/')) return next();
+        const auth = req.headers['authorization'] || '';
+        const bm = auth.match(/^Bearer\s+(.+)$/i);
+        const cookieTok = req.cookies && req.cookies.pr_access;
+        const tok = bm ? bm[1].trim() : cookieTok;
+        if (!tok) return next();
+        // 쿠키 인증 + 변경 요청 → Origin 확인 (헤더 Bearer 는 교차 사이트에서 자동 첨부되지 않으므로 제외)
+        if (!bm && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+            const origin = req.headers.origin;
+            if (origin) { let h = ''; try { h = new URL(origin).host; } catch (e) {} if (h !== req.headers.host) return next(); }
+        }
+        const payload = await require('./lib/auth/jwt').verifyAccess(db, tok);
+        if (!payload || !payload.role || payload.role === 'viewer') return next();
+        const t = 'jwtb:' + crypto.randomBytes(18).toString('hex');
+        _bridgeTokens.set(t, { role: payload.role, name: payload.username || 'user', userId: payload.sub });
+        req._bridgeToken = t;
+        req.user = req.user || { id: payload.sub, username: payload.username, role: payload.role, source: 'jwt' };
+        res.on('close', () => _bridgeTokens.delete(t));
+        _applyJwtBridge(req);
+    } catch (e) { /* 브리지 실패는 무인증과 동일 */ }
+    next();
+});
 
 // ------------------------------------------------------------
 // 글로벌 쓰기 가드 미들웨어 — 종료된 대회는 운영자/녹화관 쓰기 금지
@@ -1654,6 +1710,8 @@ if (!db.isAsync) _loadOpKeyCacheSync();
 
 function isOperationKey(key) {
     if (!key) return false;
+    const _b = _bridgeOf(key); if (_b) return ['admin', 'manager', 'operator'].includes(_b.role);
+    if (typeof key === 'string' && key.startsWith('jwtb:')) return false; // 만료/위조 브리지 토큰
     if (key === ACCESS_KEYS.operation) return true;
     if (bcrypt.compareSync(key, ACCESS_KEYS.adminHash)) return true;
     return _opKeyCache.has(key);
@@ -1672,9 +1730,12 @@ function orderByBibSql(colExpr = 'bib_number') {
 }
 function isAdminKey(key) {
     if (!key) return false;
+    const _b = _bridgeOf(key); if (_b) return _b.role === 'admin';
+    if (typeof key === 'string' && key.startsWith('jwtb:')) return false; // 만료/위조 브리지 토큰
     return bcrypt.compareSync(key, ACCESS_KEYS.adminHash);
 }
 function isAdminOrManager(key) {
+    const _b = _bridgeOf(key); if (_b) return _b.role === 'admin' || _b.role === 'manager';
     if (isAdminKey(key)) return true;
     const r = _opKeyCache.get(key);
     return !!(r && r.can_manage);
@@ -1683,6 +1744,7 @@ function isAdminOrManager(key) {
 //   ACCESS_KEYS.recordOfficer 가 비어있으면 항상 false (비활성).
 function isRecordOfficerKey(key) {
     if (!key) return false;
+    const _b = _bridgeOf(key); if (_b) return _b.role === 'record_officer';
     const stored = ACCESS_KEYS.recordOfficer;
     if (!stored) return false; // 비활성 상태
     return key === stored;
@@ -1693,6 +1755,7 @@ function isRecordOfficerOrAdmin(key) {
     return isRecordOfficerKey(key);
 }
 function getJudgeName(key) {
+    const _b = _bridgeOf(key); if (_b) return _b.role === 'admin' ? '관리자' : _b.name;
     if (isAdminKey(key)) return '관리자';
     if (isRecordOfficerKey(key)) return '기록위원';
     if (key === ACCESS_KEYS.operation) return '운영(기본키)';
@@ -1700,6 +1763,8 @@ function getJudgeName(key) {
     return r ? r.judge_name : 'unknown';
 }
 function getKeyRole(key) {
+    const _b = _bridgeOf(key);
+    if (_b) return ({ admin: 'admin', manager: 'admin', operator: 'operation', record_officer: 'record_officer' })[_b.role] || null;
     if (isAdminKey(key)) return 'admin';
     if (isRecordOfficerKey(key)) return 'record_officer';
     const r = _opKeyCache.get(key);
@@ -1806,7 +1871,7 @@ const AUDIT_INSERT_SQL = `INSERT INTO audit_log (competition_id,table_name,recor
 const OPLOG_INSERT_SQL = `INSERT INTO operation_log (competition_id,message,category,performed_by,created_at) VALUES (?,?,?,?,?)`;
 function audit(table, id, action, oldV, newV, by = 'operator', compId = null, req = null) {
     const ts = kstNow();
-    const ip = req ? (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim() : null;
+    const ip = req ? (req.ip || req.socket?.remoteAddress || null) : null; // trust proxy 설정을 따르는 req.ip 사용 (XFF 직접 파싱 금지)
     const ua = req ? (req.headers['user-agent'] || '').substring(0, 256) : null;
     const oldJson = oldV ? JSON.stringify(oldV) : null;
     const newJson = newV ? JSON.stringify(newV) : null;
@@ -2412,91 +2477,8 @@ require('./lib/routes/auth')(app, { db, authLimiter, bcrypt });
 // GET/POST/PUT/DELETE /api/admin/users + revoke-sessions
 require('./lib/routes/admin_users')(app, { db, bcrypt, jwtHelpers: require('./lib/auth/jwt') });
 
-// ============================================================
-// DIAG: auth-state 진단 + 복구 라우트 (운영 디버깅용)
-//   - GET  /api/_diag/auth-state   : app_user 테이블 존재여부 / row 수 / 마이그레이션 상태
-//   - POST /api/_diag/auth-init    : runAuthMigrations 재실행 (legacy admin key 헤더 필요)
-//   - POST /api/_diag/admin-reset  : ROUNKIM 등 관리자 비번을 system_config.admin_pw 와 동기화
-//     (사전조건: x-admin-key 헤더에 legacy admin key 일치)
-// ============================================================
-function diagRequireAdminKey(req, res) {
-    const k = req.headers['x-admin-key'] || req.query.adminKey;
-    if (!isAdminKey(String(k || ''))) {
-        res.status(403).json({ error: 'forbidden — admin key required (x-admin-key header)' });
-        return false;
-    }
-    return true;
-}
-
-app.get('/api/_diag/auth-state', async (req, res) => {
-    if (!diagRequireAdminKey(req, res)) return;
-    try {
-        const out = {
-            backend: db.getBackendName ? db.getBackendName() : (db.isAsync ? 'postgres' : 'sqlite'),
-            authMigOk: !!global.__authMigOk,
-            authMigError: global.__authMigError || null,
-        };
-        // app_user 테이블 존재 여부
-        try {
-            const cntRow = await db.get('SELECT COUNT(*) AS c FROM app_user');
-            out.app_user_count = cntRow ? Number(cntRow.c) : 0;
-            // 사용자 목록 (해시는 prefix 만)
-            const rows = await db.all('SELECT id, username, role, active, COALESCE(SUBSTRING(password_hash FROM 1 FOR 15), \'\') AS hash_prefix FROM app_user ORDER BY id');
-            out.app_users = rows;
-        } catch (e) {
-            out.app_user_error = String(e && e.message || e);
-        }
-        // system_config 핵심 키 (값은 prefix 만)
-        try {
-            const cfg = await db.all("SELECT key, COALESCE(SUBSTRING(value FROM 1 FOR 25), '') AS value_preview FROM system_config WHERE key IN ('admin_id','admin_pw','jwt_secret')");
-            out.system_config = cfg;
-        } catch (e) {
-            out.system_config_error = String(e && e.message || e);
-        }
-        res.json(out);
-    } catch (e) {
-        res.status(500).json({ error: String(e && e.message || e) });
-    }
-});
-
-app.post('/api/_diag/auth-init', async (req, res) => {
-    if (!diagRequireAdminKey(req, res)) return;
-    try {
-        const { runAuthMigrations } = require('./lib/auth/migrations');
-        await runAuthMigrations(db);
-        global.__authMigOk = true;
-        global.__authMigError = null;
-        console.log('[auth-mig] manual re-run OK via /api/_diag/auth-init');
-        res.json({ ok: true, message: 'runAuthMigrations 재실행 완료' });
-    } catch (e) {
-        global.__authMigError = String(e && e.message || e);
-        console.error('[auth-mig] manual re-run FAILED:', e.message, e.code || '', e.detail || '');
-        res.status(500).json({
-            ok: false,
-            error: String(e && e.message || e),
-            code: e && e.code || null,
-            detail: e && e.detail || null,
-            query: e && e.query ? String(e.query).substring(0, 500) : null
-        });
-    }
-});
-
-app.post('/api/_diag/admin-reset', async (req, res) => {
-    if (!diagRequireAdminKey(req, res)) return;
-    try {
-        const { runAuthMigrations } = require('./lib/auth/migrations');
-        await runAuthMigrations(db);
-        // 이 시점 후 app_user 의 관리자 row 가 system_config.admin_pw 와 동기화되어 있어야 함
-        const adminUsername = ADMIN_ID();
-        const row = await db.get('SELECT id, username, role, active FROM app_user WHERE username=?', adminUsername);
-        if (!row) {
-            return res.status(500).json({ ok: false, error: `app_user('${adminUsername}') 시드 실패 — migrations 결과 확인 필요` });
-        }
-        res.json({ ok: true, message: `관리자 계정 동기화 완료`, user: row });
-    } catch (e) {
-        res.status(500).json({ ok: false, error: String(e && e.message || e), code: e && e.code || null });
-    }
-});
+// (2026-09) /api/_diag/* 진단 라우트 제거 — jwt_secret·admin_pw 값 미리보기를 응답했고 ?adminKey= 쿼리 인증을 허용했음.
+//   필요 시 서버 셸에서 직접 확인: sqlite3 db/competition.db "select id,username,role,active from app_user"
 
 app.post('/api/auth/verify', authLimiter, async (req, res) => {
     const { key, judge_name } = req.body;
@@ -4827,6 +4809,7 @@ app.get('/api/admin/full-backup/download', (req, res) => {
 // POST /api/admin/full-backup/preview
 // ZIP 업로드 → manifest 파싱 + 무결성 검사 (실제 복원은 하지 않음)
 app.post('/api/admin/full-backup/preview', _fullBackupUpload.single('file'), (req, res) => {
+    _applyJwtBridge(req); // multer 가 req.body 를 새로 만들므로 JWT 브리지 재주입
     if (db.isAsync) {
         try { if (req.file) fs.unlinkSync(req.file.path); } catch(_) {}
         return res.status(400).json({ error: '통백업/복원은 SQLite 백엔드 전용입니다.' });
@@ -4880,6 +4863,7 @@ app.post('/api/admin/full-backup/preview', _fullBackupUpload.single('file'), (re
 // ZIP 업로드 → 즉시 복원. 매우 위험.
 // confirm='RESTORE'를 명시적으로 받음. 복원 직전 자동 안전 백업 수행.
 app.post('/api/admin/full-backup/restore', _fullBackupUpload.single('file'), (req, res) => {
+    _applyJwtBridge(req); // multer 가 req.body 를 새로 만들므로 JWT 브리지 재주입
     if (db.isAsync) {
         try { if (req.file) fs.unlinkSync(req.file.path); } catch(_) {}
         return res.status(400).json({ error: '통백업/복원은 SQLite 백엔드 전용입니다.' });
@@ -11946,7 +11930,7 @@ function externalApiAuth(req, res, next) {
                 key_prefix: req.extApiKey ? req.extApiKey.key_prefix : (req._extKeyPrefix || ''),
                 endpoint: req.originalUrl.split('?')[0],
                 method: req.method,
-                request_ip: (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim(),
+                request_ip: (req.ip || '').toString(),
                 user_agent: req.headers['user-agent'] || '',
                 competition_id: (req.body && req.body.competition_id) || (req.query && req.query.competition_id) || null,
                 event_id: (req.body && req.body.event_id) || (req.params && req.params.id) || null,

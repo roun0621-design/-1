@@ -27,6 +27,8 @@ module.exports = async function () {
     process.env.ADMIN_ID = process.env.ADMIN_ID || 'admin';
     process.env.ADMIN_PW = process.env.ADMIN_PW || 'testadmin1234';
     process.env.OPERATION_KEY = process.env.OPERATION_KEY || 'testopkey';
+    // 전 테스트가 한 IP(127.0.0.1)에서 로그인 API 를 호출 → 운영 한도(30/분)에 걸려 간헐 실패하지 않게 상향
+    process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX || '5000';
 
     // 디버깅용 로그 (테스트 출력에 1회만 보임)
     console.log(`[test] SQLITE_PATH = ${testDbPath}`);
