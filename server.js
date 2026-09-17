@@ -5884,7 +5884,8 @@ app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => 
         headers.forEach((h, idx) => {
             const hn = String(h || '').trim();
             if (/^(선수명|성명|이름|name)$/i.test(hn)) hdrMap.name = idx;
-            else if (/^(팀명|소속|팀|team)$/i.test(hn)) hdrMap.team = idx;
+            else if (/^(팀명|소속|소속명|팀|team)$/i.test(hn)) hdrMap.team = idx;      // 소속명: 연맹 배번 명단 원본
+            else if (/^(생년월일|birth|birth_date)$/i.test(hn)) hdrMap.birth = idx;
             else if (/^(성별|gender)$/i.test(hn)) hdrMap.gender = idx;
             else if (/^(배번|배번호|bib|bib_number|번호)$/i.test(hn)) hdrMap.bib = idx;
             else if (/^(바코드|barcode|바코드번호)$/i.test(hn)) hdrMap.barcode = idx;
@@ -5917,18 +5918,25 @@ app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => 
 
         // Parse rows - deduplicate by name+team(+gender if available)
         const excelMap = new Map();
+        const _altKey = new Map();            // '이름|소속|성별#배번' → '이름(yy)|소속|성별'
         for (const row of rows.slice(1)) {
             const name = String(row[hdrMap.name] || '').trim();
             if (!name) continue;
             const team = hdrMap.team !== undefined ? String(row[hdrMap.team] || '').trim() : '';
             const genderRaw = hasGenderCol ? String(row[hdrMap.gender] || '').trim() : '';
             const gender = (genderRaw === '남' || genderRaw === '남자' || genderRaw === 'M') ? 'M' : (genderRaw === '여' || genderRaw === '여자' || genderRaw === 'F') ? 'F' : null;
-            const bib = hdrMap.bib !== undefined ? String(row[hdrMap.bib] || '').trim() : '';
+            let bib = hdrMap.bib !== undefined ? String(row[hdrMap.bib] || '').trim() : '';
+            if (/^\d+$/.test(bib)) bib = bib.replace(/^0+(?=\d)/, '');      // 연맹 원본은 '00012' — 시스템 배번은 '12' (앞자리 0 때문에 전원 '변경'으로 잡히던 것 방지)
             if (!bib) continue;
+            // 동명이인: 시스템은 '홍길동(06)' 처럼 출생연도를 붙여 구분한다 → 생년월일이 있으면 그 이름으로도 찾는다
+            const _by = hdrMap.birth !== undefined ? String(row[hdrMap.birth] || '').replace(/\D/g, '') : '';
+            const _yy = _by.length >= 8 ? _by.slice(2, 4) : (_by.length === 6 ? _by.slice(0, 2) : '');
             // If gender column exists but value is invalid, skip
             if (hasGenderCol && !gender) continue;
             const key = gender ? `${name}|${team}|${gender}` : `${name}|${team}`;
             if (!excelMap.has(key)) excelMap.set(key, { bib, hasGender: !!gender });
+            else if (_yy) { const k2 = gender ? `${name}(${_yy})|${team}|${gender}` : `${name}(${_yy})|${team}`; if (!excelMap.has(k2)) excelMap.set(k2, { bib, hasGender: !!gender }); }
+            if (_yy) _altKey.set(key + '#' + bib, gender ? `${name}(${_yy})|${team}|${gender}` : `${name}(${_yy})|${team}`);
         }
 
         const results = { matched: 0, updated: 0, already_same: 0, not_found: [], total_excel: excelMap.size };
@@ -5942,6 +5950,10 @@ app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => 
                 // Fallback: match by name+team only
                 const found = existingNoGender.get(key);
                 if (found) existing = found; // null means ambiguous → skip
+            }
+            if (!existing && _altKey.has(key + '#' + newBib)) {      // 동명이인 표기로 재시도
+                const k2 = _altKey.get(key + '#' + newBib);
+                existing = hasGender ? existingCache.get(k2) : (existingNoGender.get(k2) || null);
             }
             if (existing) {
                 results.matched++;

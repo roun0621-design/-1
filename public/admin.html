@@ -682,7 +682,8 @@
                         <strong>엑셀 양식 (열 순서 고정):</strong><br>
                         A열: <code>배번(BIB) *</code> — 새로 부여할 배번 | B열: <code>선수명 *</code> | C열: <code>소속 *</code> | D열: <code>성별(남/여)</code> 선택<br>
                         <span style="color:#d97706;font-weight:600;">* 매칭 키: 선수명 + 소속 (성별 열이 있으면 + 성별도 비교)</span><br>
-                        <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터 | 성별 열 없어도 이름+소속으로 매칭 가능</span>
+                        <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터 | 성별 열 없어도 이름+소속으로 매칭 가능</span><br>
+                        <span style="color:#0e7c66;font-weight:600;">연맹에서 받은 '배번 명단' 원본(소속명·성명·생년월일·성별·배번 열)은 고치지 않고 그대로 올려도 됩니다 — 머리글 이름으로 열을 찾고, 00012 는 12 로, 동명이인은 생년월일로 구분합니다.</span>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
                         <input type="file" id="bib-update-file" accept=".xlsx,.xls,.csv" class="t-lg">

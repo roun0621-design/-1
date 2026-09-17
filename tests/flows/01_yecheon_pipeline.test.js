@@ -272,6 +272,17 @@ describe('연맹 데일리 원본(▣ 섹션형)을 그대로 업로드 (Phase 5
         expect(new Set(g5000.map(r => r[4]))).toEqual(new Set(['A', 'B']));
         expect(g5000.map(r => r[5])).toEqual(g5000.map((_, i) => i + 1));          // 순서: A 1..n → B 이어서
     });
+    it('사전 조편성 원본("▣ 남자실업부"처럼 성별 머리글에도 ▣)도 같은 변환기로 — 손 변환본의 모든 행을 포함한다', async () => {
+        for (const key of ['pro', 'univ']) {
+            const roster = await q('SELECT name, bib_number, team, gender FROM athlete WHERE competition_id=?', ids[key]);
+            const out = FD.convertIfFederationDaily(sheet(path.join(FX, key, 'src_federation_heats.xlsx')), roster);
+            const k = r => r.slice(0, 9).map(x => String(x).trim()).join('|');
+            const mine = new Set(out.aoa.slice(1).map(k));
+            const missing = sheet(path.join(FX, key, '2_heat_assignment.xlsx')).slice(1).map(k).filter(x => !mine.has(x));
+            expect(missing, key).toEqual([]);                                             // 동명이인 '(06)' 표기도 명단으로 맞춰진다
+            expect(out.aoa.slice(1).every(r => r[0] !== ''), key).toBe(true);             // 성별을 놓친 행이 없다
+        }
+    });
     for (const [key, file, std] of [['univ', 'src_federation_daily_day3.xlsx', '3_daily_day3.xlsx'], ['pro', 'src_federation_daily_day3.xlsx', '3_daily_day3.xlsx'], ['univ', 'src_federation_daily_day2.xlsx', '3_daily_day2.xlsx']]) {
         it(`${key} ${file}: 미리보기 결과가 손으로 변환해 올렸던 파일과 같다 (동명이인 표기는 명단으로 맞춘다)`, async () => {
             const a = await post('/api/heat-assignment/preview', { competition_id: ids[key] }, path.join(FX, key, file));
@@ -282,6 +293,18 @@ describe('연맹 데일리 원본(▣ 섹션형)을 그대로 업로드 (Phase 5
             expect(a.body.totalRows).toBe(b.body.totalRows);
             const slim = p => p.map(x => ({ n: x.eventName, g: x.gender, r: x.round, s: x.status, c: x.excelEntries, ch: (x.changes || []).length })).sort((x, y) => JSON.stringify(x).localeCompare(JSON.stringify(y)));
             expect(slim(a.body.preview)).toEqual(slim(b.body.preview));
+        });
+    }
+});
+
+describe('연맹 배번 명단 원본을 그대로 업로드 (Phase 5)', () => {
+    for (const key of ['univ', 'pro']) {
+        it(`${key}: 소속명·'00012' 배번·동명이인(생년월일)까지 매칭 — 못 찾은 선수 0, 바뀌는 배번 0`, async () => {
+            const r = await post('/api/athletes/update-bib', { competition_id: ids[key], preview: 'true' }, path.join(FX, key, 'src_federation_bib_roster.xlsx'));
+            expect(r.status).toBe(200);
+            expect(r.body.results.not_found).toEqual([]);
+            expect(r.body.results.matched).toBeGreaterThan(150);
+            expect(r.body.results.updated).toBe(0);            // 1단계에서 넣은 배번과 같다 (앞자리 0 은 무시)
         });
     }
 });
