@@ -991,7 +991,7 @@ async function addRelayMemberToTeam(eventEntryId, athleteId, teamName) {
 }
 
 async function removeRelayMemberFromTeam(eventEntryId, athleteId, teamName) {
-    if (!confirm('이 선수를 릴레이 팀에서 제거하시겠습니까?')) return;
+    if (!await uiConfirm('이 선수를 릴레이 팀에서 제거하시겠습니까?')) return;
     try {
         await api('DELETE', '/api/relay-members', { event_entry_id: eventEntryId, athlete_id: athleteId });
         showToast('릴레이 멤버 제거 완료');
@@ -1615,7 +1615,7 @@ async function bcRun(mode) {
     if (!ids.length) { uiAlert('종목을 선택하세요.'); return; }
     const judge = (document.getElementById('bc-judge') && document.getElementById('bc-judge').value || '').trim();
     const lab = mode === 'complete' ? '소집완료' : '소집 되돌리기';
-    if (!confirm(`선택한 ${ids.length}개 종목을 일괄 ${lab} 하시겠습니까?`)) return;
+    if (!await uiConfirm(`선택한 ${ids.length}개 종목을 일괄 ${lab} 하시겠습니까?`)) return;
     const url = mode === 'complete' ? '/api/events/callroom-complete-batch' : '/api/events/callroom-revert-batch';
     try {
         const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_ids: ids, judge_name: judge }) }).then(x => x.json());

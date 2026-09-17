@@ -528,7 +528,7 @@ function playCompVideo() {
 }
 async function editEventVideoUrl() {
     const current = document.getElementById('btn-play-video')?.dataset?.url || '';
-    const url = prompt('종목 영상 URL을 입력하세요 (YouTube):', current);
+    const url = await uiPrompt('종목 영상 URL을 입력하세요 (YouTube):', current);
     if (url === null) return; // cancelled
     try {
         const key = localStorage.getItem('accessKey') || '';
@@ -2264,10 +2264,10 @@ async function deleteBarHeight(barHeight) {
     // Check if any attempts recorded at this height
     const attemptsAtHeight = (state.heightAttempts || []).filter(a => a.bar_height === h);
     if (attemptsAtHeight.length > 0) {
-        if (!confirm(`${formatHeight(h)}에 ${attemptsAtHeight.length}개의 시기 기록이 있습니다.\n이 높이와 모든 기록을 삭제하시겠습니까?`)) return;
+        if (!await uiConfirm(`${formatHeight(h)}에 ${attemptsAtHeight.length}개의 시기 기록이 있습니다.\n이 높이와 모든 기록을 삭제하시겠습니까?`)) return;
         // Delete from server
         try {
-            const key = localStorage.getItem('op_key') || prompt('운영키를 입력하세요');
+            const key = localStorage.getItem('op_key') || await uiPrompt('운영키를 입력하세요');
             if (!key) return;
             // [JOINT] 합동 모드면 모든 멤버 대회 heat 에서 동시에 삭제
             await api('POST', '/api/height-attempts/delete-bar', { heat_id: state.heatId, bar_height: h, admin_key: key });
@@ -2841,13 +2841,13 @@ async function _renderScoreboard(container) {
 async function repairCombinedScoresAction() {
     const evt = _combinedParentEvt || state.selectedEvent;
     if (!evt) return;
-    if (!confirm(`${evt.name} 종합 점수를 모두 지우고 세부기록에서 다시 계산합니다.\n\n(점수가 잘못 표시될 때만 사용)\n계속하시겠습니까?`)) return;
+    if (!await uiConfirm(`${evt.name} 종합 점수를 모두 지우고 세부기록에서 다시 계산합니다.\n\n(점수가 잘못 표시될 때만 사용)\n계속하시겠습니까?`)) return;
     let adminKey = '';
     try {
         const stored = sessionStorage.getItem('admin_key') || localStorage.getItem('admin_key') || '';
-        adminKey = stored || prompt('운영 키를 입력하세요:') || '';
+        adminKey = stored || await uiPrompt('운영 키를 입력하세요:') || '';
     } catch(e) {
-        adminKey = prompt('운영 키를 입력하세요:') || '';
+        adminKey = await uiPrompt('운영 키를 입력하세요:') || '';
     }
     if (!adminKey) return;
     try {
@@ -2874,10 +2874,10 @@ async function completeCombinedEvent() {
     });
     
     if (missingOrders.length > 0) {
-        const proceed = confirm(`다음 종목에 기록이 없습니다:\n${missingOrders.join('\n')}\n\n그래도 경기를 완료하시겠습니까?`);
+        const proceed = await uiConfirm(`다음 종목에 기록이 없습니다:\n${missingOrders.join('\n')}\n\n그래도 경기를 완료하시겠습니까?`);
         if (!proceed) return;
     } else {
-        if (!confirm('모든 세부종목의 기록을 확인했습니까?\n경기를 최종 완료 처리합니다.')) return;
+        if (!await uiConfirm('모든 세부종목의 기록을 확인했습니까?\n경기를 최종 완료 처리합니다.')) return;
     }
     
     // Show judge/admin key modal (identical to completeRound)
@@ -2961,7 +2961,7 @@ async function revertCombinedComplete() {
         showToast('이미 진행 중 상태입니다.', 'info', 2000);
         return;
     }
-    if (!confirm(`${evt.name} 경기 완료를 취소하시겠습니까?\n다시 진행 중 상태로 되돌립니다.`)) return;
+    if (!await uiConfirm(`${evt.name} 경기 완료를 취소하시겠습니까?\n다시 진행 중 상태로 되돌립니다.`)) return;
 
     // Need admin key
     showAdminKeyModal(async (key) => {
@@ -3907,9 +3907,9 @@ async function _cSubHeightDeleteBar(barHeight) {
     const h = parseFloat(barHeight);
     const attemptsAtHeight = (_cSubHeightData.attempts || []).filter(a => a.bar_height === h);
     if (attemptsAtHeight.length > 0) {
-        if (!confirm(`${formatHeight(h)}에 ${attemptsAtHeight.length}개의 시기 기록이 있습니다.\n이 높이와 모든 기록을 삭제하시겠습니까?`)) return;
+        if (!await uiConfirm(`${formatHeight(h)}에 ${attemptsAtHeight.length}개의 시기 기록이 있습니다.\n이 높이와 모든 기록을 삭제하시겠습니까?`)) return;
         try {
-            const key = localStorage.getItem('op_key') || prompt('운영키를 입력하세요');
+            const key = localStorage.getItem('op_key') || await uiPrompt('운영키를 입력하세요');
             if (!key) return;
             await api('POST', '/api/height-attempts/delete-bar', { heat_id: _cSubHeightData.heatId, bar_height: h, admin_key: key });
         } catch (err) { uiAlert('삭제 실패: ' + (err.error || '')); return; }
@@ -4352,7 +4352,7 @@ async function approveQualification() {
     const qualified = _qualAllRows.filter(r => r.qual === 'Q' || r.qual === 'q');
     if (qualified.length === 0) { uiAlert('진출자가 선택되지 않았습니다. Q 또는 q를 지정하세요.'); return; }
     const groupCount = parseInt(document.getElementById('final-group-count')?.value) || 1;
-    if (!confirm(`결승 ${groupCount}개 조로 ${qualified.length}명을 확정하고 결승 라운드를 생성합니다.\nWA 규정에 따라 서펜타인 시딩 및 레인 배정이 적용됩니다.\n계속하시겠습니까?`)) return;
+    if (!await uiConfirm(`결승 ${groupCount}개 조로 ${qualified.length}명을 확정하고 결승 라운드를 생성합니다.\nWA 규정에 따라 서펜타인 시딩 및 레인 배정이 적용됩니다.\n계속하시겠습니까?`)) return;
 
     const selections = _qualAllRows.map(r => ({
         event_entry_id: r.event_entry_id,
@@ -4504,7 +4504,7 @@ async function approveSemifinalQualification() {
     const qualified = _qualAllRows.filter(r => r.qual === 'Q' || r.qual === 'q');
     if (qualified.length === 0) { uiAlert('진출자가 선택되지 않았습니다. Q 또는 q를 지정하세요.'); return; }
     const groupCount = parseInt(document.getElementById('semi-group-count')?.value) || 2;
-    if (!confirm(`준결승 ${groupCount}개 조로 ${qualified.length}명을 확정하고 준결승 라운드를 생성합니다.\n계속하시겠습니까?`)) return;
+    if (!await uiConfirm(`준결승 ${groupCount}개 조로 ${qualified.length}명을 확정하고 준결승 라운드를 생성합니다.\n계속하시겠습니까?`)) return;
 
     const selections = _qualAllRows.map(r => ({
         event_entry_id: r.event_entry_id,
@@ -4552,7 +4552,7 @@ async function revertRoundComplete() {
         showToast('이미 진행 중 상태입니다.', 'info', 2000);
         return;
     }
-    if (!confirm(`${evt.name} 경기 완료를 취소하시겠습니까?\n다시 진행 중 상태로 되돌립니다.`)) return;
+    if (!await uiConfirm(`${evt.name} 경기 완료를 취소하시겠습니까?\n다시 진행 중 상태로 되돌립니다.`)) return;
 
     showAdminKeyModal(async (key) => {
         if (!key) return;
@@ -4592,7 +4592,7 @@ async function completeRound() {
     if (isHeightEvt) {
         const ok = await waitForOptimisticHeightFlush(2500);
         if (!ok) {
-            const proceed = confirm('일부 시기 기록 저장이 아직 완료되지 않았습니다.\n그래도 경기를 완료하시겠습니까? (불완전한 데이터로 완료될 수 있음)');
+            const proceed = await uiConfirm('일부 시기 기록 저장이 아직 완료되지 않았습니다.\n그래도 경기를 완료하시겠습니까? (불완전한 데이터로 완료될 수 있음)');
             if (!proceed) return;
         }
     }
@@ -4628,7 +4628,7 @@ async function completeRound() {
                 ? `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(예선탈락 등으로 일부 시기만 진행한 선수가 있을 수 있습니다)\n그래도 경기를 완료하시겠습니까?`
                 : `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(기록/상태코드 없이도 완료할 수 있으며, 완료 후 관리자가 되돌릴 수 있습니다)\n그래도 경기를 완료하시겠습니까?`;
             // 기록이 없어도 강제 완료 허용 (현장 요청) — 확인만 받는다
-            if (!confirm(msg)) return;
+            if (!await uiConfirm(msg)) return;
         }
     } catch(e) { console.error(e); }
 
@@ -4827,7 +4827,7 @@ async function validateWARegulations() {
             showToast('WA 규정 검증 통과', 'success');
         } else {
             const msgs = result.issues.map(i => `• ${i.message}`).join('\n');
-            const action = confirm(`WA 규정 검증 결과:\n\n${msgs}\n\n자동 수정하시겠습니까?`);
+            const action = await uiConfirm(`WA 규정 검증 결과:\n\n${msgs}\n\n자동 수정하시겠습니까?`);
             if (action) {
                 await autoCorrectWAFromModal(state.selectedEvent.id);
             }
@@ -4959,8 +4959,8 @@ async function resetSubEventResults(eventId, eventName) {
     // 합동 종목이면 다른 대회 멤버의 기록도 같이 지운다 (화면에 함께 보이므로 이것만 지우면 "안 지워진 것"처럼 보임)
     const joint = (typeof isJointMode === 'function' && eventId === state.selectedEventId && isJointMode());
     const jointNote = joint ? `\n\n※ 합동 종목: 함께 표시되는 다른 대회(${_jointOtherMembers().map(m => m.federation || m.comp_name || '').filter(Boolean).join(', ') || '멤버'})의 기록도 함께 초기화됩니다.` : '';
-    if (!confirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.${jointNote}\n정말 초기화하시겠습니까?`)) return;
-    if (!confirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
+    if (!await uiConfirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.${jointNote}\n정말 초기화하시겠습니까?`)) return;
+    if (!await uiConfirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
 
     try {
         showToast('기록 초기화 중...', 'info', 2000);
@@ -5123,7 +5123,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function downloadAwardDocx() {
     const evt = state.selectedEvent;
     if (!evt) return;
-    const ans = prompt('몇 위까지 상장을 출력할까요? (예: 3 → 1~3위, 동순위는 모두 포함)', '3');
+    const ans = await uiPrompt('몇 위까지 상장을 출력할까요? (예: 3 → 1~3위, 동순위는 모두 포함)', '3');
     if (ans === null) return;
     const to = Math.max(1, parseInt(ans, 10) || 3);
     try {

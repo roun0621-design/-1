@@ -10855,6 +10855,11 @@ app.get('/api/documents/ad-card/:compId', async (req, res) => {
     if (req.query.gender) athletes = athletes.filter(a => a.gender === String(req.query.gender).toUpperCase());
     if (req.query.event_id) { const eid = Number(req.query.event_id); athletes = athletes.filter(a => (_eventsOf.get(a.id) || []).some(e => e.event_id === eid)); }
     if (req.query.athlete_ids) { const ids = new Set(String(req.query.athlete_ids).split(',').map(Number)); athletes = athletes.filter(a => ids.has(a.id)); }
+    // ?bibs=12,W31,105 — 배번으로 지정 (W 접두 = 여자, M 접두 = 남자. 접두가 없으면 그 배번의 남녀 모두)
+    if (req.query.bibs) {
+        const want = String(req.query.bibs).split(/[\s,]+/).filter(Boolean).map(t => { const m = t.match(/^([WwFfMm])?-?0*(\d+)$/); return m ? { g: m[1] ? (/[Mm]/.test(m[1]) ? 'M' : 'F') : null, bib: m[2] } : { g: null, bib: t }; });
+        athletes = athletes.filter(a => want.some(w => String(a.bib_number || '').replace(/^0+/, '') === w.bib && (!w.g || a.gender === w.g)));
+    }
     if (athletes.length === 0) return res.status(404).json({ error: 'No athletes found' });
     const tpl = (await getDocTemplate(comp.id)).ad_card;
     // 바코드는 소집실 스캔에 쓰인다. 설정 화면이 없어 저장값(false)은 사용자의 선택이 아니므로 기본으로 넣고, ?barcode=0 일 때만 뺀다.
@@ -10867,7 +10872,7 @@ app.get('/api/documents/ad-card/:compId', async (req, res) => {
         return a.gender === 'F' ? `W${bib}` : bib;      // 남녀 배번이 겹치는 대회가 있어 여자는 W 접두(소집실 스캔 규칙과 동일)
     };
 
-    const cardsPerPage = tpl.cards_per_page || 4;
+    const cardsPerPage = [1, 2, 4].includes(Number(req.query.per_page)) ? Number(req.query.per_page) : (tpl.cards_per_page || 4);      // ?per_page=1|2|4 로 발급 때 바로 고른다
     const bibSize = tpl.bib_font_size || 48;
     const nameSize = tpl.name_font_size || 16;
     const bandMode = tpl.band_color_mode || 'gender_auto';

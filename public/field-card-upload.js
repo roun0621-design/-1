@@ -301,7 +301,7 @@
         async function save() {
             const willN = rowsOf().filter(r => r.will_import).length;
             if (!willN || S.busy) return;
-            if (!confirm(`${willN}명의 기록을 저장합니다. 카드에 있는 선수는 시기 전체가 이 표의 값으로 교체됩니다. 계속할까요?`)) return;
+            if (!await uiConfirm(`${willN}명의 기록을 저장합니다. 카드에 있는 선수는 시기 전체가 이 표의 값으로 교체됩니다. 계속할까요?`)) return;
             S.busy = true; S.status = '저장 중…'; render();
             try {
                 const data = await postJson('/api/field-card/import-json', { admin_key: opts.key, competition_id: opts.competitionId, heat_id: opts.heatId, card: S.card });

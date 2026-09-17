@@ -75,6 +75,13 @@ describe('ID카드 PDF', () => {
         expect(one).toContain('PARKTAG'); expect(one).not.toContain('LEEMAN');
         expect((await cardPdf('?team=NOPE')).status).toBe(404);
     });
+    it('배번 지정(?bibs=): 접두 없는 31 은 남녀 모두, W31 은 여자만 · ?per_page 로 장수 변경', async () => {
+        const both = (await cardPdf('?bibs=31')).parsed.text;
+        expect(both).toContain('KIMWOMAN'); expect(both).toContain('LEEMAN'); expect(both).not.toContain('PARKTAG');
+        const w = (await cardPdf('?bibs=W31, 040')).parsed.text;
+        expect(w).toContain('KIMWOMAN'); expect(w).toContain('PARKTAG'); expect(w).not.toContain('LEEMAN');
+        expect((await cardPdf('?per_page=1')).parsed.numpages).toBe(3);      // 3명 → 1장/쪽 = 3쪽
+    });
 });
 
 describe('카드에 찍힌 값으로 소집 출석', () => {

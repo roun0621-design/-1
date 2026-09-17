@@ -202,7 +202,7 @@
 <!-- Link Edit Modal (hidden) -->
 <div id="link-modal" style="display:none;"></div>
 
-<script src="common.js?v=101"></script>
+<script src="common.js?v=102"></script>
 <script>
 // ═══════════════════════════════════════════════════════════
 // STATE
@@ -533,7 +533,7 @@ function openTTEdit(ids){
                         <input id="tt-edit-time" class="link-input" value="${esc(first.time||'')}" placeholder="14:30" style="margin-bottom:0;">
                     </div>
                     <div>
-                        <label class="tt-edit-label">콜룸 시간</label>
+                        <label class="tt-edit-label">소집 시간</label>
                         <input id="tt-edit-callroom" class="link-input" value="${esc(first.callroom_time||'')}" placeholder="자동 계산" style="margin-bottom:0;">
                     </div>
                 </div>
@@ -655,7 +655,7 @@ async function saveTTEdit(ids, linkedEvId){
 }
 
 async function deleteTTEntries(ids){
-    if(!confirm(`${ids.length}건의 시간표 행을 삭제하시겠습니까?\n(연결된 종목/명단은 유지됩니다)`)) return;
+    if(!await uiConfirm(`${ids.length}건의 시간표 행을 삭제하시겠습니까?\n(연결된 종목/명단은 유지됩니다)`)) return;
     const adminKey = getKey();
     let okCount = 0, failMsgs = [];
     for(const id of ids){
@@ -1135,7 +1135,7 @@ async function uploadTT(inp){
     const file=inp.files[0]; if(!file)return;
     const forceMode = document.getElementById('upload-force')?.checked;
     if(forceMode){
-        if(!confirm('[경고] 강제 덮어쓰기 모드입니다.\n\n과거 일차의 시간표도 모두 삭제 후 새로 등록되며, 결과 링크나 수동 수정 사항이 사라질 수 있습니다.\n\n계속하시겠습니까?')){
+        if(!await uiConfirm('[경고] 강제 덮어쓰기 모드입니다.\n\n과거 일차의 시간표도 모두 삭제 후 새로 등록되며, 결과 링크나 수동 수정 사항이 사라질 수 있습니다.\n\n계속하시겠습니까?')){
             inp.value=''; return;
         }
     }
@@ -1195,7 +1195,7 @@ async function previewOrphanEvents(){
 
 // 시간표 재링크 — 모든 timetable.event_id 를 NULL 로 리셋 후 autoLink 재실행
 async function relinkTimetable(){
-    if(!confirm('시간표의 모든 행을 다시 링크합니다.\n\n잘못된 라벨로 매칭되었던 행이 올바른 종목으로 재매핑되며, 누락된 종목은 자동 생성됩니다.\n\n진행하시겠습니까?')) return;
+    if(!await uiConfirm('시간표의 모든 행을 다시 링크합니다.\n\n잘못된 라벨로 매칭되었던 행이 올바른 종목으로 재매핑되며, 누락된 종목은 자동 생성됩니다.\n\n진행하시겠습니까?')) return;
     const box = document.getElementById('orphan-result');
     box.innerHTML = '<span style="color:var(--gold);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 재링크 중...</span>';
     try {
@@ -1217,7 +1217,7 @@ async function relinkTimetable(){
 
 // 명단 재매칭 — PDF 재업로드 없이 매칭 로직만 다시 돌림
 async function relinkRoster(){
-    if(!confirm('명단 전체를 다시 매칭합니다.\n\n현재 명단 데이터는 그대로 두고, 시간표 종목과의 연결만 재계산합니다.\n매칭 로직 개선·시간표 변경 후 사용하세요.\n\n진행하시겠습니까?')) return;
+    if(!await uiConfirm('명단 전체를 다시 매칭합니다.\n\n현재 명단 데이터는 그대로 두고, 시간표 종목과의 연결만 재계산합니다.\n매칭 로직 개선·시간표 변경 후 사용하세요.\n\n진행하시겠습니까?')) return;
     const box = document.getElementById('orphan-result');
     box.innerHTML = '<span style="color:var(--gold);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 명단 재매칭 중...</span>';
     try {
@@ -1287,8 +1287,8 @@ async function showUnmatchedRoster(){
 
 // 실제 삭제 — 미리보기 후 진행 권장
 async function cleanupOrphanEvents(){
-    if(!confirm('[경고] 고아 종목을 삭제합니다.\n\n시간표·엔트리·조·결과(result_url/video_url)가 모두 없는 종목만 삭제됩니다.\n부모 종목으로 참조되는 10종/7종 sub-event 도 보호됩니다.\n\n계속하시겠습니까?')) return;
-    if(!confirm('한번 더 확인합니다. 정말 삭제하시겠습니까?')) return;
+    if(!await uiConfirm('[경고] 고아 종목을 삭제합니다.\n\n시간표·엔트리·조·결과(result_url/video_url)가 모두 없는 종목만 삭제됩니다.\n부모 종목으로 참조되는 10종/7종 sub-event 도 보호됩니다.\n\n계속하시겠습니까?')) return;
+    if(!await uiConfirm('한번 더 확인합니다. 정말 삭제하시겠습니까?')) return;
     const box = document.getElementById('orphan-result');
     box.innerHTML = '<span style="color:var(--gold);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 삭제 중...</span>';
     try {
@@ -1583,7 +1583,7 @@ async function bulkAssignGroup(gi){
     if(!sel || !sel.value) { toast('매칭할 종목을 선택하세요'); return; }
     const evId = parseInt(sel.value);
     const ev = _matchEditCache.events.find(e => e.id === evId);
-    if(!confirm(`${g.event_name} | ${g.division||'-'} | ${g.gender||'-'} | ${g.round||'-'} (${g.items.length}명)\n→ ${ev.name} | ${ev.division||'-'} | ${ev.gender||'-'} | ${ev.round_type||'-'}\n\n위 ${g.items.length}명을 일괄 매칭합니다. 진행할까요?`)) return;
+    if(!await uiConfirm(`${g.event_name} | ${g.division||'-'} | ${g.gender||'-'} | ${g.round||'-'} (${g.items.length}명)\n→ ${ev.name} | ${ev.division||'-'} | ${ev.gender||'-'} | ${ev.round_type||'-'}\n\n위 ${g.items.length}명을 일괄 매칭합니다. 진행할까요?`)) return;
     try{
         const r = await fetch('/api/display/roster/assign-bulk', {
             method:'POST', headers:{'Content-Type':'application/json'},
@@ -1612,7 +1612,7 @@ async function bulkClearGroup(gi){
     })();
     const g = groupList[gi];
     if(!g) return;
-    if(!confirm(`${g.event_name} | ${g.division||'-'} (${g.items.length}명) 의 매칭을 모두 해제하시겠습니까?`)) return;
+    if(!await uiConfirm(`${g.event_name} | ${g.division||'-'} (${g.items.length}명) 의 매칭을 모두 해제하시겠습니까?`)) return;
     try{
         const r = await fetch('/api/display/roster/assign-bulk', {
             method:'POST', headers:{'Content-Type':'application/json'},
@@ -1631,7 +1631,7 @@ async function openSingleAssign(rosterId){
     const events = _matchEditCache.events;
     const evList = events.map(e => `${e.id}: ${e.name} | ${e.division||'-'} | ${e.gender||'-'} | ${e.round_type||'-'}`).join('\n');
     const cur = row.event_id || '없음';
-    const ans = prompt(`현재 매칭 ID: ${cur}\n${row.event_name} | ${row.division||'-'} | ${row.gender||'-'} | ${row.round||'-'} 의 ${row.athlete_name}\n\n새 매칭할 event_id를 입력하세요 (해제는 0):\n\n[가능한 종목 목록]\n${evList}`);
+    const ans = await uiPrompt(`현재 매칭 ID: ${cur}\n${row.event_name} | ${row.division||'-'} | ${row.gender||'-'} | ${row.round||'-'} 의 ${row.athlete_name}\n\n새 매칭할 event_id를 입력하세요 (해제는 0):\n\n[가능한 종목 목록]\n${evList}`);
     if(ans === null) return;
     const evId = parseInt(ans);
     const newId = (isNaN(evId) || evId === 0) ? null : evId;
@@ -1656,7 +1656,7 @@ async function uploadRoster(inp){
     const dayLabel = files.length === 1
         ? '몇 일차 명단입니까? (1~5)'
         : `몇 일차 명단입니까? (1~5)\n— 선택된 ${files.length}개 파일 모두 같은 일차로 업로드됩니다.`;
-    const day = prompt(dayLabel, '1');
+    const day = await uiPrompt(dayLabel, '1');
     if(!day) { inp.value=''; return; }
 
     const msgEl = document.getElementById('upload-msg');
@@ -1946,7 +1946,7 @@ async function saveRelayTeam(originalIds, ctx){
 }
 
 async function deleteRelayTeam(memberIds){
-    if(!confirm(`이 릴레이 팀(${memberIds.length}명)을 모두 삭제하시겠습니까?`)) return;
+    if(!await uiConfirm(`이 릴레이 팀(${memberIds.length}명)을 모두 삭제하시겠습니까?`)) return;
     const adminKey = getKey();
     let okCount=0;
     for(const id of memberIds){
@@ -2020,7 +2020,7 @@ async function doManualMatch(rosterIds){
 }
 
 async function doRematch(){
-    if(!confirm('자동 매칭을 다시 실행합니까?\n기존 매칭은 유지되며, 미매칭 항목만 처리됩니다.')) return;
+    if(!await uiConfirm('자동 매칭을 다시 실행합니까?\n기존 매칭은 유지되며, 미매칭 항목만 처리됩니다.')) return;
     const r = await fetch('/api/display/roster/'+compId+'/rematch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:getKey()})}).then(r=>r.json()).catch(e=>({error:e.message}));
     if(r.success){ toast(`자동 매칭 완료: ${r.matched}건`); await loadAll(); }
     else toast('오류: '+(r.error||'매칭 실패'),'error');

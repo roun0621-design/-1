@@ -1955,6 +1955,20 @@ POST /api/external/event-result-link/batch<br>
                                 <span class="t-xs t-muted">인쇄용</span>
                             </div>
                         </div>
+                        <div style="flex:1;min-width:260px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
+                            <h5 style="font-size:13px;margin-bottom:8px;">ID카드 (AD카드)</h5>
+                            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">배번·성명·소속·참가 종목 + <b>소집실에서 스캔되는 바코드</b>. 계주 팀은 제외됩니다.</p>
+                            <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:12px;">
+                                <label for="idc-team">소속</label><select id="idc-team" style="padding:4px 6px;border:1px solid var(--gray);border-radius:4px;min-width:0;"><option value="">전체</option></select>
+                                <label for="idc-gender">성별</label><select id="idc-gender" style="padding:4px 6px;border:1px solid var(--gray);border-radius:4px;"><option value="">전체</option><option value="M">남자</option><option value="F">여자</option></select>
+                                <label for="idc-bibs">배번</label><input type="text" id="idc-bibs" placeholder="비우면 전체 · 예) 12, W31, 105" title="추가 등록·분실 재발급용. W31 = 여자 31번, M31 = 남자 31번" style="padding:4px 6px;border:1px solid var(--gray);border-radius:4px;min-width:0;">
+                                <label for="idc-per-page">한 쪽에</label><select id="idc-per-page" style="padding:4px 6px;border:1px solid var(--gray);border-radius:4px;"><option value="4">4장</option><option value="2">2장</option><option value="1">1장 (크게)</option></select>
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                                <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;"><input type="checkbox" id="idc-barcode" checked> 바코드 포함</label>
+                                <button class="btn btn-sm btn-pdf" style="margin-left:auto;" onclick="openIdCards()">PDF 열기</button>
+                            </div>
+                        </div>
                         <div style="flex:1;min-width:200px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
                             <h5 style="font-size:13px;margin-bottom:8px;">데이터 백업</h5>
                             <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">선수, 종목, 기록, 조편성 전체 백업</p>
@@ -2847,7 +2861,7 @@ POST /api/external/event-result-link/batch<br>
 
     <script src="lib/xlsx.full.min.js"></script>
     <script src="/lib/auth-client.js?v=1"></script>
-    <script src="common.js?v=101"></script>
+    <script src="common.js?v=102"></script>
     <script>
         renderPageNav('admin');
         // [정책] 종료된 대회 + 운영진(operation) → 진입 차단, dashboard 로 리다이렉트
@@ -3022,7 +3036,7 @@ POST /api/external/event-result-link/batch<br>
             const confirmMsg = isClosed
                 ? `"${c.name}" 대회를 다시 진행 상태로 되돌리시겠습니까?\n운영자가 다시 데이터를 수정할 수 있게 됩니다.`
                 : `"${c.name}" 대회를 종료하시겠습니까?\n종료 후에는 운영자가 데이터를 수정할 수 없게 됩니다. (관리자만 수정 가능)`;
-            if (!confirm(confirmMsg)) return;
+            if (!await uiConfirm(confirmMsg)) return;
             try {
                 const r = await api('POST', `/api/admin/competitions/${_selectedCompId}/${action}`, { admin_key: AK() });
                 toast(isClosed ? '대회 재개 완료' : '대회 종료 완료');
@@ -3121,7 +3135,7 @@ POST /api/external/event-result-link/batch<br>
             if (name === 'settings') { loadSystemSettings(); loadSiteConfigAdmin(); loadHomePopups(); }
             if (name === 'pacing') loadPacingTab();
             if (name === 'relay') loadRelayTab();
-            if (name === 'documents') loadDocTemplates();
+            if (name === 'documents') { loadDocTemplates(); idcLoadTeams(); }
             if (name === 'records') loadRecordsTab();
             if (name === 'extapi') { extLoadCompetitions(); extLoadKeys(); extLoadLogs(); }
             // [대 리뉴얼] 사이드바 활성 항목 동기화
@@ -3311,7 +3325,7 @@ POST /api/external/event-result-link/batch<br>
 
         async function adminUsers_toggleActive(id, nextActive) {
             const action = nextActive ? '활성화' : '비활성화';
-            if (!confirm(`이 계정을 ${action}하시겠습니까?\n(${action} 시 해당 사용자의 모든 로그인 세션이 회수됩니다)`)) return;
+            if (!await uiConfirm(`이 계정을 ${action}하시겠습니까?\n(${action} 시 해당 사용자의 모든 로그인 세션이 회수됩니다)`)) return;
             try {
                 const res = await _adminUsersAuthFetch(`/api/admin/users/${id}`, {
                     method: 'PUT',
@@ -3327,7 +3341,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function adminUsers_resetPassword(id, uname) {
-            const newPw = prompt(`'${uname}' 계정의 새 비밀번호를 입력하세요 (8자 이상):`);
+            const newPw = await uiPrompt(`'${uname}' 계정의 새 비밀번호를 입력하세요 (8자 이상):`);
             if (!newPw) return;
             if (newPw.length < 8) { uiAlert('8자 이상이어야 합니다.'); return; }
             try {
@@ -3345,7 +3359,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function adminUsers_revokeSessions(id, uname) {
-            if (!confirm(`'${uname}' 계정의 모든 로그인 세션을 강제 종료하시겠습니까?`)) return;
+            if (!await uiConfirm(`'${uname}' 계정의 모든 로그인 세션을 강제 종료하시겠습니까?`)) return;
             try {
                 const res = await _adminUsersAuthFetch(`/api/admin/users/${id}/revoke-sessions`, {
                     method: 'POST'
@@ -3431,7 +3445,7 @@ POST /api/external/event-result-link/batch<br>
             { group:'op', label:'기록 입력 / 관리',    tab:'records',     icon:'timer',   desc:'NR/DR/CR 승인 큐, 기록 관리', keywords:'record 기록 입력 신기록' },
 
             // ───── 결과·기록 ─────
-            { group:'result', label:'문서 · 다운로드',  tab:'documents',  icon:'file',    desc:'종합기록지, 백업, PDF/Excel', keywords:'document download pdf excel xlsx 백업' },
+            { group:'result', label:'문서 · 다운로드',  tab:'documents',  icon:'file',    desc:'종합기록지, ID카드, 백업, PDF/Excel', keywords:'document download pdf excel xlsx 백업 id카드 ad카드 idcard 바코드 인가증' },
             { group:'result', label:'상장 출력',         tab:'certificates', icon:'trophy', desc:'상장·완주증 양식 편집 및 일괄 인쇄', keywords:'certificate 상장 완주증 시상 시상장 인쇄 출력' },
             { group:'result', label:'문자 발송',         tab:'sms',         icon:'message', desc:'결과·상장 링크 SMS 발송 (알리고)', keywords:'sms 문자 알리고 aligo 발송 lms' },
             { group:'result', label:'스코어보드',       tab:'scoreboard', icon:'monitor', desc:'스코어보드 그룹·종목 연동', keywords:'scoreboard joint group' },
@@ -3821,7 +3835,7 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) { toast(e.error || e.message || '추가 실패', 'error'); }
         }
         async function panelRemoveEventFromAthlete(athleteId, entryId) {
-            if (!confirm('이 종목 배정을 제거하시겠습니까?')) return;
+            if (!await uiConfirm('이 종목 배정을 제거하시겠습니까?')) return;
             try {
                 await API.removeAthleteEvent(athleteId, entryId, AK());
                 toast('제거 완료');
@@ -3861,7 +3875,7 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) { toast(e.error || '추가 실패', 'error'); }
         }
         async function deleteAthlete(id, name) {
-            if (!confirm(`"${name}" 선수를 삭제하시겠습니까?`)) return;
+            if (!await uiConfirm(`"${name}" 선수를 삭제하시겠습니까?`)) return;
             try { await API.deleteAthlete(id, AK()); toast('삭제 완료'); _athSelectedId = null; loadAthletes(); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
         }
 
@@ -4137,7 +4151,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function autoSortEvents() {
-            if (!confirm('모든 종목을 WA 표준 육상 순서로 재정렬하시겠습니까?')) return;
+            if (!await uiConfirm('모든 종목을 WA 표준 육상 순서로 재정렬하시겠습니까?')) return;
             try {
                 const compId = CID();
                 if (!compId) { toast('대회를 먼저 선택하세요', 'error'); return; }
@@ -4182,7 +4196,7 @@ POST /api/external/event-result-link/batch<br>
                     msg += `\n`;
                 }
                 msg += `자동 처리 (흡수+단순삭제만, 수동 선택 필요한 건 건너뜀)을 진행하시겠습니까?`;
-                if (!confirm(msg)) return;
+                if (!await uiConfirm(msg)) return;
                 // 3) 실행
                 const runRes = await fetch(`/api/display/cleanup-undefined/${compId}`, {
                     method: 'POST',
@@ -4267,7 +4281,7 @@ POST /api/external/event-result-link/batch<br>
             const round_status = document.getElementById('em-status')?.value;
             const round_type = document.getElementById('em-round')?.value;
             if (!round_status || !round_type) return;
-            if (!confirm(`종목 #${id}를 강제로 ${round_type}/${round_status}로 변경합니다.\n(일반 저장과 달리 검증 없이 바로 적용됩니다)`)) return;
+            if (!await uiConfirm(`종목 #${id}를 강제로 ${round_type}/${round_status}로 변경합니다.\n(일반 저장과 달리 검증 없이 바로 적용됩니다)`)) return;
             try {
                 await API.forceEventStatus(id, round_status, round_type, AK());
                 toast('강제 상태변경 완료');
@@ -4403,8 +4417,8 @@ POST /api/external/event-result-link/batch<br>
             openVideoModal(url, '대회 대표 영상');
         }
         async function resetCompDB() {
-            if (!confirm('이 대회의 모든 데이터를 초기화합니다. 되돌릴 수 없습니다!')) return;
-            if (!confirm('마지막 확인: 계속하시겠습니까?')) return;
+            if (!await uiConfirm('이 대회의 모든 데이터를 초기화합니다. 되돌릴 수 없습니다!')) return;
+            if (!await uiConfirm('마지막 확인: 계속하시겠습니까?')) return;
             try { await API.adminResetDB(AK(), _selectedCompId); toast('초기화 완료'); loadOverview(); } catch (e) { toast(e.error||'실패', 'error'); }
         }
 
@@ -4493,7 +4507,7 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) { toast(e.error || '키 생성 실패 (중복?)', 'error'); }
         }
         async function deleteJudgeKey(id, name) {
-            if (!confirm(`"${name}" 운영키를 삭제하시겠습니까?`)) return;
+            if (!await uiConfirm(`"${name}" 운영키를 삭제하시겠습니까?`)) return;
             try { await API.deleteOperationKey(id, AK()); toast('삭제 완료'); loadJudgeKeys(); } catch (e) { toast(e.error||'삭제 실패', 'error'); }
         }
         async function toggleJudgeKey(id, active) {
@@ -4501,7 +4515,7 @@ POST /api/external/event-result-link/batch<br>
         }
         async function toggleJudgeManage(id, canManage) {
             const action = canManage ? '관리자 권한을 부여' : '운영 권한으로 변경';
-            if (!confirm(`이 심판에게 ${action}하시겠습니까?`)) return;
+            if (!await uiConfirm(`이 심판에게 ${action}하시겠습니까?`)) return;
             try { await API.toggleOperationKeyManage(id, canManage, AK()); toast(`권한 변경 완료`); loadJudgeKeys(); } catch (e) { toast('변경 실패', 'error'); }
         }
         async function changeKeys() {
@@ -4551,7 +4565,7 @@ POST /api/external/event-result-link/batch<br>
         async function toggleFedHidden(id, hidden) {
             const f = _federations.find(x => x.id === id);
             if (!f) return;
-            if (hidden && !confirm(`${f.code} 연맹의 대회 전체를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
+            if (hidden && !await uiConfirm(`${f.code} 연맹의 대회 전체를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
             try {
                 await API.setFederationHidden(id, hidden, AK());
                 invalidateCache('federations'); API.invalidateCompetitions();
@@ -4580,7 +4594,7 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) { toast(e.error || '연맹 추가 실패', 'error'); }
         }
         async function deleteFed(id) {
-            if (!confirm('이 연맹을 삭제하시겠습니까?')) return;
+            if (!await uiConfirm('이 연맹을 삭제하시겠습니까?')) return;
             try { await API.deleteFederation(id, AK()); toast('삭제 완료'); await loadFederations(); }
             catch (e) { toast(e.error || '삭제 실패', 'error'); }
         }
@@ -4848,7 +4862,7 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) { toast(e.error || '저장 실패', 'error'); }
         }
         async function deletePopup(id) {
-            if (!confirm('이 팝업을 삭제하시겠습니까?')) return;
+            if (!await uiConfirm('이 팝업을 삭제하시겠습니까?')) return;
             try { await API.deleteHomePopup(id, AK()); toast('삭제 완료'); await loadHomePopups(); }
             catch (e) { toast(e.error || '삭제 실패', 'error'); }
         }
@@ -5012,7 +5026,7 @@ POST /api/external/event-result-link/batch<br>
                 toast('먼저 [파일 검증]을 통과해야 합니다.', 'error');
                 return;
             }
-            const confirmText = prompt(
+            const confirmText = await uiPrompt(
                 '시스템 전체 복원을 진행하시겠습니까?\n\n' +
                 '현재 모든 데이터(대회·선수·기록·로그·설정·업로드 파일)가\n' +
                 '백업 파일의 내용으로 교체됩니다.\n\n' +
@@ -5057,10 +5071,10 @@ POST /api/external/event-result-link/batch<br>
         async function deleteCompetition() {
             const compId = getCompetitionId();
             if (!compId) { toast('대회를 선택하세요', 'error'); return; }
-            const adminKey = prompt('대회를 완전히 삭제합니다.\n이 작업은 복구할 수 없습니다.\n\n관리자 키를 입력하세요:');
+            const adminKey = await uiPrompt('대회를 완전히 삭제합니다.\n이 작업은 복구할 수 없습니다.\n\n관리자 키를 입력하세요:');
             if (!adminKey) return;
             const compName = document.getElementById('comp-name')?.value || '선택된 대회';
-            if (!confirm(`정말로 "${compName}" 대회를 삭제하시겠습니까?\n\n모든 선수, 종목, 기록, 로그가 영구 삭제됩니다.`)) return;
+            if (!await uiConfirm(`정말로 "${compName}" 대회를 삭제하시겠습니까?\n\n모든 선수, 종목, 기록, 로그가 영구 삭제됩니다.`)) return;
             try {
                 await API.deleteCompetition(compId, adminKey);
                 toast('대회가 삭제되었습니다.');
@@ -5091,7 +5105,7 @@ POST /api/external/event-result-link/batch<br>
                 if (r.error) throw r;
                 // 지난 일차만 들어 있어 아무것도 반영되지 않은 경우 → 분명히 알리고, 원하면 강제 덮어쓰기로 다시 올린다
                 if (r.needs_force) {
-                    if (confirm(r.message + '\n\n지금 강제 덮어쓰기로 다시 올릴까요? (해당 일차의 기존 시간표가 파일 내용으로 교체됩니다)')) {
+                    if (await uiConfirm(r.message + '\n\n지금 강제 덮어쓰기로 다시 올릴까요? (해당 일차의 기존 시간표가 파일 내용으로 교체됩니다)')) {
                         r = await send('force');
                         if (r.error) throw r;
                     } else {
@@ -5187,7 +5201,7 @@ POST /api/external/event-result-link/batch<br>
         async function deleteTimetableDay(day) {
             const compId = getCompetitionId();
             if (!compId) { toast('대회를 선택하세요', 'error'); return; }
-            if (!confirm(day + '일차 시간표를 삭제하시겠습니까? 다른 일차는 유지됩니다.')) return;
+            if (!await uiConfirm(day + '일차 시간표를 삭제하시겠습니까? 다른 일차는 유지됩니다.')) return;
             try {
                 await API.deleteTimetableDay(compId, day, AK());
                 toast(day + '일차 시간표가 삭제되었습니다.');
@@ -5198,7 +5212,7 @@ POST /api/external/event-result-link/batch<br>
         async function deleteTimetableAll() {
             const compId = getCompetitionId();
             if (!compId) { toast('대회를 선택하세요', 'error'); return; }
-            if (!confirm('전체 시간표를 삭제하시겠습니까?')) return;
+            if (!await uiConfirm('전체 시간표를 삭제하시겠습니까?')) return;
             try {
                 await API.deleteTimetable(compId, AK());
                 toast('전체 시간표가 삭제되었습니다.');
@@ -5363,7 +5377,7 @@ POST /api/external/event-result-link/batch<br>
             if (!fileInput.files.length) { toast('파일을 선택하세요', 'error'); return; }
             if (!_selectedCompId) { toast('대회를 선택하세요', 'error'); return; }
             const clearExisting = document.getElementById('fed-clear').checked;
-            if (clearExisting && !confirm('기존 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?')) return;
+            if (clearExisting && !await uiConfirm('기존 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?')) return;
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             formData.append('admin_key', AK());
@@ -5517,10 +5531,10 @@ POST /api/external/event-result-link/batch<br>
             // Confirm if force-changing events with results
             const hasForced = forceIds.length > 0;
             if (hasForced) {
-                if (!confirm(`[경고] ${forceIds.length}개 종목의 기록이 초기화됩니다. 정말 진행하시겠습니까?`)) return;
+                if (!await uiConfirm(`[경고] ${forceIds.length}개 종목의 기록이 초기화됩니다. 정말 진행하시겠습니까?`)) return;
             }
 
-            if (!confirm('조편성을 적용합니다. 계속하시겠습니까?')) return;
+            if (!await uiConfirm('조편성을 적용합니다. 계속하시겠습니까?')) return;
 
             const formData = new FormData();
             formData.append('file', _haFile);
@@ -5561,7 +5575,7 @@ POST /api/external/event-result-link/batch<br>
             if (!fileInput.files.length) { toast('파일을 선택하세요', 'error'); return; }
             if (!_selectedCompId) { toast('대회를 선택하세요', 'error'); return; }
             const clearExisting = document.getElementById('ath-upload-clear').checked;
-            if (clearExisting && !confirm('기존 선수 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?')) return;
+            if (clearExisting && !await uiConfirm('기존 선수 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?')) return;
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             formData.append('admin_key', AK());
@@ -5590,7 +5604,7 @@ POST /api/external/event-result-link/batch<br>
             if (!fileInput.files.length) { toast('파일을 선택하세요', 'error'); return; }
             if (!_selectedCompId) { toast('대회를 선택하세요', 'error'); return; }
             const clearExisting = document.getElementById('evt-upload-clear').checked;
-            if (clearExisting && !confirm('기존 종목 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?')) return;
+            if (clearExisting && !await uiConfirm('기존 종목 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?')) return;
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             formData.append('admin_key', AK());
@@ -5648,7 +5662,7 @@ POST /api/external/event-result-link/batch<br>
         async function deleteAthleteFromModal() {
             const id = document.getElementById('am-id').value;
             const name = document.getElementById('am-name').value;
-            if (!confirm(`"${name}" 선수를 삭제하시겠습니까?`)) return;
+            if (!await uiConfirm(`"${name}" 선수를 삭제하시겠습니까?`)) return;
             try { await API.deleteAthlete(id, AK()); toast('삭제 완료'); closeAthModal(); loadAthletes(); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
         }
 
@@ -5690,7 +5704,7 @@ POST /api/external/event-result-link/batch<br>
             }
         }
         async function removeEventFromAthlete(athleteId, entryId) {
-            if (!confirm('이 종목 배정을 제거하시겠습니까?')) return;
+            if (!await uiConfirm('이 종목 배정을 제거하시겠습니까?')) return;
             try {
                 await API.removeAthleteEvent(athleteId, entryId, AK());
                 toast('제거 완료');
@@ -5966,7 +5980,7 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) { toast('순서 변경 실패', 'error'); }
         }
         async function emDeleteSubEvent(parentId, subId, name) {
-            if (!confirm(`세부종목 "${name}"을(를) 삭제하시겠습니까?\n기록이 있으면 함께 삭제됩니다.`)) return;
+            if (!await uiConfirm(`세부종목 "${name}"을(를) 삭제하시겠습니까?\n기록이 있으면 함께 삭제됩니다.`)) return;
             try {
                 await api('DELETE', `/api/events/${parentId}/sub-events/${subId}`, { admin_key: AK() });
                 toast('세부종목 삭제 완료');
@@ -5975,7 +5989,7 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) { toast('삭제 실패: ' + (e.error || e.message), 'error'); }
         }
         async function emSyncSubAthletes() {
-            if (!confirm('상위 종목의 선수를 모든 세부종목에 동기화합니까?')) return;
+            if (!await uiConfirm('상위 종목의 선수를 모든 세부종목에 동기화합니까?')) return;
             try {
                 const resp = await api('POST', `/api/events/${_emEventId}/sub-events/sync-athletes`, { admin_key: AK() });
                 toast(`선수 동기화 완료: ${resp.added || 0}명 추가`);
@@ -6136,7 +6150,7 @@ POST /api/external/event-result-link/batch<br>
         
         async function mergeAllToOneHeat() {
             if (_emHeats.length <= 1) { toast('이미 1개 조입니다', 'error'); return; }
-            if (!confirm('모든 선수를 1조로 합칩니다. 계속하시겠습니까?')) return;
+            if (!await uiConfirm('모든 선수를 1조로 합칩니다. 계속하시겠습니까?')) return;
             const targetHeat = _emHeats[0];
             try {
                 for (let i = 1; i < _emHeats.length; i++) {
@@ -6185,7 +6199,7 @@ POST /api/external/event-result-link/batch<br>
         
         async function autoAssignABGroups() {
             if (!_emSelectedHeatId) return;
-            if (!confirm('선수를 반으로 나눠 A/B 그룹에 자동 배정합니다. 계속하시겠습니까?')) return;
+            if (!await uiConfirm('선수를 반으로 나눠 A/B 그룹에 자동 배정합니다. 계속하시겠습니까?')) return;
             try {
                 const entries = await API.getHeatEntries(_emSelectedHeatId);
                 const half = Math.ceil(entries.length / 2);
@@ -6211,12 +6225,12 @@ POST /api/external/event-result-link/batch<br>
             //  1) "확인" = 종목에서 완전 제거 (event_entry 까지 삭제) → 다시 추가 가능
             //  2) "취소" → 다시 묻기: "조에서만 제거하시겠습니까?" → 확인 시 heat_entry만 제거
             //  3) 두 번째도 취소면 중단
-            const fullRemove = confirm(`"${name}" 선수를 이 종목에서 완전히 제거하시겠습니까?\n\n[확인] = 종목에서 완전 제거 (다시 추가 가능)\n[취소] = 조 이동/유지 옵션 선택`);
+            const fullRemove = await uiConfirm(`"${name}" 선수를 이 종목에서 완전히 제거하시겠습니까?\n\n[확인] = 종목에서 완전 제거 (다시 추가 가능)\n[취소] = 조 이동/유지 옵션 선택`);
             let deleteEventEntry;
             if (fullRemove) {
                 deleteEventEntry = true;
             } else {
-                const heatOnly = confirm(`"${name}" 선수를 조에서만 제거하시겠습니까?\n(종목 등록은 유지되며, 다른 조로 옮길 수 있습니다)\n\n[확인] = 조에서만 제거\n[취소] = 작업 중단`);
+                const heatOnly = await uiConfirm(`"${name}" 선수를 조에서만 제거하시겠습니까?\n(종목 등록은 유지되며, 다른 조로 옮길 수 있습니다)\n\n[확인] = 조에서만 제거\n[취소] = 작업 중단`);
                 if (!heatOnly) return;
                 deleteEventEntry = false;
             }
@@ -6227,7 +6241,7 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) {
                 // 기록 데이터가 있어 409를 받은 경우 → 강제 삭제 여부 재확인
                 if (e && e.needs_force) {
-                    const goForce = confirm(`이 선수에게 저장된 기록이 ${e.result_count}건 있습니다.\n그래도 종목에서 완전히 제거하시겠습니까?\n(저장된 기록이 모두 함께 삭제됩니다)`);
+                    const goForce = await uiConfirm(`이 선수에게 저장된 기록이 ${e.result_count}건 있습니다.\n그래도 종목에서 완전히 제거하시겠습니까?\n(저장된 기록이 모두 함께 삭제됩니다)`);
                     if (!goForce) { toast('취소되었습니다'); return; }
                     try {
                         // force=true 로 재시도 — common.js helper 미사용, 직접 호출
@@ -6252,7 +6266,7 @@ POST /api/external/event-result-link/batch<br>
         }
         
         async function emDeleteHeat(heatId) {
-            if (!confirm('이 조를 삭제하시겠습니까?')) return;
+            if (!await uiConfirm('이 조를 삭제하시겠습니까?')) return;
             try {
                 await API.deleteHeat(heatId, AK());
                 _emSelectedHeatId = null;
@@ -6266,7 +6280,7 @@ POST /api/external/event-result-link/batch<br>
             if (!heat) return;
             const currentName = heat.heat_name || '';
             const currentSbKey = heat.scoreboard_key || '';
-            const newName = prompt(`조 이름 변경\n현재: ${heat.heat_name || (heat.heat_number + '조')}\n스코어보드 키: ${currentSbKey || '(없음)'}\n\n새 이름 입력 (빈칸=기본값 ${heat.heat_number}조):`, currentName);
+            const newName = await uiPrompt(`조 이름 변경\n현재: ${heat.heat_name || (heat.heat_number + '조')}\n스코어보드 키: ${currentSbKey || '(없음)'}\n\n새 이름 입력 (빈칸=기본값 ${heat.heat_number}조):`, currentName);
             if (newName === null) return;
             try {
                 await API.renameHeat(heatId, newName.trim(), AK());
@@ -6280,7 +6294,7 @@ POST /api/external/event-result-link/batch<br>
             const heat = _emHeats.find(h => h.id === heatId);
             if (!heat) return;
             const currentKey = heat.scoreboard_key || '';
-            const newKey = prompt(`스코어보드 키 변경\n현재: ${currentKey || '(없음)'}\n\n새 키 입력 (예: 남자실업부 100m 예선 1조):`, currentKey);
+            const newKey = await uiPrompt(`스코어보드 키 변경\n현재: ${currentKey || '(없음)'}\n\n새 키 입력 (예: 남자실업부 100m 예선 1조):`, currentKey);
             if (newKey === null) return;
             try {
                 const resp = await api('POST', `/api/heats/${heatId}/scoreboard-key`, { scoreboard_key: newKey.trim(), admin_key: AK() });
@@ -6371,7 +6385,7 @@ POST /api/external/event-result-link/batch<br>
         }
         async function addRoundForEvent(name, category, gender, roundType) {
             const label = ROUND_LABEL[roundType] || roundType;
-            if (!confirm(`"${name}" ${label} 라운드를 새로 만듭니다.\n계속하시겠습니까?`)) return;
+            if (!await uiConfirm(`"${name}" ${label} 라운드를 새로 만듭니다.\n계속하시겠습니까?`)) return;
             try {
                 const created = await API.adminCreateEvent({ competition_id: _selectedCompId, name, category, gender, round_type: roundType }, AK());
                 toast(`${label} 라운드 추가 완료`);
@@ -6428,11 +6442,11 @@ POST /api/external/event-result-link/batch<br>
                 _n(e.name) === _n(name) && e.gender === gender &&
                 e.category === category && (e.division || '') === division &&
                 ['preliminary', 'semifinal', 'final'].includes(e.round_type));
-            if (!confirm(`"${name}" 종목을 삭제하시겠습니까?`)) return;
+            if (!await uiConfirm(`"${name}" 종목을 삭제하시겠습니까?`)) return;
             let alsoIds = [];
             if (siblings.length) {
                 const labels = siblings.map(e => ROUND_LABEL[e.round_type] || e.round_type).join(', ');
-                if (confirm(`연결된 다른 라운드(${labels})도 함께 삭제할까요?\n\n[확인] 함께 삭제   [취소] 이 라운드만 삭제`)) {
+                if (await uiConfirm(`연결된 다른 라운드(${labels})도 함께 삭제할까요?\n\n[확인] 함께 삭제   [취소] 이 라운드만 삭제`)) {
                     alsoIds = siblings.map(e => e.id);
                 }
             }
@@ -6898,7 +6912,7 @@ POST /api/external/event-result-link/batch<br>
                 _pacingCurrentEvent = null; _pacingEditData = null;
                 document.getElementById('pacing-editor').style.display = 'none'; return;
             }
-            if (!confirm(`"${_pacingCurrentEvent}" 페이싱 설정을 삭제하시겠습니까?`)) return;
+            if (!await uiConfirm(`"${_pacingCurrentEvent}" 페이싱 설정을 삭제하시겠습니까?`)) return;
             try {
                 await API.deletePacingConfig(_pacingEditData.id, AK());
                 toast('삭제 완료');
@@ -7027,7 +7041,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function removeRelayAdmin(eeId, athleteId, teamName, eventId) {
-            if (!confirm('이 선수를 릴레이 팀에서 제거하시겠습니까?')) return;
+            if (!await uiConfirm('이 선수를 릴레이 팀에서 제거하시겠습니까?')) return;
             try {
                 await api('DELETE', '/api/relay-members', { event_entry_id: eeId, athlete_id: athleteId });
                 toast('릴레이 멤버 제거 완료');
@@ -7214,7 +7228,7 @@ POST /api/external/event-result-link/batch<br>
         async function recxImport() {
             const fi = document.getElementById('recx-file');
             if (!fi.files.length) { toast('파일을 선택해 주세요.', 'error'); return; }
-            if (!confirm('매칭된 선수에게 기록을 입력합니다. 계속할까요?\n(기존 기록이 있으면 덮어씁니다)')) return;
+            if (!await uiConfirm('매칭된 선수에게 기록을 입력합니다. 계속할까요?\n(기존 기록이 있으면 덮어씁니다)')) return;
             const box = document.getElementById('recx-result');
             box.style.display = 'block';
             box.innerHTML = '<div style="color:var(--text-muted);padding:12px;">입력 중...</div>';
@@ -7297,7 +7311,7 @@ POST /api/external/event-result-link/batch<br>
 
         async function ttImport() {
             if (!_ttFiles.length) { toast('파일을 먼저 끌어다 놓으세요.', 'error'); return; }
-            if (!confirm(`${_ttFiles.length}개 계측 결과파일의 기록을 입력합니다. 계속할까요?\n(기존 기록이 있으면 덮어씁니다)`)) return;
+            if (!await uiConfirm(`${_ttFiles.length}개 계측 결과파일의 기록을 입력합니다. 계속할까요?\n(기존 기록이 있으면 덮어씁니다)`)) return;
             const box = document.getElementById('tt-result');
             box.style.display = 'block';
             box.innerHTML = '<div style="color:var(--text-muted);padding:12px;">입력 중...</div>';
@@ -7558,7 +7572,7 @@ POST /api/external/event-result-link/batch<br>
             if (!_fcFile || !_fcPreview) { toast('파일을 먼저 올려 주세요.', 'error'); return; }
             const n = _fcPreview.groups.reduce((s, g) => s + (fcGroupOk(g) ? g.rows.filter(r => r.will_import).length : 0), 0);
             const w = _fcPreview.groups.reduce((s, g) => s + fcCountIssues(g, 'warn'), 0);
-            if (!confirm(`${n}명의 기록을 저장합니다.${w ? `\n경고 ${w}건이 있습니다 — 종이 카드와 대조했는지 확인하세요.` : ''}\n\n파일에 기록이 있는 선수는 시기 전체가 파일대로 교체됩니다. 계속할까요?`)) return;
+            if (!await uiConfirm(`${n}명의 기록을 저장합니다.${w ? `\n경고 ${w}건이 있습니다 — 종이 카드와 대조했는지 확인하세요.` : ''}\n\n파일에 기록이 있는 선수는 시기 전체가 파일대로 교체됩니다. 계속할까요?`)) return;
             const box = document.getElementById('fc-result');
             box.style.display = 'block';
             box.innerHTML = '<div style="color:var(--text-muted);padding:12px;">저장 중...</div>';
@@ -7598,7 +7612,7 @@ POST /api/external/event-result-link/batch<br>
             const fileInput = document.getElementById('sb-lif-files');
             if (!fileInput.files.length) { toast('파일을 선택해 주세요.', 'error'); return; }
 
-            if (!confirm(`${fileInput.files.length}개 .lif 파일의 기록을 입력하시겠습니까?`)) return;
+            if (!await uiConfirm(`${fileInput.files.length}개 .lif 파일의 기록을 입력하시겠습니까?`)) return;
 
             const fd = new FormData();
             fd.append('competition_id', _selectedCompId);
@@ -8073,7 +8087,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function jgDeleteGroup(groupId, name) {
-            if (!confirm(`합동 그룹 "${name}"을(를) 해제하시겠습니까?\n(각 대회의 종목·기록은 그대로 유지됩니다)`)) return;
+            if (!await uiConfirm(`합동 그룹 "${name}"을(를) 해제하시겠습니까?\n(각 대회의 종목·기록은 그대로 유지됩니다)`)) return;
             try {
                 await api('DELETE', `/api/joint-groups/${groupId}`, { admin_key: AK() });
                 toast('합동 해제 완료');
@@ -8082,7 +8096,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function jgRemoveMember(groupId, eventId) {
-            if (!confirm('이 종목을 합동 그룹에서 제거하시겠습니까?')) return;
+            if (!await uiConfirm('이 종목을 합동 그룹에서 제거하시겠습니까?')) return;
             try {
                 await api('DELETE', `/api/joint-groups/${groupId}/members/${eventId}`, { admin_key: AK() });
                 toast('제거 완료');
@@ -8205,7 +8219,7 @@ POST /api/external/event-result-link/batch<br>
                 `   · ${s.joint_members.will_move}개 합동 멤버십 이전\n` +
                 `   · ${s.joint_members.will_delete}개는 keep 에 이미 있어 dup 측 삭제\n\n` +
                 `완료 후 dup 종목(ID ${s.dup_id})은 삭제됩니다.\n시간표·event_link 의 dup 참조도 keep 으로 이전됩니다.\n\n계속하시겠습니까?`;
-            if (!confirm(msg)) return;
+            if (!await uiConfirm(msg)) return;
             try {
                 const r = await api('POST', '/api/admin/event-duplicates/merge', {
                     admin_key: AK(),
@@ -8221,7 +8235,7 @@ POST /api/external/event-result-link/batch<br>
             }
         }
         async function jgRunCleanup() {
-            if (!confirm('데이터(조/엔트리/기록)가 전혀 없는 빈 중복 종목만 삭제합니다.\n계속하시겠습니까?')) return;
+            if (!await uiConfirm('데이터(조/엔트리/기록)가 전혀 없는 빈 중복 종목만 삭제합니다.\n계속하시겠습니까?')) return;
             try {
                 const r = await api('POST', '/api/admin/event-duplicates/cleanup', {
                     admin_key: AK(),
@@ -8242,7 +8256,7 @@ POST /api/external/event-result-link/batch<br>
         // 중복된 event_id 들을 그룹에서 제거 (DB의 event 테이블은 건드리지 않음, 그룹 멤버만 정리)
         async function jgCleanDups(groupId, dupEventIds) {
             if (!Array.isArray(dupEventIds) || dupEventIds.length === 0) return;
-            if (!confirm(`이 그룹에 중복 등록된 종목 ${dupEventIds.length}개를 정리합니다.\n(중복된 멤버만 제거하며, 원래 종목·기록은 그대로 유지됩니다)`)) return;
+            if (!await uiConfirm(`이 그룹에 중복 등록된 종목 ${dupEventIds.length}개를 정리합니다.\n(중복된 멤버만 제거하며, 원래 종목·기록은 그대로 유지됩니다)`)) return;
             try {
                 let ok = 0;
                 for (const eid of dupEventIds) {
@@ -8642,7 +8656,7 @@ POST /api/external/event-result-link/batch<br>
 
         async function quickDeleteLogo(position) {
             if (!_selectedCompId) return;
-            if (!confirm(`${position === 'left' ? '좌측' : '우측'} 로고를 삭제하시겠습니까?`)) return;
+            if (!await uiConfirm(`${position === 'left' ? '좌측' : '우측'} 로고를 삭제하시겠습니까?`)) return;
             try {
                 await api('POST', '/api/doc-logos/delete', { admin_key: AK(), competition_id: _selectedCompId, position });
                 for (const p of ['sl', 'rs', 'comp']) {
@@ -8686,7 +8700,7 @@ POST /api/external/event-result-link/batch<br>
 
         async function deleteDocLogo(docType, position) {
             if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
-            if (!confirm(`${position === 'left' ? '좌측' : '우측'} 로고를 삭제하시겠습니까?`)) return;
+            if (!await uiConfirm(`${position === 'left' ? '좌측' : '우측'} 로고를 삭제하시겠습니까?`)) return;
             try {
                 await api('POST', '/api/doc-logos/delete', {
                     admin_key: AK(),
@@ -8944,7 +8958,7 @@ POST /api/external/event-result-link/batch<br>
             if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
             const fileInput = document.getElementById('bib-update-file');
             if (!fileInput.files[0]) { toast('파일을 선택하세요', 'error'); return; }
-            if (!confirm('BIB 번호를 일괄 수정하시겠습니까? 기존 기록에는 영향이 없습니다.')) return;
+            if (!await uiConfirm('BIB 번호를 일괄 수정하시겠습니까? 기존 기록에는 영향이 없습니다.')) return;
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             formData.append('competition_id', _selectedCompId);
@@ -9007,7 +9021,7 @@ POST /api/external/event-result-link/batch<br>
             if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
             const fileInput = document.getElementById('phone-update-file');
             if (!fileInput.files[0]) { toast('파일을 선택하세요', 'error'); return; }
-            if (!confirm('휴대폰 번호를 일괄 업데이트하시겠습니까?')) return;
+            if (!await uiConfirm('휴대폰 번호를 일괄 업데이트하시겠습니까?')) return;
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             formData.append('competition_id', _selectedCompId);
@@ -9290,10 +9304,10 @@ POST /api/external/event-result-link/batch<br>
             const fd = _rbkForm(); if (!fd) return;
             const cb = document.getElementById('rbk-allow-worse');
             if (cb && cb.checked) {
-                if (!confirm('기존 기록보다 나쁜 값으로 덮어쓰는 행이 포함됩니다. 정말 적용하시겠습니까?')) return;
+                if (!await uiConfirm('기존 기록보다 나쁜 값으로 덮어쓰는 행이 포함됩니다. 정말 적용하시겠습니까?')) return;
                 fd.append('allow_worse', '1');
             }
-            if (!confirm('기록표를 적용합니다. 계속하시겠습니까?')) return;
+            if (!await uiConfirm('기록표를 적용합니다. 계속하시겠습니까?')) return;
             const out = document.getElementById('rbk-result');
             out.style.display = 'block'; out.style.background = ''; out.style.color = '';
             out.innerHTML = '<div style="color:var(--blue)">적용 중...</div>';
@@ -9687,7 +9701,7 @@ POST /api/external/event-result-link/batch<br>
         async function deleteRecordCell() {
             const id = document.getElementById('rec-cell-id').value;
             if (!id) return;
-            if (!confirm('이 기록을 삭제하시겠습니까?')) return;
+            if (!await uiConfirm('이 기록을 삭제하시겠습니까?')) return;
             try {
                 const res = await fetch('/api/records/' + id, {
                     method: 'DELETE',
@@ -9789,7 +9803,7 @@ POST /api/external/event-result-link/batch<br>
             }
         }
         async function deleteSeries(id) {
-            if (!confirm('이 시리즈를 비활성화하시겠습니까? (연결된 대회/기록은 유지)')) return;
+            if (!await uiConfirm('이 시리즈를 비활성화하시겠습니까? (연결된 대회/기록은 유지)')) return;
             try {
                 const res = await fetch('/api/competition-series/' + id, {
                     method: 'DELETE',
@@ -9954,7 +9968,7 @@ POST /api/external/event-result-link/batch<br>
             }
         }
         async function deleteDivision(code) {
-            if (!confirm(`부 "${code}"를 비활성화하시겠습니까?\n\n(연결된 종목/기록의 division 값은 그대로 유지되며, 종목/기록 입력 시 선택 목록에서만 사라집니다.)`)) return;
+            if (!await uiConfirm(`부 "${code}"를 비활성화하시겠습니까?\n\n(연결된 종목/기록의 division 값은 그대로 유지되며, 종목/기록 입력 시 선택 목록에서만 사라집니다.)`)) return;
             try {
                 let res = await fetch('/api/admin/divisions/' + encodeURIComponent(code), {
                     method: 'DELETE',
@@ -9964,7 +9978,7 @@ POST /api/external/event-result-link/batch<br>
                 let data = await res.json();
                 if (res.status === 409 && data.needs_force) {
                     // 사용 중 - 강제 삭제 확인
-                    if (!confirm(`${data.message}\n\n그래도 비활성화하시겠습니까?`)) return;
+                    if (!await uiConfirm(`${data.message}\n\n그래도 비활성화하시겠습니까?`)) return;
                     res = await fetch('/api/admin/divisions/' + encodeURIComponent(code), {
                         method: 'DELETE',
                         headers: { 'Content-Type': 'application/json' },
@@ -10354,7 +10368,7 @@ POST /api/external/event-result-link/batch<br>
             const msg = `'${cand ? cand.event_name : ''}' 기록을 종목명 '${st.targetEventName}' 으로 강제 연결합니다.\n\n` +
                 `→ DB 의 event_name 이 '${st.targetEventName}' 으로 영구 변경됩니다.\n` +
                 `→ 이 종목의 NR/CR 배지가 대시보드/기록지에 표시됩니다.\n\n계속하시겠습니까?`;
-            if (!confirm(msg)) return;
+            if (!await uiConfirm(msg)) return;
             _matchForceModalClose();
             await matchRelinkRecord(recordId, st.targetEventName);
         }
@@ -10363,7 +10377,7 @@ POST /api/external/event-result-link/batch<br>
             await _runNormalizeAll(true);
         }
         async function confirmNormalizeAll() {
-            if (!confirm('event_record 전체 행에 대해 종목명 정규화를 실행합니다. 계속하시겠습니까?\n\n(미리보기를 먼저 해 보시려면 [정규화 미리보기] 버튼을 사용하세요)')) return;
+            if (!await uiConfirm('event_record 전체 행에 대해 종목명 정규화를 실행합니다. 계속하시겠습니까?\n\n(미리보기를 먼저 해 보시려면 [정규화 미리보기] 버튼을 사용하세요)')) return;
             const key = await _getAdminKeyForNormalize();
             if (!key) return;
             await _runNormalizeAll(false, key);
@@ -10379,7 +10393,7 @@ POST /api/external/event-result-link/batch<br>
             const sess = sessionStorage.getItem('pace_normalize_key');
             if (sess) return sess.trim();
             // 3) prompt
-            const k = prompt('관리자 키 또는 운영진 키를 입력하세요:');
+            const k = await uiPrompt('관리자 키 또는 운영진 키를 입력하세요:');
             if (!k) return null;
             const trimmed = k.trim();
             try { sessionStorage.setItem('pace_normalize_key', trimmed); } catch(_) {}
@@ -10602,7 +10616,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function approveRecordBreak(id) {
-            if (!confirm('이 기록 갱신을 승인하시겠습니까?\n승인 시 종목별 기록(NR/DR/CR)이 즉시 갱신됩니다.')) return;
+            if (!await uiConfirm('이 기록 갱신을 승인하시겠습니까?\n승인 시 종목별 기록(NR/DR/CR)이 즉시 갱신됩니다.')) return;
             try {
                 const res = await fetch(`/api/record-breaks/${id}/approve`, {
                     method: 'POST',
@@ -10796,7 +10810,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function extRevoke(id) {
-            if (!confirm(`키 #${id} 를 회수하시겠습니까? 회수 후에는 사용할 수 없으며 되돌릴 수 없습니다.`)) return;
+            if (!await uiConfirm(`키 #${id} 를 회수하시겠습니까? 회수 후에는 사용할 수 없으며 되돌릴 수 없습니다.`)) return;
             try {
                 const res = await fetch(`/api/admin/external-keys/${id}/revoke`, {
                     method: 'POST',
@@ -10922,6 +10936,33 @@ POST /api/external/event-result-link/batch<br>
         function _certGenderRank(g) { return g === 'M' ? 0 : g === 'F' ? 1 : g === 'X' ? 2 : 3; }
         let _certRenderedGroups = [];   // 현재 필터로 화면에 보이는 종목 그룹
 
+        // ── ID카드(AD카드) 발급 ─────────────────────────────────
+        async function idcLoadTeams() {
+            const sel = document.getElementById('idc-team'); if (!sel || !_selectedCompId) return;
+            try {
+                const list = await API.getAthletes(AK(), _selectedCompId);
+                const teams = [...new Set((list || []).filter(a => !/^RELAY_/.test(a.barcode || '')).map(a => a.team).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko'));
+                const cur = sel.value;
+                sel.innerHTML = '<option value="">전체</option>' + teams.map(t => `<option value="${String(t).replace(/"/g, '&quot;')}">${String(t).replace(/</g, '&lt;')}</option>`).join('');
+                if (teams.includes(cur)) sel.value = cur;
+            } catch (e) { /* 목록을 못 읽어도 전체 발급은 된다 */ }
+        }
+        function openIdCards() {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const q = new URLSearchParams();
+            const v = id => document.getElementById(id).value.trim();
+            if (v('idc-team')) q.set('team', v('idc-team'));
+            if (v('idc-gender')) q.set('gender', v('idc-gender'));
+            if (v('idc-bibs')) q.set('bibs', v('idc-bibs'));
+            q.set('per_page', v('idc-per-page'));
+            if (!document.getElementById('idc-barcode').checked) q.set('barcode', '0');
+            fetch(`/api/documents/ad-card/${_selectedCompId}?${q}`).then(async r => {
+                if (r.status === 404) { toast('조건에 맞는 선수가 없습니다', 'error'); return; }
+                if (!r.ok) { toast('ID카드 생성 실패', 'error'); return; }
+                const url = URL.createObjectURL(await r.blob()); window.open(url, '_blank'); setTimeout(() => URL.revokeObjectURL(url), 60000);
+            }).catch(() => toast('ID카드 생성 실패 — 연결을 확인하세요', 'error'));
+        }
+
         // ── 워드 상장 양식 (현장 인쇄용) ─────────────────────────────────
         const AWD_TEXT = ['title_text', 'rank_label_style', 'serial_format', 'serial_start', 'body_template', 'body_template_team', 'award_date', 'signer_org', 'signer_title', 'signer_name', 'seal_mark', 'font_family', 'paper_orientation', 'border_style', 'border_color', 'title_size', 'field_size', 'body_size', 'date_size', 'signer_size'];
         const AWD_BOOL = ['show_serial', 'show_event', 'show_rank', 'show_record', 'show_wind', 'show_team', 'show_members', 'show_date'];
@@ -10972,7 +11013,7 @@ POST /api/external/event-result-link/batch<br>
         }
         async function awdDelete() {
             const compId = awdScopeCompId(); if (!compId) return;
-            if (!confirm('이 대회 전용 워드 상장 양식을 삭제하고 전체 기본 양식으로 되돌릴까요?')) return;
+            if (!await uiConfirm('이 대회 전용 워드 상장 양식을 삭제하고 전체 기본 양식으로 되돌릴까요?')) return;
             try {
                 const res = await fetch(`/api/award-docx-template?competition_id=${compId}`, { method: 'DELETE', headers: { 'x-admin-key': AK() } });
                 if (!res.ok) throw new Error((await res.json()).error || '삭제 실패');
@@ -11344,7 +11385,7 @@ POST /api/external/event-result-link/batch<br>
         async function deleteCertImage(position) {
             const id = document.getElementById('cert-edit-id').value;
             if (!id) return;
-            if (!confirm('이미지를 제거하시겠습니까?')) return;
+            if (!await uiConfirm('이미지를 제거하시겠습니까?')) return;
             try {
                 const res = await fetch('/api/admin/certificate-images/delete', {
                     method: 'POST',
@@ -11444,7 +11485,7 @@ POST /api/external/event-result-link/batch<br>
         }
 
         async function deleteCertTemplate(id) {
-            if (!confirm('이 양식을 삭제하시겠습니까?')) return;
+            if (!await uiConfirm('이 양식을 삭제하시겠습니까?')) return;
             try {
                 const res = await fetch(`/api/admin/certificate-templates/${id}?admin_key=${encodeURIComponent(AK())}`, {
                     method: 'DELETE'
@@ -11589,7 +11630,7 @@ POST /api/external/event-result-link/batch<br>
             const message = document.getElementById('sms-send-message').value;
             if (!phone || !message) { toast('전화번호와 메시지를 입력하세요', 'error'); return; }
             const forceReal = !!document.getElementById('sms-send-force-real')?.checked;
-            if (forceReal && !confirm('시뮬레이션을 무시하고 실제 문자를 발송합니다.\n요금이 발생하며 수신자에게 실제로 도착합니다. 계속할까요?')) return;
+            if (forceReal && !await uiConfirm('시뮬레이션을 무시하고 실제 문자를 발송합니다.\n요금이 발생하며 수신자에게 실제로 도착합니다. 계속할까요?')) return;
             const st = document.getElementById('sms-send-status');
             st.textContent = '발송 중...';
             st.style.color = '#888';
@@ -11708,7 +11749,7 @@ POST /api/external/event-result-link/batch<br>
             // 백엔드 발송 직전 단계 시뮬레이션 — 그냥 sim_mode가 켜져 있으면 OK, 아니면 임시로 forcing
             const cfg = await fetch(`/api/admin/sms/config?admin_key=${encodeURIComponent(AK())}`).then(r => r.json()).catch(() => ({}));
             if (!cfg.config || !cfg.config.sim_mode) {
-                if (!confirm('시뮬레이션 모드가 꺼져 있습니다. 실제 발송됩니다. 계속할까요?\n\n(미리보기만 하려면 설정에서 시뮬레이션 모드를 켜고 다시 시도하세요)')) return;
+                if (!await uiConfirm('시뮬레이션 모드가 꺼져 있습니다. 실제 발송됩니다. 계속할까요?\n\n(미리보기만 하려면 설정에서 시뮬레이션 모드를 켜고 다시 시도하세요)')) return;
             }
             runSmsBatch();
         }
@@ -11724,7 +11765,7 @@ POST /api/external/event-result-link/batch<br>
             const skipSent = (document.getElementById('sms-batch-skip-sent') || {}).checked !== false;
             const selectedIds = Array.from(document.querySelectorAll('.sms-batch-event-cb:checked')).map(cb => parseInt(cb.value, 10));
             const forceReal = !!document.getElementById('sms-batch-force-real')?.checked;
-            if (forceReal && !confirm('시뮬레이션을 무시하고 선택한 종목의 대상자 전원에게 실제 문자를 발송합니다.\n요금이 발생하며 수신자에게 실제로 도착합니다. 계속할까요?')) return;
+            if (forceReal && !await uiConfirm('시뮬레이션을 무시하고 선택한 종목의 대상자 전원에게 실제 문자를 발송합니다.\n요금이 발생하며 수신자에게 실제로 도착합니다. 계속할까요?')) return;
 
             const status = document.getElementById('sms-batch-status');
             const resultBox = document.getElementById('sms-batch-result');

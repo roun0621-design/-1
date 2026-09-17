@@ -308,7 +308,7 @@
         const { att, wind } = attemptsOf(eid);
         if (att[attempt] === undefined) return;
         const cur = att[attempt] === 0 ? 'X' : att[attempt] === -1 ? '–' : att[attempt] == null ? ('풍속 ' + fmtW(wind[attempt])) : fmtDist(att[attempt]);
-        if (!confirm(`${laneOf(eid)} ${nameOf(eid)} ${attempt}차 시기(${cur})를 지울까요?`)) return;
+        if (!await uiConfirm(`${laneOf(eid)} ${nameOf(eid)} ${attempt}차 시기(${cur})를 지울까요?`)) return;
         fe.undo = { prev: snapshot(eid, attempt), label: `${laneOf(eid)} ${nameOf(eid)} ${attempt}차 지움` };
         await fieldInlineClear(eid, attempt);
         selectCell(eid, attempt);
@@ -492,7 +492,7 @@
         const bar = heBar(); if (bar == null) return;
         const cur = (state.heightAttempts || []).find(a => a.event_entry_id === eid && a.bar_height === bar && a.attempt_number === attempt);
         if (!cur) return;
-        if (!confirm(`${nameOf(eid)} ${fmtDist(bar)} ${attempt}차 시도(${cur.result_mark === 'PASS' ? '–' : cur.result_mark})를 지울까요?`)) return;
+        if (!await uiConfirm(`${nameOf(eid)} ${fmtDist(bar)} ${attempt}차 시도(${cur.result_mark === 'PASS' ? '–' : cur.result_mark})를 지울까요?`)) return;
         he.undo = { eid, bar, attempt, prev: cur.result_mark, label: `${laneOf(eid)} ${nameOf(eid)} ${fmtDist(bar)} ${attempt}차 지움` };
         await toggleHeightMark(eid, bar, attempt, '');
         renderHeightContent();

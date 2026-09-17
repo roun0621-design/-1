@@ -1749,7 +1749,7 @@ let _isOffline = !navigator.onLine;
 window.addEventListener('online', () => {
     _isOffline = false;
     _updateOfflineBadge();
-    showToast('Online', 'success', 2000);
+    showToast('연결되었습니다', 'success', 2000);
     // Trigger manual sync via SW
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
         const mc = new MessageChannel();
@@ -1763,7 +1763,7 @@ window.addEventListener('online', () => {
 window.addEventListener('offline', () => {
     _isOffline = true;
     _updateOfflineBadge();
-    showToast('Offline mode', 'warning', 3000);
+    showToast('연결이 끊겼습니다 — 기록 입력은 기기에 임시 저장됩니다', 'warning', 3500);
 });
 
 function _updateOfflineBadge() {
@@ -2812,3 +2812,53 @@ function uiAlert(message, opts) {
         try { ok.focus(); } catch (e) {}
     });
 }
+
+// ============================================================
+// 확인창 · 입력창 (uiConfirm / uiPrompt) — 브라우저 기본 confirm()/prompt() 대체 (2026-09 사용성 점검)
+//   규칙: 버튼은 오른쪽 정렬 '취소 · 확인'. 삭제·초기화처럼 되돌리기 어려운 작업은 확인 버튼이 빨강이고 처음 초점이 '취소'에 있다(Enter 를 연타해도 실행되지 않게).
+//   Esc = 취소. 반환: uiConfirm → true/false, uiPrompt → 문자열 / 취소 시 null (기본 prompt 와 동일)
+//   ※ await 로 쓴다. 동기 함수 안(예: confirmCompletedEdit)에서는 기본 confirm 을 그대로 쓴다.
+// ============================================================
+function _uiDialog(kind, message, opts) {
+    opts = opts || {};
+    const text = String(message == null ? '' : message);
+    const danger = opts.danger != null ? !!opts.danger : /삭제|초기화|되돌릴 수 없|복구할 수 없|덮어|제거|지웁|지워|폐기|강제/.test(text);
+    return new Promise(resolve => {
+        const prev = document.getElementById('pr-ui-dialog'); if (prev) prev.remove();
+        const ov = document.createElement('div');
+        ov.id = 'pr-ui-dialog'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+        ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#fff;border-radius:12px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3);overflow:hidden;';
+        const body = document.createElement('div');
+        body.style.cssText = `padding:22px 22px 14px;font-size:15px;line-height:1.6;color:#222;white-space:pre-wrap;word-break:keep-all;border-top:4px solid ${danger ? '#c0392b' : '#b79f58'};`;
+        body.textContent = text;
+        box.appendChild(body);
+        let input = null;
+        if (kind === 'prompt') {
+            input = document.createElement('input');
+            input.type = opts.inputType || (/키를 입력|비밀번호|암호/.test(text) ? 'password' : 'text');      // 키·비밀번호는 화면에 드러나지 않게 input.value = opts.defaultValue == null ? '' : String(opts.defaultValue);
+            input.style.cssText = 'display:block;width:calc(100% - 44px);margin:0 22px 14px;padding:10px 12px;font-size:16px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;';
+            box.appendChild(input);
+        }
+        const foot = document.createElement('div');
+        foot.style.cssText = 'padding:0 16px 16px;display:flex;justify-content:flex-end;gap:8px;';
+        const mk = (label, primary) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+            b.style.cssText = `padding:10px 22px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;` + (primary ? `background:${danger ? '#c0392b' : '#2d9d78'};color:#fff;border:none;` : 'background:#fff;color:#444;border:1px solid #ccc;'); return b; };
+        const cancel = mk(opts.cancelText || '취소', false), ok = mk(opts.okText || '확인', true);
+        foot.appendChild(cancel); foot.appendChild(ok); box.appendChild(foot); ov.appendChild(box);
+        const done = v => { document.removeEventListener('keydown', onKey, true); ov.remove(); resolve(v); };
+        const accept = () => done(kind === 'prompt' ? input.value : true);
+        const reject = () => done(kind === 'prompt' ? null : false);
+        const onKey = e => {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); reject(); }
+            else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); (document.activeElement === cancel) ? reject() : accept(); }
+        };
+        ok.addEventListener('click', accept); cancel.addEventListener('click', reject);
+        document.addEventListener('keydown', onKey, true);
+        (document.body || document.documentElement).appendChild(ov);
+        try { if (input) { input.focus(); input.select(); } else (danger ? cancel : ok).focus(); } catch (e) {}
+    });
+}
+function uiConfirm(message, opts) { return _uiDialog('confirm', message, opts); }
+function uiPrompt(message, defaultValue, opts) { return _uiDialog('prompt', message, Object.assign({ defaultValue }, opts || {})); }

@@ -342,7 +342,7 @@
     </div>
 
     <script src="/i18n.js?v=3"></script>
-    <script src="common.js?v=101"></script>
+    <script src="common.js?v=102"></script>
     <script src="/lib/auth-client.js?v=1"></script>
     <script>
         renderPageNav('home');
@@ -399,13 +399,13 @@
         async function toggleLogin() {
             // 1) legacy 로그인 상태 → 로그아웃
             if (currentRole !== 'viewer') {
-                if (!confirm('로그아웃하시겠습니까?')) return;
+                if (!await uiConfirm('로그아웃하시겠습니까?')) return;
                 await doLogout();
                 return;
             }
             // 2) JWT 세션만 있는 경우 → 로그아웃
             if (window.PaceAuth && PaceAuth.getCachedUser()) {
-                if (!confirm('로그아웃하시겠습니까?')) return;
+                if (!await uiConfirm('로그아웃하시겠습니까?')) return;
                 try { await PaceAuth.logout(); } catch(_) {}
                 localStorage.removeItem('pr_auth_user');
                 updateRoleUI();
@@ -556,7 +556,7 @@
             if (ev) { ev.stopPropagation(); ev.preventDefault(); }
             const c = _allComps.find(x => x.id === id);
             if (!c) return;
-            if (hide && !confirm(`"${c.name}" 대회를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
+            if (hide && !await uiConfirm(`"${c.name}" 대회를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
             try {
                 await API.setCompetitionHomeVisibility(id, hide ? 'hidden' : 'auto', currentKey);
                 await _afterVisibilityChange();
@@ -566,7 +566,7 @@
             if (ev) { ev.stopPropagation(); ev.preventDefault(); }
             const f = _federationList.find(x => x.code === code);
             if (!f) return;
-            if (hide && !confirm(`${f.code} 연맹의 대회 전체를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
+            if (hide && !await uiConfirm(`${f.code} 연맹의 대회 전체를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
             try {
                 await API.setFederationHidden(f.id, hide, currentKey);
                 await _afterVisibilityChange();
