@@ -482,7 +482,13 @@ function invalidateCache(key) { if (key) delete _apiCache[key]; else Object.keys
 const API = {
     // Competitions (cached — called by renderCompSelector, renderCompInfoBar, requireCompetition)
     getCompetitions: () => cachedApi('competitions', () => api('GET', '/api/competitions')),
-    invalidateCompetitions: () => invalidateCache('competitions'),
+    // 숨긴 대회·숨긴 연맹 대회까지 전부 (관리자 페이지, 이름 조회용)
+    getAllCompetitionsAdmin: () => cachedApi('competitions_all', () => api('GET', '/api/competitions?include_hidden=1')),
+    invalidateCompetitions: () => { invalidateCache('competitions'); invalidateCache('competitions_all'); },
+    // 홈 노출 빠른 전환 (auto | pinned | hidden) — 관리자 키
+    setCompetitionHomeVisibility: (id, home_visibility, key) => api('PUT', `/api/competitions/${id}/home-visibility`, { admin_key: key, home_visibility }),
+    // 연맹 숨김 토글 — 관리자 키
+    setFederationHidden: (id, hidden, key) => api('PUT', `/api/federations/${id}/hidden`, { admin_key: key, hidden: hidden ? 1 : 0 }),
     getCompetition: id => api('GET', `/api/competitions/${id}`),
     createCompetition: (data, adminKey) => api('POST', '/api/competitions', { ...data, admin_key: adminKey }),
     updateCompetition: (id, data, adminKey) => api('PUT', `/api/competitions/${id}`, { ...data, admin_key: adminKey }),
@@ -941,6 +947,11 @@ async function renderCompSelector(currentPage) {
     if (!container) return;
     try {
         const all = await API.getCompetitions();
+        // 숨긴 대회를 직접 링크로 보고 있으면 목록에는 없으므로 이름 표시용으로만 보충
+        const _curId = getCompetitionId();
+        if (_curId && !all.some(c => String(c.id) === String(_curId))) {
+            try { const cur = await API.getCompetition(_curId); if (cur && cur.id) all.push(cur); } catch (e) {}
+        }
         // Date-based filter: show competitions that are currently relevant
         // 1. status 'active' (running right now)
         // 2. status 'upcoming' AND start_date within 14 days from today

@@ -442,7 +442,12 @@
             loadCompetitions();
         }
 
+        let _lastRoleForList = null;
         function updateRoleUI() {
+            // 관리자 여부에 따라 숨긴 대회 표시가 달라지므로 역할이 바뀌면 목록을 다시 로드
+            const roleKey = currentRole === 'admin' && currentKey ? 'admin' : 'other';
+            if (_lastRoleForList !== null && _lastRoleForList !== roleKey && _compsLoaded) { API.invalidateCompetitions(); loadCompetitions(); }
+            _lastRoleForList = roleKey;
             const badge = document.getElementById('role-badge');
             const adminActions = document.getElementById('admin-actions');
             const loginBtn = document.getElementById('header-login-btn');
@@ -527,13 +532,45 @@
             return `D+${Math.abs(diff)}`;
         }
 
+        let _compsLoaded = false;
+        const isHomeAdmin = () => currentRole === 'admin' && !!currentKey;
         async function loadCompetitions() {
             const list = document.getElementById('comp-list');
             try {
-                _allComps = await API.getCompetitions();
+                // 관리자는 숨긴 대회·숨긴 연맹 대회도 흐리게 보고 해제할 수 있어야 하므로 전체 목록
+                _allComps = isHomeAdmin() ? await API.getAllCompetitionsAdmin() : await API.getCompetitions();
+                _compsLoaded = true;
                 document.getElementById('year-display').textContent = _selectedYear;
                 renderCompsByYear();
             } catch (e) { list.innerHTML = '<div class="comp-empty">대회 목록을 불러올 수 없습니다.</div>'; }
+        }
+        // ── 숨기기 / 해제 (홈 화면 관리자 모드) ──
+        function _isFedHidden(code) { const f = code ? _federationList.find(x => x.code === code) : null; return !!(f && f.hidden); }
+        async function _afterVisibilityChange() {
+            API.invalidateCompetitions(); invalidateCache('federations');
+            try { _federationList = await API.getFederations(); } catch (e) {}
+            await loadCompetitions();
+            if (typeof loadRecentCompetitions === 'function') loadRecentCompetitions();
+        }
+        async function hideComp(ev, id, hide) {
+            if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+            const c = _allComps.find(x => x.id === id);
+            if (!c) return;
+            if (hide && !confirm(`"${c.name}" 대회를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
+            try {
+                await API.setCompetitionHomeVisibility(id, hide ? 'hidden' : 'auto', currentKey);
+                await _afterVisibilityChange();
+            } catch (e) { alert('숨김 변경 실패: ' + (e.message || e)); }
+        }
+        async function hideFed(ev, code, hide) {
+            if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+            const f = _federationList.find(x => x.code === code);
+            if (!f) return;
+            if (hide && !confirm(`${f.code} 연맹의 대회 전체를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
+            try {
+                await API.setFederationHidden(f.id, hide, currentKey);
+                await _afterVisibilityChange();
+            } catch (e) { alert('연맹 숨김 변경 실패: ' + (e.message || e)); }
         }
 
         function renderCompsByYear() {
@@ -576,12 +613,17 @@
                     const label = fedInfo ? `${fed} ${fedInfo.name}` : (fed || '기타 대회');
                     const badge = fed ? getFedBadge(fed) : '';
                     const countLabel = `<span style="font-size:11px;color:var(--text-muted);margin-left:6px;">${groupComps.length}개 대회</span>`;
+                    const fedHidden = _isFedHidden(fed);
+                    const hiddenBadge = fedHidden ? '<span style="background:#fee2e2;color:#991b1b;padding:1px 8px;border-radius:99px;font-size:10px;font-weight:700;">숨김</span>' : '';
+                    const fedAdminBtn = (isHomeAdmin() && fed) ? (fedHidden
+                        ? `<button class="btn btn-xs btn-primary" onclick="hideFed(event,'${fed}',0)" title="이 연맹 대회를 다시 표시">숨김 해제</button>`
+                        : `<button class="btn btn-xs btn-outline" onclick="hideFed(event,'${fed}',1)" title="이 연맹 대회 전체를 홈·운영 화면 목록에서 숨김">연맹 숨기기</button>`) : '';
 
-                    html += `<details class="fed-group" style="margin-bottom:4px;">
+                    html += `<details class="fed-group" style="margin-bottom:4px;${fedHidden ? 'opacity:.6;' : ''}">
                         <summary class="fed-group-header" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:var(--radius);background:var(--gray-bg);user-select:none;list-style:none;transition:background 0.15s;">
                             <span class="fed-toggle-icon" style="font-size:12px;color:var(--text-muted);transition:transform 0.2s;display:inline-block;">▶</span>
                             <span style="font-family:var(--font-brand);font-size:14px;font-weight:400;letter-spacing:1px;flex:1;">${label}</span>
-                            ${badge} ${countLabel}
+                            ${badge} ${hiddenBadge} ${countLabel} ${fedAdminBtn}
                         </summary>
                         <div style="padding:6px 0 0;">
                             ${renderCompCards(groupComps)}
@@ -605,15 +647,22 @@
             return comps.map(c => {
                 const statusLabel = { upcoming: '예정', active: '진행중', completed: '종료' }[c.status] || c.status;
                 const dday = c.status === 'upcoming' ? getDDay(c.start_date) : c.status === 'active' ? 'LIVE' : '';
-                return `<div class="comp-card" onclick="selectCompetition(${c.id})">
+                const compHidden = c.home_visibility === 'hidden';
+                const dim = compHidden || _isFedHidden(c.federation);
+                const hiddenBadge = compHidden ? '<span class="comp-card-dday" style="background:#fee2e2;color:#991b1b;">숨김</span>' : '';
+                const adminBtn = isHomeAdmin() ? (compHidden
+                    ? `<button class="btn btn-xs btn-primary" onclick="hideComp(event,${c.id},0)" title="홈·운영 화면 목록에 다시 표시">숨김 해제</button>`
+                    : `<button class="btn btn-xs btn-outline" onclick="hideComp(event,${c.id},1)" title="홈·운영 화면 목록에서 숨김">숨기기</button>`) : '';
+                return `<div class="comp-card" onclick="selectCompetition(${c.id})" style="${dim ? 'opacity:.55;' : ''}">
                     <div class="comp-card-status ${c.status}"></div>
                     <div class="comp-card-info">
-                        <div class="comp-card-name">${c.name}</div>
+                        <div class="comp-card-name">${c.name} ${hiddenBadge}</div>
                         <div class="comp-card-meta">
                             <span>${c.start_date} ~ ${c.end_date}</span>
                             <span>${c.venue || ''}</span>
                             <span class="comp-status-label ${c.status}">${statusLabel}</span>
                             ${dday ? `<span class="comp-card-dday ${c.status}">${dday}</span>` : ''}
+                            ${adminBtn}
                         </div>
                     </div>
                     <div class="comp-card-arrow">&rsaquo;</div>

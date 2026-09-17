@@ -136,9 +136,13 @@ describe('Competition API — 회귀', () => {
             const items = res.body.items || res.body;
             expect(items.some(c => c.id === id)).toBe(false);
 
-            // 전체 펼침(window=all)에는 표시 유지
+            // 2026-09 규칙 변경: 숨긴 대회는 전체 펼침(window=all)·기본 목록에서도 빠지고, include_hidden=1 에만 나온다
             const all = await request(app).get('/api/competitions/recent?window=all');
-            expect(all.body.some(c => c.id === id)).toBe(true);
+            expect(all.body.some(c => c.id === id)).toBe(false);
+            const list = await request(app).get('/api/competitions');
+            expect(list.body.some(c => c.id === id)).toBe(false);
+            const adminList = await request(app).get('/api/competitions?include_hidden=1');
+            expect(adminList.body.some(c => c.id === id)).toBe(true);
         });
     });
 

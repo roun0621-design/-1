@@ -307,6 +307,7 @@ CREATE TABLE IF NOT EXISTS "federation_list" (
     "gender_label_m" TEXT DEFAULT '',
     "gender_label_f" TEXT DEFAULT '',
     "gender_label_x" TEXT DEFAULT '',
+    "hidden" BIGINT NOT NULL DEFAULT 0,
     UNIQUE ("code")
 );
 

@@ -1216,7 +1216,7 @@ async function printCallroom(mode) {
     // 대회명과 시간표 시간을 함께 표시. 합동종목은 모든 대회명 함께 표시.
     let compNamesLabel = '';
     try {
-        const comps = await API.getCompetitions();
+        const comps = await API.getAllCompetitionsAdmin();   // 이름 표시용 — 숨긴 대회도 포함
         const jointGroup = window._crJointGroup || null;
         if (jointGroup && Array.isArray(jointGroup.members) && jointGroup.members.length > 1) {
             // 합동 종목: 모든 대회 표시 (각 대회별 짧은 라벨/소속연맹 우선)
@@ -1412,7 +1412,7 @@ async function exportCallroomExcel() {
     // ─── 자동 헤더: 대회명 + 종목/부/라운드 + 시간표 시각 ─────────────────
     let compNamesLabel = '';
     try {
-        const comps = await API.getCompetitions();
+        const comps = await API.getAllCompetitionsAdmin();   // 이름 표시용 — 숨긴 대회도 포함
         const jointGroup = window._crJointGroup || null;
         if (jointGroup && Array.isArray(jointGroup.members) && jointGroup.members.length > 1) {
             const labels = jointGroup.members.map(m => {

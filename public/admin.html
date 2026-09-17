@@ -2853,7 +2853,7 @@ POST /api/external/event-result-link/batch<br>
 
         // ---- COMPETITION SELECTOR ----
         async function loadCompetitionSelector() {
-            _competitions = await API.getCompetitions();
+            _competitions = await API.getAllCompetitionsAdmin();   // 관리자 페이지는 숨긴 대회도 표시
             // If we have a saved competition, find its year
             if (_selectedCompId) {
                 const saved = _competitions.find(c => c.id === _selectedCompId);
@@ -2876,7 +2876,7 @@ POST /api/external/event-result-link/batch<br>
                 _selectedCompMode = 'operation';
             } else {
                 sel.innerHTML = filtered.map(c =>
-                    `<option value="${c.id}">${c.name} (${c.start_date})</option>`
+                    `<option value="${c.id}">${c.home_visibility === 'hidden' ? '🙈 [숨김] ' : ''}${c.name} (${c.start_date})</option>`
                 ).join('');
                 // Keep previous selection if still in list, otherwise pick first
                 const prev = filtered.find(c => c.id === _selectedCompId);
@@ -4434,11 +4434,13 @@ POST /api/external/event-result-link/batch<br>
                 <div class="pacing-config-item" style="cursor:default;justify-content:space-between;flex-wrap:wrap;" data-fed-id="${f.id}">
                     <div style="display:flex;align-items:center;gap:10px;">
                         <span style="color:#bbb;font-size:12px;min-width:20px;">${idx+1}</span>
-                        <span style="background:${f.badge_bg};color:${f.badge_color};padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;">${f.code}</span>
-                        <span class="t-lg">${f.name || ''}</span>
+                        <span style="background:${f.badge_bg};color:${f.badge_color};padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;${f.hidden ? 'opacity:.5;' : ''}">${f.code}</span>
+                        <span class="t-lg" style="${f.hidden ? 'color:#9ca3af;' : ''}">${f.name || ''}</span>
+                        ${f.hidden ? '<span class="t-xs" style="background:#fee2e2;color:#991b1b;padding:1px 8px;border-radius:99px;font-weight:700;">숨김</span>' : ''}
                         ${f.gender_label_m ? `<span class="t-xs t-muted">${f.gender_label_m} / ${f.gender_label_f || '-'}</span>` : ''}
                     </div>
                     <div style="display:flex;align-items:center;gap:4px;">
+                        <button class="btn btn-xs ${f.hidden ? 'btn-primary' : 'btn-ghost'}" onclick="toggleFedHidden(${f.id}, ${f.hidden ? 0 : 1})" title="${f.hidden ? '이 연맹 대회를 홈·운영 화면에 다시 표시' : '이 연맹 대회 전체를 홈·운영 화면 목록에서 숨김'}">${f.hidden ? '숨김 해제' : '연맹 숨기기'}</button>
                         ${idx > 0 ? `<button class="btn btn-xs btn-ghost" onclick="moveFed(${f.id},-1)" title="위로">↑</button>` : ''}
                         ${idx < _federations.length-1 ? `<button class="btn btn-xs btn-ghost" onclick="moveFed(${f.id},1)" title="아래로">↓</button>` : ''}
                         <button class="btn btn-xs btn-ghost" onclick="editFed(${f.id})" title="수정">수정</button>
@@ -4446,6 +4448,17 @@ POST /api/external/event-result-link/batch<br>
                     </div>
                 </div>
             `).join('');
+        }
+        async function toggleFedHidden(id, hidden) {
+            const f = _federations.find(x => x.id === id);
+            if (!f) return;
+            if (hidden && !confirm(`${f.code} 연맹의 대회 전체를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
+            try {
+                await API.setFederationHidden(id, hidden, AK());
+                invalidateCache('federations'); API.invalidateCompetitions();
+                toast(hidden ? `${f.code} 연맹 숨김` : `${f.code} 연맹 숨김 해제`);
+                await loadFederations();
+            } catch (e) { toast('연맹 숨김 변경 실패: ' + (e.message || e), 'error'); }
         }
         async function addFederation() {
             const code = document.getElementById('new-fed-code').value.trim();
@@ -4609,7 +4622,7 @@ POST /api/external/event-result-link/batch<br>
             const sel = document.getElementById('pe-competition');
             if (!sel) return;
             let comps = _competitions;
-            if (!comps || !comps.length) { try { comps = await API.getCompetitions(); } catch(e) { comps = []; } }
+            if (!comps || !comps.length) { try { comps = await API.getAllCompetitionsAdmin(); } catch(e) { comps = []; } }
             const sorted = [...comps].sort((a,b) => (b.start_date||'').localeCompare(a.start_date||''));
             sel.innerHTML = '<option value="">공통 (전체 · 홈에 노출)</option>' +
                 sorted.map(c => `<option value="${c.id}">${_esc(c.name || '')}${c.start_date ? ' ('+c.start_date+')' : ''}</option>`).join('');

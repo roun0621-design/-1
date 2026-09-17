@@ -901,8 +901,11 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS federation_list (
     badge_bg TEXT NOT NULL DEFAULT '#e3f2fd',
     badge_color TEXT NOT NULL DEFAULT '#1565c0',
     sort_order INTEGER NOT NULL DEFAULT 0,
+    hidden INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`); } catch(e) {}
+// 연맹 숨김: 1이면 홈·운영 화면의 대회 목록에서 그 연맹 대회 전체가 빠짐 (관리자 페이지에서만 보임)
+try { db.exec(`ALTER TABLE federation_list ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 // Add gender label columns to federation_list (전광판 성별 매핑)
 try { db.exec(`ALTER TABLE federation_list ADD COLUMN gender_label_m TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE federation_list ADD COLUMN gender_label_f TEXT DEFAULT ''`); } catch(e) {}
@@ -1515,6 +1518,8 @@ if (db.isAsync) {
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
             // competition: 홈 노출 강제 설정 (auto | pinned | hidden)
             await pgIdempotentAddCol('competition', 'home_visibility', `TEXT NOT NULL DEFAULT 'auto'`);
+            // federation_list: 연맹 숨김 (홈·운영 화면 목록에서 소속 대회 전체 제외)
+            await pgIdempotentAddCol('federation_list', 'hidden', `BIGINT NOT NULL DEFAULT 0`);
             // athlete: federation, personal_best, date_of_birth, phone(SMS 발송용)
             await pgIdempotentAddCol('athlete', 'federation', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'personal_best', `TEXT DEFAULT ''`);
