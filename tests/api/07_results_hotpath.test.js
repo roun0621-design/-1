@@ -100,4 +100,20 @@ describe('POST /api/results/upsert — hot-path', () => {
             .set('Content-Type', 'application/json');
         expect(res.status).toBe(200);
     });
+
+    it('같은 선수의 트랙 기록을 동시에 20번 보내도 행은 하나 (더블탭·가져오기 경합)', async () => {
+        const a = await db.run("INSERT INTO athlete (competition_id, name, bib_number, team, gender) VALUES (?,?,?,?, 'M')", fx.compId, '동시', '909', 'T');
+        const ee = (await db.run("INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?,?, 'registered')", fx.eventId, a.lastInsertRowid)).lastInsertRowid;
+        await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?,?,7)', fx.heatId, ee);
+        const rs = await Promise.all(Array.from({ length: 20 }, (_, i) =>
+            request(app).post('/api/results/upsert').set('x-admin-key', 'testopkey').send({ heat_id: fx.heatId, event_entry_id: ee, time_seconds: 11 + i / 100 })));
+        expect(rs.every(r => r.status === 200)).toBe(true);
+        const rows = await db.all('SELECT * FROM result WHERE heat_id=? AND event_entry_id=?', fx.heatId, ee);
+        expect(rows.length).toBe(1);
+    });
+    it('DB 가 트랙 기록 중복을 거부한다 (부분 유니크 인덱스)', async () => {
+        let threw = false;
+        try { await db.run('INSERT INTO result (heat_id, event_entry_id, attempt_number, time_seconds) VALUES (?,?,NULL,12.0)', fx.heatId, fx.entryId); await db.run('INSERT INTO result (heat_id, event_entry_id, attempt_number, time_seconds) VALUES (?,?,NULL,12.1)', fx.heatId, fx.entryId); } catch (e) { threw = true; }
+        expect(threw).toBe(true);
+    });
 });

@@ -1084,6 +1084,20 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_heat_entry_heat ON heat_entry(heat
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_heat_entry_event_entry ON heat_entry(event_entry_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_result_heat ON result(heat_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_result_event_entry ON result(event_entry_id)`); } catch(e) {}
+// (2026-09) 트랙 기록(attempt_number IS NULL)의 중복 방지.
+//   UNIQUE(heat_id, event_entry_id, attempt_number) 는 NULL 을 서로 다른 값으로 보기 때문에 트랙 기록에는 효력이 없었다 →
+//   더블탭·가져오기와 수기 입력의 동시 요청이 같은 선수의 행을 2개 만들 수 있었고, 그러면 화면은 옛 행을 보여주고 수정은 새 행에 들어갔다.
+//   기존 중복은 가장 최근 행(수정이 들어가던 행)만 남기고 정리한 뒤 부분 유니크 인덱스를 건다.
+if (!db.isAsync) {
+    try {
+        const dup = db.raw.prepare(`SELECT COUNT(*) AS c FROM result WHERE attempt_number IS NULL AND id NOT IN (SELECT MAX(id) FROM result WHERE attempt_number IS NULL GROUP BY heat_id, event_entry_id)`).get();
+        if (dup && dup.c > 0) {
+            db.exec(`DELETE FROM result WHERE attempt_number IS NULL AND id NOT IN (SELECT MAX(id) FROM result WHERE attempt_number IS NULL GROUP BY heat_id, event_entry_id)`);
+            console.warn(`[DB Migration] 트랙 기록 중복 ${dup.c}행 정리 (선수·조당 최신 1행 유지)`);
+        }
+        db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_entry_id) WHERE attempt_number IS NULL`);
+    } catch (e) { console.warn('[DB Migration] ux_result_no_attempt 생성 실패:', e.message); }
+}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_height_attempt_heat ON height_attempt(heat_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_combined_score_entry ON combined_score(event_entry_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_relay_member_entry ON relay_member(event_entry_id)`); } catch(e) {}

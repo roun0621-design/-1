@@ -322,3 +322,6 @@ CREATE TABLE IF NOT EXISTS operation_key (
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- 트랙 기록(attempt_number IS NULL) 중복 방지 — UNIQUE(heat_id,event_entry_id,attempt_number) 는 NULL 에 효력이 없다
+CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_entry_id) WHERE attempt_number IS NULL;

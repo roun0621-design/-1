@@ -710,3 +710,6 @@ CREATE INDEX IF NOT EXISTS idx_relay_member_entry ON relay_member(event_entry_id
 CREATE INDEX IF NOT EXISTS idx_result_event_entry ON result(event_entry_id);
 CREATE INDEX IF NOT EXISTS idx_result_heat ON result(heat_id);
 CREATE INDEX IF NOT EXISTS ux_timetable_full ON timetable(competition_id, day, section, time, event_name, category, round);
+
+-- 트랙 기록(attempt_number IS NULL) 중복 방지 — UNIQUE(heat_id,event_entry_id,attempt_number) 는 NULL 에 효력이 없다
+CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_entry_id) WHERE attempt_number IS NULL;
