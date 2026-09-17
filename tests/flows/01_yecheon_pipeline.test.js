@@ -308,3 +308,43 @@ describe('연맹 배번 명단 원본을 그대로 업로드 (Phase 5)', () => {
         });
     }
 });
+
+describe('연맹 데일리 PDF 를 그대로 업로드 (Phase 5)', () => {
+    const fs = require('fs'), os = require('os');
+    const PDFDocument = require('pdfkit');
+    const XLSX = require('xlsx');
+    const t = v => String(v == null ? '' : v).trim();
+    // 연맹 xlsx 원본을 'PDF 에서 글자를 뽑았을 때의 모양'(칸이 붙은 줄, 성별 표시는 구간 뒤)으로 찍은 PDF 를 만든다
+    const makePdf = (xlsxPath) => new Promise(resolve => {
+        const wb = XLSX.readFile(xlsxPath); const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false });
+        const off = rows.find(r => r.some(c => t(c).startsWith('▣'))).findIndex(c => t(c).startsWith('▣'));
+        const lines = []; let pending = null;
+        for (const r0 of rows) { const full = r0.map(t); if (!full.some(Boolean)) continue; const first = full.find(Boolean);
+            if (/^(남자|여자)?(대학교?부|실업부)$/.test(first)) { if (pending) lines.push(pending); pending = first; continue; }
+            const c = full.slice(off); lines.push(c[0].startsWith('▣') ? c[0] : /^\d+조$/.test(c[0]) ? c[0] + c.slice(1, 5).join('') : c.slice(1, 5).join('')); }
+        if (pending) lines.push(pending);
+        const out = path.join(os.tmpdir(), `daily_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
+        const doc = new PDFDocument({ size: 'A4', margin: 40 }); const ws = fs.createWriteStream(out); doc.pipe(ws);
+        doc.font(path.join(__dirname, '..', '..', 'public', 'fonts', 'NanumSquare_acR.ttf')).fontSize(9);
+        for (const l of lines) doc.text(l);
+        doc.end(); ws.on('finish', () => resolve(out));
+    });
+    it('대학 3일차 PDF: 미리보기 결과가 엑셀 원본을 올렸을 때와 같고, 추정(확인 필요) 0건', async () => {
+        const pdf = await makePdf(path.join(FX, 'univ', 'src_federation_daily_day3.xlsx'));
+        const a = await post('/api/heat-assignment/preview', { competition_id: ids.univ }, pdf);
+        const b = await post('/api/heat-assignment/preview', { competition_id: ids.univ }, path.join(FX, 'univ', 'src_federation_daily_day3.xlsx'));
+        fs.unlinkSync(pdf);
+        expect(a.status).toBe(200); expect(a.body.sourceFormat).toBe('federation_daily_pdf');
+        expect(a.body.mergeWarnings[0]).toContain('PDF');
+        expect(a.body.mergeWarnings.filter(w => /확인 필요:|해석 못 한/.test(w))).toEqual([]);
+        expect(a.body.eventCount).toBe(b.body.eventCount); expect(a.body.totalRows).toBe(b.body.totalRows);
+        const slim = p => p.map(x => ({ n: x.eventName, r: x.round, s: x.status, c: x.excelEntries, ch: (x.changes || []).length })).sort((x, y) => JSON.stringify(x).localeCompare(JSON.stringify(y)));
+        expect(slim(a.body.preview)).toEqual(slim(b.body.preview));
+    });
+    it('데일리가 아닌 PDF 는 이유를 알려주며 400', async () => {
+        const out = path.join(os.tmpdir(), `notdaily_${Date.now()}.pdf`);
+        await new Promise(res => { const doc = new PDFDocument(); const ws = fs.createWriteStream(out); doc.pipe(ws); doc.font(path.join(__dirname, '..', '..', 'public', 'fonts', 'NanumSquare_acR.ttf')).text('대회 요강 안내문입니다. 참가 신청은 9월 1일까지. 문의는 사무국으로 연락 바랍니다. 감사합니다.'); doc.end(); ws.on('finish', res); });
+        const r = await post('/api/heat-assignment/preview', { competition_id: ids.univ }, out); fs.unlinkSync(out);
+        expect(r.status).toBe(400); expect(r.body.error).toContain('▣');
+    });
+});
