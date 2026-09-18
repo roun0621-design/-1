@@ -337,7 +337,7 @@ async function downloadAllGroups(format) {
             allRows.push([`대회명: ${compName}`]);
             allRows.push([`장소: ${venue}`]);
             allRows.push([`부별: ${gL}`, `종목: ${evt.name}`, `라운드: ${roundLabel}`]);
-            allRows.push([`출력일: ${new Date().toLocaleDateString('ko-KR')}`]);
+            allRows.push([`출력일: ${new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)}`]);
             allRows.push([]); // empty row
 
             for (const heat of data.heats) {
@@ -355,7 +355,7 @@ async function downloadAllGroups(format) {
         } else if (format === 'pdf') {
             let allHtml = `<div style="padding:20px;font-family:sans-serif;">`;
             allHtml += `<h2 style="text-align:center;">${compName}</h2>`;
-            allHtml += `<p style="text-align:center;font-size:12px;color:#666;">${venue} | ${gL} | ${evt.name} ${roundLabel} | ${new Date().toLocaleDateString('ko-KR')}</p>`;
+            allHtml += `<p style="text-align:center;font-size:12px;color:#666;">${venue} | ${gL} | ${evt.name} ${roundLabel} | ${new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)}</p>`;
             for (const heat of data.heats) {
                 if (data.heats.length > 1) allHtml += `<h3 style="margin-top:24px;">${heat.heat_number}조</h3>`;
                 allHtml += buildHeatHtmlTable(evt, heat);
@@ -599,7 +599,7 @@ async function loadResultsData() {
         window._currentEventRecords = null;
         window._currentEventDirection = null;
     }
-    document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date().toLocaleDateString('ko-KR')}</p>${recordsBannerHtml}${windInfoHtml}${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
+    document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)}</p>${recordsBannerHtml}${windInfoHtml}${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
 
     const allArea = document.getElementById('results-all-area');
     const tableEl = document.getElementById('results-table');

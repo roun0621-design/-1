@@ -2359,3 +2359,20 @@ body.viewer-mode .footer { display: none; }
 .pace-table { font-family: 'D2Coding', monospace; white-space: pre; line-height: 1.8; }
 /* 일반 폰트로 남는 숫자도 폭 고정 → 표 자릿수 세로 정렬 */
 body { font-variant-numeric: tabular-nums; }
+
+/* ── 터치 기기(태블릿·폰) 조작 크기 — 2026-09 사용성 규칙 ──
+   손가락으로 누르는 버튼은 최소 40px, 작은 버튼도 36px. 입력칸 글자는 16px 이상(iOS 는 그보다 작으면 포커스 때 화면을 확대한다).
+   표 안의 촘촘한 칸(.track-time-input 등)은 행 높이가 깨지지 않게 글자 크기만 맞춘다. */
+@media (pointer: coarse) {
+    .btn { min-height: 40px; }
+    .btn-sm, .btn-xs { min-height: 36px; padding-left: 12px; padding-right: 12px; }
+    .admin-card select, .admin-card input[type="text"], .admin-card input[type="number"], .admin-card input[type="date"], .admin-card input[type="password"], .admin-card textarea { min-height: 40px; font-size: 16px; }
+    input[type="text"], input[type="number"], input[type="password"], input[type="search"], input[type="tel"], select, textarea { font-size: max(16px, 1em); }
+    .track-time-input { font-size: 16px; }
+}
+@media (pointer: coarse) {
+    #comp-doc-btn, #comp-tt-btn { min-height: 36px !important; padding-top: 6px !important; padding-bottom: 6px !important; }
+    .header-login-btn { min-height: 36px; }
+    .font-size-ctrl button { width: 36px; height: 36px; }
+    .mobile-menu-close { min-width: 40px; min-height: 40px; }
+}
