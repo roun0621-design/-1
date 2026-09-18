@@ -2554,6 +2554,8 @@ function _showConflictModal(conflicts) {
         if (v.distance_meters != null) return `거리 ${v.distance_meters}m${v.attempt_number ? ` (${v.attempt_number}차)` : ''}`;
         if (v.time_seconds != null) return `시간 ${v.time_seconds}초`;
         if (v.status_code) return `상태 ${v.status_code}`;
+        if (v.wind !== undefined) return `풍속 ${v.wind == null || v.wind === '' ? '(없음)' : v.wind}`;
+        if (v.status) return `소집 상태 ${{ registered: '미확인', checked_in: '출석', no_show: '결석' }[v.status] || v.status}`;
         return JSON.stringify(v);
     };
 
