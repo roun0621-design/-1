@@ -109,6 +109,13 @@ function parseDbTimestampMs(v) {
     if (typeof v !== 'string') return NaN;
     let s = v.trim();
     if (!s) return NaN;
+    // 0) 시간대 표기가 없는 값(SQLite datetime('now') = UTC)은 UTC 로 읽는다.
+    //    예전엔 new Date('2026-09-18 06:40:00') 이 '현지 시각'으로 읽혀 9시간 앞선 값이 됐고, 오프라인 충돌 판정(서버가 더 최신인가)이
+    //    9시간 안에서는 절대 참이 되지 않아 옛 오프라인 값이 최신 수정을 덮었다.
+    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) {
+        const ms0 = new Date(s.replace(' ', 'T') + 'Z').getTime();
+        if (Number.isFinite(ms0)) return ms0;
+    }
     // 1) 그대로 파싱 시도 (Node 20+ 은 PG 공백/+00 형식도 받음)
     let ms = new Date(s).getTime();
     if (Number.isFinite(ms)) return ms;
@@ -709,6 +716,9 @@ try { db.exec(`ALTER TABLE result ADD COLUMN status_code TEXT DEFAULT ''`); } ca
 // Add wind columns (migration)
 try { db.exec(`ALTER TABLE result ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE heat ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
+// 오프라인 재전송 충돌 판정용 — 풍속·소집 상태가 마지막으로 바뀐 시각 (2026-09)
+try { db.exec(`ALTER TABLE heat ADD COLUMN wind_updated_at TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE event_entry ADD COLUMN status_updated_at TEXT DEFAULT NULL`); } catch(e) {}
 // 오프라인 충돌 감지용 — height_attempt 에 updated_at 추가 (result 는 이미 보유)
 try { db.exec(`ALTER TABLE height_attempt ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`); } catch(e) {}
 // 혼성경기 종합기록지의 DNS/DNF/DQ/NM 표시용 — combined_score 에 status_code 추가
@@ -1761,6 +1771,8 @@ if (db.isAsync) {
             // operation_key: can_manage
             await pgIdempotentAddCol('operation_key', 'can_manage', `BIGINT NOT NULL DEFAULT 0`);
             await pgIdempotentAddCol('doc_template', 'comprehensive', `TEXT DEFAULT '{}'`);
+            await pgIdempotentAddCol('heat', 'wind_updated_at', `TEXT DEFAULT NULL`);
+            await pgIdempotentAddCol('event_entry', 'status_updated_at', `TEXT DEFAULT NULL`);
             console.log('[PG migration] idempotent column migrations complete (combined_score.status_code 등)');
         } catch (e) {
             console.error('[PG migration] idempotent column migrations error:', e.message);
@@ -2854,16 +2866,23 @@ app.get('/api/heats/:id/entries', async (req, res) => {
 const _resultsRoutes = require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit, parseDbTimestampMs, DECATHLON_KEYS, HEPTATHLON_KEYS });
 // ============================================================
 app.post('/api/heats/:id/wind', async (req, res) => {
-    const { wind } = req.body;
+    const { wind, offline_input_at } = req.body;
     const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
+    // 오프라인 재전송: 그 사이 다른 기기가 풍속을 바꿨으면 옛 값으로 덮지 않는다 (기록 입력과 같은 규칙)
+    if (offline_input_at && heat.wind_updated_at) {
+        const serverMs = parseDbTimestampMs(heat.wind_updated_at), offMs = Number(offline_input_at);
+        if (Number.isFinite(serverMs) && Number.isFinite(offMs) && serverMs > offMs) {
+            return res.status(409).json({ error: 'CONFLICT_NEWER_ON_SERVER', message: '운영진이 그 사이에 풍속을 갱신했습니다. 오프라인 입력값은 적용되지 않았습니다.', server_value: { wind: heat.wind, updated_at: heat.wind_updated_at }, rejected_offline_value: { wind, offline_input_at } });
+        }
+    }
     // Store as "N.N m/s" text format for scoreboard system compatibility
     let windValue = null;
     if (wind != null && wind !== '') {
         const v = parseFloat(wind);
         if (!isNaN(v)) windValue = v.toFixed(1) + ' m/s';
     }
-    await db.run('UPDATE heat SET wind=? WHERE id=?', windValue, heat.id);
+    await db.run(`UPDATE heat SET wind=?, wind_updated_at=${db.isAsync ? 'NOW()' : "datetime('now')"} WHERE id=?`, windValue, heat.id);
     broadcastSSE('wind_update', { heat_id: heat.id, wind: windValue });
     // 풍속이 바뀌면 이 조의 신기록 판정을 다시 (추풍이면 대기 중 감지 제거, 허용 풍속이면 재감지)
     let recheck = null;
@@ -3102,14 +3121,21 @@ app.get('/api/barcode/:code', async (req, res) => {
     res.json(a);
 });
 app.patch('/api/event-entries/:id/status', async (req, res) => {
-    const { status, admin_key } = req.body;
+    const { status, admin_key, offline_input_at } = req.body;
     if (!['registered', 'checked_in', 'no_show'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
     const entry = await db.get('SELECT * FROM event_entry WHERE id=?', req.params.id);
     if (!entry) return res.status(404).json({ error: 'Not found' });
     // Post-competition lock
     const _evt = await db.get('SELECT competition_id FROM event WHERE id=?', entry.event_id);
     if (_evt && await requireAdminAfterCompEnd(_evt.competition_id, admin_key, res)) return;
-    await db.run('UPDATE event_entry SET status=? WHERE id=?', status, req.params.id);
+    // 오프라인 재전송: 그 사이 다른 기기(소집실 PC 등)가 상태를 바꿨으면 옛 값으로 덮지 않는다
+    if (offline_input_at && entry.status_updated_at) {
+        const serverMs = parseDbTimestampMs(entry.status_updated_at), offMs = Number(offline_input_at);
+        if (Number.isFinite(serverMs) && Number.isFinite(offMs) && serverMs > offMs) {
+            return res.status(409).json({ error: 'CONFLICT_NEWER_ON_SERVER', message: '그 사이에 다른 기기에서 소집 상태를 바꿨습니다. 오프라인 입력값은 적용되지 않았습니다.', server_value: { status: entry.status, updated_at: entry.status_updated_at }, rejected_offline_value: { status, offline_input_at } });
+        }
+    }
+    await db.run(`UPDATE event_entry SET status=?, status_updated_at=${db.isAsync ? 'NOW()' : "datetime('now')"} WHERE id=?`, status, req.params.id);
     await syncCombinedSubEventCheckin(entry.event_id, entry.athlete_id, status);
     const _he = await db.get('SELECT heat_id FROM heat_entry WHERE event_entry_id=?', entry.id);
     broadcastSSE('entry_status', { event_entry_id: entry.id, status, event_id: entry.event_id, heat_id: _he ? _he.heat_id : null });

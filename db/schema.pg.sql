@@ -136,7 +136,8 @@ CREATE TABLE IF NOT EXISTS "event_entry" (
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "callroom_memo" TEXT DEFAULT '',
     CHECK (status IN ('registered','checked_in','no_show')),
-    UNIQUE ("event_id", "athlete_id")
+    UNIQUE ("event_id", "athlete_id"),
+    "status_updated_at" TEXT DEFAULT NULL
 );
 
 -- Table: event_link
@@ -321,7 +322,8 @@ CREATE TABLE IF NOT EXISTS "heat" (
     "wind" TEXT DEFAULT NULL,
     "heat_name" TEXT DEFAULT NULL,
     "scoreboard_key" TEXT DEFAULT NULL,
-    UNIQUE ("event_id", "heat_number")
+    UNIQUE ("event_id", "heat_number"),
+    "wind_updated_at" TEXT DEFAULT NULL
 );
 
 -- Table: heat_entry

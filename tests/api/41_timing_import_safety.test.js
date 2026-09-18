@@ -72,3 +72,34 @@ describe('.txt', () => {
         expect((await result(fx.m1)).time_seconds).toBeCloseTo(3735.3, 5);
     });
 });
+
+describe('오프라인 재전송 충돌 — 풍속·소집 상태 (기록과 같은 규칙)', () => {
+    it('다른 기기가 나중에 고친 풍속·상태를 옛 오프라인 값이 덮지 않는다 (409)', async () => {
+        const wait = ms => new Promise(r => setTimeout(r, ms));
+        const old = Date.now() - 60 * 1000;                         // 1분 전에 오프라인으로 입력한 값
+        expect((await request(app).post(`/api/heats/${fx.m400.heat}/wind`).set('x-admin-key', OP).send({ wind: 0.5 })).status).toBe(200);   // 다른 기기가 지금 저장
+        await wait(1100);
+        const r = await request(app).post(`/api/heats/${fx.m400.heat}/wind`).set('x-admin-key', OP).send({ wind: -1.0, offline_input_at: old });
+        expect(r.status).toBe(409); expect(r.body.error).toBe('CONFLICT_NEWER_ON_SERVER');
+        expect((await db.get('SELECT wind FROM heat WHERE id=?', fx.m400.heat)).wind).toBe('0.5 m/s');
+        // 오프라인 값이 더 최신이면 적용
+        const r2 = await request(app).post(`/api/heats/${fx.m400.heat}/wind`).set('x-admin-key', OP).send({ wind: -1.0, offline_input_at: Date.now() + 5000 });
+        expect(r2.status).toBe(200);
+        expect((await request(app).patch(`/api/event-entries/${fx.m1}/status`).set('x-admin-key', OP).send({ status: 'no_show' })).status).toBe(200);
+        await wait(1100);
+        const r3 = await request(app).patch(`/api/event-entries/${fx.m1}/status`).set('x-admin-key', OP).send({ status: 'checked_in', offline_input_at: old });
+        expect(r3.status).toBe(409);
+        expect((await db.get('SELECT status FROM event_entry WHERE id=?', fx.m1)).status).toBe('no_show');
+    });
+});
+
+describe('오프라인 재전송 충돌 — 기록 (시각 해석)', () => {
+    it("SQLite 의 datetime('now')(UTC)를 현지 시각으로 잘못 읽어 9시간 안에서는 충돌이 잡히지 않던 것 — 1분 전 오프라인 값은 409", async () => {
+        const ee = fx.f1;
+        expect((await request(app).post('/api/results/upsert').set('x-admin-key', OP).send({ heat_id: fx.fin.heat, event_entry_id: ee, time_seconds: 21.30 })).status).toBe(200);
+        await new Promise(r => setTimeout(r, 1100));
+        const r = await request(app).post('/api/results/upsert').set('x-admin-key', OP).send({ heat_id: fx.fin.heat, event_entry_id: ee, time_seconds: 21.99, offline_input_at: Date.now() - 60 * 1000 });
+        expect(r.status).toBe(409);
+        expect((await db.get('SELECT time_seconds FROM result WHERE event_entry_id=? AND attempt_number IS NULL', ee)).time_seconds).toBe(21.3);
+    });
+});
