@@ -666,7 +666,7 @@ const API = {
     // Video URL
     getEventVideoUrl: eid => api('GET', `/api/events/${eid}/video-url`),
     setEventVideoUrl: (eid, url, key) => api('PUT', `/api/events/${eid}/video-url`, { video_url: url, key }),
-    getPublicEvents: (compId) => compId ? api('GET', `/api/public/events?competition_id=${compId}`) : api('GET', '/api/public/events'),
+    getPublicEvents: (compId) => api('GET', `/api/public/events?competition_id=${compId || getCompetitionId()}`),
     getCallroomStatus: () => api('GET', '/api/public/callroom-status'),
     getCompetitionInfo: (compId) => compId ? api('GET', `/api/competition-info?competition_id=${compId}`) : api('GET', '/api/competition-info'),
     // Multi-key management
@@ -752,7 +752,7 @@ function connectSSE() {
             // Fire reconnect callbacks (refresh stale data)
             _sseReconnectCallbacks.forEach(cb => { try { cb(); } catch(e) {} });
         });
-        ['result_update','entry_status','event_completed','callroom_complete','height_update','combined_update','event_reverted','operation_log','event_status_changed','wind_update','pacing_update'].forEach(evt => {
+        ['result_update','entry_status','event_completed','callroom_complete','height_update','combined_update','event_reverted','operation_log','event_status_changed','wind_update','pacing_update','record_break_detected','record_break_resolved','record_break_wind_skipped','competition_status','heat_update'].forEach(evt => {
             _sseConnection.addEventListener(evt, (e) => { notifySSE(evt, JSON.parse(e.data)); });
         });
         _sseConnection.onerror = () => {

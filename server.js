@@ -438,6 +438,11 @@ async function _extractCompetitionIdFromRequest(req) {
             const he = await db.get('SELECT e.competition_id AS competition_id FROM heat_entry he JOIN heat h ON h.id=he.heat_id JOIN event e ON e.id=h.event_id WHERE he.id=?', b.heat_entry_id);
             if (he) return he.competition_id;
         }
+        // items: [{event_id}] (외부 API 일괄 연결) → 첫 항목 기준
+        if (Array.isArray(b.items) && b.items.length && b.items[0] && b.items[0].event_id) {
+            const ev = await db.get('SELECT competition_id FROM event WHERE id=?', b.items[0].event_id);
+            if (ev) return ev.competition_id;
+        }
         // event_ids: [..] (소집 일괄 처리 등) → 첫 종목 기준
         if (Array.isArray(b.event_ids) && b.event_ids.length) {
             const ev = await db.get('SELECT competition_id FROM event WHERE id=?', b.event_ids[0]);
@@ -1979,15 +1984,37 @@ function broadcastSSE(eventType, data) {
         try { c.write(msg); return true; }
         catch { return false; }
     });
-    // Also forward to WebSocket scoreboard clients
+    // Also forward to WebSocket scoreboard clients — 구독한 대회의 것만 (예전엔 모든 대회의 모든 변경을 모든 오버레이에 보내
+    // 오버레이마다 8번의 DB 조회를 되풀이하게 했다). 대회를 알 수 없는 이벤트는 전체 전송(예전과 같음).
     if (typeof wsClients !== 'undefined' && ['result_update', 'wind_update', 'height_update', 'event_status_changed', 'event_completed', 'heat_update', 'entry_status', 'callroom_complete'].includes(eventType)) {
-        const wsMsg = JSON.stringify({ type: 'scoreboard_' + eventType, data, timestamp: Date.now() });
-        wsClients.forEach(ws => {
-            if (ws.readyState === 1) { // WebSocket.OPEN
-                try { ws.send(wsMsg); } catch(e) {}
-            }
-        });
+        _wsForward(eventType, data).catch(() => {});
     }
+}
+const _wsCompCache = new Map();      // 'e:<event_id>' | 'h:<heat_id>' → competition_id
+async function _wsCompOf(data) {
+    if (!data) return null;
+    if (data.competition_id) return Number(data.competition_id);
+    const key = data.event_id ? 'e:' + data.event_id : data.heat_id ? 'h:' + data.heat_id : null;
+    if (!key) return null;
+    if (_wsCompCache.has(key)) return _wsCompCache.get(key);
+    let comp = null;
+    try {
+        const row = data.event_id ? await db.get('SELECT competition_id FROM event WHERE id=?', data.event_id)
+            : await db.get('SELECT e.competition_id FROM heat h JOIN event e ON e.id=h.event_id WHERE h.id=?', data.heat_id);
+        comp = row ? row.competition_id : null;
+    } catch (e) { comp = null; }
+    if (_wsCompCache.size > 5000) _wsCompCache.clear();
+    _wsCompCache.set(key, comp);
+    return comp;
+}
+async function _wsForward(eventType, data) {
+    const comp = await _wsCompOf(data);
+    const wsMsg = JSON.stringify({ type: 'scoreboard_' + eventType, data: comp ? { ...data, competition_id: comp } : data, timestamp: Date.now() });
+    wsClients.forEach(ws => {
+        if (ws.readyState !== 1) return;                       // WebSocket.OPEN
+        if (comp && ws._compId && String(ws._compId) !== String(comp)) return;
+        try { ws.send(wsMsg); } catch (e) {}
+    });
 }
 
 // ---- WA Scoring ----
@@ -4094,8 +4121,9 @@ app.get('/api/sse', (req, res) => {
 // ============================================================
 app.get('/api/public/events', async (req, res) => {
     const compId = req.query.competition_id;
-    if (compId) return res.json(await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id", compId));
-    res.json(await db.all("SELECT * FROM event WHERE parent_event_id IS NULL ORDER BY sort_order, id"));
+    // 대회를 지정해야 한다 — 예전엔 없으면 모든 대회의 모든 종목을 한 번에 내보냈다 (호출부 없음)
+    if (!compId) return res.status(400).json({ error: 'competition_id 필요' });
+    res.json(await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id", compId));
 });
 app.get('/api/public/callroom-status', async (req, res) => {
     const logs = await db.all("SELECT * FROM audit_log WHERE table_name='event' AND new_values LIKE '%callroom_complete%' ORDER BY created_at DESC LIMIT 50");
@@ -11304,6 +11332,13 @@ function _logExternalCall(opts) {
 
 // 메모리 기반 레이트 리미터 (분 단위 슬라이딩 윈도우, 키 ID 기준)
 const _extRateMap = new Map(); // key: api_key_id, value: { windowStart: ms, count: n }
+function _extExpired(expiresAt) {
+    const str = String(expiresAt).trim();
+    let t;
+    if (/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$/.test(str)) t = Date.parse(str.replace(' ', 'T') + (str.length === 10 ? 'T23:59:59' : '') + '+09:00');
+    else t = Date.parse(str);
+    return Number.isFinite(t) ? t < Date.now() : false;
+}
 function _checkRateLimit(apiKeyId, limitPerMin) {
     const now = Date.now();
     const winSize = 60 * 1000;
@@ -11369,10 +11404,13 @@ function externalApiAuth(req, res, next) {
     (async () => {
         try {
             const prefix = _keyPrefix(plainKey);
+            // 비교(bcrypt) 전에 IP+접두로 먼저 제한한다 — 예전엔 비교가 먼저라 접두(관리 화면에 보임)만 알면 서버를 붙잡아 둘 수 있었다
+            const pre = _checkRateLimit('pre:' + prefix + ':' + (req.ip || ''), 120);
+            if (!pre.allowed) return res.status(429).json({ success: false, error_code: 'RATE_LIMITED', message: '호출이 너무 잦습니다.', reset_in_ms: pre.resetIn });
             const candidates = await db.all('SELECT * FROM external_api_key WHERE key_prefix=?', prefix);
             let matched = null;
             for (const c of candidates) {
-                if (bcrypt.compareSync(plainKey, c.key_hash)) { matched = c; break; }
+                if (await bcrypt.compare(plainKey, c.key_hash)) { matched = c; break; }     // 비동기 — 기록 입력 요청을 막지 않게
             }
             if (!matched) {
                 return res.status(403).json({ success: false, error_code: 'INVALID_API_KEY', message: '유효하지 않은 API 키입니다.' });
@@ -11380,7 +11418,8 @@ function externalApiAuth(req, res, next) {
             if (matched.revoked_at) {
                 return res.status(403).json({ success: false, error_code: 'KEY_REVOKED', message: '회수된 API 키입니다.' });
             }
-            if (matched.expires_at && matched.expires_at < new Date().toISOString()) {
+            // 만료: 'YYYY-MM-DD HH:MM:SS'(KST 의도) 를 시각으로 바꿔 비교 (예전엔 문자열 비교라 그날 09:00 KST 에 만료됐다)
+            if (matched.expires_at && _extExpired(matched.expires_at)) {
                 return res.status(403).json({ success: false, error_code: 'KEY_EXPIRED', message: '만료된 API 키입니다.' });
             }
 
@@ -14278,8 +14317,18 @@ server.on('upgrade', (request, socket, head) => {
     }
 });
 
+// 죽은 연결 정리 — 30초마다 ping, 응답 없으면 끊는다 (예전엔 끊긴 태블릿·PC 의 소켓이 TCP 시간 초과까지 남아 전송 버퍼가 쌓였다)
+if (require.main === module) setInterval(() => {
+    wsClients.forEach(ws => {
+        if (ws._alive === false) { try { ws.terminate(); } catch (e) {} wsClients.delete(ws); return; }
+        ws._alive = false; try { ws.ping(); } catch (e) {}
+    });
+}, 30000).unref();
+
 wss.on('connection', (ws) => {
     wsClients.add(ws);
+    ws._alive = true;
+    ws.on('pong', () => { ws._alive = true; });
     console.log(`[WS] Scoreboard client connected (total: ${wsClients.size})`);
 
     // Send initial state
@@ -14319,6 +14368,53 @@ function broadcastToScoreboard(eventType, data) {
     });
 }
 
+// 전광판·방송 오버레이 현재 상태 (2026-09 점검으로 재작성)
+//   예전엔 ① 마지막 조(heat_number DESC)를 보여줘 1조 경기 중에 빈 5조가 떴고 ② 거리 종목은 1차 시기 값으로 순위를 매겼으며
+//   ③ 높이 종목(height_attempt)은 기록이 아예 안 나왔고 ④ 순위를 화면(오버레이)이 따로 계산해 동률·DQ 처리가 대시보드와 달랐다.
+//   → 기록이 가장 최근에 들어온 조를 고르고, 종목별 기록 집계·순위를 서버가 공용 규칙(public/lib/ranking.js)으로 계산해 보낸다.
+function _sbFormatTime(sec) {
+    if (sec == null) return '';
+    const r3 = Math.round(sec * 1000) / 1000, r2 = Math.round(sec * 100) / 100;
+    const dp = Math.abs(r3 - r2) < 0.0001 ? 2 : 3;
+    const pad = (v, d) => (v < 10 ? '0' : '') + v.toFixed(d);
+    if (sec >= 3600) { const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), r = sec - h * 3600 - m * 60; return `${h}:${String(m).padStart(2, '0')}:${pad(r, dp)}`; }
+    if (sec >= 60) { const m = Math.floor(sec / 60), r = sec - m * 60; return `${m}:${pad(r, dp)}`; }
+    return sec.toFixed(dp);
+}
+async function _sbHeatEntries(heat, category, federation) {
+    const R = require('./public/lib/ranking');
+    const entries = await db.all(`
+        SELECT he.lane_number, ee.id as event_entry_id, ee.status, ee.manual_rank, a.name, a.bib_number, a.team
+        FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
+        JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
+        ORDER BY he.lane_number ASC`, heat.id);
+    const results = await db.all('SELECT * FROM result WHERE heat_id=?', heat.id);
+    const attempts = category === 'field_height' ? await db.all('SELECT * FROM height_attempt WHERE heat_id=?', heat.id) : [];
+    const out = entries.map(e => {
+        const mine = results.filter(r => r.event_entry_id === e.event_entry_id);
+        const st = (mine.find(r => r.attempt_number == null && r.status_code) || mine.find(r => r.status_code) || {}).status_code || (e.status === 'no_show' ? 'DNS' : '');
+        const row = { ...e, federation, status_code: st, record: null, record_text: '', rank: null, best: null, sortedValid: [] };
+        if (category === 'field_height') {
+            const hs = R.heightStatsFromAttempts(attempts.filter(x => x.event_entry_id === e.event_entry_id));
+            row.best = hs.best; row.failsAtBest = hs.failsAtBest; row.totalFails = hs.totalFails;
+            if (hs.best != null) { row.record = hs.best; const m = Math.floor(hs.best); row.record_text = `${m}m${String(Math.round((hs.best - m) * 100)).padStart(2, '0')}`; }
+            else if (!st && hs.isNM) row.status_code = 'NM';
+        } else if (category === 'field_distance') {
+            const ds = R.distanceStats(mine.filter(r => r.attempt_number != null).map(r => r.distance_meters));
+            row.best = ds.best; row.sortedValid = ds.sortedValid;
+            if (ds.best != null) { row.record = ds.best; row.record_text = ds.best.toFixed(2) + 'm'; }
+        } else {
+            const t = mine.map(r => r.time_seconds).filter(v => v != null && v > 0);
+            if (t.length) { row.best = -Math.min(...t); row.record = Math.min(...t); row.record_text = _sbFormatTime(row.record); }
+        }
+        if (row.status_code) { row.best = null; }        // 실격·기권·결장은 기록이 있어도 순위 없음
+        return row;
+    });
+    const cmp = category === 'field_height' ? R.compareHeight : category === 'field_distance' ? R.compareDistance : (x, y) => (y.best === x.best ? 0 : y.best - x.best);
+    R.assignRanks(out, cmp);
+    if (category === 'field_height') out.forEach(r => { if (r.best != null && r.manual_rank != null && r.manual_rank !== '') r.rank = Number(r.manual_rank); });
+    return out.map(({ best, sortedValid, failsAtBest, totalFails, manual_rank, ...rest }) => rest);
+}
 async function sendCurrentScoreboard(ws, compId) {
     if (!compId) return;
     const activeEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND round_status='in_progress' AND parent_event_id IS NULL ORDER BY sort_order LIMIT 1", compId);
@@ -14326,64 +14422,37 @@ async function sendCurrentScoreboard(ws, compId) {
         ws.send(JSON.stringify({ type: 'scoreboard_state', data: { event: null } }));
         return;
     }
-    const heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1', activeEvent.id);
+    // 진행 중인 조 = 기록이 가장 최근에 들어온 조. 아직 기록이 없으면 1조
+    const pickHeat = eventId => db.get(`SELECT h.* FROM heat h LEFT JOIN result r ON r.heat_id = h.id LEFT JOIN height_attempt ha ON ha.heat_id = h.id
+        WHERE h.event_id = ? GROUP BY h.id ORDER BY (MAX(r.id) IS NULL AND MAX(ha.id) IS NULL) ASC, MAX(r.id) DESC, MAX(ha.id) DESC, h.heat_number ASC LIMIT 1`, eventId);
+    const heat = await pickHeat(activeEvent.id);
     const totalHeatsRow = await db.get('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?', activeEvent.id);
     const totalHeats = (totalHeatsRow && totalHeatsRow.cnt) || 0;
-    
-    // Get entries for this event's heat
-    let entries = heat ? await db.all(`
-        SELECT he.lane_number, ee.id as event_entry_id, ee.status, a.name, a.bib_number, a.team
-        FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-        JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-        ORDER BY he.lane_number ASC
-    `, heat.id) : [];
-    let results = heat ? await db.all('SELECT * FROM result WHERE heat_id=?', heat.id) : [];
-    
-    // Check for linked (joint) events — 합동 종목 전광판
-    const linkedEvents = await db.all(`
-        SELECT CASE WHEN event_id_a = ? THEN event_id_b ELSE event_id_a END as linked_id
-        FROM event_link WHERE event_id_a = ? OR event_id_b = ?
-    `, activeEvent.id, activeEvent.id, activeEvent.id);
-    
     const comp = await db.get('SELECT federation, name FROM competition WHERE id=?', compId);
     const primaryFed = (comp && (comp.federation || comp.name)) || '';
-    
-    // Tag primary entries with federation
-    entries = entries.map(e => ({ ...e, federation: primaryFed }));
-    
-    // Merge linked event entries
+    let entries = heat ? await _sbHeatEntries(heat, activeEvent.category, primaryFed) : [];
+
+    // 합동 종목 — 연결된 다른 대회 종목의 조를 합쳐 순위를 다시 매긴다
+    const linkedEvents = await db.all(`
+        SELECT CASE WHEN event_id_a = ? THEN event_id_b ELSE event_id_a END as linked_id
+        FROM event_link WHERE event_id_a = ? OR event_id_b = ?`, activeEvent.id, activeEvent.id, activeEvent.id);
     for (const link of linkedEvents) {
         const linkedEvt = await db.get('SELECT e.*, c.federation, c.name as comp_name FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?', link.linked_id);
         if (!linkedEvt) continue;
-        const linkedHeat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1', link.linked_id);
+        const linkedHeat = await pickHeat(link.linked_id);
         if (!linkedHeat) continue;
-        
-        const linkedEntries = await db.all(`
-            SELECT he.lane_number, ee.id as event_entry_id, ee.status, a.name, a.bib_number, a.team
-            FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-            JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-            ORDER BY he.lane_number ASC
-        `, linkedHeat.id);
-        const linkedResults = await db.all('SELECT * FROM result WHERE heat_id=?', linkedHeat.id);
-        
-        const linkedFed = linkedEvt.federation || linkedEvt.comp_name || '';
-        entries = entries.concat(linkedEntries.map(e => ({ ...e, federation: linkedFed })));
-        results = results.concat(linkedResults);
+        entries = entries.concat(await _sbHeatEntries(linkedHeat, activeEvent.category, linkedEvt.federation || linkedEvt.comp_name || ''));
+    }
+    if (linkedEvents.length && entries.length) {
+        // 합동: 두 조의 순위를 함께 — 기록(record) 기준으로 다시 매긴다 (동률은 같은 순위)
+        const isTrack = !String(activeEvent.category || '').startsWith('field');
+        const ranked = entries.filter(e => e.record != null && !e.status_code).sort((x, y) => isTrack ? x.record - y.record : y.record - x.record);
+        ranked.forEach((e, i) => { e.rank = (i > 0 && ranked[i - 1].record === e.record) ? ranked[i - 1].rank : i + 1; });
     }
 
     ws.send(JSON.stringify({
         type: 'scoreboard_state',
-        data: {
-            event: activeEvent,
-            heat,
-            total_heats: totalHeats,
-            is_joint: linkedEvents.length > 0,
-            entries: entries.map(e => {
-                const r = results.find(r => r.event_entry_id === e.event_entry_id);
-                const record = r ? (r.time_seconds ?? r.distance_meters ?? null) : null;
-                return { ...e, record, status_code: r?.status_code || '' };
-            })
-        },
+        data: { competition_id: compId, event: activeEvent, heat, total_heats: totalHeats, is_joint: linkedEvents.length > 0, entries },
         timestamp: Date.now()
     }));
 }
