@@ -23,6 +23,34 @@ let _currentDivision = '전체'; // 부별 필터
 const _BELL_ON = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
 const _BELL_OFF = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 
+// ── 종목 검색 (툴바 아이콘 → 그 자리에 검색칸) ─────────────────────
+let _searchQuery = '';   // 종목명 부분일치 (예: 400 → 400m·400mH·4X400mR, 멀리 → 멀리뛰기)
+function onEventSearch(v) {
+    _searchQuery = v || '';
+    const btn = document.getElementById('dash-search-btn');
+    if (btn) btn.classList.toggle('has-query', !!_searchQuery.trim());
+    renderMatrix();
+}
+function toggleEventSearch() {
+    const field = document.getElementById('dash-search-field');
+    if (!field) return;
+    if (field.hidden) {
+        field.hidden = false;
+        document.getElementById('filter-bar').classList.add('searching');
+        document.getElementById('dash-search-btn').classList.add('active');
+        const inp = document.getElementById('event-search'); if (inp) { inp.focus(); inp.select(); }
+    } else closeEventSearch();
+}
+function closeEventSearch() {
+    const field = document.getElementById('dash-search-field'); if (!field) return;
+    field.hidden = true;
+    document.getElementById('filter-bar').classList.remove('searching');
+    document.getElementById('dash-search-btn').classList.remove('active');
+    const inp = document.getElementById('event-search');
+    if (inp && inp.value) { inp.value = ''; onEventSearch(''); }      // 닫으면 검색도 푼다 — 필터가 남아 목록이 비어 보이는 일 방지
+}
+function clearEventSearch() { closeEventSearch(); }
+
 // ── "진행 중 N" 배지 + 라이브 카드로 스크롤 ──────────────────────
 function updateLiveJumpBadge(n) {
     const b = document.getElementById('live-jump-badge');
@@ -612,6 +640,11 @@ function renderMatrix() {
     const container = document.getElementById('events-container');
     // 'ALL' 탭이면 성별 필터 해제 → 남/여/혼성 모든 종목을 종목순으로 통합 표시
     let events = allEvents.filter(e => !e.parent_event_id);
+    if (_searchQuery && _searchQuery.trim()) {
+        const norm = x => String(x || '').toLowerCase().replace(/[×x]/g, 'x').replace(/[\s,]/g, '');
+        const q = norm(_searchQuery);
+        events = events.filter(e => norm(e.name).includes(q) || norm(e.division).includes(q));
+    }
     if (currentGender !== 'ALL') {
         events = events.filter(e => e.gender === currentGender);
     }
