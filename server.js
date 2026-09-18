@@ -11978,6 +11978,11 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
 //     POST   /api/admin/certificate-images/delete
 //     GET    /api/admin/certificates/log
 //   헬퍼 getEventResultsForCert 는 모듈에서 반환받아 SMS 라우트 마운트 시 주입.
+// 대회 운영 체크리스트 (대회 전·당일·후 점검)
+require('./lib/routes/readiness')(app, {
+    db, isAdminKey, kstNow, lastBackupAgeMs: _lastBackupAgeMs, backupS3,
+    listFinalSnapshots: compId => { try { return fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith(`backup_final${compId}_`) && f.endsWith('.db')).sort(); } catch (e) { return []; } },
+});
 const _certMod = require('./lib/routes/certificate')(app, {
     db, isAdminKey, isOperationKey,
     generateCertificatePdf, generateCertificateBatch,

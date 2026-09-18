@@ -949,6 +949,17 @@
 
             <!-- TAB: Competition Settings -->
             <div id="tab-competition" class="admin-tab-panel">
+                <!-- 대회 운영 체크리스트 — 시스템이 직접 점검 -->
+                <div class="admin-card" id="card-readiness" style="border-left:4px solid #0e7c66;">
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+                        <h4 style="margin:0;color:#0e7c66;">대회 운영 체크리스트</h4>
+                        <span id="rd-phase" style="font-size:11px;font-weight:700;color:#fff;background:#0e7c66;border-radius:4px;padding:2px 8px;"></span>
+                        <span id="rd-summary" style="font-size:12px;color:var(--text-muted);"></span>
+                        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="loadReadiness()">다시 점검</button>
+                    </div>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">대회 전·당일·후에 빠뜨리기 쉬운 것을 시스템이 직접 확인합니다. 빨강은 반드시, 주황은 확인해 보세요.</p>
+                    <div id="rd-groups" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;"></div>
+                </div>
                 <div class="admin-card" id="card-comp-edit" style="scroll-margin-top:20px;">
                     <h4>대회 정보 수정</h4>
                     <div class="admin-form-row">
@@ -3138,6 +3149,7 @@ POST /api/external/event-result-link/batch<br>
             if (name === 'pacing') loadPacingTab();
             if (name === 'relay') loadRelayTab();
             if (name === 'documents') { loadDocTemplates(); idcLoadTeams(); }
+            if (name === 'competition') loadReadiness();
             if (name === 'records') loadRecordsTab();
             if (name === 'extapi') { extLoadCompetitions(); extLoadKeys(); extLoadLogs(); }
             // [대 리뉴얼] 사이드바 활성 항목 동기화
@@ -10937,6 +10949,28 @@ POST /api/external/event-result-link/batch<br>
         }
         function _certGenderRank(g) { return g === 'M' ? 0 : g === 'F' ? 1 : g === 'X' ? 2 : 3; }
         let _certRenderedGroups = [];   // 현재 필터로 화면에 보이는 종목 그룹
+
+        // ── 대회 운영 체크리스트 ─────────────────────────────────
+        async function loadReadiness() {
+            const box = document.getElementById('rd-groups'); if (!box) return;
+            if (!_selectedCompId) { box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">대회를 선택하면 점검합니다.</div>'; return; }
+            box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">점검 중…</div>';
+            try {
+                const res = await fetch(`/api/admin/competitions/${_selectedCompId}/readiness`, { headers: { 'x-admin-key': AK() } });
+                const d = await res.json(); if (!res.ok) throw new Error(d.error || '점검 실패');
+                document.getElementById('rd-phase').textContent = { before: '대회 전', during: '대회 중', after: '대회 후' }[d.phase] || '';
+                document.getElementById('rd-summary').textContent = `문제 ${d.summary.fail} · 확인 ${d.summary.warn} · 정상 ${d.summary.ok}`;
+                const dot = st => ({ ok: '#16a34a', warn: '#d97706', fail: '#dc2626', info: '#9ca3af' }[st] || '#9ca3af');
+                const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+                box.innerHTML = d.groups.map(g => `<div style="border:1px solid var(--gray);border-radius:8px;padding:10px 12px;">
+                    <div style="font-size:12px;font-weight:700;margin-bottom:6px;">${esc(g.title)}</div>
+                    ${g.items.map(it => `<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-top:1px solid #f1f1f1;font-size:12px;">
+                        <span style="flex:none;width:10px;height:10px;border-radius:50%;background:${dot(it.status)};margin-top:4px;"></span>
+                        <div style="flex:1;min-width:0;"><div style="font-weight:600;">${esc(it.label)}</div><div style="color:var(--text-muted);line-height:1.5;">${esc(it.detail)}</div></div>
+                        ${it.action && (it.status === 'warn' || it.status === 'fail') ? `<button class="btn btn-xs btn-outline" style="flex:none;" onclick="switchTab('${it.action.tab}', document.querySelector('.admin-tab[data-tab=\'${it.action.tab}\']'))">${esc(it.action.label)}</button>` : ''}
+                    </div>`).join('')}</div>`).join('');
+            } catch (e) { box.innerHTML = `<div style="font-size:12px;color:#dc2626;">${e.message}</div>`; }
+        }
 
         // ── ID카드(AD카드) 발급 ─────────────────────────────────
         async function idcLoadTeams() {
