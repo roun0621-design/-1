@@ -109,3 +109,6 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 ### ✅ heat_assignment 추출 (2026-09-18)
 - `lib/routes/heat_assignment.js` — 조편성 미리보기/적용 2라우트 + 파서·정규화 헬퍼 (867줄). deps: db, upload, isAdminKey, opLog, normalizeDivisionLabel, resolveFedEventName, guessEventCategory, autoLinkDisplayTimetable
 - 회귀: tests/flows/01_yecheon_pipeline(30건), tests/api/25_heat_assignment_round_sync. server.js 15,372 → 14,509줄
+
+### ✅ timing_import 추출 (2026-09-18)
+- `lib/routes/timing_import.js` — .lif/기록 xlsx/.txt 가져오기 5라우트 + 파서·매칭 헬퍼 (891줄). 반환 `{ recx }` 를 field_card_import 가 공유. server.js 14,509 → 13,624줄
