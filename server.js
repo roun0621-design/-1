@@ -57,6 +57,7 @@ const { detectRecordBreaks, detectCombinedRecordBreaks, normalizeEventName: norm
 const WebSocket = require('ws');
 const PDFDocument = require('pdfkit');
 const code128 = require('./lib/code128');
+const timingParse = require('./lib/timingParse');   // .lif/.txt/xlsx 공통: 시간·상태·라운드·성별 해석
 const { createCanvas, registerFont } = require('canvas');
 const http = require('http');
 const crypto = require('crypto');
@@ -6289,27 +6290,14 @@ function parseLifBuffer(buffer) {
         if (!rank && !bib && lane) {
             // Empty lane
             rows.push({ type: 'empty', lane: parseInt(lane) });
-        } else if (rank === 'DNS') {
-            rows.push({ type: 'DNS', bib, lane: parseInt(lane), name, team });
-        } else if (rank === 'DNF') {
-            rows.push({ type: 'DNF', bib, lane: parseInt(lane), name, team });
-        } else if (rank === 'DQ') {
-            rows.push({ type: 'DQ', bib, lane: parseInt(lane), name, team });
+        } else if (timingParse.parseStatus(rank) || timingParse.parseStatus(rawTime)) {
+            // DNS/DNF/DQ — "DQ(TR16.8)" 처럼 사유가 붙어도 상태다 (예전엔 'DQ' 만 인식해 나머지는 빈 기록으로 저장됐다)
+            const st = timingParse.parseStatus(rank) || timingParse.parseStatus(rawTime);
+            rows.push({ type: st === 'NM' ? 'DNF' : st, bib, lane: parseInt(lane), name, team, note: st !== rank ? String(rank || rawTime) : '' });
         } else if (rank && bib && name) {
-            // Valid result row
-            // FIX: "3:22.35"(분:초) / "1:02:03.4"(시:분:초) 형식 지원.
-            //   예전엔 parseFloat 만 써서 콜론 앞에서 잘려(3:22.35→3) 중장거리 기록이 깨졌음.
-            let time;
-            {
-                const ts = String(rawTime).replace(/[^0-9.:]/g, '');
-                if (ts.includes(':')) {
-                    const p = ts.split(':').map(x => parseFloat(x));
-                    time = p.some(isNaN) ? null : p.reduce((a, v) => a * 60 + v, 0);
-                } else {
-                    const f = parseFloat(ts);
-                    time = isNaN(f) ? null : f;
-                }
-            }
+            // Valid result row — "3:22.35"(분:초) / "1:02:03.4"(시:분:초) / "10,52" 지원. 못 읽으면 invalid 로 남겨 화면에 알린다
+            const time = timingParse.parseTime(rawTime);
+            if (time == null) { rows.push({ type: 'invalid', bib, lane: parseInt(lane), name, team, raw: rawTime, reason: `시간을 읽을 수 없음: "${rawTime}"` }); continue; }
             rows.push({
                 type: 'result',
                 rank: parseInt(rank),
@@ -6317,7 +6305,7 @@ function parseLifBuffer(buffer) {
                 lane: parseInt(lane),
                 name,
                 team,
-                time: isNaN(time) ? null : time,
+                time,
             });
         }
     }
@@ -6357,7 +6345,7 @@ async function _lifFindHeat(competition_id, header) {
             const mh = await db.get(`${SEL} WHERE h.event_id = ? ORDER BY h.heat_number LIMIT 1`, m.event_id);
             if (mh) jointHeats.push(mh);
         }
-        heat = jointHeats.find(h => String(h.comp_id) === String(competition_id)) || jointHeats[0] || null;
+        heat = jointHeats.find(h => String(h.comp_id) === String(competition_id)) || null;      // 이 대회에 구성원이 없으면 다른 대회 조로 넣지 않는다
         if (heat) return { heat, jointHeats, via: 'joint' };
     }
     // 구조 매칭 (라벨에 "(2+4)" 같은 접미는 이미 제거된 scoreboardKey 사용)
@@ -6506,6 +6494,7 @@ app.post('/api/scoreboard/import', upload.array('files', 50), async (req, res) =
         if (!files || files.length === 0) return res.status(400).json({ error: '.lif 파일을 선택해 주세요.' });
 
         const importResults = [];
+        const hookJobs = [];   // 트랜잭션 뒤 신기록 감지에 넘길 [{row, heat}]
         const importTx = db.transaction(async () => {
             for (const file of files) {
                 let buf, parsed;
@@ -6561,7 +6550,7 @@ app.post('/api/scoreboard/import', upload.array('files', 50), async (req, res) =
                 }
 
                 let imported = 0, skipped = 0;
-                const details = [];
+                const details = [], overwritten = [];
 
                 for (const row of parsed.rows) {
                     if (row.type === 'empty') continue;
@@ -6595,29 +6584,35 @@ app.post('/api/scoreboard/import', upload.array('files', 50), async (req, res) =
                     let time_seconds = null;
                     let status_code = '';
 
-                    if (row.type === 'DNS') {
-                        status_code = 'DNS';
-                    } else if (row.type === 'DNF') {
-                        status_code = 'DNF';
-                    } else if (row.type === 'DQ') {
-                        status_code = 'DQ';
+                    if (row.type === 'DNS' || row.type === 'DNF' || row.type === 'DQ') {
+                        status_code = row.type;
                     } else if (row.type === 'result') {
                         time_seconds = row.time;
+                    } else {
+                        skipped++; details.push({ name: row.name, bib: row.bib, reason: row.reason || '읽을 수 없는 행' }); continue;
+                    }
+                    if (row.type === 'result' && (time_seconds == null || !(time_seconds > 0))) {
+                        // 시간이 없는 결과 행으로 심판이 넣은 기록을 지우지 않는다
+                        skipped++; details.push({ name: row.name, bib: row.bib, reason: '시간 없음 — 기존 기록 유지' }); continue;
                     }
 
-                    // Upsert result
+                    // Upsert result — 비고(remark)는 심판이 적은 것이므로 유지한다
                     const existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NULL ORDER BY id DESC LIMIT 1', heat_id, event_entry_id);
-
+                    let written = null;
                     if (existing) {
                         const _nowFR2 = db.isAsync ? 'NOW()' : "datetime('now')";
-                        await db.run(`UPDATE result SET time_seconds=?,status_code=?,remark=?,updated_at=${_nowFR2} WHERE id=?`, time_seconds, status_code, '', existing.id);
+                        await db.run(`UPDATE result SET time_seconds=?,status_code=?,updated_at=${_nowFR2} WHERE id=?`, time_seconds, status_code, existing.id);
                         const upd = await db.get('SELECT * FROM result WHERE id=?', existing.id);
                         audit('result', existing.id, 'UPDATE', existing, upd, 'scoreboard', null, req);
+                        written = upd;
+                        if (existing.time_seconds != null && existing.time_seconds !== time_seconds) overwritten.push({ name: row.name, bib: row.bib, before: existing.status_code || existing.time_seconds, after: status_code || time_seconds });
                     } else {
-                        const info = await db.run('INSERT INTO result (heat_id,event_entry_id,time_seconds,status_code,remark) VALUES (?,?,?,?,?)', heat_id, event_entry_id, time_seconds, status_code, '');
+                        const info = await db.run('INSERT INTO result (heat_id,event_entry_id,time_seconds,status_code,remark) VALUES (?,?,?,?,?)', heat_id, event_entry_id, time_seconds, status_code, row.note || '');
                         const ins = await db.get('SELECT * FROM result WHERE id=?', info.lastInsertRowid);
                         audit('result', ins.id, 'INSERT', null, ins, 'scoreboard', null, req);
+                        written = ins;
                     }
+                    if (written) hookJobs.push({ row: written, heat: matchedEntry.source_heat_id ? await db.get('SELECT * FROM heat WHERE id=?', matchedEntry.source_heat_id) : heat });
 
                     imported++;
                     details.push({ name: row.name, bib: row.bib, time: time_seconds, status: status_code || 'OK' });
@@ -6669,6 +6664,7 @@ app.post('/api/scoreboard/import', upload.array('files', 50), async (req, res) =
                     wind: windImported,
                     imported,
                     skipped,
+                    overwritten,          // 이미 있던 기록을 다른 값으로 덮은 선수 (심판 수정과 겹칠 때 확인용)
                     details,
                 });
 
@@ -6677,6 +6673,8 @@ app.post('/api/scoreboard/import', upload.array('files', 50), async (req, res) =
         });
 
         await importTx();
+        // 신기록 감지 — 수기 입력과 같은 훅. (트랜잭션이 끝난 뒤에 돌린다)
+        if (_resultsRoutes && _resultsRoutes.runRecordCompareHook) for (const j of hookJobs) { try { await _resultsRoutes.runRecordCompareHook(j.row, j.heat); } catch (e) { /* 감지 실패는 가져오기를 막지 않는다 */ } }
         res.json({ success: true, results: importResults });
     } catch (err) {
         console.error('[Scoreboard Import]', err);
@@ -6705,29 +6703,10 @@ function _recxDivToken(raw) {
     if (/일반|실업|성인/.test(s)) return '일반';
     return s;
 }
-function _recxGenderOf(raw) {
-    const s = String(raw || '').trim();
-    if (/^남|^m/i.test(s)) return 'M';
-    if (/^여|^f/i.test(s)) return 'F';
-    if (/^혼|^x|mixed/i.test(s)) return 'X';
-    return null;
-}
-function _recxRound(raw) {
-    const r = String(raw || '').trim();
-    if (/결승/.test(r)) return 'final';
-    if (/준결/.test(r)) return 'semifinal';
-    if (/예선/.test(r)) return 'preliminary';
-    return 'final';
-}
-// "4:15.21"→255.21, "1:05.3"→65.3, "10.52"→10.52
-function _recxParseTime(raw) {
-    const s = String(raw || '').trim();
-    if (!s) return null;
-    const m = s.match(/^(\d+):(\d{1,2}(?:\.\d+)?)$/);
-    if (m) return parseInt(m[1], 10) * 60 + parseFloat(m[2]);
-    const f = parseFloat(s.replace(/[^0-9.]/g, ''));
-    return isNaN(f) ? null : f;
-}
+// 성별·라운드·시간 해석은 공통 파서(lib/timingParse.js) — 예전엔 '준결승'이 결승으로, 'DQ(TR16.8)'이 16.8초로, 라벨 중간의 성별을 놓쳤다
+const _recxGenderOf = timingParse.genderOf;
+const _recxRound = timingParse.parseRound;
+const _recxParseTime = timingParse.parseTime;
 // "6.72m"/"6.72"→6.72
 function _recxParseDist(raw) {
     const f = parseFloat(String(raw || '').replace(/[^0-9.]/g, ''));
@@ -6787,11 +6766,9 @@ function parseRecordXlsx(buffer) {
         if (g.wind == null && windRaw) { const w = parseFloat(windRaw); if (!isNaN(w)) g.wind = w; }
         const rankRaw = get(r, 'rank');
         const recordRaw = get(r, 'record');
-        let type = 'result';
-        if (/^dns$/i.test(rankRaw) || /dns/i.test(get(r, 'rtype'))) type = 'DNS';
-        else if (/^dnf$/i.test(rankRaw) || /dnf/i.test(get(r, 'rtype'))) type = 'DNF';
-        else if (/^(dq|실격)$/i.test(rankRaw) || /dq|실격/i.test(get(r, 'rtype'))) type = 'DQ';
-        else if (/^(nm|기록없음)$/i.test(recordRaw) || (!recordRaw && !/^\d+$/.test(rankRaw))) type = 'NM';
+        // 상태는 순위 칸·기록구분 칸·기록 칸 어디에 있어도, 사유가 붙어도("DQ(TR16.8)") 상태로 본다 — 공통 파서
+        let type = timingParse.parseStatus(rankRaw) || timingParse.parseStatus(get(r, 'rtype')) || timingParse.parseStatus(recordRaw) || 'result';
+        if (type === 'result' && !recordRaw && !/^\d+$/.test(rankRaw)) type = 'NM';
         g.rows.push({
             type,
             rank: /^\d+$/.test(rankRaw) ? parseInt(rankRaw, 10) : null,
@@ -6905,11 +6882,17 @@ app.post('/api/record-xlsx/import', upload.single('file'), async (req, res) => {
         const buf = fs.readFileSync(req.file.path);
         const groups = parseRecordXlsx(buf);
         const out = [];
+        const _hookJobs = [];   // 트랜잭션 뒤 신기록 감지 (수기 입력과 같은 훅)
         await db.transaction(async () => {
             for (const g of groups) {
                 const matched = await _recxMatchGroup(competition_id, g);
                 if (matched.matchStatus !== 'matched') {
                     out.push({ label: `${g.divisionRaw} ${g.eventName} ${g.roundRaw} ${g.heatNum}조`, error: '매칭되는 종목/조를 찾을 수 없습니다.', imported: 0, skipped: g.rows.length });
+                    continue;
+                }
+                if (matched.ambiguous) {
+                    // 후보 종목이 둘 이상(성별·부를 못 가림) — 첫 후보에 넣지 않고 거부한다. 파일의 종목 라벨에 성별·부를 적어 다시 올린다
+                    out.push({ label: `${g.divisionRaw} ${g.eventName} ${g.roundRaw} ${g.heatNum}조`, error: '해당하는 종목이 둘 이상입니다(성별·부 구분 필요). 라벨에 성별·부를 적어 다시 올려 주세요.', imported: 0, skipped: g.rows.length });
                     continue;
                 }
                 const { heat_id, event_id, is_field } = matched.heatInfo;
@@ -6929,10 +6912,12 @@ app.post('/api/record-xlsx/import', upload.single('file'), async (req, res) => {
                         await db.run(`UPDATE result SET time_seconds=?,distance_meters=?,status_code=?,updated_at=${_now} WHERE id=?`, time_seconds, distance_meters, status_code, existing.id);
                         const upd = await db.get('SELECT * FROM result WHERE id=?', existing.id);
                         audit('result', existing.id, 'UPDATE', existing, upd, 'record-xlsx', null, req);
+                        _hookJobs.push({ row: upd, heat_id });
                     } else {
                         const info = await db.run('INSERT INTO result (heat_id,event_entry_id,time_seconds,distance_meters,status_code,remark) VALUES (?,?,?,?,?,?)', heat_id, am.event_entry_id, time_seconds, distance_meters, status_code, '');
                         const ins = await db.get('SELECT * FROM result WHERE id=?', info.lastInsertRowid);
                         audit('result', ins.id, 'INSERT', null, ins, 'record-xlsx', null, req);
+                        _hookJobs.push({ row: ins, heat_id });
                     }
                     imported++;
                 }
@@ -6951,6 +6936,7 @@ app.post('/api/record-xlsx/import', upload.single('file'), async (req, res) => {
             }
         })();
         const totalImp = out.reduce((s, r) => s + (r.imported || 0), 0);
+        await _runImportRecordHooks(_hookJobs);
         opLog(`기록 엑셀 가져오기: ${out.length}개 그룹, ${totalImp}건 입력`, 'record', 'admin', competition_id);
         res.json({ success: true, results: out });
     } catch (err) {
@@ -6970,6 +6956,17 @@ app.post('/api/record-xlsx/import', upload.single('file'), async (req, res) => {
 // "남자 실업부 100m 결승 2조" 같은 한 줄 종목 라벨 → { divisionRaw, gender, divToken, eventName, roundRaw, round, heatNum }
 //   .txt(계측 결과) 1행과 .lif 헤더가 같은 형태라 공유. 종목(거리/필드) 위치 기준으로 앞=성별+부, 뒤=라운드+조.
 //   전광판 .lif 는 "100 결승" 처럼 m 이 빠진 경우가 있어 숫자만 있으면 m 을 붙인다.
+// 가져오기 뒤 신기록 감지 — 수기 입력(results.js)과 같은 훅. 트랜잭션이 끝난 뒤 돌린다 (예전엔 세 경로 모두 감지를 건너뛰었다)
+async function _runImportRecordHooks(jobs) {
+    if (!_resultsRoutes || !_resultsRoutes.runRecordCompareHook) return;
+    const heatCache = new Map();
+    for (const j of jobs || []) {
+        try {
+            if (!heatCache.has(j.heat_id)) heatCache.set(j.heat_id, await db.get('SELECT * FROM heat WHERE id=?', j.heat_id));
+            await _resultsRoutes.runRecordCompareHook(j.row, heatCache.get(j.heat_id));
+        } catch (e) { /* 감지 실패는 가져오기를 막지 않는다 */ }
+    }
+}
 function _parseEventLabel(fullName) {
     fullName = String(fullName || '').trim();
     let em = fullName.match(/(\d+\s*[×xX]\s*\d+\s*m?R?|\d+mH|\d+mSC|\d+mW|\d+m|\d+kmW?|하프마라톤|마라톤|멀리뛰기|세단뛰기|높이뛰기|장대높이뛰기|포환던지기|원반던지기|창던지기|해머던지기|\d+종경기)/i);
@@ -7018,10 +7015,8 @@ function parseTimingTxt(content) {
         if (!name && !rec && !bib) continue;
         const rankRaw = gv(ci.rank);
         let type = 'result';
-        if (/^dns$/i.test(rec)) type = 'DNS';
-        else if (/^dnf$/i.test(rec)) type = 'DNF';
-        else if (/^(dq|실격)$/i.test(rec)) type = 'DQ';
-        else if (/^(nm|nh|기록없음)$/i.test(rec)) type = 'NM';
+        const _st = timingParse.parseStatus(rec);       // "DQ(TR16.8)" 처럼 사유가 붙어도 상태 (예전엔 16.8초 기록이 됐다)
+        if (_st) type = _st;
         rows.push({ type, rank: /^\d+$/.test(rankRaw) ? parseInt(rankRaw) : null, bib, lane: parseInt(gv(ci.lane)) || null, name, team: gv(ci.team), recordRaw: rec });
     }
     return [{ ...label, wind, rows }];
@@ -7033,6 +7028,7 @@ app.post('/api/timing-txt/import', upload.array('files', 100), async (req, res) 
     if (!req.files || !req.files.length) return res.status(400).json({ error: '.txt 파일을 선택하세요.' });
     const previewOnly = req.body.preview === 'true' || req.body.preview === true;
     const out = [];
+    const _hookJobs = [];   // 트랜잭션 뒤 신기록 감지 (수기 입력과 같은 훅)
     const run = async () => {
         for (const file of req.files) {
             let groups;
@@ -7042,6 +7038,11 @@ app.post('/api/timing-txt/import', upload.array('files', 100), async (req, res) 
                 const matched = await _recxMatchGroup(competition_id, g);
                 if (matched.matchStatus !== 'matched') {
                     out.push({ filename: file.originalname, label: `${g.divisionRaw} ${g.eventName} ${g.roundRaw} ${g.heatNum}조`, error: '매칭되는 종목/조 없음', imported: 0, skipped: g.rows.length, matched: 0, total: g.rows.length });
+                    continue;
+                }
+                if (matched.ambiguous) {
+                    // 후보 종목이 둘 이상(성별·부를 못 가림) — 첫 후보에 넣지 않고 거부한다. 파일의 종목 라벨에 성별·부를 적어 다시 올린다
+                    out.push({ label: `${g.divisionRaw} ${g.eventName} ${g.roundRaw} ${g.heatNum}조`, error: '해당하는 종목이 둘 이상입니다(성별·부 구분 필요). 라벨에 성별·부를 적어 다시 올려 주세요.', imported: 0, skipped: g.rows.length });
                     continue;
                 }
                 const { heat_id, event_id, is_field } = matched.heatInfo;
@@ -7067,10 +7068,12 @@ app.post('/api/timing-txt/import', upload.array('files', 100), async (req, res) 
                         await db.run(`UPDATE result SET time_seconds=?,distance_meters=?,status_code=?,updated_at=${_now} WHERE id=?`, time_seconds, distance_meters, status_code, existing.id);
                         const upd = await db.get('SELECT * FROM result WHERE id=?', existing.id);
                         audit('result', existing.id, 'UPDATE', existing, upd, 'timing-txt', null, req);
+                        _hookJobs.push({ row: upd, heat_id });
                     } else {
                         const info = await db.run('INSERT INTO result (heat_id,event_entry_id,time_seconds,distance_meters,status_code,remark) VALUES (?,?,?,?,?,?)', heat_id, am.event_entry_id, time_seconds, distance_meters, status_code, '');
                         const ins = await db.get('SELECT * FROM result WHERE id=?', info.lastInsertRowid);
                         audit('result', ins.id, 'INSERT', null, ins, 'timing-txt', null, req);
+                        _hookJobs.push({ row: ins, heat_id });
                     }
                     imported++;
                 }
@@ -7091,6 +7094,7 @@ app.post('/api/timing-txt/import', upload.array('files', 100), async (req, res) 
     };
     try {
         if (previewOnly) await run(); else await db.transaction(run)();
+        if (!previewOnly) await _runImportRecordHooks(_hookJobs);
         const totalImp = out.reduce((s, r) => s + (r.imported || 0), 0);
         if (!previewOnly && totalImp > 0) opLog(`계측결과(txt) 가져오기: ${req.files.length}개 파일, ${totalImp}건 입력`, 'record', 'timing', competition_id);
         res.json({ success: true, preview: previewOnly, results: out });
