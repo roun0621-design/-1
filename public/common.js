@@ -211,7 +211,7 @@ function isShortTrackEvent(eventName) {
     return false;
 }
 
-function fmtCat(c) { return { track: 'Track', field_distance: 'Field', field_height: 'Field', combined: '혼성', relay: '릴레이', road: 'Road' }[c] || c; }
+function fmtCat(c) { return { track: 'Track', field_distance: 'Field', field_height: 'Field', combined: '종합', relay: '릴레이', road: 'Road' }[c] || c; }
 function fmtRound(r) { return { preliminary: '예선', semifinal: '준결승', final: '결승' }[r] || r; }
 function fmtRoundShort(r) { return { preliminary: '예선', semifinal: '준결', final: '결승' }[r] || r; }
 function fmtSt(s) { return { registered: '미확인', checked_in: '출석', no_show: '결석' }[s] || s; }
@@ -2221,7 +2221,7 @@ async function openDocumentList() {
         const sortedGenders = Object.keys(genderGroups).sort((a, b) => (genderOrder[a] ?? 9) - (genderOrder[b] ?? 9));
 
         const roundMap = { preliminary: '예선', semifinal: '준결승', final: '결승' };
-        const catMap = { track: '트랙', field_distance: '필드(투척/도약)', field_height: '필드(높이)', combined: '혼성경기', relay: '릴레이', road: '도로' };
+        const catMap = { track: '트랙', field_distance: '필드(투척/도약)', field_height: '필드(높이)', combined: '종합경기', relay: '릴레이', road: '도로' };
         const filterId = 'doc-filter-' + Date.now();
 
         // Build general docs (comprehensive, ad-card)

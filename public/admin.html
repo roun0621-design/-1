@@ -638,7 +638,7 @@
                         A열: <code>성별(남/여/혼성)</code> | B열: <code>종목</code> | C열: <code>라운드(예선/결승)</code><br>
                         D열: <code>조</code> | E열: <code>그룹(A/B)</code> — 5000m/10000m만 해당<br>
                         F열: <code>순서(레인)</code> | G열: <code>배번</code> | H열: <code>성명</code> | I열: <code>소속</code><br>
-                        <span style="color:#6b7280;">릴레이: 배번 비우고 성명에 팀명 입력 | 배번 비워두면 NULL 저장 (자동 배정 없음)</span><br>
+                        <span style="color:#6b7280;">릴레이: 배번 비우고 성명에 팀명 입력 | 배번을 비워 두면 비운 채로 저장됩니다 (자동 배정 없음)</span><br>
                         <span style="color:#0e7c66;font-weight:600;">연맹에서 받은 '데일리 조편성' 원본(▣ 종목 머리글이 있는 엑셀)은 고치지 않고 그대로 올려도 됩니다 — 자동으로 이 양식으로 바꿔 미리보기를 보여줍니다. <b>PDF 로만 받은 경우 PDF 도 됩니다</b>(글자가 들어 있는 PDF 만, 스캔본 제외).</span>
                     </div>
                     <div style="display:flex;flex-direction:column;gap:12px;">
@@ -658,7 +658,7 @@
                     <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
                         <strong>엑셀 양식 (열 순서 고정):</strong><br>
                         A열: <code>배번(BIB)</code> — 비워둘 수 있음 | B열: <code>선수명 *</code> | C열: <code>소속</code> | D열: <code>성별(남/여) *</code> | E열: <code>바코드</code>(선택)<br>
-                        <span style="color:#ef4444;font-weight:600;">* 배번/바코드를 비워두면 NULL 저장 (자동 생성하지 않음)</span><br>
+                        <span style="color:#ef4444;font-weight:600;">* 배번·바코드를 비워 두면 비운 채로 저장됩니다 (자동 생성하지 않음)</span><br>
                         <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터</span>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
@@ -679,7 +679,7 @@
                         <span style="color:#22c55e;">기존 기록(결과, 조편성 등)에 영향 없음 — BIB은 표시용 필드입니다.</span>
                     </p>
                     <div style="background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
-                        <strong>엑셀 양식 (열 순서 고정):</strong><br>
+                        <strong>엑셀 양식 (머리글 이름으로 열을 찾습니다 · 순서 무관):</strong><br>
                         A열: <code>배번(BIB) *</code> — 새로 부여할 배번 | B열: <code>선수명 *</code> | C열: <code>소속 *</code> | D열: <code>성별(남/여)</code> 선택<br>
                         <span style="color:#d97706;font-weight:600;">* 매칭 키: 선수명 + 소속 (성별 열이 있으면 + 성별도 비교)</span><br>
                         <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터 | 성별 열 없어도 이름+소속으로 매칭 가능</span><br>
@@ -719,11 +719,11 @@
                 <!-- Event Upload -->
                 <div class="admin-card">
                     <h4>종목 리스트 엑셀 업로드</h4>
-                    <p class="t-help">종목만 일괄 등록합니다. (혼성경기는 세부 종목 자동 생성)</p>
+                    <p class="t-help">종목만 일괄 등록합니다. (종합경기 10종·7종·5종은 세부 종목 자동 생성)</p>
                     <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
                         <strong>엑셀 양식 (열 순서 고정):</strong><br>
                         A열: <code>종목명 *</code> | B열: <code>카테고리</code> | C열: <code>성별</code> | D열: <code>라운드</code><br>
-                        <span style="color:#6b7280;">카테고리: track, 트랙, field_distance, 필드(거리), field_height, 필드(높이), relay, 릴레이, combined, 혼성, road, 도로</span><br>
+                        <span style="color:#6b7280;">카테고리: track, 트랙, field_distance, 필드(거리), field_height, 필드(높이), relay, 릴레이, combined, 종합(10종·7종·5종), road, 도로</span><br>
                         <span style="color:#6b7280;">성별: 남/M, 여/F, 혼성/X &nbsp;|&nbsp; 라운드: 결승/final(기본), 예선/preliminary, 준결승/semifinal</span><br>
                         <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터. 카테고리/성별/라운드 미입력 시 기본값: track/남/결승</span>
                     </div>
@@ -1507,7 +1507,7 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                     </div>
                     <div style="margin-bottom:14px;">
-                        <label class="t-label">② 종목 선택 (트랙 800m 이상 + 혼성경기)</label>
+                        <label class="t-label">② 종목 선택 (트랙 800m 이상 + 종합경기)</label>
                         <div id="pacing-event-btns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
                     </div>
                     <input type="hidden" id="pacing-event-select" value="">
@@ -1968,7 +1968,7 @@ POST /api/external/event-result-link/batch<br>
                                 <span class="t-xs t-muted">인쇄용</span>
                             </div>
                         </div>
-                        <div style="flex:1;min-width:260px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
+                        <div id="card-idcard" style="flex:1;min-width:260px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
                             <h5 style="font-size:13px;margin-bottom:8px;">ID카드 (AD카드)</h5>
                             <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">배번·성명·소속·참가 종목 + <b>소집실에서 스캔되는 바코드</b>. 계주 팀은 제외됩니다.</p>
                             <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:12px;">
@@ -2421,7 +2421,7 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- W. 워드 상장 양식 (현장 인쇄용) — PDF 양식과 별개 -->
-                <div class="admin-card" style="border-left:4px solid #2b579a;">
+                <div class="admin-card" id="card-award-docx" style="border-left:4px solid #2b579a;">
                     <h4 style="color:#2b579a;margin-bottom:6px;">워드 상장 양식 <span style="font-size:11px;font-weight:600;color:#fff;background:#2b579a;border-radius:4px;padding:2px 6px;vertical-align:middle;">현장 인쇄용</span></h4>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6;">
                         기록입력 화면의 <b>상장 출력</b> 버튼과 위 일괄 발급의 <b>워드(.docx)</b> 형식이 쓰는 양식입니다. 받은 파일은 워드·한글에서 열어 고칠 수 있습니다.<br>
@@ -3450,6 +3450,7 @@ POST /api/external/event-result-link/batch<br>
             { group:'overview', label:'현황',           tab:'overview', icon:'chart', desc:'대회/시스템 전체 상태 요약', keywords:'dashboard 상태 요약' },
 
             // ───── 대회 운영 ─────
+            { group:'op', label:'대회 운영 체크리스트', tab:'competition', anchor:'card-readiness', icon:'chart', desc:'대회 전·당일·후 점검 — 시리즈 연결, 명단·조편성·시간표, 운영키, 백업, 종료 잠금', keywords:'checklist 체크리스트 점검 준비 readiness 시리즈 백업' },
             { group:'op', label:'대회 정보 수정',       tab:'competition', anchor:'card-comp-edit', icon:'stadium', desc:'대회명·기간·연맹·시리즈·운영 모드 등 기본 정보', keywords:'competition 대회 정보 수정 기간 연맹 시리즈 mode' },
             { group:'op', label:'대회 데이터 초기화',   tab:'competition', anchor:'card-comp-reset',  icon:'trash', desc:'이 대회의 선수·종목·기록만 삭제 (대회는 유지)', keywords:'초기화 reset clear 데이터 삭제 비우기' },
             { group:'op', label:'대회 삭제',             tab:'competition', anchor:'card-comp-delete', icon:'trash', desc:'대회 전체를 영구 삭제 (복구 불가, 관리자키 필요)', keywords:'대회 삭제 delete remove 제거 영구 완전삭제' },
@@ -3461,6 +3462,8 @@ POST /api/external/event-result-link/batch<br>
             // ───── 결과·기록 ─────
             { group:'result', label:'문서 · 다운로드',  tab:'documents',  icon:'file',    desc:'종합기록지, ID카드, 백업, PDF/Excel', keywords:'document download pdf excel xlsx 백업 id카드 ad카드 idcard 바코드 인가증' },
             { group:'result', label:'상장 출력',         tab:'certificates', icon:'trophy', desc:'상장·완주증 양식 편집 및 일괄 인쇄', keywords:'certificate 상장 완주증 시상 시상장 인쇄 출력' },
+            { group:'result', label:'워드 상장 양식',     tab:'certificates', anchor:'card-award-docx', icon:'file', desc:'현장 인쇄용 워드(.docx) 상장 문구·수여자·글꼴 (기록입력의 상장 출력 버튼이 쓰는 양식)', keywords:'워드 docx 상장 양식 한글 시상 수여 직인 문구' },
+            { group:'result', label:'ID카드 발급',        tab:'documents', anchor:'card-idcard', icon:'user', desc:'배번·소속·바코드가 든 ID카드(AD카드) PDF — 소속·성별·배번 지정', keywords:'id카드 ad카드 idcard 바코드 인가증 발급' },
             { group:'result', label:'문자 발송',         tab:'sms',         icon:'message', desc:'결과·상장 링크 SMS 발송 (알리고)', keywords:'sms 문자 알리고 aligo 발송 lms' },
             { group:'result', label:'스코어보드',       tab:'scoreboard', icon:'monitor', desc:'스코어보드 그룹·종목 연동', keywords:'scoreboard joint group' },
 
@@ -3982,7 +3985,7 @@ POST /api/external/event-result-link/batch<br>
             }
             container.innerHTML = html;
         }
-        const CAT_LABEL = { track:'트랙', field_distance:'필드(거리)', field_height:'필드(높이)', relay:'릴레이', combined:'혼성경기', road:'도로' };
+        const CAT_LABEL = { track:'트랙', field_distance:'필드(거리)', field_height:'필드(높이)', relay:'릴레이', combined:'종합경기', road:'도로' };
         const CAT_COLOR = { track:'#6b6b6b', field_distance:'#9a8548', field_height:'#ea580c', relay:'#8a7640', combined:'#db2777', road:'#0891b2' };
         const STATUS_LABEL = { created:'생성', heats_generated:'조편성', in_progress:'진행중', completed:'완료' };
         const STATUS_COLOR = { created:'#9ca3af', heats_generated:'#f59e0b', in_progress:'#6b6b6b', completed:'#b79f58' };
@@ -7768,7 +7771,7 @@ POST /api/external/event-result-link/batch<br>
         const _jgGL = g => g === 'M' ? '남' : g === 'F' ? '여' : g === 'X' ? '혼성' : '';
         const _jgRL = r => ({preliminary:'예선', semifinal:'준결승', final:'결승'}[r] || r || '');
         const _jgStatus = s => ({upcoming:'예정', active:'진행중', completed:'종료'}[s] || s || '');
-        const _jgCatLabel = c => ({track:'트랙', field:'필드', relay:'계주', road:'도로', combined:'혼성'}[c] || c || '');
+        const _jgCatLabel = c => ({track:'트랙', field:'필드', relay:'계주', road:'도로', combined:'종합'}[c] || c || '');
 
         // ── 메인: 합동 그룹 목록 카드 렌더링
         async function jgLoadGroups() {
@@ -10909,7 +10912,7 @@ POST /api/external/event-result-link/batch<br>
             { key: 'field', label: '필드', match: c => c === 'field_distance' || c === 'field_height' },
             { key: 'relay', label: '릴레이', match: c => c === 'relay' },
             { key: 'road',  label: '로드',  match: c => c === 'road' },
-            { key: 'combined', label: '혼성', match: c => c === 'combined' },
+            { key: 'combined', label: '종합', match: c => c === 'combined' },
         ];
         function _certTypeOf(cat) { const d = CERT_TYPE_DEFS.find(t => t.match(cat)); return d ? d.key : 'track'; }
         function _certTypeLabel(key) { const d = CERT_TYPE_DEFS.find(t => t.key === key); return d ? d.label : key; }

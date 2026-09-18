@@ -991,7 +991,7 @@ function guessCat(name){
     if(/[Ww]$|경보|마라톤|하프마라톤/.test(n)) return 'road';
     return 'track';
 }
-const CAT_LABELS = {track:'트랙',field_height:'필드(높이)',field_distance:'필드(투척/도약)',combined:'혼성경기',relay:'릴레이',road:'도로'};
+const CAT_LABELS = {track:'트랙',field_height:'필드(높이)',field_distance:'필드(투척/도약)',combined:'종합경기',relay:'릴레이',road:'도로'};
 const CAT_ORDER = ['track','field_height','field_distance','combined','relay','road'];
 const CAT_COLORS = {track:{bg:'#f0f0f0',color:'#333'},field_height:{bg:'#e8f5e9',color:'#2e7d32'},field_distance:{bg:'#fff3e0',color:'#e65100'},combined:{bg:'#f3e5f5',color:'#6a1b9a'},relay:{bg:'#e3f2fd',color:'#1565c0'},road:{bg:'#fce4ec',color:'#c62828'}};
 
@@ -1715,7 +1715,7 @@ function openLinkEdit(evId){
     if(!ev) return;
     const label = fmtEvent(ev);
     const catOptions = ['track','field_distance','field_height','combined','relay','road'];
-    const catLabels = {track:'트랙',field_distance:'필드(투척/도약)',field_height:'필드(높이)',combined:'혼성경기',relay:'릴레이',road:'도로'};
+    const catLabels = {track:'트랙',field_distance:'필드(투척/도약)',field_height:'필드(높이)',combined:'종합경기',relay:'릴레이',road:'도로'};
     const genderOptions = [{v:'M',l:'남자'},{v:'F',l:'여자'},{v:'X',l:'혼성'}];
     const roundOptions = [{v:'preliminary',l:'예선'},{v:'semifinal',l:'준결승'},{v:'final',l:'결승'}];
     
