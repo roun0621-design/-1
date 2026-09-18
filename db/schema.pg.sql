@@ -418,7 +418,9 @@ CREATE TABLE IF NOT EXISTS "operation_key" (
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "can_manage" BIGINT NOT NULL DEFAULT 0,
     CHECK (role IN ('operation','admin')),
-    UNIQUE ("key_value")
+    UNIQUE ("key_value"),
+    "key_prefix" TEXT DEFAULT '',
+    "key_hint" TEXT DEFAULT ''
 );
 
 -- Table: operation_log

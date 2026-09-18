@@ -674,6 +674,7 @@ const API = {
     createOperationKey: (adminKey, judge_name, key_value, can_manage) => api('POST', '/api/admin/operation-keys', { admin_key: adminKey, judge_name, key_value, can_manage: can_manage || false }),
     deleteOperationKey: (id, adminKey) => api('DELETE', `/api/admin/operation-keys/${id}`, { admin_key: adminKey }),
     toggleOperationKey: (id, active, adminKey) => api('PATCH', `/api/admin/operation-keys/${id}`, { admin_key: adminKey, active }),
+    reissueOperationKey: (id, adminKey) => api('POST', `/api/admin/operation-keys/${id}/reissue`, { admin_key: adminKey }),
     toggleOperationKeyManage: (id, can_manage, adminKey) => api('PATCH', `/api/admin/operation-keys/${id}`, { admin_key: adminKey, can_manage }),
     // Heat management
     addHeat: (eventId, adminKey) => api('POST', `/api/admin/events/${eventId}/add-heat`, { admin_key: adminKey }),

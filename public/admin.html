@@ -479,7 +479,7 @@
             <div id="tab-judges" class="admin-tab-panel">
                 <div class="admin-card" id="card-judge-keys" style="scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;"><span class="css-icon css-icon-judge" data-icon="J"></span> 심판별 운영키 관리</h4>
-                    <p class="t-help-lg">심판별로 고유한 운영키를 생성하면, 로그에 심판 이름이 자동으로 표시됩니다.</p>
+                    <p class="t-help-lg">심판별로 고유한 운영키를 생성하면, 로그에 심판 이름이 자동으로 표시됩니다. 키는 <b>만들 때 한 번만 보이고</b> 서버에는 해시로만 저장됩니다. 심판이 키를 잊으면 <b>재발급</b>으로 새 키를 만들어 주세요(옛 키는 즉시 무효).</p>
                     <div class="admin-form-row" style="margin-bottom:12px;">
                         <div class="admin-form-group"><label>심판명 *</label><input id="new-judge-name" placeholder="예: 김심판"></div>
                         <div class="admin-form-group"><label>운영키 (4자 이상) *</label><input id="new-judge-key" placeholder="예: kim2026"></div>
@@ -4445,7 +4445,7 @@ POST /api/external/event-result-link/batch<br>
                 const k = await api('GET', '/api/admin/current-keys?key=' + encodeURIComponent(AK()));
                 document.getElementById('current-keys').innerHTML = `
                     <div style="display:flex;gap:20px;flex-wrap:wrap;">
-                        <div><span class="t-md t-muted">현재 운영키:</span> <span class="key-display">${k.operation}</span></div>
+                        <div><span class="t-md t-muted">현재 운영키:</span> <span class="key-display">${k.operation || (k.operation_hint || '••••')}</span> <span class="t-xs t-muted">${k.operation ? '' : '(해시로 저장돼 다시 볼 수 없습니다 — 바꿀 때 한 번만 표시)'}</span></div>
                         <div><span class="t-md t-muted">관리자 ID:</span> <span class="key-display">${k.admin_id}</span></div>
                         <div><span class="t-md t-muted">관리자 비밀번호:</span> <span style="color:var(--green);font-size:12px;">●●●●●● (암호화됨)</span></div>
                     </div>`;
@@ -4498,11 +4498,12 @@ POST /api/external/event-result-link/batch<br>
                 document.getElementById('judge-keys-tbody').innerHTML = keys.map(k => `<tr>
                     <td>${k.id}</td>
                     <td style="font-weight:600;">${k.judge_name}</td>
-                    <td><span class="key-display t-md">${k.key_value}</span></td>
+                    <td><span class="key-display t-md" title="키는 해시로 저장돼 다시 볼 수 없습니다">${k.key_hint || '••••'}</span></td>
                     <td><span style="color:${k.can_manage ? 'var(--blue)' : 'var(--text-muted)'};font-weight:600;cursor:pointer;" onclick="toggleJudgeManage(${k.id},${k.can_manage ? 0 : 1})" title="클릭하여 권한 변경">${k.can_manage ? '관리자' : '운영'}</span></td>
                     <td><span style="color:${k.active ? 'var(--green)' : 'var(--danger)'};font-weight:600;">${k.active ? '활성' : '비활성'}</span></td>
                     <td class="t-xs t-muted">${(k.created_at||'').slice(0,10)}</td>
                     <td>
+                        <button class="btn btn-xs btn-outline" onclick="reissueJudgeKey(${k.id},'${k.judge_name}')" title="새 키를 만들어 한 번 보여줍니다. 옛 키는 즉시 무효">재발급</button>
                         <button class="btn btn-xs ${k.active ? 'btn-outline' : 'btn-primary'}" onclick="toggleJudgeKey(${k.id},${k.active ? 0 : 1})">${k.active ? '비활성' : '활성'}</button>
                         <button class="btn btn-xs btn-danger" onclick="deleteJudgeKey(${k.id},'${k.judge_name}')">삭제</button>
                     </td>
@@ -4515,13 +4516,33 @@ POST /api/external/event-result-link/batch<br>
             const canManage = document.getElementById('new-judge-can-manage')?.checked || false;
             if (!name || !key || key.length < 4) { toast('심판명과 키(4자 이상)를 입력하세요', 'error'); return; }
             try {
-                await API.createOperationKey(AK(), name, key, canManage);
+                const made = await API.createOperationKey(AK(), name, key, canManage);
                 toast(`${name} 운영키 생성 완료${canManage ? ' (관리 권한 포함)' : ''}`);
+                showIssuedKey(name, made.key_value);
                 document.getElementById('new-judge-name').value = '';
                 document.getElementById('new-judge-key').value = '';
                 if (document.getElementById('new-judge-can-manage')) document.getElementById('new-judge-can-manage').checked = false;
                 loadJudgeKeys();
             } catch (e) { toast(e.error || '키 생성 실패 (중복?)', 'error'); }
+        }
+        // 발급·재발급된 키를 한 번 보여주는 창 — 닫으면 다시 볼 수 없다
+        function showIssuedKey(name, key) {
+            const prev = document.getElementById('issued-key-modal'); if (prev) prev.remove();
+            const ov = document.createElement('div'); ov.id = 'issued-key-modal';
+            ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;';
+            const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+            ov.innerHTML = `<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3);overflow:hidden;">
+                <div style="padding:20px 22px 8px;font-size:15px;line-height:1.6;color:#222;"><b>${esc(name)}</b> 심판의 운영키입니다.<br><span style="color:#b45309;">이 창을 닫으면 다시 볼 수 없습니다.</span> 지금 심판에게 전달하세요.</div>
+                <div style="margin:8px 22px 14px;padding:14px;border:1px dashed #0e7c66;border-radius:8px;text-align:center;font-family:monospace;font-size:26px;letter-spacing:2px;color:#0e7c66;" id="issued-key-text">${esc(key)}</div>
+                <div style="padding:0 16px 16px;display:flex;justify-content:flex-end;gap:8px;">
+                    <button type="button" class="btn btn-outline" onclick="navigator.clipboard&&navigator.clipboard.writeText(${JSON.stringify(String(key))}).then(()=>toast('복사했습니다'))">복사</button>
+                    <button type="button" class="btn btn-primary" onclick="document.getElementById('issued-key-modal').remove()">확인</button>
+                </div></div>`;
+            document.body.appendChild(ov);
+        }
+        async function reissueJudgeKey(id, name) {
+            if (!await uiConfirm(`"${name}" 심판의 운영키를 재발급할까요?\n옛 키는 즉시 쓸 수 없게 되고, 새 키는 한 번만 표시됩니다.`, { danger: true })) return;
+            try { const r = await API.reissueOperationKey(id, AK()); showIssuedKey(name, r.key_value); loadJudgeKeys(); } catch (e) { toast(e.error || '재발급 실패', 'error'); }
         }
         async function deleteJudgeKey(id, name) {
             if (!await uiConfirm(`"${name}" 운영키를 삭제하시겠습니까?`)) return;
@@ -4544,6 +4565,7 @@ POST /api/external/event-result-link/batch<br>
                 await API.changeKeys(AK(), opKey || undefined, adminKey || undefined);
                 if (adminKey) { localStorage.setItem('pace_admin_key', adminKey); }
                 toast('키 변경 완료');
+                if (opKey) showIssuedKey('기본 운영키', opKey);      // 해시로 저장되므로 지금 이 한 번만 보여준다
                 document.getElementById('new-op-key').value = '';
                 document.getElementById('new-admin-key').value = '';
                 loadSystemSettings();

@@ -621,7 +621,8 @@ function _refreshDbSecurityWarnings() {
             const { _WEAK } = require('./lib/securityCheck');
             const w = [];
             const op = ACCESS_KEYS.operation;
-            if (!op || String(op).length < 6 || _WEAK.has(String(op).toLowerCase())) w.push('운영키(기본키)가 약함 — 6자 미만이거나 흔한 값. 관리자 → 접근 키에서 변경하세요');
+            const opWeak = _opKeyIsHash(op) ? getConfigKey('operation_key_weak', '0') === '1' : (!op || String(op).length < 6 || _WEAK.has(String(op).toLowerCase()));
+            if (opWeak) w.push('운영키(기본키)가 약함 — 6자 미만이거나 흔한 값. 관리자 → 접근 키에서 변경하세요');
             const h = ACCESS_KEYS.adminHash;
             if (h) for (const c of _WEAK) { if (bcrypt.compareSync(c, h)) { w.push(`관리자 키가 흔한 값("${c}")입니다 — 즉시 변경하세요`); break; } }
             global.__dbSecurityWarnings = w;
@@ -696,6 +697,9 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS system_config (
 )`); } catch(e) {}
 // Add can_manage column if missing (migration)
 try { db.exec(`ALTER TABLE operation_key ADD COLUMN can_manage INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
+// (2026-09 결정) 운영키는 해시로 저장한다: key_value = bcrypt 해시, key_prefix = 앞 3자(후보 좁히기), key_hint = 화면 표시용 'abc••••'
+try { db.exec(`ALTER TABLE operation_key ADD COLUMN key_prefix TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE operation_key ADD COLUMN key_hint TEXT DEFAULT ''`); } catch(e) {}
 // Event Records table (종목별 기록 관리)
 try { db.exec(`CREATE TABLE IF NOT EXISTS event_record (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1770,6 +1774,8 @@ if (db.isAsync) {
             await pgIdempotentAddCol('event_link', 'joint_scoreboard_key', `TEXT DEFAULT NULL`);
             // operation_key: can_manage
             await pgIdempotentAddCol('operation_key', 'can_manage', `BIGINT NOT NULL DEFAULT 0`);
+            await pgIdempotentAddCol('operation_key', 'key_prefix', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('operation_key', 'key_hint', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('doc_template', 'comprehensive', `TEXT DEFAULT '{}'`);
             await pgIdempotentAddCol('heat', 'wind_updated_at', `TEXT DEFAULT NULL`);
             await pgIdempotentAddCol('event_entry', 'status_updated_at', `TEXT DEFAULT NULL`);
@@ -1856,39 +1862,84 @@ const ACCESS_KEYS = {
 };
 const ADMIN_ID = () => getConfigKey('admin_id', 'admin');
 
-// ─── operation_key 메모리 캐시 (Phase 2-G-2-extra-3b-2) ───────────────
-// 목적: isOperationKey/isAdminOrManager/getJudgeName/getKeyRole 의 DB hit을 boot 1회 + 변경 시로 축소.
-//   매 request마다 발생하던 DB query 제거. caller 89건 무변경 유지.
-// 캐시 형태: Map<key_value, { judge_name, can_manage, active }>
-const _opKeyCache = new Map();
-function _loadOpKeyCacheSync() {
-    if (db.isAsync) return; // PG: 별도 async 로더 필요(추후)
-    try {
-        const rows = db.raw.prepare('SELECT key_value, judge_name, can_manage, active FROM operation_key WHERE active=1').all();
-        _opKeyCache.clear();
-        for (const r of rows) _opKeyCache.set(r.key_value, r);
-    } catch (e) {
-        console.error('[opkey-cache] sync load failed:', e.message);
+// ─── operation_key 메모리 캐시 ───────────────────────────────────────
+// (2026-09 결정) 키는 bcrypt 해시로 저장한다. 요청마다 해시를 비교하면 느리므로(기록 입력 경로) 한 번 확인된 평문 키는
+//   메모리에 기억해 둔다(_opKeyVerified). 캐시를 다시 읽으면(발급·삭제·1분 주기) 기억도 지운다.
+//   캐시 형태: _opKeyRows = [{ id, key_value(해시), key_prefix, key_hint, judge_name, can_manage, active }]
+const OPKEY_BCRYPT_COST = 8;          // 심판 키는 짧은 편이라 10 보다 낮춰 첫 확인을 빠르게 (약 15ms)
+const _opKeyPrefix = k => String(k || '').slice(0, 3);
+const _opKeyHint = k => { const t = String(k || ''); return t.length <= 2 ? '••••' : t.slice(0, 2) + '•'.repeat(Math.max(4, t.length - 2)); };
+const _opKeyIsHash = v => /^\$2[aby]\$/.test(String(v || ''));
+let _opKeyRows = [];
+const _opKeyVerified = new Map();     // 평문 키 → row
+const _opKeyCache = { has: k => !!_opKeyLookup(k), get: k => _opKeyLookup(k), get size() { return _opKeyRows.length; } };
+function _opKeySetRows(rows) { _opKeyRows = rows; _opKeyVerified.clear(); }
+function _opKeyLookup(key) {
+    if (!key || typeof key !== 'string') return null;
+    const hit = _opKeyVerified.get(key); if (hit) return hit;
+    const pre = _opKeyPrefix(key);
+    for (const r of _opKeyRows) {
+        if (!r.active) continue;
+        if (_opKeyIsHash(r.key_value)) {
+            if (r.key_prefix && r.key_prefix !== pre) continue;
+            try { if (bcrypt.compareSync(key, r.key_value)) { _opKeyVerified.set(key, r); return r; } } catch (e) {}
+        } else if (r.key_value === key) { _opKeyVerified.set(key, r); return r; }     // 아직 해시되지 않은 옛 행
     }
+    return null;
+}
+function _loadOpKeyCacheSync() {
+    if (db.isAsync) return;
+    try { _opKeySetRows(db.raw.prepare('SELECT id, key_value, key_prefix, key_hint, judge_name, can_manage, active FROM operation_key WHERE active=1').all()); }
+    catch (e) { console.error('[opkey-cache] sync load failed:', e.message); }
 }
 async function _reloadOpKeyCacheAsync() {
+    try { _opKeySetRows(await db.all('SELECT id, key_value, key_prefix, key_hint, judge_name, can_manage, active FROM operation_key WHERE active=1')); }
+    catch (e) { console.error('[opkey-cache] async reload failed:', e.message); }
+}
+// 부팅 마이그레이션: 평문으로 남아 있는 키를 해시로 (원본은 key_hint 에 앞 2자만 남긴다)
+async function _migrateOpKeysToHash() {
     try {
-        const rows = await db.all('SELECT key_value, judge_name, can_manage, active FROM operation_key WHERE active=1');
-        _opKeyCache.clear();
-        for (const r of rows) _opKeyCache.set(r.key_value, r);
-    } catch (e) {
-        console.error('[opkey-cache] async reload failed:', e.message);
-    }
+        const rows = await db.all('SELECT id, key_value FROM operation_key');
+        let n = 0;
+        for (const r of rows) {
+            if (_opKeyIsHash(r.key_value)) continue;
+            await db.run('UPDATE operation_key SET key_value=?, key_prefix=?, key_hint=? WHERE id=?', bcrypt.hashSync(String(r.key_value), OPKEY_BCRYPT_COST), _opKeyPrefix(r.key_value), _opKeyHint(r.key_value), r.id);
+            n++;
+        }
+        if (n) console.log(`[opkey] 운영키 ${n}개를 해시로 저장 (평문 제거)`);
+    } catch (e) { console.error('[opkey] 해시 마이그레이션 실패:', e.message); }
 }
 if (!db.isAsync) _loadOpKeyCacheSync();
+_bootTasks.push(_migrateOpKeysToHash().then(() => _reloadOpKeyCacheAsync()));
 // 다른 인스턴스·DB 직접 수정으로 폐기된 운영키가 재시작 전까지 살아있지 않도록 1분마다 다시 읽는다
 setInterval(() => { _reloadOpKeyCacheAsync().catch(() => {}); }, 60 * 1000).unref();
+
+// 기본 운영키(system_config.operation_key) — 역시 해시로 저장. 설정 시 평문은 한 번만 돌려준다
+const _defaultOpVerified = { key: null };
+function isDefaultOperationKey(key) {
+    const stored = ACCESS_KEYS.operation;
+    if (!stored || !key) return false;
+    if (!_opKeyIsHash(stored)) return key === stored;                       // 아직 해시되지 않은 값
+    if (_defaultOpVerified.key === key) return true;
+    try { if (bcrypt.compareSync(key, stored)) { _defaultOpVerified.key = key; return true; } } catch (e) {}
+    return false;
+}
+function setDefaultOperationKey(plain) {
+    const p = String(plain || '');
+    const { _WEAK } = require('./lib/securityCheck');
+    setConfigKey('operation_key', bcrypt.hashSync(p, OPKEY_BCRYPT_COST));
+    setConfigKey('operation_key_hint', _opKeyHint(p));
+    setConfigKey('operation_key_weak', (p.length < 6 || _WEAK.has(p.toLowerCase())) ? '1' : '0');
+    _defaultOpVerified.key = null;
+}
+// 부팅: 평문으로 저장돼 있던 기본 운영키를 해시로 (SQLite 는 여기서, PG 는 _pgBootAsync 에서)
+if (!db.isAsync) { const _op = ACCESS_KEYS.operation; if (_op && !_opKeyIsHash(_op)) setDefaultOperationKey(_op); }
 
 function isOperationKey(key) {
     if (!key) return false;
     const _b = _bridgeOf(key); if (_b) return ['admin', 'manager', 'operator'].includes(_b.role);
     if (typeof key === 'string' && key.startsWith('jwtb:')) return false; // 만료/위조 브리지 토큰
-    if (key === ACCESS_KEYS.operation) return true;
+    if (isDefaultOperationKey(key)) return true;
     if (bcrypt.compareSync(key, ACCESS_KEYS.adminHash)) return true;
     return _opKeyCache.has(key);
 }
@@ -1934,7 +1985,7 @@ function getJudgeName(key) {
     const _b = _bridgeOf(key); if (_b) return _b.role === 'admin' ? '관리자' : _b.name;
     if (isAdminKey(key)) return '관리자';
     if (isRecordOfficerKey(key)) return '기록위원';
-    if (key === ACCESS_KEYS.operation) return '운영(기본키)';
+    if (isDefaultOperationKey(key)) return '운영(기본키)';
     const r = _opKeyCache.get(key);
     return r ? r.judge_name : 'unknown';
 }
@@ -1945,7 +1996,7 @@ function getKeyRole(key) {
     if (isRecordOfficerKey(key)) return 'record_officer';
     const r = _opKeyCache.get(key);
     if (r) return r.can_manage ? 'admin' : 'operation';
-    if (key === ACCESS_KEYS.operation) return 'operation';
+    if (isDefaultOperationKey(key)) return 'operation';
     return null;
 }
 
@@ -1992,8 +2043,9 @@ async function verifyJudgeLogin(judgeName, key) {
     } catch(_) { /* compareSync 실패 시 그냥 진행 */ }
 
     // Judge login: judge_name + key_value 둘 다 일치해야 통과
-    const dbKey = await db.get('SELECT * FROM operation_key WHERE judge_name=? AND key_value=? AND active=1', judgeName, key);
-    if (dbKey) return { role: dbKey.can_manage ? 'admin' : 'operation', judge_name: dbKey.judge_name };
+    const cands = await db.all('SELECT * FROM operation_key WHERE judge_name=? AND active=1', judgeName);
+    const dbKey = cands.find(r => _opKeyIsHash(r.key_value) ? (r.key_prefix === _opKeyPrefix(key) || !r.key_prefix) && bcrypt.compareSync(String(key || ''), r.key_value) : r.key_value === key);
+    if (dbKey) { _opKeyVerified.set(key, dbKey); return { role: dbKey.can_manage ? 'admin' : 'operation', judge_name: dbKey.judge_name }; }
     return null;
 }
 
@@ -3915,7 +3967,7 @@ app.post('/api/admin/change-keys', (req, res) => {
     if (new_operation_key && (String(new_operation_key).length < 6 || weak(new_operation_key))) return res.status(400).json({ error: '운영키는 6자 이상이고 흔한 값(1234 등)이 아니어야 합니다.' });
     if (typeof new_record_officer_key === 'string' && new_record_officer_key.trim() !== '' && (new_record_officer_key.trim().length < 6 || weak(new_record_officer_key.trim()))) return res.status(400).json({ error: '기록위원 키는 6자 이상이고 흔한 값이 아니어야 합니다.' });
     const changed = [];
-    if (new_operation_key) { ACCESS_KEYS.operation = new_operation_key; changed.push('운영키'); }
+    if (new_operation_key) { setDefaultOperationKey(new_operation_key); changed.push('운영키'); }
     if (new_admin_key) { ACCESS_KEYS.admin = new_admin_key; changed.push('관리자 키'); }  // setter hashes automatically
     if (new_admin_id && new_admin_id.trim()) { setConfigKey('admin_id', new_admin_id.trim()); changed.push('관리자 ID'); }
     // Phase C 확장: 기록위원 키. 빈 문자열 명시 시 비활성
@@ -3923,7 +3975,8 @@ app.post('/api/admin/change-keys', (req, res) => {
     if (changed.length) { try { opLog(`접근 키 변경: ${changed.join(', ')}`, 'security', getJudgeName(admin_key), null); } catch (e) {} _refreshDbSecurityWarnings(); }
     res.json({
         success: true,
-        operation_key: ACCESS_KEYS.operation,
+        operation_key: new_operation_key || null,          // 새로 정한 키는 이번 응답에서 한 번만 보여준다
+        operation_key_hint: getConfigKey('operation_key_hint', ''),
         admin_id: ADMIN_ID(),
         record_officer_key: ACCESS_KEYS.recordOfficer,
         record_officer_active: !!ACCESS_KEYS.recordOfficer,
@@ -3932,7 +3985,8 @@ app.post('/api/admin/change-keys', (req, res) => {
 app.get('/api/admin/current-keys', (req, res) => {
     if (!isAdminKey(req.query.key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     res.json({
-        operation: ACCESS_KEYS.operation,
+        operation: _opKeyIsHash(ACCESS_KEYS.operation) ? null : ACCESS_KEYS.operation,     // 해시 저장 뒤에는 평문을 보여줄 수 없다
+        operation_hint: getConfigKey('operation_key_hint', _opKeyIsHash(ACCESS_KEYS.operation) ? '' : _opKeyHint(ACCESS_KEYS.operation)),
         admin_id: ADMIN_ID(),
         record_officer_key: ACCESS_KEYS.recordOfficer,
         record_officer_active: !!ACCESS_KEYS.recordOfficer,
@@ -3947,18 +4001,32 @@ app.get('/api/registered-judges', async (req, res) => {
 // Multi-key CRUD
 app.get('/api/admin/operation-keys', async (req, res) => {
     if (!isAdminKey(req.query.key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    res.json(await db.all('SELECT id, judge_name, key_value, role, can_manage, active, created_at FROM operation_key ORDER BY created_at DESC'));
+    res.json((await db.all('SELECT id, judge_name, key_value, key_hint, role, can_manage, active, created_at FROM operation_key ORDER BY created_at DESC')).map(r => ({ ...r, key_value: undefined, key_hint: r.key_hint || (_opKeyIsHash(r.key_value) ? '••••' : _opKeyHint(r.key_value)) })));
 });
 app.post('/api/admin/operation-keys', async (req, res) => {
     const { admin_key, judge_name, key_value, can_manage } = req.body;
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     if (!judge_name || !key_value || key_value.length < 4) return res.status(400).json({ error: '심판명과 키(4자 이상)를 입력하세요.' });
     try {
-        const info = await db.run('INSERT INTO operation_key (judge_name, key_value, can_manage) VALUES (?, ?, ?)', judge_name, key_value, can_manage ? 1 : 0);
+        if (_opKeyLookup(String(key_value)) || isDefaultOperationKey(String(key_value))) return res.status(400).json({ error: '이미 쓰이는 키입니다. 다른 키를 정하세요.' });
+        const info = await db.run('INSERT INTO operation_key (judge_name, key_value, key_prefix, key_hint, can_manage) VALUES (?, ?, ?, ?, ?)', judge_name, bcrypt.hashSync(String(key_value), OPKEY_BCRYPT_COST), _opKeyPrefix(key_value), _opKeyHint(key_value), can_manage ? 1 : 0);
         await _reloadOpKeyCacheAsync();
         opLog(`운영키 생성: ${judge_name}${can_manage ? ' (관리권한)' : ''}`, 'admin', 'admin');
-        res.json(await db.get('SELECT * FROM operation_key WHERE id=?', info.lastInsertRowid));
-    } catch (e) { res.status(400).json({ error: '키가 중복되었습니다.' }); }
+        const row = await db.get('SELECT id, judge_name, key_hint, role, can_manage, active, created_at FROM operation_key WHERE id=?', info.lastInsertRowid);
+        res.json({ ...row, key_value: String(key_value), show_once: true });      // 평문은 이번 응답에서만
+    } catch (e) { res.status(400).json({ error: '키 생성에 실패했습니다: ' + e.message }); }
+});
+// 재발급 — 심판이 키를 잊었을 때. 새 키를 만들어 한 번 보여주고 옛 키는 즉시 무효
+app.post('/api/admin/operation-keys/:id/reissue', async (req, res) => {
+    const { admin_key } = req.body;
+    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+    const key = await db.get('SELECT * FROM operation_key WHERE id=?', req.params.id);
+    if (!key) return res.status(404).json({ error: 'Not found' });
+    const plain = crypto.randomBytes(6).toString('base64url').replace(/[-_]/g, 'x').slice(0, 8).toLowerCase();
+    await db.run('UPDATE operation_key SET key_value=?, key_prefix=?, key_hint=?, active=1 WHERE id=?', bcrypt.hashSync(plain, OPKEY_BCRYPT_COST), _opKeyPrefix(plain), _opKeyHint(plain), key.id);
+    await _reloadOpKeyCacheAsync();
+    opLog(`운영키 재발급: ${key.judge_name}`, 'admin', 'admin');
+    res.json({ success: true, id: key.id, judge_name: key.judge_name, key_value: plain, key_hint: _opKeyHint(plain), show_once: true });
 });
 app.delete('/api/admin/operation-keys/:id', async (req, res) => {
     const { admin_key } = req.body;
@@ -11474,6 +11542,7 @@ async function _pgBootAsync() {
             }
         }
         if (!_configCache.has('operation_key')) setConfigKey('operation_key', process.env.OPERATION_KEY || '1234');
+        if (!_opKeyIsHash(ACCESS_KEYS.operation)) setDefaultOperationKey(ACCESS_KEYS.operation);
         if (!_configCache.has('record_officer_key')) setConfigKey('record_officer_key', process.env.RECORD_OFFICER_KEY || '');
         console.log(`  [PG cache] config: ${_configCache.size} keys, opkey: ${_opKeyCache.size} keys`);
     } catch (e) { console.error('[PG cache load] failed:', e.message); }
