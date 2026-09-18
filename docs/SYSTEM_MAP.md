@@ -181,7 +181,7 @@ html2canvas-pro.min.js      → 결과지 스크린샷
 
 ## 6. 죽은 코드 / 정리 대상 식별
 
-### 🗑️ Tier 1 — 즉시 삭제 가능 (영향 없음)
+### 🗑️ Tier 1 — 즉시 삭제 가능 (영향 없음) — 2026-09-18 정리 완료(`_convert.js`, `download_server.py`, `db_import/`, `public/test-*.lif`, `i18n-demo.html` 포함)
 
 | 항목 | 위치 | 이유 |
 |---|---|---|

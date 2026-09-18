@@ -1,6 +1,6 @@
 # 다국어(i18n) 적용 가이드
 
-빌드 도구 없는 런타임 i18n. 엔진: [`public/i18n.js`](../public/i18n.js). 데모: `/i18n-demo.html`.
+빌드 도구 없는 런타임 i18n. 엔진: [`public/i18n.js`](../public/i18n.js).
 
 ## 페이지에 언어 스위처 추가 (1줄)
 
