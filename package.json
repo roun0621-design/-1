@@ -8,7 +8,8 @@
     "dev": "node server.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:pg": "TEST_DB_BACKEND=postgres TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres@127.0.0.1:55432/pacerise_test} vitest run"
   },
   "keywords": [
     "athletics",

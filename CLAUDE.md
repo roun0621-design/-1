@@ -19,6 +19,10 @@ npm run test:coverage
 npx vitest run tests/api/02_competitions.test.js
 npx vitest run -t "some test name substring"
 TEST_VERBOSE=1 npx vitest run <file>   # un-mute server boot logs for debugging
+
+# PostgreSQL path (same suite against a local PG): create a template DB with db/schema.pg.sql applied, then
+#   TEST_DB_BACKEND=postgres TEST_DATABASE_URL=postgres://user@host:port/<template_db> npm test   (or: npm run test:pg)
+# Each test file clones the template DB (CREATE DATABASE … TEMPLATE) via psql; SQLite-only tests (file backup) are skipped.
 ```
 
 There is no lint/format/build step — it's plain CommonJS, run directly with `node`.

@@ -31,8 +31,8 @@ describe('GET /api/health — 강화된 헬스체크', () => {
         expect(res.body.ts).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO timestamp
     });
 
-    it('테스트 환경은 sqlite 백엔드여야 한다 (DB 격리 보장)', async () => {
+    it('테스트 환경의 백엔드는 설정(TEST_DB_BACKEND)과 같다 — 운영 DB 가 아니다', async () => {
         const res = await request(app).get('/api/health');
-        expect(res.body.backend).toBe('sqlite');
+        expect(res.body.backend).toBe((process.env.TEST_DB_BACKEND || 'sqlite').toLowerCase());
     });
 });

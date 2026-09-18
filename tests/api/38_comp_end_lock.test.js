@@ -56,7 +56,8 @@ describe('관리자 · 진행 중 대회 · 면제 경로', () => {
     });
 });
 
-describe('백업', () => {
+// 파일 백업은 SQLite 전용 (PG 는 RDS 스냅샷) — PG 경로 실행에서는 건너뛴다
+describe.skipIf((process.env.TEST_DB_BACKEND || '').toLowerCase() === 'postgres')('백업', () => {
     const fs = require('fs'), path = require('path');
     const BK = path.join(__dirname, '..', '..', 'backups');
     const made = [];

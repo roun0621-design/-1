@@ -102,7 +102,8 @@ CREATE TABLE IF NOT EXISTS "doc_template" (
     "competition_id" BIGINT PRIMARY KEY,
     "ad_card" TEXT DEFAULT '{}',
     "start_list" TEXT DEFAULT '{}',
-    "result_sheet" TEXT DEFAULT '{}'
+    "result_sheet" TEXT DEFAULT '{}',
+    "comprehensive" TEXT DEFAULT '{}'
 );
 
 -- Table: event

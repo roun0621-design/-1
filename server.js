@@ -254,6 +254,9 @@ const PORT = process.env.PORT || 3000;
     app.set('trust proxy', tp == null || tp === '' ? 1 : (tp === 'false' ? false : tp === 'true' ? true : (/^\d+$/.test(tp) ? parseInt(tp, 10) : tp)));
 }
 
+// 부팅 작업(인증 테이블·마이그레이션·시드·PG 캐시)이 끝나기 전의 요청은 기다린다
+app.use((req, res, next) => { if (_bootDone) return next(); _bootReady.then(() => { _bootDone = true; next(); }, () => { _bootDone = true; next(); }); });
+let _bootDone = false;
 // ---- Security Middleware ----
 app.use(helmet({
     contentSecurityPolicy: false,   // CSP는 프론트엔드 inline script 때문에 비활성
@@ -667,6 +670,9 @@ const db = getDb();
 // PG 모드(db.isAsync=true)에서는 db/schema.pg.sql 이 모든 테이블/컬럼/인덱스를
 // 이미 정의하므로 이 블록 전체를 건너뛴다. SQLite 부트 시에만 멱등 마이그레이션 실행.
 // ──────────────────────────────────────────────────────────────────
+// 부팅 시 비동기로 도는 시드·마이그레이션들 — 요청을 받기 전에 끝나야 한다 (_pgBootAsync 가 기다린다)
+const _bootTasks = [];
+
 if (!db.isAsync) {
 try { db.exec(`CREATE TABLE IF NOT EXISTS operation_key (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -848,9 +854,30 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_push_interest_token ON push_intere
 global.__authMigError = null;
 global.__authMigOk = false;
 
+
+// Migrate existing numeric wind values to "N.N m/s" text format for scoreboard compatibility
+// (SQLite 부팅 전용 마이그레이션 — PG 백엔드에서는 별도 마이그레이션 스크립트로 처리)
+if (!db.isAsync) {
+    try {
+        const numericWindHeats = db.raw.prepare("SELECT id, wind FROM heat WHERE wind IS NOT NULL AND CAST(wind AS TEXT) NOT LIKE '% m/s'").all();
+        if (numericWindHeats.length > 0) {
+            const upd = db.raw.prepare('UPDATE heat SET wind=? WHERE id=?');
+            const tx = db.raw.transaction(() => {
+                for (const h of numericWindHeats) {
+                    const v = parseFloat(h.wind);
+                    if (!isNaN(v)) upd.run(v.toFixed(1) + ' m/s', h.id);
+                }
+            });
+            tx();
+            console.log(`[DB Migration] heat.wind: ${numericWindHeats.length}건 → "N.N m/s" 형식으로 변환`);
+        }
+    } catch(e) { console.error('[DB Migration] wind format migration error:', e.message); }
+}
+
+// (2026-09) 이 시드는 예전에 SQLite 전용 블록 안에 들어 있어 PG 에서는 기본 상장 양식이 생성되지 않았다 → 블록 밖으로 이동
 // 기본 상장 템플릿 시드 (최초 1회) — 시상장 + 완주증
 // SQLite/PostgreSQL 양쪽에서 동작하도록 통합 db API 사용 (비동기)
-(async () => {
+_bootTasks.push((async () => {
     try {
         const cntRow = await db.get('SELECT COUNT(*) AS c FROM certificate_template');
         const cnt = cntRow ? Number(cntRow.c) : 0;
@@ -886,26 +913,7 @@ global.__authMigOk = false;
             console.log('[DB] certificate_template seeded (4 templates)');
         }
     } catch(e) { console.error('[DB] certificate_template seed error:', e.message); }
-})();
-
-// Migrate existing numeric wind values to "N.N m/s" text format for scoreboard compatibility
-// (SQLite 부팅 전용 마이그레이션 — PG 백엔드에서는 별도 마이그레이션 스크립트로 처리)
-if (!db.isAsync) {
-    try {
-        const numericWindHeats = db.raw.prepare("SELECT id, wind FROM heat WHERE wind IS NOT NULL AND CAST(wind AS TEXT) NOT LIKE '% m/s'").all();
-        if (numericWindHeats.length > 0) {
-            const upd = db.raw.prepare('UPDATE heat SET wind=? WHERE id=?');
-            const tx = db.raw.transaction(() => {
-                for (const h of numericWindHeats) {
-                    const v = parseFloat(h.wind);
-                    if (!isNaN(v)) upd.run(v.toFixed(1) + ' m/s', h.id);
-                }
-            });
-            tx();
-            console.log(`[DB Migration] heat.wind: ${numericWindHeats.length}건 → "N.N m/s" 형식으로 변환`);
-        }
-    } catch(e) { console.error('[DB Migration] wind format migration error:', e.message); }
-}
+})());
 // Add heat_name to heat (custom display name, e.g. "준결1조", "A조")
 try { db.exec(`ALTER TABLE heat ADD COLUMN heat_name TEXT DEFAULT NULL`); } catch(e) {}
 // Add scoreboard_key to heat (전광판 매칭키, e.g. "남자실업부 100m 예선 1조")
@@ -1429,7 +1437,7 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_record_breaking_comp ON record_bre
 //   - 부팅 자체는 막지 않음 (legacy 로그인은 여전히 동작해야 하므로)
 //   - 글로벌 플래그 global.__authMigOk / __authMigError 로 상태 보관
 //   - 진단/복구는 /api/_diag/auth-state, /api/_diag/auth-init 으로 가능
-(async () => {
+_bootTasks.push((async () => {
     try {
         const { runAuthMigrations } = require('./lib/auth/migrations');
         await runAuthMigrations(db);
@@ -1444,13 +1452,13 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_record_breaking_comp ON record_bre
         console.error('[auth-mig] FATAL — JWT 로그인이 불가능한 상태입니다:', e.message, extras.join(' '));
         if (e && e.query) console.error('[auth-mig] failing query:', String(e.query).substring(0, 500));
     }
-})();
+})());
 
 // ─── Records Management v4 — PostgreSQL 마이그레이션 (비동기, idempotent) ───
 // PG 모드에서는 schema.pg.sql 을 운영자가 한 번 실행하지만, 새 테이블/컬럼이
 // 누락된 기존 DB에 대비해 boot 시 멱등 마이그레이션을 시도한다.
 if (db.isAsync) {
-    (async () => {
+    _bootTasks.push((async () => {
         try {
             await db.run(`CREATE TABLE IF NOT EXISTS division_master (
                 code TEXT PRIMARY KEY,
@@ -1752,11 +1760,12 @@ if (db.isAsync) {
             await pgIdempotentAddCol('event_link', 'joint_scoreboard_key', `TEXT DEFAULT NULL`);
             // operation_key: can_manage
             await pgIdempotentAddCol('operation_key', 'can_manage', `BIGINT NOT NULL DEFAULT 0`);
+            await pgIdempotentAddCol('doc_template', 'comprehensive', `TEXT DEFAULT '{}'`);
             console.log('[PG migration] idempotent column migrations complete (combined_score.status_code 등)');
         } catch (e) {
             console.error('[PG migration] idempotent column migrations error:', e.message);
         }
-    })();
+    })());
 }
 
 // ─── system_config 메모리 캐시 (Phase 2-G-2-extra-3b-1) ───────────────
@@ -4928,6 +4937,7 @@ app.get('/api/admin/db-backup/status', (req, res) => {
 app.post('/api/admin/db-backup/trigger', async (req, res) => {
     if (!isOperationKey(req.body.admin_key)) return res.status(403).json({ error: '운영키가 필요합니다.' });
     const tag = (req.body.tag || 'manual').replace(/[^a-z0-9]/gi, '').slice(0, 20) || 'manual';
+    if (db.isAsync) return res.status(400).json({ error: 'PostgreSQL 모드에서는 파일 백업을 쓰지 않습니다 — RDS 자동 백업·스냅샷을 이용하세요.' });
     const file = await performBackup(tag);      // async — await 가 없어 path.basename(Promise) 로 항상 500 이었다
     if (!file) return res.status(500).json({ error: '백업 생성 실패' });
     res.json({ success: true, file: path.basename(file), tag });
@@ -7962,9 +7972,16 @@ if (!db.isAsync) {
         event_id INTEGER PRIMARY KEY,
         records TEXT DEFAULT '{}'
     )`); } catch(e) {}
+    // 종합기록지 설정(심판장·기록원·표시 항목) — 예전엔 화면에서 보내도 저장 열이 없어 버려졌다 (2026-09)
+    try { db.exec(`ALTER TABLE doc_template ADD COLUMN comprehensive TEXT DEFAULT '{}'`); } catch(e) {}
 }
 
 const DOC_DEFAULTS = {
+    comprehensive: {
+        chief_judge: '', chief_recorder: '', logo_left: '', logo_right: '',
+        show_name: true, show_team: true, show_record: true, show_wind: true, show_bib: true, show_remark: true,
+        cat_track: true, cat_field: true, cat_relay: true, cat_road: true, cat_combined: true,
+    },
     ad_card: {
         cards_per_page: 4, bib_font_size: 48, name_font_size: 16,
         band_color_mode: 'gender_auto', custom_band_color: '#2d9d78', logo_url: '',
@@ -7997,7 +8014,8 @@ async function getDocTemplate(compId) {
             result = {
                 ad_card: { ...DOC_DEFAULTS.ad_card, ...JSON.parse(row.ad_card || '{}') },
                 start_list: { ...DOC_DEFAULTS.start_list, ...JSON.parse(row.start_list || '{}') },
-                result_sheet: { ...DOC_DEFAULTS.result_sheet, ...JSON.parse(row.result_sheet || '{}') }
+                result_sheet: { ...DOC_DEFAULTS.result_sheet, ...JSON.parse(row.result_sheet || '{}') },
+                comprehensive: { ...DOC_DEFAULTS.comprehensive, ...JSON.parse(row.comprehensive || '{}') }
             };
         } catch(e) { result = JSON.parse(JSON.stringify(DOC_DEFAULTS)); }
     }
@@ -8030,7 +8048,8 @@ app.post('/api/doc-templates', async (req, res) => {
     const ad = JSON.stringify(templates.ad_card || {});
     const sl = JSON.stringify(templates.start_list || {});
     const rs = JSON.stringify(templates.result_sheet || {});
-    await db.run('INSERT INTO doc_template (competition_id, ad_card, start_list, result_sheet) VALUES (?, ?, ?, ?) ON CONFLICT(competition_id) DO UPDATE SET ad_card=excluded.ad_card, start_list=excluded.start_list, result_sheet=excluded.result_sheet', competition_id, ad, sl, rs);
+    const cp = JSON.stringify(templates.comprehensive || {});
+    await db.run('INSERT INTO doc_template (competition_id, ad_card, start_list, result_sheet, comprehensive) VALUES (?, ?, ?, ?, ?) ON CONFLICT(competition_id) DO UPDATE SET ad_card=excluded.ad_card, start_list=excluded.start_list, result_sheet=excluded.result_sheet, comprehensive=excluded.comprehensive', competition_id, ad, sl, rs, cp);
     opLog('문서 양식 설정 업데이트', 'admin', 'admin', competition_id);
     res.json({ success: true });
 });
@@ -14519,39 +14538,38 @@ function migrateNormalizeDivisionAndRound() {
     }
 }
 
+// PG 모드 부팅(비동기): 설정·운영키 캐시 로드 + 초기 admin/운영키 시드.
+//   예전엔 server.listen 콜백 안에서만 돌아서 ① 테스트(require)에서는 아예 돌지 않았고 ② 운영에서도 listen 직후 첫 요청이 빈 캐시를 볼 수 있었다.
+//   → 요청 처리 전에 반드시 끝나도록 _bootReady 로 묶고, 미들웨어가 기다린다.
+async function _pgBootAsync() {
+    await Promise.allSettled(_bootTasks);          // 인증 테이블·PG 열 마이그레이션·상장 양식 시드
+    if (!db.isAsync) return;
+    try {
+        await _loadConfigCacheAsync();
+        await _reloadOpKeyCacheAsync();
+        if (!_configCache.has('admin_id')) setConfigKey('admin_id', process.env.ADMIN_ID || 'admin');
+        if (!_configCache.has('admin_pw')) setConfigKey('admin_pw', bcrypt.hashSync(process.env.ADMIN_PW || 'changeme', 10));
+        else {
+            const existingPw = _configCache.get('admin_pw') || '';
+            if (existingPw && !existingPw.startsWith('$2a$') && !existingPw.startsWith('$2b$') && !existingPw.startsWith('$2y$')) {
+                console.log('  [PG migration] admin_pw 가 평문 형태 → bcrypt 해시로 자동 변환');
+                setConfigKey('admin_pw', bcrypt.hashSync(existingPw, 10));
+            }
+        }
+        if (!_configCache.has('operation_key')) setConfigKey('operation_key', process.env.OPERATION_KEY || '1234');
+        if (!_configCache.has('record_officer_key')) setConfigKey('record_officer_key', process.env.RECORD_OFFICER_KEY || '');
+        console.log(`  [PG cache] config: ${_configCache.size} keys, opkey: ${_opKeyCache.size} keys`);
+    } catch (e) { console.error('[PG cache load] failed:', e.message); }
+}
+const _bootReady = _pgBootAsync();
+
 // Export app/server for tests; only auto-listen when run directly (node server.js)
 // db 도 노출 — 테스트에서 격리 DB에 픽스처를 직접 삽입하기 위함 (운영에선 미사용)
 if (require.main !== module) {
-    module.exports = { app, server, db, calcWAPoints, WA_TABLES, DECATHLON_KEYS, HEPTATHLON_KEYS };
+    module.exports = { app, server, db, calcWAPoints, WA_TABLES, DECATHLON_KEYS, HEPTATHLON_KEYS, ready: _bootReady };
 } else
 server.listen(PORT, '0.0.0.0', async () => {
-    // PG 모드: boot 시 1회 async 캐시 로드 (SQLite는 boot 직후 sync 로드 완료됨)
-    if (db.isAsync) {
-        try {
-            await _loadConfigCacheAsync();
-            await _reloadOpKeyCacheAsync();
-            // PG 모드 초기 admin 자동 시드: admin_pw 가 없으면 env 값으로 bcrypt 해시 저장
-            if (!_configCache.has('admin_id')) {
-                setConfigKey('admin_id', process.env.ADMIN_ID || 'admin');
-            }
-            if (!_configCache.has('admin_pw')) {
-                setConfigKey('admin_pw', bcrypt.hashSync(process.env.ADMIN_PW || 'changeme', 10));
-            } else {
-                // 평문 → bcrypt 자동 마이그레이션 (SQLite L581 와 동일 로직, PG 누락 보완)
-                const existingPw = _configCache.get('admin_pw') || '';
-                if (existingPw && !existingPw.startsWith('$2a$') && !existingPw.startsWith('$2b$') && !existingPw.startsWith('$2y$')) {
-                    console.log('  [PG migration] admin_pw 가 평문 형태 → bcrypt 해시로 자동 변환');
-                    setConfigKey('admin_pw', bcrypt.hashSync(existingPw, 10));
-                }
-            }
-            if (!_configCache.has('operation_key')) {
-                setConfigKey('operation_key', process.env.OPERATION_KEY || '1234');
-            }
-            console.log(`  [PG cache] config: ${_configCache.size} keys, opkey: ${_opKeyCache.size} keys`);
-        } catch (e) {
-            console.error('[PG cache load] failed:', e.message);
-        }
-    }
+    await _bootReady;
     try {
         const compRow = await db.get('SELECT COUNT(*) as c FROM competition');
         const evtRow = await db.get('SELECT COUNT(*) as c FROM event');

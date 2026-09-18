@@ -181,7 +181,7 @@ describe('3단계 당일 조편성 — 3일차', () => {
     });
     it('종목 이름·성별 중복 생성 없음', async () => {
         for (const compId of [ids.univ, ids.pro]) {
-            const dup = await q('SELECT name, gender, COUNT(*) c FROM event WHERE competition_id=? AND parent_event_id IS NULL GROUP BY name, gender HAVING c>1', compId);
+            const dup = await q('SELECT name, gender, COUNT(*) c FROM event WHERE competition_id=? AND parent_event_id IS NULL GROUP BY name, gender HAVING COUNT(*)>1', compId);
             expect(dup).toEqual([]);
         }
     });
