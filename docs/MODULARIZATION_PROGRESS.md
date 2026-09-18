@@ -105,3 +105,7 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 - `runRecordCompareHook` 은 `lib/routes/results.js` 의 mount 반환값으로 노출 (신기록 감지 경로 재사용)
 - 문서: `docs/FIELD_CARD_IMPORT.md`
 - 사진 → 서버 AI 전사(`/api/field-card/transcribe`)는 `lib/fieldCardVision.js` 가 Claude API 호출과 카드 JSON → 시트 변환을 담당하고, 라우트는 같은 모듈에 있음. 의존성 `@anthropic-ai/sdk` 추가 (9/15)
+
+### ✅ heat_assignment 추출 (2026-09-18)
+- `lib/routes/heat_assignment.js` — 조편성 미리보기/적용 2라우트 + 파서·정규화 헬퍼 (867줄). deps: db, upload, isAdminKey, opLog, normalizeDivisionLabel, resolveFedEventName, guessEventCategory, autoLinkDisplayTimetable
+- 회귀: tests/flows/01_yecheon_pipeline(30건), tests/api/25_heat_assignment_round_sync. server.js 15,372 → 14,509줄
