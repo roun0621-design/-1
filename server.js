@@ -486,13 +486,13 @@ app.get('/results.html', (req, res) => {
 app.get('/e/:slug/:page', (req, res, next) => {
     let p = req.params.page;
     try { p = decodeURIComponent(p); } catch (e) {}
-    if (p === '입력' || p === 'record') return res.sendFile(path.join(__dirname, 'public', 'event-record.html'));
+    if (p === '입력' || p === 'record') return sendStampedHtml(res, 'event-record.html');
     return next();
 });
 
 // 행사(event) 화이트라벨 — /e/<brand-slug> → 대시보드(클라이언트가 slug로 브랜딩 적용)
 app.get('/e/:slug', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+    sendStampedHtml(res, 'dashboard.html');
 });
 
 // 행사 브랜드 이미지 업로드 (로고/워터마크) — 관리자
@@ -532,14 +532,32 @@ app.use('/.well-known', express.static(path.join(__dirname, 'public', '.well-kno
 function isIOSAppShell(req) {
     return /PWAShell/i.test(req.headers['user-agent'] || '');
 }
-app.get(['/', '/index.html'], (req, res, next) => {
-    const p = path.join(__dirname, 'public', 'index.html');
-    if (!isIOSAppShell(req)) return res.sendFile(p);
+// 캐시 버전 자동화: HTML 의 ?v= 와 sw.js 의 CACHE_NAME 을 파일 해시로 바꿔 내보낸다 (손으로 올리던 번호는 이제 의미 없음)
+const assetVersion = require('./lib/assetVersion').create(path.join(__dirname, 'public'));
+function sendStampedHtml(res, file, next) {
+    fs.readFile(path.join(__dirname, 'public', file), 'utf8', (err, html) => {
+        if (err) return next ? next() : res.status(404).end();
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.type('html').send(assetVersion.stampHtml(html));
+    });
+}
+app.get('/sw.js', (req, res, next) => {
+    fs.readFile(path.join(__dirname, 'public', 'sw.js'), 'utf8', (err, js) => {
+        if (err) return next();
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.type('application/javascript').send(assetVersion.stampSw(js));
+    });
+});
+app.get(/^\/(?:[A-Za-z0-9_-]+\.html)?$/, (req, res, next) => {
+    const file = req.path === '/' ? 'index.html' : req.path.slice(1);
+    if (file === 'open.html') return next();      // 아래 iOS 우회 라우트가 처리
+    const p = path.join(__dirname, 'public', file);
     fs.readFile(p, 'utf8', (err, html) => {
         if (err) return next();
-        const stripped = html.replace(/<!--PWASHELL-STRIP-->[\s\S]*?<!--\/PWASHELL-STRIP-->/g, '');
+        let out = html;
+        if (file === 'index.html' && isIOSAppShell(req)) out = out.replace(/<!--PWASHELL-STRIP-->[\s\S]*?<!--\/PWASHELL-STRIP-->/g, '');
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        res.type('html').send(stripped);
+        res.type('html').send(assetVersion.stampHtml(out));
     });
 });
 // open.html 은 Android intent 리다이렉트 전용 → iOS 앱에서는 홈으로 우회
@@ -15054,17 +15072,17 @@ app.delete('/api/display/roster/entry/:id', async (req, res) => {
 
 // Serve display-manage page
 app.get('/display-manage', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'display-manage.html'));
+    sendStampedHtml(res, 'display-manage.html');
 });
 
 // ============================================================
 // BROADCAST OVERLAY — OBS/vMix HTML Overlay pages
 // ============================================================
 app.get('/overlay/scoreboard', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'overlay-scoreboard.html'));
+    sendStampedHtml(res, 'overlay-scoreboard.html');
 });
 app.get('/overlay/lower-third', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'overlay-lower-third.html'));
+    sendStampedHtml(res, 'overlay-lower-third.html');
 });
 
 // Overlay data API — current live event data for overlay consumption
