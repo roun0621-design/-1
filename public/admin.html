@@ -7146,19 +7146,23 @@ POST /api/external/event-result-link/batch<br>
                         <th style="text-align:left;padding:4px 6px;">이름(스코어보드)</th>
                         <th style="text-align:left;padding:4px 6px;">이름(DB)</th>
                         <th style="text-align:left;padding:4px 6px;">기록</th>
+                        <th style="text-align:left;padding:4px 6px;">기존 기록</th>
                         <th style="text-align:left;padding:4px 6px;">매칭</th>
                     </tr></thead><tbody>`;
                     for (const m of r.athleteMatches) {
                         const mColor = m.match_method === 'bib' ? '#b79f58' : m.match_method === 'lane' ? '#6b6b6b' : m.match_method === 'name' ? '#f59e0b' : '#ef4444';
-                        const mLabel = m.match_method === 'none' ? '실패' : m.match_method;
-                        const timeStr = m.lif_type === 'DNS' ? 'DNS' : m.lif_type === 'DNF' ? 'DNF' : m.lif_type === 'DQ' ? 'DQ' : (m.lif_time != null ? m.lif_time + 's' : '-');
-                        html += `<tr style="border-top:1px solid #f3f4f6;">
+                        // 레인·이름 매칭은 배번이 안 맞는 경우 — 늦게 교체된 선수의 기록이 원래 선수에게 붙을 수 있어 표시한다
+                        const mLabel = m.match_method === 'none' ? '실패' : m.match_method === 'bib' ? '배번' : m.match_method === 'lane' ? '레인(배번 불일치·확인)' : '이름(배번 불일치·확인)';
+                        const timeStr = m.lif_type === 'DNS' ? 'DNS' : m.lif_type === 'DNF' ? 'DNF' : m.lif_type === 'DQ' ? 'DQ' : m.lif_type === 'invalid' ? '<span style="color:#ef4444">읽기 실패</span>' : (m.lif_time != null ? m.lif_time + 's' : '-');
+                        const exStr = m.existing ? (m.existing.status_code || (m.existing.time_seconds != null ? m.existing.time_seconds + 's' : '')) : '';
+                        html += `<tr style="border-top:1px solid #f3f4f6;${m.overwrites ? 'background:#fff7ed;' : ''}">
                             <td style="padding:3px 6px;">${m.lif_rank || '-'}</td>
                             <td style="padding:3px 6px;">${m.lif_bib || '-'}</td>
                             <td style="padding:3px 6px;">${m.lif_lane || '-'}</td>
                             <td style="padding:3px 6px;">${m.lif_name || '-'}</td>
                             <td style="padding:3px 6px;">${m.db_name || '<span style=color:red>-</span>'}</td>
                             <td style="padding:3px 6px;font-family:monospace;">${timeStr}</td>
+                            <td style="padding:3px 6px;font-family:monospace;color:${m.overwrites ? '#c2410c' : '#9ca3af'};">${exStr}${m.overwrites ? ' → 덮어씀' : ''}</td>
                             <td style="padding:3px 6px;color:${mColor};font-weight:600;">${mLabel}</td>
                         </tr>`;
                     }
@@ -7626,7 +7630,11 @@ POST /api/external/event-result-link/batch<br>
             const fileInput = document.getElementById('sb-lif-files');
             if (!fileInput.files.length) { toast('파일을 선택해 주세요.', 'error'); return; }
 
-            if (!await uiConfirm(`${fileInput.files.length}개 .lif 파일의 기록을 입력하시겠습니까?`)) return;
+            // 미리보기에서 '덮어씀'·'배번 불일치' 가 있으면 그 수를 알리고 확인을 받는다 (심판 수정값을 모르고 덮지 않게)
+            const _all = (_sbPreviewData || []).flatMap(r => r.athleteMatches || []);
+            const _ow = _all.filter(m => m.overwrites).length, _weak = _all.filter(m => m.match_method === 'lane' || m.match_method === 'name').length;
+            const _warn = (_ow ? `\n· 기존 기록을 덮어쓰는 선수 ${_ow}명` : '') + (_weak ? `\n· 배번이 맞지 않아 레인·이름으로 맞춘 선수 ${_weak}명 (교체 선수 확인)` : '');
+            if (!await uiConfirm(`${fileInput.files.length}개 .lif 파일의 기록을 입력하시겠습니까?${_warn ? '\n' + _warn : ''}`, { danger: !!_warn })) return;
 
             const fd = new FormData();
             fd.append('competition_id', _selectedCompId);

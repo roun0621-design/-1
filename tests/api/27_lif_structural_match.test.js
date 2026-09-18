@@ -98,3 +98,17 @@ describe('.lif 구조 매칭 폴백', () => {
         expect(res.body.results[0].matchStatus).toBe('not_found');
     });
 });
+
+describe('.lif 미리보기 — 덮어쓰기·약한 매칭 표시', () => {
+    it('기존 기록이 있으면 existing 과 overwrites 를, 레인 매칭은 match_method=lane 을 돌려준다', async () => {
+        await db.run('UPDATE result SET time_seconds=10.40, status_code=\'\' WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NULL', fx.heat100, fx.e1);   // 앞 테스트가 가져온 행을 심판이 고친 것으로
+        const res = await request(app).post('/api/scoreboard/preview').set('x-admin-key', 'testopkey')
+            .field('competition_id', String(fx.compId))
+            .attach('files', lifBuffer([LIF_HDR, '1,7,3,,김철수,테스트팀,10.52,,10.52', '2,999,4,,이영희,테스트팀,10.80,,0.28']), 'r.lif');
+        expect(res.status).toBe(200);
+        const m = res.body.results[0].athleteMatches;
+        const kim = m.find(x => x.lif_name === '김철수'), lee = m.find(x => x.lif_name === '이영희');
+        expect(kim.existing.time_seconds).toBe(10.4); expect(kim.overwrites).toBe(true);
+        expect(lee.match_method).toBe('lane'); expect(lee.overwrites).toBe(false);
+    });
+});
