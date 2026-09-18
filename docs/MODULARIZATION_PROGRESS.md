@@ -118,3 +118,8 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 
 ### ✅ event_records 추출 (2026-09-18)
 - `lib/routes/event_records.js` — 종목별 기록표 4라우트 + 부 마스터 5라우트 (254줄). server.js 12,060 → 11,810줄
+
+### ✅ callroom 추출 (2026-09-18)
+- `lib/routes/callroom.js` — 소집 출석·완료·경기 완료 6라우트 (328줄). 반환 `{ syncCombinedSubEventCheckin }`. server.js 11,810 → 11,490줄
+- 남은 큰 덩어리: admin 51 · display 25 · events(생성·조·레인) 20여 — admin/display 는 테스트가 얇아 마지막
+- 급조 코드(record-fieldpad.js): 인라인 입력 모드는 이미 제거됐고 키패드 모듈이 4개 함수만 감싼다. 브라우저 테스트가 없어 본체 병합은 보류(모듈로 유지)
