@@ -631,7 +631,7 @@ async function loadResultsData() {
     else if (cat === 'combined') await renderCombinedResults();
     else {
         document.getElementById('results-thead').innerHTML = '';
-        document.getElementById('results-tbody').innerHTML = '<tr><td class="empty-state">데이터 없음</td></tr>';
+        document.getElementById('results-tbody').innerHTML = '<tr><td class="empty-state">기록이 없습니다</td></tr>';
     }
 }
 
@@ -1211,7 +1211,7 @@ async function _showCombinedSubResult(subOrder) {
     if (!dbSub) { area.innerHTML = '<div class="empty-state">세부 종목을 찾을 수 없습니다.</div>'; return; }
     
     const subHeats = await API.getHeats(dbSub.id);
-    if (subHeats.length === 0) { area.innerHTML = '<div class="empty-state">히트가 없습니다.</div>'; return; }
+    if (subHeats.length === 0) { area.innerHTML = '<div class="empty-state">조가 없습니다.</div>'; return; }
     
     const heatId = subHeats[0].id;
     const entries = await API.getHeatEntries(heatId);

@@ -6164,21 +6164,8 @@ app.post('/api/events/upload', upload.single('file'), async (req, res) => {
 // ============================================================
 
 // Helper: Normalize event name from Excel to DB name
-function normalizeEventName(raw) {
-    if (!raw) return null;
-    const s = String(raw).trim();
-    // Map common variations
-    const map = {
-        '10000m': '10,000m', '10000mW': '10,000mW',
-        '4x100mR': '4X100mR', '4X100mR': '4X100mR', '4 x 100mR': '4X100mR',
-        '4x400mR': '4X400mR', '4X400mR': '4X400mR', '4 x 400mR': '4X400mR',
-        '4x400mR(Mixed)': '4X400mR(Mixed)', 'Mixed 4x400mR': '4X400mR(Mixed)', 'Mixed4x400mR': '4X400mR(Mixed)',
-        '4x400mR Mixed': '4X400mR(Mixed)', '4X400mR Mixed': '4X400mR(Mixed)', '4 x 400mR Mixed': '4X400mR(Mixed)',
-        '4x1500mR': '4X1500mR', '4X1500mR': '4X1500mR', '4 x 1500mR': '4X1500mR', '4×1500mR': '4X1500mR',
-        '4x800mR': '4X800mR', '4X800mR': '4X800mR', '4 x 800mR': '4X800mR', '4×800mR': '4X800mR',
-    };
-    return map[s] || s;
-}
+// Helper: 엑셀 종목명 → 저장 표기 (lib/eventName.js 로 이동)
+const { storedName: normalizeEventName } = require('./lib/eventName');
 
 // Helper: Normalize gender from Excel
 function normalizeGender(raw) {
