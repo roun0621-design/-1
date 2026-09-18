@@ -111,4 +111,7 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 - 회귀: tests/flows/01_yecheon_pipeline(30건), tests/api/25_heat_assignment_round_sync. server.js 15,372 → 14,509줄
 
 ### ✅ timing_import 추출 (2026-09-18)
-- `lib/routes/timing_import.js` — .lif/기록 xlsx/.txt 가져오기 5라우트 + 파서·매칭 헬퍼 (891줄). 반환 `{ recx }` 를 field_card_import 가 공유. server.js 14,509 → 13,624줄
+- `lib/routes/timing_import.js` — .lif/기록 xlsx/.txt 가져오기 5라우트 + 파서·매칭 헬퍼 (891줄). 반환 `{ recx }` 를 field_card_import 가 공유. server.js 14,509 → 13,714줄
+
+### ✅ pdf_documents 추출 (2026-09-18)
+- `lib/routes/pdf_documents.js` — 스타트리스트·결과지(+PNG)·ID카드 PDF 3라우트 + 글꼴/표/머리글 헬퍼 (1,658줄). deps: db, getDocTemplate, orderByBibSql, PORT. server.js 13,714 → 12,060줄
