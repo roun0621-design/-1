@@ -115,3 +115,6 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 
 ### ✅ pdf_documents 추출 (2026-09-18)
 - `lib/routes/pdf_documents.js` — 스타트리스트·결과지(+PNG)·ID카드 PDF 3라우트 + 글꼴/표/머리글 헬퍼 (1,658줄). deps: db, getDocTemplate, orderByBibSql, PORT. server.js 13,714 → 12,060줄
+
+### ✅ event_records 추출 (2026-09-18)
+- `lib/routes/event_records.js` — 종목별 기록표 4라우트 + 부 마스터 5라우트 (254줄). server.js 12,060 → 11,810줄
