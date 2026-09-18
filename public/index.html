@@ -13,6 +13,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PACE RISE : Node</title>
     <meta name="description" content="PACE RISE : Node — 육상 경기 실시간 운영 플랫폼. 대회 실시간 기록 확인, 소집실 운영, 기록 입력, 결과 조회를 한 곳에서.">
+    <!-- iOS Safari 시스템 Smart App Banner (App Store id6784736644) — 다른 브라우저는 common.js 의 앱 설치 배너 -->
+    <meta name="apple-itunes-app" content="app-id=6784736644">
     <!-- Open Graph (카카오톡, 인스타, 페이스북 공유 미리보기) -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="PACE RISE : Node">
@@ -34,7 +36,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="P-R:Node">
-    <link rel="stylesheet" href="styles.css?v=72">
+    <link rel="stylesheet" href="styles.css?v=79">
     <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
         .home-container { max-width: 900px; margin: 0 auto; padding: 20px; }
@@ -111,13 +113,6 @@
         .info-modal-inner p, .info-modal-inner li { font-size: 13px; color: var(--text); line-height: 1.7; }
         .info-modal-inner ul { padding-left: 20px; margin: 4px 0 12px; }
         .info-modal-inner .close-modal-btn { display: block; margin: 16px auto 0; padding: 8px 32px; }
-        .install-tabs { display: flex; gap: 0; margin-bottom: 12px; border-bottom: 2px solid var(--gray); }
-        .install-tab { padding: 8px 16px; font-size: 13px; font-weight: 600; border: none; background: none; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; }
-        .install-tab.active { color: var(--blue); border-bottom-color: var(--blue); }
-        .install-content { display: none; font-size: 13px; line-height: 1.8; }
-        .install-content.active { display: block; }
-        .install-step { display: flex; gap: 10px; margin-bottom: 8px; align-items: flex-start; }
-        .install-step-num { background: var(--blue); color: #fff; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -141,9 +136,8 @@
 
         <!-- Quick links (visible to all) -->
         <div class="home-quick">
-            <button class="home-quick-btn" onclick="openAbout()">P-R : Node에 관하여</button>
-            <button class="home-quick-btn" onclick="openInstallGuide()">앱 설치 안내</button>
-            <button class="home-quick-btn" id="btn-manual" style="display:none;" onclick="openManual()">운영 매뉴얼</button>
+            <button class="home-quick-btn" data-i18n="home.about_btn" onclick="openAbout()">P-R : Node에 관하여</button>
+            <button class="home-quick-btn" id="btn-manual" data-i18n="home.manual_btn" style="display:none;" onclick="openManual()">운영 매뉴얼</button>
         </div>
 
         <!-- Role indicator (small, subtle) -->
@@ -165,7 +159,7 @@
         </div>
 
         <div class="home-actions" id="admin-actions" style="display:none;">
-            <button class="btn btn-primary" onclick="openAddComp()">+ 대회 추가</button>
+            <button class="btn btn-primary" data-i18n="home.add_comp" onclick="openAddComp()">+ 대회 추가</button>
         </div>
     </main>
 
@@ -183,69 +177,31 @@
     <!-- About Modal -->
     <div class="info-modal" id="about-modal">
         <div class="info-modal-inner">
-            <h3>P-R : Node에 관하여</h3>
+            <h3 data-i18n="about.title">P-R : Node에 관하여</h3>
             <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Sport Competition Operation Platform for Excellence</p>
 
-            <h4>실시간 대회 결과 확인</h4>
+            <p style="background:#f1f8e9;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.7;margin-bottom:14px;">
+                이제 <strong>모바일 앱</strong>으로도 만나보실 수 있습니다. 대회 현장의 실시간 기록·결과·알림을 더 빠르고 편하게 확인하세요.
+            </p>
+
+            <h4 data-i18n="about.h1">실시간 대회 결과 확인</h4>
             <p>P-R : Node를 통해 육상 대회의 실시간 경기 결과를 확인할 수 있습니다. 대회를 선택한 후 대시보드에서 종목별 진행 상황과 결과를 바로 확인하세요.</p>
 
-            <h4>주요 기능</h4>
+            <h4 data-i18n="about.features">주요 기능</h4>
             <ul>
                 <li><strong>대시보드</strong> — 전 종목의 진행 상황을 한눈에 확인, 영상 링크 바로가기</li>
-                <li><strong>실시간 결과</strong> — 경기가 끝나는 즉시 기록과 순위 확인 가능</li>
+                <li><strong>실시간 결과</strong> — 경기가 끝나는 즉시 기록과 순위 확인</li>
+                <li><strong>실시간 알림</strong> — 관심 종목의 결과·공지를 앱 알림으로 바로 받기</li>
                 <li><strong>종합 순위</strong> — 여러 조로 진행되는 종목도 통합 순위로 확인</li>
-                <li><strong>실시간 현황</strong> — 소집 상태, 진행중인 경기 확인</li>
-                <li><strong>소집실 운영</strong> — 바코드/배번 스캔, 릴레이 팀 단위 체크인</li>
-                <li><strong>기록 입력</strong> — 트랙/필드/도로/복합 종목별 기록 관리</li>
+                <li><strong>소집 · 기록 운영</strong> — 소집실 체크인, 트랙/필드/도로/복합 종목 기록 관리</li>
+                <li><strong>상장 · 기록증</strong> — 입상자 상장과 참가 기록증 발급</li>
                 <li><strong>관리자 패널</strong> — 선수/종목 관리, 조편성, 엑셀 업로드, 데이터 백업</li>
             </ul>
 
-            <h4>즐겨찾기</h4>
-            <p>대시보드에서 관심 종목 옆의 별 아이콘을 눌러 즐겨찾기에 추가하면, 해당 종목이 상단에 고정되어 빠르게 확인할 수 있습니다.</p>
+            <h4 data-i18n="about.favorites">즐겨찾기</h4>
+            <p>대시보드에서 관심 종목 옆의 별 아이콘을 눌러 즐겨찾기에 추가하면, 해당 종목이 상단에 고정되어 빠르게 확인할 수 있습니다. 즐겨찾기한 종목의 결과는 실시간 알림으로도 받아볼 수 있습니다.</p>
 
-            <button class="btn btn-ghost close-modal-btn" onclick="closeModal('about-modal')">닫기</button>
-        </div>
-    </div>
-
-    <!-- Install Guide Modal -->
-    <div class="info-modal" id="install-modal">
-        <div class="info-modal-inner">
-            <h3>앱 설치 안내</h3>
-            <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">홈 화면에 추가하면 앱처럼 빠르게 접근할 수 있습니다.</p>
-
-            <div class="install-tabs" id="install-tabs-container">
-                <button class="install-tab" id="install-tab-android" onclick="switchInstallTab('android',this)">Android (Chrome)</button>
-                <button class="install-tab" id="install-tab-ios" onclick="switchInstallTab('ios',this)">iOS (Safari)</button>
-            </div>
-            <div class="install-content" id="install-android">
-                <div id="install-android-steps">
-                    <div class="install-step"><div class="install-step-num">1</div><div>Chrome 브라우저로 이 페이지에 접속합니다.</div></div>
-                    <div class="install-step"><div class="install-step-num">2</div><div>우측 상단 <strong>메뉴 (&#8942;)</strong> 를 누릅니다.</div></div>
-                    <div class="install-step"><div class="install-step-num">3</div><div><strong>"홈 화면에 추가"</strong> 또는 <strong>"앱 설치"</strong>를 선택합니다.</div></div>
-                    <div class="install-step"><div class="install-step-num">4</div><div><strong>"추가"</strong>를 누르면 홈 화면에 아이콘이 생성됩니다.</div></div>
-                </div>
-                <div style="margin-top:12px;text-align:center;">
-                    <a href="/open" class="btn btn-primary" style="display:inline-block;text-decoration:none;font-size:13px;padding:10px 24px;" target="_blank" rel="noopener">Chrome으로 열기</a>
-                    <button class="btn btn-primary" id="pwa-install-btn" style="display:none;margin-top:8px;" onclick="doPWAInstall()">앱 설치하기</button>
-                    <p style="font-size:10px;color:var(--text-muted);margin-top:6px;">카카오톡·인스타 등 인앱브라우저에서도 Chrome으로 이동됩니다</p>
-                </div>
-            </div>
-            <div class="install-content" id="install-ios">
-                <div id="install-ios-steps">
-                    <div class="install-step"><div class="install-step-num">1</div><div><strong>Safari</strong> 브라우저로 이 페이지에 접속합니다. (Safari만 지원)</div></div>
-                    <div class="install-step"><div class="install-step-num">2</div><div>하단 (또는 상단) 의 <strong>공유 버튼</strong> (&#x2B06;&#xFE0E; 사각형+화살표)을 누릅니다.</div></div>
-                    <div class="install-step"><div class="install-step-num">3</div><div>목록에서 <strong>"홈 화면에 추가"</strong>를 선택합니다.</div></div>
-                    <div class="install-step"><div class="install-step-num">4</div><div><strong>"추가"</strong>를 누르면 홈 화면에 아이콘이 생성됩니다.</div></div>
-                </div>
-                <div style="text-align:center;margin-top:12px;">
-                    <a href="x-safari-https://pace-rise-node.com" class="btn btn-primary" style="display:inline-block;text-decoration:none;font-size:13px;padding:10px 24px;">Safari로 열기</a>
-                    <p style="font-size:10px;color:var(--text-muted);margin-top:6px;">Safari에서 열린 후 공유 → 홈 화면에 추가</p>
-                </div>
-            </div>
-
-            <p style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:12px;">위 단계를 따라 홈 화면에 추가하면 앱처럼 사용할 수 있습니다.</p>
-
-            <button class="btn btn-ghost close-modal-btn" onclick="closeModal('install-modal')">닫기</button>
+            <button class="btn btn-ghost close-modal-btn" data-i18n="common.close" onclick="closeModal('about-modal')">닫기</button>
         </div>
     </div>
 
@@ -385,7 +341,8 @@
         </div>
     </div>
 
-    <script src="common.js?v=74"></script>
+    <script src="/i18n.js?v=3"></script>
+    <script src="common.js?v=102"></script>
     <script src="/lib/auth-client.js?v=1"></script>
     <script>
         renderPageNav('home');
@@ -442,13 +399,13 @@
         async function toggleLogin() {
             // 1) legacy 로그인 상태 → 로그아웃
             if (currentRole !== 'viewer') {
-                if (!confirm('로그아웃하시겠습니까?')) return;
+                if (!await uiConfirm('로그아웃하시겠습니까?')) return;
                 await doLogout();
                 return;
             }
             // 2) JWT 세션만 있는 경우 → 로그아웃
             if (window.PaceAuth && PaceAuth.getCachedUser()) {
-                if (!confirm('로그아웃하시겠습니까?')) return;
+                if (!await uiConfirm('로그아웃하시겠습니까?')) return;
                 try { await PaceAuth.logout(); } catch(_) {}
                 localStorage.removeItem('pr_auth_user');
                 updateRoleUI();
@@ -485,7 +442,12 @@
             loadCompetitions();
         }
 
+        let _lastRoleForList = null;
         function updateRoleUI() {
+            // 관리자 여부에 따라 숨긴 대회 표시가 달라지므로 역할이 바뀌면 목록을 다시 로드
+            const roleKey = currentRole === 'admin' && currentKey ? 'admin' : 'other';
+            if (_lastRoleForList !== null && _lastRoleForList !== roleKey && _compsLoaded) { API.invalidateCompetitions(); loadCompetitions(); }
+            _lastRoleForList = roleKey;
             const badge = document.getElementById('role-badge');
             const adminActions = document.getElementById('admin-actions');
             const loginBtn = document.getElementById('header-login-btn');
@@ -545,54 +507,12 @@
 
         // ---- Modals ----
         function openAbout() { document.getElementById('about-modal').classList.add('show'); }
-        // openInstallGuide is defined below with OS auto-detect
         function openManual() { document.getElementById('manual-modal').classList.add('show'); }
         function closeModal(id) { document.getElementById(id).classList.remove('show'); }
         // Close on outside click
-        ['about-modal','install-modal','manual-modal'].forEach(id => {
+        ['about-modal','manual-modal'].forEach(id => {
             document.getElementById(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); });
         });
-
-        function switchInstallTab(tab, btn) {
-            document.querySelectorAll('.install-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.install-content').forEach(c => c.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById('install-' + tab).classList.add('active');
-        }
-
-        // ---- OS Auto-detect for install guide ----
-        function detectOS() {
-            const ua = navigator.userAgent || '';
-            if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'ios';
-            if (/android/i.test(ua)) return 'android';
-            return 'other';
-        }
-        function openInstallGuide() {
-            document.getElementById('install-modal').classList.add('show');
-            const os = detectOS();
-            if (os === 'ios') {
-                switchInstallTab('ios', document.getElementById('install-tab-ios'));
-            } else {
-                switchInstallTab('android', document.getElementById('install-tab-android'));
-            }
-        }
-        // PWA install prompt
-        let _deferredPrompt = null;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            _deferredPrompt = e;
-            const btn = document.getElementById('pwa-install-btn');
-            if (btn) btn.style.display = 'inline-flex';
-        });
-        function doPWAInstall() {
-            if (_deferredPrompt) {
-                _deferredPrompt.prompt();
-                _deferredPrompt.userChoice.then(r => {
-                    _deferredPrompt = null;
-                    document.getElementById('pwa-install-btn').style.display = 'none';
-                });
-            }
-        }
 
         // ---- Competitions ----
         let _allComps = [];
@@ -612,13 +532,45 @@
             return `D+${Math.abs(diff)}`;
         }
 
+        let _compsLoaded = false;
+        const isHomeAdmin = () => currentRole === 'admin' && !!currentKey;
         async function loadCompetitions() {
             const list = document.getElementById('comp-list');
             try {
-                _allComps = await API.getCompetitions();
+                // 관리자는 숨긴 대회·숨긴 연맹 대회도 흐리게 보고 해제할 수 있어야 하므로 전체 목록
+                _allComps = isHomeAdmin() ? await API.getAllCompetitionsAdmin() : await API.getCompetitions();
+                _compsLoaded = true;
                 document.getElementById('year-display').textContent = _selectedYear;
                 renderCompsByYear();
             } catch (e) { list.innerHTML = '<div class="comp-empty">대회 목록을 불러올 수 없습니다.</div>'; }
+        }
+        // ── 숨기기 / 해제 (홈 화면 관리자 모드) ──
+        function _isFedHidden(code) { const f = code ? _federationList.find(x => x.code === code) : null; return !!(f && f.hidden); }
+        async function _afterVisibilityChange() {
+            API.invalidateCompetitions(); invalidateCache('federations');
+            try { _federationList = await API.getFederations(); } catch (e) {}
+            await loadCompetitions();
+            if (typeof loadRecentCompetitions === 'function') loadRecentCompetitions();
+        }
+        async function hideComp(ev, id, hide) {
+            if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+            const c = _allComps.find(x => x.id === id);
+            if (!c) return;
+            if (hide && !await uiConfirm(`"${c.name}" 대회를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
+            try {
+                await API.setCompetitionHomeVisibility(id, hide ? 'hidden' : 'auto', currentKey);
+                await _afterVisibilityChange();
+            } catch (e) { uiAlert('숨김 변경 실패: ' + (e.message || e)); }
+        }
+        async function hideFed(ev, code, hide) {
+            if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+            const f = _federationList.find(x => x.code === code);
+            if (!f) return;
+            if (hide && !await uiConfirm(`${f.code} 연맹의 대회 전체를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?`)) return;
+            try {
+                await API.setFederationHidden(f.id, hide, currentKey);
+                await _afterVisibilityChange();
+            } catch (e) { uiAlert('연맹 숨김 변경 실패: ' + (e.message || e)); }
         }
 
         function renderCompsByYear() {
@@ -661,12 +613,17 @@
                     const label = fedInfo ? `${fed} ${fedInfo.name}` : (fed || '기타 대회');
                     const badge = fed ? getFedBadge(fed) : '';
                     const countLabel = `<span style="font-size:11px;color:var(--text-muted);margin-left:6px;">${groupComps.length}개 대회</span>`;
+                    const fedHidden = _isFedHidden(fed);
+                    const hiddenBadge = fedHidden ? '<span style="background:#fee2e2;color:#991b1b;padding:1px 8px;border-radius:99px;font-size:10px;font-weight:700;">숨김</span>' : '';
+                    const fedAdminBtn = (isHomeAdmin() && fed) ? (fedHidden
+                        ? `<button class="btn btn-xs btn-primary" onclick="hideFed(event,'${fed}',0)" title="이 연맹 대회를 다시 표시">숨김 해제</button>`
+                        : `<button class="btn btn-xs btn-outline" onclick="hideFed(event,'${fed}',1)" title="이 연맹 대회 전체를 홈·운영 화면 목록에서 숨김">연맹 숨기기</button>`) : '';
 
-                    html += `<details class="fed-group" style="margin-bottom:4px;">
+                    html += `<details class="fed-group" style="margin-bottom:4px;${fedHidden ? 'opacity:.6;' : ''}">
                         <summary class="fed-group-header" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:var(--radius);background:var(--gray-bg);user-select:none;list-style:none;transition:background 0.15s;">
                             <span class="fed-toggle-icon" style="font-size:12px;color:var(--text-muted);transition:transform 0.2s;display:inline-block;">▶</span>
                             <span style="font-family:var(--font-brand);font-size:14px;font-weight:400;letter-spacing:1px;flex:1;">${label}</span>
-                            ${badge} ${countLabel}
+                            ${badge} ${hiddenBadge} ${countLabel} ${fedAdminBtn}
                         </summary>
                         <div style="padding:6px 0 0;">
                             ${renderCompCards(groupComps)}
@@ -690,15 +647,22 @@
             return comps.map(c => {
                 const statusLabel = { upcoming: '예정', active: '진행중', completed: '종료' }[c.status] || c.status;
                 const dday = c.status === 'upcoming' ? getDDay(c.start_date) : c.status === 'active' ? 'LIVE' : '';
-                return `<div class="comp-card" onclick="selectCompetition(${c.id})">
+                const compHidden = c.home_visibility === 'hidden';
+                const dim = compHidden || _isFedHidden(c.federation);
+                const hiddenBadge = compHidden ? '<span class="comp-card-dday" style="background:#fee2e2;color:#991b1b;">숨김</span>' : '';
+                const adminBtn = isHomeAdmin() ? (compHidden
+                    ? `<button class="btn btn-xs btn-primary" onclick="hideComp(event,${c.id},0)" title="홈·운영 화면 목록에 다시 표시">숨김 해제</button>`
+                    : `<button class="btn btn-xs btn-outline" onclick="hideComp(event,${c.id},1)" title="홈·운영 화면 목록에서 숨김">숨기기</button>`) : '';
+                return `<div class="comp-card" onclick="selectCompetition(${c.id})" style="${dim ? 'opacity:.55;' : ''}">
                     <div class="comp-card-status ${c.status}"></div>
                     <div class="comp-card-info">
-                        <div class="comp-card-name">${c.name}</div>
+                        <div class="comp-card-name">${c.name} ${hiddenBadge}</div>
                         <div class="comp-card-meta">
                             <span>${c.start_date} ~ ${c.end_date}</span>
                             <span>${c.venue || ''}</span>
                             <span class="comp-status-label ${c.status}">${statusLabel}</span>
                             ${dday ? `<span class="comp-card-dday ${c.status}">${dday}</span>` : ''}
+                            ${adminBtn}
                         </div>
                     </div>
                     <div class="comp-card-arrow">&rsaquo;</div>
@@ -720,9 +684,10 @@
         function _renderCompCard(c) {
             const isLive = c.status === 'active';
             const fedBadge = c.federation ? getFedBadge(c.federation) : '';
-            const statusBadge = isLive
+            const pinBadge = c.home_visibility === 'pinned' ? '<span class="comp-card-dday" style="background:#eef2ff;color:#3730a3;">📌 고정</span>' : '';
+            const statusBadge = (isLive
                 ? '<span class="comp-card-dday active">LIVE</span>'
-                : `<span class="comp-card-dday ${c.status}">${{upcoming:'예정',completed:'종료'}[c.status]||c.status}</span>`;
+                : `<span class="comp-card-dday ${c.status}">${{upcoming:'예정',completed:'종료'}[c.status]||c.status}</span>`) + pinBadge;
             return `<div class="comp-card" onclick="selectCompetition(${c.id})" style="${isLive?'border-color:#b79f58;':''}">
                 <div class="comp-card-status ${c.status}"></div>
                 <div class="comp-card-info">
@@ -821,6 +786,8 @@
                 // Filter all applicable popups (not just first one)
                 const applicable = popups.filter(p => {
                     if (!p.is_active) return false;
+                    // 홈에서는 공통(전체) 팝업만 자동 노출. 특정 대회 전용 팝업은 그 대회 대시보드에서만.
+                    if (p.competition_id) return false;
                     if (p.popup_type === 'admin' && !isAdmin) return false;
                     if (p.show_from && today < p.show_from) return false;
                     if (p.show_until && today > p.show_until) return false;
@@ -855,14 +822,14 @@
                 <div style="font-family:'Audiowide',sans-serif;font-size:18px;letter-spacing:2px;">${p.title || 'PACE RISE : Node'} ${counter}</div>
                 ${p.subtitle ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${p.subtitle}</div>` : ''}
             </div>`;
-            if (p.intro_text) html += `<div style="font-size:13px;line-height:1.6;margin-bottom:16px;">${p.intro_text}</div>`;
+            if (p.intro_text) html += `<div style="font-size:13px;line-height:1.6;margin-bottom:16px;">${p.intro_text.replace(/\n/g,'<br>')}</div>`;
 
             const activeSections = (p.sections || []).filter(s => s.is_active !== 0);
             activeSections.forEach(s => {
                 html += `<details style="margin-bottom:8px;border:1px solid var(--gray);border-radius:8px;overflow:hidden;">
                     <summary style="padding:10px 14px;font-weight:600;font-size:13px;cursor:pointer;background:#f9fafb;">${s.title || ''}</summary>
                     <div style="padding:10px 14px;font-size:12px;line-height:1.7;">${(s.content||'').replace(/\n/g,'<br>')}</div>
-                    ${s.link_btn_text ? `<div style="padding:0 14px 10px;"><a href="${s.link_btn_url||'#'}" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="font-size:12px;color:var(--primary);font-weight:600;text-decoration:none;">${s.link_btn_text} →</a></div>` : ''}
+                    ${s.link_btn_text ? `<div style="padding:0 14px 10px;"><a href="${s.link_btn_url||'#'}" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="font-size:12px;color:#1565c0;font-weight:600;text-decoration:none;">${s.link_btn_text} →</a></div>` : ''}
                 </details>`;
             });
 
@@ -870,7 +837,7 @@
                 html += `<div style="margin-top:16px;padding:16px;background:#f0f9ff;border-radius:8px;text-align:center;border:1px solid #c0c0c0;">
                     <div style="font-size:14px;font-weight:600;">${p.bottom_btn_text}</div>
                     ${p.bottom_btn_desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${p.bottom_btn_desc}</div>` : ''}
-                    ${p.bottom_btn_link ? `<div style="margin-top:8px;"><a href="${p.bottom_btn_link}" onclick="event.stopPropagation();closeModal('home-popup-modal');" style="display:inline-block;padding:8px 20px;background:var(--primary);color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;">이동 →</a></div>` : ''}
+                    ${p.bottom_btn_link ? `<div style="margin-top:8px;"><a href="${p.bottom_btn_link}" onclick="event.stopPropagation();closeModal('home-popup-modal');" style="display:inline-block;padding:8px 20px;background:var(--green);color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;">이동 →</a></div>` : ''}
                 </div>`;
             }
 
@@ -912,12 +879,12 @@
             const mode = document.getElementById('new-comp-mode').value;
             const division_type = document.getElementById('new-comp-division').value;
             const video_url = document.getElementById('new-comp-video').value.trim();
-            if (!name || !start || !end) { alert('대회명, 시작일, 종료일은 필수입니다.'); return; }
+            if (!name || !start || !end) { uiAlert('대회명, 시작일, 종료일은 필수입니다.'); return; }
             try {
                 await API.createCompetition({ name, start_date: start, end_date: end, venue, federation, mode, division_type, video_url }, currentKey);
                 closeAddComp();
                 await loadCompetitions();
-            } catch (e) { alert(e.error || '생성 실패'); }
+            } catch (e) { uiAlert(e.error || '생성 실패'); }
         }
         document.getElementById('add-comp-modal').addEventListener('click', e => { if (e.target === document.getElementById('add-comp-modal')) closeAddComp(); });
 

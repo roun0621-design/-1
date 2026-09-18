@@ -917,7 +917,7 @@ async function showRelayMembers(teamName) {
         window._relayAvailableAthletes = availableAthletes;
         window._relayEventEntryId = eventEntryId;
         window._relayTeamName = teamName;
-    } catch (err) { alert('선수 명단 로드 실패: ' + (err.error || err.message)); }
+    } catch (err) { uiAlert('선수 명단 로드 실패: ' + (err.error || err.message)); }
 }
 
 function _renderRelayAddList(list, eventEntryId, teamName) {
@@ -973,7 +973,7 @@ async function applyRelayReorder(teamName) {
         // Refresh modal to show new order
         document.getElementById('relay-members-modal')?.remove();
         await showRelayMembers(teamName);
-    } catch(e) { alert('순서 변경 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('순서 변경 실패: ' + (e.error || e.message)); }
 }
 
 async function addRelayMemberToTeam(eventEntryId, athleteId, teamName) {
@@ -987,18 +987,18 @@ async function addRelayMemberToTeam(eventEntryId, athleteId, teamName) {
         // Refresh modal only (not the background)
         document.getElementById('relay-members-modal')?.remove();
         await showRelayMembers(teamName);
-    } catch(e) { alert('추가 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('추가 실패: ' + (e.error || e.message)); }
 }
 
 async function removeRelayMemberFromTeam(eventEntryId, athleteId, teamName) {
-    if (!confirm('이 선수를 릴레이 팀에서 제거하시겠습니까?')) return;
+    if (!await uiConfirm('이 선수를 릴레이 팀에서 제거하시겠습니까?')) return;
     try {
         await api('DELETE', '/api/relay-members', { event_entry_id: eventEntryId, athlete_id: athleteId });
         showToast('릴레이 멤버 제거 완료');
         // Refresh modal only (background refreshes on close)
         document.getElementById('relay-members-modal')?.remove();
         await showRelayMembers(teamName);
-    } catch(e) { alert('제거 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('제거 실패: ' + (e.error || e.message)); }
 }
 
 // changeRelayMemberOrder is no longer called on individual input change.
@@ -1010,7 +1010,7 @@ async function changeRelayMemberOrder(eventEntryId, athleteId, newLeg, teamName)
     try {
         await api('PUT', '/api/relay-members/order', { event_entry_id: eventEntryId, members: [{ athlete_id: athleteId, leg_order: leg }] });
         showToast(`주자 순서 → ${leg}번으로 변경`);
-    } catch(e) { alert('순서 변경 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('순서 변경 실패: ' + (e.error || e.message)); }
 }
 
 // ============================================================
@@ -1081,7 +1081,7 @@ async function doAddAthlete(athleteId) {
         const row = document.getElementById(`add-ath-row-${athleteId}`);
         if (row) { row.style.opacity = '0.3'; row.querySelector('button').disabled = true; row.querySelector('button').textContent = '추가됨'; }
         await loadCallroomHeatData();
-    } catch (e) { alert('추가 실패: ' + (e.error || '')); }
+    } catch (e) { uiAlert('추가 실패: ' + (e.error || '')); }
 }
 
 // ============================================================
@@ -1216,7 +1216,7 @@ async function printCallroom(mode) {
     // 대회명과 시간표 시간을 함께 표시. 합동종목은 모든 대회명 함께 표시.
     let compNamesLabel = '';
     try {
-        const comps = await API.getCompetitions();
+        const comps = await API.getAllCompetitionsAdmin();   // 이름 표시용 — 숨긴 대회도 포함
         const jointGroup = window._crJointGroup || null;
         if (jointGroup && Array.isArray(jointGroup.members) && jointGroup.members.length > 1) {
             // 합동 종목: 모든 대회 표시 (각 대회별 짧은 라벨/소속연맹 우선)
@@ -1401,7 +1401,7 @@ async function printCallroom(mode) {
 // ============================================================
 async function exportCallroomExcel() {
     if (!crSelectedEvent || !crHeats || crHeats.length === 0) return;
-    if (typeof XLSX === 'undefined') { alert('엑셀 라이브러리를 불러올 수 없습니다.'); return; }
+    if (typeof XLSX === 'undefined') { uiAlert('엑셀 라이브러리를 불러올 수 없습니다.'); return; }
 
     const evt = crSelectedEvent;
     const gL = { M: '남자', F: '여자', X: '혼성' }[evt.gender] || '';
@@ -1412,7 +1412,7 @@ async function exportCallroomExcel() {
     // ─── 자동 헤더: 대회명 + 종목/부/라운드 + 시간표 시각 ─────────────────
     let compNamesLabel = '';
     try {
-        const comps = await API.getCompetitions();
+        const comps = await API.getAllCompetitionsAdmin();   // 이름 표시용 — 숨긴 대회도 포함
         const jointGroup = window._crJointGroup || null;
         if (jointGroup && Array.isArray(jointGroup.members) && jointGroup.members.length > 1) {
             const labels = jointGroup.members.map(m => {
@@ -1538,4 +1538,98 @@ async function exportCallroomExcel() {
     XLSX.utils.book_append_sheet(wb, ws, '소집명단');
     const fileName = `소집_${evt.name}_${gL}_${roundLabel}.xlsx`;
     XLSX.writeFile(wb, fileName);
+}
+
+// ============================================================
+// 일괄 소집 (부별 · 다중선택 소집완료 / 되돌리기)
+// ============================================================
+function openBatchCallroom() {
+    if (document.getElementById('batch-callroom-modal')) return;
+    const evts = (allEvents || []).filter(e => !e.parent_event_id);
+    if (evts.length === 0) { uiAlert('등록된 종목이 없습니다.'); return; }
+    const gL = g => g === 'M' ? '남' : g === 'F' ? '여' : '혼성';
+    const rL = r => ({ preliminary: '예선', semifinal: '준결승', final: '결승' }[r] || r);
+    const stat = e => e.round_status === 'completed'
+        ? '<span style="color:#9ca3af;font-size:11px;">경기완료</span>'
+        : e.round_status === 'in_progress'
+            ? '<span style="color:#f59e0b;font-size:11px;font-weight:700;">진행중</span>'
+            : '<span style="color:#16a34a;font-size:11px;">소집전</span>';
+    // 부(division)별 그룹핑
+    const groups = {}; const order = [];
+    evts.forEach(e => { const d = e.division || '(부 없음)'; if (!groups[d]) { groups[d] = []; order.push(d); } groups[d].push(e); });
+    let body = '';
+    order.forEach((div, gi) => {
+        const list = groups[div];
+        const divId = 'bcg-' + gi;
+        body += `<div style="margin-bottom:8px;border:1px solid #eee;border-radius:8px;overflow:hidden;">
+          <div style="padding:7px 12px;background:#f8f4ea;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:700;font-size:13px;cursor:pointer;">
+              <input type="checkbox" class="bc-divall" onclick="bcToggleDiv(this,'${divId}')"> ${div}
+              <span style="color:#999;font-weight:400;font-size:11px;">${list.length}종목</span>
+            </label>
+          </div><div>`;
+        list.forEach(e => {
+            const dis = e.round_status === 'completed';
+            body += `<label style="display:flex;align-items:center;gap:8px;padding:5px 14px;font-size:12px;border-top:1px solid #f5f5f5;${dis ? 'opacity:.55;' : 'cursor:pointer;'}">
+              <input type="checkbox" class="bc-evt ${divId}" value="${e.id}" ${dis ? 'disabled' : ''} onchange="bcCount()">
+              <span style="flex:1;">${e.name} <span style="color:#777;">· ${gL(e.gender)} ${rL(e.round_type)}</span></span>
+              ${stat(e)}
+            </label>`;
+        });
+        body += `</div></div>`;
+    });
+    const m = document.createElement('div');
+    m.id = 'batch-callroom-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:14px;';
+    m.innerHTML = `<div style="background:#fff;border-radius:12px;width:min(560px,97vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+      <div style="padding:13px 18px;background:#faf6ec;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-weight:800;font-size:15px;color:#6b5520;">🔊 일괄 소집</div>
+        <button onclick="closeBatchCallroom()" style="border:none;background:none;font-size:22px;line-height:1;cursor:pointer;color:#999;">&times;</button>
+      </div>
+      <div style="padding:9px 14px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <input id="bc-judge" placeholder="판정관/운영자 이름(선택)" style="flex:1;min-width:140px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+        <button class="btn btn-sm btn-ghost" onclick="bcSelectAll(true)">전체선택</button>
+        <button class="btn btn-sm btn-ghost" onclick="bcSelectAll(false)">해제</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:10px 12px;background:#fcfcfc;">${body}</div>
+      <div style="padding:12px 16px;border-top:1px solid #eee;display:flex;align-items:center;gap:8px;">
+        <span id="bc-count" style="font-size:13px;color:#666;font-weight:700;">0개 선택</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-outline" style="border-color:#dc3545;color:#dc3545;" onclick="bcRun('revert')">되돌리기</button>
+        <button class="btn btn-primary" onclick="bcRun('complete')">소집완료</button>
+      </div>
+    </div>`;
+    document.body.appendChild(m);
+    bcCount();
+}
+function closeBatchCallroom() { const m = document.getElementById('batch-callroom-modal'); if (m) m.remove(); }
+function bcToggleDiv(el, divId) { document.querySelectorAll('#batch-callroom-modal .bc-evt.' + divId + ':not(:disabled)').forEach(cb => cb.checked = el.checked); bcCount(); }
+function bcSelectAll(v) {
+    document.querySelectorAll('#batch-callroom-modal .bc-evt:not(:disabled)').forEach(cb => cb.checked = v);
+    document.querySelectorAll('#batch-callroom-modal .bc-divall').forEach(cb => cb.checked = v);
+    bcCount();
+}
+function bcCount() { const n = document.querySelectorAll('#batch-callroom-modal .bc-evt:checked').length; const el = document.getElementById('bc-count'); if (el) el.textContent = n + '개 선택'; }
+async function bcRun(mode) {
+    const ids = [...document.querySelectorAll('#batch-callroom-modal .bc-evt:checked')].map(cb => parseInt(cb.value));
+    if (!ids.length) { uiAlert('종목을 선택하세요.'); return; }
+    const judge = (document.getElementById('bc-judge') && document.getElementById('bc-judge').value || '').trim();
+    const lab = mode === 'complete' ? '소집완료' : '소집 되돌리기';
+    if (!await uiConfirm(`선택한 ${ids.length}개 종목을 일괄 ${lab} 하시겠습니까?`)) return;
+    const url = mode === 'complete' ? '/api/events/callroom-complete-batch' : '/api/events/callroom-revert-batch';
+    try {
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_ids: ids, judge_name: judge }) }).then(x => x.json());
+        if (r.error) { uiAlert(r.error); return; }
+        const cnt = mode === 'complete' ? r.completed : r.reverted;
+        const blk = (r.skipped || r.blocked || []);
+        let msg = `${cnt}개 종목 ${lab} 완료`;
+        if (blk.length) {
+            const reasons = { not_found: '없음', completed: '경기완료', not_in_progress: '진행중 아님', has_results: '기록있음' };
+            msg += `\n제외 ${blk.length}개 (${blk.map(b => reasons[b.reason] || b.reason).join(', ')})`;
+        }
+        uiAlert(msg);
+        closeBatchCallroom();
+        allEvents = await API.getAllEvents(getCompetitionId());
+        renderMatrix();
+    } catch (e) { uiAlert('오류: ' + e.message); }
 }

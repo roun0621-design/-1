@@ -319,7 +319,7 @@ async function downloadAllGroups(format) {
     if (!rSelectedEvent) return;
     try {
         const data = await API.getFullResults(rSelectedEvent.id);
-        if (!data || !data.heats || data.heats.length === 0) { alert('데이터가 없습니다.'); return; }
+        if (!data || !data.heats || data.heats.length === 0) { uiAlert('데이터가 없습니다.'); return; }
 
         const evt = data.event;
         const gL = { M: '남자', F: '여자', X: '혼성' }[evt.gender] || '';
@@ -337,7 +337,7 @@ async function downloadAllGroups(format) {
             allRows.push([`대회명: ${compName}`]);
             allRows.push([`장소: ${venue}`]);
             allRows.push([`부별: ${gL}`, `종목: ${evt.name}`, `라운드: ${roundLabel}`]);
-            allRows.push([`출력일: ${new Date().toLocaleDateString('ko-KR')}`]);
+            allRows.push([`출력일: ${new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)}`]);
             allRows.push([]); // empty row
 
             for (const heat of data.heats) {
@@ -355,7 +355,7 @@ async function downloadAllGroups(format) {
         } else if (format === 'pdf') {
             let allHtml = `<div style="padding:20px;font-family:sans-serif;">`;
             allHtml += `<h2 style="text-align:center;">${compName}</h2>`;
-            allHtml += `<p style="text-align:center;font-size:12px;color:#666;">${venue} | ${gL} | ${evt.name} ${roundLabel} | ${new Date().toLocaleDateString('ko-KR')}</p>`;
+            allHtml += `<p style="text-align:center;font-size:12px;color:#666;">${venue} | ${gL} | ${evt.name} ${roundLabel} | ${new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)}</p>`;
             for (const heat of data.heats) {
                 if (data.heats.length > 1) allHtml += `<h3 style="margin-top:24px;">${heat.heat_number}조</h3>`;
                 allHtml += buildHeatHtmlTable(evt, heat);
@@ -365,7 +365,7 @@ async function downloadAllGroups(format) {
             w.document.write(`<html><head><title>${fileName}</title></head><body>${allHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
             w.document.close();
         }
-    } catch (e) { console.error(e); alert('다운로드 실패'); }
+    } catch (e) { console.error(e); uiAlert('다운로드 실패'); }
 }
 
 function buildHeatRows(evt, heat) {
@@ -599,7 +599,7 @@ async function loadResultsData() {
         window._currentEventRecords = null;
         window._currentEventDirection = null;
     }
-    document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date().toLocaleDateString('ko-KR')}</p>${recordsBannerHtml}${windInfoHtml}${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
+    document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)}</p>${recordsBannerHtml}${windInfoHtml}${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
 
     const allArea = document.getElementById('results-all-area');
     const tableEl = document.getElementById('results-table');
@@ -631,7 +631,7 @@ async function loadResultsData() {
     else if (cat === 'combined') await renderCombinedResults();
     else {
         document.getElementById('results-thead').innerHTML = '';
-        document.getElementById('results-tbody').innerHTML = '<tr><td class="empty-state">데이터 없음</td></tr>';
+        document.getElementById('results-tbody').innerHTML = '<tr><td class="empty-state">기록이 없습니다</td></tr>';
     }
 }
 
@@ -1078,15 +1078,8 @@ async function renderFieldHeightResults(entries) {
     const rows = entries.map(e => {
         const ea = ha.filter(a => a.event_entry_id === e.event_entry_id);
         const hd = {}; ea.forEach(a => { if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
-        let best = null, totalFails = 0, failsAtBest = 0, hasAttempts = false;
-        hts.forEach(h2 => {
-            const d = hd[h2]; if (!d) return;
-            hasAttempts = true;
-            const xCount = Object.values(d).filter(m => m === 'X').length;
-            totalFails += xCount;
-            if (Object.values(d).includes('O')) { best = h2; failsAtBest = xCount; }
-        });
-        const isNM = best == null && hasAttempts && totalFails >= 3;
+        const _hs = PaceRanking.heightStats(hd, hts);   // 공용 모듈 (WA TR 26.2·26.8)
+        const best = _hs.best, totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest, isNM = _hs.isNM;
         return { ...e, hd, best, totalFails, failsAtBest, isNM };
     }).sort((a, b) => {
         if (a.best == null && b.best == null) return 0;
@@ -1218,7 +1211,7 @@ async function _showCombinedSubResult(subOrder) {
     if (!dbSub) { area.innerHTML = '<div class="empty-state">세부 종목을 찾을 수 없습니다.</div>'; return; }
     
     const subHeats = await API.getHeats(dbSub.id);
-    if (subHeats.length === 0) { area.innerHTML = '<div class="empty-state">히트가 없습니다.</div>'; return; }
+    if (subHeats.length === 0) { area.innerHTML = '<div class="empty-state">조가 없습니다.</div>'; return; }
     
     const heatId = subHeats[0].id;
     const entries = await API.getHeatEntries(heatId);
@@ -1328,15 +1321,8 @@ function _renderCombinedSubHeightResult(area, seDef, entries, attempts) {
         const ea = attempts.filter(a => a.event_entry_id === e.event_entry_id);
         const hd = {};
         ea.forEach(a => { if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
-        let best = null, elim = false, totalFails = 0, failsAtBest = 0;
-        heights.forEach(h => {
-            const d = hd[h]; if (!d) return;
-            const xCount = Object.values(d).filter(m => m === 'X').length;
-            totalFails += xCount;
-            if (Object.values(d).includes('O')) { best = h; failsAtBest = xCount; }
-            if (xCount >= 3) elim = true;
-        });
-        return { ...e, heightData: hd, bestHeight: best, eliminated: elim, totalFails, failsAtBest };
+        const _hs = PaceRanking.heightStats(hd, heights);   // 공용 모듈 (WA TR 26.2·26.8)
+        return { ...e, heightData: hd, bestHeight: _hs.best, eliminated: _hs.eliminated, totalFails: _hs.totalFails, failsAtBest: _hs.failsAtBest };
     });
     const ranked = dataRows.filter(r => r.bestHeight != null).sort((a, b) => {
         if (b.bestHeight !== a.bestHeight) return b.bestHeight - a.bestHeight;
@@ -1407,12 +1393,12 @@ function exportExcel() {
 async function exportPNG() {
     const el = document.getElementById('results-content');
     if (!el) return;
-    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const a = document.createElement('a'); a.download = `${rSelectedEvent ? rSelectedEvent.name : 'results'}.png`; a.href = c.toDataURL('image/png'); a.click(); } catch (e) { alert('이미지 생성 실패'); }
+    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const a = document.createElement('a'); a.download = `${rSelectedEvent ? rSelectedEvent.name : 'results'}.png`; a.href = c.toDataURL('image/png'); a.click(); } catch (e) { uiAlert('이미지 생성 실패'); }
 }
 async function exportPDF() {
     const el = document.getElementById('results-content');
     if (!el) return;
-    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const w = window.open('', '_blank'); w.document.write(`<html><head><title>Results</title></head><body style="margin:0;padding:20px;"><img src="${c.toDataURL('image/png')}" style="max-width:100%;"><script>window.onload=function(){window.print();}<\/script></body></html>`); w.document.close(); } catch (e) { alert('PDF 생성 실패'); }
+    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const w = window.open('', '_blank'); w.document.write(`<html><head><title>Results</title></head><body style="margin:0;padding:20px;"><img src="${c.toDataURL('image/png')}" style="max-width:100%;"><script>window.onload=function(){window.print();}<\/script></body></html>`); w.document.close(); } catch (e) { uiAlert('PDF 생성 실패'); }
 }
 
 // IO 1080x1350 PNG generator removed — was 882 lines of unreachable code.

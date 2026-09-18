@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS competition (
     federation TEXT DEFAULT '',
     division_type TEXT DEFAULT '',
     mode TEXT NOT NULL DEFAULT 'operation',         -- 'operation' | 'display'
-    series_id INTEGER REFERENCES competition_series(id)
+    series_id INTEGER REFERENCES competition_series(id),
+    home_visibility TEXT NOT NULL DEFAULT 'auto',    -- 'auto' | 'pinned'(홈 고정) | 'hidden'(홈 숨김)
+    manual_status_lock INTEGER NOT NULL DEFAULT 0    -- 1=관리자 '대회 재개'로 수동 상태고정 → 날짜 자동갱신(active→completed) 제외
 );
 
 -- Events (종목) — linked to competition
@@ -319,4 +321,14 @@ CREATE TABLE IF NOT EXISTS operation_key (
     role TEXT NOT NULL DEFAULT 'operation' CHECK(role IN ('operation','admin')),
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 트랙 기록(attempt_number IS NULL) 중복 방지 — UNIQUE(heat_id,event_entry_id,attempt_number) 는 NULL 에 효력이 없다
+CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_entry_id) WHERE attempt_number IS NULL;
+
+-- 워드 상장 양식 (현장 인쇄용) — scope_key: 'global' | 'c<대회id>', config: JSON (lib/awardDocxTemplate.js)
+CREATE TABLE IF NOT EXISTS award_docx_template (
+    scope_key TEXT PRIMARY KEY,
+    config TEXT NOT NULL,
+    updated_at TEXT
 );

@@ -1,0 +1,11 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.pacerise.node",
+    "sha256_cert_fingerprints": [
+      "33:76:BC:72:58:59:F9:A1:C3:99:BA:88:09:01:A2:15:35:F6:DD:65:AF:D6:9C:8B:2A:6F:77:18:AA:FF:5C:F9",
+      "DC:87:28:35:7E:B4:4D:B6:51:6C:67:76:E6:52:96:49:E8:6F:CE:08:49:33:0C:D6:73:4B:4E:4B:CD:CB:94:D2"
+    ]
+  }
+}]

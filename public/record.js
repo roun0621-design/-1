@@ -132,6 +132,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof guardEndedCompForOperation === 'function') await guardEndedCompForOperation('record');
 
     // ─── 오프라인 동기화 완료 시 현재 화면 데이터 다시 fetch (옵티미스틱 값을 서버 값으로 reconcile)
+    // 실시간 연결(SSE)이 끊겼다 다시 붙으면 그 사이의 변경을 놓쳤을 수 있다 → 입력 중이 아닐 때만 현재 화면을 다시 읽는다
+    if (typeof onSSEReconnect === 'function') onSSEReconnect(() => {
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && ae.value) return;   // 입력 중인 값은 건드리지 않는다
+        if (typeof window.onSyncComplete === 'function') window.onSyncComplete();
+    });
     window.onSyncComplete = async function() {
         try {
             if (state.selectedEvent) {
@@ -522,7 +528,7 @@ function playCompVideo() {
 }
 async function editEventVideoUrl() {
     const current = document.getElementById('btn-play-video')?.dataset?.url || '';
-    const url = prompt('종목 영상 URL을 입력하세요 (YouTube):', current);
+    const url = await uiPrompt('종목 영상 URL을 입력하세요 (YouTube):', current);
     if (url === null) return; // cancelled
     try {
         const key = localStorage.getItem('accessKey') || '';
@@ -709,12 +715,27 @@ function showPlaceholder() {
         </div>`;
 }
 
+// 종목명으로 세부종목의 실제 카테고리 추정 (잘못된 category 방어용)
+function _guessSubCategory(name) {
+    const n = (name || '').replace(/^\[.*?\]\s*/, '').replace(/\s+/g, '');
+    if (/높이뛰기|장대높이뛰기/.test(n)) return 'field_height';
+    if (/멀리뛰기|세단뛰기|포환던지기|원반던지기|창던지기|해머던지기|던지기|뛰기/.test(n)) return 'field_distance';
+    return 'track'; // 100mH/200m/800m 등
+}
+
 async function renderDetail() {
     const evt = state.selectedEvent;
     if (!evt) return showPlaceholder();
 
     state.heats = await API.getHeats(evt.id);
-    const cat = evt.category;
+    let cat = evt.category;
+
+    // 방어: 세부종목(parent_event_id 있음)은 절대 combined 가 될 수 없음.
+    // category 가 'combined'(또는 누락)로 잘못 저장된 트랙/필드 세부종목을 종목명으로 올바르게 라우팅.
+    // (이 버그로 트랙 세부종목 클릭 시 종합순위 화면만 떠서 기록 입력이 안 되던 문제 해결)
+    if (evt.parent_event_id && (cat === 'combined' || !cat)) {
+        cat = _guessSubCategory(evt.name);
+    }
 
     if (cat === 'track' || cat === 'relay' || cat === 'road') await renderTrackDetail(evt);
     else if (cat === 'field_distance') await renderFieldDistanceDetail(evt);
@@ -934,7 +955,7 @@ async function renderTrackTable() {
                     <td><strong>${bib(r.bib_number)}</strong></td>
                     <td style="text-align:left;">${jointBadgeHTML(r)}${r.name}${qualBadge}${relayMemberHtml}</td>
                     <td style="font-size:12px;text-align:left;">${r.team || ''}</td>
-                    <td><input class="track-time-input ${savedClass}" data-eid="${r.event_entry_id}" data-row="${idx}"
+                    <td><input class="track-time-input ${savedClass}" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-row="${idx}"
                         value="${displayVal}" placeholder="${placeholder}" ${r.status_code ? 'disabled' : ''}
                         onkeydown="trackInlineKeydown(event,this)" oninput="trackInlineInput(this)" onfocus="this.select()"></td>
                     <td><select class="sc-select" data-eid="${r.event_entry_id}" onchange="setStatusCode(this)" title="DQ=실격, DNS=불출발, DNF=미완주, NM=기록없음">
@@ -1045,6 +1066,7 @@ async function saveSingleTrackInline(inp, doRerender = true) {
 }
 
 async function saveAllTrackInline() {
+    let _failCnt = 0;
     if (!confirmCompletedEdit()) return;
     const inputs = document.querySelectorAll('.track-time-input');
     for (const inp of inputs) {
@@ -1056,9 +1078,11 @@ async function saveAllTrackInline() {
         try {
             await API.upsertResult({ heat_id: hid, event_entry_id: eid, time_seconds: v });
             delete state._pendingInlineTrack[eid];
-        } catch (err) { inp.classList.remove('saving'); inp.disabled = false; inp.classList.add('error'); showToast(err.error || '저장 실패', 'error'); }
+        } catch (err) { _failCnt++; inp.classList.remove('saving'); inp.disabled = false; inp.classList.add('error'); showToast(err.error || '저장 실패', 'error'); }
     }
     if (Object.keys(state._pendingInlineTrack).length === 0) clearUnsaved();
+    // 실패가 있었는데 '전체 저장 완료'라고 알리면 안 된다 — 실패한 칸(빨간 테두리)은 그대로 두고 건수를 알린다
+    if (_failCnt > 0) { showToast(`${_failCnt}건이 저장되지 않았습니다 — 빨간 칸을 확인하고 다시 저장하세요`, 'error', 7000); return; }
     showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 전체 저장 완료');
     await loadTrackHeatData();
     if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
@@ -1092,7 +1116,7 @@ async function saveHeatWind() {
         // Hide inline warning
         const warnEl = document.getElementById('wind-warning-inline');
         if (warnEl) warnEl.style.display = 'none';
-    } catch (e) { console.error(e); }
+    } catch (e) { _recSaveFailed('풍속', e); }
 }
 async function loadHeatWind() {
     const inp = document.getElementById('heat-wind-input');
@@ -1157,7 +1181,9 @@ async function setStatusCode(sel) {
     const sc = sel.value;
     const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
     try {
-        await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, time_seconds: sc ? null : undefined });
+        const _saved = await API.upsertResult({ heat_id: hid, event_entry_id: eid, status_code: sc, time_seconds: sc ? null : undefined });
+        // 오프라인이라 기기에 임시 저장된 경우: 서버에서 다시 읽으면 '예전에 받아둔 값'이 와서 방금 바꾼 상태가 되돌아간 것처럼 보인다 → 화면 값만 반영하고 끝낸다
+        if (_saved && _saved.queued) { _optimisticUpsertResult(eid, null, { heat_id: hid, status_code: sc, ...(sc ? { time_seconds: null } : {}) }); renderTrackTable(); return; }
         // [JOINT] 합동모드면 현재 heat + joint extras 모두 재로딩, 아니면 기존 heat 만
         let allResults = await API.getResults(state.heatId);
         if (isJointMode()) {
@@ -1170,7 +1196,20 @@ async function setStatusCode(sel) {
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         }
-    } catch (e) { console.error(e); }
+    } catch (e) { _recSaveFailed('선수 상태', e, true); }
+}
+// 저장 실패 알림 — 예전엔 console.error 만 하고 넘어가(또는 인자가 틀린 showBanner 호출이 catch 안에서 다시 터져) 화면에는 값이 남아 있는데
+//   서버에는 없는 상태가 조용히 생겼다. 실패를 크게 알리고, 화면에 먼저 그려둔 값이 있으면 서버 값으로 되돌린다.
+async function _recSaveFailed(what, err, reload) {
+    console.error('[record] save failed:', what, err);
+    const reason = (err && (err.error || err.message)) || '네트워크 오류';
+    showToast(`${what} 저장 실패 — ${reason}`, 'error', 7000);
+    if (!reload || !state.heatId) return;
+    try {
+        state.results = await API.getResults(state.heatId);
+        if (typeof renderFieldDistanceContent === 'function' && state.selectedEvent && state.selectedEvent.category === 'field_distance') renderFieldDistanceContent();
+        else if (typeof renderTrackTable === 'function' && state.selectedEvent && (state.selectedEvent.category === 'track' || state.selectedEvent.category === 'relay' || state.selectedEvent.category === 'road')) renderTrackTable();
+    } catch (e) { /* 서버에 닿지 않으면 되돌릴 값도 없다 — 알림만 남긴다 */ }
 }
 async function saveRemark(inp) {
     if (!confirmCompletedEdit()) return;
@@ -1178,7 +1217,7 @@ async function saveRemark(inp) {
     const hid = getSaveHeatId(eid); // [JOINT] entry 의 원래 대회 heat 로 저장
     try {
         await API.upsertResult({ heat_id: hid, event_entry_id: eid, remark: inp.value.trim() });
-    } catch (e) { console.error(e); }
+    } catch (e) { _recSaveFailed('비고', e); }
 }
 
 // Status code for standalone field distance events (DNS/DNF/DQ/NM)
@@ -1205,7 +1244,7 @@ async function setFieldDistStatusCode(sel) {
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         }
-    } catch (e) { console.error('setFieldDistStatusCode error:', e); }
+    } catch (e) { _recSaveFailed('선수 상태', e, true); }
 }
 
 // Status code for standalone field height events (DNS/DNF/DQ)
@@ -1236,7 +1275,7 @@ async function setFieldHeightStatusCode(sel) {
         if (state.selectedEvent && state.selectedEvent.parent_event_id) {
             await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         }
-    } catch (e) { console.error('setFieldHeightStatusCode error:', e); }
+    } catch (e) { _recSaveFailed('선수 상태', e, true); }
 }
 
 // Status code for combined sub-event field height (DNS/DNF/DQ)
@@ -1456,6 +1495,7 @@ function renderFieldDistanceContent() {
         <button class="btn btn-xs ${!isRank && !isView ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('input')" title="스몰넘버 순서">No.순</button>
         <button class="btn btn-xs ${isRank ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('rank')" title="기록순">기록순</button>
         <button class="btn btn-xs ${isView ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('view')" title="조망 모드">조망</button>
+        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="openFieldCardUpload()" title="수기 기록카드 사진을 올려 AI 로 전사하고 표에서 확인·수정 후 저장">📷 기록카드</button>
     </div>`;
 
     content.innerHTML = `
@@ -1487,7 +1527,10 @@ function renderFieldDistanceContent() {
                         const cls = top8.has(r.event_entry_id) ? 'top8-highlight' : '';
                         const zebraCls = needsWind ? '' : (rowIdx % 2 === 1 ? 'field-row-odd' : '');
                         // === ROW 1: Name + Distance records ===
-                        const isStatusDisabled = !!r.status_code;
+                        // DNS/DNF/DQ 는 시도 입력이 의미 없어 잠그지만, NM(파울/패스로 유효기록 없음)은
+                        // 선수가 시기를 치른 상태라 수정 가능해야 함 → NM 은 입력칸을 잠그지 않는다.
+                        // (NM 자동판정이 입력칸을 잠가 패스를 실제 기록으로 못 고치던 deadlock 해결)
+                        const isStatusDisabled = !!r.status_code && r.status_code !== 'NM';
                         let distCells = '';
                         for (let i = 1; i <= maxAttempts; i++) {
                             const v = r.attempts[i];
@@ -1502,7 +1545,7 @@ function renderFieldDistanceContent() {
                                 distCells += `<td class="attempt-cell ${attColCls}" style="opacity:0.3;text-align:center;">—</td>`;
                             } else if (isActive && !isView) {
                                 distCells += `<td class="attempt-cell attempt-cell-editing ${attColCls}" data-entry="${r.event_entry_id}" data-attempt="${i}">
-                                    <input class="field-dist-input" type="text" data-eid="${r.event_entry_id}" data-att="${i}" data-row="${rowIdx}"
+                                    <input class="field-dist-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-att="${i}" data-row="${rowIdx}"
                                         value="${hasVal && !isFoul && !isPass ? v.toFixed(2) : (isPass ? '-' : '')}" placeholder="0.00 / X / -"
                                         onkeydown="fieldInlineKeydown(event,this)" oninput="fieldInlineChange(this)" onblur="fieldInlineBlur(this)" onfocus="this.select()" autofocus>
                                     <button class="btn btn-xs btn-danger foul-inline-btn" onclick="fieldInlineFoul(${r.event_entry_id},${i})" title="파울 (X)">X</button>
@@ -1563,11 +1606,12 @@ function renderFieldDistanceContent() {
                                             onkeydown="fieldWindKeydown2(event,this)" onblur="windCellBlur(this)" onfocus="this.select()" autofocus>
                                     </td>`;
                                 } else {
+                                    // 기록(거리) 입력 전에도 풍속 먼저 입력 가능 — 풍속계가 먼저 나오는 현장 순서
                                     let wDisp = '';
-                                    if (hasVal && !isFoul && !isPass && r.attWind && r.attWind[i] != null) {
+                                    if (!isFoul && !isPass && r.attWind && r.attWind[i] != null) {
                                         wDisp = formatWind(r.attWind[i]);
                                     }
-                                    const wClickAttr = (isView || !hasVal || isFoul || isPass) ? '' : `onclick="activateWindCell(${r.event_entry_id},${i})"`;
+                                    const wClickAttr = (isView || isFoul || isPass) ? '' : `onclick="activateWindCell(${r.event_entry_id},${i})"`;
                                     windCells += `<td class="wind-cell ${wAttColCls}" ${wClickAttr}>${wDisp}</td>`;
                                 }
                             } else {
@@ -1626,19 +1670,34 @@ function renderFieldDistanceContent() {
     if (activeInput) setTimeout(() => activeInput.focus(), 30);
 }
 
+// ============================================================
+// 필드 기록카드 업로드 (사진/xlsx → AI 전사 → 표에서 수정 → 저장) — public/field-card-upload.js
+// 종목·조는 현재 화면으로 고정, 선수는 배번으로 매칭. 관리자 키 또는 운영키 필요.
+// ============================================================
+function openFieldCardUpload() {
+    const evt = state.selectedEvent, hid = state.heatId;
+    if (!evt || !hid) { uiAlert('종목과 조를 먼저 선택하세요.'); return; }
+    if (typeof FieldCardUpload === 'undefined') { uiAlert('업로드 모듈이 로드되지 않았습니다. 페이지를 새로고침해 주세요.'); return; }
+    let key = localStorage.getItem('pace_admin_key') || sessionStorage.getItem('admin_key') || localStorage.getItem('admin_key')
+        || localStorage.getItem('op_key') || localStorage.getItem('accessKey') || '';
+    if (!key) { key = prompt('운영키 또는 관리자 키를 입력하세요'); if (!key) return; localStorage.setItem('op_key', key); }
+    const heat = (state.heats || []).find(h => h.id === hid);
+    FieldCardUpload.open({
+        competitionId: evt.competition_id, heatId: hid, key,
+        eventName: evt.name, gender: evt.gender, division: evt.division || '', roundType: evt.round_type,
+        heatNumber: heat ? heat.heat_number : '', category: evt.category,
+        needsWind: requiresWindMeasurement(evt.name, 'field_distance'),
+        onSaved: async () => {
+            if (evt.category === 'field_height') await loadFieldHeightData();
+            else await loadFieldDistanceData();
+        },
+    });
+}
+
 function getTop8Ids(rows) {
-    const wb = rows.filter(r => r.best != null).sort((a, b) => b.best - a.best);
-    const ids = new Set();
-    if (wb.length <= 8) { wb.forEach(r => ids.add(r.event_entry_id)); }
-    else {
-        let c = 0;
-        for (let i = 0; i < wb.length; i++) {
-            if (c < 8) { ids.add(wb[i].event_entry_id); c++; }
-            else if (wb[i].best === wb[i - 1].best) ids.add(wb[i].event_entry_id);
-            else break;
-        }
-    }
-    return ids;
+    // WA TR 25.6 — 8위 동률은 두 번째·세 번째 기록으로 가리고, 끝까지 같으면 모두 진출 (공용 모듈)
+    //   예전엔 최고 기록만 같으면 전부 포함시켜, 규정상 탈락인 선수에게도 4~6차 시기를 열어 줬다.
+    return PaceRanking.topNIds(rows.map(r => ({ event_entry_id: r.event_entry_id, best: r.best, sortedValid: r.sortedValid || (r.best != null ? [r.best] : []) })), 8);
 }
 
 // ============================================================
@@ -1875,24 +1934,20 @@ function fieldWindKeydown(e, windInp) {
 async function saveFieldWind(entryId, attempt, wind) {
     if (!confirmCompletedEdit()) return;
     try {
-        const existing = state.results.find(r => r.event_entry_id === entryId && r.attempt_number === attempt);
-        if (existing) {
-            const hid = getSaveHeatId(entryId); // [JOINT]
-            await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: existing.distance_meters, wind });
-            let allResults = await API.getResults(state.heatId);
-            if (isJointMode()) {
-                const extraR = await fetchJointExtraResults();
-                allResults = allResults.concat(extraR);
-            }
-            state.results = allResults;
-            state._activeWindCell = null;
-            state._activeFieldCell = null;
-            showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 풍속 저장');
-            renderFieldDistanceContent();
+        // 기록이 아직 없어도 풍속만 먼저 저장 가능 (distance_meters 미전송 → 기존값 유지 / 신규는 NULL)
+        const hid = getSaveHeatId(entryId); // [JOINT]
+        await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, wind });
+        let allResults = await API.getResults(state.heatId);
+        if (isJointMode()) {
+            const extraR = await fetchJointExtraResults();
+            allResults = allResults.concat(extraR);
         }
-    } catch (err) {
-        console.error('saveFieldWind error:', err);
-    }
+        state.results = allResults;
+        state._activeWindCell = null;
+        state._activeFieldCell = null;
+        showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 풍속 저장');
+        renderFieldDistanceContent();
+    } catch (err) { _recSaveFailed('풍속', err, true); }
 }
 
 async function saveFieldInline(entryId, attempt, distance) {
@@ -1932,8 +1987,7 @@ async function saveFieldInline(entryId, attempt, distance) {
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
     } catch (err) {
-        console.error('saveFieldInline error:', err);
-        showBanner('저장 실패', 'error');
+        _recSaveFailed('기록', err, true);
     }
 }
 
@@ -2001,7 +2055,7 @@ async function fieldDblClickFoul(entryId, attempt) {
         showFoulNotice();
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
-    } catch (err) { console.error('fieldDblClickFoul error:', err); }
+    } catch (err) { _recSaveFailed('파울', err, true); }
 }
 
 // Show foul notice banner
@@ -2116,6 +2170,22 @@ function setupFieldModal() { /* No longer used — inline editing replaces modal
 // ============================================================
 // FIELD HEIGHT DETAIL — redesigned: empty start, add-height button, O/X/- toggle
 // ============================================================
+// 수직도약 순위결정전(동기록) — RANK 칸에 직접 입력한 순위 저장
+async function saveHeightManualRank(inp) {
+    if (!confirmCompletedEdit()) return;
+    const eid = +inp.dataset.eid;
+    const raw = (inp.value || '').trim();
+    const val = raw === '' ? null : parseInt(raw);
+    if (raw !== '' && (isNaN(val) || val < 1)) { showToast('순위는 1 이상의 숫자로 입력하세요.', 'error'); return; }
+    try {
+        await API.setManualRank(eid, val);
+        // 새 순위로 정렬 반영
+        if (state.selectedEvent) await renderFieldHeightDetail(state.selectedEvent);
+    } catch (e) {
+        showToast((e && (e.error || e.message)) || '순위 저장 실패', 'error');
+    }
+}
+
 async function renderFieldHeightDetail(evt) {
     let parentLink = '';
     if (evt.parent_event_id) {
@@ -2194,10 +2264,10 @@ async function deleteBarHeight(barHeight) {
     // Check if any attempts recorded at this height
     const attemptsAtHeight = (state.heightAttempts || []).filter(a => a.bar_height === h);
     if (attemptsAtHeight.length > 0) {
-        if (!confirm(`${formatHeight(h)}에 ${attemptsAtHeight.length}개의 시기 기록이 있습니다.\n이 높이와 모든 기록을 삭제하시겠습니까?`)) return;
+        if (!await uiConfirm(`${formatHeight(h)}에 ${attemptsAtHeight.length}개의 시기 기록이 있습니다.\n이 높이와 모든 기록을 삭제하시겠습니까?`)) return;
         // Delete from server
         try {
-            const key = localStorage.getItem('op_key') || prompt('운영키를 입력하세요');
+            const key = localStorage.getItem('op_key') || await uiPrompt('운영키를 입력하세요');
             if (!key) return;
             // [JOINT] 합동 모드면 모든 멤버 대회 heat 에서 동시에 삭제
             await api('POST', '/api/height-attempts/delete-bar', { heat_id: state.heatId, bar_height: h, admin_key: key });
@@ -2211,7 +2281,7 @@ async function deleteBarHeight(barHeight) {
                     } catch (err) { console.warn('[joint] delete-bar failed for', m.event_id, err); }
                 }
             }
-        } catch (err) { alert('삭제 실패: ' + (err.error || '')); return; }
+        } catch (err) { uiAlert('삭제 실패: ' + (err.error || '')); return; }
     }
     // Remove from local bar list
     state._heightBarList = state._heightBarList.filter(x => x !== h);
@@ -2320,15 +2390,11 @@ function renderHeightContent() {
         }
         if (isDNS && !status_code) status_code = 'DNS';
         if (status_code) elim = true;
-        // Count total failures and total O for tiebreaking
-        let totalFails = 0, failsAtBest = 0;
-        heights.forEach(h => {
-            const d = hd[h]; if (!d) return;
-            const xCount = Object.values(d).filter(m => m === 'X').length;
-            totalFails += xCount;
-            if (Object.values(d).includes('O')) { best = h; failsAtBest = xCount; }
-            if (xCount >= 3) elim = true;
-        });
+        // 순위 규칙은 공용 모듈(public/lib/ranking.js, WA TR 26.2·26.8) — 3회 '연속' 실패 탈락, 마지막으로 넘은 높이까지의 실패 수로 카운트백
+        const _hs = PaceRanking.heightStats(hd, heights);
+        best = _hs.best;
+        const totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest;
+        if (_hs.eliminated) elim = true;
         // Auto-detect NM
         const isNM = elim && best == null && !isDNS && !status_code;
         if (isNM && !status_code) status_code = 'NM';
@@ -2355,6 +2421,8 @@ function renderHeightContent() {
         if (r.bestHeight == null) r.rank = null;
         else { const f = rankedH.find(x => x.event_entry_id === r.event_entry_id); if (f) r.rank = f.rank; }
     });
+    // 수동 순위(순위결정전/동기록 시 직접 입력) override — 계산 순위를 덮어씀
+    rows.forEach(r => { if (r.manual_rank != null && r.manual_rank !== '') r.rank = Number(r.manual_rank); });
 
     // Sort: rank mode puts ranked athletes first by rank, then unranked
     const sorted = isRank
@@ -2373,14 +2441,17 @@ function renderHeightContent() {
         <span style="font-size:11px;font-weight:700;color:var(--text-muted);">정렬:</span>
         <button class="btn btn-xs ${!isRank ? 'btn-primary' : 'btn-outline'}" onclick="setHeightMode('input')" title="레인 순서">No.순</button>
         <button class="btn btn-xs ${isRank ? 'btn-primary' : 'btn-outline'}" onclick="setHeightMode('rank')" title="순위별 정렬">순위순</button>
+        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="openFieldCardUpload()" title="수기 기록카드 사진을 올려 AI 로 전사하고 표에서 확인·수정 후 저장">📷 기록카드</button>
     </div>`;
 
     let hdr = '<th>RANK</th><th>No.</th><th>NAME / BIB</th>';
     heights.forEach(h => { hdr += `<th class="height-col-header" style="font-size:10px;">${formatHeight(h)}<br><button class="btn-bar-delete" onclick="deleteBarHeight(${h})" title="${formatHeight(h)} 삭제">&times;</button></th>`; });
     hdr += '<th>최고</th><th>상태</th>';
 
+    // 높이 열이 늘어나면 표가 화면보다 넓어진다 → 가로 스크롤 래퍼로 감싼다 (없으면 상위 overflow-x:hidden 에 잘려 드래그 불가)
     document.getElementById('height-content').innerHTML = `
         ${sortBtns}
+        <div class="matrix-scroll-wrap height-scroll-wrap">
         <table class="data-table field-table height-toggle-table">
             <thead><tr>${hdr}</tr></thead>
             <tbody>${sorted.map(r => {
@@ -2417,9 +2488,13 @@ function renderHeightContent() {
                         cells += `<td class="height-toggle-cell">${cellContent}</td>`;
                     });
                 }
-                // Rank display
+                // Rank display — 순위결정전(동기록) 대비 직접 타이핑 가능한 입력칸.
+                //   비우면 자동순위로 복귀, 숫자 입력 시 수동 순위로 고정.
                 const rankDisp = r.status_code ? `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>` :
-                    (r.rank || '—');
+                    `<input class="height-rank-input" type="text" inputmode="numeric" value="${r.rank != null ? r.rank : ''}"
+                        data-eid="${r.event_entry_id}" placeholder="—" title="순위결정전 시 직접 입력 (비우면 자동)"
+                        onchange="saveHeightManualRank(this)" onfocus="this.select()"
+                        style="width:40px;text-align:center;padding:3px 2px;border:1px solid #d1d5db;border-radius:5px;font-weight:700;font-size:13px;background:${r.manual_rank != null ? '#fffbea' : '#fff'};">`;
                 // Status dropdown
                 const scDropdown = `<select class="sc-select" data-eid="${r.event_entry_id}" onchange="setFieldHeightStatusCode(this)" title="DNS=불출전, DNF=미완주, DQ=실격, NM=기록없음" ${r._isNoShow ? 'disabled' : ''}>
                     <option value="">—</option><option value="DNS" ${r.status_code==='DNS'?'selected':''}>DNS</option>
@@ -2441,7 +2516,8 @@ function renderHeightContent() {
                     <td>${statusCell}</td>
                 </tr>`;
             }).join('')}</tbody>
-        </table>`;
+        </table>
+        </div>`;
 }
 
 // Toggle height sort mode
@@ -2455,7 +2531,8 @@ function setHeightMode(mode) {
 //     · 옵티미스틱 머지 제거 → 서버 응답으로만 state 갱신 (race 의 근원 차단)
 //     · 클릭 시 즉시 버튼 disabled (busy 표시) → 서버 호출 → reload → 렌더
 //     · cycle: empty → X → O → '-' (pass) → empty
-async function toggleHeightMark(entryId, barHeight, attemptNumber) {
+// forceMark: 'O' | 'X' | '-' | '' 를 주면 순환 대신 그 값으로 지정 (터치 키패드 패널 record-fieldpad.js 에서 사용)
+async function toggleHeightMark(entryId, barHeight, attemptNumber, forceMark) {
     const cellKey = _heightCellKey(entryId, barHeight, attemptNumber);
     return _heightCellRunSerial(cellKey, async () => {
         // 직렬화 락 안에 들어왔으므로 직전 작업은 이미 완료 → state 최신.
@@ -2463,7 +2540,7 @@ async function toggleHeightMark(entryId, barHeight, attemptNumber) {
             a.event_entry_id === entryId && a.bar_height === barHeight && a.attempt_number === attemptNumber
         );
         const currentMark = current ? current.result_mark : '';
-        const newMark = _heightNextMark(currentMark);
+        const newMark = (forceMark !== undefined && forceMark !== null) ? forceMark : _heightNextMark(currentMark);
 
         _heightCellMarkBusy(cellKey, true);
         renderHeightContent(); // busy 표시 즉시 반영
@@ -2764,13 +2841,13 @@ async function _renderScoreboard(container) {
 async function repairCombinedScoresAction() {
     const evt = _combinedParentEvt || state.selectedEvent;
     if (!evt) return;
-    if (!confirm(`${evt.name} 종합 점수를 모두 지우고 세부기록에서 다시 계산합니다.\n\n(점수가 잘못 표시될 때만 사용)\n계속하시겠습니까?`)) return;
+    if (!await uiConfirm(`${evt.name} 종합 점수를 모두 지우고 세부기록에서 다시 계산합니다.\n\n(점수가 잘못 표시될 때만 사용)\n계속하시겠습니까?`)) return;
     let adminKey = '';
     try {
         const stored = sessionStorage.getItem('admin_key') || localStorage.getItem('admin_key') || '';
-        adminKey = stored || prompt('운영 키를 입력하세요:') || '';
+        adminKey = stored || await uiPrompt('운영 키를 입력하세요:') || '';
     } catch(e) {
-        adminKey = prompt('운영 키를 입력하세요:') || '';
+        adminKey = await uiPrompt('운영 키를 입력하세요:') || '';
     }
     if (!adminKey) return;
     try {
@@ -2797,10 +2874,10 @@ async function completeCombinedEvent() {
     });
     
     if (missingOrders.length > 0) {
-        const proceed = confirm(`다음 종목에 기록이 없습니다:\n${missingOrders.join('\n')}\n\n그래도 경기를 완료하시겠습니까?`);
+        const proceed = await uiConfirm(`다음 종목에 기록이 없습니다:\n${missingOrders.join('\n')}\n\n그래도 경기를 완료하시겠습니까?`);
         if (!proceed) return;
     } else {
-        if (!confirm('모든 세부종목의 기록을 확인했습니까?\n경기를 최종 완료 처리합니다.')) return;
+        if (!await uiConfirm('모든 세부종목의 기록을 확인했습니까?\n경기를 최종 완료 처리합니다.')) return;
     }
     
     // Show judge/admin key modal (identical to completeRound)
@@ -2884,7 +2961,7 @@ async function revertCombinedComplete() {
         showToast('이미 진행 중 상태입니다.', 'info', 2000);
         return;
     }
-    if (!confirm(`${evt.name} 경기 완료를 취소하시겠습니까?\n다시 진행 중 상태로 되돌립니다.`)) return;
+    if (!await uiConfirm(`${evt.name} 경기 완료를 취소하시겠습니까?\n다시 진행 중 상태로 되돌립니다.`)) return;
 
     // Need admin key
     showAdminKeyModal(async (key) => {
@@ -2920,7 +2997,7 @@ async function revertCombinedComplete() {
                 await renderCombinedDetail(freshEvt);
                 showToast('이미 되돌려진 상태입니다.', 'info', 2000);
             } else {
-                alert(e.error || '완료 취소 실패: 관리자 키를 확인하세요.');
+                uiAlert(e.error || '완료 취소 실패: 관리자 키를 확인하세요.');
             }
         }
     });
@@ -3050,7 +3127,7 @@ function _renderSubTrack(area, evt, entries, results, heatId, parentId) {
             return `<tr class="${r.status_code ? 'row-status-code' : ''}">
                 <td>${r.status_code ? scBadge : (r.rank || '—')}</td><td><strong>${bib(r.bib_number)}</strong></td>
                 <td style="text-align:left;">${r.name}</td><td style="font-size:12px;text-align:left;">${r.team||''}</td>
-                <td><input class="track-time-input" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" data-row="${idx}"
+                <td><input class="track-time-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" data-row="${idx}"
                     value="${cv}" placeholder="${ph}" ${cv ? 'class="track-time-input has-value"' : ''} ${r.status_code ? 'disabled' : ''}
                     onkeydown="_cSubTrackKey(event,this)" onfocus="this.select()"></td>
                 <td><select class="sc-select" data-eid="${r.event_entry_id}" data-hid="${heatId}" data-pid="${parentId}" onchange="_cSubTrackSetStatus(this)" title="DQ=실격, DNS=불출발, DNF=미완주">
@@ -3317,7 +3394,7 @@ function _cSubFieldRender(area) {
                                 distCells += `<td class="attempt-cell ${attCls}" style="opacity:0.3;text-align:center;">—</td>`;
                             } else if (isActive) {
                                 distCells += `<td class="attempt-cell attempt-cell-editing ${attCls}" data-entry="${r.event_entry_id}" data-attempt="${i}">
-                                    <input class="field-dist-input" type="text" data-eid="${r.event_entry_id}" data-att="${i}" data-hid="${heatId}" data-pid="${parentId}" data-row="${rowIdx}"
+                                    <input class="field-dist-input" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-att="${i}" data-hid="${heatId}" data-pid="${parentId}" data-row="${rowIdx}"
                                         value="${hasVal && !isFoul ? v.toFixed(2) : ''}" placeholder="0.00"
                                         onkeydown="_cSubFieldKeydown(event,this)" oninput="_cSubFieldChange(this)" onblur="_cSubFieldBlur(this)" onfocus="this.select()" autofocus>
                                     <button class="btn btn-xs btn-danger foul-inline-btn" onclick="_cSubFieldFoul(${r.event_entry_id},${i},${heatId},${parentId})" title="파울 (X)">X</button>
@@ -3354,10 +3431,10 @@ function _cSubFieldRender(area) {
                                     </td>`;
                                 } else {
                                     let wDisp = '';
-                                    if (hasVal && !isFoul && r.attWind && r.attWind[i] != null) {
+                                    if (!isFoul && r.attWind && r.attWind[i] != null) {
                                         wDisp = formatWind(r.attWind[i]);
                                     }
-                                    const wClickAttr = (!hasVal || isFoul) ? '' : `onclick="_cSubFieldWindActivate(${r.event_entry_id},${i})"`;
+                                    const wClickAttr = isFoul ? '' : `onclick="_cSubFieldWindActivate(${r.event_entry_id},${i})"`;
                                     windCells += `<td class="wind-cell ${wAttCls}" ${wClickAttr}>${wDisp}</td>`;
                                 }
                             }
@@ -3497,7 +3574,7 @@ async function _cSubFieldSave(entryId, attempt, distance, heatId, parentId) {
             _cSubFieldRender();
         }
         await syncCombinedFromSubEvent(parentId);
-    } catch (err) { console.error('_cSubFieldSave error:', err); showBanner('저장 실패', 'error'); }
+    } catch (err) { _recSaveFailed('기록', err, true); }
 }
 
 async function _cSubFieldFoul(entryId, attempt, heatId, parentId) {
@@ -3514,7 +3591,7 @@ async function _cSubFieldFoul(entryId, attempt, heatId, parentId) {
         }
         showFoulNotice();
         await syncCombinedFromSubEvent(parentId);
-    } catch (err) { console.error('_cSubFieldFoul error:', err); }
+    } catch (err) { _recSaveFailed('파울', err, true); }
 }
 
 async function _cSubFieldDblFoul(entryId, attempt, heatId, parentId) {
@@ -3571,7 +3648,8 @@ async function _cSubFieldSaveAll() {
         if (hasStatusCode) continue; // already has status
         const attemptResults = er.filter(r => r.attempt_number != null);
         if (attemptResults.length === 0) continue; // no attempts yet
-        const allFoul = attemptResults.every(r => r.distance_meters === 0 || r.distance_meters === null);
+        // distance NULL 은 '풍속만 먼저 입력된 빈 시기' 이므로 파울로 세지 않는다
+        const allFoul = attemptResults.every(r => r.distance_meters === 0);
         const hasValidDist = attemptResults.some(r => r.distance_meters != null && r.distance_meters > 0);
         // If all attempts are fouls (distance=0) and there are enough attempts, auto-NM
         // 10종/7종 필드종목은 3회 시기 (예: 원반, 포환, 창던지기, 멀리뛰기)
@@ -3648,13 +3726,11 @@ function _cSubFieldWindBlur(inp) {
 
 async function _cSubFieldWindSave(entryId, attempt, wind, heatId, parentId) {
     try {
-        const existing = _cSubFieldData.results.find(r => r.event_entry_id === entryId && r.attempt_number === attempt);
-        if (existing) {
-            await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, distance_meters: existing.distance_meters, wind });
-            _cSubFieldData.results = await API.getResults(heatId);
-            _cSubFieldWindActive = null;
-            _cSubFieldRender();
-        }
+        // 기록 입력 전에도 풍속만 먼저 저장 가능
+        await API.upsertResult({ heat_id: heatId, event_entry_id: entryId, attempt_number: attempt, wind });
+        _cSubFieldData.results = await API.getResults(heatId);
+        _cSubFieldWindActive = null;
+        _cSubFieldRender();
     } catch(err) { console.error('_cSubFieldWindSave error:', err); }
 }
 
@@ -3738,19 +3814,17 @@ function _cSubHeightRender(area) {
             const subResults = _cSubHeightData.attempts; // height attempts don't have status_code, check via API if needed
             if (isDNS && !status_code) status_code = 'DNS';
             if (status_code) elim = true;
-            heights.forEach(h => {
-                const d = hd[h]; if (!d) return;
-                if (Object.values(d).includes('O')) best = h;
-                if (Object.values(d).filter(m => m === 'X').length >= 3) elim = true;
-            });
+            // 순위 규칙은 공용 모듈 (WA TR 26.2·26.8) — 예전엔 이 화면만 카운트백 없이 최고 높이로만 순위를 매겼다
+            const _hs = PaceRanking.heightStats(hd, heights);
+            best = _hs.best; if (_hs.eliminated) elim = true;
             const isNM = elim && best == null && !isDNS && !status_code;
             if (isNM) status_code = 'NM';
-            return { ...e, heightData: hd, bestHeight: best, eliminated: elim, _isNoShow: isDNS, status_code };
+            return { ...e, heightData: hd, bestHeight: best, best, failsAtBest: _hs.failsAtBest, totalFails: _hs.totalFails, eliminated: elim, _isNoShow: isDNS, status_code };
         });
 
-        const rankedH = rows.filter(r => r.bestHeight != null).sort((a, b) => b.bestHeight - a.bestHeight);
+        const rankedH = rows.filter(r => r.bestHeight != null).sort(PaceRanking.compareHeight);
         let rk = 1;
-        rankedH.forEach((r, i) => { r.rank = (i > 0 && rankedH[i - 1].bestHeight === r.bestHeight) ? rankedH[i - 1].rank : rk; rk = i + 2; });
+        rankedH.forEach((r, i) => { r.rank = (i > 0 && PaceRanking.compareHeight(rankedH[i - 1], r) === 0) ? rankedH[i - 1].rank : rk; rk = i + 2; });
         rows.forEach(r => {
             if (r.bestHeight == null) r.rank = null;
             else { const f = rankedH.find(x => x.event_entry_id === r.event_entry_id); if (f) r.rank = f.rank; }
@@ -3833,12 +3907,12 @@ async function _cSubHeightDeleteBar(barHeight) {
     const h = parseFloat(barHeight);
     const attemptsAtHeight = (_cSubHeightData.attempts || []).filter(a => a.bar_height === h);
     if (attemptsAtHeight.length > 0) {
-        if (!confirm(`${formatHeight(h)}에 ${attemptsAtHeight.length}개의 시기 기록이 있습니다.\n이 높이와 모든 기록을 삭제하시겠습니까?`)) return;
+        if (!await uiConfirm(`${formatHeight(h)}에 ${attemptsAtHeight.length}개의 시기 기록이 있습니다.\n이 높이와 모든 기록을 삭제하시겠습니까?`)) return;
         try {
-            const key = localStorage.getItem('op_key') || prompt('운영키를 입력하세요');
+            const key = localStorage.getItem('op_key') || await uiPrompt('운영키를 입력하세요');
             if (!key) return;
             await api('POST', '/api/height-attempts/delete-bar', { heat_id: _cSubHeightData.heatId, bar_height: h, admin_key: key });
-        } catch (err) { alert('삭제 실패: ' + (err.error || '')); return; }
+        } catch (err) { uiAlert('삭제 실패: ' + (err.error || '')); return; }
     }
     _cSubHeightBarList = _cSubHeightBarList.filter(x => x !== h);
     _cSubHeightData.attempts = await API.getHeightAttempts(_cSubHeightData.heatId);
@@ -4064,7 +4138,9 @@ async function loadAllHeatsForQual() {
                 ...e,
                 heat_id: heat.id,
                 heat_number: heat.heat_number,
-                time_seconds: r ? r.time_seconds : null,
+                // 상태코드(DQ/DNF/DNS)가 있으면 기록이 남아 있어도 진출 대상이 아니다 — 예전엔 status_code 를 안 실어 DQ 선수도 자동 선정됐다
+                time_seconds: (r && !r.status_code) ? r.time_seconds : null,
+                status_code: r ? (r.status_code || '') : '',
                 qual: null // Q, q, or null
             });
         });
@@ -4167,34 +4243,22 @@ function autoAssignQualification() {
     const qPerHeat = parseInt(document.getElementById('qual-auto-Q-per-heat')?.value) || 0;
     const qTotal = parseInt(document.getElementById('qual-auto-q-total')?.value) || 0;
 
-    // Reset all
-    _qualAllRows.forEach(r => r.qual = null);
-
-    // Group by heat
-    const heatGroups = {};
-    _qualAllRows.forEach(r => {
-        if (!heatGroups[r.heat_number]) heatGroups[r.heat_number] = [];
-        heatGroups[r.heat_number].push(r);
-    });
-
-    // Assign Q: top N per heat (by time, ascending)
-    const qAssignedIds = new Set();
-    for (const [hNum, rows] of Object.entries(heatGroups)) {
-        const sorted = rows.filter(r => r.time_seconds != null).sort((a, b) => a.time_seconds - b.time_seconds);
-        for (let i = 0; i < Math.min(qPerHeat, sorted.length); i++) {
-            sorted[i].qual = 'Q';
-            qAssignedIds.add(sorted[i].event_entry_id);
-        }
-    }
-
-    // Assign q: remaining athletes sorted by time, take top qTotal
-    if (qTotal > 0) {
-        const remaining = _qualAllRows
-            .filter(r => r.time_seconds != null && !qAssignedIds.has(r.event_entry_id))
-            .sort((a, b) => a.time_seconds - b.time_seconds);
-        for (let i = 0; i < Math.min(qTotal, remaining.length); i++) {
-            remaining[i].qual = 'q';
-        }
+    // 선정 규칙은 공용 모듈(public/lib/ranking.js · WA TR 20.3/21):
+    //   상태코드(DQ/DNF…) 선수 제외, 마지막 자리 동기록(1/1000초)은 자동으로 가르지 않고 경고로 알린다.
+    _qualAllRows.forEach(r => { r.qual = null; r.tieWarn = false; });
+    const _aq = PaceRanking.autoQualify(_qualAllRows, qPerHeat, qTotal);
+    _qualAllRows.forEach(r => { if (_aq.Q.has(r.event_entry_id)) r.qual = 'Q'; else if (_aq.q.has(r.event_entry_id)) r.qual = 'q'; });
+    const _sec = document.getElementById('track-qual-section');
+    if (_sec) {
+        let warn = document.getElementById('qual-tie-warning');
+        if (!warn) { warn = document.createElement('div'); warn.id = 'qual-tie-warning'; warn.style.cssText = 'margin:8px 0;padding:10px 12px;border-radius:8px;background:#fdecea;border:1.5px solid #d32f2f;color:#8b1a1a;font-size:13px;font-weight:600;line-height:1.6;'; _sec.insertBefore(warn, _sec.firstChild); }
+        if (_aq.ties.length) {
+            const nameOf = id => { const r = _qualAllRows.find(x => x.event_entry_id === id); return r ? `${r.name}(${r.heat_number}조 ${formatTime(r.time_seconds)})` : id; };
+            _aq.ties.forEach(t => t.ids.forEach(id => { const r = _qualAllRows.find(x => x.event_entry_id === id); if (r) r.tieWarn = true; }));
+            warn.innerHTML = '⚠️ 진출 마지막 자리에 동기록이 있습니다 — 자동 선정은 앞 순서대로만 넣었으니 심판장 결정(레인 여유 시 모두 진출 / 추첨)에 따라 직접 조정하세요.<br>' +
+                _aq.ties.map(t => `· ${t.type === 'Q' ? t.heat_number + '조 순위 진출(Q)' : '기록 진출(q)'}: ${t.ids.map(nameOf).join(' = ')}`).join('<br>');
+            warn.style.display = 'block';
+        } else warn.style.display = 'none';
     }
 
     // Re-render
@@ -4286,9 +4350,9 @@ function toggleQual(entryId) {
 
 async function approveQualification() {
     const qualified = _qualAllRows.filter(r => r.qual === 'Q' || r.qual === 'q');
-    if (qualified.length === 0) { alert('진출자가 선택되지 않았습니다. Q 또는 q를 지정하세요.'); return; }
+    if (qualified.length === 0) { uiAlert('진출자가 선택되지 않았습니다. Q 또는 q를 지정하세요.'); return; }
     const groupCount = parseInt(document.getElementById('final-group-count')?.value) || 1;
-    if (!confirm(`결승 ${groupCount}개 조로 ${qualified.length}명을 확정하고 결승 라운드를 생성합니다.\nWA 규정에 따라 서펜타인 시딩 및 레인 배정이 적용됩니다.\n계속하시겠습니까?`)) return;
+    if (!await uiConfirm(`결승 ${groupCount}개 조로 ${qualified.length}명을 확정하고 결승 라운드를 생성합니다.\nWA 규정에 따라 서펜타인 시딩 및 레인 배정이 적용됩니다.\n계속하시겠습니까?`)) return;
 
     const selections = _qualAllRows.map(r => ({
         event_entry_id: r.event_entry_id,
@@ -4307,9 +4371,9 @@ async function approveQualification() {
         if (res.final_event_id) {
             await showLaneAssignmentReview(res.final_event_id, res.count);
         } else {
-            alert(`결승 생성 완료 (${res.count}명 진출, ${groupCount}개 조)`);
+            uiAlert(`결승 생성 완료 (${res.count}명 진출, ${groupCount}개 조)`);
         }
-    } catch (e) { alert('결승 생성 실패: ' + (e.error || '')); }
+    } catch (e) { uiAlert('결승 생성 실패: ' + (e.error || '')); }
     renderAuditLog();
 }
 
@@ -4318,7 +4382,7 @@ async function showLaneAssignmentReview(finalEventId, athleteCount) {
     try {
         const data = await fetch(`/api/events/${finalEventId}/lane-assignments`).then(r => r.json());
         if (!data.heats || data.heats.length === 0) {
-            alert(`결승 생성 완료 (${athleteCount}명 진출)`);
+            uiAlert(`결승 생성 완료 (${athleteCount}명 진출)`);
             return;
         }
 
@@ -4387,7 +4451,7 @@ async function showLaneAssignmentReview(finalEventId, athleteCount) {
 
     } catch (err) {
         console.error('Lane assignment review error:', err);
-        alert(`결승 생성 완료 (${athleteCount}명 진출)\n레인 배정 확인 중 오류 발생`);
+        uiAlert(`결승 생성 완료 (${athleteCount}명 진출)\n레인 배정 확인 중 오류 발생`);
     }
 }
 
@@ -4418,7 +4482,10 @@ async function saveLaneReview(finalEventId) {
         // Save all lane assignments
         const resp = await fetch('/api/lanes/bulk-update', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-key': localStorage.getItem('pace_admin_key') || ''
+            },
             body: JSON.stringify({ assignments })
         });
         if (!resp.ok) {
@@ -4435,9 +4502,9 @@ async function saveLaneReview(finalEventId) {
 
 async function approveSemifinalQualification() {
     const qualified = _qualAllRows.filter(r => r.qual === 'Q' || r.qual === 'q');
-    if (qualified.length === 0) { alert('진출자가 선택되지 않았습니다. Q 또는 q를 지정하세요.'); return; }
+    if (qualified.length === 0) { uiAlert('진출자가 선택되지 않았습니다. Q 또는 q를 지정하세요.'); return; }
     const groupCount = parseInt(document.getElementById('semi-group-count')?.value) || 2;
-    if (!confirm(`준결승 ${groupCount}개 조로 ${qualified.length}명을 확정하고 준결승 라운드를 생성합니다.\n계속하시겠습니까?`)) return;
+    if (!await uiConfirm(`준결승 ${groupCount}개 조로 ${qualified.length}명을 확정하고 준결승 라운드를 생성합니다.\n계속하시겠습니까?`)) return;
 
     const selections = _qualAllRows.map(r => ({
         event_entry_id: r.event_entry_id,
@@ -4455,9 +4522,9 @@ async function approveSemifinalQualification() {
         if (res.semi_event_id) {
             await showLaneAssignmentReview(res.semi_event_id, res.count);
         } else {
-            alert(`준결승 생성 완료 (${res.count}명, ${groupCount}개 조)`);
+            uiAlert(`준결승 생성 완료 (${res.count}명, ${groupCount}개 조)`);
         }
-    } catch (e) { alert('준결승 생성 실패: ' + (e.error || '')); }
+    } catch (e) { uiAlert('준결승 생성 실패: ' + (e.error || '')); }
     renderAuditLog();
 }
 
@@ -4468,7 +4535,8 @@ function _buildCompleteUI(evt) {
     // NOTE: 한글 깨짐 이슈로 "결과 이미지" 다운로드 버튼은 제거함 (PDF 결과지로 대체)
     if (evt.round_status === 'completed') {
         return `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:12px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 경기 완료됨</div>
-                <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`;
+                <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>
+                ${(evt.round_type === 'final' && !evt.parent_event_id) ? `<button class="btn btn-primary btn-sm" onclick="downloadAwardDocx()" title="1~3위 상장을 워드 파일(.docx)로 받습니다. 워드·한글에서 열어 내용을 고칠 수 있고, 문구는 관리자 → 상장관리에서 바꿉니다">상장 출력</button>` : ''}`;
     }
     return `<button class="btn btn-success btn-sm" onclick="completeRound()" title="모든 기록이 저장된 후 경기를 최종 완료 처리합니다">경기 완료</button>`;
 }
@@ -4484,7 +4552,7 @@ async function revertRoundComplete() {
         showToast('이미 진행 중 상태입니다.', 'info', 2000);
         return;
     }
-    if (!confirm(`${evt.name} 경기 완료를 취소하시겠습니까?\n다시 진행 중 상태로 되돌립니다.`)) return;
+    if (!await uiConfirm(`${evt.name} 경기 완료를 취소하시겠습니까?\n다시 진행 중 상태로 되돌립니다.`)) return;
 
     showAdminKeyModal(async (key) => {
         if (!key) return;
@@ -4507,7 +4575,7 @@ async function revertRoundComplete() {
                 await renderDetail();
                 showToast('이미 되돌려진 상태입니다.', 'info', 2000);
             } else {
-                alert(e.error || '완료 취소 실패: 관리자 키를 확인하세요.');
+                uiAlert(e.error || '완료 취소 실패: 관리자 키를 확인하세요.');
             }
         }
     });
@@ -4524,7 +4592,7 @@ async function completeRound() {
     if (isHeightEvt) {
         const ok = await waitForOptimisticHeightFlush(2500);
         if (!ok) {
-            const proceed = confirm('일부 시기 기록 저장이 아직 완료되지 않았습니다.\n그래도 경기를 완료하시겠습니까? (불완전한 데이터로 완료될 수 있음)');
+            const proceed = await uiConfirm('일부 시기 기록 저장이 아직 완료되지 않았습니다.\n그래도 경기를 완료하시겠습니까? (불완전한 데이터로 완료될 수 있음)');
             if (!proceed) return;
         }
     }
@@ -4558,13 +4626,9 @@ async function completeRound() {
                 ? `높이 시기가 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(패스/탈락 선수도 최소 한 번의 시기 기록이 필요합니다)\n계속 완료하시겠습니까?`
                 : isFieldDist
                 ? `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(예선탈락 등으로 일부 시기만 진행한 선수가 있을 수 있습니다)\n그래도 경기를 완료하시겠습니까?`
-                : `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n모든 선수의 기록 또는 상태코드(DQ/DNS/DNF/NM)를 입력한 후 경기를 완료하세요.`;
-            if (isHeight || isFieldDist) {
-                if (!confirm(msg)) return;
-            } else {
-                alert(msg);
-                return;
-            }
+                : `기록이 입력되지 않은 선수가 ${missingCount}명 있습니다.\n(기록/상태코드 없이도 완료할 수 있으며, 완료 후 관리자가 되돌릴 수 있습니다)\n그래도 경기를 완료하시겠습니까?`;
+            // 기록이 없어도 강제 완료 허용 (현장 요청) — 확인만 받는다
+            if (!await uiConfirm(msg)) return;
         }
     } catch(e) { console.error(e); }
 
@@ -4657,7 +4721,7 @@ async function openManualHeatEditUI() {
     // First, find the latest created event
     const events = await API.getAllEvents(getCompetitionId());
     const parentEvt = state.selectedEvent;
-    if (!parentEvt) { alert('종목을 먼저 선택하세요.'); return; }
+    if (!parentEvt) { uiAlert('종목을 먼저 선택하세요.'); return; }
     
     // Find the latest semifinal or final for this event
     const related = events.filter(e => 
@@ -4666,14 +4730,14 @@ async function openManualHeatEditUI() {
     ).sort((a, b) => b.id - a.id);
     
     const targetEvt = related[0];
-    if (!targetEvt) { alert('생성된 준결승/결승이 없습니다.'); return; }
+    if (!targetEvt) { uiAlert('생성된 준결승/결승이 없습니다.'); return; }
     
     await showHeatEditModal(targetEvt);
 }
 
 async function showHeatEditModal(evt) {
     if (!evt) evt = state.selectedEvent;
-    if (!evt) { alert('종목을 먼저 선택하세요.'); return; }
+    if (!evt) { uiAlert('종목을 먼저 선택하세요.'); return; }
     try {
         const allocData = await API.getHeatAllocations(evt.id);
         const heats = allocData.heats;
@@ -4737,7 +4801,7 @@ async function showHeatEditModal(evt) {
         document.body.appendChild(modal);
     } catch (e) {
         console.error(e);
-        alert('조 편성 데이터를 불러올 수 없습니다: ' + (e.error || e.message));
+        uiAlert('조 편성 데이터를 불러올 수 없습니다: ' + (e.error || e.message));
     }
 }
 
@@ -4752,7 +4816,7 @@ async function autoCorrectWAFromModal(eventId) {
         } else {
             showToast('WA 규정 위반 없음', 'success');
         }
-    } catch(e) { alert('자동 수정 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('자동 수정 실패: ' + (e.error || e.message)); }
 }
 
 async function validateWARegulations() {
@@ -4763,12 +4827,12 @@ async function validateWARegulations() {
             showToast('WA 규정 검증 통과', 'success');
         } else {
             const msgs = result.issues.map(i => `• ${i.message}`).join('\n');
-            const action = confirm(`WA 규정 검증 결과:\n\n${msgs}\n\n자동 수정하시겠습니까?`);
+            const action = await uiConfirm(`WA 규정 검증 결과:\n\n${msgs}\n\n자동 수정하시겠습니까?`);
             if (action) {
                 await autoCorrectWAFromModal(state.selectedEvent.id);
             }
         }
-    } catch(e) { alert('검증 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('검증 실패: ' + (e.error || e.message)); }
 }
 
 async function saveManualHeatEdit(eventId) {
@@ -4814,7 +4878,7 @@ async function saveManualHeatEdit(eventId) {
         // Refresh the current view
         if (state.selectedEventId) await selectEvent(state.selectedEventId);
     } catch (e) {
-        alert('저장 실패: ' + (e.error || e.message));
+        uiAlert('저장 실패: ' + (e.error || e.message));
     }
 }
 
@@ -4892,15 +4956,23 @@ function closeFieldZoomModal() {
 // RESET EVENT RESULTS — 종목 기록 전체 초기화 (10종/7종 + 일반 종목)
 // ============================================================
 async function resetSubEventResults(eventId, eventName) {
-    if (!confirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.\n정말 초기화하시겠습니까?`)) return;
-    if (!confirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
+    // 합동 종목이면 다른 대회 멤버의 기록도 같이 지운다 (화면에 함께 보이므로 이것만 지우면 "안 지워진 것"처럼 보임)
+    const joint = (typeof isJointMode === 'function' && eventId === state.selectedEventId && isJointMode());
+    const jointNote = joint ? `\n\n※ 합동 종목: 함께 표시되는 다른 대회(${_jointOtherMembers().map(m => m.federation || m.comp_name || '').filter(Boolean).join(', ') || '멤버'})의 기록도 함께 초기화됩니다.` : '';
+    if (!await uiConfirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.${jointNote}\n정말 초기화하시겠습니까?`)) return;
+    if (!await uiConfirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
 
     try {
         showToast('기록 초기화 중...', 'info', 2000);
-        const result = await API.resetSubEvent(eventId);
-        showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제)`, 'success', 4000);
+        const result = await API.resetSubEvent(eventId, joint);
+        // 화면 상태도 즉시 비움 (되돌아오는 재조회가 늦어도 옛 기록이 남아 보이지 않게)
+        state.results = []; state.heightAttempts = [];
+        if (window._fe) { _fe.sel = null; _fe.undo = null; _fe.lastAttemptInit = false; }
+        if (window._he) { _he.undo = null; }
+        showToast(`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> ${eventName} 기록 초기화 완료 (결과 ${result.deletedResults}건, 시기 ${result.deletedAttempts}건 삭제${result.jointEvents ? `, 합동 ${result.jointEvents}종목 포함` : ''})`, 'success', 4000);
         // Reload the event list and current event data
-        await loadEventsAndMatrix();
+        state.events = await API.getAllEvents(getCompetitionId());
+        renderMatrix();
         if (state.selectedEventId) {
             await selectEvent(state.selectedEventId);
         }
@@ -5015,4 +5087,61 @@ function cancelPrefetchAllEvents() {
     _prefetchCancelled = true;
     const txt = document.getElementById('prefetch-status-text');
     if (txt) txt.textContent = '취소 중…';
+}
+
+// ============================================================
+// 종목 목록(왼쪽 패널) 접기/펼치기
+//   필드 종목은 입력 목록+키패드가 넓은 폭을 쓰므로 목록을 접어 화면을 넓힌다. 상태는 기기에 저장.
+// ============================================================
+function _applyRecordSidebar(collapsed) {
+    const dash = document.querySelector('.record-dashboard');
+    const btn = document.getElementById('sb-toggle');
+    if (!dash) return;
+    dash.classList.toggle('sb-collapsed', !!collapsed);
+    if (btn) {
+        btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        const lbl = btn.querySelector('.sb-toggle-label');
+        if (lbl) lbl.textContent = collapsed ? '종목 목록 펼치기' : '종목 목록 접기';
+    }
+}
+function toggleRecordSidebar(force) {
+    const dash = document.querySelector('.record-dashboard');
+    if (!dash) return;
+    const next = typeof force === 'boolean' ? force : !dash.classList.contains('sb-collapsed');
+    try { localStorage.setItem('rec_sidebar_collapsed', next ? '1' : '0'); } catch (e) {}
+    _applyRecordSidebar(next);
+}
+document.addEventListener('DOMContentLoaded', () => {
+    let saved = false; try { saved = localStorage.getItem('rec_sidebar_collapsed') === '1'; } catch (e) {}
+    _applyRecordSidebar(saved);
+});
+
+// ============================================================
+// 상장 출력 — 경기 완료된 결승 종목의 입상자 상장을 워드(.docx)로 받는다
+//   편집 가능한 파일이라 현장에서 문구·직인 자리를 고쳐 인쇄할 수 있다. 양식 문구는 관리자 → 상장관리.
+// ============================================================
+async function downloadAwardDocx() {
+    const evt = state.selectedEvent;
+    if (!evt) return;
+    const ans = await uiPrompt('몇 위까지 상장을 출력할까요? (예: 3 → 1~3위, 동순위는 모두 포함)', '3');
+    if (ans === null) return;
+    const to = Math.max(1, parseInt(ans, 10) || 3);
+    try {
+        showToast('상장 파일을 만드는 중…', 'info', 2000);
+        const res = await fetch('/api/certificates/event-award', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event_id: evt.id, rank_from: 1, rank_to: to, format: 'docx', admin_key: localStorage.getItem('pace_admin_key') || '' })
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || '생성 실패'); }
+        const blob = await res.blob();
+        const gl = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `상장_${gl}_${evt.name}.docx`;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+        showToast('상장 파일을 내려받았습니다 (워드·한글에서 열립니다)', 'success', 3500);
+    } catch (e) {
+        showToast('상장 출력 실패: ' + (e.message || e), 'error', 4500);
+    }
 }
