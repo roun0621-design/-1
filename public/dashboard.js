@@ -76,8 +76,23 @@ function renderHeroRosterButton() {
     }).catch(() => { if (sub) sub.textContent = '출전 선수와 기록'; });
 }
 // 대표팀 명단 창 — 선수 기준: 출전 종목 · 다음 경기 · PB/SB · 결과 (GET /api/competitions/:id/roster)
-let _rosterSort = null;   // null 이면 자동: 대회가 끝났으면 종목별, 아니면 시간별
-function setRosterSort(m) { _rosterSort = m === 'event' ? 'event' : 'time'; openTeamRoster(true); }
+let _rosterView = null;      // 'athlete'(선수별 · 다음 경기 순) | 'event'(종목별 · 칩 필터). null 이면 자동: 대회가 끝났으면 종목별
+let _rosterEventKey = null;  // 종목별에서 고른 종목 (name|gender)
+function setRosterSort(m) { _rosterView = m === 'event' ? 'event' : 'athlete'; openTeamRoster(true); }
+function _rosterPickEvent(key) { _rosterEventKey = key; openTeamRoster(true); }
+// 종목군(칩 묶음): 종목 이름으로 판단
+function _eventGroupOf(name, category) {
+    const n = String(name || '').replace(/[,\s]/g, '');   // 10,000m → 10000m
+    if (category === 'relay' || /x\d+m?r/i.test(n)) return '계주';
+    if (category === 'combined' || /종경기/.test(n)) return '혼성';
+    if (/경보|kmW|마라톤/i.test(n)) return '경보·도로';
+    if (/H$|허들|SC$|장애물/.test(n)) return '허들·장애물';
+    if (/뛰기/.test(n)) return '도약';
+    if (/던지기/.test(n)) return '투척';
+    const m = n.match(/^(\d+)m/); if (m) return +m[1] <= 400 ? '단거리' : '중장거리';
+    return '기타';
+}
+const _EVENT_GROUP_ORDER = ['단거리', '중장거리', '허들·장애물', '경보·도로', '도약', '투척', '혼성', '계주', '기타'];
 async function openTeamRoster(keep) {
     let overlay = document.getElementById('roster-modal-overlay');
     if (!overlay) {
@@ -93,7 +108,8 @@ async function openTeamRoster(keep) {
     const mobile = window.innerWidth < 720;
     // 폰: 아래에서 올라오는 전체 폭 시트(위만 둥글게) · PC: 가운데 창
     overlay.style.alignItems = mobile ? 'flex-end' : 'center';
-    const box = mobile ? 'width:100%;height:94vh;border-radius:18px 18px 0 0;' : 'width:92%;max-width:600px;max-height:88vh;border-radius:12px;';
+    const box = mobile ? 'width:100%;height:94vh;border-radius:18px 18px 0 0;' : 'width:92%;max-width:600px;height:88vh;border-radius:12px;';
+    const scrollTop = keep ? (document.getElementById('roster-modal-body') || {}).scrollTop : 0;
     overlay.innerHTML = `<div style="background:#fff;${box}display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,0.25);overflow:hidden;">
         ${mobile ? '<div style="width:40px;height:4px;border-radius:2px;background:#d9d4ca;margin:8px auto 0;flex-shrink:0;"></div>' : ''}
         <div style="display:flex;align-items:center;gap:10px;padding:${mobile ? '10px 16px 8px' : '14px 18px'};border-bottom:1px solid #eee;flex-shrink:0;">
@@ -103,14 +119,17 @@ async function openTeamRoster(keep) {
             <div id="team-roster-tools"></div>
             <button onclick="closeRosterModal()" aria-label="닫기" style="flex:none;width:32px;height:32px;border-radius:50%;background:#f0ede6;border:none;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;">${PaceIcons.svg('close', { size: 16 })}</button>
         </div>
+        <div id="team-roster-chips" style="flex-shrink:0;"></div>
         <div id="roster-modal-body" style="flex:1;overflow-y:auto;padding:0 0 env(safe-area-inset-bottom,0);-webkit-overflow-scrolling:touch;">${uiStateHtml('loading', { title: '선수단 명단을 불러오는 중…' })}</div></div>`;
     if (!keep && window.pushModalState) pushModalState(() => closeRosterModal());
     const body = document.getElementById('roster-modal-body');
     try {
         const data = await _loadRoster(!keep);
         const ended = allEvents.length > 0 && allEvents.every(e => e.round_status === 'completed');
-        const sortMode = _rosterSort || (ended ? 'event' : 'time');
-        document.getElementById('team-roster-tools').innerHTML = segToggleHtml(sortMode, 'setRosterSort');
+        const view = _rosterView || (ended ? 'event' : 'athlete');
+        document.getElementById('team-roster-tools').innerHTML = `<div class="seg-toggle" role="group" aria-label="보기">
+            <button type="button" class="${view === 'athlete' ? 'on' : ''}" onclick="setRosterSort('athlete')" aria-pressed="${view === 'athlete'}">선수별</button>
+            <button type="button" class="${view === 'event' ? 'on' : ''}" onclick="setRosterSort('event')" aria-pressed="${view === 'event'}">종목별</button></div>`;
         const DOW = ['일', '월', '화', '수', '목', '금', '토'];
         const when = ev => {
             const iso = ev.scheduled_at || (ev.scheduled_date ? `${ev.scheduled_date}T${ev.time || '00:00'}:00` : null);
@@ -128,34 +147,68 @@ async function openTeamRoster(keep) {
             if (r.distance_meters != null) return `${place}<b>${Number(r.distance_meters).toFixed(2)}</b>`;
             return '';
         };
-        const evLine = ev => {
+        const pbsb = ev => [ev.personal_best ? 'PB ' + ev.personal_best : '', ev.season_best ? 'SB ' + ev.season_best : ''].filter(Boolean).map(esc).join('<br>');   // 폰에서 종목명 자리를 남기려고 PB·SB 를 위아래로
+        const stOf = ev => ev.round_status === 'completed' ? (mark(ev) || '<span style="color:#888;">결과</span>') : ev.round_status === 'in_progress' ? '<span style="color:#16a34a;font-weight:800;">LIVE</span>' : '';
+        const evLine = (ev, showName) => {
             const done = ev.round_status === 'completed', live = ev.round_status === 'in_progress';
-            const pb = [ev.personal_best ? 'PB ' + ev.personal_best : '', ev.season_best ? 'SB ' + ev.season_best : ''].filter(Boolean).map(esc).join('<br>');   // 폰에서 종목명 자리를 남기려고 PB·SB 를 위아래로
-            const st = done ? mark(ev) || '<span style="color:#888;">결과</span>' : live ? '<span style="color:#16a34a;font-weight:800;">LIVE</span>' : '';
             return `<div onclick="openEventDetail(${ev.event_id})" style="display:flex;align-items:center;gap:8px;padding:7px 0;min-height:36px;cursor:pointer;${done ? 'opacity:.75;' : ''}">
                 <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:${live ? '#16a34a' : done ? '#999' : '#1a2a5e'};min-width:92px;">${esc(when(ev))}</span>
-                <span style="flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ev.relay ? '<span style="font-size:10px;color:#7c3aed;margin-right:3px;">계주</span>' : ''}${esc(ev.event_name)} <span style="color:#888;font-weight:500;">${genderL[ev.gender] || ''} ${roundL[ev.round_type] || ''}</span></span>
-                <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;text-align:right;line-height:1.25;">${st || pb}</span></div>`;
+                <span style="flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${showName ? esc(showName) : `${ev.relay ? '<span style="font-size:10px;color:#7c3aed;margin-right:3px;">계주</span>' : ''}${esc(ev.event_name)} <span style="color:#888;font-weight:500;">${genderL[ev.gender] || ''} ${roundL[ev.round_type] || ''}</span>`}</span>
+                <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;text-align:right;line-height:1.25;">${stOf(ev) || pbsb(ev)}</span></div>`;
         };
-        const row = a => `<div style="padding:10px 16px 6px;border-top:1px solid #f1f1f1;">
-            <div style="font-size:15px;font-weight:800;">${esc(a.name)}${a.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;font-weight:500;">${esc(a.name_alt)}</span>` : ''}${a.birth_year ? `<span style="font-size:11px;color:#999;margin-left:6px;font-weight:500;">${a.birth_year}</span>` : ''}${a.members ? '' : ''}</div>
-            ${a.members && a.members.length ? `<div style="font-size:11px;color:#666;margin-top:1px;">${a.members.map(m => esc(m.name)).join(' · ')}</div>` : ''}
-            <div style="margin-top:3px;">${a.events.map(evLine).join('') || '<div style="font-size:11px;color:#999;">출전 종목 없음</div>'}</div></div>`;
-        // 정렬: 다음 경기가 빠른 순, 모두 끝난 선수는 뒤로
-        const sortA = (p, q) => (p.next_key == null) - (q.next_key == null) || (String(p.next_key || '') < String(q.next_key || '') ? -1 : String(p.next_key || '') > String(q.next_key || '') ? 1 : 0) || String(p.name).localeCompare(String(q.name));   // ISO 문자열 비교 (일정 미정 '~' 는 맨 뒤)
-        // 종목별: 첫 출전 종목의 WA 순서 → 성별 → 이름 (계주만 뛰는 선수는 계주 자리)
-        const primary = a => { const evs = a.events.slice().sort((p, q) => _evSortIdx(p.event_name) - _evSortIdx(q.event_name)); return evs[0] || null; };
-        const gIdx = g => g === 'M' ? 0 : g === 'F' ? 1 : 2;
-        const sortE = (p, q) => { const a = primary(p), b = primary(q); return (a == null) - (b == null) || (a && b ? (_evSortIdx(a.event_name) - _evSortIdx(b.event_name) || gIdx(a.gender) - gIdx(b.gender)) : 0) || String(p.name).localeCompare(String(q.name)); };
-        const sorter = sortMode === 'event' ? sortE : sortA;
-        const athletes = (data.athletes || []).slice().sort(sorter);
-        const teams = (data.teams || []).map(t => ({ ...t, members: (t.events[0] && t.events[0].members) || [] })).sort(sorter);
+        const nameLine = a => `<div style="font-size:15px;font-weight:800;">${esc(a.name)}${a.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;font-weight:500;">${esc(a.name_alt)}</span>` : ''}${a.birth_year ? `<span style="font-size:11px;color:#999;margin-left:6px;font-weight:500;">${a.birth_year}</span>` : ''}</div>`;
+        const membersLine = a => a.members && a.members.length ? `<div style="font-size:11px;color:#666;margin-top:1px;">${a.members.map(m => esc(m.name)).join(' · ')}</div>` : '';
+        const athletes = data.athletes || [];
+        const teams = (data.teams || []).map(t => ({ ...t, members: (t.events[0] && t.events[0].members) || [] }));
         const evCount = new Set(athletes.flatMap(a => a.events.filter(e => !e.relay).map(e => e.event_name + '|' + e.gender))).size;
         document.getElementById('team-roster-title').textContent = `${teamL} · ${athletes.length}명`;
-        document.getElementById('team-roster-sub').textContent = `${evCount}종목${teams.length ? ` · 계주 ${teams.length}팀` : ''} · ${sortMode === 'event' ? '종목 순' : '다음 경기 순'}${ended ? ' · 대회 종료' : ''}`;
-        body.innerHTML = athletes.length
-            ? `${athletes.map(row).join('')}${teams.length ? `<div style="padding:10px 14px 2px;font-size:11px;font-weight:800;color:#7c3aed;letter-spacing:.05em;">계주 (${teams.length})</div>${teams.map(row).join('')}` : ''}`
-            : uiStateHtml('empty', { title: '선수단 명단이 아직 없습니다', hint: '공식 엔트리가 올라오면 자동으로 들어옵니다.' });
+        const chipsEl = document.getElementById('team-roster-chips');
+
+        if (view === 'athlete') {
+            // ── 선수별: 다음 경기 순 (모두 끝난 선수는 뒤로) ──
+            chipsEl.innerHTML = '';
+            const sorted = _rosterSortNext(athletes), teamsSorted = _rosterSortNext(teams);
+            document.getElementById('team-roster-sub').textContent = `${evCount}종목${teams.length ? ` · 계주 ${teams.length}팀` : ''} · 다음 경기 순${ended ? ' · 대회 종료' : ''}`;
+            const row = a => `<div style="padding:10px 16px 6px;border-top:1px solid #f1f1f1;">${nameLine(a)}${membersLine(a)}
+                <div style="margin-top:3px;">${a.events.map(ev => evLine(ev)).join('') || '<div style="font-size:11px;color:#999;">출전 종목 없음</div>'}</div></div>`;
+            body.innerHTML = sorted.length
+                ? `${sorted.map(row).join('')}${teamsSorted.length ? `<div style="padding:10px 16px 2px;font-size:11px;font-weight:800;color:#7c3aed;letter-spacing:.05em;">계주 (${teamsSorted.length})</div>${teamsSorted.map(row).join('')}` : ''}`
+                : uiStateHtml('empty', { title: '선수단 명단이 아직 없습니다', hint: '공식 엔트리가 올라오면 자동으로 들어옵니다.' });
+        } else {
+            // ── 종목별: 종목 칩(종목군별 바둑판) → 고른 종목의 선수만, 남자/여자로 나눠 ──
+            // 종목 키 = 이름 (남·여를 한 칩에) — 계주는 팀 행, 개인 종목은 선수 행
+            const byEvent = new Map();   // name → { name, category, athletes: [{a, ev}], teams: [{a, ev}], done }
+            const add = (bucket, a, ev) => {
+                if (!byEvent.has(ev.event_name)) byEvent.set(ev.event_name, { name: ev.event_name, category: ev.category, athletes: [], teams: [], done: true, live: false });
+                const b = byEvent.get(ev.event_name); b[bucket].push({ a, ev });
+                if (ev.round_status !== 'completed') b.done = false; if (ev.round_status === 'in_progress') b.live = true;
+            };
+            athletes.forEach(a => a.events.filter(e => !e.relay).forEach(ev => add('athletes', a, ev)));
+            teams.forEach(t => t.events.forEach(ev => add('teams', t, ev)));
+            // 한 선수가 같은 종목에 여러 라운드면 첫(가장 이른 미완료 → 없으면 마지막) 라운드 한 줄만
+            byEvent.forEach(b => {
+                for (const k of ['athletes', 'teams']) {
+                    const per = new Map();
+                    b[k].forEach(x => { if (!per.has(x.a.id)) per.set(x.a.id, []); per.get(x.a.id).push(x); });
+                    b[k] = [...per.values()].map(list => list.find(x => x.ev.round_status !== 'completed') || list[list.length - 1]);
+                }
+            });
+            const events = [...byEvent.values()].sort((p, q) => _evSortIdx(p.name) - _evSortIdx(q.name) || p.name.localeCompare(q.name));
+            if (!events.length) { chipsEl.innerHTML = ''; body.innerHTML = uiStateHtml('empty', { title: '선수단 명단이 아직 없습니다' }); return; }
+            if (!_rosterEventKey || !byEvent.has(_rosterEventKey)) _rosterEventKey = events[0].name;
+            const groups = new Map();
+            events.forEach(e => { const g = _eventGroupOf(e.name, e.category); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(e); });
+            const chip = e => { const n = e.athletes.length + e.teams.length; const on = e.name === _rosterEventKey;
+                return `<button type="button" onclick="_rosterPickEvent('${esc(e.name).replace(/'/g, '&#39;')}')" aria-pressed="${on}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;border:1px solid ${on ? '#1a2a5e' : '#e2ddd2'};background:${on ? '#1a2a5e' : '#fff'};color:${on ? '#fff' : '#333'};font-size:11.5px;font-weight:${on ? 800 : 600};cursor:pointer;line-height:1.3;min-height:26px;">${esc(e.name)}<span style="font-size:10px;font-weight:700;padding:0 5px;border-radius:8px;background:${on ? 'rgba(255,255,255,.22)' : '#f0ede6'};color:${on ? '#fff' : '#777'};">${n}</span>${e.live ? '<span style="width:6px;height:6px;border-radius:50%;background:#16a34a;"></span>' : e.done ? `<span style="width:6px;height:6px;border-radius:50%;background:${on ? '#fff' : '#b79f58'};"></span>` : ''}</button>`; };
+            chipsEl.innerHTML = `<div style="padding:6px 14px 4px;border-bottom:1px solid #eee;max-height:40vh;overflow-y:auto;">${_EVENT_GROUP_ORDER.filter(g => groups.has(g)).map(g => `<div style="display:flex;align-items:flex-start;gap:5px;margin:3px 0;"><span style="flex:none;width:62px;padding-top:6px;font-size:10px;font-weight:800;color:#a09a92;letter-spacing:.02em;white-space:nowrap;">${g}</span><div style="flex:1;display:flex;flex-wrap:wrap;gap:5px;">${groups.get(g).map(chip).join('')}</div></div>`).join('')}</div>`;
+            const sel = byEvent.get(_rosterEventKey);
+            document.getElementById('team-roster-sub').textContent = `${events.length}종목 · 종목을 고르면 출전 선수${ended ? ' · 대회 종료' : ''}`;
+            const gOrder = ['M', 'F', 'X'];
+            const section = (label, list) => list.length ? `<div style="padding:8px 16px 2px;font-size:11px;font-weight:800;color:#8b1a2a;letter-spacing:.05em;">${label} (${list.length})</div>${list.map(({ a, ev }) => `<div style="padding:6px 16px 4px;border-top:1px solid #f4f4f4;">${nameLine(a)}${membersLine(a)}${evLine(ev, (roundL[ev.round_type] || '') + (ev.heat_number ? ` ${ev.heat_number}조` : ''))}</div>`).join('')}` : '';
+            const parts = gOrder.map(g => section(g === 'M' ? '남자' : g === 'F' ? '여자' : '혼성', [...sel.athletes, ...sel.teams].filter(x => x.ev.gender === g).sort((p, q) => String(p.a.name).localeCompare(String(q.a.name)))));
+            body.innerHTML = `<div style="padding:10px 16px 0;font-size:15px;font-weight:900;color:#1a2a5e;">${esc(sel.name)}</div>${parts.join('')}`;
+        }
+        if (keep && scrollTop) body.scrollTop = scrollTop;
     } catch (e) { body.innerHTML = uiStateHtml('error', { title: '선수단 명단을 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '' }); }
 }
 function onEventSearch(v) {
@@ -879,6 +932,7 @@ function _groupScheduleKey(g) {
 }
 
 function renderMatrix() {
+    _sortToggleDone = false;
     _applyEventGenderBar();
     const container = document.getElementById('events-container');
     // 'ALL' 탭이면 성별 필터 해제 → 남/여/혼성 모든 종목을 종목순으로 통합 표시
@@ -963,7 +1017,7 @@ function renderMatrix() {
     // 시간표가 하나도 없는 대회는 토글을 숨긴다 (시간별 정렬이 의미 없음)
     const _hasSchedule = Object.keys(_scheduleMap || {}).length > 0;
     if (!_hasSchedule && _sortMode === 'time') _sortMode = 'event';
-    if (allGroups.length && _hasSchedule) html = `<div class="sort-row"><span class="sort-lbl">정렬</span>${segToggleHtml(_sortMode, 'setSortMode')}</div>` + html;
+    _sortToggleInTitle = allGroups.length && _hasSchedule;   // 섹션 제목 줄(TRACK / 9/23(수)) 오른쪽 끝에 작은 토글
 
     if (_sortMode === 'time') {
         // 시간별: 날짜(일차)별로 묶고 그 안은 다음 경기 시각순. 시간표에 없는 종목은 맨 아래 '시간 미정'
@@ -995,10 +1049,13 @@ function renderMatrix() {
     updateLiveJumpBadge(liveGroups.length);
 }
 
+let _sortToggleInTitle = false, _sortToggleDone = false;
 function renderCategoryTable(groups, label, isLive) {
     const favs = getFavorites();
+    // 정렬 토글은 첫 섹션 제목 줄에만 (LIVE 묶음 제외) — 한 줄을 따로 차지하지 않게
+    const tog = _sortToggleInTitle && !isLive && !_sortToggleDone ? (_sortToggleDone = true, segToggleHtml(_sortMode, 'setSortMode')) : '';
     let html = `<div class="matrix-section">
-        <div class="matrix-section-title">${label}</div>
+        <div class="matrix-section-title" style="display:flex;align-items:center;justify-content:space-between;"><span>${label}</span>${tog}</div>
         <div class="matrix-scroll-wrap">
         <table class="matrix-table${_isDisplayMode ? ' matrix-display' : ''}">
             <thead><tr>
