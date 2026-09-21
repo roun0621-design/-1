@@ -21,8 +21,8 @@
     --gray-mid: #bfc5cd;
     --gray-dark: #6b7280;
     --text: #1a1f2b;
-    --text-light: #9ca3af;
-    --text-muted: #b0b6c0;
+    --text-light: #7a8190;   /* 대비 3.9:1 (보조 글자) — 2026-09 접근성: 전 #9ca3af 2.5:1 */
+    --text-muted: #6d7380;   /* 대비 4.7:1 (본문 보조) — 전 #b0b6c0 1.9:1, 회색 위 회색 */
     --danger: #dc3545;
     --danger-light: #fde8ea;
     --warning: #e5a100;
@@ -73,7 +73,7 @@
 .font-size-ctrl { display: inline-flex; align-items: center; gap: 2px; background: var(--gray-light); border-radius: 6px; padding: 2px; }
 .font-size-ctrl button { background: none; border: none; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text); width: 30px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background .15s; }
 .font-size-ctrl button:hover { background: var(--gray); }
-.font-size-ctrl .font-size-label { font-size: 10px; color: var(--text-muted); min-width: 32px; text-align: center; }
+.font-size-ctrl .font-size-label { font-size: 11px; color: var(--text-muted); min-width: 32px; text-align: center; }
 
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
@@ -127,7 +127,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .header-colon { color: #b79f58; }
 .header-scope { color: #b79f58; }
 .header-subtitle {
-    font-size: 10px; color: var(--text-muted);
+    font-size: 11px; color: var(--text-muted);
     font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase;
     font-family: var(--font-brand);
 }
@@ -369,7 +369,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .btn-ghost { background: transparent; color: var(--gray-dark); }
 .btn-ghost:hover:not(:disabled) { background: var(--gray-light); }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
-.btn-xs { padding: 2px 8px; font-size: 10px; border-radius: 4px; }
+.btn-xs { padding: 2px 8px; font-size: 11px; border-radius: 4px; }
 /* Document export buttons — semantic color coding */
 .btn-excel { background: #2d5016; color: #fff; }
 .btn-excel:hover:not(:disabled) { background: #1f3a0f; }
@@ -382,7 +382,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 /* ============================================================
    TYPOGRAPHY UTILITIES — replaces repeated inline font-size:11px/12px patterns
    ============================================================ */
-.t-xs    { font-size: 10px; }
+.t-xs    { font-size: 11px; }
 .t-sm    { font-size: 11px; }
 .t-md    { font-size: 12px; }
 .t-lg    { font-size: 13px; }
@@ -573,7 +573,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     text-align: center; min-width: 88px; border-top: 3px solid var(--gray);
 }
 .stat-card .stat-number { font-size: 22px; font-weight: 800; }
-.stat-card .stat-label { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+.stat-card .stat-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
 
 /* ============================================================
    RECORD TABS (within record page)
@@ -734,7 +734,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .field-table tbody tr.field-row-odd td.att-col-odd:not(.attempt-cell-editing),
 .field-table tbody tr.field-row-odd td.att-col-even:not(.attempt-cell-editing) { background: transparent; }
 /* Wind row header */
-.field-table thead th.wind-header { background: #1a2a5e; font-size: 10px; padding: 4px 6px; }
+.field-table thead th.wind-header { background: #1a2a5e; font-size: 11px; padding: 4px 6px; }
 .nm-mark { color: var(--danger); font-weight: 800; font-size: 12px; }
 .pass-mark { color: #6b6b6b; font-weight: 700; }
 
@@ -781,7 +781,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .combined-sub-btn .sub-order {
     display: inline-block; background: var(--gray-dark); color: #fff;
     border-radius: 50%; width: 18px; height: 18px; line-height: 18px;
-    text-align: center; font-size: 10px; margin-right: 4px;
+    text-align: center; font-size: 11px; margin-right: 4px;
 }
 .combined-sub-btn.completed .sub-order { background: var(--green); }
 .combined-total-points { font-weight: 800; font-size: 15px; color: var(--green); font-family: var(--font-mono); }
@@ -821,7 +821,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .combined-tab-order {
     display: inline-block; background: var(--gray-dark); color: #fff;
     border-radius: 50%; width: 18px; height: 18px; line-height: 18px;
-    text-align: center; font-size: 10px;
+    text-align: center; font-size: 11px;
 }
 .combined-tab-btn.tab-completed .combined-tab-order { background: var(--green); }
 .combined-tab-btn.active .combined-tab-order { background: var(--green); }
@@ -829,7 +829,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 /* Combined Day Label */
 .combined-day-label {
     display: inline-flex; align-items: center;
-    padding: 4px 8px; font-size: 9px; font-weight: 800;
+    padding: 4px 8px; font-size: 11px; font-weight: 800;
     color: var(--accent); letter-spacing: 1px;
     text-transform: uppercase; white-space: nowrap;
     border-right: 2px solid var(--blue-soft);
@@ -843,7 +843,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 /* Combined Overview Table */
 .combined-overview-wrap { padding: 4px 0; }
 .combined-overview-table .combined-overview-th {
-    font-size: 9px !important; padding: 3px 2px !important;
+    font-size: 11px !important; padding: 3px 2px !important;
     writing-mode: vertical-lr; max-width: 26px;
     cursor: pointer; transition: background 0.12s;
 }
@@ -854,8 +854,8 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     transition: background 0.1s;
 }
 .combined-cell:hover { background: var(--blue-light) !important; }
-.combined-cell-record { font-size: 10px; font-family: var(--font-mono); }
-.combined-cell-points { font-size: 10px; color: var(--green); font-weight: 700; }
+.combined-cell-record { font-size: 11px; font-family: var(--font-mono); }
+.combined-cell-points { font-size: 11px; color: var(--green); font-weight: 700; }
 .combined-cell-empty { color: var(--text-muted); }
 .combined-rank-cell { width: 50px; }
 
@@ -912,7 +912,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     color: var(--white);
     padding: 2px 8px;
     border-radius: 10px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.5px;
     vertical-align: middle;
@@ -1018,7 +1018,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 }
 .sub-event-tag {
     display: inline-block; background: var(--blue); color: #fff;
-    padding: 2px 10px; border-radius: 99px; font-size: 10px; font-weight: 700;
+    padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 700;
 }
 
 /* ============================================================
@@ -1031,7 +1031,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 }
 .footer summary { cursor: pointer; font-weight: 600; font-size: 11px; color: var(--text-muted); }
 .audit-entry {
-    font-size: 10px; padding: 3px 0; border-bottom: 1px solid #f0f2f5;
+    font-size: 11px; padding: 3px 0; border-bottom: 1px solid #f0f2f5;
     color: var(--gray-dark); font-family: var(--font-mono);
 }
 
@@ -1039,6 +1039,9 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    MISC
    ============================================================ */
 .empty-state { text-align: center; padding: 36px; color: var(--text-muted); font-size: 13px; }
+/* 접근성 (2026-09, 규칙집 §12): 키보드 포커스는 항상 보이게, 글자 최소 11px(배지·라벨)·13px(본문) */
+:focus-visible { outline: 2px solid #b79f58; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(183,159,88,.25); }
+button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 /* 세 상태(비어 있음 · 불러오는 중 · 실패) 공통 — common.js uiStateHtml() (규칙집 §10) */
 .ui-state { text-align: center; padding: 36px 16px; color: var(--text-muted); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .ui-state .ui-state-title { font-size: 14px; font-weight: 700; color: var(--text); }
@@ -1246,7 +1249,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .cr-event-btn.cr-active-status { border-color: var(--blue-soft); background: var(--blue-light); }
 .cr-event-btn.cr-done { border-color: var(--green-soft); background: var(--green-light); }
 .cr-evt-name { font-weight: 800; font-size: 11px; line-height: 1.2; }
-.cr-evt-round { font-size: 9px; color: var(--text-muted); font-weight: 500; }
+.cr-evt-round { font-size: 11px; color: var(--text-muted); font-weight: 500; }
 
 /* Detail Header */
 .cr-detail-header {
@@ -1313,8 +1316,8 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    RECORD — Compact Matrix (left panel)
    ============================================================ */
 .matrix-section-compact { margin-bottom: 10px; }
-.matrix-section-compact .matrix-section-title { font-size: 10px; padding: 4px 8px; }
-.matrix-table-compact th { font-size: 9px; padding: 5px 4px; }
+.matrix-section-compact .matrix-section-title { font-size: 11px; padding: 4px 8px; }
+.matrix-table-compact th { font-size: 11px; padding: 5px 4px; }
 .matrix-table-compact td { padding: 5px 4px; font-size: 12px; }
 /* 소집실/기록실/관리 매트릭스: 종목 셀이 시간·Call Room 배지로 넓어지면
    준결승·결승 라운드 버튼이 320px 패널 밖으로 밀려 잘리던 문제 →
@@ -1325,7 +1328,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .matrix-table-compact th:not(:first-child),
 .matrix-table-compact td:not(:first-child) { width: 58px; }
 .rec-matrix-event { font-weight: 600; font-size: 12px !important; text-align: left !important; white-space: normal; word-break: keep-all; line-height: 1.25; }
-.rec-round-btn { font-size: 10px !important; padding: 3px 8px !important; white-space: nowrap; }
+.rec-round-btn { font-size: 11px !important; padding: 3px 8px !important; white-space: nowrap; }
 .rec-round-btn.rec-btn-active {
     background: var(--green) !important; color: #fff !important;
     box-shadow: 0 0 0 2px var(--green-soft);
@@ -1485,7 +1488,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     border-right: 2px solid var(--gray);
 }
 .results-unified-table .results-round-header th {
-    font-size: 10px;
+    font-size: 11px;
     padding: 5px 6px;
 }
 .results-unified-table .round-col-male {
@@ -1547,13 +1550,13 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 /* ============================================================
    ICON BADGES (Emoji-free CSS replacements)
    ============================================================ */
-.ico { display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;border-radius:4px;padding:1px 5px;line-height:1.3;letter-spacing:0.3px;vertical-align:middle; }
+.ico { display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;border-radius:4px;padding:1px 5px;line-height:1.3;letter-spacing:0.3px;vertical-align:middle; }
 .ico-track { background:#eef1f7;color:#1a2a5e;border:1px solid #c0c8d8; }
 .ico-field { background:#f8f4ea;color:#b79f58;border:1px solid #e8dfc0; }
-.ico-link { font-size:9px;color:#b79f58;margin-left:3px;font-weight:700;opacity:0.7; }
-.ico-wind { background:#eef4fa;color:#0369a1;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #bae6fd; }
-.ico-doc { font-size:10px;font-weight:700;color:#6b7280; }
-.ico-callroom { background:#1a2a5e;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px;letter-spacing:0.5px;animation:cr-pulse 2s ease-in-out infinite; }
+.ico-link { font-size:11px;color:#b79f58;margin-left:3px;font-weight:700;opacity:0.7; }
+.ico-wind { background:#eef4fa;color:#0369a1;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #bae6fd; }
+.ico-doc { font-size:11px;font-weight:700;color:#6b7280; }
+.ico-callroom { background:#1a2a5e;color:#fff;font-size:11px;font-weight:800;padding:2px 7px;border-radius:8px;letter-spacing:0.5px;animation:cr-pulse 2s ease-in-out infinite; }
 @keyframes cr-pulse { 0%,100%{opacity:1;} 50%{opacity:0.7;} }
 .ico-dot { display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle; }
 .ico-dot-m { background:#1a2a5e; }
@@ -1585,7 +1588,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .main-content { padding: 12px 14px; }
     .field-two-panel { grid-template-columns: 1fr; }
     .combined-overview-table .combined-overview-th { font-size: 8px !important; }
-    .combined-tab-btn { padding: 4px 8px; font-size: 10px; }
+    .combined-tab-btn { padding: 4px 8px; font-size: 11px; }
 }
 
 /* ============================================================
@@ -1692,7 +1695,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .matrix-table th { font-size: 11px; padding: 8px 10px; }
     .matrix-table td { padding: 8px 10px; font-size: 13px; }
     .rec-matrix-event { font-size: 12px !important; }
-    .rec-round-btn { font-size: 10px !important; padding: 3px 8px !important; }
+    .rec-round-btn { font-size: 11px !important; padding: 3px 8px !important; }
     .round-btn { font-size: 11px; padding: 5px 10px; }
 
     /* Data tables — keep readable */
@@ -1701,7 +1704,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 
     /* Track input */
     .track-time-input { width: 80px; font-size: 12px; padding: 4px 6px; }
-    .track-hint { font-size: 10px; padding: 4px 10px; }
+    .track-hint { font-size: 11px; padding: 4px 10px; }
     .track-actions { flex-wrap: wrap; }
 
     /* Field */
@@ -1711,7 +1714,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 
     /* Combined */
     .combined-tab-bar { gap: 1px; }
-    .combined-tab-btn { padding: 4px 6px; font-size: 9px; }
+    .combined-tab-btn { padding: 4px 6px; font-size: 11px; }
     .combined-tab-order { width: 14px; height: 14px; line-height: 14px; font-size: 8px; }
     .combined-day-label { font-size: 8px; padding: 2px 4px; }
     .combined-sub-nav { flex-wrap: wrap; }
@@ -1727,7 +1730,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 
     /* Buttons */
     .btn { padding: 5px 12px; font-size: 12px; }
-    .btn-sm { padding: 3px 8px; font-size: 10px; }
+    .btn-sm { padding: 3px 8px; font-size: 11px; }
 
     /* Modals */
     .modal { width: 95vw; }
@@ -1741,10 +1744,10 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .height-controls input { width: 65px; font-size: 12px; }
 
     /* Results side-by-side table */
-    .results-unified-table { font-size: 10px; }
+    .results-unified-table { font-size: 11px; }
     .results-unified-table .event-name-cell { font-size: 11px !important; padding-left: 6px !important; }
     .results-unified-table .results-gender-header th { font-size: 11px; padding: 6px 4px; }
-    .results-unified-table .results-round-header th { font-size: 9px; padding: 3px 3px; }
+    .results-unified-table .results-round-header th { font-size: 11px; padding: 3px 3px; }
 
     /* Qualification panel */
     .qual-checkbox-item { padding: 5px 8px; }
@@ -1770,19 +1773,19 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .gender-tab { padding: 5px 12px; font-size: 11px; }
 
     /* Round buttons — keep readable */
-    .round-btn { font-size: 10px; padding: 4px 8px; }
+    .round-btn { font-size: 11px; padding: 4px 8px; }
 
     /* Track */
     .track-time-input { width: 70px; font-size: 11px; }
 
     /* Field */
-    .field-dist-input { width: 48px; font-size: 10px; }
-    .field-table td.attempt-cell { min-width: 34px; font-size: 10px; }
+    .field-dist-input { width: 48px; font-size: 11px; }
+    .field-table td.attempt-cell { min-width: 34px; font-size: 11px; }
     .field-ranking-panel { display: none; }
 
     /* Combined */
     .combined-tab-btn { padding: 3px 4px; font-size: 8px; }
-    .combined-overview-table { font-size: 10px; }
+    .combined-overview-table { font-size: 11px; }
     .combined-overview-table .combined-overview-th { font-size: 7px !important; max-width: 20px; }
 
     /* Callroom */
@@ -1919,7 +1922,7 @@ body.viewer-mode .footer { display: none; }
     /* Tighter mobile spacing (Phase 8) */
     .matrix-table-compact td { padding: 3px 2px; }
     .rec-round-btn { font-size: 8px !important; padding: 2px 4px !important; }
-    .matrix-section-compact .matrix-section-title { font-size: 9px; padding: 3px 6px; }
+    .matrix-section-compact .matrix-section-title { font-size: 11px; padding: 3px 6px; }
     /* Prevent auto keyboard on callroom (Phase 8) */
     .callroom-detail-panel .barcode-input-area input { font-size: 16px; }
 }
@@ -1946,7 +1949,7 @@ body.viewer-mode .footer { display: none; }
 .comp-info-sep { color: var(--text-muted); }
 .comp-info-dates, .comp-info-venue { color: var(--text-muted); }
 
-.height-col-header { font-size: 10px; min-width: 46px; }
+.height-col-header { font-size: 11px; min-width: 46px; }
 .height-mark-btn {
     border: none; cursor: pointer; border-radius: var(--radius);
     font-size: 14px; font-weight: 700; padding: 6px 16px;
@@ -1967,7 +1970,7 @@ body.viewer-mode .footer { display: none; }
 }
 .qual-badge.qual-Q { background: #6b6b6b; color: #fff; }
 .qual-badge.qual-q { background: #ff8f00; color: #fff; }
-.qual-badge.qual-none { background: var(--gray-light); color: var(--text-muted); font-size: 10px; }
+.qual-badge.qual-none { background: var(--gray-light); color: var(--text-muted); font-size: 11px; }
 .qual-badge:hover { transform: scale(1.2); box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 .row-qual-selected { background: #f5f0e0 !important; }
 .qual-panel { background: var(--card); border: 1.5px solid var(--primary); border-radius: var(--radius); padding: 16px; margin-top: 12px; }
@@ -1977,7 +1980,7 @@ body.viewer-mode .footer { display: none; }
 /* ============================================================
    STATUS CODE BADGES & SELECT
    ============================================================ */
-.sc-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+.sc-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
 .sc-DQ { background: #fde8ea; color: #991b1b; }
 .sc-DNS { background: #fff3cd; color: #7a6400; }
 .sc-DNF { background: #f0f0f0; color: #6b6b6b; }
@@ -2086,7 +2089,7 @@ body.viewer-mode .footer { display: none; }
     padding: 6px 8px; text-align: center; border: 1px solid #2a3a6e;
 }
 .field-2row-table thead th.wind-header {
-    background: #243470; font-size: 10px; font-weight: 400; color: #c8d6f0;
+    background: #243470; font-size: 11px; font-weight: 400; color: #c8d6f0;
 }
 /* Row 1: name + distance records  — thin bottom border (same athlete) */
 .field-2row-table .field-row1 td {
@@ -2097,7 +2100,7 @@ body.viewer-mode .footer { display: none; }
     text-align: left; font-family: var(--font); font-size: 13px;
 }
 .field-2row-table .field-row1 td .bib-tag {
-    font-size: 10px; color: #888; font-weight: 400;
+    font-size: 11px; color: #888; font-weight: 400;
 }
 /* Row 2: team + wind  — thick bottom border (between athletes) */
 .field-2row-table .field-row2 td {
@@ -2165,7 +2168,7 @@ body.viewer-mode .footer { display: none; }
 /* Q/q result badges in results views */
 .result-qual-badge {
     display: inline-block; padding: 1px 6px; border-radius: 8px;
-    font-weight: 700; font-size: 10px; margin-left: 4px; vertical-align: middle;
+    font-weight: 700; font-size: 11px; margin-left: 4px; vertical-align: middle;
 }
 .result-qual-Q { background: #6b6b6b; color: #fff; }
 .result-qual-q { background: #b79f58; color: #fff; }
@@ -2217,7 +2220,7 @@ body.viewer-mode .footer { display: none; }
     padding: 1px 6px;
     background: #f0f0f0;
     color: #6b6b6b;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     border-radius: 3px;
     white-space: nowrap;
@@ -2266,7 +2269,7 @@ body.viewer-mode .footer { display: none; }
     display: inline-block;
     background: var(--accent, #6b6b6b);
     color: #fff;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     padding: 2px 8px;
     border-radius: 10px;
@@ -2319,7 +2322,7 @@ body.viewer-mode .footer { display: none; }
 /* 종목명 앞 성별 배지 (남/여/혼) */
 .gender-badge {
     display: inline-block;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     padding: 1px 5px;
     border-radius: 3px;

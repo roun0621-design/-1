@@ -2123,7 +2123,7 @@ async function openTimetable(compId) {
                 items.forEach((item, idx) => {
                     const borderBottom = idx < items.length - 1 ? 'border-bottom:1px solid #f5f5f5;' : '';
                     const isHighlighted = closestEventId === ('tt-item-' + item.id);
-                    const nowBadge = isHighlighted ? '<span style="background:#b79f58;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;">NOW</span>' : '';
+                    const nowBadge = isHighlighted ? '<span style="background:#b79f58;color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;">NOW</span>' : '';
                     // Call Room badge: show only within callroom_time -10min ~ +5min (KST)
                     const crBadge = isCallRoomWindow(item.callroom_time, item.scheduled_date) ? '<span class="ico-callroom" style="margin-left:4px;">Call Room</span>' : '';
                     const hasLink = !!item.event_id;
@@ -2141,20 +2141,20 @@ async function openTimetable(compId) {
                     // 뒤쪽 가변 뱃지: 상태(명단/LIVE/결과보기) + 괄호(A,B) + 결과링크
                     const _roundFull = (item.round || '').trim();
                     const _bracketMatch = _roundFull.match(/\(([^)]+)\)/);
-                    const _resultTag = item.result_url ? `<span style="color:#fff;font-size:9px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window.open('${(item.result_url||'').replace(/'/g,"\\'")}','_blank')">결과</span>` : '';
+                    const _resultTag = item.result_url ? `<span style="color:#fff;font-size:11px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window.open('${(item.result_url||'').replace(/'/g,"\\'")}','_blank')">결과</span>` : '';
                     const _bracketTag = _bracketMatch ? `<span style="color:#8a7640;font-size:10px;font-weight:600;background:#f8f4ea;padding:1px 6px;border-radius:8px;white-space:nowrap;">(${_bracketMatch[1]})</span>` : '';
                     // Status badge based on round_status (so operators can see at a glance whether records are entered)
                     let _statusTag = '';
                     if (item.event_id && item.round_status) {
                         if (item.round_status === 'completed') {
                             // 결과보기 — 진한 녹색, 클릭 시 결과 패널 또는 결과지 PDF
-                            _statusTag = `<span style="color:#fff;font-size:9px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="결과 보기">결과보기</span>`;
+                            _statusTag = `<span style="color:#fff;font-size:11px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="결과 보기">결과보기</span>`;
                         } else if (item.round_status === 'in_progress') {
                             // 진행중 — 골드 LIVE
-                            _statusTag = `<span style="color:#b79f58;font-size:9px;font-weight:700;background:#f8f4ea;border:1px solid #e8dfc0;padding:1px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="실시간 기록">LIVE</span>`;
+                            _statusTag = `<span style="color:#b79f58;font-size:11px;font-weight:700;background:#f8f4ea;border:1px solid #e8dfc0;padding:1px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="실시간 기록">LIVE</span>`;
                         } else if (item.round_status === 'heats_generated') {
                             // 명단 — 연한 회색
-                            _statusTag = `<span style="color:#666;font-size:9px;font-weight:600;background:#f5f5f5;border:1px dashed #bbb;padding:1px 6px;border-radius:8px;white-space:nowrap;">명단</span>`;
+                            _statusTag = `<span style="color:#666;font-size:11px;font-weight:600;background:#f5f5f5;border:1px dashed #bbb;padding:1px 6px;border-radius:8px;white-space:nowrap;">명단</span>`;
                         }
                         // 'created' (대기) → no badge (시간표가 너무 복잡해지지 않도록)
                     }

@@ -115,7 +115,7 @@ function renderMatrix() {
             if (schedEvt && schedEvt.time) {
                 const tColor = schedEvt.is_today ? '#b79f58' : '#999';
                 const crBadge = isCallRoomWindow(schedEvt.callroom_time, schedEvt.scheduled_date) ? ' <span class="ico-callroom">Call Room</span>' : '';
-                timeBadge = `<span style="font-size:9px;color:${tColor};padding:1px 4px;border-radius:4px;background:${schedEvt.is_today ? '#f8f4ea' : '#f5f5f5'};margin-left:3px;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
+                timeBadge = `<span style="font-size:11px;color:${tColor};padding:1px 4px;border-radius:4px;background:${schedEvt.is_today ? '#f8f4ea' : '#f5f5f5'};margin-left:3px;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
             }
             html += `<tr>
                 <td class="rec-matrix-event">${g.name}${timeBadge}</td>
@@ -572,7 +572,7 @@ async function loadCallroomHeatData() {
                     const groupLabel = hasSubGroup ? (e.sub_group || '—') : '';
                     const groupTd = hasSubGroup ? `<td><span style="font-size:11px;font-weight:700;color:${groupLabel==='A'?'#6b6b6b':groupLabel==='B'?'#8b1a2a':'var(--text-muted)'}">${groupLabel}</span></td>` : '';
                     let smallNum = e.lane_number || '';
-                    const fedBadge = hasJoint ? `<td><span style="background:${fedColors[e._federation] || '#888'};color:#fff;padding:0 4px;border-radius:3px;font-size:9px;font-weight:600;">${e._federation}</span></td>` : '';
+                    const fedBadge = hasJoint ? `<td><span style="background:${fedColors[e._federation] || '#888'};color:#fff;padding:0 4px;border-radius:3px;font-size:11px;font-weight:600;">${e._federation}</span></td>` : '';
                     const jointRowStyle = e._isJoint ? 'background:#fffbeb;' : '';
                     return `<tr data-entry-id="${e.event_entry_id}" class="${e.status === 'checked_in' ? 'row-checked-in' : e.status === 'no_show' ? 'row-no-show' : ''}" style="${jointRowStyle}">
                     ${fedBadge}

@@ -294,7 +294,7 @@
     .fc-table td.l, .fc-table th.l { text-align:left; }
     .fc-cell-foul { color:#c0392b; font-weight:600; }
     .fc-cell-pass { color:#888; }
-    .fc-wind { display:block; font-size:9px; color:#6b7280; }
+    .fc-wind { display:block; font-size:11px; color:#6b7280; }
     .fc-existing { display:block; font-size:9.5px; color:#9ca3af; }
     .fc-row-error td { background:#fef2f2; }
     .fc-row-warn td { background:#fffbeb; }
@@ -4147,9 +4147,9 @@ POST /api/external/event-result-link/batch<br>
                     let divBadge = '';
                     if (_evtDivision === 'all' && g.division) {
                         const c = DIV_BADGE_COLOR[g.division] || { bg:'#eee', fg:'#555' };
-                        divBadge = `<span class="evt-div-badge" style="background:${c.bg};color:${c.fg};font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-right:4px;">${g.division}</span>`;
+                        divBadge = `<span class="evt-div-badge" style="background:${c.bg};color:${c.fg};font-size:11px;font-weight:700;padding:1px 6px;border-radius:8px;margin-right:4px;">${g.division}</span>`;
                     } else if (_evtDivision === 'all' && !g.division) {
-                        divBadge = `<span class="evt-div-badge" style="background:#f5f5f5;color:#999;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-right:4px;" title="division 미지정">—</span>`;
+                        divBadge = `<span class="evt-div-badge" style="background:#f5f5f5;color:#999;font-size:11px;font-weight:700;padding:1px 6px;border-radius:8px;margin-right:4px;" title="division 미지정">—</span>`;
                     }
                     // Indicator for events that have any link (result_url or video_url) to encourage usage
                     const anyLink = g.rounds.some(r => (r.result_url && r.result_url.trim()) || (r.video_url && r.video_url.trim()));
@@ -6002,7 +6002,7 @@ POST /api/external/event-result-link/batch<br>
                                 <a href="javascript:void(0)" onclick="openEvtModal(${s.id})" 
                                     style="font-size:12px;font-weight:600;color:var(--primary);text-decoration:none;cursor:pointer;"
                                     title="클릭: 조편성/기록/선수 관리 열기">${shortName}</a>
-                                <span style="font-size:9px;color:var(--text-muted);">${entryCnt}명 ${heatCnt}조</span>
+                                <span style="font-size:11px;color:var(--text-muted);">${entryCnt}명 ${heatCnt}조</span>
                             </div>
                             <input class="em-sub-name-input" data-sub-id="${s.id}" value="${shortName}" 
                                 style="display:none;border:1px solid var(--primary);background:#fff;font-size:12px;width:100%;padding:2px 4px;border-radius:3px;margin-top:2px;" 
@@ -6106,8 +6106,8 @@ POST /api/external/event-result-link/batch<br>
                 const isFinalSingle = emEvtForLabel && emEvtForLabel.round_type === 'final' && _emHeats.length === 1;
                 const label = h.heat_name || (isFinalSingle ? '결승' : (h.heat_number + '조'));
                 const sbKeyBadge = h.scoreboard_key 
-                    ? `<span style="font-size:9px;color:var(--text-muted);background:#f3f4f6;padding:1px 4px;border-radius:3px;cursor:pointer;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;" onclick="emEditScoreboardKey(${h.id})" title="스코어보드 키: ${h.scoreboard_key}&#10;클릭하여 수정">${h.scoreboard_key}</span>` 
-                    : `<span style="font-size:9px;color:#f59e0b;cursor:pointer;" onclick="emEditScoreboardKey(${h.id})" title="스코어보드 키 없음 — 클릭하여 설정">• 키없음</span>`;
+                    ? `<span style="font-size:11px;color:var(--text-muted);background:#f3f4f6;padding:1px 4px;border-radius:3px;cursor:pointer;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;" onclick="emEditScoreboardKey(${h.id})" title="스코어보드 키: ${h.scoreboard_key}&#10;클릭하여 수정">${h.scoreboard_key}</span>` 
+                    : `<span style="font-size:11px;color:#f59e0b;cursor:pointer;" onclick="emEditScoreboardKey(${h.id})" title="스코어보드 키 없음 — 클릭하여 설정">• 키없음</span>`;
                 return `<span style="display:inline-flex;align-items:center;gap:2px;position:relative;">
                     <button class="heat-tab-btn ${active}" onclick="switchEmHeat(${h.id}, this)" title="클릭: 선수 보기">${label}</button>
                     <button class="btn btn-sm btn-ghost" style="min-width:0;line-height:1;" onclick="emRenameHeatInline(${h.id})" title="조 이름 수정">수정</button>
@@ -6875,7 +6875,7 @@ POST /api/external/event-result-link/batch<br>
                     <input type="number" value="${distVal||''}" min="1" style="width:58px;padding:3px 5px;border:1px solid #ccc;border-radius:4px;font-size:11px;font-family:monospace;text-align:right;"
                         onchange="_pSetDist(${si},this.value)">
                     <span style="font-size:10px;color:#888;">m</span>
-                    <span style="font-size:9px;color:#aaa;margin-left:3px;">(${cumDist}m)</span>
+                    <span style="font-size:11px;color:#aaa;margin-left:3px;">(${cumDist}m)</span>
                     <button class="btn btn-xs btn-ghost" onclick="_pRemSeg(${si})" style="color:var(--danger);padding:0 3px;font-size:10px;margin-left:3px;" title="구간 삭제">×</button>
                 </td>`;
                 colors.forEach((c, ci) => {
@@ -8039,14 +8039,14 @@ POST /api/external/event-result-link/batch<br>
             container.innerHTML = filtered.map(c => {
                 const isCurrent = String(c.id) === String(CID());
                 const statusBadge = c.status === 'completed'
-                    ? '<span style="background:#e5e7eb;color:#6b7280;padding:1px 6px;border-radius:8px;font-size:9px;">종료</span>'
+                    ? '<span style="background:#e5e7eb;color:#6b7280;padding:1px 6px;border-radius:8px;font-size:11px;">종료</span>'
                     : c.status === 'active'
-                    ? '<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:8px;font-size:9px;">진행중</span>'
-                    : '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;font-size:9px;">예정</span>';
+                    ? '<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:8px;font-size:11px;">진행중</span>'
+                    : '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;font-size:11px;">예정</span>';
                 return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:${isCurrent ? '#fffbeb' : '#fafafa'};border:1px solid ${isCurrent ? '#fbbf24' : '#e5e7eb'};border-radius:6px;font-size:13px;cursor:pointer;">
                     <input type="checkbox" class="jg-comp-cb" value="${c.id}" onchange="jgUpdateSummary()">
                     <span style="flex:1;">${escapeHtml(c.name)}</span>
-                    ${c.federation ? `<span style="background:#9a8548;color:#fff;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">${escapeHtml(c.federation)}</span>` : ''}
+                    ${c.federation ? `<span style="background:#9a8548;color:#fff;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;">${escapeHtml(c.federation)}</span>` : ''}
                     ${statusBadge}
                     ${isCurrent ? '<span style="font-size:10px;color:#92400e;">현재</span>' : ''}
                 </label>`;
@@ -8127,11 +8127,11 @@ POST /api/external/event-result-link/batch<br>
                     const memberRows = g.events.map(e => {
                         const c = fedColors[e.federation] || '#6b6b6b';
                         const extraDup = (g._dupIds[String(e.competition_id)] || []).length;
-                        const dupMark = extraDup > 1 ? `<span style="background:#fee2e2;color:#991b1b;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;margin-left:2px;" title="이 대회에 동일 종목이 ${extraDup}회 중복 등록되어 있습니다. 합동 그룹에는 자동으로 1개만 추가됩니다.">중복 ${extraDup}</span>` : '';
+                        const dupMark = extraDup > 1 ? `<span style="background:#fee2e2;color:#991b1b;padding:0 4px;border-radius:3px;font-size:11px;font-weight:700;margin-left:2px;" title="이 대회에 동일 종목이 ${extraDup}회 중복 등록되어 있습니다. 합동 그룹에는 자동으로 1개만 추가됩니다.">중복 ${extraDup}</span>` : '';
                         const linkedGroupName = linkedEventMap.get(e.id);
-                        const linkedMark = linkedGroupName ? `<span style="background:#dbeafe;color:#1e40af;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;margin-left:2px;" title="이미 합동 그룹 '${escapeHtml(linkedGroupName)}' 에 속해있습니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> ${escapeHtml(linkedGroupName)}</span>` : '';
+                        const linkedMark = linkedGroupName ? `<span style="background:#dbeafe;color:#1e40af;padding:0 4px;border-radius:3px;font-size:11px;font-weight:700;margin-left:2px;" title="이미 합동 그룹 '${escapeHtml(linkedGroupName)}' 에 속해있습니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> ${escapeHtml(linkedGroupName)}</span>` : '';
                         return `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#6b7280;margin-right:8px;">
-                            <span style="background:${c};color:#fff;padding:0 4px;border-radius:3px;font-size:9px;font-weight:700;">${escapeHtml(e.federation || 'N/A')}</span>
+                            <span style="background:${c};color:#fff;padding:0 4px;border-radius:3px;font-size:11px;font-weight:700;">${escapeHtml(e.federation || 'N/A')}</span>
                             ${escapeHtml(e.comp_name || '')}${dupMark}${linkedMark}
                         </span>`;
                     }).join('');
@@ -8141,13 +8141,13 @@ POST /api/external/event-result-link/batch<br>
                         ? 'opacity:0.55;background:#fafbfc;'
                         : (anyLinked ? 'background:#fefce8;' : '');
                     const headerWarn = anyLinked
-                        ? `<span style="background:${allLinked?'#fee2e2':'#fef3c7'};color:${allLinked?'#991b1b':'#92400e'};padding:1px 6px;border-radius:8px;font-size:9px;font-weight:600;" title="${allLinked?'모든 종목이 이미 합동됨':'일부 종목이 이미 다른 그룹에 합동됨'}">${allLinked?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 이미 합동':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 일부 합동됨'}</span>`
+                        ? `<span style="background:${allLinked?'#fee2e2':'#fef3c7'};color:${allLinked?'#991b1b':'#92400e'};padding:1px 6px;border-radius:8px;font-size:11px;font-weight:600;" title="${allLinked?'모든 종목이 이미 합동됨':'일부 종목이 이미 다른 그룹에 합동됨'}">${allLinked?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 이미 합동':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 일부 합동됨'}</span>`
                         : '';
                     return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;${rowStyle}" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='${allLinked?'#fafbfc':anyLinked?'#fefce8':''}'">
                         <input type="checkbox" class="jg-evt-cb" data-event-ids="${ids}" data-event-name="${escapeHtml(g.name)}" onchange="jgUpdateSummary()" style="margin-top:2px;">
                         <div style="flex:1;min-width:0;">
                             <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
-                                <span style="background:${g.category==='field'?'#fef3c7':g.category==='track'?'#dbeafe':g.category==='relay'?'#fce7f3':'#f3f4f6'};color:#374151;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:600;">${_jgCatLabel(g.category)}</span>
+                                <span style="background:${g.category==='field'?'#fef3c7':g.category==='track'?'#dbeafe':g.category==='relay'?'#fce7f3':'#f3f4f6'};color:#374151;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;">${_jgCatLabel(g.category)}</span>
                                 <span style="font-weight:600;font-size:13px;color:#111827;">${_jgGL(g.gender)} ${_jgRL(g.round_type)} ${escapeHtml(g.name)}</span>
                                 ${headerWarn}
                                 <span style="font-size:10px;color:#9ca3af;margin-left:auto;">${countLabel}</span>
@@ -8421,7 +8421,7 @@ POST /api/external/event-result-link/batch<br>
                 const c = fedColors[e.federation] || '#6b6b6b';
                 return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:12px;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
                     <input type="checkbox" class="jg-addmem-cb" value="${e.id}">
-                    <span style="background:${c};color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;min-width:42px;text-align:center;">${escapeHtml(e.federation || 'N/A')}</span>
+                    <span style="background:${c};color:#fff;padding:1px 5px;border-radius:3px;font-size:11px;font-weight:700;min-width:42px;text-align:center;">${escapeHtml(e.federation || 'N/A')}</span>
                     <span style="color:#6b7280;font-size:11px;flex-shrink:0;">${escapeHtml(e.comp_name)}</span>
                     <span style="font-weight:600;flex:1;">${_jgGL(e.gender)} ${_jgRL(e.round_type)} ${escapeHtml(e.name)}</span>
                 </label>`;

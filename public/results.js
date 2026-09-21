@@ -1142,10 +1142,10 @@ async function renderCombinedResults() {
     const day1Max = evt.gender === 'M' ? 5 : 4;
     let hdr = '<tr><th>RANK</th><th>BIB</th><th style="text-align:left;">선수명</th>';
     subDefs.forEach(se => {
-        if (se.order === 1) hdr += '<th style="font-size:9px;padding:3px 4px;background:#e8ecf4;color:#1a2a5e;font-weight:700;border-left:3px solid #1a2a5e;">DAY 1</th>';
-        if (se.order === day1Max + 1) hdr += '<th style="font-size:9px;padding:3px 4px;background:#f4e8ec;color:#8b1a2a;font-weight:700;border-left:3px solid #8b1a2a;">DAY 2</th>';
+        if (se.order === 1) hdr += '<th style="font-size:11px;padding:3px 4px;background:#e8ecf4;color:#1a2a5e;font-weight:700;border-left:3px solid #1a2a5e;">DAY 1</th>';
+        if (se.order === day1Max + 1) hdr += '<th style="font-size:11px;padding:3px 4px;background:#f4e8ec;color:#8b1a2a;font-weight:700;border-left:3px solid #8b1a2a;">DAY 2</th>';
         const bg = se.order <= day1Max ? 'background:#eef1f7;' : 'background:#f7f0f2;';
-        hdr += `<th style="font-size:9px;padding:3px 2px;writing-mode:vertical-lr;max-width:26px;${bg}">${se.name}</th>`;
+        hdr += `<th style="font-size:11px;padding:3px 2px;writing-mode:vertical-lr;max-width:26px;${bg}">${se.name}</th>`;
     });
     hdr += '<th>총점</th></tr>';
     document.getElementById('results-thead').innerHTML = hdr;

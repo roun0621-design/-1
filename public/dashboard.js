@@ -827,7 +827,7 @@ function renderCategoryTable(groups, label, isLive) {
         const genderBadge = `<span class="gender-badge" data-g="${_rowGender}" aria-label="${_gLabel}">${_badgeText}</span>`;
         const pacingCfg = _pacingMap[g.name + ' (' + _gLabel + ')'] || _pacingMap[g.name];
         const _pacingKey = pacingCfg ? pacingCfg.event_name : g.name;
-        const wlCell = pacingCfg ? `<span class="round-btn" style="background:#f0f9ff;color:#6b6b6b;border:1px solid #c0c0c0;cursor:pointer;font-size:9px;padding:3px 6px;white-space:nowrap;" onclick="openPacingPopup('${_pacingKey.replace(/'/g, "\\'")}')">Target</span>` : '';
+        const wlCell = pacingCfg ? `<span class="round-btn" style="background:#f0f9ff;color:#6b6b6b;border:1px solid #c0c0c0;cursor:pointer;font-size:11px;padding:3px 6px;white-space:nowrap;" onclick="openPacingPopup('${_pacingKey.replace(/'/g, "\\'")}')">Target</span>` : '';
 
         // Display mode: video button (종목당 1개, 결승 > 준결승 > 예선 우선순위)
         let videoCell = '';
@@ -895,7 +895,7 @@ function renderCategoryTable(groups, label, isLive) {
             return { color: '#6a1b9a', bg: '#f3e5f5' };
         }
         const _dc = _divColorOf(g.division);
-        const divBadge = (_isDisplayMode && g.division && _currentDivision === '전체') ? `<span style="font-size:9px;color:${_dc.color};background:${_dc.bg};padding:1px 5px;border-radius:6px;margin-left:4px;font-weight:600;">${g.division}</span>` : '';
+        const divBadge = (_isDisplayMode && g.division && _currentDivision === '전체') ? `<span style="font-size:11px;color:${_dc.color};background:${_dc.bg};padding:1px 5px;border-radius:6px;margin-left:4px;font-weight:600;">${g.division}</span>` : '';
 
         // ── 카드 상태 배지 (예정 / ● 진행 중(라운드) / 종료) — 모든 카드에 1개 ──
         // 소집 완료 목록(callroomCompletedIds)은 경기 완료 후에도 남으므로, 완료된 라운드는 LIVE 판정에서 제외
@@ -1716,7 +1716,7 @@ function renderLiveCombinedResults(data) {
             const hdrCols = subDefs.map(se => {
                 const has = scores.some(s => s.sub_event_order === se.order && s.raw_record > 0);
                 const bg = se.order <= day1Max ? 'background:#f5f9ff;' : 'background:#fef5f7;';
-                return `<th style="font-size:9px;padding:2px 4px;white-space:nowrap;${bg}${has ? 'font-weight:700;' : 'color:#ccc;'}">${se.name}</th>`;
+                return `<th style="font-size:11px;padding:2px 4px;white-space:nowrap;${bg}${has ? 'font-weight:700;' : 'color:#ccc;'}">${se.name}</th>`;
             }).join('');
 
             const rows = entries.map(e => {
@@ -1763,14 +1763,14 @@ function renderLiveCombinedResults(data) {
                                 if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) {
                                     const _sc = p.status_code;
                                     const _scColor = (_sc === 'DQ') ? '#a02050' : 'var(--danger)';
-                                    return `<td style="font-size:10px;color:${_scColor};font-weight:700;"><div>${_sc}</div><div style="color:var(--text-muted);font-size:9px;font-weight:400;">${p.points}pt</div></td>`;
+                                    return `<td style="font-size:10px;color:${_scColor};font-weight:700;"><div>${_sc}</div><div style="color:var(--text-muted);font-size:11px;font-weight:400;">${p.points}pt</div></td>`;
                                 }
                                 if (p.raw === 0 && p.points === 0)
                                     return `<td style="font-size:10px;color:var(--danger);font-weight:700;">NM</td>`;
                                 if (p.raw <= 0)
                                     return `<td style="color:#ccc;font-size:10px;">—</td>`;
                                 const isHt = se.key && (se.key.includes('high_jump') || se.key.includes('pole_vault'));
-                                const rec = se.unit === 's' ? formatTime(p.raw) : formatHeight(p.raw);                                return `<td style="font-size:10px;"><div>${rec}</div><div style="color:var(--primary);font-size:9px;">${p.points}</div></td>`;
+                                const rec = se.unit === 's' ? formatTime(p.raw) : formatHeight(p.raw);                                return `<td style="font-size:10px;"><div>${rec}</div><div style="color:var(--primary);font-size:11px;">${p.points}</div></td>`;
                             }).join('');
                             return `<tr style="${r.total > 0 ? 'background:#f0fff4;' : ''}">
                                 <td><strong>${r.rank}</strong></td><td><strong>${bib(r.bib_number)}</strong></td>
@@ -1818,7 +1818,7 @@ async function _loadCombinedResultsAsync(evt) {
         const hdrCols = subDefs.map(se => {
             const has = scores.some(s => s.sub_event_order === se.order && s.raw_record > 0);
             const bg = se.order <= day1Max ? 'background:#f5f9ff;' : 'background:#fef5f7;';
-            return `<th style="font-size:9px;padding:2px 4px;white-space:nowrap;${bg}${has ? 'font-weight:700;' : 'color:#ccc;'}" onclick="_cResultShowSub(${se.order})" title="클릭하여 세부기록 보기" class="clickable-th">${se.name}</th>`;
+            return `<th style="font-size:11px;padding:2px 4px;white-space:nowrap;${bg}${has ? 'font-weight:700;' : 'color:#ccc;'}" onclick="_cResultShowSub(${se.order})" title="클릭하여 세부기록 보기" class="clickable-th">${se.name}</th>`;
         }).join('');
 
         const rows = entries.map(e => {
@@ -1877,7 +1877,7 @@ async function _loadCombinedResultsAsync(evt) {
                             if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) {
                                 const _sc = p.status_code;
                                 const _scColor = (_sc === 'DQ') ? '#a02050' : 'var(--danger)';
-                                return `<td style="font-size:10px;cursor:pointer;color:${_scColor};font-weight:700;" onclick="_cResultShowSub(${se.order})"><div>${_sc}</div><div style="color:var(--text-muted);font-size:9px;font-weight:400;">${p.points}pt</div></td>`;
+                                return `<td style="font-size:10px;cursor:pointer;color:${_scColor};font-weight:700;" onclick="_cResultShowSub(${se.order})"><div>${_sc}</div><div style="color:var(--text-muted);font-size:11px;font-weight:400;">${p.points}pt</div></td>`;
                             }
                             if (p.raw === 0 && p.points === 0)
                                 return `<td style="font-size:10px;cursor:pointer;color:var(--danger);font-weight:700;" onclick="_cResultShowSub(${se.order})">NM</td>`;
@@ -1885,7 +1885,7 @@ async function _loadCombinedResultsAsync(evt) {
                                 return `<td style="color:#ccc;font-size:10px;cursor:pointer;" onclick="_cResultShowSub(${se.order})">—</td>`;
                             const isHt = se.key && (se.key.includes('high_jump') || se.key.includes('pole_vault'));
                             const rec = se.unit === 's' ? formatTime(p.raw) : formatHeight(p.raw);
-                            return `<td style="font-size:10px;cursor:pointer;" onclick="_cResultShowSub(${se.order})"><div>${rec}</div><div style="color:var(--primary);font-size:9px;">${p.points}</div></td>`;
+                            return `<td style="font-size:10px;cursor:pointer;" onclick="_cResultShowSub(${se.order})"><div>${rec}</div><div style="color:var(--primary);font-size:11px;">${p.points}</div></td>`;
                         }).join('');
                         // SNS 카드용: 세부 기록을 종목명 없이 순서대로만 (표 셀과 같은 판정 순서)
                         const scMarks = subDefs.map(se => {
