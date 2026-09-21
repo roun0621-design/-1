@@ -123,3 +123,7 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 - `lib/routes/callroom.js` — 소집 출석·완료·경기 완료 6라우트 (328줄). 반환 `{ syncCombinedSubEventCheckin }`. server.js 11,810 → 11,490줄
 - 남은 큰 덩어리: admin 51 · display 25 · events(생성·조·레인) 20여 — admin/display 는 테스트가 얇아 마지막
 - 급조 코드(record-fieldpad.js): 인라인 입력 모드는 이미 제거됐고 키패드 모듈이 4개 함수만 감싼다. 브라우저 테스트가 없어 본체 병합은 보류(모듈로 유지)
+
+### ✅ 종목 매칭 통합 — `lib/eventMatch.js` (2026-09-22)
+- 시간표 자동연결(`lib/routes/timetable.js autoLinkTimetable`), 계측 파일 .lif/.txt/기록 xlsx(`lib/routes/timing_import.js _recxResolveHeat`), 노출용 시간표(`server.js autoLinkDisplayTimetable`)가 각자 갖던 `norm()`·종별 해석·후보 고르기를 한 모듈로. `normEvt`(공백·콤마·×·대소문자), `parseCategory`, `combinedParentName`, `divToken`, `findEvents`(정확한 이름 우선 → 접두는 옵션, 라운드 폴백 옵션, 부 토큰 좁히기, 부 라벨 엄격 옵션), `pickByGender`.
+- 판정이 바뀐 곳: 노출용 시간표도 이제 콤마를 지운다('10,000m' = '10000m'). 나머지는 기존 동작 그대로(테스트 `tests/rules/13_event_match` 9건 + 기존 가져오기·자동연결 테스트).

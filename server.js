@@ -10104,7 +10104,8 @@ async function autoLinkDisplayTimetable(compId) {
     let events = await db.all('SELECT id, name, gender, division, round_type, category FROM event WHERE competition_id=?', compId);
     const ttRows = await db.all('SELECT id, event_name, category AS jongbyul, round, event_id FROM timetable WHERE competition_id=?', compId);
 
-    function norm(s) { return (s || '').replace(/\s+/g, '').toLowerCase().replace(/[×xX]/g, 'x'); }
+    const EM = require('./lib/eventMatch');
+    const norm = EM.normEvt;   // 시간표 자동연결·계측 가져오기와 같은 정규화 (콤마도 지운다: '10,000m' = '10000m')
 
     // Best-effort 카테고리 추정 (기존 동일 종목명에서 가져오거나 guessEventCategory)
     function guessCat(name) {
@@ -10134,13 +10135,9 @@ async function autoLinkDisplayTimetable(compId) {
         const targetRound = isCombinedSub ? 'final' : parsed.round_type;
         const targetDivNorm = divNorm(jbParsed.division);
 
-        // 1) Strict match: name + gender + division + round_type 모두 일치
-        let match = events.find(ev => {
-            if (norm(ev.name) !== norm(targetName)) return false;
-            if (jbParsed.gender && ev.gender && ev.gender !== jbParsed.gender) return false;
-            if (targetDivNorm && divNorm(ev.division) !== targetDivNorm) return false;
-            return ev.round_type === targetRound;
-        });
+        // 1) Strict match: name + gender + division + round_type 모두 일치 — 공통 규칙 (부는 정규화 라벨로 비교)
+        let match = EM.findEvents(events.map(ev => ({ ...ev, division: divNorm(ev.division) })), { name: targetName, gender: jbParsed.gender || null, round: targetRound, division: targetDivNorm }, { divisionStrict: true }).matches[0];
+        if (match) match = events.find(ev => ev.id === match.id);
 
         // 2) Auto-create: 매칭 실패 시, parseJongbyul이 division을 추출했다면 누락된 event를 자동 생성
         //    (노출용 대회에서만 — 운영용은 종목 자동 생성 금지)
