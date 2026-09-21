@@ -1039,6 +1039,15 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    MISC
    ============================================================ */
 .empty-state { text-align: center; padding: 36px; color: var(--text-muted); font-size: 13px; }
+/* 세 상태(비어 있음 · 불러오는 중 · 실패) 공통 — common.js uiStateHtml() (규칙집 §10) */
+.ui-state { text-align: center; padding: 36px 16px; color: var(--text-muted); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ui-state .ui-state-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.ui-state .ui-state-hint { font-size: 12px; max-width: 46ch; line-height: 1.5; }
+.ui-state .ui-state-action { margin-top: 8px; }
+.ui-state.is-error .ui-state-title { color: var(--danger, #b3261e); }
+.ui-state .ui-state-spinner { width: 22px; height: 22px; border: 3px solid rgba(0,0,0,.12); border-top-color: var(--accent, #b79f58); border-radius: 50%; animation: ui-state-spin .8s linear infinite; margin-bottom: 4px; }
+@keyframes ui-state-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ui-state .ui-state-spinner { animation: none; } }
 
 /* ============================================================
    LOADING SPINNER

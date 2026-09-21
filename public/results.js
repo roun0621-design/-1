@@ -14,10 +14,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!(await requireCompetition())) return;
     renderPageNav('results');
     // Parallel: info bar + events load simultaneously
-    const [, events] = await Promise.all([
-        renderCompInfoBar(),
-        API.getAllEvents(getCompetitionId())
-    ]);
+    uiState('results-matrix-container', 'loading', { title: '종목을 불러오는 중…' });
+    let events;
+    try {
+        [, events] = await Promise.all([
+            renderCompInfoBar(),
+            API.getAllEvents(getCompetitionId())
+        ]);
+    } catch (e) {
+        uiState('results-matrix-container', 'error', { title: '종목을 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '네트워크나 서버 상태를 확인하세요.' });
+        throw e;
+    }
     allEvents = events;
     renderResultsMatrix();
     renderAuditLog();
@@ -281,7 +288,7 @@ function renderResultsMatrix() {
         html += `</tbody></table></div>`;
     });
 
-    if (!html) html = '<div class="empty-state">종목이 없습니다.</div>';
+    if (!html) html = uiStateHtml('empty', { title: '아직 결과가 없습니다', hint: '완료된 종목이 생기면 여기에 나타납니다.' });
     container.innerHTML = html;
 }
 
@@ -630,7 +637,7 @@ async function loadResultsData() {
     else if (cat === 'combined') await renderCombinedResults();
     else {
         document.getElementById('results-thead').innerHTML = '';
-        document.getElementById('results-tbody').innerHTML = '<tr><td class="empty-state">기록이 없습니다</td></tr>';
+        document.getElementById('results-tbody').innerHTML = `<tr><td colspan="12">${uiStateHtml('empty', { title: '아직 기록이 없습니다', hint: '기록 입력이 끝나면 여기에 나타납니다.' })}</td></tr>`;
     }
 }
 

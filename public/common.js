@@ -1647,6 +1647,18 @@ function showToast(message, type = 'success', duration = 2000) {
     }, duration);
 }
 
+// 세 상태 화면 (2026-09 Phase 6, 규칙집 §10): 비어 있음 / 불러오는 중 / 실패 — 문구 + 다음 행동 버튼을 같은 모양으로.
+//   uiStateHtml('empty'|'loading'|'error', { title, hint, action: { label, onclick } }) → HTML
+//   uiState(el, kind, opts) → el.innerHTML 에 넣는다
+function uiStateHtml(kind, opts = {}) {
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const defaults = { empty: { title: '아직 없습니다' }, loading: { title: '불러오는 중…' }, error: { title: '불러오지 못했습니다', hint: '네트워크나 서버 상태를 확인하고 다시 시도하세요.', action: { label: '다시 시도', onclick: 'location.reload()' } } };
+    const o = { ...(defaults[kind] || {}), ...opts };
+    const action = o.action ? `<div class="ui-state-action"><button type="button" class="btn btn-sm ${kind === 'error' ? 'btn-primary' : 'btn-outline'}" onclick="${esc(o.action.onclick || '')}">${esc(o.action.label)}</button></div>` : '';
+    return `<div class="ui-state is-${kind}" role="${kind === 'error' ? 'alert' : 'status'}">${kind === 'loading' ? '<div class="ui-state-spinner" aria-hidden="true"></div>' : ''}<div class="ui-state-title">${esc(o.title)}</div>${o.hint ? `<div class="ui-state-hint">${esc(o.hint)}</div>` : ''}${action}</div>`;
+}
+function uiState(el, kind, opts) { if (typeof el === 'string') el = document.getElementById(el); if (el) el.innerHTML = uiStateHtml(kind, opts); }
+
 // 되돌리기 토스트 (2026-09 Phase 6): 삭제·초기화 응답의 undo_id 로 10초 동안 '되돌리기' 버튼을 보여준다.
 //   서버(lib/undo.js)가 지운 행을 24시간 보관하므로, 토스트가 사라진 뒤에도 관리자 → 대회 설정 → 최근 되돌리기에서 할 수 있다.
 //   onRestored(result) 는 되살린 뒤 화면을 다시 읽는 콜백.

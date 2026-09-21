@@ -169,11 +169,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     window._compLocked = _compLocked;
 
     // Parallel: comp selector + info bar + events load simultaneously
-    const [, , events] = await Promise.all([
-        renderCompSelector('record'),
-        renderCompInfoBar(),
-        API.getAllEvents(getCompetitionId())
-    ]);
+    uiState('record-matrix', 'loading', { title: '종목을 불러오는 중…' });
+    let events;
+    try {
+        [, , events] = await Promise.all([
+            renderCompSelector('record'),
+            renderCompInfoBar(),
+            API.getAllEvents(getCompetitionId())
+        ]);
+    } catch (e) {
+        uiState('record-matrix', 'error', { title: '종목을 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '네트워크나 서버 상태를 확인하세요.' });
+        throw e;
+    }
     state.events = events;
     setupGenderTabs();
     setupFieldModal();
@@ -427,7 +434,9 @@ function renderMatrix() {
         html += `</tbody></table></div>`;
     });
 
-    if (!html) html = '<div class="empty-state">해당 성별의 종목이 없습니다.</div>';
+    if (!html) html = state.events.filter(e => !e.parent_event_id).length
+        ? uiStateHtml('empty', { title: '이 성별의 종목이 없습니다', hint: '위의 성별 탭을 바꿔 보세요.' })
+        : uiStateHtml('empty', { title: '등록된 종목이 없습니다', hint: '관리자에서 종목을 만들거나 연맹 명단을 올리면 여기에 나타납니다.' });
     container.innerHTML = html;
 }
 

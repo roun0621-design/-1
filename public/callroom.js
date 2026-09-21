@@ -23,11 +23,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // [정책] 종료된 대회 + 운영진(operation) → 진입 차단
     if (typeof guardEndedCompForOperation === 'function') await guardEndedCompForOperation('callroom');
     // Parallel: comp selector + info bar + events load simultaneously
-    const [, , events] = await Promise.all([
-        renderCompSelector('callroom'),
-        renderCompInfoBar(),
-        API.getAllEvents(getCompetitionId())
-    ]);
+    uiState('callroom-matrix-container', 'loading', { title: '종목을 불러오는 중…' });
+    let events;
+    try {
+        [, , events] = await Promise.all([
+            renderCompSelector('callroom'),
+            renderCompInfoBar(),
+            API.getAllEvents(getCompetitionId())
+        ]);
+    } catch (e) {
+        uiState('callroom-matrix-container', 'error', { title: '종목을 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '네트워크나 서버 상태를 확인하세요.' });
+        throw e;
+    }
     allEvents = events;
     // Load timetable schedule
     try { _crScheduleMap = await fetch('/api/timetable/' + getCompetitionId() + '/event-schedule').then(r => r.json()) || {}; } catch(e) { _crScheduleMap = {}; }
@@ -170,7 +177,9 @@ function renderMatrix() {
         html += `</tbody></table></div>`;
     });
 
-    if (!html) html = '<div class="empty-state">해당 성별의 종목이 없습니다.</div>';
+    if (!html) html = allEvents.filter(e => !e.parent_event_id).length
+        ? uiStateHtml('empty', { title: '이 성별의 종목이 없습니다', hint: '위의 성별 탭을 바꿔 보세요.' })
+        : uiStateHtml('empty', { title: '소집할 종목이 없습니다', hint: '관리자에서 종목·조편성을 올리면 여기에 나타납니다.' });
     container.innerHTML = html;
 }
 

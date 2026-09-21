@@ -253,7 +253,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadData() {
     const compId = getCompetitionId();
-    allEvents = await API.getAllEvents(compId);
+    try {
+        allEvents = await API.getAllEvents(compId);
+    } catch (e) {
+        // 서버·네트워크 실패: 빈 화면 대신 원인과 다음 행동
+        uiState('events-container', 'error', { title: '종목을 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '네트워크나 서버 상태를 확인하세요.' });
+        throw e;
+    }
     try {
         const cs = await API.getCallroomStatus();
         callroomCompletedIds = new Set(cs.completed_event_ids);
@@ -784,8 +790,10 @@ function renderMatrix() {
     });
 
     if (!html) {
-        const emptyMsg = currentGender === 'ALL' ? '등록된 종목이 없습니다.' : '해당 성별의 종목이 없습니다.';
-        html = `<div style="text-align:center;padding:40px;color:var(--text-muted);">${emptyMsg}</div>`;
+        const isAdmin = (localStorage.getItem('pace_role') || '') === 'admin';
+        html = currentGender === 'ALL'
+            ? uiStateHtml('empty', { title: '등록된 종목이 없습니다', hint: '관리자에서 종목을 만들거나 연맹 명단을 올리면 여기에 나타납니다.', action: isAdmin ? { label: '관리자 열기', onclick: `location.href='/admin.html?comp=${getCompetitionId()}'` } : null })
+            : uiStateHtml('empty', { title: '이 성별의 종목이 없습니다', hint: '위의 성별 탭을 바꿔 보세요.' });
     }
     container.innerHTML = html;
     updateLiveJumpBadge(liveGroups.length);
