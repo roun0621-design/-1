@@ -127,3 +127,7 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 ### ✅ 종목 매칭 통합 — `lib/eventMatch.js` (2026-09-22)
 - 시간표 자동연결(`lib/routes/timetable.js autoLinkTimetable`), 계측 파일 .lif/.txt/기록 xlsx(`lib/routes/timing_import.js _recxResolveHeat`), 노출용 시간표(`server.js autoLinkDisplayTimetable`)가 각자 갖던 `norm()`·종별 해석·후보 고르기를 한 모듈로. `normEvt`(공백·콤마·×·대소문자), `parseCategory`, `combinedParentName`, `divToken`, `findEvents`(정확한 이름 우선 → 접두는 옵션, 라운드 폴백 옵션, 부 토큰 좁히기, 부 라벨 엄격 옵션), `pickByGender`.
 - 판정이 바뀐 곳: 노출용 시간표도 이제 콤마를 지운다('10,000m' = '10000m'). 나머지는 기존 동작 그대로(테스트 `tests/rules/13_event_match` 9건 + 기존 가져오기·자동연결 테스트).
+
+### ✅ 브라우저 렌더 테스트 — `tests/browser/` (2026-09-22)
+- `BROWSER_TESTS=1 npm run test:browser` (기본 `npm test` 는 건너뜀). 서버를 임시 포트로 띄우고 puppeteer 로 홈·대시보드·결과·소집실·기록입력을 360/768/1024px 에서 열어 JS 예외·CSP 거부·가로 넘침·핵심 요소를 검사, 스크린샷은 `tests/browser/shots/`(git 무시).
+- 첫 실행에서 잡은 결함: 관심 국가 없는 일반 대회에서 히어로 '대표팀 명단' 반쪽이 보임(`hidden` 을 `.hero-schedule{display:flex}` 가 덮음) → `[hidden]{display:none !important}`.

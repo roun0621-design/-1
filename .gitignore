@@ -42,3 +42,4 @@ tmp/
 
 # 테스트 픽스처 (익명화된 실데이터)
 !tests/fixtures/**/*.xlsx
+tests/browser/shots/
