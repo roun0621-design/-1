@@ -1425,6 +1425,20 @@ function _buildMobileMenu(pages, currentPage, role) {
     document.body.appendChild(menu);
 }
 
+// 창(시트)이 떠 있는 동안 뒤 페이지가 스크롤되지 않게 — iOS 는 overflow:hidden 만으로는 스크롤이 새어 나가서 body 를 고정한다
+let _bodyLockY = null;
+function lockBodyScroll() {
+    if (_bodyLockY != null) return;
+    _bodyLockY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.top = `-${_bodyLockY}px`; document.body.style.position = 'fixed'; document.body.style.left = '0'; document.body.style.right = '0'; document.body.style.width = '100%'; document.body.style.overflow = 'hidden';
+}
+function unlockBodyScroll() {
+    if (_bodyLockY == null) return;
+    const y = _bodyLockY; _bodyLockY = null;
+    document.body.style.position = ''; document.body.style.top = ''; document.body.style.left = ''; document.body.style.right = ''; document.body.style.width = ''; document.body.style.overflow = '';
+    window.scrollTo(0, y);
+}
+
 function openMobileMenu() {
     const overlay = document.getElementById('mobile-menu-overlay');
     const menu = document.getElementById('mobile-menu');

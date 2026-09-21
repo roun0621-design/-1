@@ -92,6 +92,8 @@ function _eventGroupOf(name, category) {
     const m = n.match(/^(\d+)m/); if (m) return +m[1] <= 400 ? '단거리' : '중장거리';
     return '기타';
 }
+// 종목군 색 [연한 바탕, 진한 글씨] — 칩에서 묶음 라벨 대신 색으로 구분
+const _GROUP_TINT = { '단거리': ['#e3f2fd', '#1565c0'], '중장거리': ['#e8f5e9', '#1b5e20'], '허들·장애물': ['#fff3e0', '#e65100'], '경보·도로': ['#e0f7fa', '#006064'], '도약': ['#f3e5f5', '#6a1b9a'], '투척': ['#f8f4ea', '#8a7640'], '혼성': ['#fce4ec', '#ad1457'], '계주': ['#ede7f6', '#4527a0'], '기타': ['#f5f5f5', '#555'] };
 const _EVENT_GROUP_ORDER = ['단거리', '중장거리', '허들·장애물', '경보·도로', '도약', '투척', '혼성', '계주', '기타'];
 async function openTeamRoster(keep) {
     let overlay = document.getElementById('roster-modal-overlay');
@@ -101,7 +103,7 @@ async function openTeamRoster(keep) {
         overlay.onclick = (e) => { if (e.target === overlay) closeRosterModal(); };
         document.body.appendChild(overlay);
     }
-    overlay.style.display = 'flex';
+    overlay.style.display = 'flex'; if (window.lockBodyScroll) lockBodyScroll();
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const code = (allEvents.find(e => e.spotlight) || {}).spotlight || 'KOR';
     const teamL = code === 'KOR' ? '대한민국 육상 선수단' : code + ' 선수단';
@@ -120,7 +122,7 @@ async function openTeamRoster(keep) {
             <button onclick="closeRosterModal()" aria-label="닫기" style="flex:none;width:32px;height:32px;border-radius:50%;background:#f0ede6;border:none;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;">${PaceIcons.svg('close', { size: 16 })}</button>
         </div>
         <div id="team-roster-chips" style="flex-shrink:0;"></div>
-        <div id="roster-modal-body" style="flex:1;overflow-y:auto;padding:0 0 env(safe-area-inset-bottom,0);-webkit-overflow-scrolling:touch;">${uiStateHtml('loading', { title: '선수단 명단을 불러오는 중…' })}</div></div>`;
+        <div id="roster-modal-body" style="flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 0 env(safe-area-inset-bottom,0);-webkit-overflow-scrolling:touch;">${uiStateHtml('loading', { title: '선수단 명단을 불러오는 중…' })}</div></div>`;
     if (!keep && window.pushModalState) pushModalState(() => closeRosterModal());
     const body = document.getElementById('roster-modal-body');
     try {
@@ -198,9 +200,11 @@ async function openTeamRoster(keep) {
             if (!_rosterEventKey || !byEvent.has(_rosterEventKey)) _rosterEventKey = events[0].name;
             const groups = new Map();
             events.forEach(e => { const g = _eventGroupOf(e.name, e.category); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(e); });
-            const chip = e => { const n = e.athletes.length + e.teams.length; const on = e.name === _rosterEventKey;
-                return `<button type="button" onclick="_rosterPickEvent('${esc(e.name).replace(/'/g, '&#39;')}')" aria-pressed="${on}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;border:1px solid ${on ? '#1a2a5e' : '#e2ddd2'};background:${on ? '#1a2a5e' : '#fff'};color:${on ? '#fff' : '#333'};font-size:11.5px;font-weight:${on ? 800 : 600};cursor:pointer;line-height:1.3;min-height:26px;">${esc(e.name)}<span style="font-size:10px;font-weight:700;padding:0 5px;border-radius:8px;background:${on ? 'rgba(255,255,255,.22)' : '#f0ede6'};color:${on ? '#fff' : '#777'};">${n}</span>${e.live ? '<span style="width:6px;height:6px;border-radius:50%;background:#16a34a;"></span>' : e.done ? `<span style="width:6px;height:6px;border-radius:50%;background:${on ? '#fff' : '#b79f58'};"></span>` : ''}</button>`; };
-            chipsEl.innerHTML = `<div style="padding:6px 14px 4px;border-bottom:1px solid #eee;max-height:40vh;overflow-y:auto;">${_EVENT_GROUP_ORDER.filter(g => groups.has(g)).map(g => `<div style="display:flex;align-items:flex-start;gap:5px;margin:3px 0;"><span style="flex:none;width:62px;padding-top:6px;font-size:10px;font-weight:800;color:#a09a92;letter-spacing:.02em;white-space:nowrap;">${g}</span><div style="flex:1;display:flex;flex-wrap:wrap;gap:5px;">${groups.get(g).map(chip).join('')}</div></div>`).join('')}</div>`;
+            // 칩: 종목군 라벨 없이 한 흐름으로 쭉 — 종목군은 색(연한 바탕·진한 글씨)으로만 구분, 고른 칩은 그 색으로 채움
+            const chip = e => { const n = e.athletes.length + e.teams.length; const on = e.name === _rosterEventKey; const [bg, fg] = _GROUP_TINT[_eventGroupOf(e.name, e.category)] || _GROUP_TINT['기타'];
+                return `<button type="button" onclick="_rosterPickEvent('${esc(e.name).replace(/'/g, '&#39;')}')" aria-pressed="${on}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:12px;border:1px solid ${on ? fg : 'transparent'};background:${on ? fg : bg};color:${on ? '#fff' : fg};font-size:11.5px;font-weight:${on ? 800 : 700};cursor:pointer;line-height:1.3;min-height:26px;">${esc(e.name)}<span style="font-size:10px;font-weight:700;opacity:.75;">${n}</span>${e.live ? '<span style="width:6px;height:6px;border-radius:50%;background:#16a34a;"></span>' : e.done ? `<span style="width:6px;height:6px;border-radius:50%;background:${on ? '#fff' : '#b79f58'};"></span>` : ''}</button>`; };
+            const ordered = _EVENT_GROUP_ORDER.filter(g => groups.has(g)).flatMap(g => groups.get(g));
+            chipsEl.innerHTML = `<div style="padding:8px 14px 6px;border-bottom:1px solid #eee;max-height:34vh;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-wrap:wrap;gap:6px 5px;">${ordered.map(chip).join('')}</div>`;
             const sel = byEvent.get(_rosterEventKey);
             document.getElementById('team-roster-sub').textContent = `${events.length}종목 · 종목을 고르면 출전 선수${ended ? ' · 대회 종료' : ''}`;
             const gOrder = ['M', 'F', 'X'];
@@ -1274,7 +1278,7 @@ async function openEntriesModal(eventId, eventName) {
         overlay.onclick = (e) => { if (e.target === overlay) closeRosterModal(); };
         document.body.appendChild(overlay);
     }
-    overlay.style.display = 'flex';
+    overlay.style.display = 'flex'; if (window.lockBodyScroll) lockBodyScroll();
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const gL = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
@@ -3035,7 +3039,7 @@ async function openRosterModal(eventId, eventName) {
         overlay.onclick = (e) => { if (e.target === overlay) closeRosterModal(); };
         document.body.appendChild(overlay);
     }
-    overlay.style.display = 'flex';
+    overlay.style.display = 'flex'; if (window.lockBodyScroll) lockBodyScroll();
 
     const gL = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
@@ -3060,6 +3064,7 @@ async function openRosterModal(eventId, eventName) {
 function closeRosterModal() {
     const overlay = document.getElementById('roster-modal-overlay');
     if (overlay) overlay.style.display = 'none';
+    if (window.unlockBodyScroll) unlockBodyScroll();
     _rosterModalEventId = null;
 }
 
