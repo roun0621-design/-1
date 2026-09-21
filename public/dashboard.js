@@ -46,15 +46,39 @@ function _renderSpotlightButton() {
     b.innerHTML = `<span class="flag">${code === 'KOR' ? PaceIcons.svg('flagKR', { size: 22 }) : code}</span><span class="lbl">${code === 'KOR' ? '한국 선수' : code}</span>`;
     b.classList.toggle('active', _spotlightOnly);
 }
-// 히어로 카드의 '대표팀 명단' 버튼 — 관심 국가가 있는 대회에서만
+// 히어로 오른쪽 반쪽 '대표팀 명단' — 관심 국가(KOR)가 있는 대회에서만. 일반 대회는 시간표 카드 한 장 그대로
+let _rosterCache = null, _rosterCacheAt = 0;
+async function _loadRoster(force) {
+    if (!force && _rosterCache && Date.now() - _rosterCacheAt < 60000) return _rosterCache;
+    _rosterCache = await api('GET', `/api/competitions/${getCompetitionId()}/roster`); _rosterCacheAt = Date.now();
+    return _rosterCache;
+}
+function _rosterSortNext(list) {
+    const k = a => String(a.next_key || '');
+    return list.slice().sort((p, q) => (p.next_key == null) - (q.next_key == null) || (k(p) < k(q) ? -1 : k(p) > k(q) ? 1 : 0) || String(p.name).localeCompare(String(q.name)));
+}
 function renderHeroRosterButton() {
-    const b = document.getElementById('hero-roster-btn'); if (!b) return;
+    const half = document.getElementById('hero-roster'); const row = document.getElementById('hero-row'); if (!half || !row) return;
     const code = (allEvents.find(e => e.spotlight) || {}).spotlight;
-    b.hidden = !code;
-    if (code) b.firstChild.textContent = (code === 'KOR' ? '대표팀 명단' : code + ' 명단') + ' ';
+    half.hidden = !code; row.classList.toggle('has-roster', !!code);
+    if (!code) return;
+    const title = document.getElementById('hero-roster-title'), sub = document.getElementById('hero-roster-sub'), icon = document.getElementById('hero-roster-icon');
+    if (icon && !icon.innerHTML) icon.innerHTML = code === 'KOR' ? PaceIcons.svg('flagKR', { size: 26 }) : PaceIcons.svg('list', { size: 22 });
+    if (title) title.textContent = code === 'KOR' ? '대표팀 명단' : code + ' 명단';
+    _loadRoster().then(data => {
+        const ath = data.athletes || [];
+        const n = ath.length;
+        const next = _rosterSortNext(ath).find(a => a.next_key != null);
+        const nev = next && next.events.find(e => e.round_status !== 'completed');
+        const tm = nev && (nev.scheduled_at ? nev.scheduled_at.slice(11, 16) : nev.time) || '';
+        if (title) title.innerHTML = `${code === 'KOR' ? '대표팀 명단' : code + ' 명단'} <span class="hero-day-chip">${n}명</span>`;
+        if (sub) sub.innerHTML = next && nev ? `다음 <strong>${_esc(next.name)}</strong> ${_esc(nev.event_name)} · ${_esc(tm)}` : `${n}명 · 출전 선수와 기록`;
+    }).catch(() => { if (sub) sub.textContent = '출전 선수와 기록'; });
 }
 // 대표팀 명단 창 — 선수 기준: 출전 종목 · 다음 경기 · PB/SB · 결과 (GET /api/competitions/:id/roster)
-async function openTeamRoster() {
+let _rosterSort = null;   // null 이면 자동: 대회가 끝났으면 종목별, 아니면 시간별
+function setRosterSort(m) { _rosterSort = m === 'event' ? 'event' : 'time'; openTeamRoster(true); }
+async function openTeamRoster(keep) {
     let overlay = document.getElementById('roster-modal-overlay');
     if (!overlay) {
         overlay = document.createElement('div'); overlay.id = 'roster-modal-overlay';
@@ -72,11 +96,15 @@ async function openTeamRoster() {
                  <div style="font-size:12px;color:#8a7640;margin-top:2px;" id="team-roster-sub">불러오는 중…</div></div></div>
             <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
         </div>
+        <div id="team-roster-tools" style="display:flex;justify-content:flex-end;padding:8px 14px 0;"></div>
         <div id="roster-modal-body" style="flex:1;overflow-y:auto;padding:0;">${uiStateHtml('loading', { title: '선수단 명단을 불러오는 중…' })}</div></div>`;
-    if (window.pushModalState) pushModalState(() => closeRosterModal());
+    if (!keep && window.pushModalState) pushModalState(() => closeRosterModal());
     const body = document.getElementById('roster-modal-body');
     try {
-        const data = await api('GET', `/api/competitions/${getCompetitionId()}/roster`);
+        const data = await _loadRoster(!keep);
+        const ended = allEvents.length > 0 && allEvents.every(e => e.round_status === 'completed');
+        const sortMode = _rosterSort || (ended ? 'event' : 'time');
+        document.getElementById('team-roster-tools').innerHTML = segToggleHtml(sortMode, 'setRosterSort');
         const DOW = ['일', '월', '화', '수', '목', '금', '토'];
         const when = ev => {
             const iso = ev.scheduled_at || (ev.scheduled_date ? `${ev.scheduled_date}T${ev.time || '00:00'}:00` : null);
@@ -85,11 +113,13 @@ async function openTeamRoster() {
         };
         const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' };
         const genderL = { M: '남', F: '여', X: '혼성' };
+        // 결과: 순위(결승 '3위' · 예선 '2조 3위') + 기록(풍속) / 상태코드
         const mark = ev => {
             const r = ev.result; if (!r) return '';
             if (r.status_code) return `<span style="color:#b3261e;font-weight:700;">${esc(PaceRanking.statusText(r.status_code))}</span>`;
-            if (r.time_seconds != null) return `<b>${formatTime(r.time_seconds)}</b>${r.wind != null ? ` <span style="color:#888;">(${r.wind > 0 ? '+' : ''}${Number(r.wind).toFixed(1)})</span>` : ''}`;
-            if (r.distance_meters != null) return `<b>${Number(r.distance_meters).toFixed(2)}</b>`;
+            const place = r.place ? `<span style="display:inline-block;min-width:22px;padding:0 5px;border-radius:9px;background:${r.place <= 3 ? '#1a2a5e' : '#e9edf6'};color:${r.place <= 3 ? '#fff' : '#1a2a5e'};font-weight:800;text-align:center;margin-right:5px;">${ev.round_type !== 'final' && r.heat_count > 1 && ev.heat_number ? ev.heat_number + '조 ' : ''}${r.place}위</span>` : '';
+            if (r.time_seconds != null) return `${place}<b>${formatTime(r.time_seconds)}</b>${r.wind != null ? ` <span style="color:#888;">(${r.wind > 0 ? '+' : ''}${Number(r.wind).toFixed(1)})</span>` : ''}`;
+            if (r.distance_meters != null) return `${place}<b>${Number(r.distance_meters).toFixed(2)}</b>`;
             return '';
         };
         const evLine = ev => {
@@ -107,11 +137,16 @@ async function openTeamRoster() {
             <div style="margin-top:3px;">${a.events.map(evLine).join('') || '<div style="font-size:11px;color:#999;">출전 종목 없음</div>'}</div></div>`;
         // 정렬: 다음 경기가 빠른 순, 모두 끝난 선수는 뒤로
         const sortA = (p, q) => (p.next_key == null) - (q.next_key == null) || (String(p.next_key || '') < String(q.next_key || '') ? -1 : String(p.next_key || '') > String(q.next_key || '') ? 1 : 0) || String(p.name).localeCompare(String(q.name));   // ISO 문자열 비교 (일정 미정 '~' 는 맨 뒤)
-        const athletes = (data.athletes || []).slice().sort(sortA);
-        const teams = (data.teams || []).map(t => ({ ...t, members: (t.events[0] && t.events[0].members) || [] })).sort(sortA);
+        // 종목별: 첫 출전 종목의 WA 순서 → 성별 → 이름 (계주만 뛰는 선수는 계주 자리)
+        const primary = a => { const evs = a.events.slice().sort((p, q) => _evSortIdx(p.event_name) - _evSortIdx(q.event_name)); return evs[0] || null; };
+        const gIdx = g => g === 'M' ? 0 : g === 'F' ? 1 : 2;
+        const sortE = (p, q) => { const a = primary(p), b = primary(q); return (a == null) - (b == null) || (a && b ? (_evSortIdx(a.event_name) - _evSortIdx(b.event_name) || gIdx(a.gender) - gIdx(b.gender)) : 0) || String(p.name).localeCompare(String(q.name)); };
+        const sorter = sortMode === 'event' ? sortE : sortA;
+        const athletes = (data.athletes || []).slice().sort(sorter);
+        const teams = (data.teams || []).map(t => ({ ...t, members: (t.events[0] && t.events[0].members) || [] })).sort(sorter);
         const evCount = new Set(athletes.flatMap(a => a.events.filter(e => !e.relay).map(e => e.event_name + '|' + e.gender))).size;
         document.getElementById('team-roster-title').textContent = `${teamL} · ${athletes.length}명`;
-        document.getElementById('team-roster-sub').textContent = `${evCount}종목${teams.length ? ` · 계주 ${teams.length}팀` : ''} · 다음 경기 순`;
+        document.getElementById('team-roster-sub').textContent = `${evCount}종목${teams.length ? ` · 계주 ${teams.length}팀` : ''} · ${sortMode === 'event' ? '종목 순' : '다음 경기 순'}${ended ? ' · 대회 종료' : ''}`;
         body.innerHTML = athletes.length
             ? `${athletes.map(row).join('')}${teams.length ? `<div style="padding:10px 14px 2px;font-size:11px;font-weight:800;color:#7c3aed;letter-spacing:.05em;">계주 (${teams.length})</div>${teams.map(row).join('')}` : ''}`
             : uiStateHtml('empty', { title: '선수단 명단이 아직 없습니다', hint: '공식 엔트리가 올라오면 자동으로 들어옵니다.' });
@@ -346,6 +381,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadData() {
     const compId = getCompetitionId();
+    _loadSortMode();
     try {
         allEvents = await API.getAllEvents(compId);
     } catch (e) {
@@ -513,9 +549,10 @@ function renderHeroSchedule() {
     if (!card) return;
     const days = _timetableFull.days || {};
     const dayKeys = Object.keys(days).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+    const row = document.getElementById('hero-row') || card;
     if (dayKeys.length === 0) {
         // 시간표 없음 → 카드 숨김
-        card.style.display = 'none';
+        row.style.display = 'none';
         return;
     }
 
@@ -523,10 +560,10 @@ function renderHeroSchedule() {
     const targetDay = _ttGetTargetDay();
     if (targetDay == null) {
         // 모든 경기 종료 → 히어로 카드 숨김
-        card.style.display = 'none';
+        row.style.display = 'none';
         return;
     }
-    card.style.display = 'flex';
+    row.style.display = 'flex';
 
     const dayItems = _ttFlattenDay(targetDay);
 
@@ -557,6 +594,7 @@ function renderHeroSchedule() {
     const subEl = document.getElementById('hero-sub');
     const iconEl = document.getElementById('hero-icon');
 
+    row.classList.toggle('live', !!liveItem);
     if (liveItem) {
         card.classList.add('live');
         iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>';
@@ -754,6 +792,86 @@ function _applyEventGenderBar() {
     }
 }
 
+// ── 종목 정렬 순서 (대시보드 카드 · 대표팀 명단 창 공용) ──
+// WA 표준 순서: 단거리 → 중거리 → 장거리 → 허들 → 장애물 → 트랙경보 → 도로경보 → 도로 → 점프 → 투척 → 혼성 → 릴레이
+const EVENT_SORT_ORDER = [
+    '60m','100m','200m','400m',
+    '800m','1500m',
+    '3000m','5000m','10000m',
+    '60mH','100mH','110mH','400mH',
+    '2000mSC','3000mSC',
+    '3000mW','5000mW','10000mW',
+    '10kmW','20kmW','35kmW','50kmW',
+    '하프마라톤','마라톤',
+    '높이뛰기','장대높이뛰기',
+    '멀리뛰기','세단뛰기',
+    '포환던지기','원반던지기','해머던지기','창던지기',
+    '5종경기','7종경기','10종경기',
+    '4x100mR','4x400mR','4x400mR(혼성)','4x400mR(믹스)','4x800mR','4x1500mR'
+];
+// 종목명 정규화 (공백·콤마 제거, ×→x, Mixed→혼성, 허들/경보/장애물 표기 통일)
+function _normEv(s) {
+    if (!s) return '';
+    let t = String(s).trim().toLowerCase().replace(/[\s\u3000,]/g,'').replace(/[×✕✖＊*]/g,'x');
+    t = t.replace(/(\d+)x(\d+)m?릴레이/g, '$1x$2mr');
+    t = t.replace(/(\d+)x(\d+)r(?![a-z0-9])/g, '$1x$2mr');
+    t = t.replace(/mixed/g, '혼성').replace(/\(mix\)/g, '(혼성)');
+    t = t.replace(/혼성(\d+x\d+mr)/g, '$1(혼성)');
+    t = t.replace(/(\d+)\s*km\s*(?:경보|w)\b/gi, '$1kmw');
+    t = t.replace(/(\d+)\s*m\s*(?:경보|w)\b/gi, '$1mw');
+    t = t.replace(/(\d+)m?허들/g, '$1mh').replace(/허들/g, 'h');
+    t = t.replace(/(\d+)m?장애물/g, '$1msc').replace(/장애물/g, 'sc');
+    t = t.replace(/하프\s*마라톤|halfmarathon/g, '하프마라톤').replace(/marathon/g, '마라톤');
+    return t;
+}
+function _evSortIdx(name) {
+    const target = _normEv(name);
+    if (!target) return 999;
+    // 1) 정확매칭
+    for (let i=0; i<EVENT_SORT_ORDER.length; i++) {
+        if (_normEv(EVENT_SORT_ORDER[i]) === target) return i;
+    }
+    // 2) 카테고리 패턴 매칭 (100mH가 100m에 잡히는 사고 방지)
+    const patterns = [
+        { re: /^(\d+)mw$/, probe: m => `${m[1]}mw` },
+        { re: /^(\d+)kmw$/, probe: m => `${m[1]}kmw` },
+        { re: /^(\d+)mh$/, probe: m => `${m[1]}mh` },
+        { re: /^(\d+)msc$/, probe: m => `${m[1]}msc` },
+        { re: /^(\d+)x(\d+)mr(\(혼성\))?$/, probe: m => `${m[1]}x${m[2]}mr${m[3]||''}` },
+        { re: /^(\d+)m$/, probe: m => `${m[1]}m` },
+    ];
+    for (const p of patterns) {
+        const mt = target.match(p.re);
+        if (!mt) continue;
+        const probe = p.probe(mt);
+        for (let i=0; i<EVENT_SORT_ORDER.length; i++) {
+            if (_normEv(EVENT_SORT_ORDER[i]) === probe) return i;
+        }
+    }
+    return 999;
+}
+
+// 정렬 모드: 종목별(WA 순서) / 시간별(다음 경기 시각순, 날짜 묶음) — 대회별로 기억
+let _sortMode = 'event';
+function _loadSortMode() { try { _sortMode = localStorage.getItem('pace_sort_mode_' + getCompetitionId()) === 'time' ? 'time' : 'event'; } catch (e) { _sortMode = 'event'; } }
+function setSortMode(m) { _sortMode = m === 'time' ? 'time' : 'event'; try { localStorage.setItem('pace_sort_mode_' + getCompetitionId(), _sortMode); } catch (e) {} renderMatrix(); }
+// 홀짝 버튼 모양의 정렬 토글 (대시보드·명단 창 공용)
+function segToggleHtml(mode, onclickFn, opts) {
+    const o = opts || {};
+    return `<div class="seg-toggle" role="group" aria-label="정렬"${o.style ? ` style="${o.style}"` : ''}>
+        <button type="button" class="${mode === 'event' ? 'on' : ''}" onclick="${onclickFn}('event')" aria-pressed="${mode === 'event'}">종목별</button>
+        <button type="button" class="${mode === 'time' ? 'on' : ''}" onclick="${onclickFn}('time')" aria-pressed="${mode === 'time'}">시간별</button></div>`;
+}
+// 그룹(종목)의 다음 경기 시각 키: 아직 안 끝난 첫 라운드 → 없으면 결승/준결승/예선. 시간표 없으면 null
+function _groupScheduleKey(g) {
+    const by = t => g.rounds.find(r => r.round_type === t);
+    const order = [by('preliminary'), by('semifinal'), by('final')].filter(Boolean);
+    const pending = order.filter(r => _scheduleMap[r.id] && r.round_status !== 'completed');
+    const pick = pending[0] || order.slice().reverse().find(r => _scheduleMap[r.id]);
+    const sc = pick && _scheduleMap[pick.id]; if (!sc || !sc.time) return null;
+    return { key: `${sc.scheduled_date || ('D' + String(sc.day || 0).padStart(2, '0'))}T${sc.time}`, date: sc.scheduled_date || null, day: sc.day || null, is_today: !!sc.is_today };
+}
+
 function renderMatrix() {
     _applyEventGenderBar();
     const container = document.getElementById('events-container');
@@ -803,63 +921,6 @@ function renderMatrix() {
     });
 
     const allGroups = [];
-    // WA 표준 순서: 단거리 → 중거리 → 장거리 → 허들 → 장애물 → 트랙경보 → 도로경보 → 도로 → 점프 → 투척 → 혼성 → 릴레이
-    const EVENT_SORT_ORDER = [
-        '60m','100m','200m','400m',
-        '800m','1500m',
-        '3000m','5000m','10000m',
-        '60mH','100mH','110mH','400mH',
-        '2000mSC','3000mSC',
-        '3000mW','5000mW','10000mW',
-        '10kmW','20kmW','35kmW','50kmW',
-        '하프마라톤','마라톤',
-        '높이뛰기','장대높이뛰기',
-        '멀리뛰기','세단뛰기',
-        '포환던지기','원반던지기','해머던지기','창던지기',
-        '5종경기','7종경기','10종경기',
-        '4x100mR','4x400mR','4x400mR(혼성)','4x400mR(믹스)','4x800mR','4x1500mR'
-    ];
-    // 종목명 정규화 (공백·콤마 제거, ×→x, Mixed→혼성, 허들/경보/장애물 표기 통일)
-    function _normEv(s) {
-        if (!s) return '';
-        let t = String(s).trim().toLowerCase().replace(/[\s\u3000,]/g,'').replace(/[×✕✖＊*]/g,'x');
-        t = t.replace(/(\d+)x(\d+)m?릴레이/g, '$1x$2mr');
-        t = t.replace(/(\d+)x(\d+)r(?![a-z0-9])/g, '$1x$2mr');
-        t = t.replace(/mixed/g, '혼성').replace(/\(mix\)/g, '(혼성)');
-        t = t.replace(/혼성(\d+x\d+mr)/g, '$1(혼성)');
-        t = t.replace(/(\d+)\s*km\s*(?:경보|w)\b/gi, '$1kmw');
-        t = t.replace(/(\d+)\s*m\s*(?:경보|w)\b/gi, '$1mw');
-        t = t.replace(/(\d+)m?허들/g, '$1mh').replace(/허들/g, 'h');
-        t = t.replace(/(\d+)m?장애물/g, '$1msc').replace(/장애물/g, 'sc');
-        t = t.replace(/하프\s*마라톤|halfmarathon/g, '하프마라톤').replace(/marathon/g, '마라톤');
-        return t;
-    }
-    function _evSortIdx(name) {
-        const target = _normEv(name);
-        if (!target) return 999;
-        // 1) 정확매칭
-        for (let i=0; i<EVENT_SORT_ORDER.length; i++) {
-            if (_normEv(EVENT_SORT_ORDER[i]) === target) return i;
-        }
-        // 2) 카테고리 패턴 매칭 (100mH가 100m에 잡히는 사고 방지)
-        const patterns = [
-            { re: /^(\d+)mw$/, probe: m => `${m[1]}mw` },
-            { re: /^(\d+)kmw$/, probe: m => `${m[1]}kmw` },
-            { re: /^(\d+)mh$/, probe: m => `${m[1]}mh` },
-            { re: /^(\d+)msc$/, probe: m => `${m[1]}msc` },
-            { re: /^(\d+)x(\d+)mr(\(혼성\))?$/, probe: m => `${m[1]}x${m[2]}mr${m[3]||''}` },
-            { re: /^(\d+)m$/, probe: m => `${m[1]}m` },
-        ];
-        for (const p of patterns) {
-            const mt = target.match(p.re);
-            if (!mt) continue;
-            const probe = p.probe(mt);
-            for (let i=0; i<EVENT_SORT_ORDER.length; i++) {
-                if (_normEv(EVENT_SORT_ORDER[i]) === probe) return i;
-            }
-        }
-        return 999;
-    }
     function _divSortIdx(div) { return _divCompareKey(div); }
     // 성별 정렬 점수: 남(0) < 여(1) < 혼성(2)
     function _genderSortIdx(g) { return g === 'M' ? 0 : g === 'F' ? 1 : g === 'X' ? 2 : 3; }
@@ -892,12 +953,31 @@ function renderMatrix() {
         html += `</div>`;
     }
 
-    // Render by category
-    categories.forEach(cat => {
-        const groups = allGroups.filter(g => g.catKey === cat.key);
-        if (groups.length === 0) return;
-        html += renderCategoryTable(groups, cat.label);
-    });
+    // 정렬 토글 (홀짝 버튼) — 종목이 있을 때만
+    // 시간표가 하나도 없는 대회는 토글을 숨긴다 (시간별 정렬이 의미 없음)
+    const _hasSchedule = Object.keys(_scheduleMap || {}).length > 0;
+    if (!_hasSchedule && _sortMode === 'time') _sortMode = 'event';
+    if (allGroups.length && _hasSchedule) html = segToggleHtml(_sortMode, 'setSortMode', { style: 'margin:2px 0 8px;' }) + html;
+
+    if (_sortMode === 'time') {
+        // 시간별: 날짜(일차)별로 묶고 그 안은 다음 경기 시각순. 시간표에 없는 종목은 맨 아래 '시간 미정'
+        const keyed = allGroups.map(g => ({ g, sk: _groupScheduleKey(g) }));
+        keyed.sort((a, b) => (a.sk == null) - (b.sk == null) || (a.sk && b.sk ? (a.sk.key < b.sk.key ? -1 : a.sk.key > b.sk.key ? 1 : 0) : 0) || _evSortIdx(a.g.name) - _evSortIdx(b.g.name) || _genderSortIdx(a.g.gender) - _genderSortIdx(b.g.gender));
+        const buckets = [];
+        keyed.forEach(({ g, sk }) => {
+            const label = !sk ? '시간 미정' : sk.date ? (() => { const dt = new Date(sk.date + 'T00:00:00'); return isFinite(dt) ? `${dt.getMonth() + 1}/${dt.getDate()}(${'일월화수목금토'[dt.getDay()]})${sk.is_today ? ' · 오늘' : ''}` : sk.date; })() : sk.day ? `${sk.day}일차` : '시간 미정';
+            let b = buckets[buckets.length - 1]; if (!b || b.label !== label) { b = { label, groups: [] }; buckets.push(b); }
+            b.groups.push(g);
+        });
+        buckets.forEach(b => { html += renderCategoryTable(b.groups, b.label); });
+    } else {
+        // Render by category
+        categories.forEach(cat => {
+            const groups = allGroups.filter(g => g.catKey === cat.key);
+            if (groups.length === 0) return;
+            html += renderCategoryTable(groups, cat.label);
+        });
+    }
 
     if (!html) {
         const isAdmin = (localStorage.getItem('pace_role') || '') === 'admin';

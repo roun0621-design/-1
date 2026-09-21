@@ -189,6 +189,11 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         expect(seo.events.some(e => e.relay && e.event_name === '4X100mR' && e.personal_best === '38.49')).toBe(true);
         expect(seo.events.every(e => !e.relay || e.members.length >= 4)).toBe(true);
         expect(r.body.teams.length).toBeGreaterThan(0); expect(r.body.teams[0].is_team).toBe(true);
+        // 결과가 들어온 조: 여자 100m 준결승 1조 — 한국 선수 11.42 는 2위, 풍속 -0.3 (결승이 아니니 조 번호와 조 수도 함께)
+        const korW100 = F('entries_org_KOR.json').Events.find(e => e.EvKey === 'W.100M--------------').Partics[0];
+        const runner = r.body.athletes.find(a => a.name_alt === korW100.Name || a.name === korW100.Name);
+        const semi = runner.events.find(e => e.event_name === '100m' && e.round_type === 'semifinal');
+        expect(semi.result).toMatchObject({ time_seconds: 11.42, place: 2, heat_count: 3 }); expect(Number(semi.result.wind)).toBeCloseTo(-0.3, 5); expect(semi.heat_number).toBe(1);
         // 관심 국가 없는 대회는 400 (team 파라미터로는 조회 가능)
         const other = await db.get("SELECT id FROM competition WHERE id<>? ORDER BY id LIMIT 1", fx.comp);
         if (other) expect((await request(app).get(`/api/competitions/${other.id}/roster`)).status).toBe(400);
