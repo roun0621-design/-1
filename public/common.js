@@ -896,6 +896,7 @@ async function renderCompInfoBar(containerId) {
         // 정보(줄1) 와 액션 버튼(줄2) 을 분리 → 대회명이 길어도 버튼이 항상 한 줄에 나란히
         el.innerHTML = `<div class="comp-info-main">
                 <span class="comp-info-name">${info.name || ''}</span>
+                <span id="comp-switch-slot"></span>
                 ${fedBadge}
                 <span class="comp-info-sep">|</span>
                 <span class="comp-info-dates">${info.dates || ''}</span>
@@ -903,6 +904,18 @@ async function renderCompInfoBar(containerId) {
                 <span class="comp-info-venue">${info.venue || ''}</span>
             </div>
             <div class="comp-info-actions" id="comp-info-actions">${docBtnHtml}${ttBtnHtml}</div>`;
+        // 대회 바꾸기 — 볼 만한 대회가 둘 이상이면 어느 페이지에서나 같은 자리(대회명 옆)에서 (규칙집 §13)
+        try {
+            const comps = await _relevantCompetitions();
+            const slot = document.getElementById('comp-switch-slot');
+            if (slot && comps.length > 1) {
+                const cur = getCompetitionId(), page = _currentPageName();
+                const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                slot.innerHTML = `<select aria-label="대회 바꾸기" title="다른 대회 보기" style="margin-left:6px;padding:2px 22px 2px 8px;border:1px solid var(--gray);border-radius:999px;background:#fff;font-size:11px;font-weight:700;color:#555;cursor:pointer;max-width:200px;">
+                    ${comps.map(c => `<option value="${c.id}" ${String(c.id) === String(cur) ? 'selected' : ''}>${c.status === 'active' ? '● ' : '○ '}${esc(c.name)}</option>`).join('')}</select>`;
+                slot.querySelector('select').addEventListener('change', function () { setCompetitionId(this.value); location.href = '/' + page + '.html?comp=' + this.value; });
+            }
+        } catch (e) {}
     } catch (e) {}
 }
 
@@ -1034,36 +1047,34 @@ async function initCompNoticePopup() {
 // ============================================================
 // Competition Selector (date-aware: active now or starting within 14 days)
 // ============================================================
+// 지금 볼 만한 대회 목록: 진행 중 + 14일 안에 시작하는 예정 + 보고 있는 대회 (사이드바 선택·대회 정보줄의 '대회 바꾸기' 공용)
+let _relevantCompsCache = null;
+async function _relevantCompetitions() {
+    if (_relevantCompsCache) return _relevantCompsCache;
+    const all = await API.getCompetitions();
+    // 숨긴 대회를 직접 링크로 보고 있으면 목록에는 없으므로 이름 표시용으로만 보충
+    const currentId = getCompetitionId();
+    if (currentId && !all.some(c => String(c.id) === String(currentId))) {
+        try { const cur = await API.getCompetition(currentId); if (cur && cur.id) all.push(cur); } catch (e) {}
+    }
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() + 14);
+    _relevantCompsCache = all.filter(c => {
+        if (String(c.id) === currentId) return true;
+        if (c.status === 'active') return true;
+        if (c.status === 'upcoming' && c.start_date) return new Date(c.start_date + 'T00:00:00') <= cutoff;
+        return false;
+    });
+    return _relevantCompsCache;
+}
+function _currentPageName() { const m = location.pathname.match(/\/([a-z0-9_-]+)\.html$/i); return m ? m[1] : 'dashboard'; }
+
 async function renderCompSelector(currentPage) {
     const container = document.getElementById('comp-selector');
     if (!container) return;
     try {
-        const all = await API.getCompetitions();
-        // 숨긴 대회를 직접 링크로 보고 있으면 목록에는 없으므로 이름 표시용으로만 보충
-        const _curId = getCompetitionId();
-        if (_curId && !all.some(c => String(c.id) === String(_curId))) {
-            try { const cur = await API.getCompetition(_curId); if (cur && cur.id) all.push(cur); } catch (e) {}
-        }
-        // Date-based filter: show competitions that are currently relevant
-        // 1. status 'active' (running right now)
-        // 2. status 'upcoming' AND start_date within 14 days from today
-        // 3. Always include the currently selected competition
-        const today = new Date(); today.setHours(0,0,0,0);
-        const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() + 14);
         const currentId = getCompetitionId();
-
-        const comps = all.filter(c => {
-            // Always show the competition the user is currently viewing
-            if (String(c.id) === currentId) return true;
-            // Active competitions (in progress)
-            if (c.status === 'active') return true;
-            // Upcoming within 14 days
-            if (c.status === 'upcoming' && c.start_date) {
-                const start = new Date(c.start_date + 'T00:00:00');
-                return start <= cutoff;
-            }
-            return false;
-        });
+        const comps = await _relevantCompetitions();
         if (comps.length <= 1) {
             container.style.display = 'none';
             return;
