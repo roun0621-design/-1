@@ -1936,7 +1936,7 @@ async function openTimetable(compId) {
                 </div>
                 <button onclick="document.getElementById('timetable-overlay').remove()" style="background:rgba(255,255,255,0.8);border:1px solid #c0c0c0;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;transition:all 0.15s;font-weight:300;" onmouseover="this.style.background='#fff';this.style.borderColor='#8a8a8a'" onmouseout="this.style.background='rgba(255,255,255,0.8)';this.style.borderColor='#c0c0c0'">&times;</button>
             </div>
-            <div id="tt-day-tabs" style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap;"></div>
+            <div id="tt-day-tabs" style="display:flex;gap:6px;margin-top:14px;align-items:center;position:relative;"></div>
         </div>`;
 
         const contentHtml = `<div id="tt-content" style="overflow-y:auto;padding:16px 22px 22px;flex:1;"></div>`;
@@ -2035,14 +2035,22 @@ async function openTimetable(compId) {
             const dt = new Date(date + 'T00:00:00'); const wd = '일월화수목금토'[dt.getDay()];
             return `${dt.getMonth() + 1}/${dt.getDate()}(${wd})<span style="font-size:10px;opacity:.7;margin-left:3px;">${d}일차</span>`;
         }
+        // 날짜 이동: ◀ [9/24(목) · 2일차 (13) ▾] ▶ — 날짜를 누르면 전체 날짜 목록이 아래로 펼쳐진다 (일주일짜리 대회도 한 줄)
         function renderDayTabs() {
-            tabContainer.innerHTML = dayKeys.map(d => {
-                const dd = data.days[d];
-                const cnt = (dd.track || []).length + (dd.field || []).length;
-                const isActive = d === activeDay;
-                return `<button onclick="window._ttShowDay(${d})" style="padding:6px 16px;border-radius:20px;border:1.5px solid ${isActive ? '#6b6b6b' : '#c0c0c0'};background:${isActive ? '#6b6b6b' : '#fff'};color:${isActive ? '#fff' : '#6b6b6b'};font-size:12px;font-weight:${isActive ? '700' : '500'};cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:4px;">${_ttDayLabel(d, dd, data)} <span style="font-size:10px;opacity:.7;">(${cnt})</span></button>`;
-            }).join('');
+            const idx = dayKeys.indexOf(activeDay);
+            const cntOf = d => { const dd = data.days[d] || {}; return (dd.track || []).length + (dd.field || []).length; };
+            const btn = (dis, dir, label) => `<button type="button" ${dis ? 'disabled' : ''} onclick="window._ttShowDay(${dis ? activeDay : dayKeys[idx + dir]})" aria-label="${dir < 0 ? '이전 날' : '다음 날'}" style="width:36px;height:36px;border-radius:50%;border:1.5px solid #c0c0c0;background:#fff;color:${dis ? '#ccc' : '#6b6b6b'};font-size:16px;cursor:${dis ? 'default' : 'pointer'};display:inline-flex;align-items:center;justify-content:center;">${label}</button>`;
+            tabContainer.innerHTML = `${btn(idx <= 0, -1, '&#8249;')}
+                <button type="button" id="tt-day-current" onclick="window._ttToggleDayList()" aria-haspopup="listbox" aria-expanded="false" style="flex:1;max-width:280px;height:36px;padding:0 14px;border-radius:20px;border:1.5px solid #6b6b6b;background:#6b6b6b;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;">${_ttDayLabel(activeDay, data.days[activeDay] || {}, data)} <span style="font-size:11px;opacity:.75;">(${cntOf(activeDay)})</span> <span style="font-size:11px;opacity:.8;">&#9662;</span></button>
+                ${btn(idx >= dayKeys.length - 1, 1, '&#8250;')}
+                <div id="tt-day-list" role="listbox" hidden style="position:absolute;top:42px;left:42px;z-index:5;background:#fff;border:1px solid #ddd;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:220px;padding:4px;">
+                    ${dayKeys.map(d => `<button type="button" role="option" aria-selected="${d === activeDay}" onclick="window._ttShowDay(${d})" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:0;border-radius:8px;background:${d === activeDay ? '#f5f0e0' : 'transparent'};color:#333;font-size:13px;font-weight:${d === activeDay ? 700 : 500};cursor:pointer;text-align:left;">${_ttDayLabel(d, data.days[d] || {}, data)}<span style="font-size:11px;color:#888;">${cntOf(d)}경기</span></button>`).join('')}
+                </div>`;
         }
+        window._ttToggleDayList = function () {
+            const list = document.getElementById('tt-day-list'), cur = document.getElementById('tt-day-current');
+            if (!list) return; list.hidden = !list.hidden; if (cur) cur.setAttribute('aria-expanded', String(!list.hidden));
+        };
 
         function renderDay(dayNum) {
             activeDay = dayNum;
