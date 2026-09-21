@@ -267,13 +267,33 @@ const PORT = process.env.PORT || 3000;
 app.use((req, res, next) => { if (_bootDone) return next(); _bootReady.then(() => { _bootDone = true; next(); }, () => { _bootDone = true; next(); }); });
 let _bootDone = false;
 // ---- Security Middleware ----
+// CSP (2026-09 Phase 1 XSS 방어선): 화면이 inline script/onclick 을 쓰므로 script 는 'unsafe-inline' 을 남기되,
+//   외부 출처(스크립트·연결·프레임)는 실제 쓰는 호스트만 — GA·Firebase(푸시)·Google Fonts·YouTube 임베드.
+//   object-src 'none' · base-uri 'self' · frame-ancestors 'self'(다른 사이트가 우리 화면을 iframe 으로 감싸지 못함; OBS 브라우저 소스는 iframe 이 아니라 영향 없음)
+//   새 외부 출처를 쓰면 여기에 추가한다 (브라우저 콘솔 'Refused to …' 로 바로 드러난다).
+const CSP_DIRECTIVES = {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "'unsafe-inline'", 'https://www.googletagmanager.com', 'https://www.gstatic.com', 'https://*.google-analytics.com'],
+    scriptSrcAttr: ["'unsafe-inline'"],
+    styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+    fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+    imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+    mediaSrc: ["'self'", 'blob:', 'data:'],
+    connectSrc: ["'self'", 'ws:', 'wss:', 'https://*.google-analytics.com', 'https://*.analytics.google.com', 'https://*.googletagmanager.com', 'https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.google.com'],
+    frameSrc: ["'self'", 'https://www.youtube.com', 'https://youtube.com', 'https://www.youtube-nocookie.com'],
+    frameAncestors: ["'self'"],
+    workerSrc: ["'self'", 'blob:'],
+    manifestSrc: ["'self'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+};
 app.use(helmet({
-    contentSecurityPolicy: false,   // CSP는 프론트엔드 inline script 때문에 비활성
+    contentSecurityPolicy: { useDefaults: false, directives: CSP_DIRECTIVES },
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: false,
     crossOriginResourcePolicy: false,  // YouTube 등 외부 리소스 임베드 허용
-    // YouTube iframe 임베드를 위해 X-Frame-Options 완화
-    frameguard: false,
+    frameguard: { action: 'sameorigin' },   // CSP frame-ancestors 와 같은 뜻 (구형 브라우저용)
     referrerPolicy: { policy: 'no-referrer-when-downgrade' },  // YouTube 임베드 호환
 }));
 app.use(rateLimit({

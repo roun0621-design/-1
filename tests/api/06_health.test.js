@@ -36,3 +36,16 @@ describe('GET /api/health — 강화된 헬스체크', () => {
         expect(res.body.backend).toBe((process.env.TEST_DB_BACKEND || 'sqlite').toLowerCase());
     });
 });
+
+describe('보안 헤더 (CSP, 2026-09)', () => {
+    it('CSP 가 켜져 있고 프레임 감싸기·object·base 를 막는다, 쓰는 외부 출처는 허용', async () => {
+        const request = require('supertest');
+        const { app } = require('../../server.js');
+        const r = await request(app).get('/api/health');
+        const csp = r.headers['content-security-policy'];
+        expect(csp).toBeTruthy();
+        expect(csp).toContain("frame-ancestors 'self'"); expect(csp).toContain("object-src 'none'"); expect(csp).toContain("base-uri 'self'");
+        expect(csp).toContain('https://www.gstatic.com'); expect(csp).toContain('https://www.youtube.com'); expect(csp).toContain('https://fonts.gstatic.com');
+        expect(r.headers['x-frame-options']).toBe('SAMEORIGIN');
+    });
+});
