@@ -25,6 +25,27 @@ const _BELL_OFF = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke=
 
 // ── 종목 검색 (툴바 아이콘 → 그 자리에 검색칸) ─────────────────────
 let _searchQuery = '';   // 종목명 부분일치 (예: 400 → 400m·400mH·4X400mR, 멀리 → 멀리뛰기)
+let _spotlightOnly = false;   // 국제대회: 관심 국가(한국) 선수 출전 종목만
+// 국제대회: 선수 행에 PB·SB (있을 때만)
+function _pbSb(r) { const p = []; if (r && r.personal_best) p.push('PB ' + r.personal_best); if (r && r.season_best) p.push('SB ' + r.season_best); return p.length ? `<span class="rr-pbsb">${p.join(' · ')}</span>` : ''; }
+function toggleSpotlight() {
+    _spotlightOnly = !_spotlightOnly;
+    const b = document.getElementById('dash-spot-btn'); if (b) { b.classList.toggle('active', _spotlightOnly); b.setAttribute('aria-pressed', String(_spotlightOnly)); }
+    renderMatrix();
+}
+function _renderSpotlightButton() {
+    const code = (allEvents.find(e => e.spotlight) || {}).spotlight;
+    let b = document.getElementById('dash-spot-btn');
+    if (!code) { if (b) b.remove(); _spotlightOnly = false; return; }
+    if (!b) {
+        const host = document.getElementById('dash-search'); if (!host) return;
+        b = document.createElement('button'); b.type = 'button'; b.id = 'dash-spot-btn'; b.className = 'dash-spot-btn'; b.setAttribute('aria-pressed', 'false');
+        b.onclick = toggleSpotlight; host.parentNode.insertBefore(b, host);
+    }
+    b.title = code === 'KOR' ? '한국 선수 출전 종목만 보기' : code + ' 선수 종목만';
+    b.innerHTML = `<span class="flag">${code === 'KOR' ? '🇰🇷' : code}</span><span class="lbl">${code === 'KOR' ? '한국 선수' : code}</span>`;
+    b.classList.toggle('active', _spotlightOnly);
+}
 function onEventSearch(v) {
     _searchQuery = v || '';
     const btn = document.getElementById('dash-search-btn');
@@ -656,6 +677,11 @@ function renderMatrix() {
     const container = document.getElementById('events-container');
     // 'ALL' 탭이면 성별 필터 해제 → 남/여/혼성 모든 종목을 종목순으로 통합 표시
     let events = allEvents.filter(e => !e.parent_event_id);
+    _renderSpotlightButton();
+    if (_spotlightOnly) {
+        const spotBases = new Set(allEvents.filter(e => e.spotlight).map(e => (e.name + '|' + e.gender)));
+        events = events.filter(e => spotBases.has(e.name + '|' + e.gender));
+    }
     if (_searchQuery && _searchQuery.trim()) {
         const norm = x => String(x || '').toLowerCase().replace(/[×x]/g, 'x').replace(/[\s,]/g, '');
         const q = norm(_searchQuery);
@@ -688,8 +714,9 @@ function renderMatrix() {
         const gKey = _isDisplayMode
             ? (e.name + '|' + e.category + '|' + e.gender + '|' + (e.division||''))
             : (e.name + '|' + e.category + '|' + e.gender);
-        if (!eventGroups[gKey]) eventGroups[gKey] = { name: e.name, category: e.category, gender: e.gender, division: e.division || '', rounds: [] };
+        if (!eventGroups[gKey]) eventGroups[gKey] = { name: e.name, category: e.category, gender: e.gender, division: e.division || '', rounds: [], spotlight: null };
         eventGroups[gKey].rounds.push(e);
+        if (e.spotlight) eventGroups[gKey].spotlight = e.spotlight;      // 국제대회: 관심 국가(KOR) 선수 출전 종목
     });
 
     const allGroups = [];
@@ -942,7 +969,7 @@ function renderCategoryTable(groups, label, isLive) {
         const favCell = `<td class="fav-cell"><span class="fav-toggle${_isFav ? ' on' : ''}" role="button" tabindex="0" aria-pressed="${_isFav}" title="${_isFav ? '관심 알림 켜짐 (눌러서 해제)' : '이 종목 알림 받기'}" onclick="event.stopPropagation();toggleFavorite('${g.name.replace(/'/g, "\\'")}','${_rowGender}')">${_isFav ? _BELL_ON : _BELL_OFF}<span class="fav-label">알림</span></span></td>`;
         html += `<tr data-row-gender="${_rowGender}"${_tapAttr}>
             ${favCell}
-            <td class="event-name">${genderBadge}${g.name}${divBadge}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
+            <td class="event-name">${genderBadge}${g.name}${divBadge}${g.spotlight ? `<span class="spot-badge" title="${g.spotlight === 'KOR' ? '한국 선수 출전' : g.spotlight + ' 출전'}">${g.spotlight === 'KOR' ? '🇰🇷' : g.spotlight}</span>` : ''}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
             ${_isDisplayMode ? `<td data-label="영상" class="${videoCell ? '' : 'cell-empty'}">${videoCell}</td>` : ''}
             ${(_isDisplayMode || _colRounds.wl) ? `<td data-label="${_isDisplayMode ? '명단' : 'W/L'}" class="${(_isDisplayMode ? rosterCell : wlCell) ? '' : 'cell-empty'}">${_isDisplayMode ? rosterCell : wlCell}</td>` : ''}
             ${_colRounds.preliminary ? _roundCell(prelim, '예선') : ''}
@@ -1473,7 +1500,7 @@ function renderLiveTrackResults(data, relayMembers) {
                 : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark}${recBadges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
             return `<div class="rr rr-nocard${hasRec ? ' rr-has-rec' : ''}">
                 ${rankHtml}
-                <div class="rr-who"><span class="rr-name">${r.name}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}</span>`}</div>
+                <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
                 <div class="rr-meta">${meta}</div>
                 ${recHtml}
                 <div class="rr-go" aria-hidden="true"></div>
@@ -2250,7 +2277,7 @@ function renderTrackResults(data, relayMembers) {
                 : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark2}${recBadges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
             return `<div class="rr${scAttr ? '' : ' rr-nocard'}"${scAttr}>
                 ${rankHtml}
-                <div class="rr-who"><span class="rr-name">${r.name}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}</span>`}</div>
+                <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
                 <div class="rr-meta">${meta}</div>
                 ${recHtml}
                 <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
@@ -2304,7 +2331,7 @@ function _rrFieldDistList(rows, needsWind, opts) {
         const scAttr = (!live && hasRec) ? _scAttr(evt, r, formatHeight(r.best), rankNum, { windAided: bwa }) : '';
         return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr}>
             ${_rrFieldRankHtml(r.status_code, rankNum)}
-            <div class="rr-who"><span class="rr-name">${r.name}</span><span class="rr-team">${r.team || ''}</span></div>
+            <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">${meta}</div>
             ${recHtml}
             <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
@@ -2336,7 +2363,7 @@ function _rrFieldHeightList(rows, hts, opts) {
         const scAttr = (!live && hasRec) ? _scAttr(evt, r, formatHeight(r.best), rankNum) : '';
         return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr}>
             ${_rrFieldRankHtml(status, rankNum)}
-            <div class="rr-who"><span class="rr-name">${r.name}</span><span class="rr-team">${r.team || ''}</span></div>
+            <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">${meta}</div>
             ${recHtml}
             <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
@@ -2405,7 +2432,7 @@ function _rrCombinedList(rows, subDefs, day1Max, opts) {
         const scAttr = (!live && r.total > 0 && opts && opts.scAttr) ? opts.scAttr(r) : '';
         return `<div class="rr rr-cmb${scAttr ? '' : ' rr-nocard'}${live && r.total > 0 ? ' rr-has-rec' : ''}"${scAttr}>
             ${_rrFieldRankHtml(status, rankNum)}
-            <div class="rr-who"><span class="rr-name">${r.name}</span><span class="rr-team">${r.team || ''}</span></div>
+            <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">BIB ${bib(r.bib_number)}<i>·</i><span class="d1">1일차 ${fmtPts(d1)}</span><i>·</i><span class="d2">2일차 ${d2 || nowOrder > day1Max ? fmtPts(d2) : '–'}</span></div>
             <div class="rr-tot"><b>${r.total > 0 ? fmtPts(r.total) : '—'}</b>${sub}</div>
             <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>

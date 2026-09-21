@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS competition (
     mode TEXT NOT NULL DEFAULT 'operation',         -- 'operation' | 'display'
     series_id INTEGER REFERENCES competition_series(id),
     home_visibility TEXT NOT NULL DEFAULT 'auto',    -- 'auto' | 'pinned'(홈 고정) | 'hidden'(홈 숨김)
-    manual_status_lock INTEGER NOT NULL DEFAULT 0    -- 1=관리자 '대회 재개'로 수동 상태고정 → 날짜 자동갱신(active→completed) 제외
+    manual_status_lock INTEGER NOT NULL DEFAULT 0,   -- 1=관리자 '대회 재개'로 수동 상태고정 → 날짜 자동갱신(active→completed) 제외
+    sync_source TEXT DEFAULT NULL,                   -- 국제대회 동기화 출처 JSON {provider, base, champ, disc, lang} (lib/intl)
+    sync_state TEXT DEFAULT NULL                     -- 마지막 동기화 상태 JSON
 );
 
 -- Events (종목) — linked to competition
@@ -38,7 +40,8 @@ CREATE TABLE IF NOT EXISTS event (
     video_url TEXT DEFAULT '',
     callroom_event_memo TEXT DEFAULT '',
     division TEXT NOT NULL DEFAULT '',
-    result_url TEXT DEFAULT ''
+    result_url TEXT DEFAULT '',
+    external_key TEXT DEFAULT NULL                  -- 국제대회 동기화: 공식 결과 API 의 종목 키 (lib/intl)
 );
 
 -- Athletes (선수) — linked to competition
@@ -69,6 +72,8 @@ CREATE TABLE IF NOT EXISTS heat (
     event_id INTEGER NOT NULL REFERENCES event(id),
     heat_number INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    external_key TEXT DEFAULT NULL,                 -- 국제대회 동기화: 공식 결과 API 의 조(유닛) 키
+    scheduled_at TEXT DEFAULT NULL,                 -- 조 시작 시각 (ISO, 국제대회 동기화)
     UNIQUE(event_id, heat_number)
 );
 

@@ -245,6 +245,13 @@
         .live-jump-badge:hover { filter:brightness(1.06); }
         /* 종목 검색 — 아이콘 하나(36px). 열리면 필터 칩 자리를 검색칸이 대신 쓴다 */
         .dash-search { flex:0 0 auto; display:flex; align-items:center; min-width:0; }
+        /* 국제대회: 관심 국가(한국 선수) 종목만 보기 */
+        .dash-spot-btn { flex:0 0 auto; height:36px; padding:0 12px 0 8px; margin-right:6px; border:1px solid var(--gray); border-radius:18px; background:var(--white); color:#555; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+        .dash-spot-btn .flag { font-size:16px; line-height:1; }
+        .dash-spot-btn.active { background:#1a2a5e; color:#fff; border-color:#1a2a5e; }
+        .spot-badge { display:inline-block; margin-left:5px; font-size:14px; line-height:1; vertical-align:-1px; }
+        .rr-alt { margin-left:6px; font-size:11px; font-weight:500; color:var(--text-muted); }
+        .rr-pbsb { margin-left:8px; font-size:11px; color:var(--text-muted); font-family:var(--font-mono); }
         .dash-search-btn { width:36px; height:36px; border:1px solid var(--gray); border-radius:50%; background:var(--white); color:var(--text-muted); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:0; transition:color .15s, border-color .15s, background .15s; }
         .dash-search-btn svg { width:17px; height:17px; }
         .dash-search-btn:hover, .dash-search-btn.active { color:var(--text); border-color:var(--gray-mid); background:var(--gray-light); }

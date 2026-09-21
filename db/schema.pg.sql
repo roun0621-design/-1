@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS "athlete" (
     "date_of_birth" TEXT DEFAULT '',
     "phone" TEXT NOT NULL DEFAULT '',
     "grade" INTEGER,                      -- 학년 (학년별 대회, Phase 7-②)
+    "name_alt" TEXT DEFAULT '',           -- 보조 표기 (국제대회: 한글/영문 이름)
+    "season_best" TEXT DEFAULT '',        -- 시즌 최고 (SB)
     CHECK (gender IN ('M','F'))
 );
 
@@ -76,6 +78,8 @@ CREATE TABLE IF NOT EXISTS "competition" (
     "event_show_rounds" TEXT NOT NULL DEFAULT 'auto',
     "home_visibility" TEXT NOT NULL DEFAULT 'auto',
     "manual_status_lock" INTEGER NOT NULL DEFAULT 0,
+    "sync_source" TEXT DEFAULT NULL,      -- 국제대회 동기화 출처 JSON {provider, base, champ, disc, lang}
+    "sync_state" TEXT DEFAULT NULL,       -- 마지막 동기화 상태 JSON
     CHECK (status IN ('upcoming','active','completed'))
 );
 
@@ -123,6 +127,7 @@ CREATE TABLE IF NOT EXISTS "event" (
     "callroom_event_memo" TEXT DEFAULT '',
     "division" TEXT NOT NULL DEFAULT '',
     "result_url" TEXT DEFAULT '',
+    "external_key" TEXT DEFAULT NULL,    -- 국제대회 동기화: 공식 결과 API 의 종목 키 (lib/intl)
     CHECK (category IN ('track','field_distance','field_height','combined','relay','road')),
     CHECK (gender IN ('M','F','X')),
     CHECK (round_type IN ('preliminary','semifinal','final'))
@@ -326,7 +331,9 @@ CREATE TABLE IF NOT EXISTS "heat" (
     "heat_name" TEXT DEFAULT NULL,
     "scoreboard_key" TEXT DEFAULT NULL,
     UNIQUE ("event_id", "heat_number"),
-    "wind_updated_at" TEXT DEFAULT NULL
+    "wind_updated_at" TEXT DEFAULT NULL,
+    "external_key" TEXT DEFAULT NULL,    -- 국제대회 동기화: 조(유닛) 키
+    "scheduled_at" TEXT DEFAULT NULL     -- 조 시작 시각 (ISO)
 );
 
 -- Table: heat_entry

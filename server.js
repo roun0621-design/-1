@@ -1476,6 +1476,16 @@ try {
 } catch(e) { console.error('[DB Migration] division_master grade seed error:', e.message); }
 // 선수 학년 (Phase 7-②): 학년별 대회 참가 자격·연맹 명단
 try { db.exec(`ALTER TABLE athlete ADD COLUMN grade INTEGER DEFAULT NULL`); } catch(e) {}
+// 국제대회 동기화 (2026-09, lib/intl): 공식 결과 API 와 맞물리는 외부 키·시각, 선수 보조 표기(한글/영문)·시즌 최고
+try { db.exec(`ALTER TABLE competition ADD COLUMN sync_source TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN sync_state TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE event ADD COLUMN external_key TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE heat ADD COLUMN external_key TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE heat ADD COLUMN scheduled_at TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE athlete ADD COLUMN name_alt TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE athlete ADD COLUMN season_best TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_external ON event(external_key)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_heat_external ON heat(external_key)`); } catch(e) {}
 // Indexes for record-related queries
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_record_lookup ON event_record(event_name, gender, record_type)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_record_division ON event_record(division_code, event_name, gender)`); } catch(e) {}
@@ -1623,6 +1633,12 @@ if (db.isAsync) {
             // 학년 단위 부 + 선수 학년 (Phase 7-②, 멱등)
             try { await db.run(`ALTER TABLE division_master ADD COLUMN IF NOT EXISTS grade INTEGER`); } catch(e) {}
             try { await db.run(`ALTER TABLE athlete ADD COLUMN IF NOT EXISTS grade INTEGER`); } catch(e) {}
+            // 국제대회 동기화 (lib/intl)
+            for (const [t, c, d] of [['competition', 'sync_source', 'TEXT'], ['competition', 'sync_state', 'TEXT'], ['event', 'external_key', 'TEXT'], ['heat', 'external_key', 'TEXT'], ['heat', 'scheduled_at', 'TEXT'], ['athlete', 'name_alt', "TEXT DEFAULT ''"], ['athlete', 'season_best', "TEXT DEFAULT ''"]]) {
+                try { await db.run(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS ${c} ${d}`); } catch(e) {}
+            }
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_external ON event(external_key)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_heat_external ON heat(external_key)`); } catch(e) {}
             for (const r of _gradeDivisionSeed()) {
                 try { await db.run(`INSERT INTO division_master (code,label_ko,gender,school_level,sort_order,grade) VALUES (?,?,?,?,?,?) ON CONFLICT (code) DO NOTHING`, ...r); } catch(e) { console.error('[DB Migration PG] grade division seed:', e.message); }
             }
@@ -2931,6 +2947,21 @@ app.get('/api/events', async (req, res) => {
         const counts = await db.all(`SELECT event_id, COUNT(*) AS cnt FROM heat WHERE event_id IN (${placeholders}) GROUP BY event_id`, ...ids);
         const countMap = new Map(counts.map(c => [c.event_id, Number(c.cnt)]));
         events.forEach(e => { e.heat_count = countMap.get(e.id) || 0; });
+        // 국제대회(동기화 대회): 관심 국가(spotlight, 예: KOR) 선수가 출전하는 종목 표시 — 대시보드 배지·'한국 선수' 필터
+        if (competition_id) {
+            try {
+                const comp = await db.get('SELECT sync_source FROM competition WHERE id=?', competition_id);
+                const src = comp && comp.sync_source ? JSON.parse(comp.sync_source) : null;
+                if (src && src.spotlight) {
+                    const rows = await db.all(`SELECT DISTINCT ee.event_id FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id WHERE ee.event_id IN (${placeholders}) AND a.team=?`, ...ids, src.spotlight);
+                    const spot = new Set(rows.map(r => Number(r.event_id)));
+                    // 같은 종목의 다른 라운드(external_key 앞부분이 같음)도 함께 표시 — 예선에만 엔트리가 있어도 결승 행에 배지가 보이게
+                    const baseOf = e => String(e.external_key || '').split('#')[0] || null;
+                    const spotBases = new Set(events.filter(e => spot.has(Number(e.id))).map(baseOf).filter(Boolean));
+                    events.forEach(e => { e.spotlight = spot.has(Number(e.id)) || (baseOf(e) != null && spotBases.has(baseOf(e))) ? src.spotlight : null; });
+                }
+            } catch (e) {}
+        }
     }
     res.json(events);
 });
@@ -3055,7 +3086,7 @@ app.get('/api/events/:id/live-results', async (req, res) => {
     const quals = await db.all('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
     const result = await Promise.all(heats.map(async h => {
         const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status, ee.manual_rank,
-               a.name, a.bib_number, a.team FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
+               a.name, a.bib_number, a.team, a.name_alt, a.personal_best, a.season_best FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
                JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`, h.id);
         if (event.category === 'field_height') {
             return { ...h, entries, height_attempts: await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', h.id) };
@@ -8271,6 +8302,8 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
 //   헬퍼 getEventResultsForCert 는 모듈에서 반환받아 SMS 라우트 마운트 시 주입.
 // 대회 운영 체크리스트 (대회 전·당일·후 점검)
 require('./lib/routes/undo')(app, { db, isAdminKey, isOperationKey, getJudgeName, isCompetitionEnded, broadcastSSE, opLog });
+// 국제대회 동기화 (공식 결과 API → 우리 대회) — lib/intl, 60초 스케줄러 포함
+const _intlSync = require('./lib/routes/intl')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, upload });
 require('./lib/routes/readiness')(app, {
     db, isAdminKey, kstNow, lastBackupAgeMs: _lastBackupAgeMs, backupS3,
     listFinalSnapshots: compId => { try { return fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith(`backup_final${compId}_`) && f.endsWith('.db')).sort(); } catch (e) { return []; } },
