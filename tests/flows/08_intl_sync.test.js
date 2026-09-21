@@ -80,7 +80,7 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         const tt = await db.all('SELECT day, section, time, event_name, category, round, note, scheduled_date FROM timetable WHERE competition_id=? ORDER BY day, time', fx.comp);
         expect(tt[0]).toMatchObject({ day: 1, section: 'road', time: '07:30', event_name: '하프마라톤경보', category: '남자', round: '결승', scheduled_date: '2026-09-23' });
         expect(tt.find(t => t.event_name === '100m' && t.category === '여자' && t.round === '예선')).toMatchObject({ day: 2, note: '8조' });
-        expect(tt.some(t => t.section === 'ceremony')).toBe(true);
+        expect(tt.some(t => t.section === 'ceremony')).toBe(false);      // 시상식은 싣지 않는다
     });
     it('엔트리: 여자 100m 전 국가 선수 + 남자 4x100mR 팀·주자, KOR 표시', async () => {
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
@@ -147,6 +147,12 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         const w100 = evs.body.filter(e => e.name === '100m' && e.gender === 'F');
         expect(w100.map(e => e.spotlight)).toEqual(['KOR', 'KOR', 'KOR']);
         expect(evs.body.find(e => e.name === '100mH' && e.gender === 'F' && !e.parent_event_id).spotlight).toBeNull();     // 여자 100mH 에 한국 선수 없음
+        // 시간표 API: 한국 선수 출전 종목 행에 spotlight, 시상식 행 없음
+        const tt = await request(app).get(`/api/timetable/${fx.comp}`);
+        const day2 = tt.body.days['2'];
+        const w100tt = [...day2.track, ...day2.field].find(t => t.event_name === '100m' && t.category === '여자');
+        expect(w100tt.spotlight).toBe('KOR');
+        expect(Object.values(tt.body.days).flatMap(d => [...d.track, ...d.field]).some(t => /시상식/.test(t.event_name))).toBe(false);
         // 조편성 전 '엔트리' 버튼용: 출전 인원 + 엔트리 API 에 국가·한글·생년·PB/SB
         expect(w100[0].entry_count).toBeGreaterThan(20); expect(w100[0].heat_count).toBe(8);
         const en = await request(app).get(`/api/events/${w100[0].id}/entries`);

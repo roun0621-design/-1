@@ -2183,7 +2183,7 @@ async function openTimetable(compId) {
                     html += `<div id="tt-item-${item.id}" class="tt-row" ${clickAction} style="background:${rowBg};border-left:3px solid ${rowBar};${borderBottom}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${rowBg}'"` : ''}>
                         <span class="tt-time">${item.time}</span>
                         <div class="tt-front">${_frontBadges}</div>
-                        <span class="tt-name">${item.event_name}${crBadge}</span>
+                        <span class="tt-name">${item.event_name}${item.spotlight === 'KOR' ? ' <span title="한국 선수 출전" style="font-size:13px;">🇰🇷</span>' : item.spotlight ? ` <span style="font-size:10px;font-weight:700;">${item.spotlight}</span>` : ''}${crBadge}</span>
                         <div class="tt-tail">${nowBadge}${_statusTag}${_bracketTag}${_resultTag}</div>
                     </div>`;
                 });
