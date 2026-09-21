@@ -137,3 +137,15 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 - deps: db, upload, XLSX, fs, isAdminKey, isOperationKey, opLog, normalizeDivisionLabel, parseJongbyul/parseJongbyulNormalized/parseDisplayRound, excelTimeToHHMM, cleanTimetableEventName, guessEventCategory(다른 모듈도 쓰므로 server.js 에 잔류), timetableRoutes(`autoLinkTimetable` 폴백).
 - 주의: `autoLinkDisplayTimetable` 은 server.js 의 종목 생성·수정·라운드 완료 라우트와 heat_assignment 모듈이 부른다 → heat_assignment 에는 늦게 바인딩되는 래퍼로 넘긴다(마운트 순서 TDZ). 모듈 안 상대 require 는 `../eventMatch`.
 - 남은 큰 덩어리: admin 48 · events 20 · documents 6.
+
+### ✅ admin 계열 5개 모듈 추출 (2026-09-22) — server.js 9,842 → 8,150줄
+| 모듈 | 라우트 | deps 특이점 |
+|---|---|---|
+| `admin_backup.js` | reset-db · backup · db-backup status/trigger · full-backup download/preview/restore (7) | BACKUP_DIR·performBackup·backupS3·_applyJwtBridge·multer |
+| `admin_keys.js` | change-keys · current-keys · operation-keys ×5 · registered-judges · site-config ×2 (11) | ACCESS_KEYS(참조 공유)·운영키 캐시 헬퍼·securityCheck |
+| `admin_events.js` | 공개 선수 조회 ×2 · 선수 CRUD/출전 ×7 · 종목 CRUD/자동정렬/영상 URL ×8 · 조 관리 ×4 · force-status (24) | `_normalizeAthletePhone`·`_normalizeGrade`·`_normEvtName`·`autoSortCompetitionEvents` 를 반환값으로 server.js 가 다시 바인딩(연맹 업로드가 씀). `autoLinkDisplayTimetable` 은 display 모듈이 뒤에서 마운트되므로 늦게 바인딩되는 래퍼 |
+| `event_duplicates.js` | event-duplicates 진단/정리/병합 (3) | db·isAdminKey·opLog |
+| `event_record_admin.js` | event-record-matching · normalize-all · relink · all-candidates (4) | normalizeEventNameServer(recordCompare)·_divisionCodeFor |
+| `external_keys.js` | external-keys 발급/목록/폐기/로그 (4) | _generateApiKey·_hashApiKey·_keyPrefix |
+- 추출 도구: 블록의 자유 변수를 server.js 최상위 정의에서 자동으로 골라 deps 로, 블록 안 정의 중 밖에서 쓰는 이름은 반환값으로. 마운트 행보다 뒤에 정의되는 dep 은 래퍼로 늦게 바인딩(TDZ).
+- 남은 admin 인라인: brand-image · security-status · verify · heats/update-entries · heat-entry/set-group (각자 다른 도메인 옆에 있어 그대로 둠). 남은 큰 덩어리: events 20 · documents 6.
