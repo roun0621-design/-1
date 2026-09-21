@@ -103,12 +103,13 @@
             .hero-title { font-size:15px; }
             .hero-sub { font-size:12px; }
             .hero-cta { padding:8px 12px; font-size:12px; }
-            /* 폰: 반쪽씩이라 아이콘·버튼은 숨기고 제목+한 줄만 (칸 전체가 버튼) */
-            .hero-row.has-roster .hero-icon, .hero-row.has-roster .hero-cta { display:none; }
-            .hero-row.has-roster .hero-schedule { padding:11px 12px; }
-            .hero-row.has-roster .hero-title { font-size:14px; }
-            .hero-row.has-roster .hero-sub { font-size:11.5px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-            .hero-row.has-roster .hero-text::after { content:''; }
+            /* 폰: 반쪽씩이라 아이콘·버튼·설명줄은 숨기고 "시간표 / 9/23(수) · 1일차", "대표팀 명단 / 42명" 두 줄만 (칸 전체가 버튼) */
+            .hero-row.has-roster .hero-icon, .hero-row.has-roster .hero-cta, .hero-row.has-roster .hero-sub { display:none; }
+            .hero-row.has-roster .hero-schedule { padding:12px 14px; }
+            .hero-row.has-roster .hero-title { font-size:15px; flex-direction:column; align-items:flex-start; gap:5px; margin-bottom:0; }
+            .hero-row.has-roster .hero-day-chip { font-size:11px; padding:3px 9px; letter-spacing:.3px; }
+            /* 폰: 대회 정보 줄은 대회명 + 연맹 배지까지만 (날짜·장소는 시간표에 있음) */
+            .dashboard-mode .comp-info-sep, .dashboard-mode .comp-info-dates, .dashboard-mode .comp-info-venue { display:none; }
         }
 
         /* 정렬 토글 — 홀짝 버튼 (종목별 | 시간별) */
