@@ -82,17 +82,21 @@
         .hero-cta:hover { background:rgba(255,255,255,.32); }
         .hero-cta svg { width:16px; height:16px; }
         /* ── 히어로 줄: 시간표 | 대표팀 명단 — 한 카드를 홀짝 버튼처럼 좌우로 가른다 (일반 대회는 왼쪽만) ── */
-        .hero-row {
-            display:flex; margin:10px 0 12px; border-radius:14px; overflow:hidden;
-            background: linear-gradient(135deg, #1a2a5e 0%, #2d3a6e 35%, #b79f58 100%);
-            box-shadow: 0 4px 18px rgba(26,42,94,.25), 0 1px 3px rgba(0,0,0,.08);
+        .hero-row { display:flex; gap:10px; margin:10px 0 12px; align-items:stretch; }
+        .hero-row .hero-schedule { flex:1 1 0; min-width:0; margin:0; }
+        /* 오른쪽: 대표팀 명단 — 시간표(남색)와 확실히 다른 색: 흰 바탕 · 골드 테두리 · 남색 글씨 */
+        .hero-row .hero-roster {
+            background:#fff; color:#1a2a5e; border:1.5px solid #b79f58;
+            box-shadow: 0 4px 18px rgba(183,159,88,.22), 0 1px 3px rgba(0,0,0,.06);
         }
-        .hero-row.live { background: linear-gradient(135deg, #8b1a2a 0%, #c0392b 50%, #b79f58 100%); animation: heroLivePulse 2.4s ease-in-out infinite; }
-        .hero-row .hero-schedule { flex:1 1 0; min-width:0; margin:0; border-radius:0; box-shadow:none; background:transparent; animation:none; }
-        .hero-row .hero-schedule:hover { transform:none; box-shadow:none; background:rgba(255,255,255,.06); }
-        .hero-row .hero-roster { border-left:1px solid rgba(255,255,255,.28); }
-        .hero-row .hero-roster .hero-cta { background:rgba(255,255,255,.9); color:#1a2a5e; }
-        .hero-row.live .hero-roster .hero-cta { color:#8b1a2a; }
+        .hero-row .hero-roster::before { background: radial-gradient(circle at 90% 20%, rgba(183,159,88,.16), transparent 55%); }
+        .hero-row .hero-roster:hover { box-shadow: 0 6px 22px rgba(183,159,88,.3), 0 1px 3px rgba(0,0,0,.08); }
+        .hero-row .hero-roster .hero-icon { background:#f8f4ea; }
+        .hero-row .hero-roster .hero-day-chip { background:#1a2a5e; color:#fff; }
+        .hero-row .hero-roster .hero-sub { color:#4b4742; opacity:1; }
+        .hero-row .hero-roster .hero-sub strong { color:#8b1a2a; }
+        .hero-row .hero-roster .hero-cta { background:#1a2a5e; color:#fff; }
+        .hero-row .hero-roster .hero-cta:hover { background:#2d3a6e; }
         @media (max-width:640px) {
             .hero-schedule { padding:12px 14px; gap:10px; }
             .hero-icon { width:44px; height:44px; font-size:22px; border-radius:10px; }
@@ -108,10 +112,12 @@
         }
 
         /* 정렬 토글 — 홀짝 버튼 (종목별 | 시간별) */
-        .seg-toggle { display:inline-flex; border:1px solid var(--gray); border-radius:16px; overflow:hidden; background:var(--white); }
-        .seg-toggle button { border:none; background:transparent; padding:6px 14px; font-size:12px; font-weight:700; color:#666; cursor:pointer; line-height:1; }
-        .seg-toggle button + button { border-left:1px solid var(--gray); }
-        .seg-toggle button.on { background:#1a2a5e; color:#fff; }
+        .seg-toggle { display:inline-flex; border:1px solid var(--gray-light); border-radius:12px; overflow:hidden; background:var(--white); }
+        .seg-toggle button { border:none; background:transparent; padding:4px 10px; font-size:11px; font-weight:600; color:#8a8580; cursor:pointer; line-height:1.2; min-height:24px; }
+        .seg-toggle button + button { border-left:1px solid var(--gray-light); }
+        .seg-toggle button.on { background:#eef1f8; color:#1a2a5e; font-weight:800; }
+        .sort-row { display:flex; justify-content:flex-end; align-items:center; margin:0 0 6px; }
+        .sort-row .sort-lbl { font-size:11px; color:#a09a92; margin-right:6px; }
         .gender-tabs-bar { display:flex; gap:0; background:var(--white); padding:8px 0; border-bottom:2px solid var(--gray); }
         .gender-tab-btn { flex:1; padding:10px 0; text-align:center; font-size:14px; font-weight:800; border:none; cursor:pointer; border-bottom:3px solid transparent; transition:all .15s; background:none; letter-spacing:0.5px; }
         .gender-tab-btn[data-gender="ALL"] { color:#374151; }
@@ -253,7 +259,7 @@
             .comp-info-line { padding:6px 12px; font-size:12px; gap:6px; margin-bottom:0; }
             /* 상단: 시간표 히어로 카드 — 위아래 여백·내부 패딩 축소 */
             .hero-schedule { margin:6px 0 7px; padding:10px 12px; gap:8px; }
-            .hero-row { margin:6px 0 7px; }
+            .hero-row { margin:6px 0 7px; gap:8px; }
             /* 섹션(TRACK/FIELD) 제목·간격 */
             .matrix-section { margin-bottom:8px; }
             .matrix-section-title { padding:3px 8px; margin-bottom:3px; font-size:11px; }

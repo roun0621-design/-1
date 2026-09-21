@@ -90,14 +90,20 @@ async function openTeamRoster(keep) {
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const code = (allEvents.find(e => e.spotlight) || {}).spotlight || 'KOR';
     const teamL = code === 'KOR' ? '대한민국 육상 선수단' : code + ' 선수단';
-    overlay.innerHTML = `<div style="background:#fff;border-radius:12px;width:92%;max-width:600px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#f5f0e0,#eef2f9);border-bottom:1px solid #e8dfc0;flex-shrink:0;">
-            <div style="display:flex;align-items:center;gap:10px;">${code === 'KOR' ? PaceIcons.svg('flagKR', { size: 28 }) : ''}<div><div style="font-weight:800;font-size:15px;color:#1a2a5e;" id="team-roster-title">${teamL}</div>
-                 <div style="font-size:12px;color:#8a7640;margin-top:2px;" id="team-roster-sub">불러오는 중…</div></div></div>
-            <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
+    const mobile = window.innerWidth < 720;
+    // 폰: 아래에서 올라오는 전체 폭 시트(위만 둥글게) · PC: 가운데 창
+    overlay.style.alignItems = mobile ? 'flex-end' : 'center';
+    const box = mobile ? 'width:100%;height:94vh;border-radius:18px 18px 0 0;' : 'width:92%;max-width:600px;max-height:88vh;border-radius:12px;';
+    overlay.innerHTML = `<div style="background:#fff;${box}display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,0.25);overflow:hidden;">
+        ${mobile ? '<div style="width:40px;height:4px;border-radius:2px;background:#d9d4ca;margin:8px auto 0;flex-shrink:0;"></div>' : ''}
+        <div style="display:flex;align-items:center;gap:10px;padding:${mobile ? '10px 16px 8px' : '14px 18px'};border-bottom:1px solid #eee;flex-shrink:0;">
+            ${code === 'KOR' ? PaceIcons.svg('flagKR', { size: 30 }) : ''}
+            <div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:16px;color:#1a2a5e;line-height:1.2;" id="team-roster-title">${teamL}</div>
+                 <div style="font-size:12px;color:#8a7640;margin-top:3px;" id="team-roster-sub">불러오는 중…</div></div>
+            <div id="team-roster-tools"></div>
+            <button onclick="closeRosterModal()" aria-label="닫기" style="flex:none;width:32px;height:32px;border-radius:50%;background:#f0ede6;border:none;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;">${PaceIcons.svg('close', { size: 16 })}</button>
         </div>
-        <div id="team-roster-tools" style="display:flex;justify-content:flex-end;padding:8px 14px 0;"></div>
-        <div id="roster-modal-body" style="flex:1;overflow-y:auto;padding:0;">${uiStateHtml('loading', { title: '선수단 명단을 불러오는 중…' })}</div></div>`;
+        <div id="roster-modal-body" style="flex:1;overflow-y:auto;padding:0 0 env(safe-area-inset-bottom,0);-webkit-overflow-scrolling:touch;">${uiStateHtml('loading', { title: '선수단 명단을 불러오는 중…' })}</div></div>`;
     if (!keep && window.pushModalState) pushModalState(() => closeRosterModal());
     const body = document.getElementById('roster-modal-body');
     try {
@@ -126,13 +132,13 @@ async function openTeamRoster(keep) {
             const done = ev.round_status === 'completed', live = ev.round_status === 'in_progress';
             const pb = [ev.personal_best ? 'PB ' + ev.personal_best : '', ev.season_best ? 'SB ' + ev.season_best : ''].filter(Boolean).map(esc).join('<br>');   // 폰에서 종목명 자리를 남기려고 PB·SB 를 위아래로
             const st = done ? mark(ev) || '<span style="color:#888;">결과</span>' : live ? '<span style="color:#16a34a;font-weight:800;">LIVE</span>' : '';
-            return `<div onclick="openEventDetail(${ev.event_id})" style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;${done ? 'opacity:.75;' : ''}">
+            return `<div onclick="openEventDetail(${ev.event_id})" style="display:flex;align-items:center;gap:8px;padding:7px 0;min-height:36px;cursor:pointer;${done ? 'opacity:.75;' : ''}">
                 <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:${live ? '#16a34a' : done ? '#999' : '#1a2a5e'};min-width:92px;">${esc(when(ev))}</span>
                 <span style="flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ev.relay ? '<span style="font-size:10px;color:#7c3aed;margin-right:3px;">계주</span>' : ''}${esc(ev.event_name)} <span style="color:#888;font-weight:500;">${genderL[ev.gender] || ''} ${roundL[ev.round_type] || ''}</span></span>
                 <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;text-align:right;line-height:1.25;">${st || pb}</span></div>`;
         };
-        const row = a => `<div style="padding:9px 14px;border-top:1px solid #f1f1f1;">
-            <div style="font-size:13px;font-weight:700;">${esc(a.name)}${a.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;font-weight:500;">${esc(a.name_alt)}</span>` : ''}${a.birth_year ? `<span style="font-size:11px;color:#999;margin-left:6px;font-weight:500;">${a.birth_year}</span>` : ''}${a.members ? '' : ''}</div>
+        const row = a => `<div style="padding:10px 16px 6px;border-top:1px solid #f1f1f1;">
+            <div style="font-size:15px;font-weight:800;">${esc(a.name)}${a.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;font-weight:500;">${esc(a.name_alt)}</span>` : ''}${a.birth_year ? `<span style="font-size:11px;color:#999;margin-left:6px;font-weight:500;">${a.birth_year}</span>` : ''}${a.members ? '' : ''}</div>
             ${a.members && a.members.length ? `<div style="font-size:11px;color:#666;margin-top:1px;">${a.members.map(m => esc(m.name)).join(' · ')}</div>` : ''}
             <div style="margin-top:3px;">${a.events.map(evLine).join('') || '<div style="font-size:11px;color:#999;">출전 종목 없음</div>'}</div></div>`;
         // 정렬: 다음 경기가 빠른 순, 모두 끝난 선수는 뒤로
@@ -957,7 +963,7 @@ function renderMatrix() {
     // 시간표가 하나도 없는 대회는 토글을 숨긴다 (시간별 정렬이 의미 없음)
     const _hasSchedule = Object.keys(_scheduleMap || {}).length > 0;
     if (!_hasSchedule && _sortMode === 'time') _sortMode = 'event';
-    if (allGroups.length && _hasSchedule) html = segToggleHtml(_sortMode, 'setSortMode', { style: 'margin:2px 0 8px;' }) + html;
+    if (allGroups.length && _hasSchedule) html = `<div class="sort-row"><span class="sort-lbl">정렬</span>${segToggleHtml(_sortMode, 'setSortMode')}</div>` + html;
 
     if (_sortMode === 'time') {
         // 시간별: 날짜(일차)별로 묶고 그 안은 다음 경기 시각순. 시간표에 없는 종목은 맨 아래 '시간 미정'
