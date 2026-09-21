@@ -2949,6 +2949,14 @@ app.get('/api/events', async (req, res) => {
         const counts = await db.all(`SELECT event_id, COUNT(*) AS cnt FROM heat WHERE event_id IN (${placeholders}) GROUP BY event_id`, ...ids);
         const countMap = new Map(counts.map(c => [c.event_id, Number(c.cnt)]));
         events.forEach(e => { e.heat_count = countMap.get(e.id) || 0; });
+        // 출전 인원 — 조가 아직 없는 종목의 '엔트리' 버튼용
+        const ecounts = await db.all(`SELECT event_id, COUNT(*) AS cnt FROM event_entry WHERE event_id IN (${placeholders}) GROUP BY event_id`, ...ids);
+        const ecountMap = new Map(ecounts.map(c => [Number(c.event_id), Number(c.cnt)]));
+        events.forEach(e => { e.entry_count = ecountMap.get(Number(e.id)) || 0; });
+        // 조에 실제로 배정된 인원(레인) — 국제대회는 조(유닛)가 일정에서 먼저 만들어지고 명단은 나중에 오므로, 조가 있어도 비어 있으면 '명단' 대신 '엔트리'
+        const hcounts = await db.all(`SELECT h.event_id, COUNT(he.id) AS cnt FROM heat h JOIN heat_entry he ON he.heat_id=h.id WHERE h.event_id IN (${placeholders}) GROUP BY h.event_id`, ...ids);
+        const hcountMap = new Map(hcounts.map(c => [Number(c.event_id), Number(c.cnt)]));
+        events.forEach(e => { e.heat_entry_count = hcountMap.get(Number(e.id)) || 0; });
         // 국제대회(동기화 대회): 관심 국가(spotlight, 예: KOR) 선수가 출전하는 종목 표시 — 대시보드 배지·'한국 선수' 필터
         if (competition_id) {
             try {
@@ -2975,7 +2983,9 @@ app.get('/api/events/:id', async (req, res) => {
 app.get('/api/events/:id/entries', async (req, res) => {
     res.json(await db.all(`
         SELECT ee.id AS event_entry_id, ee.status, ee.event_id,
-               a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender
+               a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender,
+               a.name_alt, a.federation, a.date_of_birth,
+               COALESCE(NULLIF(ee.personal_best,''), a.personal_best) AS personal_best, COALESCE(NULLIF(ee.season_best,''), a.season_best) AS season_best
         FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id
         WHERE ee.event_id=? ORDER BY ${orderByBibSql('a.bib_number')}
     `, req.params.id));

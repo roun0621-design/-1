@@ -147,6 +147,11 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         const w100 = evs.body.filter(e => e.name === '100m' && e.gender === 'F');
         expect(w100.map(e => e.spotlight)).toEqual(['KOR', 'KOR', 'KOR']);
         expect(evs.body.find(e => e.name === '100mH' && e.gender === 'F' && !e.parent_event_id).spotlight).toBeNull();     // 여자 100mH 에 한국 선수 없음
+        // 조편성 전 '엔트리' 버튼용: 출전 인원 + 엔트리 API 에 국가·한글·생년·PB/SB
+        expect(w100[0].entry_count).toBeGreaterThan(20); expect(w100[0].heat_count).toBe(8);
+        const en = await request(app).get(`/api/events/${w100[0].id}/entries`);
+        const seo = en.body.find(x => x.name === '서지현');
+        expect(seo).toMatchObject({ team: 'KOR', federation: 'KOR', name_alt: 'SEO Jihyun', personal_best: '11.30' }); expect(seo.date_of_birth).toMatch(/^\d{4}-/);
     });
     it('선수 × 종목 표(한글 이름·성별·출생·세부종목·SB·PB): 성별·출생년·종목으로 KOR 선수를 찾아 출전마다 PB/SB, 계주는 팀 출전에', async () => {
         const kor = F('entries_org_KOR.json');

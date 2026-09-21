@@ -96,7 +96,8 @@ function openEventDetail(evtId) {
     if (!evt) return;
     if (evt.round_status === 'completed') { openResult(evtId); return; }
     if (evt.round_status === 'in_progress' || callroomCompletedIds.has(evtId)) { openLiveResult(evtId); return; }
-    if (evt.heat_count > 0) { openRosterModal(evtId, evt.name); return; }
+    if (evt.heat_count > 0 && (evt.heat_entry_count == null || evt.heat_entry_count > 0)) { openRosterModal(evtId, evt.name); return; }
+    if (evt.entry_count > 0) { openEntriesModal(evtId, evt.name); return; }
     // 예정/대기 — 표시할 상세 없음
 }
 
@@ -995,7 +996,8 @@ function renderViewerBtn(evt) {
     const isAdmin = currentRole === 'admin';
     const isJudge = currentRole === 'operation' || isAdmin;
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
-    const hasHeats = evt.heat_count > 0;
+    // 조가 있어도 레인 배정이 하나도 없으면(국제대회: 조는 일정에서 먼저 생김) 아직 '명단'이 아니다
+    const hasHeats = evt.heat_count > 0 && (evt.heat_entry_count == null || evt.heat_entry_count > 0);
     const isCallroomDone = callroomCompletedIds.has(evt.id);
 
     const rc = _roundColors[evt.round_type] || { color: '#555', bg: '#f5f5f5', border: '#ccc' };
@@ -1023,8 +1025,62 @@ function renderViewerBtn(evt) {
         return `<span class="round-btn" style="background:#fff;color:${rc.color};border:1px dashed ${rc.color};cursor:pointer;font-size:10px;padding:3px 6px;white-space:nowrap;font-weight:500;" onclick="openRosterModal(${evt.id},'${eName}')" title="조편성 명단 (기록 미입력)">명단</span>`;
     }
 
+    // 조가 아직 없지만 출전 명단은 있는 종목(국제대회: 조편성 전) → 엔트리
+    if (evt.entry_count > 0) {
+        const eName = (evt.name || '').replace(/'/g, "\\'");
+        return `<span class="round-btn" style="background:#fff;color:${rc.color};border:1px dashed ${rc.color};cursor:pointer;font-size:10px;padding:3px 6px;white-space:nowrap;font-weight:500;" onclick="openEntriesModal(${evt.id},'${eName}')" title="출전 선수 (조편성 전)">엔트리 ${evt.entry_count}</span>`;
+    }
     // created — 대기
     return `<span class="round-btn btn-disabled" style="font-size:10px;padding:3px 6px;border:1px solid #eee;" title="대기중">대기</span>`;
+}
+
+// ── 엔트리 창 (조편성 전 출전 선수) — 국제대회: 관심 국가(한국) 선수 맨 위, 한글 이름·PB/SB, 나머지는 국가 코드순 ──
+async function openEntriesModal(eventId, eventName) {
+    const evt = allEvents.find(e => e.id === eventId); if (!evt) return;
+    let overlay = document.getElementById('roster-modal-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div'); overlay.id = 'roster-modal-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100000;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.2s;';
+        overlay.onclick = (e) => { if (e.target === overlay) closeRosterModal(); };
+        document.body.appendChild(overlay);
+    }
+    overlay.style.display = 'flex';
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const gL = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
+    const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
+    const sched = _scheduleMap[evt.id];
+    overlay.innerHTML = `<div style="background:#fff;border-radius:12px;width:92%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#f5f0e0,#eef2f9);border-bottom:1px solid #e8dfc0;flex-shrink:0;">
+            <div><div style="font-weight:800;font-size:15px;color:#1a2a5e;" id="entries-modal-title">엔트리</div>
+                 <div style="font-size:12px;color:#8a7640;margin-top:2px;">${gL} ${esc(eventName)} ${roundL}${sched && sched.time ? ` · ${sched.scheduled_date || ''} ${sched.time}` : ''}</div></div>
+            <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
+        </div>
+        <div id="roster-modal-body" style="flex:1;overflow-y:auto;padding:0;">${uiStateHtml('loading', { title: '출전 선수를 불러오는 중…' })}</div></div>`;
+    if (window.pushModalState) pushModalState(() => closeRosterModal());
+    const body = document.getElementById('roster-modal-body');
+    try {
+        const entries = await API.getEventEntries(evt.id);
+        const isRelay = evt.category === 'relay';
+        let members = {};
+        if (isRelay) { try { members = await api('GET', `/api/relay-members/batch?event_id=${evt.id}`); } catch (e) { members = {}; } }
+        const spot = (allEvents.find(e => e.spotlight) || {}).spotlight || null;
+        const rows = entries.slice().sort((a, b) => ((b.team === spot) - (a.team === spot)) || String(a.team || '').localeCompare(String(b.team || '')) || String(a.name).localeCompare(String(b.name)));
+        const year = d => (String(d || '').match(/^\d{4}/) || [''])[0];
+        const flag = t => t === spot && spot === 'KOR' ? '🇰🇷 ' : '';
+        const line = e => {
+            const pb = [e.personal_best ? 'PB ' + e.personal_best : '', e.season_best ? 'SB ' + e.season_best : ''].filter(Boolean).join(' · ');
+            const mem = isRelay && members[e.event_entry_id] ? `<div style="font-size:11px;color:#666;margin-top:2px;">${members[e.event_entry_id].members.map(m => esc(m.name)).join(' · ')}</div>` : '';
+            return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 14px;border-top:1px solid #f1f1f1;${e.team === spot ? 'background:#fff6f6;' : ''}">
+                <div style="flex:none;width:52px;font-weight:800;font-size:12px;color:${e.team === spot ? '#8b1a2a' : '#555'};">${flag(e.team)}${esc(e.team || '')}</div>
+                <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:${e.team === spot ? 700 : 500};">${esc(isRelay ? (e.name || '') : e.name)}${e.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;">${esc(e.name_alt)}</span>` : ''}${year(e.date_of_birth) ? `<span style="font-size:11px;color:#999;margin-left:6px;">${year(e.date_of_birth)}</span>` : ''}</div>${mem}</div>
+                <div style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;">${esc(pb)}</div></div>`;
+        };
+        const korRows = rows.filter(e => spot && e.team === spot), rest = rows.filter(e => !(spot && e.team === spot));
+        document.getElementById('entries-modal-title').textContent = `엔트리 · ${rows.length}${isRelay ? '팀' : '명'}`;
+        body.innerHTML = rows.length ? `${korRows.length ? `<div style="padding:8px 14px 2px;font-size:11px;font-weight:800;color:#8b1a2a;letter-spacing:.05em;">한국 (${korRows.length})</div>${korRows.map(line).join('')}` : ''}
+            ${rest.length ? `<div style="padding:10px 14px 2px;font-size:11px;font-weight:800;color:#888;letter-spacing:.05em;">${korRows.length ? '다른 국가' : '출전'} (${rest.length}) · 국가 코드순</div>${rest.map(line).join('')}` : ''}`
+            : uiStateHtml('empty', { title: '출전 선수가 아직 없습니다', hint: '공식 엔트리가 올라오면 자동으로 들어옵니다.' });
+    } catch (e) { body.innerHTML = uiStateHtml('error', { title: '출전 선수를 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '' }); }
 }
 
 /**
