@@ -2392,3 +2392,6 @@ body { font-variant-numeric: tabular-nums; }
 /* ── 인라인 SVG 아이콘 (lib/icons.js · 이모지 대체) ── */
 .ui-icon { display: inline-block; vertical-align: -0.15em; flex: none; }
 .ui-icon.ui-icon-top { vertical-align: middle; }
+
+/* ── 더블탭 확대 끄기 (핀치 줌은 그대로) — 빈 곳을 두 번 눌러도 화면이 튀지 않게. 스크롤 상자마다 판정이 끊기므로 전 요소에 건다 ── */
+* { touch-action: manipulation; }
