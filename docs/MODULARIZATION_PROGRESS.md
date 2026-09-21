@@ -149,3 +149,13 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 | `external_keys.js` | external-keys 발급/목록/폐기/로그 (4) | _generateApiKey·_hashApiKey·_keyPrefix |
 - 추출 도구: 블록의 자유 변수를 server.js 최상위 정의에서 자동으로 골라 deps 로, 블록 안 정의 중 밖에서 쓰는 이름은 반환값으로. 마운트 행보다 뒤에 정의되는 dep 은 래퍼로 늦게 바인딩(TDZ).
 - 남은 admin 인라인: brand-image · security-status · verify · heats/update-entries · heat-entry/set-group (각자 다른 도메인 옆에 있어 그대로 둠). 남은 큰 덩어리: events 20 · documents 6.
+
+### ✅ 종목·조 핵심 조회와 라운드 4개 모듈 추출 (2026-09-22) — server.js 8,150 → 7,150줄
+| 모듈 | 라우트 | 비고 |
+|---|---|---|
+| `events_read.js` | events 목록/상세/엔트리/조 배정 조회, heats 목록/엔트리 (6) | 대시보드·기록입력·소집이 읽는 핵심 조회. deps db·orderByBibSql |
+| `heat_meta.js` | 조 풍속/이름/전광판 키, 라이브 결과, 높이 시도 저장/삭제 (7) | results 모듈 뒤·combined_scores 앞 — 등록 순서 유지 |
+| `entry_meta.js` | 바코드 조회, 출전 상태/메모/수동 순위, 종목 소집 메모 (6) | `syncCombinedSubEventCheckin` 은 callroom 모듈이 바로 뒤에서 마운트 → 늦게 바인딩 |
+| `rounds.js` | 결승/준결승 생성, 레인 배정 조회, 종목 삭제(+`_undoSnapshotEvent` 반환), 세부종목 CRUD·정렬·선수 동기화, 레인 일괄 수정/배정, 전체 결과 (14) | `autoLinkDisplayTimetable` 늦게 바인딩 |
+- 등록 순서를 지키려고 results·combined_scores·callroom·qualifications 마운트 사이의 네 덩어리를 각각 제자리에서 모듈로 바꿨다(합치지 않음).
+- 남은 인라인 라우트: documents 6 · public 4 · external 4 · scoreboard 3 · athletes 업로드 3 · events/upload · 기타 단건들. server.js 는 부팅·미들웨어·DB·공용 헬퍼·WS·연맹 업로드가 주.
