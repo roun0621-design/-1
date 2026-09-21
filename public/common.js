@@ -2169,6 +2169,10 @@ async function openTimetable(compId) {
                             _statusTag = `<span style="color:#666;font-size:11px;font-weight:600;background:#f5f5f5;border:1px dashed #bbb;padding:1px 6px;border-radius:8px;white-space:nowrap;">명단</span>`;
                         }
                         // 'created' (대기) → no badge (시간표가 너무 복잡해지지 않도록)
+                        // 조편성 전이지만 출전 명단은 있는 종목(국제대회) → 엔트리 (클릭하면 출전 선수 창)
+                        if (!_statusTag && (item.round_status === 'created' || item.round_status === 'heats_generated') && item.entry_count > 0 && !(item.lane_count > 0)) {
+                            _statusTag = `<span style="color:#1a2a5e;font-size:11px;font-weight:600;background:#eef2f9;border:1px dashed #9fb0d8;padding:1px 6px;border-radius:8px;white-space:nowrap;">엔트리 ${item.entry_count}</span>`;
+                        }
                     }
                     // Click behavior: display mode → open result_url if exists, else do nothing
                     // Non-display mode → navigate to event
@@ -2245,6 +2249,13 @@ async function openTimetable(compId) {
                 if (ro) ro.style.zIndex = '100001';
             };
             if (page.includes('dashboard') && typeof openLiveResult === 'function') {
+                // 아직 경기 전이면 결과 대신 명단(레인) 또는 엔트리(출전 선수) 창 — 국제대회는 조편성 전이 길다
+                const ev = (typeof allEvents !== 'undefined' && Array.isArray(allEvents)) ? allEvents.find(e => e.id === eventId) : null;
+                const liftRoster = () => { const ro = document.getElementById('roster-modal-overlay'); if (ro) ro.style.zIndex = '100001'; };
+                if (ev && ev.round_status !== 'in_progress' && ev.round_status !== 'completed') {
+                    if (ev.heat_count > 0 && (ev.heat_entry_count == null || ev.heat_entry_count > 0) && typeof openRosterModal === 'function') { openRosterModal(eventId, ev.name); liftRoster(); setTimeout(liftRoster, 50); return; }
+                    if (ev.entry_count > 0 && typeof openEntriesModal === 'function') { openEntriesModal(eventId, ev.name); liftRoster(); setTimeout(liftRoster, 50); return; }
+                }
                 openLiveResult(eventId); lift(); setTimeout(lift, 50); return;
             }
             if (page.includes('results') && typeof openResultDetail === 'function') {
