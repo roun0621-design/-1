@@ -121,7 +121,7 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 
 ### ✅ callroom 추출 (2026-09-18)
 - `lib/routes/callroom.js` — 소집 출석·완료·경기 완료 6라우트 (328줄). 반환 `{ syncCombinedSubEventCheckin }`. server.js 11,810 → 11,490줄
-- 남은 큰 덩어리: admin 51 · display 25 · events(생성·조·레인) 20여 — admin/display 는 테스트가 얇아 마지막
+- 남은 큰 덩어리: admin 48 · events(생성·조·레인) 20여 (display 는 2026-09-22 추출 완료)
 - 급조 코드(record-fieldpad.js): 인라인 입력 모드는 이미 제거됐고 키패드 모듈이 4개 함수만 감싼다. 브라우저 테스트가 없어 본체 병합은 보류(모듈로 유지)
 
 ### ✅ 종목 매칭 통합 — `lib/eventMatch.js` (2026-09-22)
@@ -131,3 +131,9 @@ server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/
 ### ✅ 브라우저 렌더 테스트 — `tests/browser/` (2026-09-22)
 - `BROWSER_TESTS=1 npm run test:browser` (기본 `npm test` 는 건너뜀). 서버를 임시 포트로 띄우고 puppeteer 로 홈·대시보드·결과·소집실·기록입력을 360/768/1024px 에서 열어 JS 예외·CSP 거부·가로 넘침·핵심 요소를 검사, 스크린샷은 `tests/browser/shots/`(git 무시).
 - 첫 실행에서 잡은 결함: 관심 국가 없는 일반 대회에서 히어로 '대표팀 명단' 반쪽이 보임(`hidden` 을 `.hero-schedule{display:flex}` 가 덮음) → `[hidden]{display:none !important}`.
+
+### ✅ display 추출 (2026-09-22)
+- `lib/routes/display.js` — 노출용 대회 25 라우트 + `autoLinkDisplayTimetable`·`autoMatchDisplayRoster`(반환값). server.js 11,734 → 9,842줄.
+- deps: db, upload, XLSX, fs, isAdminKey, isOperationKey, opLog, normalizeDivisionLabel, parseJongbyul/parseJongbyulNormalized/parseDisplayRound, excelTimeToHHMM, cleanTimetableEventName, guessEventCategory(다른 모듈도 쓰므로 server.js 에 잔류), timetableRoutes(`autoLinkTimetable` 폴백).
+- 주의: `autoLinkDisplayTimetable` 은 server.js 의 종목 생성·수정·라운드 완료 라우트와 heat_assignment 모듈이 부른다 → heat_assignment 에는 늦게 바인딩되는 래퍼로 넘긴다(마운트 순서 TDZ). 모듈 안 상대 require 는 `../eventMatch`.
+- 남은 큰 덩어리: admin 48 · events 20 · documents 6.
