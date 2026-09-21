@@ -102,3 +102,37 @@ describe('서버 연동', () => {
         expect(r.body.groups.find(x => x.key === 'kjaf')).toBeUndefined();
     });
 });
+
+describe('계주 팀 구성 (WA TR 24)', () => {
+    let ev, teamA, teamB, entryA, entryB, ath;
+    beforeAll(async () => {
+        ev = (await db.run("INSERT INTO event (competition_id, name, category, gender, division, round_type, round_status) VALUES (?, '4x100mR', 'relay', 'M', '중등부', 'final', 'created')", fx.comp)).lastInsertRowid;
+        teamA = (await db.run("INSERT INTO athlete (competition_id, name, team, barcode, gender) VALUES (?, '예천중A', '예천중A', 'RELAY_예천중_M', 'M')", fx.comp)).lastInsertRowid;
+        teamB = (await db.run("INSERT INTO athlete (competition_id, name, team, barcode, gender) VALUES (?, '안동중A', '안동중A', 'RELAY_안동중_M', 'M')", fx.comp)).lastInsertRowid;
+        entryA = (await db.run("INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?,?, 'registered')", ev, teamA)).lastInsertRowid;
+        entryB = (await db.run("INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?,?, 'registered')", ev, teamB)).lastInsertRowid;
+        ath = [];
+        for (let i = 0; i < 8; i++) ath.push((await db.run("INSERT INTO athlete (competition_id, name, team, gender) VALUES (?,?,'예천중',?)", fx.comp, '주자' + i, i === 7 ? 'F' : 'M')).lastInsertRowid);
+    });
+    const add = (entry, id) => request(app).post('/api/relay-members').set('x-admin-key', OP).send({ event_entry_id: entry, athlete_id: id });
+    it('6명(주자 4 + 예비 2)까지, 7번째는 400', async () => {
+        for (let i = 0; i < 6; i++) expect((await add(entryA, ath[i])).status).toBe(200);
+        const r = await add(entryA, ath[6]);
+        expect(r.status).toBe(400); expect(r.body.error).toContain('6명');
+    });
+    it('같은 종목의 다른 팀에 든 선수는 400, 남자 계주에 여자 선수는 400', async () => {
+        const r = await add(entryB, ath[0]);
+        expect(r.status).toBe(400); expect(r.body.error).toContain('예천중A');
+        const g = await add(entryB, ath[7]);
+        expect(g.status).toBe(400); expect(g.body.error).toContain('여자 선수');
+    });
+    it('주자 순서는 1~4 이고 같은 구간 중복 불가, 예비는 비움', async () => {
+        const order = members => request(app).put('/api/relay-members/order').set('x-admin-key', OP).send({ event_entry_id: entryA, members });
+        expect((await order([{ athlete_id: ath[0], leg_order: 1 }, { athlete_id: ath[1], leg_order: 5 }])).status).toBe(400);
+        expect((await order([{ athlete_id: ath[0], leg_order: 1 }, { athlete_id: ath[1], leg_order: 1 }])).status).toBe(400);
+        const ok = await order([{ athlete_id: ath[0], leg_order: 1 }, { athlete_id: ath[1], leg_order: 2 }, { athlete_id: ath[2], leg_order: '3' }, { athlete_id: ath[3], leg_order: 4 }, { athlete_id: ath[4], leg_order: '' }, { athlete_id: ath[5], leg_order: null }]);
+        expect(ok.status).toBe(200);
+        const rows = await db.all('SELECT athlete_id, leg_order FROM relay_member WHERE event_entry_id=? ORDER BY athlete_id', entryA);
+        expect(rows.map(r => r.leg_order)).toEqual([1, 2, 3, 4, null, null]);
+    });
+});
