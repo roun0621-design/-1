@@ -1424,8 +1424,7 @@ function renderLiveTrackResults(data, relayMembers) {
             const r = (h.results || []).find(r => r.event_entry_id === e.event_entry_id);
             return { ...e, time_seconds: r ? r.time_seconds : null, status_code: r ? (r.status_code || '') : '', remark: r ? (r.remark || '') : '' };
         }).sort((a, b) => {
-            if (a.status_code && !b.status_code) return 1;
-            if (!a.status_code && b.status_code) return -1;
+            { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.time_seconds == null && b.time_seconds == null) return (a.lane_number || 99) - (b.lane_number || 99);
             if (a.time_seconds == null) return 1;
             if (b.time_seconds == null) return -1;
@@ -1508,8 +1507,7 @@ function renderLiveFieldDistResults(data) {
             sortedValid.sort((a, b) => b - a);
             return { ...e, att, attWind, best, bestWind, status_code: sc, sortedValid };
         }).sort((a, b) => {
-            if (a.status_code && !b.status_code) return 1;
-            if (!a.status_code && b.status_code) return -1;
+            { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.best == null) return 1; if (b.best == null) return -1;
             if (b.best !== a.best) return b.best - a.best;
             // WA tie-break: 2nd best, 3rd best, etc.
@@ -1624,8 +1622,10 @@ function renderLiveFieldHeightResults(data) {
             const _hs = PaceRanking.heightStats(hd, hts);
             const best = _hs.best, totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest;
             const isNM = _hs.isNM;
-            return { ...e, hd, best, isNM, totalFails, failsAtBest };
+            const status_code = ((h.results || []).find(r => r.event_entry_id === e.event_entry_id && PaceRanking.isStatus(r.status_code)) || {}).status_code || '';
+            return { ...e, hd, best: status_code ? null : best, isNM, totalFails, failsAtBest, status_code };
         }).sort((a, b) => {
+            { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.best == null && b.best == null) return 0;
             if (a.best == null) return 1; if (b.best == null) return -1;
             if (b.best !== a.best) return b.best - a.best;
@@ -1637,6 +1637,7 @@ function renderLiveFieldHeightResults(data) {
         });
         let rk = 1;
         rows.forEach((r, i) => {
+            if (r.status_code && r.status_code !== 'NM') { r.rank = `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>`; return; }
             if (r.best == null) { r.rank = r.isNM ? '<span class="nm-mark">NM</span>' : '—'; return; }
             let isTied = i > 0 && rows[i - 1].best === r.best
                 && rows[i - 1].failsAtBest === r.failsAtBest
@@ -1960,7 +1961,7 @@ async function _cResultShowSub(order) {
                 const r = results.find(r => r.event_entry_id === e.event_entry_id);
                 return { ...e, time_seconds: r ? r.time_seconds : null, status_code: r ? (r.status_code || '') : '' };
             }).sort((a, b) => {
-                if (a.status_code && !b.status_code) return 1; if (!a.status_code && b.status_code) return -1;
+                { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
                 if (a.time_seconds == null && b.time_seconds == null) return 0;
                 if (a.time_seconds == null) return 1; if (b.time_seconds == null) return -1;
                 return a.time_seconds - b.time_seconds;
@@ -2013,8 +2014,7 @@ async function _cResultShowSub(order) {
                 }
             });
             const athRows = Object.values(athleteMap).sort((a, b) => {
-                if (a.status_code && !b.status_code) return 1;
-                if (!a.status_code && b.status_code) return -1;
+                { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
                 return (b.best || 0) - (a.best || 0);
             });
             let rk = 1;
@@ -2199,8 +2199,7 @@ function renderTrackResults(data, relayMembers) {
             const r = (h.results || []).find(r => r.event_entry_id === e.event_entry_id);
             return { ...e, time_seconds: r ? r.time_seconds : null, status_code: r ? (r.status_code || '') : '', remark: r ? (r.remark || '') : '' };
         }).sort((a, b) => {
-            if (a.status_code && !b.status_code) return 1;
-            if (!a.status_code && b.status_code) return -1;
+            { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.time_seconds == null) return 1;
             if (b.time_seconds == null) return -1;
             return a.time_seconds - b.time_seconds;
@@ -2444,8 +2443,7 @@ function renderFieldDistResults(data) {
             sortedValid.sort((a, b) => b - a);
             return { ...e, att, attWind, best, bestWind, status_code: sc, sortedValid };
         }).sort((a, b) => {
-            if (a.status_code && !b.status_code) return 1;
-            if (!a.status_code && b.status_code) return -1;
+            { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.best == null) return 1; if (b.best == null) return -1;
             if (b.best !== a.best) return b.best - a.best;
             // WA tie-break: 2nd best, 3rd best, etc.
@@ -2546,8 +2544,10 @@ function renderFieldHeightResults(data) {
             ea.forEach(a => { if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
             const _hs = PaceRanking.heightStats(hd, hts);   // 공용 모듈 (WA TR 26.2·26.8)
             const best = _hs.best, totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest, isNM = _hs.isNM;
-            return { ...e, hd, best, totalFails, failsAtBest, isNM };
+            const status_code = ((h.results || []).find(r => r.event_entry_id === e.event_entry_id && PaceRanking.isStatus(r.status_code)) || {}).status_code || '';
+            return { ...e, hd, best: status_code ? null : best, totalFails, failsAtBest, isNM, status_code };
         }).sort((a, b) => {
+            { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.best == null && b.best == null) return 0;
             if (a.best == null) return 1; if (b.best == null) return -1;
             if (b.best !== a.best) return b.best - a.best;
@@ -2558,6 +2558,7 @@ function renderFieldHeightResults(data) {
         });
         let rk = 1;
         rows.forEach((r, i) => {
+            if (r.status_code) { r.rank = `<span class="sc-badge sc-${r.status_code}">${r.status_code}</span>`; return; }
             if (r.best == null) { r.rank = '—'; rk = i + 2; return; }
             let isTied = i > 0 && rows[i-1].best === r.best && rows[i-1].failsAtBest === r.failsAtBest && rows[i-1].totalFails === r.totalFails;
             r.rank = isTied ? rows[i-1].rank : rk;

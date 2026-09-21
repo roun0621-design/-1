@@ -54,7 +54,8 @@ const bcrypt = require('bcryptjs');
 const { initDatabase, DB_PATH } = require('./db/init');
 const { getDb } = require('./lib/db');
 const { detectRecordBreaks, detectCombinedRecordBreaks, normalizeEventName: normalizeEventNameServer } = require('./lib/recordCompare');
-const { normalizeDivisionLabel, divisionCodeFor: _divisionCodeFor, gradeDivisionSeed: _gradeDivisionSeed } = require('./lib/division');   // 부 라벨 정규화·부 코드 (Phase 7-②)
+const { normalizeDivisionLabel, divisionCodeFor: _divisionCodeFor, gradeDivisionSeed: _gradeDivisionSeed } = require('./lib/division');
+const PaceRanking = require('./public/lib/ranking');   // 순위·상태코드(DNS/DNF/DQ/NM) 공용 규칙 — 서버·브라우저 동일
 const WebSocket = require('ws');
 const PDFDocument = require('pdfkit');
 const code128 = require('./lib/code128');
@@ -6724,22 +6725,18 @@ app.get('/api/result-image/:eventId', async (req, res) => {
                     time: r?.time_seconds || r?.distance_meters || null,
                     status_code: r?.status_code || null,
                 };
-            }).sort((a, b) => {
-                const aS = a.status_code === 'DNS' || a.status_code === 'DNF' || a.status_code === 'DQ';
-                const bS = b.status_code === 'DNS' || b.status_code === 'DNF' || b.status_code === 'DQ';
-                if (aS && !bS) return 1;
-                if (!aS && bS) return -1;
+            }).sort(PaceRanking.withStatusLast((a, b) => {
                 if (a.time == null && b.time == null) return (a.lane_number || 0) - (b.lane_number || 0);
                 if (a.time == null) return 1;
                 if (b.time == null) return -1;
                 return isTrack ? a.time - b.time : b.time - a.time;
-            });
+            }));
 
             let rank = 0;
             for (const e of sortedEntries) {
                 if (y + ROW_H > H - 80) break; // Leave room for footer
 
-                const special = e.status_code === 'DNS' || e.status_code === 'DNF' || e.status_code === 'DQ';
+                const special = PaceRanking.isStatus(e.status_code);
                 if (!special && e.time != null) rank++;
 
                 // Alternating row bg
@@ -7751,21 +7748,15 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           return { ...e, totalPoints, status_code: statusCode };
         }));
 
-        athleteData.sort((a, b) => {
-          const aS = ['DNS','DNF','DQ'].includes(a.status_code);
-          const bS = ['DNS','DNF','DQ'].includes(b.status_code);
-          if (aS && !bS) return 1;
-          if (!aS && bS) return -1;
-          return b.totalPoints - a.totalPoints;
-        });
+        athleteData.sort(PaceRanking.withStatusLast((a, b) => b.totalPoints - a.totalPoints));
 
         rankings = athleteData.slice(0, 8).map(a => ({
           name: a.name || '',
           team: a.team || '',
-          record: ['DNS','DNF','DQ'].includes(a.status_code) ? a.status_code : String(a.totalPoints),
+          record: PaceRanking.isStatus(a.status_code) ? a.status_code : String(a.totalPoints),
           wind: null,
           wa_score: null,
-          _metric: ['DNS','DNF','DQ'].includes(a.status_code) ? null : a.totalPoints
+          _metric: PaceRanking.isStatus(a.status_code) ? null : a.totalPoints
         }));
 
       // ===== FIELD HEIGHT =====
@@ -7804,18 +7795,15 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           return { ...e, bestCleared, totalMisses, missesAtBest, status_code: status };
         }));
 
-        athleteData.sort((a, b) => {
-          const aS = ['DNS','DNF','DQ','NM'].includes(a.status_code);
-          const bS = ['DNS','DNF','DQ','NM'].includes(b.status_code);
-          if (aS && !bS) return 1; if (!aS && bS) return -1;
+        athleteData.sort(PaceRanking.withStatusLast((a, b) => {
           if (a.bestCleared == null && b.bestCleared == null) return 0;
           if (a.bestCleared == null) return 1; if (b.bestCleared == null) return -1;
           if (b.bestCleared !== a.bestCleared) return b.bestCleared - a.bestCleared;
           if (a.missesAtBest !== b.missesAtBest) return a.missesAtBest - b.missesAtBest;
           return a.totalMisses - b.totalMisses;
-        });
+        }));
 
-        rankings = athleteData.filter(a => !['DNS','DNF','DQ','NM'].includes(a.status_code) && a.bestCleared != null).slice(0, 8).map(a => ({
+        rankings = athleteData.filter(a => !PaceRanking.isStatus(a.status_code) && a.bestCleared != null).slice(0, 8).map(a => ({
           name: a.name || '',
           team: a.team || '',
           record: fmtHeightCm(a.bestCleared),
@@ -7824,7 +7812,7 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           _metric: `${a.bestCleared}|${a.missesAtBest}|${a.totalMisses}` // 같은 높이+실패수 = 공동
         }));
         // Add NM/DNS/DNF/DQ at end (up to 8)
-        const specials = athleteData.filter(a => ['DNS','DNF','DQ','NM'].includes(a.status_code) || a.bestCleared == null);
+        const specials = athleteData.filter(a => PaceRanking.isStatus(a.status_code) || a.bestCleared == null);
         for (const s of specials) {
           if (rankings.length >= 8) break;
           rankings.push({ name: s.name || '', team: s.team || '', record: s.status_code || 'NM', wind: null, wa_score: null, _metric: null });
@@ -7865,15 +7853,12 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           }
         }
 
-        allEntries.sort((a, b) => {
-          const aS = ['DNS','DNF','DQ','NM'].includes(a.status_code);
-          const bS = ['DNS','DNF','DQ','NM'].includes(b.status_code);
-          if (aS && !bS) return 1; if (!aS && bS) return -1;
+        allEntries.sort(PaceRanking.withStatusLast((a, b) => {
           if (a.best == null && b.best == null) return 0;
           if (a.best == null) return 1; if (b.best == null) return -1;
           // 최고 기록이 같으면 2·3번째 기록으로 (WA TR 25.22 · public/lib/ranking.js) — 예전엔 최고 기록만 비교해 동률 순서가 임의였다
-          return require('./public/lib/ranking').compareDistance(a, b);
-        });
+          return PaceRanking.compareDistance(a, b);
+        }));
 
         // 투척+도약 모두 "15m09" 형식 사용 (fmtJumpCm은 cm정수 "1509"로 변환되어 오류)
         const fmtFn = (isThrow || isJump) ? fmtFieldDist : (m => m != null ? m.toFixed(2) : '');
@@ -7881,10 +7866,10 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
         rankings = allEntries.slice(0, 8).map(a => ({
           name: a.name || '',
           team: a.team || '',
-          record: ['DNS','DNF','DQ','NM'].includes(a.status_code) ? a.status_code : fmtFn(a.best),
+          record: PaceRanking.isStatus(a.status_code) ? a.status_code : fmtFn(a.best),
           wind: (hasWind && a.bestWind != null) ? fmtWind(a.bestWind) : null,
           wa_score: null,
-          _metric: ['DNS','DNF','DQ','NM'].includes(a.status_code) ? null : a.best
+          _metric: PaceRanking.isStatus(a.status_code) ? null : a.best
         }));
 
       // ===== TRACK / ROAD / RELAY =====
@@ -7912,17 +7897,14 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           }
         }
 
-        allEntries.sort((a, b) => {
-          const aS = ['DNS','DNF','NM','DQ'].includes(a.status_code);
-          const bS = ['DNS','DNF','NM','DQ'].includes(b.status_code);
-          if (aS && !bS) return 1; if (!aS && bS) return -1;
+        allEntries.sort(PaceRanking.withStatusLast((a, b) => {
           if (a.best == null && b.best == null) return 0;
           if (a.best == null) return 1; if (b.best == null) return -1;
           return a.best - b.best;
-        });
+        }));
 
         for (const a of allEntries.slice(0, 8)) {
-          const isSpecial = ['DNS','DNF','NM','DQ'].includes(a.status_code);
+          const isSpecial = PaceRanking.isStatus(a.status_code);
           const entry = {
             name: a.name || '',
             team: a.team || '',

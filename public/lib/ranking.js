@@ -144,5 +144,33 @@
         return { Q, q, ties };
     }
 
-    return { normMark, heightStats, heightStatsFromAttempts, compareHeight, distanceStats, compareDistance, assignRanks, topNIds, autoQualify };
+    // ─── 상태코드 표기·정렬 (2026-09 Phase 2) ───────────────────────
+    // WA 결과지 관행: 완주(순위) → NM(무기록) → DNF(중도 포기) → DQ(실격) → DNS(불참). 상태코드 선수는 순위가 없다.
+    // 전에는 결과지·전광판·문서 생성기 10곳이 각자 목록·순서를 갖고 있었다(NM 을 빼먹거나 DQ·NM 순서가 다름).
+    const STATUS_ORDER = { NM: 1, DNF: 2, DQ: 3, DNS: 4 };
+    const STATUS_LABEL = { NM: '무기록', DNF: '중도 포기', DQ: '실격', DNS: '불참' };
+    const normStatus = c => String(c == null ? '' : c).trim().toUpperCase();
+    /** 순위에서 빠지는 상태코드인지 (DNS/DNF/DQ/NM). 'X'·'FOUL' 같은 시기 표시는 아니다 */
+    function isStatus(code) { return Object.prototype.hasOwnProperty.call(STATUS_ORDER, normStatus(code)); }
+    /** 상태코드끼리의 순서값 (작을수록 먼저). 상태코드가 아니면 0 */
+    function statusOrder(code) { return STATUS_ORDER[normStatus(code)] || 0; }
+    /** 둘 다/한쪽만 상태코드일 때의 비교값. 둘 다 아니면 null → 호출자가 기록으로 비교한다 */
+    function compareStatus(a, b) {
+        const sa = isStatus(a && a.status_code), sb = isStatus(b && b.status_code);
+        if (sa && sb) return statusOrder(a.status_code) - statusOrder(b.status_code);
+        if (sa) return 1;
+        if (sb) return -1;
+        return null;
+    }
+    /** 기록 비교 함수를 받아 "상태코드는 뒤로, 상태코드끼리는 정해진 순서" 를 씌운 비교 함수 */
+    function withStatusLast(cmp) { return (a, b) => { const s = compareStatus(a, b); return s == null ? cmp(a, b) : s; }; }
+    /** 표시 문구: 'DQ' + 사유(규칙 번호)가 있으면 'DQ (TR 16.8)' */
+    function statusText(code, reason) {
+        const c = normStatus(code); if (!c) return '';
+        const r = String(reason == null ? '' : reason).trim();
+        return r && c === 'DQ' ? `${c} (${r})` : c;
+    }
+
+    return { normMark, heightStats, heightStatsFromAttempts, compareHeight, distanceStats, compareDistance, assignRanks, topNIds, autoQualify,
+        STATUS_ORDER, STATUS_LABEL, isStatus, statusOrder, compareStatus, withStatusLast, statusText };
 });

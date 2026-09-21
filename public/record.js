@@ -3095,8 +3095,8 @@ function _renderSubTrack(area, evt, entries, results, heatId, parentId) {
         return { ...e, time_seconds: r ? r.time_seconds : null, status_code: r ? r.status_code : null, remark: r ? r.remark : null };
     });
     rows.sort((a,b) => {
-        // Status codes at bottom
-        if (a.status_code && !b.status_code) return 1; if (!a.status_code && b.status_code) return -1;
+        // 상태코드는 뒤로 (NM → DNF → DQ → DNS, 공용 규칙)
+        { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }
         if (a.time_seconds == null && b.time_seconds == null) return (a.lane_number||99)-(b.lane_number||99);
         if (a.time_seconds == null) return 1; if (b.time_seconds == null) return -1;
         return a.time_seconds - b.time_seconds;

@@ -174,6 +174,7 @@ function renderScoreboard(data) {
         if (ar !== br) return ar - br;
         const aS = !!a.status_code, bS = !!b.status_code;
         if (aS !== bS) return aS ? 1 : -1;
+        if (aS && bS) { const o = { NM: 1, DNF: 2, DQ: 3, DNS: 4 }; const d = (o[a.status_code] || 9) - (o[b.status_code] || 9); if (d) return d; }   // 공용 규칙(public/lib/ranking.js)과 같은 순서
         return (a.lane_number || 0) - (b.lane_number || 0);
     });
 
