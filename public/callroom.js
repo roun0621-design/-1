@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupGenderTabs();
     renderMatrix();
     renderAuditLog();
+    if (typeof registerShortcuts === 'function') registerShortcuts('소집실', [['Enter', '바코드/배번 칸에서 스캔 처리'], ['Esc', '선수 추가·주자 창 닫기']]);
 
     const urlEventId = getParam('event_id');
     if (urlEventId) {

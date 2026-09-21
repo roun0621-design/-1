@@ -202,6 +202,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     renderAuditLog();
 
+    // 단축키 표 (? 로 열림) + Ctrl/⌘+S 로 현재 조 트랙 기록 전체 저장
+    if (typeof registerShortcuts === 'function') {
+        registerShortcuts('트랙 기록 칸', [['Enter', '이 선수 저장'], ['Tab / ↓', '저장하고 다음 선수'], ['Shift+Tab / ↑', '이전 선수'], ['Esc', '입력 취소(원래 값)'], ['Ctrl+S / ⌘S', '현재 조 전체 저장']]);
+        registerShortcuts('필드(거리) 키패드 — 칸을 고른 뒤', [['0-9 .', '거리 입력'], ['Enter', '저장'], ['X', '파울'], ['P', '패스'], ['+ / -', '풍속 입력으로'], ['Tab', '거리 ↔ 풍속'], ['Backspace', '한 글자 지움'], ['Delete', '칸 비움']]);
+        registerShortcuts('높이 · 종합경기', [['O / X / – 버튼', '높이 시기는 버튼(터치)으로'], ['Enter', '세부종목 기록 저장'], ['Tab / ↓', '다음 선수']]);
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S') && !e.altKey) {
+                if (!state.selectedEvent) return;
+                const cat = state.selectedEvent.category;
+                if (cat === 'track' || cat === 'relay' || cat === 'road') { e.preventDefault(); if (typeof saveAllTrackInline === 'function') saveAllTrackInline(); }
+            }
+        });
+    }
+
     // SSE real-time listeners
     onSSE('entry_status', async (data) => {
         // Refresh current heat data if we're viewing an event

@@ -1180,6 +1180,14 @@ function renderPageNav(currentPage) {
         btnGroup.appendChild(backBtn);
         btnGroup.appendChild(fwdBtn);
         btnGroup.appendChild(refreshBtn);
+        // 단축키 도움말 (?) — 페이지가 registerShortcuts 로 표를 등록한 경우에만 (키보드가 있는 화면)
+        if (_shortcutSections.length || currentPage === 'record' || currentPage === 'callroom') {
+            const helpBtn = document.createElement('button');
+            helpBtn.className = 'header-refresh-btn'; helpBtn.id = 'header-shortcut-btn'; helpBtn.title = '단축키 (?)'; helpBtn.setAttribute('aria-label', '단축키 도움말');
+            helpBtn.textContent = '?'; helpBtn.style.fontWeight = '800';
+            helpBtn.onclick = function () { showShortcutHelp(); };
+            btnGroup.appendChild(helpBtn);
+        }
         // ── i18n 언어 스위처를 헤더 버튼그룹에 끼워넣음 (PaceI18n 로드된 페이지만) ──
         try { if (window.PaceI18n) window.PaceI18n.mountSwitcher(btnGroup); } catch (e) {}
         btnGroup.appendChild(loginBtn);
@@ -1646,6 +1654,33 @@ function showToast(message, type = 'success', duration = 2000) {
         setTimeout(() => toast.remove(), 300);
     }, duration);
 }
+
+// 단축키 도움말 (2026-09 Phase 6, 규칙집 §11): 페이지가 registerShortcuts('제목', [['Enter','저장'], …]) 로 표를 등록하면
+//   입력칸 밖에서 ? 를 누를 때 표가 뜬다(Esc 로 닫힘). 공통 키: ? 도움말 · Esc 창 닫기/취소
+const _shortcutSections = [];
+function registerShortcuts(title, rows) { _shortcutSections.push({ title, rows: rows || [] }); }
+function showShortcutHelp() {
+    if (document.getElementById('shortcut-help')) return;
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const kbd = k => k.split('/').map(x => `<kbd style="display:inline-block;min-width:22px;padding:2px 6px;border:1px solid #c9c4b8;border-bottom-width:2px;border-radius:5px;background:#faf8f3;font-family:ui-monospace,monospace;font-size:11px;color:#333;text-align:center;">${esc(x.trim())}</kbd>`).join('<span style="color:#999;margin:0 3px;">/</span>');
+    const sections = [{ title: '공통', rows: [['?', '이 도움말'], ['Esc', '창 닫기 · 입력 취소']] }, ..._shortcutSections];
+    const wrap = document.createElement('div');
+    wrap.id = 'shortcut-help';
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(20,18,15,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
+    wrap.innerHTML = `<div role="dialog" aria-modal="true" aria-label="단축키" style="background:#fff;color:#1f1d1a;border-radius:12px;max-width:560px;width:100%;max-height:85vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.3);padding:18px 20px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><h3 style="margin:0;font-size:16px;">단축키</h3><span style="font-size:12px;color:#777;">입력칸 밖에서 <kbd>?</kbd></span><button type="button" class="btn btn-sm btn-ghost" style="margin-left:auto;" onclick="document.getElementById('shortcut-help').remove()">닫기</button></div>
+        ${sections.map(sec => `<div style="margin:10px 0 4px;font-size:12px;font-weight:800;color:#8a7640;letter-spacing:.04em;">${esc(sec.title)}</div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">${sec.rows.map(([k, d]) => `<tr><td style="padding:5px 8px 5px 0;white-space:nowrap;width:1%;">${kbd(k)}</td><td style="padding:5px 0;color:#333;">${esc(d)}</td></tr>`).join('')}</table>`).join('')}
+    </div>`;
+    wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+    document.body.appendChild(wrap);
+}
+document.addEventListener('keydown', e => {
+    const t = e.target;
+    const inField = t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
+    if (e.key === '?' && !inField && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); showShortcutHelp(); }
+    else if (e.key === 'Escape') { const h = document.getElementById('shortcut-help'); if (h) { h.remove(); e.stopPropagation(); } }
+}, true);
 
 // 세 상태 화면 (2026-09 Phase 6, 규칙집 §10): 비어 있음 / 불러오는 중 / 실패 — 문구 + 다음 행동 버튼을 같은 모양으로.
 //   uiStateHtml('empty'|'loading'|'error', { title, hint, action: { label, onclick } }) → HTML
