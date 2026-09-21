@@ -279,7 +279,8 @@ CREATE TABLE IF NOT EXISTS record_breaking_log (
     detected_at TEXT NOT NULL DEFAULT (datetime('now')),
     reviewed_at TEXT,
     reviewed_by TEXT,
-    review_note TEXT NOT NULL DEFAULT ''
+    review_note TEXT NOT NULL DEFAULT '',
+    is_tie INTEGER NOT NULL DEFAULT 0               -- 타이기록(CT·DT·KT): 기존 기록과 같은 값 (Phase 7-④)
 );
 
 -- ============================================================

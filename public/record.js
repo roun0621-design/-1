@@ -153,6 +153,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let _compLocked = false;
     try {
         const comp = await API.getCompetition(getCompetitionId());
+        state.competition = comp;      // 연맹(KJAF)·부 구분 등 규칙 안내에 쓴다
         const today = new Date().toISOString().slice(0, 10);
         const role = localStorage.getItem('pace_role') || 'viewer';
         if (comp && (comp.status === 'completed' || (comp.end_date && comp.end_date < today))) {
@@ -4192,11 +4193,16 @@ function renderQualPanel(title, isSemifinal) {
     const defaultQPerHeat = Math.min(3, Math.ceil(totalWithTime / (heatNums.length || 1)));
     const defaultQ = Math.min(defaultQPerHeat * heatNums.length, totalWithTime);
 
+    // 중·고연맹 요강: 예선이 5조 이상이면 준결승을 둔다 — 예선에서 바로 결승을 뽑으려 할 때 안내
+    const kjafSemiNote = (!isSemifinal && state.selectedEvent && state.selectedEvent.round_type === 'preliminary' && heatNums.length >= 5
+        && String((state.competition || {}).federation || '').toUpperCase() === 'KJAF')
+        ? `<div style="margin:0 0 8px;padding:8px 12px;border:1px solid #b79f58;background:#fbf6e9;border-radius:6px;font-size:12px;color:#6b5a1e;">예선이 ${heatNums.length}조입니다 — 중·고연맹 요강은 예선 5조 이상이면 <b>준결승</b>을 둡니다. 결승 대신 '준결승 진출자 선택'을 쓰세요.</div>` : '';
     section.innerHTML = `
         <div class="qual-panel-header">
             <h3>${title}</h3>
             <button class="btn btn-sm btn-ghost" onclick="document.getElementById('track-qual-section').style.display='none'" title="진출자 선택 패널을 닫습니다">닫기</button>
         </div>
+        ${kjafSemiNote}
         <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
             <button class="btn btn-sm ${true ? 'btn-primary' : 'btn-outline'}" id="qual-view-all" onclick="switchQualView('all')" title="모든 조의 결과를 기록 순으로 정렬합니다">전체 통합</button>
             ${heatNums.map(n => `<button class="btn btn-sm btn-outline" id="qual-view-h${n}" onclick="switchQualView(${n})" title="${n}조 선수만 표시합니다">${n}조</button>`).join('')}

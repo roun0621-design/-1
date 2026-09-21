@@ -24,7 +24,7 @@ async function mkEntry(evId, heatId, athleteId, lane) {
     await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?,?,?)', heatId, ee.lastInsertRowid, lane);
     return ee.lastInsertRowid;
 }
-const pending = (evId) => db.all("SELECT record_type, new_value_num, wind FROM record_breaking_log WHERE event_id=? AND status='pending' ORDER BY record_type", evId);
+const pending = (evId) => db.all("SELECT record_type, new_value_num, wind, is_tie FROM record_breaking_log WHERE event_id=? AND status='pending' ORDER BY record_type", evId);
 const upsert = (body) => request(app).post('/api/results/upsert').set('x-admin-key', 'testopkey').send(body);
 
 beforeAll(async () => {
@@ -76,13 +76,14 @@ describe('기준 기록·동기록·상태코드', () => {
         await upsert({ heat_id: e.heatId, event_entry_id: entry, time_seconds: 45.00 });
         expect(await pending(e.evId)).toEqual([]);
     });
-    it('동기록(10.50)은 신기록이 아니다, 0.01 빠르면 신기록', async () => {
+    it('동기록(10.50)은 신기록이 아니라 타이기록(is_tie), 0.01 빠르면 신기록', async () => {
         const e = await mkEvent('100m', 'track', { round: 'semifinal' });
         const a = await mkEntry(e.evId, e.heatId, fx.ath[1], 3);
         await upsert({ heat_id: e.heatId, event_entry_id: a, time_seconds: 10.50 });
-        expect(await pending(e.evId)).toEqual([]);
+        expect(await pending(e.evId)).toMatchObject([{ record_type: 'competition', is_tie: 1 }]);      // Phase 7-④: 타이 CT
         await upsert({ heat_id: e.heatId, event_entry_id: a, time_seconds: 10.49 });
-        expect((await pending(e.evId)).length).toBe(1);
+        const p = await pending(e.evId);
+        expect(p.length).toBe(1); expect(p[0].is_tie).toBe(0);                                         // 같은 대기 행이 신기록으로 바뀐다
     });
     it('같은 종목에서 더 빠른 선수가 있으면 그 1명만 남는다, DQ 는 감지하지 않는다', async () => {
         const e = await mkEvent('100m', 'track', { round: 'preliminary' });
@@ -106,7 +107,7 @@ describe('공식 기록 환산 (TR 19.24)', () => {
         expect(officialTime(7565.2, 'road')).toBe(7566);
         expect(officialTime(7565, 'road')).toBe(7565);
     });
-    it('10.493(공식 10.50)은 CR 10.50 과 동률 → 감지 안 함, 10.489(공식 10.49)는 감지', async () => {
+    it('10.493(공식 10.50)은 CR 10.50 과 동률 → 타이기록, 10.489(공식 10.49)는 신기록', async () => {
         const e = await mkEvent('100m', 'track', { round: 'final', parent: null, sort: 9 }).catch(async () => null);
         // 같은 대회에 100m 결승이 이미 있으므로 별도 대회로
         const c = await db.run("INSERT INTO competition (name, start_date, end_date, venue, status, series_id) VALUES (?,?,?,?, 'active', ?)", 'REC_OFF_' + stamp, '2026-01-01', '2099-12-31', 'x', fx.seriesId);
@@ -116,10 +117,10 @@ describe('공식 기록 환산 (TR 19.24)', () => {
         r = await db.run("INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?,?, 'registered')", evId, r.lastInsertRowid); const entry = r.lastInsertRowid;
         await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?,?,4)', heatId, entry);
         await upsert({ heat_id: heatId, event_entry_id: entry, time_seconds: 10.493 });
-        expect(await pending(evId)).toEqual([]);
+        expect(await pending(evId)).toMatchObject([{ is_tie: 1 }]);
         await upsert({ heat_id: heatId, event_entry_id: entry, time_seconds: 10.489 });
         const p = await pending(evId);
-        expect(p.length).toBe(1);
+        expect(p.length).toBe(1); expect(p[0].is_tie).toBe(0);
         expect(p[0].new_value_num).toBeCloseTo(10.49, 5);
     });
 });
@@ -142,5 +143,31 @@ describe('종합경기 평균 풍속', () => {
         await upsert({ heat_id: s2.heatId, event_entry_id: e2, attempt_number: 2, distance_meters: 7.30, wind: 1.0 });
         const p = await pending(parent);
         expect(p.map(x => x.record_type)).toEqual(['competition']);
+    });
+});
+
+describe('타이기록 (CT·DT·KT, Phase 7-④)', () => {
+    it('기존 대회 기록과 같은 10.50 은 is_tie=1 로 대기, 승인해도 기록표의 보유자는 그대로', async () => {
+        // 종목명의 부 접미('100m 일반부')는 대조 때 떼어진다 (같은 이름·라운드 UNIQUE 회피 겸)
+        const e = await mkEvent('100m 일반부', 'track', { round: 'semifinal' });
+        const entry = await mkEntry(e.evId, e.heatId, fx.ath[2], 5);
+        await request(app).post(`/api/heats/${e.heatId}/wind`).set('x-admin-key', 'testopkey').send({ wind: 0.5 });
+        const r = await upsert({ heat_id: e.heatId, event_entry_id: entry, time_seconds: 10.50 });
+        expect(r.status).toBe(200);
+        const rows = await db.all("SELECT id, record_type, is_tie, new_value FROM record_breaking_log WHERE event_id=? AND status='pending'", e.evId);
+        expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ record_type: 'competition', is_tie: 1, new_value: '10.50' });
+        const before = await db.get("SELECT record_value, holder_name FROM event_record WHERE record_type='competition' AND event_name='100m' AND gender='M' AND series_id=?", fx.seriesId);
+        const ap = await request(app).post(`/api/record-breaks/${rows[0].id}/approve`).send({ admin_key: 'testadmin1234' });
+        expect(ap.status).toBe(200);
+        const after = await db.get("SELECT record_value, holder_name FROM event_record WHERE record_type='competition' AND event_name='100m' AND gender='M' AND series_id=?", fx.seriesId);
+        expect(after).toEqual(before);
+        expect((await db.get('SELECT status FROM record_breaking_log WHERE id=?', rows[0].id)).status).toBe('approved');
+    });
+    it('10.51 은 타이가 아니다 (감지 없음)', async () => {
+        const e = await mkEvent('100m 대학부', 'track', { round: 'final' });
+        const entry = await mkEntry(e.evId, e.heatId, fx.ath[1], 6);
+        await request(app).post(`/api/heats/${e.heatId}/wind`).set('x-admin-key', 'testopkey').send({ wind: 0.5 });
+        await upsert({ heat_id: e.heatId, event_entry_id: entry, time_seconds: 10.51 });
+        expect(await pending(e.evId)).toEqual([]);
     });
 });

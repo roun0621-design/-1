@@ -238,6 +238,7 @@ CREATE TABLE IF NOT EXISTS "record_breaking_log" (
     "reviewed_at" TEXT,
     "reviewed_by" TEXT,
     "review_note" TEXT NOT NULL DEFAULT '',
+    "is_tie" INTEGER NOT NULL DEFAULT 0,          -- 타이기록(CT·DT·KT) (Phase 7-④; wind 는 부팅 마이그레이션)
     CHECK (status IN ('pending','approved','rejected')),
     CHECK (record_type IN ('national','division','competition'))
 );

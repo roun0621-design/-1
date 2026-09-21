@@ -3610,9 +3610,9 @@ POST /api/external/event-result-link/batch<br>
                             const d = JSON.parse(ev.data);
                             const list = d.detected || [];
                             if (list.length === 0) return;
-                            const types = list.map(x => x.record_type === 'national' ? 'NR'
-                                                       : x.record_type === 'division' ? 'DR'
-                                                       : 'CR').join('/');
+                            const types = list.map(x => (x.record_type === 'national' ? (x.is_tie ? 'KT' : 'NR')
+                                                       : x.record_type === 'division' ? (x.is_tie ? 'DT' : 'DR')
+                                                       : (x.is_tie ? 'CT' : 'CR'))).join('/');
                             // payload에 종목/선수/값 포함 (Phase C 확장)
                             const eventName = d.event_name || '';
                             const athleteName = d.athlete_name || '';
@@ -10655,9 +10655,9 @@ POST /api/external/event-result-link/batch<br>
                 const rtColor = r.record_type === 'national' ? '#c0392b'
                               : r.record_type === 'division' ? '#2980b9'
                               : '#27ae60';
-                const rtLabel = r.record_type === 'national' ? 'NR'
-                              : r.record_type === 'division' ? 'DR'
-                              : 'CR';
+                const rtLabel = (r.record_type === 'national' ? (r.is_tie ? 'KT' : 'NR')
+                              : r.record_type === 'division' ? (r.is_tie ? 'DT' : 'DR')
+                              : (r.is_tie ? 'CT' : 'CR')) + (r.is_tie ? ' 타이' : '');
                 const ctxLabel = r.record_type === 'division'
                     ? (r.division_label || r.division_code || '')
                     : r.record_type === 'competition'

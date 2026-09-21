@@ -804,7 +804,8 @@ onSSE('record_break_detected', (data) => {
 
 function _showRecordBreakToast(data) {
     const labels = { national: 'NR · 한국기록', division: 'DR · 부별기록', competition: 'CR · 대회기록' };
-    const detected = (data.detected || []).map(d => labels[d.record_type] || d.record_type).join(' · ');
+    const tieLabels = { national: 'KT · 한국타이기록', division: 'DT · 부별타이기록', competition: 'CT · 대회타이기록' };
+    const detected = (data.detected || []).map(d => (d.is_tie ? tieLabels : labels)[d.record_type] || d.record_type).join(' · ');
     const valStr = (typeof data.value === 'number')
         ? (data.value < 60 ? data.value.toFixed(2) : (() => {
             const m = Math.floor(data.value / 60), s = (data.value - m * 60).toFixed(2);

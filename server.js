@@ -730,6 +730,8 @@ try { db.exec(`ALTER TABLE height_attempt ADD COLUMN updated_at TEXT NOT NULL DE
 try { db.exec(`ALTER TABLE combined_score ADD COLUMN status_code TEXT DEFAULT ''`); } catch(e) {}
 // Phase C 후속: record_breaking_log에 풍속 컬럼 추가 (NR/DR/CR 감지 시점의 풍속 보존)
 try { db.exec(`ALTER TABLE record_breaking_log ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
+// 타이기록(CT·DT·KT) — 기존 기록과 같은 값 (Phase 7-④, 2026-09)
+try { db.exec(`ALTER TABLE record_breaking_log ADD COLUMN is_tie INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 
 // ============================================================
 // 상장(Certificate) 시스템 — 양식 저장 + 발행 로그
@@ -1119,6 +1121,8 @@ try {
             ('KTFL', '한국실업육상연맹', '#e3f2fd', '#1565c0', 1),
             ('KUAF', '한국대학육상연맹', '#fce4ec', '#c62828', 2)`);
     }
+    // 한국중·고육상연맹 (Phase 7, 2026-09) — 기존 DB 에도 멱등 추가. 대회의 연맹을 KJAF 로 두면 요강 점검·연맹 기록지 규칙이 켜진다
+    db.exec(`INSERT OR IGNORE INTO federation_list (code, name, badge_bg, badge_color, sort_order) VALUES ('KJAF', '한국중고육상연맹', '#e8f5e9', '#2e7d32', 3)`);
 } catch(e) {}
 
 // Home popup tables (CMS for home page popups)
@@ -1766,6 +1770,10 @@ if (db.isAsync) {
             await pgIdempotentAddCol('competition', 'home_visibility', `TEXT NOT NULL DEFAULT 'auto'`);
             // federation_list: 연맹 숨김 (홈·운영 화면 목록에서 소속 대회 전체 제외)
             await pgIdempotentAddCol('federation_list', 'hidden', `BIGINT NOT NULL DEFAULT 0`);
+            // 연맹 기본값 (PG 는 빈 테이블 시드가 없었음) + 한국중·고육상연맹 (Phase 7)
+            for (const f of [['KTFL', '한국실업육상연맹', '#e3f2fd', '#1565c0', 1], ['KUAF', '한국대학육상연맹', '#fce4ec', '#c62828', 2], ['KJAF', '한국중고육상연맹', '#e8f5e9', '#2e7d32', 3]]) {
+                try { await db.run(`INSERT INTO federation_list (code, name, badge_bg, badge_color, sort_order) VALUES (?,?,?,?,?) ON CONFLICT (code) DO NOTHING`, ...f); } catch(e) {}
+            }
             // athlete: federation, personal_best, date_of_birth, phone(SMS 발송용)
             await pgIdempotentAddCol('athlete', 'federation', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'personal_best', `TEXT DEFAULT ''`);
@@ -1785,6 +1793,7 @@ if (db.isAsync) {
             await pgIdempotentAddCol('qualification_selection', 'qualification_type', `TEXT DEFAULT ''`);
             // record_breaking_log: wind
             await pgIdempotentAddCol('record_breaking_log', 'wind', `DOUBLE PRECISION DEFAULT NULL`);
+            await pgIdempotentAddCol('record_breaking_log', 'is_tie', `INTEGER NOT NULL DEFAULT 0`);
             // event_link: joint_scoreboard_key
             await pgIdempotentAddCol('event_link', 'joint_scoreboard_key', `TEXT DEFAULT NULL`);
             // operation_key: can_manage

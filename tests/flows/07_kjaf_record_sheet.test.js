@@ -54,6 +54,9 @@ beforeAll(async () => {
         VALUES (?,?,?,'competition','100m','M','11.15','11.10','김일등','예천중','approved', datetime('now'))`, fx.comp, fx.m100.id, fx.m100rows[0].entry);
     await db.run(`INSERT INTO record_breaking_log (competition_id, event_id, event_entry_id, record_type, event_name, gender, previous_value, new_value, athlete_name, athlete_team, status)
         VALUES (?,?,?,'division','100m','M','11.20','11.10','김일등','예천중','pending')`, fx.comp, fx.m100.id, fx.m100rows[0].entry);
+    // 타이기록(CT): 공동 2위 이공동 — 승인됨
+    await db.run(`INSERT INTO record_breaking_log (competition_id, event_id, event_entry_id, record_type, event_name, gender, previous_value, new_value, athlete_name, athlete_team, status, is_tie, reviewed_at)
+        VALUES (?,?,?,'competition','100m','M','11.25','11.25','이공동','안동중','approved', 1, datetime('now'))`, fx.comp, fx.m100.id, fx.m100rows[1].entry);
     // 시간표: 결승은 2일차
     await db.run("INSERT INTO timetable (competition_id, day, section, time, event_name, category, round, event_id) VALUES (?,2,'track','10:00','100m','M','결승',?)", fx.comp, fx.m100.id);
 });
@@ -119,7 +122,7 @@ describe('종합기록지 Excel', () => {
         const ws = wb.getWorksheet('남중');
         expect(txt(ws, 'B7')).toBe('100m'); expect(txt(ws, 'A7')).toBe('2');
         expect([txt(ws, 'C7'), txt(ws, 'D7'), txt(ws, 'E7')]).toEqual(['김일등', '예천중', '11.10 CR']);
-        expect(txt(ws, 'H7')).toBe('11.25(공동2위)'); expect(txt(ws, 'K7')).toBe('11.25(공동2위)');
+        expect(txt(ws, 'H7')).toBe('11.25 CT(공동2위)'); expect(txt(ws, 'K7')).toBe('11.25(공동2위)');    // 타이기록 CT
         expect(txt(ws, 'L7')).toBe('최넷');                                   // 4위 칸(L·M·N)
         expect(txt(ws, 'X7')).toBe('윤여덟'); expect(txt(ws, 'Z7')).toBe('11.80 공동8위');
         expect(txt(ws, 'X8')).toBe('장여덟'); expect(txt(ws, 'Z8')).toBe('11.80 공동8위');   // 이어지는 행, 같은 칸
@@ -160,7 +163,8 @@ describe('종합기록지 Excel', () => {
         expect(txt(ws, 'A1')).toBe('신 기 록 현 황');
         expect([txt(ws, 'A5'), txt(ws, 'B5'), txt(ws, 'C5'), txt(ws, 'H5'), txt(ws, 'I5')]).toEqual(['순', '일시', '종별', '종전기록', '비고']);
         expect([txt(ws, 'B6'), txt(ws, 'C6'), txt(ws, 'D6'), txt(ws, 'E6'), txt(ws, 'G6'), txt(ws, 'H6'), txt(ws, 'I6')]).toEqual(['2일', '남중부', '100m', '김일등', '11.10', '11.15', '대회신']);
-        expect(txt(ws, 'A7')).toBe('');
+        expect([txt(ws, 'D7'), txt(ws, 'E7'), txt(ws, 'I7')]).toEqual(['100m', '이공동', '대회타이']);
+        expect(txt(ws, 'A8')).toBe('');
     });
     it('없는 대회는 404', async () => {
         expect((await request(app).get('/api/documents/kjaf-record/999999/excel').query({ key: OP })).status).toBe(404);
