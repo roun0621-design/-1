@@ -211,7 +211,8 @@ CREATE TABLE IF NOT EXISTS division_master (
     school_level TEXT NOT NULL CHECK(school_level IN ('OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED')),
     sort_order INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    grade INTEGER DEFAULT NULL                      -- 학년 단위 부(초3~6·중1~3·고1~3)만 값 있음 (Phase 7-②)
 );
 
 -- Competition Series (대회 시리즈 = 회차 묶음)
@@ -298,6 +299,7 @@ INSERT OR IGNORE INTO division_master (code, label_ko, gender, school_level, sor
     ('F_GEN',   '여자일반부', 'F', 'GEN',  150),
     ('F_OPEN',  '여자공개부', 'F', 'OPEN', 160),
     ('MIXED',   '통합부',     'X', 'MIXED', 900);
+-- 학년 단위 부 20행은 서버 부팅 시 lib/division.js gradeDivisionSeed() 로 시드 (M_ELEM3~6, M_MID1~3, M_HIGH1~3, F_…)
 
 -- ============================================================
 -- competition / event parity (PG에는 있지만 SQLite schema.sql에는 누락됐던 컬럼들)

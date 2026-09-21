@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS "athlete" (
     "personal_best" TEXT DEFAULT '',
     "date_of_birth" TEXT DEFAULT '',
     "phone" TEXT NOT NULL DEFAULT '',
+    "grade" INTEGER,                      -- 학년 (학년별 대회, Phase 7-②)
     CHECK (gender IN ('M','F'))
 );
 
@@ -164,6 +165,7 @@ CREATE TABLE IF NOT EXISTS "division_master" (
     "sort_order" BIGINT NOT NULL DEFAULT 0,
     "active" BIGINT NOT NULL DEFAULT 1,
     "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "grade" INTEGER,                      -- 학년 단위 부(초3~6·중1~3·고1~3)만 값 있음 (Phase 7-②, 20행은 부팅 시 시드)
     CHECK (gender IN ('M','F','X')),
     CHECK (school_level IN ('OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED'))
 );

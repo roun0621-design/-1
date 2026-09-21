@@ -602,7 +602,7 @@
                         <strong>엑셀 양식 (열 순서 고정):</strong><br>
                         A열: <code>팀명 *</code> | B열: <code>선수명 *</code> | C열: <code>성별(남/여) *</code> | D열: <code>생년월일</code> | <code>종목1</code> / <code>종목2</code> 열은 헤더명으로 자동 인식 (양식처럼 E열 휴대폰 뒤에 있어도 됨, 헤더 없으면 E·F열)<br>
                         G열~K열: <code>릴레이(4x100mR, 4x400mR, Mixed 등)</code> — 참가 시 <code>O</code> 입력<br>
-                        L열: <code>바코드</code> — 사용자가 직접 등록한 바코드 번호<br>
+                        L열: <code>바코드</code> — 사용자가 직접 등록한 바코드 번호 | <code>학년</code> 열(헤더명으로 인식, 선택) — 학년별 대회<br>
                         <span style="color:#ef4444;font-weight:600;">* 배번(BIB)은 이 단계에서 등록하지 않음 (조편성에서 배번 배정)</span><br>
                         <span style="color:#ef4444;font-weight:600;">* 바코드는 시스템이 자동 생성하지 않음 (사용자 직접 입력)</span><br>
                         <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터. 종목 열 비워두면 선수만 등록됩니다.</span>
@@ -1761,6 +1761,12 @@ POST /api/external/event-result-link/batch<br>
                                 <input type="number" id="division-edit-sort" value="500" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;">
                             </label>
                         </div>
+                        <label style="font-size:12px;">학년 <span style="color:var(--text-muted);font-size:10px;">(학년 단위 부만 — 초3~6·중1~3·고1~3. 종목의 부 '중1학년부'가 이 부의 기록(DR)과 이어진다)</span>
+                            <select id="division-edit-grade" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="">없음 (학교급 전체)</option>
+                                <option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option><option value="4">4학년</option><option value="5">5학년</option><option value="6">6학년</option>
+                            </select>
+                        </label>
                         <label style="font-size:12px;display:flex;align-items:center;gap:6px;" id="division-edit-active-row">
                             <input type="checkbox" id="division-edit-active" checked> 활성 (비활성화 시 종목/기록 입력 시 선택 불가)
                         </label>
@@ -1929,6 +1935,7 @@ POST /api/external/event-result-link/batch<br>
                 </div>
                 <div class="admin-form-group" style="width:100%;"><label>소속</label><input id="am-team"></div>
                 <div class="admin-form-group" style="width:100%;"><label>휴대폰 <span class="t-xs t-muted">(SMS 발송용)</span></label><input id="am-phone" placeholder="01012345678" style="font-family:monospace;"></div>
+                <div class="admin-form-group" style="width:100%;"><label>학년 <span class="t-xs t-muted">(학년별 대회 참가 자격)</span></label><select id="am-grade"><option value="">-</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option><option value="4">4학년</option><option value="5">5학년</option><option value="6">6학년</option></select></div>
                 <div class="admin-form-group" style="width:100%;"><label>바코드</label><input id="am-barcode" style="font-family:monospace;"></div>
             </div>
             <hr style="margin:14px 0;border:none;border-top:1px solid var(--gray);">
@@ -3735,6 +3742,7 @@ POST /api/external/event-result-link/batch<br>
                     html += `<div onclick="selectAthlete(${a.id})" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;cursor:pointer;font-size:12px;transition:background 0.1s;${isSelected ? 'background:#f0f0f0;font-weight:600;' : ''}" onmouseover="this.style.background=this.style.background||'#f8f9ff'" onmouseout="this.style.background='${isSelected ? '#f0f0f0' : ''}'">
                         <span style="color:${gColor};font-size:10px;font-weight:700;min-width:18px;">${bib(a.bib_number)}</span>
                         <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.name}</span>
+                        ${a.grade ? `<span class="t-xs t-muted" title="학년">${a.grade}학년</span>` : ''}
                     </div>`;
                 });
                 html += `</div></div>`;
@@ -3775,6 +3783,7 @@ POST /api/external/event-result-link/batch<br>
                         <div class="admin-form-group"><label>성별</label><select id="ath-edit-gender"><option value="M" ${a.gender==='M'?'selected':''}>남</option><option value="F" ${a.gender==='F'?'selected':''}>여</option></select></div>
                         <div class="admin-form-group"><label>바코드</label><input id="ath-edit-barcode" value="${a.barcode || ''}" style="width:100px;"></div>
                         <div class="admin-form-group"><label>휴대폰 <span class="t-xs t-muted">(SMS 발송용)</span></label><input id="ath-edit-phone" value="${a.phone || ''}" placeholder="01012345678" style="width:140px;"></div>
+                        <div class="admin-form-group"><label>학년</label><select id="ath-edit-grade" style="width:80px;"><option value="">-</option>${[1,2,3,4,5,6].map(g=>`<option value="${g}" ${a.grade==g?'selected':''}>${g}학년</option>`).join('')}</select></div>
                     </div>
                     <div style="display:flex;gap:8px;margin-top:8px;">
                         <button class="btn btn-sm btn-primary" onclick="saveAthleteDetail(${a.id})">저장</button>
@@ -3808,7 +3817,8 @@ POST /api/external/event-result-link/batch<br>
                     team: document.getElementById('ath-edit-team').value,
                     gender: document.getElementById('ath-edit-gender').value,
                     barcode: document.getElementById('ath-edit-barcode').value,
-                    phone: document.getElementById('ath-edit-phone') ? document.getElementById('ath-edit-phone').value : undefined
+                    phone: document.getElementById('ath-edit-phone') ? document.getElementById('ath-edit-phone').value : undefined,
+                    grade: document.getElementById('ath-edit-grade') ? (document.getElementById('ath-edit-grade').value || null) : undefined
                 }, AK());
                 toast('저장 완료');
                 loadAthletes();
@@ -3879,6 +3889,7 @@ POST /api/external/event-result-link/batch<br>
                     <div class="admin-form-group"><label>성별 *</label><select id="new-ath-gender"><option value="M">남</option><option value="F">여</option></select></div>
                     <div class="admin-form-group"><label>바코드</label><input id="new-ath-barcode" style="width:100px;"></div>
                     <div class="admin-form-group"><label>휴대폰</label><input id="new-ath-phone" placeholder="01012345678" style="width:140px;"></div>
+                    <div class="admin-form-group"><label>학년 <span class="t-xs t-muted">(학년별 대회)</span></label><select id="new-ath-grade" style="width:80px;"><option value="">-</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option><option value="4">4학년</option><option value="5">5학년</option><option value="6">6학년</option></select></div>
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
                     <button class="btn btn-ghost" onclick="selectAthlete(_athSelectedId || 0)">취소</button>
@@ -3893,9 +3904,10 @@ POST /api/external/event-result-link/batch<br>
             const gender = document.getElementById('new-ath-gender').value;
             const barcode = document.getElementById('new-ath-barcode').value.trim();
             const phone = document.getElementById('new-ath-phone')?.value.trim() || '';
+            const grade = document.getElementById('new-ath-grade')?.value || null;
             if (!name || !bibVal) { toast('선수명과 BIB은 필수입니다', 'error'); return; }
             try {
-                await API.createAthlete({ competition_id: _selectedCompId, name, bib_number: bibVal, team, gender, barcode: barcode || undefined, phone: phone || undefined }, AK());
+                await API.createAthlete({ competition_id: _selectedCompId, name, bib_number: bibVal, team, gender, barcode: barcode || undefined, phone: phone || undefined, grade }, AK());
                 toast('선수 추가 완료');
                 loadAthletes();
             } catch (e) { toast(e.error || '추가 실패', 'error'); }
@@ -3923,9 +3935,10 @@ POST /api/external/event-result-link/batch<br>
         function _admAgeScore(d){
             const s=(d||'').replace(/\s/g,'');
             if(!s) return 900;
-            if(/초/.test(s)) return 100;
-            if(/중/.test(s)) return 200;
-            if(/고/.test(s)) return 300;
+            const gr=(s.match(/(\d)학년/)||[])[1]|0;      // 학년부는 같은 학교급 안에서 학년 순 (중등부 → 중1 → 중2 …)
+            if(/초/.test(s)) return 100+gr;
+            if(/중/.test(s)) return 200+gr;
+            if(/고/.test(s)) return 300+gr;
             if(/U18/i.test(s)) return 350;
             if(/U20/i.test(s)) return 400;
             if(/대학|대$/.test(s)) return 500;
@@ -3946,6 +3959,19 @@ POST /api/external/event-result-link/batch<br>
             const i=DIV_ORDER_ADM.indexOf(d);
             if(i>=0) return i;
             return 1000+_admAgeScore(d)+_admGenderScore(d);
+        }
+        // 종목 부(Division) 선택지: 기본 부 + 학년 단위 부(중고연맹 학년별 대회) + 이 대회에 이미 쓰인 라벨. 저장값은 라벨('중1학년부')
+        const DIV_GRADE_LABELS = [3,4,5,6].map(g=>`초${g}학년부`).concat([1,2,3].map(g=>`중${g}학년부`), [1,2,3].map(g=>`고${g}학년부`));
+        function _divOptionsHtml(cur){
+            cur = cur || '';
+            const base=['','초등부','중등부','고등부','대학부','일반부','U20','국제'];
+            const used=[...new Set((_allAdminEvents||[]).map(e=>e.division||'').filter(d=>d && !base.includes(d) && !DIV_GRADE_LABELS.includes(d)))];
+            if(cur && !base.includes(cur) && !DIV_GRADE_LABELS.includes(cur) && !used.includes(cur)) used.push(cur);
+            const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+            const opt=d=>`<option value="${esc(d)}" ${cur===d?'selected':''}>${esc(d||'미지정')}</option>`;
+            return base.map(opt).join('')
+                + `<optgroup label="학년부 (중·고연맹 학년별 대회)">${DIV_GRADE_LABELS.map(opt).join('')}</optgroup>`
+                + (used.length ? `<optgroup label="이 대회에서 쓴 부">${used.map(opt).join('')}</optgroup>` : '');
         }
         async function loadEvents() {
             if (!_selectedCompId) return;
@@ -3984,6 +4010,16 @@ POST /api/external/event-result-link/batch<br>
             let html = `<button class="evt-div-tab ${_evtDivision==='all'?'active':''}" onclick="switchEvtDivision('all',this)">전체<span class="div-count">${totalCount}</span></button>`;
             const nonEmptyDivs = Object.keys(divCounts).filter(d => d !== '');
             nonEmptyDivs.sort((a,b) => _admDivKey(a) - _admDivKey(b) || a.localeCompare(b));
+            // 부가 많은 대회(학년별 대회: 10개 이상)는 탭 대신 목록 상자 — 탭이 세 줄씩 늘어나지 않게
+            if (nonEmptyDivs.length >= 10) {
+                const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+                html += `<select class="evt-div-select" onchange="switchEvtDivision(this.value==='__all'?'all':this.value,null)" style="padding:3px 8px;border:1px solid var(--gray);border-radius:12px;font-size:11px;">`
+                    + `<option value="__all" ${_evtDivision==='all'?'selected':''}>부 선택 (${nonEmptyDivs.length}개)</option>`
+                    + nonEmptyDivs.map(d=>`<option value="${esc(d)}" ${_evtDivision===d?'selected':''}>${esc(d)} (${divCounts[d]})</option>`).join('')
+                    + (divCounts[''] ? `<option value="" ${_evtDivision===''?'selected':''}>미지정 (${divCounts['']})</option>` : '') + `</select>`;
+                container.innerHTML = html;
+                return;
+            }
             nonEmptyDivs.forEach(d => {
                 const dEsc = d.replace(/'/g, "\\'");
                 html += `<button class="evt-div-tab ${_evtDivision===d?'active':''}" onclick="switchEvtDivision('${dEsc}',this)">${d}<span class="div-count">${divCounts[d]}</span></button>`;
@@ -4258,7 +4294,6 @@ POST /api/external/event-result-link/batch<br>
             const panel = document.getElementById('evt-detail-panel');
             // Default division: current filter, or 고등부 if 'all'
             const defaultDiv = (_evtDivision !== 'all') ? _evtDivision : '';
-            const divOptions = ['','중등부','고등부','대학부','일반부','U20','국제'];
             panel.innerHTML = `<div style="padding:16px;">
                 <h3 style="margin:0 0 16px;font-size:16px;">새 종목 추가</h3>
                 <div class="admin-form-row" style="flex-direction:column;gap:8px;">
@@ -4268,7 +4303,7 @@ POST /api/external/event-result-link/batch<br>
                         <div class="admin-form-group" style="flex:1;"><label>성별</label><select id="new-evt-gender"><option value="M" ${_evtGender==='M'?'selected':''}>남</option><option value="F" ${_evtGender==='F'?'selected':''}>여</option><option value="X" ${_evtGender==='X'?'selected':''}>혼성</option></select></div>
                     </div>
                     <div style="display:flex;gap:8px;">
-                        <div class="admin-form-group" style="flex:1;"><label>부(Division)</label><select id="new-evt-division">${divOptions.map(d=>`<option value="${d}" ${defaultDiv===d?'selected':''}>${d||'미지정'}</option>`).join('')}</select></div>
+                        <div class="admin-form-group" style="flex:1;"><label>부(Division)</label><select id="new-evt-division">${_divOptionsHtml(defaultDiv)}</select></div>
                         <div class="admin-form-group" style="flex:1;"><label>라운드</label><select id="new-evt-round"><option value="final">결승</option><option value="preliminary">예선</option><option value="semifinal">준결승</option></select></div>
                     </div>
                 </div>
@@ -5685,6 +5720,7 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('am-gender').value = a.gender;
             document.getElementById('am-barcode').value = a.barcode || '';
             document.getElementById('am-phone').value = a.phone || '';
+            document.getElementById('am-grade').value = a.grade == null ? '' : String(a.grade);
 
             document.getElementById('ath-modal-title').textContent = `${a.name} (BIB: ${bib(a.bib_number)})`;
             const modal = document.getElementById('ath-detail-modal');
@@ -5702,7 +5738,8 @@ POST /api/external/event-result-link/batch<br>
                     team: document.getElementById('am-team').value,
                     gender: document.getElementById('am-gender').value,
                     barcode: document.getElementById('am-barcode').value,
-                    phone: document.getElementById('am-phone').value
+                    phone: document.getElementById('am-phone').value,
+                    grade: document.getElementById('am-grade').value || null
                 }, AK());
                 toast('저장 완료'); closeAthModal(); loadAthletes();
             } catch (e) { toast(e.error || '저장 실패', 'error'); }
@@ -5827,7 +5864,7 @@ POST /api/external/event-result-link/batch<br>
                         <div style="display:flex;gap:8px;">
                             <div class="admin-form-group" style="flex:1;"><label>부(Division)</label>
                                 <select id="em-division">
-                                    ${(() => { const base=['','중등부','고등부','대학부','일반부','U20','국제']; const cur=(e.division||''); if(cur && !base.includes(cur)) base.push(cur); return base.map(d=>`<option value="${d}" ${cur===d?'selected':''}>${d||'미지정'}</option>`).join(''); })()}
+                                    ${_divOptionsHtml(e.division||'')}
                                 </select>
                             </div>
                             <div class="admin-form-group"><label>정렬순서</label><input type="number" id="em-sort" value="${e.sort_order||0}" style="width:80px;"></div>
@@ -9944,6 +9981,7 @@ POST /api/external/event-result-link/batch<br>
                 document.getElementById('division-edit-gender').value = 'M';
                 document.getElementById('division-edit-level').value = 'GEN';
                 document.getElementById('division-edit-sort').value = '500';
+                document.getElementById('division-edit-grade').value = '';
                 document.getElementById('division-edit-active').checked = true;
                 document.getElementById('division-edit-gender').disabled = false;
                 document.getElementById('division-edit-level').disabled = false;
@@ -9963,6 +10001,7 @@ POST /api/external/event-result-link/batch<br>
                     document.getElementById('division-edit-gender').value = row.gender;
                     document.getElementById('division-edit-level').value = row.school_level;
                     document.getElementById('division-edit-sort').value = row.sort_order;
+                    document.getElementById('division-edit-grade').value = row.grade == null ? '' : String(row.grade);
                     document.getElementById('division-edit-active').checked = !!row.active;
                     // 기본 부는 성별/학교급/활성 변경 불가
                     document.getElementById('division-edit-gender').disabled = isBase;
@@ -9985,6 +10024,7 @@ POST /api/external/event-result-link/batch<br>
             const school_level = document.getElementById('division-edit-level').value;
             const sort_order = parseInt(document.getElementById('division-edit-sort').value, 10) || 0;
             const active = document.getElementById('division-edit-active').checked;
+            const grade = document.getElementById('division-edit-grade').value || null;
 
             if (!label_ko) { toast('라벨을 입력하세요.', 'error'); return; }
             if (isAdd) {
@@ -9998,10 +10038,10 @@ POST /api/external/event-result-link/batch<br>
                     res = await fetch('/api/admin/divisions', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ admin_key: AK(), code, label_ko, gender, school_level, sort_order })
+                        body: JSON.stringify({ admin_key: AK(), code, label_ko, gender, school_level, sort_order, grade })
                     });
                 } else {
-                    const body = { admin_key: AK(), label_ko, sort_order };
+                    const body = { admin_key: AK(), label_ko, sort_order, grade };
                     if (!isBase) {
                         body.gender = gender;
                         body.school_level = school_level;

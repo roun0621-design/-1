@@ -534,9 +534,10 @@ const DIVISION_ORDER = [
 function _ageGroupScore(d) {
     const s = (d || '').replace(/\s/g, '');
     if (!s) return 900;
-    if (/초/.test(s)) return 100;
-    if (/중/.test(s)) return 200;
-    if (/고/.test(s)) return 300;
+    const gr = (s.match(/(\d)학년/) || [])[1] | 0;      // 학년부는 같은 학교급 안에서 학년 순
+    if (/초/.test(s)) return 100 + gr;
+    if (/중/.test(s)) return 200 + gr;
+    if (/고/.test(s)) return 300 + gr;
     if (/U18/i.test(s)) return 350;
     if (/U20/i.test(s)) return 400;
     if (/대학|대$/.test(s)) return 500;
@@ -586,6 +587,15 @@ function renderDivisionTabs() {
     // 현재 활성 division 이 새 성별 탭의 목록에 없으면 '전체'로 폴백
     if (_currentDivision !== '전체' && !orderedDivs.includes(_currentDivision)) {
         _currentDivision = '전체';
+    }
+    // 부가 많은 대회(학년별 대회: 10개 이상)는 탭 대신 목록 상자 — 폰에서 탭이 네 줄씩 차지하지 않게
+    if (orderedDivs.length >= 10) {
+        const esc = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+        divBar.innerHTML = `<label style="display:flex;align-items:center;gap:8px;padding:4px 12px;font-size:12px;font-weight:700;color:#555;">부
+            <select onchange="switchDivision(this.value, null)" style="padding:6px 10px;border:1px solid var(--gray);border-radius:6px;font-size:13px;font-weight:600;color:#333;background:#fff;">
+                ${all.map(d => `<option value="${esc(d)}" ${d === _currentDivision ? 'selected' : ''}>${esc(d)}</option>`).join('')}
+            </select></label>`;
+        return;
     }
     divBar.innerHTML = all.map(d => `<button class="gender-tab-btn${d===_currentDivision?' active':''}" style="flex:none;padding:6px 14px;font-size:12px;font-weight:700;color:#555;border-bottom:2px solid transparent;${d===_currentDivision?'color:#b79f58;border-bottom-color:#b79f58;background:#f8f4ea;':''}" onclick="switchDivision('${d.replace(/'/g,"\\'")}',this)">${d}</button>`).join('');
 }

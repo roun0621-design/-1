@@ -54,6 +54,7 @@ const bcrypt = require('bcryptjs');
 const { initDatabase, DB_PATH } = require('./db/init');
 const { getDb } = require('./lib/db');
 const { detectRecordBreaks, detectCombinedRecordBreaks, normalizeEventName: normalizeEventNameServer } = require('./lib/recordCompare');
+const { normalizeDivisionLabel, divisionCodeFor: _divisionCodeFor, gradeDivisionSeed: _gradeDivisionSeed } = require('./lib/division');   // 부 라벨 정규화·부 코드 (Phase 7-②)
 const WebSocket = require('ws');
 const PDFDocument = require('pdfkit');
 const code128 = require('./lib/code128');
@@ -1433,6 +1434,14 @@ try {
     const tx = db.raw.transaction(() => { for (const r of seedRows) ins.run(...r); });
     tx();
 } catch(e) { console.error('[DB Migration v4] division_master seed error:', e.message); }
+// 학년 단위 부 (Phase 7-②, 2026-09): division_master.grade + 초3~6·중1~3·고1~3 × 남녀 = 20행 (멱등). 학년별 대회의 부별 기록(DR)·연맹 기록지 시트에 쓴다
+try { db.exec(`ALTER TABLE division_master ADD COLUMN grade INTEGER DEFAULT NULL`); } catch(e) {}
+try {
+    const ins = db.raw.prepare(`INSERT OR IGNORE INTO division_master (code,label_ko,gender,school_level,sort_order,grade) VALUES (?,?,?,?,?,?)`);
+    db.raw.transaction(() => { for (const r of _gradeDivisionSeed()) ins.run(...r); })();
+} catch(e) { console.error('[DB Migration] division_master grade seed error:', e.message); }
+// 선수 학년 (Phase 7-②): 학년별 대회 참가 자격·연맹 명단
+try { db.exec(`ALTER TABLE athlete ADD COLUMN grade INTEGER DEFAULT NULL`); } catch(e) {}
 // Indexes for record-related queries
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_record_lookup ON event_record(event_name, gender, record_type)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_record_division ON event_record(division_code, event_name, gender)`); } catch(e) {}
@@ -1574,6 +1583,12 @@ if (db.isAsync) {
             }
             const dmCnt = await db.get('SELECT COUNT(*)::int AS c FROM division_master').catch(() => ({ c: -1 }));
             console.log(`[DB Migration v4 PG] division_master seed: ${seedOk} ok, ${seedFail} fail, total rows=${dmCnt.c}` + (firstErr ? ` (first error: ${firstErr})` : ''));
+            // 학년 단위 부 + 선수 학년 (Phase 7-②, 멱등)
+            try { await db.run(`ALTER TABLE division_master ADD COLUMN IF NOT EXISTS grade INTEGER`); } catch(e) {}
+            try { await db.run(`ALTER TABLE athlete ADD COLUMN IF NOT EXISTS grade INTEGER`); } catch(e) {}
+            for (const r of _gradeDivisionSeed()) {
+                try { await db.run(`INSERT INTO division_master (code,label_ko,gender,school_level,sort_order,grade) VALUES (?,?,?,?,?,?) ON CONFLICT (code) DO NOTHING`, ...r); } catch(e) { console.error('[DB Migration PG] grade division seed:', e.message); }
+            }
             // Indexes
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_lookup ON event_record(event_name, gender, record_type)`); } catch(e) {}
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_division ON event_record(division_code, event_name, gender)`); } catch(e) {}
@@ -4127,27 +4142,30 @@ function _normalizeAthletePhone(p) {
     return s;
 }
 
+// 학년: 1~6 정수만, 그 밖은 null (학년별 대회·연맹 명단용, Phase 7-②)
+function _normalizeGrade(g) { const n = parseInt(String(g == null ? '' : g).replace(/[^0-9]/g, ''), 10); return n >= 1 && n <= 6 ? n : null; }
+
 app.post('/api/admin/athletes', async (req, res) => {
-    const { admin_key, competition_id, name, bib_number, team, gender, barcode, phone } = req.body;
+    const { admin_key, competition_id, name, bib_number, team, gender, barcode, phone, grade } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     if (!name || !gender || !competition_id) return res.status(400).json({ error: '필수 항목이 누락되었습니다 (이름, 성별, 대회ID).' });
     try {
         const bib = bib_number ? String(bib_number).trim() : null;
         const bc = barcode || '';
         const ph = _normalizeAthletePhone(phone);
-        const info = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone) VALUES (?,?,?,?,?,?,?)', competition_id, name, bib, team || '', bc, gender, ph);
+        const info = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone,grade) VALUES (?,?,?,?,?,?,?,?)', competition_id, name, bib, team || '', bc, gender, ph, _normalizeGrade(grade));
         res.json(await db.get('SELECT * FROM athlete WHERE id=?', info.lastInsertRowid));
     } catch (e) { res.status(400).json({ error: '등록 오류: ' + e.message }); }
 });
 app.put('/api/admin/athletes/:id', async (req, res) => {
-    const { admin_key, name, bib_number, team, gender, barcode, phone } = req.body;
+    const { admin_key, name, bib_number, team, gender, barcode, phone, grade } = req.body;
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const old = await db.get('SELECT * FROM athlete WHERE id=?', req.params.id);
     if (!old) return res.status(404).json({ error: 'Not found' });
     try {
         const newBib = bib_number !== undefined ? (bib_number ? String(bib_number).trim() : null) : old.bib_number;
         const newPhone = phone !== undefined ? _normalizeAthletePhone(phone) : (old.phone || '');
-        await db.run('UPDATE athlete SET name=?,bib_number=?,team=?,gender=?,barcode=?,phone=? WHERE id=?', name || old.name, newBib, team ?? old.team, gender || old.gender, barcode ?? old.barcode, newPhone, old.id);
+        await db.run('UPDATE athlete SET name=?,bib_number=?,team=?,gender=?,barcode=?,phone=?,grade=? WHERE id=?', name || old.name, newBib, team ?? old.team, gender || old.gender, barcode ?? old.barcode, newPhone, grade === undefined ? old.grade : _normalizeGrade(grade), old.id);
         res.json(await db.get('SELECT * FROM athlete WHERE id=?', old.id));
     } catch (e) { res.status(400).json({ error: '수정 오류: ' + e.message }); }
 });
@@ -5106,9 +5124,12 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 const hn = String(h || '').trim().toLowerCase();
                 return /^(휴대폰|핸드폰|전화|전화번호|연락처|phone|phone_number|mobile)$/.test(hn);
             });
+            // 학년 컬럼 (학년별 대회·중고연맹 명단, Phase 7-②) — 헤더 '학년'
+            const _gradeColIdx = headers.findIndex(h => /^(학년|grade)$/i.test(String(h || '').trim()));
             const _barcodeMap = new Map(); // key: name|team|gender -> barcode
             const _bibMap = new Map(); // key: name|team|gender -> bib
             const _phoneMap = new Map(); // key: name|team|gender -> phone (숫자만)
+            const _gradeMap = new Map(); // key: name|team|gender -> grade (1~6)
             // barcode와 bib_number는 별도 필드로 유지 (바코드≠배번)
 
             dataRows.forEach(row => {
@@ -5150,6 +5171,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     const rowPhone = String(row[_phoneColIdx]).replace(/[^0-9]/g, '');
                     if (rowPhone) _phoneMap.set(`${name}|${team}|${gender}`, rowPhone);
                 }
+                if (_gradeColIdx >= 0) { const gr = _normalizeGrade(row[_gradeColIdx]); if (gr) _gradeMap.set(`${name}|${team}|${gender}`, gr); }
                 for (const [colKey, relayInfo] of Object.entries(relayColMap)) {
                     if (String(row[relayInfo.idx] || '').trim().toUpperCase() === 'O') {
                         const rGender = relayInfo.gender || gender;
@@ -5290,12 +5312,14 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     if (bc) await db.run('UPDATE athlete SET barcode=? WHERE id=? AND (barcode IS NULL OR barcode = ?)', bc, existingId, bc);
                     const ph = _phoneMap.get(key) || null;
                     if (ph) await db.run("UPDATE athlete SET phone=? WHERE id=? AND (phone IS NULL OR phone = '')", ph, existingId);
+                    const gr = _gradeMap.get(key) || null;
+                    if (gr) await db.run('UPDATE athlete SET grade=? WHERE id=?', gr, existingId);
                     return existingId;
                 }
                 const bib = _bibMap.get(key) || null;
                 const bc = _barcodeMap.get(key) || '';
                 const ph = _phoneMap.get(key) || '';
-                const r = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone) VALUES (?,?,?,?,?,?,?)', competition_id, name, bib, team, bc, gender, ph);
+                const r = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone,grade) VALUES (?,?,?,?,?,?,?,?)', competition_id, name, bib, team, bc, gender, ph, _gradeMap.get(key) || null);
                 athleteCache.set(key, r.lastInsertRowid);
                 stats.athletes++;
                 return r.lastInsertRowid;
@@ -5605,6 +5629,7 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
             else if (/^(배번|배번호|bib|bib_number)$/i.test(hn)) hdrMap.bib = idx;
             else if (/^(바코드|바코드번호|barcode|바코드\s*번호)$/i.test(hn)) hdrMap.barcode = idx;
             else if (/^(휴대폰|핸드폰|전화|전화번호|연락처|phone|phone_number|mobile)$/i.test(hn)) hdrMap.phone = idx;
+            else if (/^(학년|grade)$/i.test(hn)) hdrMap.grade = idx;
         });
 
         // Determine format: header-detected or legacy fixed columns
@@ -5640,7 +5665,7 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
             };
 
             for (const row of dataRows) {
-                let name, team, genderRaw, bib, barcode, phone;
+                let name, team, genderRaw, bib, barcode, phone, grade = null;
                 if (useHeaders) {
                     name = String(row[hdrMap.name] || '').trim();
                     team = hdrMap.team !== undefined ? String(row[hdrMap.team] || '').trim() : '';
@@ -5648,6 +5673,7 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
                     bib = hdrMap.bib !== undefined ? (String(row[hdrMap.bib] || '').trim() || null) : null;
                     barcode = hdrMap.barcode !== undefined ? (String(row[hdrMap.barcode] || '').trim() || '') : '';
                     phone = hdrMap.phone !== undefined ? normPhone(row[hdrMap.phone]) : '';
+                    grade = hdrMap.grade !== undefined ? _normalizeGrade(row[hdrMap.grade]) : null;     // '3학년'·'3'·3
                 } else {
                     // Legacy fixed columns: bib | name | team | gender | barcode | phone(optional)
                     bib = String(row[0] || '').trim() || null;
@@ -5678,12 +5704,16 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
                             await db.run('UPDATE athlete SET phone=? WHERE id=?', phone, existing.id);
                             didUpdate = true;
                         }
+                        if (grade && existing.grade !== grade) {
+                            await db.run('UPDATE athlete SET grade=? WHERE id=?', grade, existing.id);
+                            didUpdate = true;
+                        }
                         if (didUpdate) stats.updated = (stats.updated || 0) + 1;
                     }
                     stats.skipped++; continue;
                 }
-                await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone) VALUES (?,?,?,?,?,?,?)', competition_id, name, bib, team, barcode, gender, phone || '');
-                existingCache.set(key, { id: null, bib_number: bib, barcode, phone });
+                await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone,grade) VALUES (?,?,?,?,?,?,?,?)', competition_id, name, bib, team, barcode, gender, phone || '', grade);
+                existingCache.set(key, { id: null, bib_number: bib, barcode, phone, grade });
                 stats.added++;
             }
         })();
@@ -7139,15 +7169,13 @@ app.get('/api/admin/event-record-matching', async (req, res) => {
 
         const seriesId = comp.series_id || null;
         // 대회의 모든 종목 (부모 합동/혼성 포함, 세부종목 제외)
-        // ⚠️ event 테이블에는 division_code 컬럼이 없다 (division 만 존재).
-        //    DR 매칭은 event 의 division_code 가 아닌 competition 의 division_type 으로 처리하거나
-        //    종목별 부 구분이 없으면 n/a 처리. 현재는 모든 event 의 division_code 를 null 로 본다.
+        // event 에는 division_code 컬럼이 없고 부 라벨(division)만 있다 → 라벨·학년·성별로 부 마스터 코드를 푼다 (Phase 7-②, 기록 감지와 같은 규칙)
         const events = await db.all(
-            `SELECT id, name, gender FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY id`,
+            `SELECT id, name, gender, division FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY id`,
             compId
         );
-        // division_code 필드를 가상으로 추가 (현재 event 테이블에 컬럼 없으므로 항상 null)
-        for (const e of events) e.division_code = null;
+        const _masters = await db.all('SELECT code, label_ko, gender, school_level, grade FROM division_master WHERE active=1');
+        for (const e of events) e.division_code = _divisionCodeFor(e.division, e.gender, _masters);
         // 모든 event_record (approved=1) 를 한 번에 가져와 매칭 (DB hit 최소화)
         const allRecords = await db.all(
             `SELECT id, record_type, event_name, gender, division_code, series_id, record_value, holder_name FROM event_record WHERE approved=1`
@@ -9287,36 +9315,7 @@ function parseDisplayRound(roundStr) {
 //   · "U18 여자부" / "U18(여)" → "U18(여)"
 //   · "중학교부" / "중등부" / "남자중학교부" → "중등부"
 //   · "" 빈 문자열은 그대로 유지 (시간표 종별이 비어있는 경우 대비)
-function normalizeDivisionLabel(div) {
-    if (!div) return '';
-    const s = div.toString().trim().replace(/\s+/g, '');
-    if (!s) return '';
-
-    // 선수권 변형 통합
-    if (/^선수권\(?남자?\)?부?$/.test(s) || s === '선수권남' || s === '남자선수권') return '선수권(남)';
-    if (/^선수권\(?여자?\)?부?$/.test(s) || s === '선수권여' || s === '여자선수권') return '선수권(여)';
-    if (/^선수권\(?혼성?\)?부?$/.test(s) || /^선수권\(?mix/i.test(s)) return '선수권(혼)';
-    if (s === '선수권') return '선수권';
-
-    // U18/U20 변형 통합
-    let m = s.match(/^U(18|20)\(?(남자?|여자?|혼성?)\)?부?$/i);
-    if (m) {
-        const g = /^남/.test(m[2]) ? '남' : (/^여/.test(m[2]) ? '여' : '혼');
-        return `U${m[1]}(${g})`;
-    }
-    if (/^U18$/i.test(s)) return 'U18';
-    if (/^U20$/i.test(s)) return 'U20';
-
-    // 학교부 변형 통합
-    if (/^(남자|여자)?(중학교부|중학부|중등부)$/.test(s)) return '중등부';
-    if (/^(남자|여자)?(고등학교부|고등부)$/.test(s)) return '고등부';
-    if (/^(남자|여자)?(대학교부|대학부)$/.test(s)) return '대학부';
-    if (/^(남자|여자)?(초등학교부|초등부)$/.test(s)) return '초등부';
-    if (/^(남자|여자)?(일반부|실업부)$/.test(s)) return '일반부';
-
-    // 기타 알 수 없는 라벨은 원본 보존
-    return div.toString().trim();
-}
+// normalizeDivisionLabel → lib/division.js 로 이동 (2026-09 Phase 7-②). 파일 위쪽 require 참조
 
 // --- Helper: Excel time fraction → HH:MM string ---
 function excelTimeToHHMM(val) {
