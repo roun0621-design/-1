@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS event_entry (
     athlete_id INTEGER NOT NULL REFERENCES athlete(id),
     status TEXT NOT NULL DEFAULT 'registered' CHECK(status IN ('registered','checked_in','no_show')),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    personal_best TEXT DEFAULT '',                  -- 종목별 PB (국제대회 선수 보조 정보)
+    season_best TEXT DEFAULT '',                    -- 종목별 SB
     UNIQUE(event_id, athlete_id)
 );
 

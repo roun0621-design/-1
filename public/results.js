@@ -1125,13 +1125,14 @@ async function renderFieldHeightResults(entries) {
 // ============================================================
 async function renderCombinedResults() {
     const evt = rSelectedEvent;
-    await API.syncCombinedScores(evt.id);
+    if (localStorage.getItem('pace_admin_key')) { try { await API.syncCombinedScores(evt.id); } catch (e) {} }   // 관람객은 저장된 점수 그대로 (키 없는 POST 는 403)
     const scores = await API.getCombinedScores(evt.id);
     const subDefs = evt.gender === 'M' ? DECATHLON_EVENTS : HEPTATHLON_EVENTS;
     const allEntries = await API.getEventEntries(evt.id);
     const subEvents = await API.getCombinedSubEvents(evt.id);
+    const _canWrite = !!localStorage.getItem('pace_admin_key');     // 점수 보정(POST)은 운영키가 있을 때만
     for (const sc of scores) {
-        if (sc.raw_record > 0) {
+        if (_canWrite && sc.raw_record > 0) {
             const def = subDefs.find(d => d.order === sc.sub_event_order);
             if (def && calcWAPoints(def.key, sc.raw_record) !== sc.wa_points) {
                 await API.saveCombinedScore({ event_entry_id: sc.event_entry_id, sub_event_name: sc.sub_event_name, sub_event_order: sc.sub_event_order, raw_record: sc.raw_record, wa_points: calcWAPoints(def.key, sc.raw_record) });

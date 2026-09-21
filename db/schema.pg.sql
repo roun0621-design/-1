@@ -143,7 +143,9 @@ CREATE TABLE IF NOT EXISTS "event_entry" (
     "callroom_memo" TEXT DEFAULT '',
     CHECK (status IN ('registered','checked_in','no_show')),
     UNIQUE ("event_id", "athlete_id"),
-    "status_updated_at" TEXT DEFAULT NULL
+    "status_updated_at" TEXT DEFAULT NULL,
+    "personal_best" TEXT DEFAULT '',      -- 종목별 PB (국제대회)
+    "season_best" TEXT DEFAULT ''
 );
 
 -- Table: event_link

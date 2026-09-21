@@ -14,6 +14,7 @@ const schedule = F('schedule_ATH.json'), days = F('days.json');
 const fakeResults = {};
 const fakeFetch = async (source, tail) => {
     if (tail === 'schedule/days') return days;
+    if (tail === 'phases') return F('phases.json');
     let m = tail.match(/^schedule\/daily\/(.+)$/); if (m) return schedule.filter(u => u.DateTimeRaw.startsWith(m[1]));
     m = tail.match(/^entries\/event\/(.+)$/);
     if (m) {
@@ -38,6 +39,8 @@ describe('어댑터', () => {
         expect(hep.category).toBe('combined'); expect(hep.subEvents.map(x => x.name)).toEqual(['100mH', '높이뛰기', '포환던지기', '200m', '멀리뛰기', '창던지기', '800m']);
         expect(s.events.find(e => e.gender === 'X' && /4X400/.test(e.name)).name).toBe('4X400mR(Mixed)');
         expect(s.events.find(e => e.name === '하프마라톤경보').category).toBe('road');
+        B.mergePhases(s, F('phases.json'));
+        expect(s.events).toHaveLength(50); expect(s.events.find(e => e.name === '마라톤경보' && e.gender === 'M').rounds).toEqual([{ phase: 'FNL-', round_type: 'final', order: 1, units: [] }]);
     });
     it('엔트리: 선수·계주 팀(주자 순서) · 결과 JSON 은 후보 키로 넓게 읽는다', () => {
         const en = B.parseEventEntries(F('entries_event_M4X100M.json'));
@@ -64,7 +67,7 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
     it('구조: 48종목(+라운드·세부) · 조 · 시간표, 두 번 돌려도 그대로', async () => {
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
         const a = await sync.setupStructure(db, comp, { fetch: fakeFetch });
-        expect(a.events).toBe(48); expect(a.stats.heats).toBeGreaterThan(200); expect(a.days).toHaveLength(7);
+        expect(a.events).toBe(50); expect(a.stats.heats).toBeGreaterThan(200); expect(a.days).toHaveLength(7);     // 일정 48 + phases 로 보탠 마라톤 경보 남·여 (유닛 없이)
         const b = await sync.setupStructure(db, comp, { fetch: fakeFetch });
         expect(b.stats.heats).toBe(0); expect(b.stats.timetable).toBe(0);
         const evs = await db.all('SELECT name, gender, round_type, category, parent_event_id, external_key FROM event WHERE competition_id=? ORDER BY id', fx.comp);
@@ -128,7 +131,7 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
     it('선수 보조 정보(한글 이름·PB·SB): 영문 이름으로 찾아 넣고, 다음 동기화가 한글 이름을 덮지 않는다', async () => {
         const r = await request(app).post(`/api/admin/intl/${fx.comp}/athlete-info`).send({ admin_key: ADMIN, rows: [
             { 영문이름: 'seo jihyun', 한글이름: '서지현', PB: '11.30', SB: '11.45' }, { name: 'KIM Juha', name_ko: '김주하', pb: '11.36' }, { name: 'NOBODY X', name_ko: '없음' }] });
-        expect(r.status).toBe(200); expect(r.body.matched).toBe(2); expect(r.body.unmatched).toEqual(['NOBODY X']);
+        expect(r.status).toBe(200); expect(r.body.matched).toBe(2); expect(r.body.unmatched).toEqual(['없음 / NOBODY X']);
         const a = await db.get("SELECT name, name_alt, personal_best, season_best FROM athlete WHERE competition_id=? AND name_alt='SEO Jihyun'", fx.comp);
         expect(a).toEqual({ name: '서지현', name_alt: 'SEO Jihyun', personal_best: '11.30', season_best: '11.45' });
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
@@ -144,6 +147,23 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         const w100 = evs.body.filter(e => e.name === '100m' && e.gender === 'F');
         expect(w100.map(e => e.spotlight)).toEqual(['KOR', 'KOR', 'KOR']);
         expect(evs.body.find(e => e.name === '100mH' && e.gender === 'F' && !e.parent_event_id).spotlight).toBeNull();     // 여자 100mH 에 한국 선수 없음
+    });
+    it('선수 × 종목 표(한글 이름·성별·출생·세부종목·SB·PB): 성별·출생년·종목으로 KOR 선수를 찾아 출전마다 PB/SB, 계주는 팀 출전에', async () => {
+        const kor = F('entries_org_KOR.json');
+        const woo = kor.Events.find(e => e.EvDesc === "Men's High Jump").Partics[0];     // WOO Sanghyeok 1996
+        const matrix = [['2026 아시안게임 육상 국가대표 SB·PB (대한육상연맹 기준)'], ['출처: …'], [], ['No', '종목군', '선수', '성별', '출생', '소속', '세부종목', 'SB (2026)', 'PB'],
+            [1, '도약', '우상혁', '남', woo.BirthDateRaw.slice(0, 4), '용인시청', '높이뛰기', '2.30', '2.36'],
+            [2, '단거리', '김주하', '여', '2001', '시흥시청', '100m', '11.76', '11.76'], [2, '단거리', '김주하', '여', '2001', '시흥시청', '4x100mR', '45.50', '45.50'],
+            [3, '단거리', '서민준', '남', '2004', '서천군청', '4x100mR', '40.33', '38.49'], [3, '단거리', '서민준', '남', '2004', '서천군청', '100m', '10.41', '10.35']];
+        const rows = sync.rowsFromSheet(matrix);
+        expect(rows).toHaveLength(5); expect(Object.keys(rows[0])).toContain('세부종목');
+        const st = await sync.applyAthleteInfo(db, fx.comp, rows);
+        expect(st.matched).toBe(3); expect(st.ambiguous).toEqual([]); expect(st.skipped_events).toEqual(['서민준 100m']);      // 서민준은 계주만 출전
+        const w = await db.get("SELECT a.name, a.name_alt, ee.personal_best, ee.season_best FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id JOIN event e ON e.id=ee.event_id WHERE a.competition_id=? AND a.barcode=?", fx.comp, 'BN:' + woo.Reg);
+        expect(w).toEqual({ name: '우상혁', name_alt: 'WOO Sanghyeok', personal_best: '2.36', season_best: '2.30' });
+        const team = await db.get("SELECT ee.personal_best, ee.season_best FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id JOIN event e ON e.id=ee.event_id WHERE a.competition_id=? AND a.barcode='RELAY_BN:KOR:F' AND e.name='4X100mR'", fx.comp);
+        expect(team).toEqual({ personal_best: '45.50', season_best: '45.50' });
+        expect((await db.get("SELECT name FROM athlete WHERE competition_id=? AND name_alt='SEO Minjun'", fx.comp)).name).toBe('서민준');
     });
     it('상태 API 와 권한', async () => {
         const s = await request(app).get(`/api/admin/intl/${fx.comp}/status`).set('x-admin-key', OP);

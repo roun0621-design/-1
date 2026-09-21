@@ -1736,7 +1736,7 @@ function renderLiveCombinedResults(data) {
     // Async load combined data after rendering container
     setTimeout(async () => {
         try {
-            await API.syncCombinedScores(evt.id);
+            if (localStorage.getItem('pace_admin_key')) { try { await API.syncCombinedScores(evt.id); } catch (e) { console.warn('[combined live] sync skipped:', e && (e.error || e.message)); } }
             const scores = await API.getCombinedScores(evt.id);
             const entries = await API.getEventEntries(evt.id);
 
@@ -1835,7 +1835,8 @@ function renderCombinedResults(data) {
 
 async function _loadCombinedResultsAsync(evt) {
     try {
-        await API.syncCombinedScores(evt.id);
+        // 점수 재계산(POST)은 운영키가 있을 때만 — 관람객은 저장된 점수를 그대로 본다 (쓰기 가드가 키 없는 POST 를 403 으로 막는다)
+        if (localStorage.getItem('pace_admin_key')) { try { await API.syncCombinedScores(evt.id); } catch (e) { console.warn('[combined] sync skipped:', e && (e.error || e.message)); } }
         const scores = await API.getCombinedScores(evt.id);
         const entries = await API.getEventEntries(evt.id);
         const subEvents = await API.getCombinedSubEvents(evt.id);

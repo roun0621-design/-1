@@ -1484,6 +1484,8 @@ try { db.exec(`ALTER TABLE heat ADD COLUMN external_key TEXT DEFAULT NULL`); } c
 try { db.exec(`ALTER TABLE heat ADD COLUMN scheduled_at TEXT DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE athlete ADD COLUMN name_alt TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE athlete ADD COLUMN season_best TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE event_entry ADD COLUMN personal_best TEXT DEFAULT ''`); } catch(e) {}   // 종목별 PB/SB (국제대회)
+try { db.exec(`ALTER TABLE event_entry ADD COLUMN season_best TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_external ON event(external_key)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_heat_external ON heat(external_key)`); } catch(e) {}
 // Indexes for record-related queries
@@ -1634,7 +1636,7 @@ if (db.isAsync) {
             try { await db.run(`ALTER TABLE division_master ADD COLUMN IF NOT EXISTS grade INTEGER`); } catch(e) {}
             try { await db.run(`ALTER TABLE athlete ADD COLUMN IF NOT EXISTS grade INTEGER`); } catch(e) {}
             // 국제대회 동기화 (lib/intl)
-            for (const [t, c, d] of [['competition', 'sync_source', 'TEXT'], ['competition', 'sync_state', 'TEXT'], ['event', 'external_key', 'TEXT'], ['heat', 'external_key', 'TEXT'], ['heat', 'scheduled_at', 'TEXT'], ['athlete', 'name_alt', "TEXT DEFAULT ''"], ['athlete', 'season_best', "TEXT DEFAULT ''"]]) {
+            for (const [t, c, d] of [['competition', 'sync_source', 'TEXT'], ['competition', 'sync_state', 'TEXT'], ['event', 'external_key', 'TEXT'], ['heat', 'external_key', 'TEXT'], ['heat', 'scheduled_at', 'TEXT'], ['athlete', 'name_alt', "TEXT DEFAULT ''"], ['athlete', 'season_best', "TEXT DEFAULT ''"], ['event_entry', 'personal_best', "TEXT DEFAULT ''"], ['event_entry', 'season_best', "TEXT DEFAULT ''"]]) {
                 try { await db.run(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS ${c} ${d}`); } catch(e) {}
             }
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_external ON event(external_key)`); } catch(e) {}
@@ -3086,7 +3088,7 @@ app.get('/api/events/:id/live-results', async (req, res) => {
     const quals = await db.all('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
     const result = await Promise.all(heats.map(async h => {
         const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status, ee.manual_rank,
-               a.name, a.bib_number, a.team, a.name_alt, a.personal_best, a.season_best FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
+               a.name, a.bib_number, a.team, a.name_alt, COALESCE(NULLIF(ee.personal_best,''), a.personal_best) AS personal_best, COALESCE(NULLIF(ee.season_best,''), a.season_best) AS season_best FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
                JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`, h.id);
         if (event.category === 'field_height') {
             return { ...h, entries, height_attempts: await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', h.id) };
