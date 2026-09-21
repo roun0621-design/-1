@@ -296,6 +296,15 @@ app.use(helmet({
     frameguard: { action: 'sameorigin' },   // CSP frame-ancestors 와 같은 뜻 (구형 브라우저용)
     referrerPolicy: { policy: 'no-referrer-when-downgrade' },  // YouTube 임베드 호환
 }));
+// GET 요청의 키는 헤더(x-admin-key)로도 받는다 — 화면이 키를 URL 에 싣지 않도록 (2026-09 Phase 1, 키의 URL 쿼리 전송).
+//   기존 라우트는 req.query.key 를 읽으므로, 헤더가 있고 쿼리에 없으면 쿼리에 옮겨 넣는다 (Express 5 의 query 는 getter → 인스턴스 속성으로 덮음).
+app.use((req, res, next) => {
+    if (req.method === 'GET') {
+        const h = req.headers['x-admin-key'];
+        if (h && !req.query.key) Object.defineProperty(req, 'query', { value: { ...req.query, key: String(h) }, writable: true, configurable: true, enumerable: true });
+    }
+    next();
+});
 app.use(rateLimit({
     windowMs: 60 * 1000,   // 1분
     max: parseInt(process.env.RATE_LIMIT_MAX || '3000', 10),  // IP당 분당 한도(기본 3000, 부하측정 시 env로 상향)
@@ -6931,7 +6940,7 @@ app.use((err, req, res, next) => {
     //   42P01 undefined_table, 42703 undefined_column (스키마 버그 — 운영 중에 발생하면 안 됨)
     const pgCode = err && err.code;
     if (pgCode === '22P02' || pgCode === '22003' || pgCode === '22001') {
-        console.warn('[PG input invalid]', req.method, req.originalUrl, err.message);
+        console.warn('[PG input invalid]', req.method, String(req.originalUrl || '').split('?')[0], err.message);   // 쿼리(키)는 로그에 남기지 않는다
         return res.status(400).json({ error: '잘못된 입력 형식입니다.', detail: err.message });
     }
     if (pgCode === '23505') {

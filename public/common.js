@@ -518,15 +518,16 @@ function _jwtRefresh() {
     document.addEventListener('visibilitychange', () => { if (!document.hidden && _isJwtSession() && due()) _jwtRefresh(); });
 })();
 
-async function api(method, path, body) {
+async function api(method, path, body, explicitKey) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (explicitKey) opts.headers['x-admin-key'] = String(explicitKey);
     // Auto-inject admin_key for all write operations (body + x-admin-key header —
     // header covers body-less POSTs like /api/wa-correct/:id)
-    if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+    {
         const storedKey = localStorage.getItem('pace_admin_key') || '';
         if (storedKey) {
-            opts.headers['x-admin-key'] = storedKey;
-            if (body && !body.admin_key) body.admin_key = storedKey;
+            opts.headers['x-admin-key'] = storedKey;      // GET 도 헤더로 — 키를 URL 에 싣지 않는다 (서버가 헤더를 쿼리 대신 받는다)
+            if (method !== 'GET' && body && !body.admin_key) body.admin_key = storedKey;
         }
     }
     if (body) opts.body = JSON.stringify(body);
@@ -645,14 +646,14 @@ const API = {
     deleteTimetableDay: (compId, day, adminKey) => api('DELETE', `/api/timetable/${compId}/${day}`, { admin_key: adminKey }),
     // Admin CRUD
     changeKeys: (admin_key, new_operation_key, new_admin_key) => api('POST', '/api/admin/change-keys', { admin_key, new_operation_key, new_admin_key }),
-    getAthletes: (adminKey, compId) => api('GET', `/api/admin/athletes?key=${encodeURIComponent(adminKey)}${compId ? '&competition_id=' + compId : ''}`),
+    getAthletes: (adminKey, compId) => api('GET', `/api/admin/athletes?${compId ? 'competition_id=' + compId : ''}`, null, adminKey),
     updateAthlete: (id, data, adminKey) => api('PUT', `/api/admin/athletes/${id}`, { ...data, admin_key: adminKey }),
     deleteAthlete: (id, adminKey) => api('DELETE', `/api/admin/athletes/${id}`, { admin_key: adminKey }),
-    getAthleteEvents: (id, adminKey) => api('GET', `/api/admin/athletes/${id}/events?key=${encodeURIComponent(adminKey)}`),
+    getAthleteEvents: (id, adminKey) => api('GET', `/api/admin/athletes/${id}/events`, null, adminKey),
     addAthleteEvent: (athleteId, eventId, adminKey) => api('POST', `/api/admin/athletes/${athleteId}/events`, { admin_key: adminKey, event_id: eventId }),
     removeAthleteEvent: (athleteId, entryId, adminKey) => api('DELETE', `/api/admin/athletes/${athleteId}/events/${entryId}`, { admin_key: adminKey }),
     createAthlete: (data, adminKey) => api('POST', '/api/admin/athletes', { ...data, admin_key: adminKey }),
-    adminGetEvents: (adminKey, compId) => api('GET', `/api/admin/events?key=${encodeURIComponent(adminKey)}${compId ? '&competition_id=' + compId : ''}`),
+    adminGetEvents: (adminKey, compId) => api('GET', `/api/admin/events?${compId ? 'competition_id=' + compId : ''}`, null, adminKey),
     adminUpdateEvent: (id, data, adminKey) => api('PUT', `/api/admin/events/${id}`, { ...data, admin_key: adminKey }),
     adminDeleteEvent: (id, adminKey) => api('DELETE', `/api/admin/events/${id}`, { admin_key: adminKey }),
     adminCreateEvent: (data, adminKey) => api('POST', '/api/admin/events', { ...data, admin_key: adminKey }),
@@ -662,7 +663,7 @@ const API = {
     completeCallroom: (eid, judge_name, heat_id) => api('POST', `/api/events/${eid}/callroom-complete`, { judge_name, heat_id }),
     createSemifinal: (eid, group_count, selections) => api('POST', `/api/events/${eid}/create-semifinal`, { group_count, selections }),
     deleteEvent: (eid, admin_key) => api('DELETE', `/api/events/${eid}`, { admin_key }),
-    listUndo: (competitionId, key) => api('GET', `/api/undo?competition_id=${competitionId}&key=${encodeURIComponent(key || '')}`),
+    listUndo: (competitionId, key) => api('GET', `/api/undo?competition_id=${competitionId}`, null, key),
     restoreUndo: (id) => api('POST', `/api/undo/${id}/restore`, {}),
     getFullResults: eid => api('GET', `/api/events/${eid}/full-results`),
     // Video URL
@@ -672,7 +673,7 @@ const API = {
     getCallroomStatus: () => api('GET', '/api/public/callroom-status'),
     getCompetitionInfo: (compId) => compId ? api('GET', `/api/competition-info?competition_id=${compId}`) : api('GET', '/api/competition-info'),
     // Multi-key management
-    getOperationKeys: (adminKey) => api('GET', `/api/admin/operation-keys?key=${encodeURIComponent(adminKey)}`),
+    getOperationKeys: (adminKey) => api('GET', `/api/admin/operation-keys`, null, adminKey),
     createOperationKey: (adminKey, judge_name, key_value, can_manage) => api('POST', '/api/admin/operation-keys', { admin_key: adminKey, judge_name, key_value, can_manage: can_manage || false }),
     deleteOperationKey: (id, adminKey) => api('DELETE', `/api/admin/operation-keys/${id}`, { admin_key: adminKey }),
     toggleOperationKey: (id, active, adminKey) => api('PATCH', `/api/admin/operation-keys/${id}`, { admin_key: adminKey, active }),

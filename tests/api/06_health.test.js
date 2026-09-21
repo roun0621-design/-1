@@ -49,3 +49,15 @@ describe('보안 헤더 (CSP, 2026-09)', () => {
         expect(r.headers['x-frame-options']).toBe('SAMEORIGIN');
     });
 });
+
+describe('GET 키는 헤더로 (URL 쿼리 없이)', () => {
+    it('x-admin-key 헤더만으로 관리자 GET 이 통과하고, 없으면 403', async () => {
+        const request = require('supertest');
+        const { app } = require('../../server.js');
+        expect((await request(app).get('/api/admin/events')).status).toBe(403);
+        expect((await request(app).get('/api/admin/events').set('x-admin-key', 'testopkey')).status).toBe(200);
+        expect((await request(app).get('/api/admin/operation-keys').set('x-admin-key', 'testadmin1234')).status).toBe(200);
+        expect((await request(app).get('/api/admin/operation-keys').set('x-admin-key', 'testopkey')).status).toBe(403);
+        expect((await request(app).get('/api/admin/events').query({ key: 'testopkey' })).status).toBe(200);   // 쿼리도 여전히 됨
+    });
+});
