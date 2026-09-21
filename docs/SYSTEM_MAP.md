@@ -113,6 +113,9 @@ server.js
     ↓ lib/fullRecordExcel.js / lib/fullRecordPdf.js
     ↓ (DB에서 데이터 조회)
 PDF/Excel 파일 응답
+
+GET /api/documents/kjaf-record/:compId/excel  → lib/kjafRecordSheet.js  (한국중·고육상연맹 종합기록지, 2026-09 Phase 7-①)
+    시트 묶음(남중/여중/N학년부/믹스릴레이/신기록현황)은 종목의 division 으로 결정 (planSheets). 결승 라운드만, 순위 8칸, 승인된 신기록만 CR/DR/KR.
 ```
 
 ---

@@ -8170,6 +8170,27 @@ const _certMod = require('./lib/routes/certificate')(app, {
 const getEventResultsForCert = _certMod.getEventResultsForCert;
 // ========== END Certificate System ==========
 
+// ============================================================
+// 한국중·고육상연맹(KJAF) 종합기록지 — Excel (Phase 7-①, 2026-09)
+//   시트 묶음(남중/여중, 학년부, 믹스릴레이, 신기록현황)은 종목의 부(division)·학년으로 자동 결정 → lib/kjafRecordSheet.js
+// ============================================================
+app.get('/api/documents/kjaf-record/:compId/excel', async (req, res) => {
+    try {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
+        if (!comp) return res.status(404).json({ error: 'Competition not found' });
+        const { generateKjafRecordSheet } = require('./lib/kjafRecordSheet');
+        const wb = await generateKjafRecordSheet(db, comp, { getEventResultsForCert });
+        const buf = await wb.xlsx.writeBuffer();
+        const fileName = encodeURIComponent(`중고연맹_종합기록지_${comp.name || 'result'}.xlsx`);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${fileName}`);
+        res.end(Buffer.from(buf));
+    } catch (err) {
+        console.error('[KJAF Record Excel Error]', err);
+        if (!res.headersSent) res.status(500).json({ error: '중고연맹 종합기록지 생성 오류: ' + err.message });
+    }
+});
+
 // ========== SMS System API (lib/routes/sms.js) ==========
 //   추출 2026-05-31 (A-11): 6 routes
 //     GET/POST /api/admin/sms/config

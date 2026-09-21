@@ -1968,6 +1968,14 @@ POST /api/external/event-result-link/batch<br>
                                 <span class="t-xs t-muted">인쇄용</span>
                             </div>
                         </div>
+                        <div id="card-kjaf-record" style="flex:1;min-width:220px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
+                            <h5 style="font-size:13px;margin-bottom:8px;">중·고연맹 종합기록지</h5>
+                            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">한국중·고육상연맹 양식(남중·여중·학년부·믹스릴레이·신기록현황 시트). 종목의 <b>부(중등부·고등부·N학년부)</b>로 시트가 나뉘고, 결승 기록·승인된 신기록(CR/DR/KR)만 들어갑니다.</p>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                                <button class="btn btn-sm btn-excel" onclick="downloadKjafRecord()">Excel</button>
+                                <span class="t-xs t-muted">시트 이름·묶음은 부 설정을 따릅니다</span>
+                            </div>
+                        </div>
                         <div id="card-idcard" style="flex:1;min-width:260px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
                             <h5 style="font-size:13px;margin-bottom:8px;">ID카드 (AD카드)</h5>
                             <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">배번·성명·소속·참가 종목 + <b>소집실에서 스캔되는 바코드</b>. 계주 팀은 제외됩니다.</p>
@@ -3463,6 +3471,7 @@ POST /api/external/event-result-link/batch<br>
             { group:'result', label:'문서 · 다운로드',  tab:'documents',  icon:'file',    desc:'종합기록지, ID카드, 백업, PDF/Excel', keywords:'document download pdf excel xlsx 백업 id카드 ad카드 idcard 바코드 인가증' },
             { group:'result', label:'상장 출력',         tab:'certificates', icon:'trophy', desc:'상장·완주증 양식 편집 및 일괄 인쇄', keywords:'certificate 상장 완주증 시상 시상장 인쇄 출력' },
             { group:'result', label:'워드 상장 양식',     tab:'certificates', anchor:'card-award-docx', icon:'file', desc:'현장 인쇄용 워드(.docx) 상장 문구·수여자·글꼴 (기록입력의 상장 출력 버튼이 쓰는 양식)', keywords:'워드 docx 상장 양식 한글 시상 수여 직인 문구' },
+            { group:'result', label:'중·고연맹 종합기록지', tab:'documents', anchor:'card-kjaf-record', icon:'file', desc:'한국중·고육상연맹 양식 Excel — 남중·여중·학년부·믹스릴레이·신기록현황', keywords:'중고연맹 kjaf 종합기록지 연맹 학년부 신기록현황 믹스릴레이' },
             { group:'result', label:'ID카드 발급',        tab:'documents', anchor:'card-idcard', icon:'user', desc:'배번·소속·바코드가 든 ID카드(AD카드) PDF — 소속·성별·배번 지정', keywords:'id카드 ad카드 idcard 바코드 인가증 발급' },
             { group:'result', label:'문자 발송',         tab:'sms',         icon:'message', desc:'결과·상장 링크 SMS 발송 (알리고)', keywords:'sms 문자 알리고 aligo 발송 lms' },
             { group:'result', label:'스코어보드',       tab:'scoreboard', icon:'monitor', desc:'스코어보드 그룹·종목 연동', keywords:'scoreboard joint group' },
@@ -8951,6 +8960,10 @@ POST /api/external/event-result-link/batch<br>
         function downloadFullRecordPdf(gender) {
             if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
             window.location.href = `/api/documents/full-record/${_selectedCompId}/pdf?gender=${gender}&_t=${Date.now()}`;
+        }
+        function downloadKjafRecord() {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            window.location.href = `/api/documents/kjaf-record/${_selectedCompId}/excel?_t=${Date.now()}`;
         }
 
         // BIB Update functions
