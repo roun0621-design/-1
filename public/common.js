@@ -2026,12 +2026,21 @@ async function openTimetable(compId) {
         const _nowForHighlight = new Date();
         const _currentHHMM = String(_nowForHighlight.getHours()).padStart(2,'0') + ':' + String(_nowForHighlight.getMinutes()).padStart(2,'0');
 
+        // 날짜 탭 라벨: 관람객은 '2일차'보다 '9/24(목)'가 빠르다 — 날짜를 앞에, 일차는 작게 (날짜를 모르면 일차만)
+        function _ttDayLabel(d, dd, data) {
+            const first = [...(dd.track || []), ...(dd.field || [])].find(x => x.scheduled_date);
+            let date = first ? first.scheduled_date : null;
+            if (!date && data.start_date) { const b = new Date(data.start_date + 'T00:00:00'); b.setDate(b.getDate() + (Number(d) - 1)); date = isFinite(b) ? `${b.getFullYear()}-${String(b.getMonth() + 1).padStart(2, '0')}-${String(b.getDate()).padStart(2, '0')}` : null; }
+            if (!date) return `${d}일차`;
+            const dt = new Date(date + 'T00:00:00'); const wd = '일월화수목금토'[dt.getDay()];
+            return `${dt.getMonth() + 1}/${dt.getDate()}(${wd})<span style="font-size:10px;opacity:.7;margin-left:3px;">${d}일차</span>`;
+        }
         function renderDayTabs() {
             tabContainer.innerHTML = dayKeys.map(d => {
                 const dd = data.days[d];
                 const cnt = (dd.track || []).length + (dd.field || []).length;
                 const isActive = d === activeDay;
-                return `<button onclick="window._ttShowDay(${d})" style="padding:6px 16px;border-radius:20px;border:1.5px solid ${isActive ? '#6b6b6b' : '#c0c0c0'};background:${isActive ? '#6b6b6b' : '#fff'};color:${isActive ? '#fff' : '#6b6b6b'};font-size:12px;font-weight:${isActive ? '700' : '500'};cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:4px;">${d}일차 <span style="font-size:10px;opacity:.7;">(${cnt})</span></button>`;
+                return `<button onclick="window._ttShowDay(${d})" style="padding:6px 16px;border-radius:20px;border:1.5px solid ${isActive ? '#6b6b6b' : '#c0c0c0'};background:${isActive ? '#6b6b6b' : '#fff'};color:${isActive ? '#fff' : '#6b6b6b'};font-size:12px;font-weight:${isActive ? '700' : '500'};cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:4px;">${_ttDayLabel(d, dd, data)} <span style="font-size:10px;opacity:.7;">(${cnt})</span></button>`;
             }).join('');
         }
 

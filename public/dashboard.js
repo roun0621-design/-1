@@ -390,6 +390,16 @@ function _ttLastEventMin(dayNum) {
 
 // 히어로 카드 전환 임계값(분): 마지막 경기 시작시각 + 이 분만큼 지나면 다음 일차로
 const _HERO_NEXT_DAY_OFFSET_MIN = 30;
+// 히어로 카드의 일차 칩: 'DAY 2' 대신 '9/24(목) · 2일차' (날짜를 알 때)
+function _heroDayChip(day) {
+    const dd = (_timetableFull.days || {})[day] || {};
+    const first = [...(dd.track || []), ...(dd.field || [])].find(x => x.scheduled_date);
+    let date = first ? first.scheduled_date : null;
+    if (!date && _timetableFull.start_date) { const b = new Date(_timetableFull.start_date + 'T00:00:00'); b.setDate(b.getDate() + (Number(day) - 1)); date = isFinite(b) ? `${b.getFullYear()}-${String(b.getMonth() + 1).padStart(2, '0')}-${String(b.getDate()).padStart(2, '0')}` : null; }
+    if (!date) return `<span class="hero-day-chip">DAY ${day}</span>`;
+    const dt = new Date(date + 'T00:00:00');
+    return `<span class="hero-day-chip">${dt.getMonth() + 1}/${dt.getDate()}(${'일월화수목금토'[dt.getDay()]}) · ${day}일차</span>`;
+}
 
 // 현재 시각 기준 화면에 보여줄 day 번호 결정
 // 규칙: 오늘이 N일차이고 (오늘 마지막 경기 시작시각 + 30분)이 지났으면 N+1일차로 전환.
@@ -479,18 +489,18 @@ function renderHeroSchedule() {
     if (liveItem) {
         card.classList.add('live');
         iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>';
-        titleEl.innerHTML = `<span class="hero-live-dot"></span> LIVE 진행중 <span class="hero-day-chip">DAY ${targetDay}</span>`;
+        titleEl.innerHTML = `<span class="hero-live-dot"></span> LIVE 진행중 ${_heroDayChip(targetDay)}`;
         const nextTxt = nextItem ? ` · 다음 <strong>${_esc(nextItem.event_name)}</strong> ${nextItem.time}` : '';
         subEl.innerHTML = `<strong>${_esc(liveItem.event_name)}</strong> ${_esc(liveItem.round||'')} · ${liveItem.time}${nextTxt}`;
     } else if (isToday && nextItem) {
         card.classList.remove('live');
         iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
-        titleEl.innerHTML = `오늘의 시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
+        titleEl.innerHTML = `오늘의 시간표 ${_heroDayChip(targetDay)}`;
         subEl.innerHTML = `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`;
     } else {
         card.classList.remove('live');
         iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
-        titleEl.innerHTML = `시간표 <span class="hero-day-chip">DAY ${targetDay}</span>`;
+        titleEl.innerHTML = `시간표 ${_heroDayChip(targetDay)}`;
         const subTxt = nextItem
             ? `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`
             : `총 ${totalCount}경기 예정`;
@@ -895,7 +905,10 @@ function renderCategoryTable(groups, label, isLive) {
             const tBg = schedEvt.is_today ? '#f8f4ea' : '#f5f5f5';
             const crBadge = isCallRoomWindow(schedEvt.callroom_time, schedEvt.scheduled_date) ? ' <span class="ico-callroom">Call Room</span>' : '';
             // 상태·Day·시간 칩은 .card-chips(공통 간격/높이)로 묶어 렌더 — 크기·여백을 통일해 다닥다닥 붙지 않게
-            const dayLabel = schedEvt.day ? `<span class="card-chip chip-day">Day-${schedEvt.day}</span>` : '';
+            // 날짜 칩: 'Day-2' 대신 '9/24(목)', 오늘이면 '오늘' (날짜를 모르면 일차)
+            const dayLabel = schedEvt.is_today ? `<span class="card-chip chip-day" style="color:#b79f58;border-color:#e8dfc0;">오늘</span>`
+                : schedEvt.scheduled_date ? (() => { const dt = new Date(schedEvt.scheduled_date + 'T00:00:00'); return isFinite(dt) ? `<span class="card-chip chip-day">${dt.getMonth() + 1}/${dt.getDate()}(${'일월화수목금토'[dt.getDay()]})</span>` : ''; })()
+                : schedEvt.day ? `<span class="card-chip chip-day">${schedEvt.day}일차</span>` : '';
             const tBorder = schedEvt.is_today ? '#e8dfc0' : '#e2e4e8';
             timeBadge = `${dayLabel}<span class="card-chip chip-time num-display" style="color:${tColor};background:${tBg};border-color:${tBorder};" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
         }
