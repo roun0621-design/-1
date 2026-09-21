@@ -1066,7 +1066,11 @@
                         <div class="admin-form-group" style="flex:1;"><label>대표 영상 URL (YouTube)</label><input id="comp-edit-video" placeholder="https://youtube.com/watch?v=..."></div>
                         <button class="btn btn-outline" style="margin-top:20px;white-space:nowrap;" onclick="previewCompVideo()">미리보기</button>
                     </div>
-                    <button class="btn btn-primary" onclick="saveCompSettings()">저장</button>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <button class="btn btn-primary" onclick="saveCompSettings()">저장</button>
+                        <button class="btn btn-outline" onclick="cloneCompetition()" title="종목 구조·문서 양식·상장 양식·시간표 틀을 새 대회로 복사합니다 (선수·기록은 제외)">다음 대회로 복제</button>
+                        <span class="t-xs t-muted">복제: 종목(출전·기록 없이)·문서/상장 양식·시간표 틀. 명단은 새 대회에 다시 올립니다.</span>
+                    </div>
                 </div>
 
                 <!-- 심판장·로고 설정 (독립 섹션) -->
@@ -3476,6 +3480,7 @@ POST /api/external/event-result-link/batch<br>
             // ───── 대회 운영 ─────
             { group:'op', label:'최근 되돌리기', tab:'competition', anchor:'card-undo', icon:'undo', desc:'기록 초기화·선수/종목/조 삭제를 24시간 안에 되살리기', keywords:'undo 되돌리기 복구 실수 삭제 초기화 휴지통' },
             { group:'op', label:'대회 운영 체크리스트', tab:'competition', anchor:'card-readiness', icon:'chart', desc:'대회 전·당일·후 점검 — 시리즈 연결, 명단·조편성·시간표, 운영키, 백업, 종료 잠금', keywords:'checklist 체크리스트 점검 준비 readiness 시리즈 백업' },
+            { group:'op', label:'다음 대회로 복제', tab:'competition', anchor:'card-comp-edit', icon:'stadium', desc:'종목 구조·문서/상장 양식·시간표 틀을 새 대회로 (선수·기록 제외)', keywords:'clone 복제 다음 대회 회차 새 대회 만들기' },
             { group:'op', label:'대회 정보 수정',       tab:'competition', anchor:'card-comp-edit', icon:'stadium', desc:'대회명·기간·연맹·시리즈·운영 모드 등 기본 정보', keywords:'competition 대회 정보 수정 기간 연맹 시리즈 mode' },
             { group:'op', label:'대회 데이터 초기화',   tab:'competition', anchor:'card-comp-reset',  icon:'trash', desc:'이 대회의 선수·종목·기록만 삭제 (대회는 유지)', keywords:'초기화 reset clear 데이터 삭제 비우기' },
             { group:'op', label:'대회 삭제',             tab:'competition', anchor:'card-comp-delete', icon:'trash', desc:'대회 전체를 영구 삭제 (복구 불가, 관리자키 필요)', keywords:'대회 삭제 delete remove 제거 영구 완전삭제' },
@@ -4418,6 +4423,28 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) {
                 sel.innerHTML = '<option value="">없음</option>';
             }
+        }
+        // 다음 대회로 복제 (Phase 3-⑦): 이름·시작일만 물어보고 기간은 원본과 같게
+        async function cloneCompetition() {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const src = (_competitions || []).find(c => String(c.id) === String(_selectedCompId)) || await API.getCompetition(_selectedCompId);
+            const guessName = String(src.name || '').replace(/제\s*(\d+)\s*회/, (m, n) => `제${Number(n) + 1}회`);
+            const name = await uiPrompt('새 대회 이름', guessName === src.name ? src.name + ' (다음 대회)' : guessName);
+            if (!name) return;
+            const days = Math.max(0, Math.round((new Date(src.end_date + 'T00:00:00Z') - new Date(src.start_date + 'T00:00:00Z')) / 86400000));
+            const nextYear = src.start_date ? String(Number(src.start_date.slice(0, 4)) + 1) + src.start_date.slice(4) : '';
+            const start = await uiPrompt('시작일 (YYYY-MM-DD)', nextYear);
+            if (!start || !/^\d{4}-\d{2}-\d{2}$/.test(start)) { if (start) toast('날짜 형식은 YYYY-MM-DD', 'error'); return; }
+            const endD = new Date(start + 'T00:00:00Z'); endD.setUTCDate(endD.getUTCDate() + days);
+            const end = endD.toISOString().slice(0, 10);
+            if (!await uiConfirm(`"${name}" (${start} ~ ${end})\n\n종목 구조·문서 양식·상장 양식·시간표 틀을 복사합니다. 선수·출전·기록은 복사하지 않습니다.`)) return;
+            try {
+                const r = await api('POST', `/api/competitions/${_selectedCompId}/clone`, { admin_key: AK(), name, start_date: start, end_date: end });
+                toast(`복제 완료: 종목 ${r.stats.events}개, 세부 ${r.stats.sub_events}개, 시간표 ${r.stats.timetable}행`);
+                _selectedCompId = r.competition.id; setCompetitionId(_selectedCompId);
+                await loadCompetitionSelector();
+                const sel = document.getElementById('admin-comp-select'); if (sel) { sel.value = String(_selectedCompId); onCompChange(); }
+            } catch (e) { toast(e.error || '복제 실패', 'error'); }
         }
         async function saveCompSettings() {
             try {
