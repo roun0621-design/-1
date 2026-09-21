@@ -1918,7 +1918,8 @@ async function openTimetable(compId) {
         overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:#fff;border-radius:16px;max-width:720px;width:94%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,0.3);overflow:hidden;';
+        // 높이를 고정(88vh)해서 경기 수가 적든 많든 머리글·닫기·날짜 이동이 늘 같은 자리에 있게 한다 (내용은 안에서 스크롤)
+        modal.style.cssText = 'background:#fff;border-radius:16px;max-width:720px;width:94%;height:88vh;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,0.3);overflow:hidden;';
 
         // Count total items
         let totalItems = 0;
@@ -1934,9 +1935,9 @@ async function openTimetable(compId) {
                     <h3 style="font-size:18px;font-weight:800;margin:0;color:#4a4a4a;">경기 시간표</h3>
                     <p style="font-size:11px;color:#8a8a8a;margin:3px 0 0;font-weight:500;">Competition Timetable · 총 ${totalItems}개 경기</p>
                 </div>
-                <button onclick="document.getElementById('timetable-overlay').remove()" style="background:rgba(255,255,255,0.8);border:1px solid #c0c0c0;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;transition:all 0.15s;font-weight:300;" onmouseover="this.style.background='#fff';this.style.borderColor='#8a8a8a'" onmouseout="this.style.background='rgba(255,255,255,0.8)';this.style.borderColor='#c0c0c0'">&times;</button>
+                <button aria-label="닫기" onclick="document.getElementById('timetable-overlay').remove()" style="background:rgba(120,120,128,0.12);border:0;width:34px;height:34px;border-radius:50%;cursor:pointer;color:#3a3a3c;display:flex;align-items:center;justify-content:center;flex:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
             </div>
-            <div id="tt-day-tabs" style="display:flex;gap:6px;margin-top:14px;align-items:center;position:relative;"></div>
+            <div id="tt-day-tabs" style="display:flex;gap:2px;margin-top:10px;align-items:center;justify-content:center;position:relative;"></div>
         </div>`;
 
         const contentHtml = `<div id="tt-content" style="overflow-y:auto;padding:16px 22px 22px;flex:1;"></div>`;
@@ -2037,13 +2038,27 @@ async function openTimetable(compId) {
         }
         // 날짜 이동: ◀ [9/24(목) · 2일차 (13) ▾] ▶ — 날짜를 누르면 전체 날짜 목록이 아래로 펼쳐진다 (일주일짜리 대회도 한 줄)
         function renderDayTabs() {
+            // PC(폭 720px 이상): 날짜 탭을 한 줄로 늘어놓고 눌러 이동. 모바일: 화살표 + 날짜 드롭다운 (사용자 결정 2026-09-22)
+            if (window.innerWidth >= 720) {
+                tabContainer.style.justifyContent = 'flex-start'; tabContainer.style.flexWrap = 'wrap'; tabContainer.style.gap = '6px';
+                tabContainer.innerHTML = dayKeys.map(d => {
+                    const dd = data.days[d] || {};
+                    const cnt = (dd.track || []).length + (dd.field || []).length;
+                    const isActive = d === activeDay;
+                    return `<button type="button" onclick="window._ttShowDay(${d})" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${isActive ? '#6b6b6b' : '#d0d0d0'};background:${isActive ? '#6b6b6b' : '#fff'};color:${isActive ? '#fff' : '#555'};font-size:12px;font-weight:${isActive ? '700' : '500'};cursor:pointer;display:inline-flex;align-items:center;gap:4px;">${_ttDayLabel(d, dd, data)} <span style="font-size:10px;opacity:.7;">(${cnt})</span></button>`;
+                }).join('');
+                return;
+            }
+            tabContainer.style.justifyContent = 'center'; tabContainer.style.flexWrap = 'nowrap'; tabContainer.style.gap = '2px';
             const idx = dayKeys.indexOf(activeDay);
             const cntOf = d => { const dd = data.days[d] || {}; return (dd.track || []).length + (dd.field || []).length; };
-            const btn = (dis, dir, label) => `<button type="button" ${dis ? 'disabled' : ''} onclick="window._ttShowDay(${dis ? activeDay : dayKeys[idx + dir]})" aria-label="${dir < 0 ? '이전 날' : '다음 날'}" style="width:36px;height:36px;border-radius:50%;border:1.5px solid #c0c0c0;background:#fff;color:${dis ? '#ccc' : '#6b6b6b'};font-size:16px;cursor:${dis ? 'default' : 'pointer'};display:inline-flex;align-items:center;justify-content:center;">${label}</button>`;
-            tabContainer.innerHTML = `${btn(idx <= 0, -1, '&#8249;')}
-                <button type="button" id="tt-day-current" onclick="window._ttToggleDayList()" aria-haspopup="listbox" aria-expanded="false" style="flex:1;max-width:280px;height:36px;padding:0 14px;border-radius:20px;border:1.5px solid #6b6b6b;background:#6b6b6b;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;">${_ttDayLabel(activeDay, data.days[activeDay] || {}, data)} <span style="font-size:11px;opacity:.75;">(${cntOf(activeDay)})</span> <span style="font-size:11px;opacity:.8;">&#9662;</span></button>
-                ${btn(idx >= dayKeys.length - 1, 1, '&#8250;')}
-                <div id="tt-day-list" role="listbox" hidden style="position:absolute;top:42px;left:42px;z-index:5;background:#fff;border:1px solid #ddd;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:220px;padding:4px;">
+            // 애플식으로 담백하게: 테두리 없는 쉐브론(터치 영역 40px, 글리프 20px), 가운데는 글자만(날짜 굵게 · 일차 연하게), 아래로 작은 목록
+            const chev = dir => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${dir < 0 ? '15 5 8 12 15 19' : '9 5 16 12 9 19'}"/></svg>`;
+            const btn = (dis, dir) => `<button type="button" ${dis ? 'disabled' : ''} onclick="window._ttShowDay(${dis ? activeDay : dayKeys[idx + dir]})" aria-label="${dir < 0 ? '이전 날' : '다음 날'}" style="width:40px;height:40px;border-radius:50%;border:0;background:transparent;color:${dis ? '#d0d0d0' : '#333'};cursor:${dis ? 'default' : 'pointer'};display:inline-flex;align-items:center;justify-content:center;">${chev(dir)}</button>`;
+            tabContainer.innerHTML = `${btn(idx <= 0, -1)}
+                <button type="button" id="tt-day-current" onclick="window._ttToggleDayList()" aria-haspopup="listbox" aria-expanded="false" style="height:40px;padding:0 10px;border:0;background:transparent;color:#1f1d1a;font-size:16px;font-weight:700;letter-spacing:-.01em;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">${_ttDayLabel(activeDay, data.days[activeDay] || {}, data)}<span style="font-size:12px;font-weight:500;color:#888;">${cntOf(activeDay)}경기</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+                ${btn(idx >= dayKeys.length - 1, 1)}
+                <div id="tt-day-list" role="listbox" hidden style="position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:5;background:#fff;border:1px solid #e5e5e5;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.14);min-width:230px;padding:4px;">
                     ${dayKeys.map(d => `<button type="button" role="option" aria-selected="${d === activeDay}" onclick="window._ttShowDay(${d})" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:0;border-radius:8px;background:${d === activeDay ? '#f5f0e0' : 'transparent'};color:#333;font-size:13px;font-weight:${d === activeDay ? 700 : 500};cursor:pointer;text-align:left;">${_ttDayLabel(d, data.days[d] || {}, data)}<span style="font-size:11px;color:#888;">${cntOf(d)}경기</span></button>`).join('')}
                 </div>`;
         }
@@ -2105,8 +2120,8 @@ async function openTimetable(compId) {
                 const cb = r.match(/(10종|7종|5종)/);
                 if (cb) return { label: cb[1], fg: '#4a148c', bg: '#f3e5f5' };
                 if (/종경기|기록경기/.test(r)) return { label: '기록경기', fg: '#4a148c', bg: '#f3e5f5' };
+                if (/준결승|^준/.test(r)) return { label: '준결승', fg: '#e65100', bg: '#fff3e0' };      // '준결승'이 /결승/ 에도 걸리므로 먼저
                 if (/결승/.test(r)) { const j = r.match(/(\d+)\s*조/); return { label: j ? `결승 ${j[1]}조` : '결승', fg: '#b71c1c', bg: '#ffebee' }; }
-                if (/준결승|^준/.test(r)) return { label: '준결승', fg: '#e65100', bg: '#fff3e0' };
                 if (/예선/.test(r) || /^\d+-\d+\+\d+$/.test(r)) return { label: '예선', fg: '#1565c0', bg: '#e3f2fd' };
                 return { label: r, fg: '#555', bg: '#f0f0f0' };
             };
