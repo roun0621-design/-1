@@ -81,12 +81,22 @@
         .hero-cta { display:flex; align-items:center; gap:8px; padding:10px 18px; background:rgba(255,255,255,.22); backdrop-filter: blur(6px); border-radius:10px; font-size:14px; font-weight:800; letter-spacing:0.5px; flex-shrink:0; position:relative; z-index:1; }
         .hero-cta:hover { background:rgba(255,255,255,.32); }
         .hero-cta svg { width:16px; height:16px; }
+        /* 버튼 두 개(전체 시간표 · 대표팀 명단)는 같은 높이로 좌우 반씩 */
+        .hero-ctas { display:flex; gap:8px; flex-shrink:0; position:relative; z-index:1; }
+        .hero-ctas .hero-cta { flex:1 1 0; justify-content:center; white-space:nowrap; }
+        .hero-cta-roster { background:rgba(255,255,255,.9); color:#1a2a5e; }
+        .hero-cta-roster:hover { background:#fff; }
+        .hero-schedule.live .hero-cta-roster { color:#8b1a2a; }
         @media (max-width:640px) {
             .hero-schedule { padding:12px 14px; gap:10px; }
             .hero-icon { width:44px; height:44px; font-size:22px; border-radius:10px; }
             .hero-title { font-size:15px; }
             .hero-sub { font-size:12px; }
             .hero-cta { padding:8px 12px; font-size:12px; }
+            /* 폰: 버튼 두 개를 오른쪽에 위아래로 쌓아 카드 높이를 그대로 둔다 */
+            .hero-ctas { flex-direction:column; gap:6px; }
+            .hero-ctas .hero-cta { padding:6px 10px; font-size:12px; justify-content:space-between; }
+            .hero-ctas .hero-cta svg { width:13px; height:13px; }
         }
 
         .gender-tabs-bar { display:flex; gap:0; background:var(--white); padding:8px 0; border-bottom:2px solid var(--gray); }
@@ -390,9 +400,16 @@
                         <div class="hero-sub" id="hero-sub">불러오는 중…</div>
                     </div>
                 </div>
-                <div class="hero-cta">
-                    전체 시간표 열기
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                <div class="hero-ctas">
+                    <div class="hero-cta" role="button">
+                        전체 시간표
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                    <!-- 국제대회(관심 국가 설정)에서만: 선수 기준 명단 창 (dashboard.js renderHeroRosterButton) -->
+                    <div class="hero-cta hero-cta-roster" id="hero-roster-btn" role="button" hidden onclick="event.stopPropagation(); openTeamRoster();">
+                        대표팀 명단
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
                 </div>
             </div>
 

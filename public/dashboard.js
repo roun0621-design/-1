@@ -46,6 +46,77 @@ function _renderSpotlightButton() {
     b.innerHTML = `<span class="flag">${code === 'KOR' ? PaceIcons.svg('flagKR', { size: 22 }) : code}</span><span class="lbl">${code === 'KOR' ? '한국 선수' : code}</span>`;
     b.classList.toggle('active', _spotlightOnly);
 }
+// 히어로 카드의 '대표팀 명단' 버튼 — 관심 국가가 있는 대회에서만
+function renderHeroRosterButton() {
+    const b = document.getElementById('hero-roster-btn'); if (!b) return;
+    const code = (allEvents.find(e => e.spotlight) || {}).spotlight;
+    b.hidden = !code;
+    if (code) b.firstChild.textContent = (code === 'KOR' ? '대표팀 명단' : code + ' 명단') + ' ';
+}
+// 대표팀 명단 창 — 선수 기준: 출전 종목 · 다음 경기 · PB/SB · 결과 (GET /api/competitions/:id/roster)
+async function openTeamRoster() {
+    let overlay = document.getElementById('roster-modal-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div'); overlay.id = 'roster-modal-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100000;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.2s;';
+        overlay.onclick = (e) => { if (e.target === overlay) closeRosterModal(); };
+        document.body.appendChild(overlay);
+    }
+    overlay.style.display = 'flex';
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const code = (allEvents.find(e => e.spotlight) || {}).spotlight || 'KOR';
+    const teamL = code === 'KOR' ? '대한민국 육상 선수단' : code + ' 선수단';
+    overlay.innerHTML = `<div style="background:#fff;border-radius:12px;width:92%;max-width:600px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#f5f0e0,#eef2f9);border-bottom:1px solid #e8dfc0;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:10px;">${code === 'KOR' ? PaceIcons.svg('flagKR', { size: 28 }) : ''}<div><div style="font-weight:800;font-size:15px;color:#1a2a5e;" id="team-roster-title">${teamL}</div>
+                 <div style="font-size:12px;color:#8a7640;margin-top:2px;" id="team-roster-sub">불러오는 중…</div></div></div>
+            <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
+        </div>
+        <div id="roster-modal-body" style="flex:1;overflow-y:auto;padding:0;">${uiStateHtml('loading', { title: '선수단 명단을 불러오는 중…' })}</div></div>`;
+    if (window.pushModalState) pushModalState(() => closeRosterModal());
+    const body = document.getElementById('roster-modal-body');
+    try {
+        const data = await api('GET', `/api/competitions/${getCompetitionId()}/roster`);
+        const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+        const when = ev => {
+            const iso = ev.scheduled_at || (ev.scheduled_date ? `${ev.scheduled_date}T${ev.time || '00:00'}:00` : null);
+            if (iso) { const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/); if (m) { const d = new Date(+m[1], +m[2] - 1, +m[3]); return `${+m[2]}/${+m[3]}(${DOW[d.getDay()]}) ${m[4]}:${m[5]}`; } }
+            return ev.day != null ? `${ev.day}일차 ${ev.time || ''}` : '일정 미정';
+        };
+        const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' };
+        const genderL = { M: '남', F: '여', X: '혼성' };
+        const mark = ev => {
+            const r = ev.result; if (!r) return '';
+            if (r.status_code) return `<span style="color:#b3261e;font-weight:700;">${esc(PaceRanking.statusText(r.status_code))}</span>`;
+            if (r.time_seconds != null) return `<b>${formatTime(r.time_seconds)}</b>${r.wind != null ? ` <span style="color:#888;">(${r.wind > 0 ? '+' : ''}${Number(r.wind).toFixed(1)})</span>` : ''}`;
+            if (r.distance_meters != null) return `<b>${Number(r.distance_meters).toFixed(2)}</b>`;
+            return '';
+        };
+        const evLine = ev => {
+            const done = ev.round_status === 'completed', live = ev.round_status === 'in_progress';
+            const pb = [ev.personal_best ? 'PB ' + ev.personal_best : '', ev.season_best ? 'SB ' + ev.season_best : ''].filter(Boolean).map(esc).join('<br>');   // 폰에서 종목명 자리를 남기려고 PB·SB 를 위아래로
+            const st = done ? mark(ev) || '<span style="color:#888;">결과</span>' : live ? '<span style="color:#16a34a;font-weight:800;">LIVE</span>' : '';
+            return `<div onclick="openEventDetail(${ev.event_id})" style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;${done ? 'opacity:.75;' : ''}">
+                <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:${live ? '#16a34a' : done ? '#999' : '#1a2a5e'};min-width:92px;">${esc(when(ev))}</span>
+                <span style="flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ev.relay ? '<span style="font-size:10px;color:#7c3aed;margin-right:3px;">계주</span>' : ''}${esc(ev.event_name)} <span style="color:#888;font-weight:500;">${genderL[ev.gender] || ''} ${roundL[ev.round_type] || ''}</span></span>
+                <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;text-align:right;line-height:1.25;">${st || pb}</span></div>`;
+        };
+        const row = a => `<div style="padding:9px 14px;border-top:1px solid #f1f1f1;">
+            <div style="font-size:13px;font-weight:700;">${esc(a.name)}${a.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;font-weight:500;">${esc(a.name_alt)}</span>` : ''}${a.birth_year ? `<span style="font-size:11px;color:#999;margin-left:6px;font-weight:500;">${a.birth_year}</span>` : ''}${a.members ? '' : ''}</div>
+            ${a.members && a.members.length ? `<div style="font-size:11px;color:#666;margin-top:1px;">${a.members.map(m => esc(m.name)).join(' · ')}</div>` : ''}
+            <div style="margin-top:3px;">${a.events.map(evLine).join('') || '<div style="font-size:11px;color:#999;">출전 종목 없음</div>'}</div></div>`;
+        // 정렬: 다음 경기가 빠른 순, 모두 끝난 선수는 뒤로
+        const sortA = (p, q) => (p.next_key == null) - (q.next_key == null) || (String(p.next_key || '') < String(q.next_key || '') ? -1 : String(p.next_key || '') > String(q.next_key || '') ? 1 : 0) || String(p.name).localeCompare(String(q.name));   // ISO 문자열 비교 (일정 미정 '~' 는 맨 뒤)
+        const athletes = (data.athletes || []).slice().sort(sortA);
+        const teams = (data.teams || []).map(t => ({ ...t, members: (t.events[0] && t.events[0].members) || [] })).sort(sortA);
+        const evCount = new Set(athletes.flatMap(a => a.events.filter(e => !e.relay).map(e => e.event_name + '|' + e.gender))).size;
+        document.getElementById('team-roster-title').textContent = `${teamL} · ${athletes.length}명`;
+        document.getElementById('team-roster-sub').textContent = `${evCount}종목${teams.length ? ` · 계주 ${teams.length}팀` : ''} · 다음 경기 순`;
+        body.innerHTML = athletes.length
+            ? `${athletes.map(row).join('')}${teams.length ? `<div style="padding:10px 14px 2px;font-size:11px;font-weight:800;color:#7c3aed;letter-spacing:.05em;">계주 (${teams.length})</div>${teams.map(row).join('')}` : ''}`
+            : uiStateHtml('empty', { title: '선수단 명단이 아직 없습니다', hint: '공식 엔트리가 올라오면 자동으로 들어옵니다.' });
+    } catch (e) { body.innerHTML = uiStateHtml('error', { title: '선수단 명단을 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '' }); }
+}
 function onEventSearch(v) {
     _searchQuery = v || '';
     const btn = document.getElementById('dash-search-btn');
@@ -689,6 +760,7 @@ function renderMatrix() {
     // 'ALL' 탭이면 성별 필터 해제 → 남/여/혼성 모든 종목을 종목순으로 통합 표시
     let events = allEvents.filter(e => !e.parent_event_id);
     _renderSpotlightButton();
+    renderHeroRosterButton();
     if (_spotlightOnly) {
         const spotBases = new Set(allEvents.filter(e => e.spotlight).map(e => (e.name + '|' + e.gender)));
         events = events.filter(e => spotBases.has(e.name + '|' + e.gender));

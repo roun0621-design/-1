@@ -19,3 +19,9 @@
 ## 결과 형식
 대회 전에는 `results/<유닛키>` 가 `null` 이라 형식을 아직 모른다. `parseResults` 는 후보 키(Results/Partics…, Rank/Lane/Result/IRM/Wind/Qual/Record)를 넓게 보고,
 못 읽은 조는 `sync_state.unknown` 에 모양을 남긴다(관리자 카드에 표시). 첫 결과(9/23 07:30 경보)가 나오면 `GET /api/admin/intl/:id/probe?unit=<키>` 로 원본을 보고 `parseResults` 를 맞춘다.
+
+
+## 대표팀 명단 (2026-09-22)
+
+- `GET /api/competitions/:id/roster[?team=KOR]` (공개) — 관심 국가 선수를 **선수 기준**으로 묶는다: 출전 종목마다 라운드·조 시각(배정된 조 → 없으면 종목 첫 조 → 시간표)·종목별 PB/SB·결과(동기화 결과 한 줄 또는 시도별 최고)·계주 멤버. 계주 멤버에게는 팀 종목이 `relay:true` 로 붙는다. `teams[]` 는 국가 팀 행.
+- 대시보드 히어로 카드 오른쪽 버튼이 `전체 시간표 | 대표팀 명단` 으로 나뉜다(관심 국가가 있는 대회만, 폰에서는 위아래로 쌓임). 명단 창은 다음 경기 순, 종목을 누르면 엔트리/결과 창.

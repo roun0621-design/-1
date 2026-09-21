@@ -176,6 +176,24 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         expect(team).toEqual({ personal_best: '45.50', season_best: '45.50' });
         expect((await db.get("SELECT name FROM athlete WHERE competition_id=? AND name_alt='SEO Minjun'", fx.comp)).name).toBe('서민준');
     });
+    it('대표팀 명단(공개): 선수 기준으로 종목·조 시각·PB/SB, 계주 멤버는 팀 종목이 붙고 다음 경기 순 정렬', async () => {
+        const r = await request(app).get(`/api/competitions/${fx.comp}/roster`);
+        expect(r.status).toBe(200); expect(r.body.team).toBe('KOR');
+        expect(r.body.athletes.length).toBeGreaterThan(0); expect(r.body.athletes.every(a => !a.is_team)).toBe(true);
+        const woo = r.body.athletes.find(a => a.name === '우상혁');
+        expect(woo).toMatchObject({ name_alt: 'WOO Sanghyeok', birth_year: '1996' });
+        const hj = woo.events.find(e => e.event_name === '높이뛰기');
+        expect(hj).toMatchObject({ gender: 'M', round_type: 'preliminary', personal_best: '2.36', season_best: '2.30' }); expect(hj.scheduled_at).toMatch(/^2026-/);
+        // 계주만 뛰는 서민준: 팀 종목이 relay:true 로 붙는다
+        const seo = r.body.athletes.find(a => a.name === '서민준');
+        expect(seo.events.some(e => e.relay && e.event_name === '4X100mR' && e.personal_best === '38.49')).toBe(true);
+        expect(seo.events.every(e => !e.relay || e.members.length >= 4)).toBe(true);
+        expect(r.body.teams.length).toBeGreaterThan(0); expect(r.body.teams[0].is_team).toBe(true);
+        // 관심 국가 없는 대회는 400 (team 파라미터로는 조회 가능)
+        const other = await db.get("SELECT id FROM competition WHERE id<>? ORDER BY id LIMIT 1", fx.comp);
+        if (other) expect((await request(app).get(`/api/competitions/${other.id}/roster`)).status).toBe(400);
+        expect((await request(app).get(`/api/competitions/${fx.comp}/roster?team=JPN`)).body.athletes.length).toBeGreaterThan(0);
+    });
     it('상태 API 와 권한', async () => {
         const s = await request(app).get(`/api/admin/intl/${fx.comp}/status`).set('x-admin-key', OP);
         expect(s.status).toBe(200); expect(s.body.counts.events).toBeGreaterThan(48); expect(s.body.source.champ).toBe('AG2026'); expect(s.body.state.structure_at).toBeTruthy();
