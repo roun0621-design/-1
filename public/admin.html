@@ -506,7 +506,7 @@
                     </h4>
                     <p class="t-help-lg">
                         새로운 로그인 시스템 계정을 관리합니다.<br>
-                        ⚠️ <strong>본인이 관리자(admin)로 로그인되어 있어야</strong> 이 탭의 기능을 사용할 수 있습니다.
+                        <svg class="ui-icon" width="1em" height="1em" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;color:#b3261e;"><path d="M24 6L44 42H4z"/><path d="M24 19v11"/><circle cx="24" cy="36" r="1.6" fill="currentColor" stroke="none"/></svg> <strong>본인이 관리자(admin)로 로그인되어 있어야</strong> 이 탭의 기능을 사용할 수 있습니다.
                         로그인은 <a href="/login.html" style="color:#b79f58;font-weight:600;">/login.html</a> 의 "관리자·매니저 (NEW)" 탭에서 진행하세요.
                     </p>
                     <div id="users-auth-warning" style="display:none;background:#fff3cd;border:1.5px solid #e5a100;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#7a6400;font-weight:600;">
@@ -836,7 +836,7 @@
                         <strong>인식 형식:</strong> 1행 <code>성별 부 종목 라운드 [조]</code> + 풍속 · 2행 <code>순위 번호 레인 이름 소속 기록</code> · 배번→레인→성명 순 매칭 · 기록 <code>1:05.3</code>→초/필드 미터 자동변환 · <code>DNS/DNF/DQ</code> 인식
                     </div>
                     <div id="tt-drop" style="border:2px dashed #6ec8b3;border-radius:10px;padding:26px 16px;text-align:center;color:#0e7c66;background:#f0fbf8;cursor:pointer;transition:all .15s;">
-                        <div style="font-size:26px;">📄 ⬇️</div>
+                        <div style="font-size:26px;color:#8a7640;"><svg class="ui-icon" width="30px" height="30px" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4h18l10 10v30H12z"/><path d="M30 4v10h10M18 26h12M18 34h12"/></svg></div>
                         <div style="font-weight:700;margin-top:6px;">여기로 .txt 결과파일을 끌어다 놓으세요</div>
                         <div style="font-size:12px;color:#5b8f82;margin-top:4px;">또는 클릭해서 선택 (복수 가능)</div>
                         <input type="file" id="tt-files" multiple accept=".txt" style="display:none;" onchange="ttPreview(this.files)">
@@ -873,7 +873,7 @@
                         <button class="btn btn-sm btn-outline" onclick="fcCopyPrompt()">AI 전사 프롬프트 복사</button>
                     </div>
                     <div id="fc-drop" class="fc-drop" onclick="document.getElementById('fc-file').click()">
-                        <div style="font-size:22px;">📷</div>
+                        <div style="font-size:22px;color:#8a7640;"><svg class="ui-icon" width="28px" height="28px" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="13" width="38" height="28" rx="5"/><path d="M17 13l3-5h8l3 5"/><circle cx="24" cy="27" r="7"/></svg></div>
                         <div style="font-weight:600;">여기에 카드 사진 또는 xlsx 파일을 끌어다 놓거나 클릭해서 선택</div>
                         <div class="t-sm t-muted">사진은 한 번에 4장까지 (멀리뛰기·세단뛰기는 기록표와 풍속표를 함께) · xlsx 는 투척 · 수평도약 · 수직도약 양식 모두 가능</div>
                         <input type="file" id="fc-file" accept=".xlsx,.xls,image/*" multiple style="display:none;" onchange="fcHandleFiles(this.files)">
@@ -1032,7 +1032,7 @@
                             </select>
                         </div>
                         <div class="admin-form-group" id="comp-event-branding" style="flex-basis:100%;display:none;border-top:1px dashed #ddd;padding-top:12px;margin-top:6px;">
-                            <label style="font-weight:700;color:#8a7640;">🎟️ 행사(화이트라벨) 브랜딩</label>
+                            <label style="font-weight:700;color:#8a7640;"><svg class="ui-icon" width="1em" height="1em" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;"><path d="M6 16a4 4 0 0 0 4-4V10h28v2a4 4 0 0 0 4 4v16a4 4 0 0 0-4 4v2H10v-2a4 4 0 0 0-4-4z"/><path d="M19 10v28" stroke-dasharray="3 3"/></svg> 행사(화이트라벨) 브랜딩</label>
                             <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:6px;">
                                 <div>
                                     <label class="t-xs">행사 주소(slug)</label>
@@ -2722,7 +2722,7 @@ POST /api/external/event-result-link/batch<br>
             <div id="tab-sms" class="admin-tab-panel">
                 <!-- 푸시(앱 알림) 공지 -->
                 <div class="admin-card" style="border-left:4px solid #b79f58;">
-                    <h4 style="color:#8a7640;margin-bottom:8px;">📱 앱 푸시 알림 (공지 보내기)</h4>
+                    <h4 style="color:#8a7640;margin-bottom:8px;"><svg class="ui-icon" width="1em" height="1em" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;"><rect x="13" y="4" width="22" height="40" rx="5"/><path d="M21 38h6"/></svg> 앱 푸시 알림 (공지 보내기)</h4>
                     <div id="push-status-box" style="font-size:12px;color:#666;margin-bottom:10px;">상태 확인 중…</div>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
                         <div>
@@ -2930,6 +2930,7 @@ POST /api/external/event-result-link/batch<br>
 
     <script src="lib/xlsx.full.min.js"></script>
     <script src="/lib/auth-client.js?v=1"></script>
+    <script src="/lib/icons.js?v=1"></script>
     <script src="common.js?v=102"></script>
     <script>
         renderPageNav('admin');
@@ -3038,7 +3039,7 @@ POST /api/external/event-result-link/batch<br>
                 _selectedCompMode = 'operation';
             } else {
                 sel.innerHTML = filtered.map(c =>
-                    `<option value="${c.id}">${c.home_visibility === 'hidden' ? '🙈 [숨김] ' : ''}${c.name} (${c.start_date})</option>`
+                    `<option value="${c.id}">${c.home_visibility === 'hidden' ? '[숨김] ' : ''}${c.name} (${c.start_date})</option>`
                 ).join('');
                 // Keep previous selection if still in list, otherwise pick first
                 const prev = filtered.find(c => c.id === _selectedCompId);
@@ -3260,7 +3261,7 @@ POST /api/external/event-result-link/batch<br>
             try {
                 const s2 = await fetch('/api/admin/security-status', { headers: { 'x-admin-key': AK() } });
                 const box = document.getElementById('sec-warn-box');
-                if (s2.ok && box) { const w = (await s2.json()).warnings || []; box.style.display = w.length ? 'block' : 'none'; box.innerHTML = w.map(m => '⚠️ ' + esc(m)).join('<br>'); }
+                if (s2.ok && box) { const w = (await s2.json()).warnings || []; box.style.display = w.length ? 'block' : 'none'; box.innerHTML = w.map(m => PaceIcons.svg('warn', { style: 'margin-right:4px' }) + esc(m)).join('<br>'); }
             } catch (e) {}
         }
 
@@ -3310,8 +3311,8 @@ POST /api/external/event-result-link/batch<br>
                         ${Object.keys(ROLE_LABEL).map(r => `<option value="${r}" ${r===u.role?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
                     </select>`;
                     const actionBtns = `
-                        <button class="btn btn-xs btn-ghost" onclick="adminUsers_resetPassword(${u.id}, '${u.username.replace(/'/g,'\\\'')}')" title="비밀번호 재설정">🔑</button>
-                        <button class="btn btn-xs btn-ghost" onclick="adminUsers_toggleActive(${u.id}, ${u.active?0:1})" ${isSelf?'disabled':''} title="${u.active?'비활성화':'활성화'}">${u.active?'⏸':'▶'}</button>
+                        <button class="btn btn-xs btn-ghost" onclick="adminUsers_resetPassword(${u.id}, '${u.username.replace(/'/g,'\\\'')}')" title="비밀번호 재설정">${PaceIcons.svg('key')}</button>
+                        <button class="btn btn-xs btn-ghost" onclick="adminUsers_toggleActive(${u.id}, ${u.active?0:1})" ${isSelf?'disabled':''} title="${u.active?'비활성화':'활성화'}">${u.active ? PaceIcons.svg('pause') : PaceIcons.svg('play')}</button>
                         <button class="btn btn-xs btn-ghost" onclick="adminUsers_revokeSessions(${u.id}, '${u.username.replace(/'/g,'\\\'')}')" title="세션 회수">⎋</button>
                         ${isSelf ? '<span style="font-size:10px;color:#b79f58;font-weight:700;margin-left:4px;">(나)</span>' : ''}
                     `;
@@ -7481,7 +7482,7 @@ POST /api/external/event-result-link/batch<br>
                 const data = await resp.json();
                 if (!resp.ok || data.error) throw new Error(data.error || '입력 실패');
                 const tot = (data.results || []).reduce((s, x) => s + (x.imported || 0), 0);
-                let html = `<div style="border:1px solid #a7e0d1;background:#f0fbf8;border-radius:8px;padding:12px;"><strong style="color:#0e7c66;">✅ 총 ${tot}건 기록 입력 완료</strong><br><br>`;
+                let html = `<div style="border:1px solid #a7e0d1;background:#f0fbf8;border-radius:8px;padding:12px;"><strong style="color:#0e7c66;">${PaceIcons.svg('check', { style: 'margin-right:4px' })}총 ${tot}건 기록 입력 완료</strong><br><br>`;
                 for (const r of (data.results || [])) {
                     if (r.error) html += `<div style="margin-bottom:6px;"><strong>${r.label || r.filename}</strong> — <span style="color:red;">${r.error}</span></div>`;
                     else html += `<div style="margin-bottom:6px;"><strong>${r.label}</strong> — <span style="color:#0e7c66;">${r.imported}건 입력</span>${r.skipped > 0 ? `<span style="color:#f59e0b;"> / ${r.skipped}건 스킵</span>` : ''}${r.wind ? ` <span style="color:#6b7280;">풍속 ${r.wind}</span>` : ''}</div>`;

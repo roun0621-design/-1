@@ -1519,7 +1519,7 @@ function renderFieldDistanceContent() {
         <button class="btn btn-xs ${!isRank && !isView ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('input')" title="스몰넘버 순서">No.순</button>
         <button class="btn btn-xs ${isRank ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('rank')" title="기록순">기록순</button>
         <button class="btn btn-xs ${isView ? 'btn-primary' : 'btn-outline'}" onclick="setFieldMode('view')" title="조망 모드">조망</button>
-        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="openFieldCardUpload()" title="수기 기록카드 사진을 올려 AI 로 전사하고 표에서 확인·수정 후 저장">📷 기록카드</button>
+        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="openFieldCardUpload()" title="수기 기록카드 사진을 올려 AI 로 전사하고 표에서 확인·수정 후 저장">${PaceIcons.svg('camera', { style: 'margin-right:4px' })}기록카드</button>
     </div>`;
 
     content.innerHTML = `
@@ -2465,7 +2465,7 @@ function renderHeightContent() {
         <span style="font-size:11px;font-weight:700;color:var(--text-muted);">정렬:</span>
         <button class="btn btn-xs ${!isRank ? 'btn-primary' : 'btn-outline'}" onclick="setHeightMode('input')" title="레인 순서">No.순</button>
         <button class="btn btn-xs ${isRank ? 'btn-primary' : 'btn-outline'}" onclick="setHeightMode('rank')" title="순위별 정렬">순위순</button>
-        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="openFieldCardUpload()" title="수기 기록카드 사진을 올려 AI 로 전사하고 표에서 확인·수정 후 저장">📷 기록카드</button>
+        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="openFieldCardUpload()" title="수기 기록카드 사진을 올려 AI 로 전사하고 표에서 확인·수정 후 저장">${PaceIcons.svg('camera', { style: 'margin-right:4px' })}기록카드</button>
     </div>`;
 
     let hdr = '<th>RANK</th><th>No.</th><th>NAME / BIB</th>';
@@ -4284,7 +4284,7 @@ function autoAssignQualification() {
         if (_aq.ties.length) {
             const nameOf = id => { const r = _qualAllRows.find(x => x.event_entry_id === id); return r ? `${r.name}(${r.heat_number}조 ${formatTime(r.time_seconds)})` : id; };
             _aq.ties.forEach(t => t.ids.forEach(id => { const r = _qualAllRows.find(x => x.event_entry_id === id); if (r) r.tieWarn = true; }));
-            warn.innerHTML = '⚠️ 진출 마지막 자리에 동기록이 있습니다 — 자동 선정은 앞 순서대로만 넣었으니 심판장 결정(레인 여유 시 모두 진출 / 추첨)에 따라 직접 조정하세요.<br>' +
+            warn.innerHTML = PaceIcons.svg('warn', { style: 'margin-right:4px;color:#b3261e' }) + '진출 마지막 자리에 동기록이 있습니다 — 자동 선정은 앞 순서대로만 넣었으니 심판장 결정(레인 여유 시 모두 진출 / 추첨)에 따라 직접 조정하세요.<br>' +
                 _aq.ties.map(t => `· ${t.type === 'Q' ? t.heat_number + '조 순위 진출(Q)' : '기록 진출(q)'}: ${t.ids.map(nameOf).join(' = ')}`).join('<br>');
             warn.style.display = 'block';
         } else warn.style.display = 'none';

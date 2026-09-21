@@ -183,7 +183,7 @@
         box._inline = inline;
 
         var globe = document.createElement('span');
-        globe.textContent = '🌐';
+        if (window.PaceIcons) globe.innerHTML = PaceIcons.svg('globe', { size: 16 }); else globe.textContent = 'A';
         globe.style.cssText = 'font-size:11px;line-height:1;margin-right:2px;opacity:.7';
         box.appendChild(globe);
 

@@ -101,7 +101,7 @@
 
         const ov = document.createElement('div'); ov.className = 'fcu-overlay';
         ov.innerHTML = `<div class="fcu-modal" role="dialog" aria-modal="true">
-            <div class="fcu-head"><strong>📷 기록카드 업로드</strong><span class="fcu-ctx">${esc(ctxLabel)}</span><button class="fcu-close" data-act="close" title="닫기">✕</button></div>
+            <div class="fcu-head"><strong>${PaceIcons.svg('camera', { style: 'margin-right:6px' })}기록카드 업로드</strong><span class="fcu-ctx">${esc(ctxLabel)}</span><button class="fcu-close" data-act="close" title="닫기">✕</button></div>
             <div class="fcu-body"></div>
             <div class="fcu-foot"></div></div>`;
         document.body.appendChild(ov);
@@ -137,7 +137,7 @@
             const imgs = S.files.filter(isImage), xl = S.files.filter(isXlsx);
             body.innerHTML = `
                 <div class="fcu-drop" data-act="pick">
-                    <div style="font-size:24px;">📷</div>
+                    <div style="font-size:24px;color:#8a7640;">${PaceIcons.svg('camera', { size: 32 })}</div>
                     <div style="font-weight:600;">카드 사진을 여기에 끌어다 놓거나 클릭해서 선택</div>
                     <div class="fcu-note">${needsWind ? '<strong>기록표와 풍속표 두 장</strong>을 차례로 올린 뒤 전사를 시작하세요. ' : ''}사진은 한 번에 4장까지, xlsx 파일도 됩니다. 종목과 조는 이 화면(${esc(ctxLabel)})으로 고정되고 선수는 배번으로 맞춥니다.</div>
                 </div>

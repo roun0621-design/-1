@@ -2388,3 +2388,7 @@ body { font-variant-numeric: tabular-nums; }
     .font-size-ctrl button { width: 36px; height: 36px; }
     .mobile-menu-close { min-width: 40px; min-height: 40px; }
 }
+
+/* ── 인라인 SVG 아이콘 (lib/icons.js · 이모지 대체) ── */
+.ui-icon { display: inline-block; vertical-align: -0.15em; flex: none; }
+.ui-icon.ui-icon-top { vertical-align: middle; }

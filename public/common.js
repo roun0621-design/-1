@@ -1413,7 +1413,7 @@ function _buildMobileMenu(pages, currentPage, role) {
         <div class="mobile-menu-footer">
             <div class="mobile-menu-divider"></div>
             <button class="mm-action" onclick="mobileMenuPush()">
-                <span>🔔 경기 알림 받기</span>
+                <span>${PaceIcons.svg('bell', { style: 'margin-right:6px' })}경기 알림 받기</span>
             </button>
             <button class="mm-action" style="${loginColor}" onclick="mobileMenuLogin()">
                 <span>${loginLabel}</span>
@@ -2219,7 +2219,7 @@ async function openTimetable(compId) {
                     html += `<div id="tt-item-${item.id}" class="tt-row" ${clickAction} style="background:${rowBg};border-left:3px solid ${rowBar};${borderBottom}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${rowBg}'"` : ''}>
                         <span class="tt-time">${item.time}</span>
                         <div class="tt-front">${_frontBadges}</div>
-                        <span class="tt-name">${item.event_name}${item.spotlight === 'KOR' ? ' <span title="한국 선수 출전" style="font-size:13px;">🇰🇷</span>' : item.spotlight ? ` <span style="font-size:10px;font-weight:700;">${item.spotlight}</span>` : ''}${crBadge}</span>
+                        <span class="tt-name">${item.event_name}${item.spotlight === 'KOR' ? ' <span title="한국 선수 출전" style="display:inline-block;vertical-align:-3px;">' + PaceIcons.svg('flagKR', { size: 15 }) + '</span>' : item.spotlight ? ` <span style="font-size:10px;font-weight:700;">${item.spotlight}</span>` : ''}${crBadge}</span>
                         <div class="tt-tail">${nowBadge}${_statusTag}${_bracketTag}${_resultTag}</div>
                     </div>`;
                 });

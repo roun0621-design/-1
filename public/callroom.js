@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Competition ended check removed — callroom stays accessible
     // so admin/ROUNKIM accounts can still operate after competition ends
     renderPageNav('callroom');
+    { const ic = document.getElementById('cr-batch-ic'); if (ic && window.PaceIcons) ic.innerHTML = PaceIcons.svg('speaker', { style: 'margin-right:6px' }); }
     // [정책] 종료된 대회 + 운영진(operation) → 진입 차단
     if (typeof guardEndedCompForOperation === 'function') await guardEndedCompForOperation('callroom');
     // Parallel: comp selector + info bar + events load simultaneously
@@ -1593,7 +1594,7 @@ function openBatchCallroom() {
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:14px;';
     m.innerHTML = `<div style="background:#fff;border-radius:12px;width:min(560px,97vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2);">
       <div style="padding:13px 18px;background:#faf6ec;display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-weight:800;font-size:15px;color:#6b5520;">🔊 일괄 소집</div>
+        <div style="font-weight:800;font-size:15px;color:#6b5520;">${PaceIcons.svg('speaker', { style: 'margin-right:6px' })}일괄 소집</div>
         <button onclick="closeBatchCallroom()" style="border:none;background:none;font-size:22px;line-height:1;cursor:pointer;color:#999;">&times;</button>
       </div>
       <div style="padding:9px 14px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">

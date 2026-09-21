@@ -43,7 +43,7 @@ function _renderSpotlightButton() {
         b.onclick = toggleSpotlight; host.parentNode.insertBefore(b, host);
     }
     b.title = code === 'KOR' ? '한국 선수 출전 종목만 보기' : code + ' 선수 종목만';
-    b.innerHTML = `<span class="flag">${code === 'KOR' ? '🇰🇷' : code}</span><span class="lbl">${code === 'KOR' ? '한국 선수' : code}</span>`;
+    b.innerHTML = `<span class="flag">${code === 'KOR' ? PaceIcons.svg('flagKR', { size: 18 }) : code}</span><span class="lbl">${code === 'KOR' ? '한국 선수' : code}</span>`;
     b.classList.toggle('active', _spotlightOnly);
 }
 function onEventSearch(v) {
@@ -985,7 +985,7 @@ function renderCategoryTable(groups, label, isLive) {
         const favCell = `<td class="fav-cell"><span class="fav-toggle${_isFav ? ' on' : ''}" role="button" tabindex="0" aria-pressed="${_isFav}" title="${_isFav ? '관심 알림 켜짐 (눌러서 해제)' : '이 종목 알림 받기'}" onclick="event.stopPropagation();toggleFavorite('${g.name.replace(/'/g, "\\'")}','${_rowGender}')">${_isFav ? _BELL_ON : _BELL_OFF}<span class="fav-label">알림</span></span></td>`;
         html += `<tr data-row-gender="${_rowGender}"${_tapAttr}>
             ${favCell}
-            <td class="event-name">${genderBadge}${g.name}${divBadge}${g.spotlight ? `<span class="spot-badge" title="${g.spotlight === 'KOR' ? '한국 선수 출전' : g.spotlight + ' 출전'}">${g.spotlight === 'KOR' ? '🇰🇷' : g.spotlight}</span>` : ''}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
+            <td class="event-name">${genderBadge}${g.name}${divBadge}${g.spotlight ? `<span class="spot-badge" title="${g.spotlight === 'KOR' ? '한국 선수 출전' : g.spotlight + ' 출전'}">${g.spotlight === 'KOR' ? PaceIcons.svg('flagKR', { size: 16 }) : g.spotlight}</span>` : ''}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
             ${_isDisplayMode ? `<td data-label="영상" class="${videoCell ? '' : 'cell-empty'}">${videoCell}</td>` : ''}
             ${(_isDisplayMode || _colRounds.wl) ? `<td data-label="${_isDisplayMode ? '명단' : 'W/L'}" class="${(_isDisplayMode ? rosterCell : wlCell) ? '' : 'cell-empty'}">${_isDisplayMode ? rosterCell : wlCell}</td>` : ''}
             ${_colRounds.preliminary ? _roundCell(prelim, '예선') : ''}
@@ -1081,7 +1081,7 @@ async function openEntriesModal(eventId, eventName) {
         const spot = (allEvents.find(e => e.spotlight) || {}).spotlight || null;
         const rows = entries.slice().sort((a, b) => ((b.team === spot) - (a.team === spot)) || String(a.team || '').localeCompare(String(b.team || '')) || String(a.name).localeCompare(String(b.name)));
         const year = d => (String(d || '').match(/^\d{4}/) || [''])[0];
-        const flag = t => t === spot && spot === 'KOR' ? '🇰🇷 ' : '';
+        const flag = t => t === spot && spot === 'KOR' ? PaceIcons.svg('flagKR', { size: 15, style: 'margin-right:4px' }) : '';
         const line = e => {
             const pb = [e.personal_best ? 'PB ' + e.personal_best : '', e.season_best ? 'SB ' + e.season_best : ''].filter(Boolean).join(' · ');
             const mem = isRelay && members[e.event_entry_id] ? `<div style="font-size:11px;color:#666;margin-top:2px;">${members[e.event_entry_id].members.map(m => esc(m.name)).join(' · ')}</div>` : '';
