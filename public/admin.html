@@ -960,6 +960,14 @@
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">대회 전·당일·후에 빠뜨리기 쉬운 것을 시스템이 직접 확인합니다. 빨강은 반드시, 주황은 확인해 보세요.</p>
                     <div id="rd-groups" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;"></div>
                 </div>
+                <div class="admin-card" id="card-undo" style="border-left:4px solid #b79f58;">
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+                        <h4 style="margin:0;">최근 되돌리기</h4>
+                        <span class="t-xs t-muted">기록 초기화·선수/종목/조 삭제는 24시간 안에 그대로 되살릴 수 있습니다</span>
+                        <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="loadUndoList()">새로고침</button>
+                    </div>
+                    <div id="undo-list" class="t-xs t-muted">불러오는 중…</div>
+                </div>
                 <div class="admin-card" id="card-comp-edit" style="scroll-margin-top:20px;">
                     <h4>대회 정보 수정</h4>
                     <div class="admin-form-row">
@@ -3164,7 +3172,7 @@ POST /api/external/event-result-link/batch<br>
             if (name === 'pacing') loadPacingTab();
             if (name === 'relay') loadRelayTab();
             if (name === 'documents') { loadDocTemplates(); idcLoadTeams(); }
-            if (name === 'competition') loadReadiness();
+            if (name === 'competition') { loadReadiness(); loadUndoList(); }
             if (name === 'records') loadRecordsTab();
             if (name === 'extapi') { extLoadCompetitions(); extLoadKeys(); extLoadLogs(); }
             // [대 리뉴얼] 사이드바 활성 항목 동기화
@@ -3411,6 +3419,7 @@ POST /api/external/event-result-link/batch<br>
         const ICON_PATHS = {
             // overview
             chart:      '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/>',
+            undo:       '<polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>',
             // 대회 운영
             stadium:    '<path d="M3 8c0-2 4-3 9-3s9 1 9 3-4 3-9 3-9-1-9-3z"/><path d="M3 8v8c0 2 4 3 9 3s9-1 9-3V8"/>',
             upload:     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/>',
@@ -3465,6 +3474,7 @@ POST /api/external/event-result-link/batch<br>
             { group:'overview', label:'현황',           tab:'overview', icon:'chart', desc:'대회/시스템 전체 상태 요약', keywords:'dashboard 상태 요약' },
 
             // ───── 대회 운영 ─────
+            { group:'op', label:'최근 되돌리기', tab:'competition', anchor:'card-undo', icon:'undo', desc:'기록 초기화·선수/종목/조 삭제를 24시간 안에 되살리기', keywords:'undo 되돌리기 복구 실수 삭제 초기화 휴지통' },
             { group:'op', label:'대회 운영 체크리스트', tab:'competition', anchor:'card-readiness', icon:'chart', desc:'대회 전·당일·후 점검 — 시리즈 연결, 명단·조편성·시간표, 운영키, 백업, 종료 잠금', keywords:'checklist 체크리스트 점검 준비 readiness 시리즈 백업' },
             { group:'op', label:'대회 정보 수정',       tab:'competition', anchor:'card-comp-edit', icon:'stadium', desc:'대회명·기간·연맹·시리즈·운영 모드 등 기본 정보', keywords:'competition 대회 정보 수정 기간 연맹 시리즈 mode' },
             { group:'op', label:'대회 데이터 초기화',   tab:'competition', anchor:'card-comp-reset',  icon:'trash', desc:'이 대회의 선수·종목·기록만 삭제 (대회는 유지)', keywords:'초기화 reset clear 데이터 삭제 비우기' },
@@ -3914,7 +3924,7 @@ POST /api/external/event-result-link/batch<br>
         }
         async function deleteAthlete(id, name) {
             if (!await uiConfirm(`"${name}" 선수를 삭제하시겠습니까?`)) return;
-            try { await API.deleteAthlete(id, AK()); toast('삭제 완료'); _athSelectedId = null; loadAthletes(); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
+            try { const r = await API.deleteAthlete(id, AK()); _athSelectedId = null; loadAthletes(); showUndoToast(`"${name}" 선수를 삭제했습니다`, r && r.undo_id, () => loadAthletes()); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
         }
 
         // ---- EVENTS (Callroom/Record-style Matrix) ----
@@ -5748,7 +5758,7 @@ POST /api/external/event-result-link/batch<br>
             const id = document.getElementById('am-id').value;
             const name = document.getElementById('am-name').value;
             if (!await uiConfirm(`"${name}" 선수를 삭제하시겠습니까?`)) return;
-            try { await API.deleteAthlete(id, AK()); toast('삭제 완료'); closeAthModal(); loadAthletes(); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
+            try { const r = await API.deleteAthlete(id, AK()); closeAthModal(); loadAthletes(); showUndoToast('선수를 삭제했습니다', r && r.undo_id, () => loadAthletes()); } catch (e) { toast(e.error || '삭제 실패', 'error'); }
         }
 
         async function loadAthleteEvents(athleteId) {
@@ -6536,10 +6546,12 @@ POST /api/external/event-result-link/batch<br>
                 }
             }
             try {
-                await API.deleteEvent(id, AK());
-                for (const sid of alsoIds) { try { await API.deleteEvent(sid, AK()); } catch (e) {} }
-                toast(alsoIds.length ? `삭제 완료 (${alsoIds.length + 1}개 라운드)` : '삭제 완료');
+                const r = await API.deleteEvent(id, AK());
+                const undoIds = [r && r.undo_id].filter(Boolean);
+                for (const sid of alsoIds) { try { const r2 = await API.deleteEvent(sid, AK()); if (r2 && r2.undo_id) undoIds.push(r2.undo_id); } catch (e) {} }
                 closeEvtModal(); loadEvents();
+                // 여러 라운드를 지웠으면 마지막 것부터 차례로 되돌린다 (나머지는 대회 설정 → 최근 되돌리기)
+                showUndoToast(alsoIds.length ? `"${name}" ${alsoIds.length + 1}개 라운드를 삭제했습니다` : `"${name}" 종목을 삭제했습니다`, undoIds[0], async () => { for (const uid of undoIds.slice(1)) { try { await API.restoreUndo(uid); } catch (e) {} } loadEvents(); });
             } catch (e) { toast(e.error || '삭제 실패', 'error'); }
         }
 
@@ -11037,6 +11049,25 @@ POST /api/external/event-result-link/batch<br>
         let _certRenderedGroups = [];   // 현재 필터로 화면에 보이는 종목 그룹
 
         // ── 대회 운영 체크리스트 ─────────────────────────────────
+        // 최근 되돌리기 목록 (lib/undo.js) — 24시간 안, 아직 안 되살린 것
+        async function loadUndoList() {
+            const box = document.getElementById('undo-list'); if (!box || !_selectedCompId) return;
+            try {
+                const rows = await API.listUndo(_selectedCompId, AK());
+                if (!rows.length) { box.textContent = '되돌릴 작업이 없습니다'; return; }
+                const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                const when = v => { try { const d = new Date(/Z$|[+-]\d\d:?\d\d$/.test(v) ? v : v.replace(' ', 'T') + 'Z'); return d.toLocaleString('ko-KR', { hour12: false }); } catch (e) { return v; } };
+                box.innerHTML = rows.map(r => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #f1f1f1;font-size:12px;color:var(--text);">
+                    <span style="flex:1;">${esc(r.label)}</span><span class="t-xs t-muted">${esc(when(r.created_at))}${r.performed_by ? ' · ' + esc(r.performed_by) : ''}${r.role === 'admin' ? ' · 관리자' : ''}</span>
+                    <button class="btn btn-xs btn-outline" onclick="restoreUndo(${Number(r.id)}, this)">되돌리기</button></div>`).join('');
+            } catch (e) { box.textContent = '목록을 불러오지 못했습니다: ' + (e.error || e.message || e); }
+        }
+        async function restoreUndo(id, btn) {
+            if (!await uiConfirm('이 작업을 되돌립니다. 그 뒤에 새로 입력한 같은 항목이 있으면 새 것이 남습니다.')) return;
+            if (btn) btn.disabled = true;
+            try { const r = await API.restoreUndo(id); toast('되돌렸습니다: ' + (r.label || '')); loadUndoList(); loadAthletes(); loadEvents(); }
+            catch (e) { toast(e.error || '되돌리기 실패', 'error'); if (btn) btn.disabled = false; }
+        }
         async function loadReadiness() {
             const box = document.getElementById('rd-groups'); if (!box) return;
             if (!_selectedCompId) { box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">대회를 선택하면 점검합니다.</div>'; return; }

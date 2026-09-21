@@ -662,6 +662,8 @@ const API = {
     completeCallroom: (eid, judge_name, heat_id) => api('POST', `/api/events/${eid}/callroom-complete`, { judge_name, heat_id }),
     createSemifinal: (eid, group_count, selections) => api('POST', `/api/events/${eid}/create-semifinal`, { group_count, selections }),
     deleteEvent: (eid, admin_key) => api('DELETE', `/api/events/${eid}`, { admin_key }),
+    listUndo: (competitionId, key) => api('GET', `/api/undo?competition_id=${competitionId}&key=${encodeURIComponent(key || '')}`),
+    restoreUndo: (id) => api('POST', `/api/undo/${id}/restore`, {}),
     getFullResults: eid => api('GET', `/api/events/${eid}/full-results`),
     // Video URL
     getEventVideoUrl: eid => api('GET', `/api/events/${eid}/video-url`),
@@ -1643,6 +1645,38 @@ function showToast(message, type = 'success', duration = 2000) {
         toast.style.opacity = '0'; toast.style.transform = 'translateY(10px)';
         setTimeout(() => toast.remove(), 300);
     }, duration);
+}
+
+// 되돌리기 토스트 (2026-09 Phase 6): 삭제·초기화 응답의 undo_id 로 10초 동안 '되돌리기' 버튼을 보여준다.
+//   서버(lib/undo.js)가 지운 행을 24시간 보관하므로, 토스트가 사라진 뒤에도 관리자 → 대회 설정 → 최근 되돌리기에서 할 수 있다.
+//   onRestored(result) 는 되살린 뒤 화면을 다시 읽는 콜백.
+function showUndoToast(message, undoId, onRestored, duration = 10000) {
+    if (!undoId) { showToast(message, 'success'); return; }
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+        document.body.appendChild(container);
+    }
+    const t = document.createElement('div');
+    t.style.cssText = 'background:#262324;color:#fff;padding:10px 12px 10px 16px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.25);display:flex;align-items:center;gap:12px;pointer-events:auto;opacity:0;transform:translateY(10px);transition:all .25s ease;';
+    const msg = document.createElement('span'); msg.textContent = message;
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.textContent = '되돌리기';
+    btn.style.cssText = 'background:#b79f58;color:#1f1d1a;border:0;border-radius:6px;padding:6px 12px;font-weight:800;font-size:12px;cursor:pointer;min-height:32px;';
+    t.appendChild(msg); t.appendChild(btn); container.appendChild(t);
+    requestAnimationFrame(() => { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; });
+    const close = () => { t.style.opacity = '0'; t.style.transform = 'translateY(10px)'; setTimeout(() => t.remove(), 300); };
+    const timer = setTimeout(close, duration);
+    btn.onclick = async () => {
+        clearTimeout(timer); btn.disabled = true; btn.textContent = '되돌리는 중…';
+        try {
+            const r = await api('POST', `/api/undo/${undoId}/restore`, {});
+            close(); showToast('되돌렸습니다', 'success');
+            if (typeof onRestored === 'function') { try { await onRestored(r); } catch (e) {} }
+        } catch (e) { btn.disabled = false; btn.textContent = '되돌리기'; showToast('되돌리기 실패: ' + (e.error || e.message || e), 'error', 4000); }
+    };
 }
 
 // ============================================================

@@ -4966,7 +4966,7 @@ async function resetSubEventResults(eventId, eventName) {
     const joint = (typeof isJointMode === 'function' && eventId === state.selectedEventId && isJointMode());
     const jointNote = joint ? `\n\n※ 합동 종목: 함께 표시되는 다른 대회(${_jointOtherMembers().map(m => m.federation || m.comp_name || '').filter(Boolean).join(', ') || '멤버'})의 기록도 함께 초기화됩니다.` : '';
     if (!await uiConfirm(`[경고] ${eventName} 기록 초기화\n\n이 종목의 모든 기록과 WA 점수가 삭제됩니다.${jointNote}\n정말 초기화하시겠습니까?`)) return;
-    if (!await uiConfirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
+    if (!await uiConfirm(`최종 확인: "${eventName}" 기록을 완전히 초기화합니다.\n초기화 직후 '되돌리기'로 24시간 안에 되살릴 수 있습니다.`)) return;
 
     try {
         showToast('기록 초기화 중...', 'info', 2000);
@@ -4982,6 +4982,11 @@ async function resetSubEventResults(eventId, eventName) {
         if (state.selectedEventId) {
             await selectEvent(state.selectedEventId);
         }
+        // 되돌리기 (서버 스냅샷, 24시간)
+        if (result && result.undo_id) showUndoToast(`${eventName} 기록을 초기화했습니다`, result.undo_id, async () => {
+            state.events = await API.getAllEvents(getCompetitionId()); renderMatrix();
+            if (state.selectedEventId) await selectEvent(state.selectedEventId);
+        });
     } catch (err) {
         console.error('Reset error:', err);
         showToast('기록 초기화 실패: ' + (err.error || err.message || '서버 오류'), 'error', 4000);

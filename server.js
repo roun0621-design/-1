@@ -1465,6 +1465,9 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_record_breaking_comp ON record_bre
 //   - 부팅 자체는 막지 않음 (legacy 로그인은 여전히 동작해야 하므로)
 //   - 글로벌 플래그 global.__authMigOk / __authMigError 로 상태 보관
 //   - 진단/복구는 /api/_diag/auth-state, /api/_diag/auth-init 으로 가능
+// 되돌리기 스냅샷 테이블 (Phase 6, lib/undo.js) — 두 백엔드 공통, 7일 지난 것 정리
+const _undo = require('./lib/undo');
+_bootTasks.push((async () => { try { await _undo.ensureTable(db); await _undo.prune(db); } catch (e) { console.error('[undo] table:', e.message); } })());
 _bootTasks.push((async () => {
     try {
         const { runAuthMigrations } = require('./lib/auth/migrations');
@@ -2940,7 +2943,7 @@ app.get('/api/heats/:id/entries', async (req, res) => {
 // RESULTS
 // ============================================================
 // RESULTS 라우트들은 lib/routes/results.js 로 추출됨 (10차)
-const _resultsRoutes = require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit, parseDbTimestampMs, DECATHLON_KEYS, HEPTATHLON_KEYS });
+const _resultsRoutes = require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit, parseDbTimestampMs, DECATHLON_KEYS, HEPTATHLON_KEYS, getJudgeName });
 // ============================================================
 app.post('/api/heats/:id/wind', async (req, res) => {
     const { wind, offline_input_at } = req.body;
@@ -3545,6 +3548,7 @@ app.delete('/api/events/:id', async (req, res) => {
     if (!_isDisplayMode && event.round_type === 'preliminary' && !event.parent_event_id) {
         return res.status(400).json({ error: '예선은 삭제할 수 없습니다.' });
     }
+    const undoId = await _undoSnapshotEvent(event, 'admin');
     await db.transaction(async () => {
         const heats = await db.all('SELECT id FROM heat WHERE event_id=?', event.id);
         for (const h of heats) {
@@ -3558,8 +3562,33 @@ app.delete('/api/events/:id', async (req, res) => {
         await db.run('DELETE FROM qualification_selection WHERE event_id=?', event.id);
         await db.run('DELETE FROM event WHERE id=?', event.id);
     })();
-    res.json({ success: true });
+    res.json({ success: true, undo_id: undoId });
 });
+
+// 종목 삭제 전 스냅샷 (세부종목 포함) — 24시간 안에 되돌릴 수 있게 (lib/undo.js)
+async function _undoSnapshotEvent(event, role) {
+    try {
+        const ids = [event.id, ...(await db.all('SELECT id FROM event WHERE parent_event_id=?', event.id)).map(x => x.id)];
+        const ph = ids.map(() => '?').join(',');
+        const gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
+        const snap = await _undo.snapshot(db, {
+            competition_id: event.competition_id, kind: 'event_delete', role,
+            label: `종목 삭제: ${gL} ${event.name}${event.division ? ' ' + event.division : ''}`,
+            tables: [
+                { table: 'event', where: `id IN (${ph})`, params: ids },
+                { table: 'heat', where: `event_id IN (${ph})`, params: ids },
+                { table: 'event_entry', where: `event_id IN (${ph})`, params: ids },
+                { table: 'heat_entry', where: `heat_id IN (SELECT id FROM heat WHERE event_id IN (${ph}))`, params: ids },
+                { table: 'result', where: `heat_id IN (SELECT id FROM heat WHERE event_id IN (${ph}))`, params: ids },
+                { table: 'height_attempt', where: `heat_id IN (SELECT id FROM heat WHERE event_id IN (${ph}))`, params: ids },
+                { table: 'relay_member', where: `event_entry_id IN (SELECT id FROM event_entry WHERE event_id IN (${ph}))`, params: ids },
+                { table: 'combined_score', where: `event_entry_id IN (SELECT id FROM event_entry WHERE event_id IN (${ph}))`, params: ids },
+                { table: 'qualification_selection', where: `event_id IN (${ph})`, params: ids },
+            ],
+        });
+        return snap ? snap.id : null;
+    } catch (e) { console.error('[undo] event snapshot:', e.message); return null; }
+}
 
 // ============================================================
 // COMBINED (10종/7종) SUB-EVENT CRUD
@@ -4184,6 +4213,25 @@ app.delete('/api/admin/athletes/:id', async (req, res) => {
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const ath = await db.get('SELECT * FROM athlete WHERE id=?', req.params.id);
     if (!ath) return res.status(404).json({ error: 'Not found' });
+    // 되돌리기용 스냅샷 (선수 + 출전·조·기록·시기·종합 점수·진출·계주 주자)
+    let undoId = null;
+    try {
+        const snap = await _undo.snapshot(db, {
+            competition_id: ath.competition_id, kind: 'athlete_delete', role: isAdminKey(admin_key) ? 'admin' : 'operation', performed_by: getJudgeName(admin_key) || '',
+            label: `선수 삭제: ${ath.name}${ath.team ? ' (' + ath.team + ')' : ''}${ath.bib_number ? ' #' + ath.bib_number : ''}`,
+            tables: [
+                { table: 'athlete', where: 'id=?', params: [ath.id] },
+                { table: 'event_entry', where: 'athlete_id=?', params: [ath.id] },
+                { table: 'heat_entry', where: 'event_entry_id IN (SELECT id FROM event_entry WHERE athlete_id=?)', params: [ath.id] },
+                { table: 'result', where: 'event_entry_id IN (SELECT id FROM event_entry WHERE athlete_id=?)', params: [ath.id] },
+                { table: 'height_attempt', where: 'event_entry_id IN (SELECT id FROM event_entry WHERE athlete_id=?)', params: [ath.id] },
+                { table: 'combined_score', where: 'event_entry_id IN (SELECT id FROM event_entry WHERE athlete_id=?)', params: [ath.id] },
+                { table: 'qualification_selection', where: 'event_entry_id IN (SELECT id FROM event_entry WHERE athlete_id=?)', params: [ath.id] },
+                { table: 'relay_member', where: 'event_entry_id IN (SELECT id FROM event_entry WHERE athlete_id=?) OR athlete_id=?', params: [ath.id, ath.id] },
+            ],
+        });
+        undoId = snap ? snap.id : null;
+    } catch (e) { console.error('[undo] athlete snapshot:', e.message); }
     await db.transaction(async () => {
         const entries = await db.all('SELECT id FROM event_entry WHERE athlete_id=?', ath.id);
         for (const e of entries) {
@@ -4194,10 +4242,11 @@ app.delete('/api/admin/athletes/:id', async (req, res) => {
             await db.run('DELETE FROM qualification_selection WHERE event_entry_id=?', e.id);
         }
         await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE athlete_id=?)', ath.id);
+        await db.run('DELETE FROM relay_member WHERE athlete_id=?', ath.id);      // 계주 주자로 든 것도 (남아 있으면 팀 주자 목록이 깨진 선수를 가리킨다)
         await db.run('DELETE FROM event_entry WHERE athlete_id=?', ath.id);
         await db.run('DELETE FROM athlete WHERE id=?', ath.id);
     })();
-    res.json({ success: true });
+    res.json({ success: true, undo_id: undoId });
 });
 
 // ---- Athlete ↔ Event Assignment ----
@@ -4489,6 +4538,7 @@ app.delete('/api/admin/events/:id', async (req, res) => {
     if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
     const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
     if (!event) return res.status(404).json({ error: 'Not found' });
+    const undoId = await _undoSnapshotEvent(event, 'admin');
     await db.transaction(async () => {
         const subs = await db.all('SELECT id FROM event WHERE parent_event_id=?', event.id);
         for (const sub of subs) {
@@ -4505,7 +4555,7 @@ app.delete('/api/admin/events/:id', async (req, res) => {
         await db.run('DELETE FROM event_entry WHERE event_id=?', event.id);
         await db.run('DELETE FROM event WHERE id=?', event.id);
     })();
-    res.json({ success: true });
+    res.json({ success: true, undo_id: undoId });
 });
 
 // ============================================================
@@ -4526,13 +4576,28 @@ app.delete('/api/admin/heats/:id', async (req, res) => {
     if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
     const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
     if (!heat) return res.status(404).json({ error: 'Heat not found' });
+    let undoId = null;
+    try {
+        const ev = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
+        const snap = await _undo.snapshot(db, {
+            competition_id: ev && ev.competition_id, kind: 'heat_delete', role: 'operation', performed_by: getJudgeName(admin_key) || '',
+            label: `조 삭제: ${ev ? ev.name + ' ' : ''}${heat.heat_number}조`, meta: { event_id: heat.event_id },
+            tables: [
+                { table: 'heat', where: 'id=?', params: [heat.id] },
+                { table: 'heat_entry', where: 'heat_id=?', params: [heat.id] },
+                { table: 'result', where: 'heat_id=?', params: [heat.id] },
+                { table: 'height_attempt', where: 'heat_id=?', params: [heat.id] },
+            ],
+        });
+        undoId = snap ? snap.id : null;
+    } catch (e) { console.error('[undo] heat snapshot:', e.message); }
     await db.transaction(async () => {
         await db.run('DELETE FROM result WHERE heat_id=?', heat.id);
         await db.run('DELETE FROM height_attempt WHERE heat_id=?', heat.id);
         await db.run('DELETE FROM heat_entry WHERE heat_id=?', heat.id);
         await db.run('DELETE FROM heat WHERE id=?', heat.id);
     })();
-    res.json({ success: true });
+    res.json({ success: true, undo_id: undoId });
 });
 // Remove athlete from heat (without deleting event_entry — just unlink from heat)
 app.post('/api/admin/heats/:id/remove-entry', async (req, res) => {
@@ -8176,6 +8241,7 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
 //     GET    /api/admin/certificates/log
 //   헬퍼 getEventResultsForCert 는 모듈에서 반환받아 SMS 라우트 마운트 시 주입.
 // 대회 운영 체크리스트 (대회 전·당일·후 점검)
+require('./lib/routes/undo')(app, { db, isAdminKey, isOperationKey, getJudgeName, isCompetitionEnded, broadcastSSE, opLog });
 require('./lib/routes/readiness')(app, {
     db, isAdminKey, kstNow, lastBackupAgeMs: _lastBackupAgeMs, backupS3,
     listFinalSnapshots: compId => { try { return fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith(`backup_final${compId}_`) && f.endsWith('.db')).sort(); } catch (e) { return []; } },
