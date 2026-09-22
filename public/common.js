@@ -5,6 +5,38 @@
  */
 
 // ============================================================
+// 폰 글자 크기 (2026-09-22)
+//   폰(720px 미만)에서는 페이지를 기본 1.125배로 보여주고, 여기에 폰의 텍스트 크기 설정(iOS 동적 글꼴)을 곱한다.
+//   방법: CSS zoom 대신 viewport 를 (device-width ÷ 배율, initial-scale=배율) 로 바꾼다 — vh·fixed 요소가 그대로 맞고, 핀치 줌도 살아 있다.
+//   iOS: -apple-system-body 의 글꼴 크기(기본 17px)로 사용자의 텍스트 크기 단계를 읽는다. 안드로이드 크롬은 시스템 글꼴 배율을 스스로 적용하므로 기본 배율만.
+//   전광판·모니터(고정 viewport 페이지)는 건드리지 않는다. 상한 1.4 · 하한 1.0.
+// ============================================================
+(function applyPhoneTextScale() {
+    try {
+        const meta = document.querySelector('meta[name="viewport"]');
+        if (!meta || /user-scalable\s*=\s*no/i.test(meta.content || '')) return;
+        if ((Math.min(window.screen.width || 0, window.screen.height || 0) || window.innerWidth) >= 720) return;   // 폰만 (짧은 변 기준)
+        const BASE = 1.125;
+        let sys = 1;
+        if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+            const probe = document.createElement('div');
+            // 부모 글꼴을 13px 로 두고 시스템 글꼴을 적용 — 지원하지 않는 브라우저(안드로이드·데스크톱)는 13px 그대로라 배율을 곱하지 않는다
+            probe.style.cssText = 'position:absolute;left:-9999px;visibility:hidden;font-size:13px;';
+            const inner = document.createElement('span'); inner.style.font = '-apple-system-body'; inner.textContent = 'A'; probe.appendChild(inner);
+            (document.body || document.documentElement).appendChild(probe);
+            const px = parseFloat(getComputedStyle(inner).fontSize); probe.remove();
+            if (px >= 14 && px <= 60 && Math.abs(px - 13) > 0.5) sys = px / 17;   // 17px = iOS 기본(Large)
+        }
+        const scale = Math.round(Math.min(1.4, Math.max(1.0, BASE * sys)) * 1000) / 1000;
+        window.__textScale = scale;
+        // 가로/세로가 바뀌면 그 방향의 화면 폭으로 다시 계산
+        const apply = () => { const w = window.screen.width || window.innerWidth; meta.content = `width=${Math.round(w / scale)}, initial-scale=${scale}, viewport-fit=cover`; };
+        apply();
+        window.addEventListener('orientationchange', () => setTimeout(apply, 250));
+    } catch (e) { /* 실패해도 페이지는 그대로 */ }
+})();
+
+// ============================================================
 // Shared formatting helpers
 // (deduplicated from record.js / dashboard.js / results.js / callroom.js)
 // ============================================================

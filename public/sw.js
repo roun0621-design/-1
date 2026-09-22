@@ -2,7 +2,7 @@
 // Offline-first PWA: cache app shell, queue API mutations for sync
 // v3: auto version sync, IndexedDB offline queue, background sync
 
-const CACHE_NAME = 'pacerise-v197';
+const CACHE_NAME = 'pacerise-v198';
 const OFFLINE_URL = '/';
 
 // App shell — version-free paths (actual files are network-first, cache updated on every fetch)
