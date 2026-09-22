@@ -76,6 +76,14 @@ function renderHeroRosterButton() {
     }).catch(() => { if (sub) sub.textContent = '출전 선수와 기록'; });
 }
 // 대표팀 명단 창 — 선수 기준: 출전 종목 · 다음 경기 · PB/SB · 결과 (GET /api/competitions/:id/roster)
+// 명단 계열 창(대표팀 명단·엔트리·조 명단) 공용 상자: 폰은 아래에서 올라오는 전체 폭 시트(94vh), PC 는 가운데 창.
+//   overlay 를 세 창이 공유하므로 열 때마다 정렬을 다시 정한다 (예전엔 대표팀 명단(시트) 뒤에 엔트리 창이 아래 절반에 걸쳐 열렸다)
+function _rosterBox(overlay, maxWidth) {
+    const mobile = window.innerWidth < 720;
+    overlay.style.alignItems = mobile ? 'flex-end' : 'center';
+    return { mobile, box: mobile ? 'width:100%;height:94vh;border-radius:18px 18px 0 0;' : `width:92%;max-width:${maxWidth || 560}px;max-height:88vh;border-radius:12px;`,
+        handle: mobile ? '<div style="width:40px;height:4px;border-radius:2px;background:#d9d4ca;margin:8px auto 0;flex-shrink:0;"></div>' : '' };
+}
 let _rosterView = null;      // 'athlete'(선수별 · 다음 경기 순) | 'event'(종목별 · 칩 필터). null 이면 자동: 대회가 끝났으면 종목별
 let _rosterEventKey = null;  // 종목별에서 고른 종목 (name|gender)
 function setRosterSort(m) { _rosterView = m === 'event' ? 'event' : 'athlete'; openTeamRoster(true); }
@@ -107,10 +115,7 @@ async function openTeamRoster(keep) {
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const code = (allEvents.find(e => e.spotlight) || {}).spotlight || 'KOR';
     const teamL = code === 'KOR' ? '대한민국 육상 선수단' : code + ' 선수단';
-    const mobile = window.innerWidth < 720;
-    // 폰: 아래에서 올라오는 전체 폭 시트(위만 둥글게) · PC: 가운데 창
-    overlay.style.alignItems = mobile ? 'flex-end' : 'center';
-    const box = mobile ? 'width:100%;height:94vh;border-radius:18px 18px 0 0;' : 'width:92%;max-width:600px;height:88vh;border-radius:12px;';
+    const { mobile, box } = _rosterBox(overlay, 600);
     const scrollTop = keep ? (document.getElementById('roster-modal-body') || {}).scrollTop : 0;
     overlay.innerHTML = `<div style="background:#fff;${box}display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,0.25);overflow:hidden;">
         ${mobile ? '<div style="width:40px;height:4px;border-radius:2px;background:#d9d4ca;margin:8px auto 0;flex-shrink:0;"></div>' : ''}
@@ -1283,13 +1288,14 @@ async function openEntriesModal(eventId, eventName) {
     const gL = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
     const sched = _scheduleMap[evt.id];
-    overlay.innerHTML = `<div style="background:#fff;border-radius:12px;width:92%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+    const _rb = _rosterBox(overlay, 560);
+    overlay.innerHTML = `<div style="background:#fff;${_rb.box}display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">${_rb.handle}
         <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#f5f0e0,#eef2f9);border-bottom:1px solid #e8dfc0;flex-shrink:0;">
             <div><div style="font-weight:800;font-size:15px;color:#1a2a5e;" id="entries-modal-title">엔트리</div>
                  <div style="font-size:12px;color:#8a7640;margin-top:2px;">${gL} ${esc(eventName)} ${roundL}${sched && sched.time ? ` · ${sched.scheduled_date || ''} ${sched.time}` : ''}</div></div>
             <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
         </div>
-        <div id="roster-modal-body" style="flex:1;overflow-y:auto;padding:0;">${uiStateHtml('loading', { title: '출전 선수를 불러오는 중…' })}</div></div>`;
+        <div id="roster-modal-body" style="flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 0 env(safe-area-inset-bottom,0);">${uiStateHtml('loading', { title: '출전 선수를 불러오는 중…' })}</div></div>`;
     if (window.pushModalState) pushModalState(() => closeRosterModal());
     const body = document.getElementById('roster-modal-body');
     try {
@@ -3044,7 +3050,8 @@ async function openRosterModal(eventId, eventName) {
     const gL = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
 
-    overlay.innerHTML = `<div style="background:#fff;border-radius:12px;width:92%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+    const _rb = _rosterBox(overlay, 520);
+    overlay.innerHTML = `<div style="background:#fff;${_rb.box}display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">${_rb.handle}
         <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#f5f0e0,#f1f8e9);border-bottom:1px solid #e8dfc0;flex-shrink:0;">
             <div>
                 <div style="font-weight:800;font-size:15px;color:#6b5520;">소집대기 명단</div>
@@ -3052,7 +3059,7 @@ async function openRosterModal(eventId, eventName) {
             </div>
             <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
         </div>
-        <div id="roster-modal-body" style="flex:1;overflow-y:auto;padding:0;">
+        <div id="roster-modal-body" style="flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 0 env(safe-area-inset-bottom,0);">
             <div style="padding:30px;text-align:center;color:var(--text-muted);">불러오는 중...</div>
         </div>
     </div>`;

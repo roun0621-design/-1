@@ -101,6 +101,29 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         await sync.syncEntries(db, comp, { fetch: fakeFetch });
         expect((await db.all('SELECT id FROM event_entry WHERE event_id=?', w100pre.id)).length).toBe(entries.length);
     });
+    it('엔트리 변경: 공식 명단에서 빠진 선수는 출전이 지워지고(조·기록 없을 때), 계주 주자 교체는 주자 명단을 맞추며, 변경 이력이 남는다', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const w = F('entries_event_W100M.json'), r = F('entries_event_M4X100M.json');
+        const gone = w.Partics.find(p => p.Org !== 'KOR');                       // 외국 선수 하나 기권
+        const korTeam = r.Partics.find(p => p.Org === 'KOR' && p.hasMembers);      // 계주 팀 하나: 주자 한 명 교체
+        const membersKey = 'Members';
+        const dropped = korTeam[membersKey][0];
+        const altFetch = async (source, tail) => {
+            if (tail === 'entries/event/W.100M--------------') return { ...w, Partics: w.Partics.filter(p => p !== gone) };
+            if (tail === 'entries/event/M.4X100M------------') return { ...r, Partics: r.Partics.map(p => p === korTeam ? { ...p, [membersKey]: p[membersKey].slice(1) } : p) };
+            return fakeFetch(source, tail);
+        };
+        const st = await sync.syncEntries(db, comp, { fetch: altFetch });
+        expect(st.removed).toBeGreaterThanOrEqual(1);
+        expect(await db.get("SELECT COUNT(*) c FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id JOIN event e ON e.id=ee.event_id WHERE e.external_key='W.100M--------------#RND1' AND a.barcode=?", 'BN:' + gone.Reg)).toMatchObject({ c: 0 });
+        if (korTeam.Org === 'KOR') { expect(st.relay_changed).toBeGreaterThanOrEqual(1); expect(st.changes.some(c => c.type === 'relay')).toBe(true); }
+        const state = JSON.parse((await db.get('SELECT sync_state FROM competition WHERE id=?', fx.comp)).sync_state);
+        expect(Array.isArray(state.entries_changes)).toBe(true);
+        // 원래 명단으로 다시 동기화하면 되살아난다 (added)
+        const back = await sync.syncEntries(db, comp, { fetch: fakeFetch });
+        expect(back.added).toBeGreaterThanOrEqual(1);
+        expect((await db.get("SELECT COUNT(*) c FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id JOIN event e ON e.id=ee.event_id WHERE e.external_key='W.100M--------------#RND1' AND a.barcode=?", 'BN:' + gone.Reg)).c).toBe(1);
+    });
     it('결과(가상 형식): 스타트리스트 레인 → 기록·상태·풍속·순위, 화면 규칙으로 정렬', async () => {
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
         const kor = F('entries_org_KOR.json').Events.find(e => e.EvKey === 'W.100M--------------').Partics;

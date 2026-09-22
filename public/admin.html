@@ -11142,6 +11142,8 @@ POST /api/external/event-result-link/batch<br>
                     `<div>구조: 종목 <b>${c.events}</b> · 조 <b>${c.heats}</b> · 선수 <b>${c.athletes}</b> · 기록 <b>${c.results}</b> &nbsp; (구조 ${when(st.structure_at)} · 엔트리 ${when(st.entries_at)} · 결과 ${when(st.results_at)})</div>
                      <div>스케줄러: ${d.scheduler && d.scheduler.last_run ? '마지막 실행 ' + when(d.scheduler.last_run) : '아직 실행 전'}${d.scheduler && d.scheduler.last_error ? ' · <span style="color:var(--danger);">' + esc(d.scheduler.last_error) + '</span>' : ''} · ${d.source.enabled === false ? '<b>꺼짐</b>' : '켜짐'}</div>
                      ${st.results ? `<div>마지막 결과 동기화: 확인 ${st.results.checked}조 · 갱신 ${st.results.updated}조 · 기록 ${st.results.results}건</div>` : ''}
+                     ${st.entries ? `<div>마지막 엔트리 동기화: 새 출전 <b>${st.entries.added || 0}</b> · 빠짐 <b>${st.entries.removed || 0}</b> · 계주 주자 변경 <b>${st.entries.relay_changed || 0}</b>${(st.entries_changes || []).length ? ` — 우리 선수 변경 ${st.entries_changes.length}건` : ''}</div>` : ''}
+                     ${(st.entries_changes || []).length ? `<div style="margin-top:4px;padding:6px 8px;background:#fff8ec;border:1px solid #f0dcb0;border-radius:6px;font-size:12px;">${st.entries_changes.slice(0, 12).map(x => `<div>${esc(when(x.at))} · <b>${x.type === 'added' ? '새 출전' : x.type === 'relay' ? '계주' : '빠짐'}</b> ${esc(x.text)}</div>`).join('')}</div>` : ''}
                      ${unknown.length ? `<div style="color:#b5541b;">형식을 모르는 결과 ${unknown.length}조 — 첫 항목: <code>${esc(unknown[0].key)}</code> ${esc((unknown[0].shape || unknown[0].error || '').slice(0, 160))}</div>` : ''}`;
             } catch (e) { box.textContent = '상태를 불러오지 못했습니다: ' + (e.error || e.message || e); }
         }
