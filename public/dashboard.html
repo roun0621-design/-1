@@ -285,6 +285,11 @@
         .dash-filter-panel .fc { min-height:32px; padding:5px 13px; border-radius:999px; border:1px solid var(--gray); background:var(--bg); color:#555; font-size:12px; font-weight:700; cursor:pointer; line-height:1.3; }   /* responsive.css 의 button 44px 규칙보다 우선 — 알약 모양 유지 */
         .dash-filter-panel .fc.on { background:#1a2a5e; color:#fff; border-color:#1a2a5e; }
         .dash-filter-panel .fc.on[data-g="M"] { background:#1a2a5e; } .dash-filter-panel .fc.on[data-g="F"] { background:#8b1a2a; border-color:#8b1a2a; } .dash-filter-panel .fc.on[data-g="X"] { background:#6a1b9a; border-color:#6a1b9a; }
+        .dash-filter-panel .fs { display:flex; align-items:center; gap:8px; margin:2px 0 10px; padding:0 10px; height:38px; border:1px solid var(--gray); border-radius:10px; background:var(--bg); }
+        .dash-filter-panel .fs svg { width:16px; height:16px; flex:none; color:#8a8580; }
+        .dash-filter-panel .fs input { flex:1; min-width:0; border:none; background:transparent; font-size:16px; /* 16px 미만이면 iOS 가 포커스 때 확대 */ min-height:0; height:34px; padding:0; outline:none; }
+        .dash-filter-panel .fs input::-webkit-search-cancel-button { display:none; }
+        .dash-filter-panel .fs .fs-x { border:none; background:none; font-size:20px; color:#999; cursor:pointer; padding:0 2px; min-height:0; line-height:1; }
         .dash-filter-panel .ft { display:flex; justify-content:flex-end; gap:8px; border-top:1px solid var(--gray-light); padding-top:8px; }
         .dash-filter-panel .ft button { border:none; background:none; font-size:12px; font-weight:700; color:#555; cursor:pointer; padding:4px 8px; }
         .dash-filter-panel .ft button.primary { color:#1a2a5e; }
@@ -364,7 +369,7 @@
             /* 폰: 칩 줄은 숨기고 필터 버튼으로 */
             #filter-bar .filter-scroll { display:none !important; }
             .dash-filter-btn { display:inline-flex; }
-            #filter-bar.searching .dash-filter-btn { display:none; }
+            #filter-bar .dash-search { display:none !important; }   /* 검색은 필터 패널 안으로 */
             #filter-bar .filter-scroll { display:flex; flex-wrap:nowrap; align-items:center; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
             #filter-bar .filter-scroll::-webkit-scrollbar { display:none; }
             #filter-bar .gender-tabs-bar { flex:0 0 auto; display:inline-flex; gap:4px; padding:0 !important; border:none; background:none; }

@@ -231,15 +231,19 @@ function renderFilterButton() {
     if (currentGender !== 'ALL') parts.push(_GENDER_LABEL[currentGender] || currentGender);
     if (_catFilter !== 'ALL') parts.push(_CAT_LABEL[_catFilter] || _catFilter);
     if (_isDisplayMode && _currentDivision && _currentDivision !== '전체') parts.push(_currentDivision);
+    if (_searchQuery && _searchQuery.trim()) parts.push('“' + _searchQuery.trim() + '”');
     const lbl = document.getElementById('dash-filter-lbl'); if (lbl) lbl.textContent = parts.length ? parts.join(' · ') : '전체';
     btn.classList.toggle('on', parts.length > 0);
-    const panel = document.getElementById('dash-filter-panel'); if (panel && !panel.hidden) _renderFilterPanel();
+    const panel = document.getElementById('dash-filter-panel');
+    if (panel && !panel.hidden && !(document.activeElement && document.activeElement.id === 'filter-search')) _renderFilterPanel();
 }
 function _renderFilterPanel() {
     const panel = document.getElementById('dash-filter-panel'); if (!panel) return;
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const chip = (on, label, onclick, g) => `<button type="button" class="fc${on ? ' on' : ''}"${g ? ` data-g="${g}"` : ''} onclick="${onclick}" aria-pressed="${on}">${esc(label)}</button>`;
     const rows = [];
+    // 검색 — 폰에선 툴바 돋보기 대신 여기 (종목명 부분일치: 400 → 400m·400mH·4X400mR)
+    rows.push(`<div class="fs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/></svg><input id="filter-search" type="search" inputmode="search" autocomplete="off" placeholder="종목 검색 · 예) 400, 멀리" value="${esc(_searchQuery || '')}" oninput="_filterSearch(this.value)" onkeydown="if(event.key==='Escape'){this.value='';_filterSearch('');}">${_searchQuery ? `<button type="button" class="fs-x" aria-label="지우기" onclick="_filterSearch(''); _renderFilterPanel();">&times;</button>` : ''}</div>`);
     // 성별 — 종목에 있는 성별만 (행사 모드에서 성별 탭을 숨긴 대회는 줄 자체를 뺀다)
     const genderBar = document.getElementById('gender-tabs');
     const genders = [...new Set(allEvents.filter(e => !e.parent_event_id).map(e => e.gender).filter(Boolean))];
@@ -266,9 +270,10 @@ function toggleFilterPanel(force) {
 }
 function _filterOutside(e) { const panel = document.getElementById('dash-filter-panel'); if (!panel || panel.hidden) return; if (panel.contains(e.target) || (e.target.closest && e.target.closest('#dash-filter-btn'))) { document.addEventListener('click', _filterOutside, { once: true }); return; } toggleFilterPanel(false); }
 function _filterGender(g) { const btn = document.querySelector(`#gender-tabs .gender-tab-btn[data-gender="${g}"]`); switchGender(g, btn); _renderFilterPanel(); }
+function _filterSearch(v) { _searchQuery = v || ''; const b = document.getElementById('dash-search-btn'); if (b) b.classList.toggle('has-query', !!_searchQuery.trim()); renderMatrix(); }
 function _filterCat(k) { _catFilter = k; renderMatrix(); _renderFilterPanel(); }
 function _filterDivision(d) { if (typeof switchDivision === 'function') switchDivision(d, null); else { _currentDivision = d; renderMatrix(); } _renderFilterPanel(); }
-function resetFilters() { _catFilter = 'ALL'; if (_isDisplayMode) _currentDivision = '전체'; const btn = document.querySelector('#gender-tabs .gender-tab-btn[data-gender="ALL"]'); switchGender('ALL', btn); _renderFilterPanel(); }
+function resetFilters() { _catFilter = 'ALL'; _searchQuery = ''; const sb = document.getElementById('dash-search-btn'); if (sb) sb.classList.remove('has-query'); const sf = document.getElementById('event-search'); if (sf) sf.value = ''; if (_isDisplayMode) _currentDivision = '전체'; const btn = document.querySelector('#gender-tabs .gender-tab-btn[data-gender="ALL"]'); switchGender('ALL', btn); _renderFilterPanel(); }
 function onEventSearch(v) {
     _searchQuery = v || '';
     const btn = document.getElementById('dash-search-btn');
