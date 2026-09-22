@@ -9,6 +9,9 @@
 
 let allEvents = [];
 let currentGender = 'ALL'; // 'ALL' | 'M' | 'F' | 'X'  (기본탭: 전체)
+let _catFilter = 'ALL';    // 종목군 필터: 'ALL' | 'track' | 'field' | 'combined' | 'relay' | 'road' (폰 필터 패널)
+const _CAT_LABEL = { track: '트랙', field: '필드', combined: '혼성경기', relay: '계주', road: '로드' };
+const _GENDER_LABEL = { M: '남자', F: '여자', X: '혼성' };
 let callroomCompletedIds = new Set();
 let currentRole = localStorage.getItem('pace_role') || 'viewer';
 let _compVideoUrl = ''; // Competition-level video URL
@@ -221,6 +224,51 @@ async function openTeamRoster(keep) {
         if (keep && scrollTop) body.scrollTop = scrollTop;
     } catch (e) { body.innerHTML = uiStateHtml('error', { title: '선수단 명단을 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '' }); }
 }
+// ── 폰 필터 버튼: 성별 · 종목군 · 부를 패널 하나로 (칩이 잘리지 않게). PC 는 기존 칩 (dashboard.html .dash-filter-btn) ──
+function renderFilterButton() {
+    const btn = document.getElementById('dash-filter-btn'); if (!btn) return;
+    const parts = [];
+    if (currentGender !== 'ALL') parts.push(_GENDER_LABEL[currentGender] || currentGender);
+    if (_catFilter !== 'ALL') parts.push(_CAT_LABEL[_catFilter] || _catFilter);
+    if (_isDisplayMode && _currentDivision && _currentDivision !== '전체') parts.push(_currentDivision);
+    const lbl = document.getElementById('dash-filter-lbl'); if (lbl) lbl.textContent = parts.length ? parts.join(' · ') : '전체';
+    btn.classList.toggle('on', parts.length > 0);
+    const panel = document.getElementById('dash-filter-panel'); if (panel && !panel.hidden) _renderFilterPanel();
+}
+function _renderFilterPanel() {
+    const panel = document.getElementById('dash-filter-panel'); if (!panel) return;
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const chip = (on, label, onclick, g) => `<button type="button" class="fc${on ? ' on' : ''}"${g ? ` data-g="${g}"` : ''} onclick="${onclick}" aria-pressed="${on}">${esc(label)}</button>`;
+    const rows = [];
+    // 성별 — 종목에 있는 성별만 (행사 모드에서 성별 탭을 숨긴 대회는 줄 자체를 뺀다)
+    const genderBar = document.getElementById('gender-tabs');
+    const genders = [...new Set(allEvents.filter(e => !e.parent_event_id).map(e => e.gender).filter(Boolean))];
+    if (!(genderBar && genderBar.style.display === 'none') && genders.length > 1) {
+        rows.push(`<div class="fr"><div class="k">성별</div><div class="v">${chip(currentGender === 'ALL', '전체', "_filterGender('ALL')")}${['M', 'F', 'X'].filter(g => genders.includes(g)).map(g => chip(currentGender === g, _GENDER_LABEL[g], `_filterGender('${g}')`, g)).join('')}</div></div>`);
+    }
+    // 종목군 — 이 대회에 있는 것만
+    const catOf = c => c === 'field_distance' || c === 'field_height' ? 'field' : c;
+    const cats = ['track', 'field', 'combined', 'relay', 'road'].filter(k => allEvents.some(e => !e.parent_event_id && catOf(e.category) === k));
+    if (cats.length > 1) rows.push(`<div class="fr"><div class="k">종목군</div><div class="v">${chip(_catFilter === 'ALL', '전체', "_filterCat('ALL')")}${cats.map(k => chip(_catFilter === k, _CAT_LABEL[k], `_filterCat('${k}')`)).join('')}</div></div>`);
+    // 부 — 노출용 대회(부 탭이 있는 대회)만, 지금 성별에 있는 부
+    if (_isDisplayMode) {
+        const divs = [...new Set(allEvents.filter(e => !e.parent_event_id && (currentGender === 'ALL' || e.gender === currentGender)).map(e => e.division).filter(Boolean))].sort((a, b) => _divCompareKey(a) - _divCompareKey(b) || a.localeCompare(b));
+        if (divs.length) rows.push(`<div class="fr"><div class="k">부</div><div class="v">${chip(_currentDivision === '전체', '전체', "_filterDivision('전체')")}${divs.map(d => chip(_currentDivision === d, d, `_filterDivision('${esc(d).replace(/'/g, '&#39;')}')`)).join('')}</div></div>`);
+    }
+    panel.innerHTML = rows.join('') + `<div class="ft"><button type="button" onclick="resetFilters()">초기화</button><button type="button" class="primary" onclick="toggleFilterPanel(false)">닫기</button></div>`;
+}
+function toggleFilterPanel(force) {
+    const panel = document.getElementById('dash-filter-panel'), btn = document.getElementById('dash-filter-btn'); if (!panel) return;
+    const open = force == null ? panel.hidden : !!force;
+    if (open) _renderFilterPanel();
+    panel.hidden = !open; if (btn) btn.setAttribute('aria-expanded', String(open));
+    if (open) setTimeout(() => document.addEventListener('click', _filterOutside, { once: true }), 0);
+}
+function _filterOutside(e) { const panel = document.getElementById('dash-filter-panel'); if (!panel || panel.hidden) return; if (panel.contains(e.target) || (e.target.closest && e.target.closest('#dash-filter-btn'))) { document.addEventListener('click', _filterOutside, { once: true }); return; } toggleFilterPanel(false); }
+function _filterGender(g) { const btn = document.querySelector(`#gender-tabs .gender-tab-btn[data-gender="${g}"]`); switchGender(g, btn); _renderFilterPanel(); }
+function _filterCat(k) { _catFilter = k; renderMatrix(); _renderFilterPanel(); }
+function _filterDivision(d) { if (typeof switchDivision === 'function') switchDivision(d, null); else { _currentDivision = d; renderMatrix(); } _renderFilterPanel(); }
+function resetFilters() { _catFilter = 'ALL'; if (_isDisplayMode) _currentDivision = '전체'; const btn = document.querySelector('#gender-tabs .gender-tab-btn[data-gender="ALL"]'); switchGender('ALL', btn); _renderFilterPanel(); }
 function onEventSearch(v) {
     _searchQuery = v || '';
     const btn = document.getElementById('dash-search-btn');
@@ -949,6 +997,7 @@ function renderMatrix() {
     let events = allEvents.filter(e => !e.parent_event_id);
     _renderSpotlightButton();
     renderHeroRosterButton();
+    renderFilterButton();
     if (_spotlightOnly) {
         const spotBases = new Set(allEvents.filter(e => e.spotlight).map(e => (e.name + '|' + e.gender)));
         events = events.filter(e => spotBases.has(e.name + '|' + e.gender));
@@ -994,7 +1043,7 @@ function renderMatrix() {
     function _divSortIdx(div) { return _divCompareKey(div); }
     // 성별 정렬 점수: 남(0) < 여(1) < 혼성(2)
     function _genderSortIdx(g) { return g === 'M' ? 0 : g === 'F' ? 1 : g === 'X' ? 2 : 3; }
-    categories.forEach(cat => {
+    categories.filter(cat => _catFilter === 'ALL' || cat.key === _catFilter).forEach(cat => {   // 폰 필터 패널의 종목군
         const groups = Object.values(eventGroups).filter(g => cat.match(g.category));
         // 종목순 → 성별순(M<F<X) → 부별순  ('전체' 탭에서 남100m → 여100m → 남200m → 여200m ... 흐름)
         groups.sort((a,b) =>
@@ -1051,9 +1100,9 @@ function renderMatrix() {
 
     if (!html) {
         const isAdmin = (localStorage.getItem('pace_role') || '') === 'admin';
-        html = currentGender === 'ALL'
-            ? uiStateHtml('empty', { title: '등록된 종목이 없습니다', hint: '관리자에서 종목을 만들거나 연맹 명단을 올리면 여기에 나타납니다.', action: isAdmin ? { label: '관리자 열기', onclick: `location.href='/admin.html?comp=${getCompetitionId()}'` } : null })
-            : uiStateHtml('empty', { title: '이 성별의 종목이 없습니다', hint: '위의 성별 탭을 바꿔 보세요.' });
+        html = (currentGender !== 'ALL' || _catFilter !== 'ALL' || _spotlightOnly || (_searchQuery && _searchQuery.trim()))
+            ? uiStateHtml('empty', { title: '조건에 맞는 종목이 없습니다', hint: '필터를 풀거나 바꿔 보세요.', action: { label: '필터 초기화', onclick: 'resetFilters()' } })
+            : uiStateHtml('empty', { title: '등록된 종목이 없습니다', hint: '관리자에서 종목을 만들거나 연맹 명단을 올리면 여기에 나타납니다.', action: isAdmin ? { label: '관리자 열기', onclick: `location.href='/admin.html?comp=${getCompetitionId()}'` } : null });
     }
     container.innerHTML = html;
     updateLiveJumpBadge(liveGroups.length);
