@@ -213,8 +213,9 @@ async function openTeamRoster(keep) {
             const sel = byEvent.get(_rosterEventKey);
             document.getElementById('team-roster-sub').textContent = `${events.length}종목 · 종목을 고르면 출전 선수${ended ? ' · 대회 종료' : ''}`;
             const gOrder = ['M', 'F', 'X'];
-            const section = (label, list) => list.length ? `<div style="padding:8px 16px 2px;font-size:11px;font-weight:800;color:#8b1a2a;letter-spacing:.05em;">${label} (${list.length})</div>${list.map(({ a, ev }) => `<div style="padding:6px 16px 4px;border-top:1px solid #f4f4f4;">${nameLine(a)}${membersLine(a)}${evLine(ev, (roundL[ev.round_type] || '') + (ev.heat_number ? ` ${ev.heat_number}조` : ''))}</div>`).join('')}` : '';
-            const parts = gOrder.map(g => section(g === 'M' ? '남자' : g === 'F' ? '여자' : '혼성', [...sel.athletes, ...sel.teams].filter(x => x.ev.gender === g).sort((p, q) => String(p.a.name).localeCompare(String(q.a.name)))));
+            const secColor = { M: '#1a2a5e', F: '#8b1a2a', X: '#6a1b9a' };   // 남=남색 · 여=버건디 · 혼성=보라 (대시보드 성별 배지와 같은 색)
+            const section = (label, list, g) => list.length ? `<div style="padding:8px 16px 2px;font-size:11px;font-weight:800;color:${secColor[g] || '#555'};letter-spacing:.05em;">${label} (${list.length})</div>${list.map(({ a, ev }) => `<div style="padding:6px 16px 4px;border-top:1px solid #f4f4f4;">${nameLine(a)}${membersLine(a)}${evLine(ev, (roundL[ev.round_type] || '') + (ev.heat_number ? ` ${ev.heat_number}조` : ''))}</div>`).join('')}` : '';
+            const parts = gOrder.map(g => section(g === 'M' ? '남자' : g === 'F' ? '여자' : '혼성', [...sel.athletes, ...sel.teams].filter(x => x.ev.gender === g).sort((p, q) => String(p.a.name).localeCompare(String(q.a.name))), g));
             body.innerHTML = `<div style="padding:10px 16px 0;font-size:15px;font-weight:900;color:#1a2a5e;">${esc(sel.name)}</div>${parts.join('')}`;
         }
         if (keep && scrollTop) body.scrollTop = scrollTop;
