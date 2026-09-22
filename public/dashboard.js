@@ -1225,7 +1225,7 @@ function renderCategoryTable(groups, label, isLive) {
 /**
  * Viewer flow:
  * - created (no heats) → "대기" button (disabled)
- * - heats_generated → "명단" button (opens roster modal)
+ * - heats_generated → "스타트 리스트" button (opens roster modal)
  * - in_progress → "LIVE" button (shows live results); judges also get "기록" link
  * - completed → "결과" button (shows results)
  */
@@ -1235,7 +1235,7 @@ function renderViewerBtn(evt) {
     const isAdmin = currentRole === 'admin';
     const isJudge = currentRole === 'operation' || isAdmin;
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
-    // 조가 있어도 레인 배정이 하나도 없으면(국제대회: 조는 일정에서 먼저 생김) 아직 '명단'이 아니다
+    // 조가 있어도 레인 배정이 하나도 없으면(국제대회: 조는 일정에서 먼저 생김) 아직 '스타트 리스트'가 아니다
     const hasHeats = evt.heat_count > 0 && (evt.heat_entry_count == null || evt.heat_entry_count > 0);
     const isCallroomDone = callroomCompletedIds.has(evt.id);
 
@@ -1257,11 +1257,11 @@ function renderViewerBtn(evt) {
         return btns;
     }
 
-    // 히트가 있고 아직 소집 전 → 명단 버튼
-    // 명단 — 연한(흰 배경 + 점선 테두리 + 일반 굵기) 스타일로 "준비만 됨, 기록 미입력" 시각 표현
+    // 히트가 있고 아직 소집 전 → 스타트 리스트 버튼
     if (hasHeats) {
         const eName = (evt.name || '').replace(/'/g, "\\'");
-        return `<span class="round-btn" style="background:#fff;color:${rc.color};border:1px dashed ${rc.color};cursor:pointer;font-size:10px;padding:3px 6px;white-space:nowrap;font-weight:500;" onclick="openRosterModal(${evt.id},'${eName}')" title="조편성 명단 (기록 미입력)">명단</span>`;
+        // 스타트 리스트 — 레인·조까지 확정된 단계. 엔트리(점선)와 달리 실선 초록 채움으로 "바뀌었다"가 보이게
+        return `<span class="round-btn round-btn-start" style="background:#1b7f4d;color:#fff;border:1px solid #1b7f4d;cursor:pointer;font-size:10px;padding:3px 7px;white-space:nowrap;font-weight:700;" onclick="openRosterModal(${evt.id},'${eName}')" title="스타트 리스트 (조·레인 확정, 기록 미입력)">스타트 리스트</span>`;
     }
 
     // 조가 아직 없지만 출전 명단은 있는 종목(국제대회: 조편성 전) → 엔트리
@@ -1424,7 +1424,7 @@ async function openDisplayRoster(eventId, eventName, division) {
     }
 
     panel.innerHTML = `<div class="result-panel-header">
-        <h3>${eventName} ${gLabel}${divLabel} — 참가선수 명단</h3>
+        <h3>${eventName} ${gLabel}${divLabel} — 스타트 리스트</h3>
         <button class="result-panel-close" onclick="closeResult()">&times;</button>
     </div><div class="result-panel-body">${bodyHtml}</div>`;
     overlay.classList.add('show');
@@ -3054,7 +3054,7 @@ async function openRosterModal(eventId, eventName) {
     overlay.innerHTML = `<div style="background:#fff;${_rb.box}display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">${_rb.handle}
         <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#f5f0e0,#f1f8e9);border-bottom:1px solid #e8dfc0;flex-shrink:0;">
             <div>
-                <div style="font-weight:800;font-size:15px;color:#6b5520;">소집대기 명단</div>
+                <div style="font-weight:800;font-size:15px;color:#6b5520;">스타트 리스트</div>
                 <div style="font-size:12px;color:#b79f58;margin-top:2px;">${gL} ${eventName} ${roundL}</div>
             </div>
             <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
@@ -3091,6 +3091,11 @@ async function loadRosterModalData(eventId) {
 
         const isFinalSingle = evt.round_type === 'final' && heats.length === 1;
         const isField = ['field_distance', 'field_height'].includes(evt.category);
+        // 국제대회(관심 국가): 국가 코드 열·태극기·영문명·출생년·PB/SB, 우리 선수 줄은 연한 붉은 배경 — 엔트리 창과 같은 규칙
+        const spot = (allEvents.find(e => e.spotlight) || {}).spotlight || null;
+        const escT = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const yearOf = d => (String(d || '').match(/^\d{4}/) || [''])[0];
+        const pbsbOf = e => [e.personal_best ? 'PB ' + e.personal_best : '', e.season_best ? 'SB ' + e.season_best : ''].filter(Boolean).map(escT).join('<br>');
         // 소집 진행 중 여부 (heats_generated 이후 = 소집 가능 상태)
         const showCallroomStatus = (evt.round_status === 'in_progress' || evt.round_status === 'heats_generated');
         let html = '';
@@ -3107,6 +3112,7 @@ async function loadRosterModalData(eventId) {
 
             // === 그룹(A/B) 분리: 5000m/10000m 등 장거리 그룹 결승은 같은 조 안에서 A/B 따로 출발 ===
             const hasSubGroup = entries.some(e => e.sub_group);
+            const hasBib = entries.some(e => e.bib_number);   // 국제대회는 배번이 없어 열을 뺀다
 
             html += `<div style="border-bottom:1.5px solid #e8e8e8;">`;
             html += `<div style="padding:8px 14px;background:#fafafa;display:flex;align-items:center;justify-content:space-between;">`;
@@ -3133,13 +3139,19 @@ async function loadRosterModalData(eventId) {
             html += `<table class="fill-table" style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">`;
             html += `<thead><tr style="background:#f5f5f5;border-bottom:1px solid #e0e0e0;">`;
             html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">${isField ? '순서' : '레인'}</th>`;
-            html += `<th style="padding:5px 8px;text-align:center;width:50px;font-weight:600;color:#777;">배번</th>`;
+            if (hasBib) html += `<th style="padding:5px 8px;text-align:center;width:50px;font-weight:600;color:#777;">배번</th>`;
             if (hasSubGroup) html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">그룹</th>`;
             //   이름은 keep-all 만 두면 폭을 넘는 긴 이름(외국인 선수 등)이 소속 열 위로 겹쳐 그려짐
             //   → 이름 열을 표 폭의 24%(데스크톱 ≈125px, 9자까지 한 줄)로 넓히고, 그래도 넘치면
             //     overflow-wrap:anywhere 로 셀 안에서 줄바꿈. 소속은 남은 폭(≈250px)이라 상태 열을 침범하지 않음.
-            html += `<th style="padding:5px 8px;text-align:left;width:24%;font-weight:600;color:#777;">이름</th>`;
-            html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">소속</th>`;
+            if (spot) {
+                html += `<th style="padding:5px 8px;text-align:left;width:54px;font-weight:600;color:#777;">국가</th>`;
+                html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">이름</th>`;
+                html += `<th style="padding:5px 8px;text-align:right;width:92px;font-weight:600;color:#777;">PB · SB</th>`;
+            } else {
+                html += `<th style="padding:5px 8px;text-align:left;width:24%;font-weight:600;color:#777;">이름</th>`;
+                html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">소속</th>`;
+            }
             if (showCallroomStatus) html += `<th style="padding:5px 8px;text-align:center;width:48px;font-weight:600;color:#777;">상태</th>`;
             html += `</tr></thead><tbody>`;
 
@@ -3159,18 +3171,19 @@ async function loadRosterModalData(eventId) {
                 const curGroup = hasSubGroup ? (e.sub_group || '') : null;
                 // 그룹 경계 행 (A → B 사이)
                 if (hasSubGroup && prevGroup !== null && curGroup !== prevGroup) {
-                    html += `<tr><td colspan="${4 + (showCallroomStatus?1:0) + (hasSubGroup?1:0)}" style="padding:3px 8px;background:#fafafa;border-top:1.5px dashed #d0c89a;font-size:10px;color:#8b6914;text-align:left;font-weight:700;">${curGroup ? curGroup + ' 그룹' : '미지정'}</td></tr>`;
+                    html += `<tr><td colspan="${(hasBib ? 4 : 3) + (spot ? 1 : 0) + (showCallroomStatus?1:0) + (hasSubGroup?1:0)}" style="padding:3px 8px;background:#fafafa;border-top:1.5px dashed #d0c89a;font-size:10px;color:#8b6914;text-align:left;font-weight:700;">${curGroup ? curGroup + ' 그룹' : '미지정'}</td></tr>`;
                 } else if (hasSubGroup && prevGroup === null) {
                     // 첫 그룹도 라벨 표시
-                    html += `<tr><td colspan="${4 + (showCallroomStatus?1:0) + (hasSubGroup?1:0)}" style="padding:3px 8px;background:#fafafa;border-top:1.5px solid #d0c89a;font-size:10px;color:#8b6914;text-align:left;font-weight:700;">${curGroup ? curGroup + ' 그룹' : '미지정'}</td></tr>`;
+                    html += `<tr><td colspan="${(hasBib ? 4 : 3) + (spot ? 1 : 0) + (showCallroomStatus?1:0) + (hasSubGroup?1:0)}" style="padding:3px 8px;background:#fafafa;border-top:1.5px solid #d0c89a;font-size:10px;color:#8b6914;text-align:left;font-weight:700;">${curGroup ? curGroup + ' 그룹' : '미지정'}</td></tr>`;
                 }
                 prevGroup = curGroup;
 
                 // 상태별 행 배경색
-                const rowBg = e.status === 'no_show' ? 'background:#fff5f5;' : e.status === 'checked_in' ? 'background:#f1f8e9;' : '';
+                const isSpot = !!(spot && e.team === spot);
+                const rowBg = e.status === 'no_show' ? 'background:#fff5f5;' : e.status === 'checked_in' ? 'background:#f1f8e9;' : isSpot ? 'background:#fff6f6;' : '';
                 html += `<tr style="border-bottom:1px solid #f0f0f0;${rowBg}">`;
                 html += `<td style="padding:5px 8px;text-align:center;color:#555;">${e.lane_number || '-'}</td>`;
-                html += `<td style="padding:5px 8px;text-align:center;font-weight:700;">${e.bib_number || '-'}</td>`;
+                if (hasBib) html += `<td style="padding:5px 8px;text-align:center;font-weight:700;">${e.bib_number || '-'}</td>`;
                 if (hasSubGroup) {
                     const g = e.sub_group;
                     const gColor = g === 'A' ? '#555' : g === 'B' ? '#8b1a2a' : '#999';
@@ -3179,8 +3192,14 @@ async function loadRosterModalData(eventId) {
                 // 모바일에서 lib/responsive.css 가 모든 td 에 white-space:nowrap 을 걸어 줄바꿈이 원천 차단됨
                 //   → 긴 이름(비웨사다니엘가사마)이 소속 열에 겹침. 인라인 white-space:normal 로 되돌리고(인라인이 우선)
                 //   폭이 모자라면 음절 단위로 줄바꿈(word-break:normal + overflow-wrap:anywhere).
-                html += `<td style="padding:5px 8px;text-align:left;font-weight:600;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
-                html += `<td style="padding:5px 8px;text-align:left;color:#666;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.team || ''}</td>`;
+                if (spot) {
+                    html += `<td style="padding:5px 6px;text-align:left;font-weight:800;font-size:11px;color:${isSpot ? '#8b1a2a' : '#555'};white-space:nowrap;">${isSpot && spot === 'KOR' ? PaceIcons.svg('flagKR', { size: 18, style: 'margin-right:3px;vertical-align:-4px' }) : ''}${escT(e.team || '')}</td>`;
+                    html += `<td style="padding:5px 8px;text-align:left;font-weight:${isSpot ? 800 : 600};white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${escT(e.name)}${e.name_alt ? `<span style="font-size:10px;color:#888;margin-left:5px;font-weight:500;">${escT(e.name_alt)}</span>` : ''}${yearOf(e.date_of_birth) ? `<span style="font-size:10px;color:#999;margin-left:5px;font-weight:500;">${yearOf(e.date_of_birth)}</span>` : ''}</td>`;
+                    html += `<td style="padding:5px 8px;text-align:right;font-family:var(--font-mono);font-size:10.5px;color:#555;white-space:nowrap;line-height:1.25;">${pbsbOf(e)}</td>`;
+                } else {
+                    html += `<td style="padding:5px 8px;text-align:left;font-weight:600;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
+                    html += `<td style="padding:5px 8px;text-align:left;color:#666;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.team || ''}</td>`;
+                }
                 if (showCallroomStatus) {
                     let badge = '<span style="font-size:10px;color:#bbb;">—</span>';
                     if (e.status === 'checked_in') badge = '<span style="font-size:10px;color:#b79f58;font-weight:700;">출석</span>';

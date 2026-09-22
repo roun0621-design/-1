@@ -2210,9 +2210,9 @@ async function openTimetable(compId) {
                         } else if (item.round_status === 'in_progress') {
                             // 진행중 — 골드 LIVE
                             _statusTag = `<span style="color:#b79f58;font-size:11px;font-weight:700;background:#f8f4ea;border:1px solid #e8dfc0;padding:1px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="실시간 기록">LIVE</span>`;
-                        } else if (item.round_status === 'heats_generated') {
-                            // 명단 — 연한 회색
-                            _statusTag = `<span style="color:#666;font-size:11px;font-weight:600;background:#f5f5f5;border:1px dashed #bbb;padding:1px 6px;border-radius:8px;white-space:nowrap;">명단</span>`;
+                        } else if (item.round_status === 'heats_generated' || (item.round_status === 'created' && item.lane_count > 0)) {
+                            // 스타트 리스트 — 조·레인 확정 (초록 채움; 엔트리 점선과 구분). 국제대회는 상태가 created 여도 레인이 들어오면 스타트 리스트
+                            _statusTag = `<span style="color:#fff;font-size:11px;font-weight:700;background:#1b7f4d;border:1px solid #1b7f4d;padding:1px 7px;border-radius:8px;white-space:nowrap;">스타트 리스트</span>`;
                         }
                         // 'created' (대기) → no badge (시간표가 너무 복잡해지지 않도록)
                         // 조편성 전이지만 출전 명단은 있는 종목(국제대회) → 엔트리 (클릭하면 출전 선수 창)
