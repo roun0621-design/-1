@@ -34,3 +34,8 @@
 - 엔트리 동기화(12시간마다 자동 · 관리자 '엔트리 다시')가 이제 **공식 명단에서 빠진 출전을 지운다**(조 배정·기록이 없을 때만; 있으면 남기고 표시) 하고, **계주 주자 명단을 공식 명단으로 맞춘다**(빠진 주자 삭제·새 주자 추가·순서 갱신). 예전엔 추가만 하고 기권을 반영하지 못했다.
 - 결과: `sync_state.entries = { added, removed, relay_changed, changes[] }`, 우리 선수(관심 국가) 변경은 `entries_changes`(최근 30건)에 남아 관리자 카드에 '새 출전 / 빠짐 / 계주' 로 표시된다.
 - 9/22 확인: 9/21 스냅샷 대비 한국 변경 없음, 외국 기권 9(IND·PLE·AFG·QAT·PHI)·추가 4(PHI 계주 3팀·IND 멀리뛰기)·계주 주자 변경 1.
+
+## 공식 결과 → 라운드 완료 → 알림 (2026-09-22)
+- `parseResults` 가 결과 JSON 의 `Status/StatusDesc/ResultStatus/…` 에서 **Official** 여부를 읽는다(`Unofficial` 은 아님). 공식 결과가 들어온 조는 `sync_state.heat_flags[heatId]='official'`, 종목의 모든 조가 공식이면 `round_status='completed'`(결과 버튼) → `onApplied({completed:true})` → `notifyEventInterest(event,{kind:'result'})` 로 관심 등록자에게 "○○ 결승 결과 발표" 푸시. 같은 종목은 6시간에 한 번만.
+- 정확한 상태 키는 9/23 첫 결과(`probe`)로 확인해 후보 목록을 맞출 것. 키가 없으면 완료로 바뀌지 않으므로 관리자 force-status 로 수동 완료 가능.
+- 관심 종목 키는 `성별|종목명`(라운드 무관). 대시보드: 카드의 종 아이콘은 없애고 엔트리·스타트 리스트·결과·LIVE 창 머리글의 `알림` 토글로, 대표팀 명단 창엔 '전 종목 알림'(우리 선수 종목 전부 한 번에). 흐름 테스트 `tests/api/49_push_interest_flow`.

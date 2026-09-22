@@ -151,6 +151,25 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         const state = JSON.parse((await db.get('SELECT sync_state FROM competition WHERE id=?', fx.comp)).sync_state);
         expect(state.unknown[0].key).toBe('W.100M--------------.SFNL.000200--');
     });
+    it('공식 결과: 조마다 Official 이 들어오면 종목의 모든 조가 공식일 때 라운드 완료 + 결과 알림 훅(completed) — Unofficial 은 완료로 치지 않는다', async () => {
+        expect(B.parseResults({ Status: 'Unofficial', Results: [{ Reg: '1', Name: 'A', Result: '10.00' }] }).official).toBe(false);
+        expect(B.parseResults({ StatusDesc: 'Official', Results: [{ Reg: '1', Name: 'A', Result: '10.00' }] }).official).toBe(true);
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const all = F('entries_event_W100M.json').Partics.filter(p => p.Org !== 'KOR');   // 한국 선수 결과(다른 테스트가 봄)는 건드리지 않는다
+        const units = ['W.100M--------------.SFNL.000100--', 'W.100M--------------.SFNL.000200--', 'W.100M--------------.SFNL.000300--'];
+        const mk = (i, status) => ({ Key: units[i], Status: status, Results: [{ Reg: all[10 + i].Reg, Name: all[10 + i].Name, Org: all[10 + i].Org, Rank: 1, Lane: 4, Result: '11.5' + i }] });
+        fakeResults[units[0]] = mk(0, 'Official'); fakeResults[units[1]] = mk(1, 'Unofficial'); fakeResults[units[2]] = mk(2, 'Official');
+        const done = [];
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: units, onApplied: a => { if (a.completed) done.push(a.event_id); } });
+        const ev = await db.get("SELECT id, round_status FROM event WHERE competition_id=? AND external_key='W.100M--------------#SFNL'", fx.comp);
+        expect(ev.round_status).toBe('in_progress'); expect(done).toEqual([]);           // 2조가 아직 Unofficial
+        fakeResults[units[1]] = mk(1, 'Official');
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [units[1]], onApplied: a => { if (a.completed) done.push(a.event_id); } });
+        expect((await db.get('SELECT round_status FROM event WHERE id=?', ev.id)).round_status).toBe('completed'); expect(done).toEqual([ev.id]);
+        // 다시 읽어도 또 완료 알림을 내지 않는다
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [units[1]], onApplied: a => { if (a.completed) done.push(a.event_id); } });
+        expect(done).toEqual([ev.id]);
+    });
     it('선수 보조 정보(한글 이름·PB·SB): 영문 이름으로 찾아 넣고, 다음 동기화가 한글 이름을 덮지 않는다', async () => {
         const r = await request(app).post(`/api/admin/intl/${fx.comp}/athlete-info`).send({ admin_key: ADMIN, rows: [
             { 영문이름: 'seo jihyun', 한글이름: '서지현', PB: '11.30', SB: '11.45' }, { name: 'KIM Juha', name_ko: '김주하', pb: '11.36' }, { name: 'NOBODY X', name_ko: '없음' }] });

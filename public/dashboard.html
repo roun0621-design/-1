@@ -141,6 +141,11 @@
         .matrix-table td { padding:8px 6px; text-align:center; border-bottom:1px solid #f0f0f0; white-space:nowrap; }
         .matrix-table td.event-name { text-align:left; font-weight:700; white-space:nowrap; font-size:14px; }
         .fav-th { width:54px; font-size:11px; }
+        /* 종목 창 머리글의 알림 토글 (카드에서 옮김) */
+        .fav-modal-btn { flex:none; display:inline-flex; align-items:center; gap:5px; min-height:32px; padding:0 10px; margin-right:6px; border:1px solid var(--gray); border-radius:16px; background:var(--white); color:#8a8580; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; }
+        .fav-modal-btn .fav-bell { width:16px; height:16px; }
+        .fav-modal-btn.on { background:#f8f4ea; color:#8a7640; border-color:#b79f58; }
+        .result-panel-header .fav-modal-btn { margin-left:auto; }
         .matrix-table td.fav-cell { text-align:center; white-space:nowrap; }
         .fav-toggle { display:inline-block; width:34px; height:18px; border-radius:999px; background:#d3cdbe; position:relative; cursor:pointer; transition:background .15s; vertical-align:middle; }
         .fav-toggle .fav-knob { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:left .15s; box-shadow:0 1px 2px rgba(0,0,0,.25); }

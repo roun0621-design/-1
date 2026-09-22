@@ -129,6 +129,7 @@ async function openTeamRoster(keep) {
             <div id="team-roster-tools"></div>
             <button onclick="closeRosterModal()" aria-label="닫기" style="flex:none;width:32px;height:32px;border-radius:50%;background:#f0ede6;border:none;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;">${PaceIcons.svg('close', { size: 16 })}</button>
         </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 16px;border-bottom:1px solid #eee;flex-shrink:0;background:#fbfaf6;"><span style="font-size:11px;color:#8a8580;">우리 선수 종목의 소집·결과 알림</span><button type="button" class="fav-modal-btn" id="team-roster-fav" style="margin:0;" onclick="event.stopPropagation(); toggleSpotFavorites(this)"></button></div>
         <div id="team-roster-chips" style="flex-shrink:0;"></div>
         <div id="roster-modal-body" style="flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 0 env(safe-area-inset-bottom,0);-webkit-overflow-scrolling:touch;">${uiStateHtml('loading', { title: '선수단 명단을 불러오는 중…' })}</div></div>`;
     if (!keep && window.pushModalState) pushModalState(() => closeRosterModal());
@@ -172,6 +173,7 @@ async function openTeamRoster(keep) {
         const teams = (data.teams || []).map(t => ({ ...t, members: (t.events[0] && t.events[0].members) || [] }));
         const evCount = new Set(athletes.flatMap(a => a.events.filter(e => !e.relay).map(e => e.event_name + '|' + e.gender))).size;
         document.getElementById('team-roster-title').textContent = `${teamL} · ${athletes.length}명`;
+        _renderSpotFavBtn(document.getElementById('team-roster-fav'));
         const chipsEl = document.getElementById('team-roster-chips');
 
         if (view === 'athlete') {
@@ -352,6 +354,41 @@ function toggleFavorite(eventName, gender) {
     // 토글을 '켤 때' + 아직 알림 미허용이면 → 알림 켜기 유도 팝업(일주일 보지않기 포함)
     if (!wasOn) { try { window.PaceRisePush && window.PaceRisePush.promptToggle && window.PaceRisePush.promptToggle(); } catch (e) {} }
     renderMatrix();
+}
+
+// ── 종목 창(엔트리·스타트 리스트·결과) 머리글의 알림 토글 — 카드의 종 아이콘을 여기로 옮김 ──
+function _favBtnHtml(evt) {
+    if (!evt) return '';
+    const g = evt.gender || 'X', on = getFavorites().includes(g + '|' + evt.name);
+    const n = String(evt.name || '').replace(/'/g, "\\'");
+    return `<button type="button" class="fav-modal-btn${on ? ' on' : ''}" aria-pressed="${on}" title="${on ? '이 종목 알림 켜짐 (눌러서 해제)' : '이 종목 소집·결과 알림 받기'}" onclick="event.stopPropagation(); toggleFavoriteFromModal('${n}','${g}', this)">${on ? _BELL_ON : _BELL_OFF}<span>${on ? '알림 켜짐' : '알림'}</span></button>`;
+}
+function toggleFavoriteFromModal(name, gender, btn) {
+    toggleFavorite(name, gender);
+    const on = getFavorites().includes(gender + '|' + name);
+    if (btn) { btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', String(on)); btn.innerHTML = (on ? _BELL_ON : _BELL_OFF) + `<span>${on ? '알림 켜짐' : '알림'}</span>`; btn.title = on ? '이 종목 알림 켜짐 (눌러서 해제)' : '이 종목 소집·결과 알림 받기'; }
+}
+// 대표팀 명단 창: 우리 선수가 나가는 종목 전부를 한 번에 켜고 끈다 (관심 종목 = 성별|종목명, 라운드 무관)
+function _spotFavKeys() { return [...new Set(allEvents.filter(e => e.spotlight && !e.parent_event_id).map(e => (e.gender || 'X') + '|' + e.name))]; }
+function _spotFavState() { const keys = _spotFavKeys(); if (!keys.length) return { keys, on: 0 }; const favs = getFavorites(); return { keys, on: keys.filter(k => favs.includes(k)).length }; }
+function toggleSpotFavorites(btn) {
+    const { keys, on } = _spotFavState(); if (!keys.length) return;
+    let favs = getFavorites();
+    const turnOn = on < keys.length;
+    favs = turnOn ? [...new Set([...favs, ...keys])] : favs.filter(k => !keys.includes(k));
+    setFavorites(favs);
+    try { if (window.PaceRisePush && window.PaceRisePush.syncFavorites) window.PaceRisePush.syncFavorites(); } catch (e) {}
+    if (turnOn) { try { window.PaceRisePush && window.PaceRisePush.promptToggle && window.PaceRisePush.promptToggle(); } catch (e) {} }
+    renderMatrix();
+    if (btn) _renderSpotFavBtn(btn);
+    if (typeof showToast === 'function') showToast(turnOn ? `한국 선수 ${keys.length}종목 알림을 켰습니다` : '한국 선수 종목 알림을 껐습니다', 'success', 2500);
+}
+function _renderSpotFavBtn(btn) {
+    const { keys, on } = _spotFavState(); if (!btn) return;
+    const all = keys.length > 0 && on === keys.length;
+    btn.classList.toggle('on', all); btn.setAttribute('aria-pressed', String(all));
+    btn.innerHTML = (all ? _BELL_ON : _BELL_OFF) + `<span>${all ? '전 종목 알림 켜짐' : on ? `알림 ${on}/${keys.length}` : '전 종목 알림'}</span>`;
+    btn.title = all ? '한국 선수 전 종목 알림 켜짐 (눌러서 해제)' : '우리 선수가 나가는 모든 종목의 소집·결과 알림 받기';
 }
 
 // ── 행사(event) 화이트라벨 — /e/<slug> 진입 시 대회 세팅 + 브랜딩 적용 ──
@@ -1123,7 +1160,6 @@ function renderCategoryTable(groups, label, isLive) {
         <div class="matrix-scroll-wrap">
         <table class="matrix-table${_isDisplayMode ? ' matrix-display' : ''}">
             <thead><tr>
-                <th class="fav-th">알림</th>
                 <th style="text-align:left;">종목</th>
                 ${_isDisplayMode ? '<th style="width:64px;">영상</th><th style="width:60px;">명단</th>' : (_colRounds.wl ? '<th style="width:52px;">W/L</th>' : '')}
                 ${_colRounds.preliminary ? '<th style="width:72px;"><span style="color:#1565c0;">예선</span></th>' : ''}
@@ -1261,7 +1297,8 @@ function renderCategoryTable(groups, label, isLive) {
         // "예선/준결승/결승" 라벨을 붙이기 위함. PC(표 모드)에서는 사용되지 않음.
         // 알림 토글: 종 아이콘 + "알림" 라벨 (켜짐=bell 강조 / 꺼짐=bell-off muted), 탭영역 ≥44×44
         const _isFav = favs.includes(_rowGender + '|' + g.name);
-        const favCell = `<td class="fav-cell"><span class="fav-toggle${_isFav ? ' on' : ''}" role="button" tabindex="0" aria-pressed="${_isFav}" title="${_isFav ? '관심 알림 켜짐 (눌러서 해제)' : '이 종목 알림 받기'}" onclick="event.stopPropagation();toggleFavorite('${g.name.replace(/'/g, "\\'")}','${_rowGender}')">${_isFav ? _BELL_ON : _BELL_OFF}<span class="fav-label">알림</span></span></td>`;
+        // 알림 토글은 카드에서 빼고 종목 창(엔트리·스타트 리스트·결과) 머리글로 옮겼다 (2026-09-22) — 카드 제목 줄이 밀리지 않게
+        const favCell = '';
         html += `<tr data-row-gender="${_rowGender}"${_tapAttr}>
             ${favCell}
             <td class="event-name">${genderBadge}${g.name}${divBadge}${g.spotlight ? `<span class="spot-badge" title="${g.spotlight === 'KOR' ? '한국 선수 출전' : g.spotlight + ' 출전'}">${g.spotlight === 'KOR' ? PaceIcons.svg('flagKR', { size: 22 }) : g.spotlight}</span>` : ''}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
@@ -1346,8 +1383,9 @@ async function openEntriesModal(eventId, eventName) {
     const _rb = _rosterBox(overlay, 560);
     overlay.innerHTML = `<div style="background:#fff;${_rb.box}display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">${_rb.handle}
         <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#f5f0e0,#eef2f9);border-bottom:1px solid #e8dfc0;flex-shrink:0;">
-            <div><div style="font-weight:800;font-size:15px;color:#1a2a5e;" id="entries-modal-title">엔트리</div>
+            <div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:15px;color:#1a2a5e;" id="entries-modal-title">엔트리</div>
                  <div style="font-size:12px;color:#8a7640;margin-top:2px;">${gL} ${esc(eventName)} ${roundL}${sched && sched.time ? ` · ${sched.scheduled_date || ''} ${sched.time}` : ''}</div></div>
+            ${_favBtnHtml(evt)}
             <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
         </div>
         <div id="roster-modal-body" style="flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 0 env(safe-area-inset-bottom,0);">${uiStateHtml('loading', { title: '출전 선수를 불러오는 중…' })}</div></div>`;
@@ -1564,6 +1602,7 @@ async function openResult(eventId) {
 
         panel.innerHTML = `<div class="result-panel-header">
             <h3>${evt.name} ${roundL} ${gL}</h3>
+            ${_favBtnHtml(evt)}
             <button class="result-panel-close" onclick="closeResult()">&times;</button>
         </div><div class="result-panel-body">${bodyHtml}</div>`;
 
@@ -1728,6 +1767,7 @@ async function refreshLiveResult() {
 
         panel.innerHTML = `<div class="result-panel-header">
             <h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>${evt.name} ${roundL} ${gL}</h3>
+            ${_favBtnHtml(evt)}
             <button class="result-panel-close" onclick="closeLiveResult()">&times;</button>
         </div><div class="result-panel-body">${bodyHtml}</div>`;
         // Restore video closed state after SSE refresh
@@ -3112,6 +3152,7 @@ async function openRosterModal(eventId, eventName) {
                 <div style="font-weight:800;font-size:15px;color:#6b5520;">스타트 리스트</div>
                 <div style="font-size:12px;color:#b79f58;margin-top:2px;">${gL} ${eventName} ${roundL}</div>
             </div>
+            ${_favBtnHtml(evt)}
             <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
         </div>
         <div id="roster-modal-body" style="flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 0 env(safe-area-inset-bottom,0);">

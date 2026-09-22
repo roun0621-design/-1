@@ -5747,7 +5747,7 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
 // 대회 운영 체크리스트 (대회 전·당일·후 점검)
 require('./lib/routes/undo')(app, { db, isAdminKey, isOperationKey, getJudgeName, isCompetitionEnded, broadcastSSE, opLog });
 // 국제대회 동기화 (공식 결과 API → 우리 대회) — lib/intl, 60초 스케줄러 포함
-const _intlSync = require('./lib/routes/intl')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, upload });
+const _intlSync = require('./lib/routes/intl')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, upload, notifyEventInterest: (...a) => notifyEventInterest(...a) /* push 모듈이 뒤에서 마운트 */ });
 require('./lib/routes/readiness')(app, {
     db, isAdminKey, kstNow, lastBackupAgeMs: _lastBackupAgeMs, backupS3,
     listFinalSnapshots: compId => { try { return fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith(`backup_final${compId}_`) && f.endsWith('.db')).sort(); } catch (e) { return []; } },
