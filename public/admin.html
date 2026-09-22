@@ -1478,14 +1478,19 @@
                 <!-- Logs -->
                 <div class="admin-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                        <h4 style="margin:0;">최근 호출 로그 (최대 100건)</h4>
-                        <div style="display:flex;gap:6px;">
+                        <h4 style="margin:0;">호출 로그 <span id="ext-log-count" style="font-weight:500;color:var(--text-muted);font-size:12px;"></span></h4>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                            <input type="date" id="ext-log-from" style="font-size:12px;padding:4px 6px;" title="시작일(한국)">
+                            <span style="color:var(--text-muted);">~</span>
+                            <input type="date" id="ext-log-to" style="font-size:12px;padding:4px 6px;" title="끝일(한국)">
                             <select id="ext-log-filter" style="font-size:12px;padding:4px 8px;">
                                 <option value="">전체 키</option>
                             </select>
-                            <button class="btn btn-sm btn-ghost" onclick="extLoadLogs()">새로고침</button>
+                            <button class="btn btn-sm btn-ghost" onclick="extLoadLogs()">조회</button>
+                            <button class="btn btn-sm btn-ghost" onclick="extDownloadLogsCsv()" title="조회 조건 그대로 CSV">CSV</button>
                         </div>
                     </div>
+                    <div id="ext-log-summary" style="font-size:11px;color:var(--text-muted);margin:-4px 0 8px;"></div>
                     <div style="overflow-x:auto;">
                         <table style="width:100%;font-size:11px;border-collapse:collapse;">
                             <thead>
@@ -11004,10 +11009,13 @@ POST /api/external/event-result-link/batch<br>
             const filt = document.getElementById('ext-log-filter');
             const apiKeyId = filt ? filt.value : '';
             try {
-                let url = '/api/admin/external-keys/logs?admin_key=' + encodeURIComponent(AK()) + '&limit=100';
-                if (apiKeyId) url += '&api_key_id=' + apiKeyId;
+                let url = _extLogUrl(apiKeyId);
                 const res = await fetch(url);
                 const data = await res.json();
+                // 기간·키별 요약 한 줄 (누가 무엇을 몇 번 가져갔나)
+                const sumEl = document.getElementById('ext-log-summary'), cntEl = document.getElementById('ext-log-count');
+                if (cntEl) cntEl.textContent = data.ok ? `${data.count}건${data.range && (data.range.from || data.range.to) ? ` · ${data.range.from || ''} ~ ${data.range.to || ''}` : ' · 최근'}` : '';
+                if (sumEl) sumEl.innerHTML = data.ok && data.summary ? [`<b>엔드포인트</b> ${data.summary.by_endpoint.slice(0, 6).map(x => `${_esc(x.key)} ${x.count}`).join(' · ') || '-'}`, `<b>키</b> ${data.summary.by_key.slice(0, 6).map(x => `${_esc(x.key.trim() || '(없음)')} ${x.count}`).join(' · ') || '-'}`].join('<br>') : '';
                 if (!data.ok) {
                     tbody.innerHTML = `<tr><td colspan="10" style="padding:14px;text-align:center;color:#b91c1c;">${_esc(data.error || '불러오기 실패')}</td></tr>`;
                     return;
@@ -11037,6 +11045,15 @@ POST /api/external/event-result-link/batch<br>
             }
         }
 
+        function _extLogUrl(apiKeyId, csv) {
+            const from = (document.getElementById('ext-log-from') || {}).value, to = (document.getElementById('ext-log-to') || {}).value;
+            let url = '/api/admin/external-keys/logs?admin_key=' + encodeURIComponent(AK()) + '&limit=' + (from || to ? 5000 : 100);
+            if (apiKeyId) url += '&api_key_id=' + apiKeyId;
+            if (from) url += '&from=' + from; if (to) url += '&to=' + to;
+            if (csv) url += '&format=csv';
+            return url;
+        }
+        function extDownloadLogsCsv() { const f = document.getElementById('ext-log-filter'); window.open(_extLogUrl(f ? f.value : '', true), '_blank'); }
         // Wire up the log filter dropdown
         document.addEventListener('DOMContentLoaded', () => {
             const filt = document.getElementById('ext-log-filter');

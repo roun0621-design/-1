@@ -2962,10 +2962,24 @@ app.get('/api/audit-log', async (req, res) => {
     res.json(await db.all('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 30'));
 });
 app.get('/api/operation-log', async (req, res) => {
-    const limit = parseInt(req.query.limit) || 100;
+    // ?limit= · competition_id= · category=record|callroom|… · from=YYYY-MM-DD&to=YYYY-MM-DD(한국 날짜) · format=csv  (lib/logRange.js)
+    let limit = parseInt(req.query.limit) || 100; if (limit > 5000) limit = 5000;
     const compId = req.query.competition_id;
-    if (compId) return res.json(await db.all('SELECT * FROM operation_log WHERE competition_id=? ORDER BY created_at DESC LIMIT ?', compId, limit));
-    res.json(await db.all('SELECT * FROM operation_log ORDER BY created_at DESC LIMIT ?', limit));
+    const LR = require('./lib/logRange');
+    const range = LR.parseRange(req.query);
+    const win = LR.sqlDayWindow(range, 'created_at');
+    const where = [], params = [];
+    if (compId) { where.push('competition_id=?'); params.push(compId); }
+    if (req.query.category) { where.push('category=?'); params.push(String(req.query.category)); }
+    if (win.sql) { where.push(win.sql); params.push(...win.params); }
+    const rows = (await db.all(`SELECT * FROM operation_log${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY created_at DESC LIMIT ?`, ...params, limit)).filter(r => LR.inRange(range, r.created_at, parseDbTimestampMs));
+    if (String(req.query.format || '').toLowerCase() === 'csv') {
+        const csv = LR.toCsv(rows, [{ key: 'created_at', label: '시각(UTC)' }, { key: 'category', label: '분류' }, { key: 'performed_by', label: '수행자' }, { key: 'competition_id', label: '대회' }, { key: 'message', label: '내용' }]);
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="operation_log_${range && range.fromDay ? range.fromDay : 'all'}_${range && range.toDay ? range.toDay : 'all'}.csv"`);
+        return res.send(csv);
+    }
+    res.json(rows);
 });
 
 // ============================================================
@@ -6563,7 +6577,7 @@ app.post('/api/external/event-result-link/batch', externalApiAuth, async (req, r
 });
 
 // ── 외부 API 키 관리(발급·목록·폐기·호출 로그) → lib/routes/external_keys.js (2026-09-22) ──
-const _external_keysRoutes = require('./lib/routes/external_keys')(app, { _generateApiKey, _hashApiKey, _keyPrefix, db, isAdminKey });
+const _external_keysRoutes = require('./lib/routes/external_keys')(app, { _generateApiKey, _hashApiKey, _keyPrefix, db, isAdminKey, parseDbTimestampMs });
 
 
 // ============================================================

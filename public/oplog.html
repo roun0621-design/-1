@@ -92,6 +92,17 @@
                 <button class="oplog-filter-btn" data-filter="completion" onclick="setFilter('completion',this)">경기완료</button>
                 <button class="oplog-filter-btn" data-filter="round" onclick="setFilter('round',this)">라운드</button>
                 <button class="oplog-filter-btn" data-filter="revert" onclick="setFilter('revert',this)">취소</button>
+                <button class="oplog-filter-btn" data-filter="record" onclick="setFilter('record',this)">기록</button>
+                <button class="oplog-filter-btn" data-filter="admin" onclick="setFilter('admin',this)">관리자</button>
+            </div>
+            <!-- 기간 조회: 지난 대회 로그도 날짜로 (한국 날짜, 끝일 포함) · CSV 는 조회 조건 그대로 -->
+            <div class="oplog-range" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 4px;font-size:12px;">
+                <input type="date" id="oplog-from" style="font-size:12px;padding:5px 6px;border:1px solid var(--gray);border-radius:6px;" title="시작일">
+                <span style="color:var(--text-muted);">~</span>
+                <input type="date" id="oplog-to" style="font-size:12px;padding:5px 6px;border:1px solid var(--gray);border-radius:6px;" title="끝일">
+                <button class="btn btn-sm btn-primary" onclick="loadLogs()">조회</button>
+                <button class="btn btn-sm btn-outline" onclick="downloadCsv()">CSV</button>
+                <span id="oplog-count" style="color:var(--text-muted);"></span>
             </div>
 
             <div class="oplog-list" id="oplog-list">
@@ -106,15 +117,27 @@
         let allLogs = [];
         let currentFilter = 'all';
         const catLabels = {
-            callroom: '소집', completion: '완료', round: '라운드', revert: '취소', general: '일반'
+            callroom: '소집', completion: '완료', round: '라운드', revert: '취소', general: '일반', record: '기록', admin: '관리자', event: '종목', pacing: '페이싱'
         };
 
+        // 기간이 있으면 그 기간 전체(최대 5000건), 없으면 최근 200건
+        function _logQuery(csv) {
+            const from = document.getElementById('oplog-from').value, to = document.getElementById('oplog-to').value;
+            const p = new URLSearchParams();
+            p.set('limit', from || to ? '5000' : '200');
+            const cid = getCompetitionId(); if (cid) p.set('competition_id', cid);
+            if (from) p.set('from', from); if (to) p.set('to', to);
+            if (csv) p.set('format', 'csv');
+            return '/api/operation-log?' + p.toString();
+        }
         async function loadLogs() {
             try {
-                allLogs = await API.getOperationLog(200);
+                allLogs = await api('GET', _logQuery(false));
+                const c = document.getElementById('oplog-count'); if (c) c.textContent = allLogs.length ? `${allLogs.length}건` : '';
                 renderLogs();
             } catch (e) { console.error(e); }
         }
+        function downloadCsv() { window.open(_logQuery(true), '_blank'); }
 
         function setFilter(filter, btn) {
             currentFilter = filter;
