@@ -1118,7 +1118,9 @@ function renderMatrix() {
     // 시간표가 하나도 없는 대회는 토글을 숨긴다 (시간별 정렬이 의미 없음)
     const _hasSchedule = Object.keys(_scheduleMap || {}).length > 0;
     if (!_hasSchedule && _sortMode === 'time') _sortMode = 'event';
-    _sortToggleInTitle = allGroups.length && _hasSchedule;   // 섹션 제목 줄(TRACK / 9/23(수)) 오른쪽 끝에 작은 토글
+    // 정렬 토글은 필터 줄 오른쪽 끝(#dash-sort-slot) — 시간표 없는 대회는 숨김
+    { const slot = document.getElementById('dash-sort-slot'); if (slot) slot.innerHTML = allGroups.length && _hasSchedule ? segToggleHtml(_sortMode, 'setSortMode') : ''; }
+    _sortToggleInTitle = false;
 
     if (_sortMode === 'time') {
         // 시간별: 날짜(일차)별로 묶고 그 안은 다음 경기 시각순. 시간표에 없는 종목은 맨 아래 '시간 미정'

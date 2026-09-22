@@ -106,8 +106,8 @@
             .hero-cta { padding:8px 12px; font-size:12px; }
             /* 폰: 반쪽씩이라 아이콘·버튼·설명줄은 숨기고 "시간표 / 9/23(수) · 1일차", "대표팀 명단 / 42명" 두 줄만 (칸 전체가 버튼) */
             .hero-row.has-roster .hero-icon, .hero-row.has-roster .hero-cta, .hero-row.has-roster .hero-sub { display:none; }
-            .hero-row.has-roster .hero-schedule { padding:12px 14px; }
-            .hero-row.has-roster .hero-title { font-size:15px; flex-direction:column; align-items:flex-start; gap:5px; margin-bottom:0; }
+            .hero-row.has-roster .hero-schedule { padding:9px 12px; }
+            .hero-row.has-roster .hero-title { font-size:14px; flex-direction:column; align-items:flex-start; gap:4px; margin-bottom:0; }
             .hero-row.has-roster .hero-day-chip { font-size:11px; padding:3px 9px; letter-spacing:.3px; }
             /* 폰: 대회 정보 줄은 대회명 + 연맹 배지까지만 (날짜·장소는 시간표에 있음) */
             .dashboard-mode .comp-info-sep, .dashboard-mode .comp-info-dates, .dashboard-mode .comp-info-venue { display:none; }
@@ -277,8 +277,11 @@
            ═══════════════════════════════════════════════════════════════ */
         #dash-toolbar { background:var(--white); border-bottom:1px solid var(--gray); }
         #filter-bar { display:flex; align-items:center; gap:10px; position:relative; }
+        /* 필터 줄은 스크롤 영역 안에서 sticky — 대회명·히어로 카드는 올라가고 이 줄만 남는다 */
+        .dash-toolbar-sticky { position:sticky; top:0; z-index:40; background:var(--bg); }
+        #dash-sort-slot { margin-left:auto; flex:0 0 auto; display:flex; align-items:center; }
         /* 폰 필터 버튼(성별·종목군·부) — PC 에선 숨기고 칩을 그대로 쓴다 */
-        .dash-filter-btn { display:none; flex:0 0 auto; height:36px; padding:0 14px 0 10px; border:1px solid var(--gray); border-radius:18px; background:var(--white); color:#333; font-size:12px; font-weight:700; align-items:center; gap:6px; cursor:pointer; max-width:46%; }
+        .dash-filter-btn { display:none; flex:0 0 auto; height:32px; padding:0 14px 0 10px; border:1px solid var(--gray); border-radius:18px; background:var(--white); color:#333; font-size:12px; font-weight:700; align-items:center; gap:6px; cursor:pointer; max-width:46%; }
         .dash-filter-btn .lbl { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .dash-filter-btn .chev { width:14px; height:14px; flex:none; transition:transform .15s; }
         .dash-filter-btn[aria-expanded="true"] .chev { transform:rotate(180deg); }
@@ -304,7 +307,7 @@
         /* 종목 검색 — 아이콘 하나(36px). 열리면 필터 칩 자리를 검색칸이 대신 쓴다 */
         .dash-search { flex:0 0 auto; display:flex; align-items:center; min-width:0; }
         /* 국제대회: 관심 국가(한국 선수) 종목만 보기 */
-        .dash-spot-btn { flex:0 0 auto; height:36px; padding:0 12px 0 8px; margin-right:6px; border:1px solid var(--gray); border-radius:18px; background:var(--white); color:#555; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+        .dash-spot-btn { flex:0 0 auto; height:32px; padding:0 12px 0 8px; margin-right:6px; border:1px solid var(--gray); border-radius:18px; background:var(--white); color:#555; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
         .dash-spot-btn .flag { font-size:16px; line-height:1; }
         .dash-spot-btn.active { background:#1a2a5e; color:#fff; border-color:#1a2a5e; }
         .spot-badge { display:inline-block; margin-left:6px; line-height:1; vertical-align:-3px; }
@@ -370,7 +373,9 @@
             .live-jump-badge { padding:0 11px; height:32px; font-size:11px; }
 
             /* 성별 + 부 필터를 한 줄 가로스크롤 칩으로 통합 (진행중 배지는 우측 고정) */
-            #filter-bar { gap:6px; padding:4px 10px; border-bottom:1px solid var(--gray); }
+            #filter-bar { gap:6px; padding:5px 10px; border-bottom:1px solid var(--gray); min-height:42px; }
+            .dash-spot-btn { margin-right:0; }
+            .dash-toolbar-sticky { margin-top:0; padding-top:3px; }   /* 틈으로 뒤 카드가 비치지 않게 여백은 안쪽으로 */
             /* 폰: 칩 줄은 숨기고 필터 버튼으로 */
             #filter-bar .filter-scroll { display:none !important; }
             .dash-filter-btn { display:inline-flex; }
@@ -407,43 +412,8 @@
     </header>
 
     <main class="main-content dashboard-layout" data-active-gender="ALL">
-        <!-- ── 고정 툴바: 성별/부 필터(가로스크롤 칩) + 진행중 배지 (한 줄) ──
-             검색 인풋은 스크롤 콘텐츠 최상단으로 내려 고정영역을 최소화한다. -->
-        <div id="dash-toolbar" style="flex-shrink:0;">
-            <div id="filter-bar" class="filter-bar">
-                <!-- 폰: 성별·종목군·부를 필터 버튼 하나로 (칩이 잘리지 않게). PC 는 아래 칩이 그대로 보인다 — dashboard.js renderFilterButton -->
-                <button type="button" id="dash-filter-btn" class="dash-filter-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleFilterPanel()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chev"><path d="M6 9l6 6 6-6"/></svg>
-                    <span class="lbl" id="dash-filter-lbl">전체</span>
-                </button>
-                <div id="dash-filter-panel" class="dash-filter-panel" hidden></div>
-                <!-- 성별/부 칩 — 모바일에서 가로스크롤 (division-tabs 는 JS 가 gender-tabs 뒤에 삽입) -->
-                <div class="filter-scroll">
-                    <div class="gender-tabs-bar" id="gender-tabs" data-active-gender="ALL" style="position:static;">
-                        <button class="gender-tab-btn active" data-gender="ALL" onclick="switchGender('ALL',this)">전체</button>
-                        <button class="gender-tab-btn" data-gender="M" onclick="switchGender('M',this)">남자</button>
-                        <button class="gender-tab-btn" data-gender="F" onclick="switchGender('F',this)">여자</button>
-                        <button class="gender-tab-btn" data-gender="X" onclick="switchGender('X',this)">혼성</button>
-                    </div>
-                </div>
-                <!-- 종목 검색: 평소엔 아이콘 하나, 누르면 그 자리에 검색칸이 펼쳐진다 (필터 칩은 잠시 숨김) -->
-                <div class="dash-search" id="dash-search">
-                    <button type="button" class="dash-search-btn" id="dash-search-btn" aria-label="종목 검색" title="종목 검색" onclick="toggleEventSearch()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.6 15.6 20 20"/></svg>
-                    </button>
-                    <div class="dash-search-field" id="dash-search-field" hidden>
-                        <input id="event-search" type="search" inputmode="search" autocomplete="off" placeholder="종목 검색 · 예) 400, 멀리" oninput="onEventSearch(this.value)" onkeydown="if(event.key==='Escape'){closeEventSearch();}">
-                        <button type="button" class="dash-search-close" aria-label="검색 닫기" onclick="closeEventSearch()">&times;</button>
-                    </div>
-                </div>
-                <button type="button" id="live-jump-badge" class="live-jump-badge" onclick="jumpToLive()" style="display:none;">
-                    <span class="live-jump-dot"></span>진행 중 <span id="live-jump-count">0</span>
-                </button>
-            </div>
-        </div>
 
-        <!-- ── 스크롤 콘텐츠: 검색 + 대회정보 + 히어로 + 종목 매트릭스 ──
-             검색·comp-info·hero 를 스크롤 영역으로 옮겨 상단 고정영역(툴바)만 남긴다. -->
+        <!-- ── 스크롤 콘텐츠: 대회정보 → 히어로(시간표|대표팀 명단) → 필터 줄(스크롤하면 위에 붙음) → 종목 매트릭스 ── -->
         <div class="events-scroll" id="events-scroll-region">
             <!-- (종목 검색창 제거 — 모바일 상단 공간 확보, 2026-09) -->
             <!-- Single-line competition info -->
@@ -478,6 +448,41 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                 </div>
             </div>
+            </div>
+
+            <!-- ── 필터 줄: 성별/부/종목군 필터 + 한국 선수 + 정렬 + 진행중 배지 — 스크롤 영역 안에서 sticky (대회명·히어로는 올라가고 이 줄만 헤더 아래에 남는다) ── -->
+            <div id="dash-toolbar" class="dash-toolbar-sticky">
+                <div id="filter-bar" class="filter-bar">
+                    <!-- 폰: 성별·종목군·부를 필터 버튼 하나로 (칩이 잘리지 않게). PC 는 아래 칩이 그대로 보인다 — dashboard.js renderFilterButton -->
+                    <button type="button" id="dash-filter-btn" class="dash-filter-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleFilterPanel()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chev"><path d="M6 9l6 6 6-6"/></svg>
+                        <span class="lbl" id="dash-filter-lbl">전체</span>
+                    </button>
+                    <div id="dash-filter-panel" class="dash-filter-panel" hidden></div>
+                    <!-- 성별/부 칩 — 모바일에서 가로스크롤 (division-tabs 는 JS 가 gender-tabs 뒤에 삽입) -->
+                    <div class="filter-scroll">
+                        <div class="gender-tabs-bar" id="gender-tabs" data-active-gender="ALL" style="position:static;">
+                            <button class="gender-tab-btn active" data-gender="ALL" onclick="switchGender('ALL',this)">전체</button>
+                            <button class="gender-tab-btn" data-gender="M" onclick="switchGender('M',this)">남자</button>
+                            <button class="gender-tab-btn" data-gender="F" onclick="switchGender('F',this)">여자</button>
+                            <button class="gender-tab-btn" data-gender="X" onclick="switchGender('X',this)">혼성</button>
+                        </div>
+                    </div>
+                    <!-- 종목 검색: 평소엔 아이콘 하나, 누르면 그 자리에 검색칸이 펼쳐진다 (필터 칩은 잠시 숨김) -->
+                    <div class="dash-search" id="dash-search">
+                        <button type="button" class="dash-search-btn" id="dash-search-btn" aria-label="종목 검색" title="종목 검색" onclick="toggleEventSearch()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.6 15.6 20 20"/></svg>
+                        </button>
+                        <div class="dash-search-field" id="dash-search-field" hidden>
+                            <input id="event-search" type="search" inputmode="search" autocomplete="off" placeholder="종목 검색 · 예) 400, 멀리" oninput="onEventSearch(this.value)" onkeydown="if(event.key==='Escape'){closeEventSearch();}">
+                            <button type="button" class="dash-search-close" aria-label="검색 닫기" onclick="closeEventSearch()">&times;</button>
+                        </div>
+                    </div>
+                    <div id="dash-sort-slot"></div>
+                <button type="button" id="live-jump-badge" class="live-jump-badge" onclick="jumpToLive()" style="display:none;">
+                        <span class="live-jump-dot"></span>진행 중 <span id="live-jump-count">0</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Events matrix -->
