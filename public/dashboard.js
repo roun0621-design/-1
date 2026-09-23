@@ -1483,14 +1483,14 @@ async function openEntriesModal(eventId, eventName) {
         const spot = (allEvents.find(e => e.spotlight) || {}).spotlight || null;
         const rows = entries.slice().sort((a, b) => ((b.team === spot) - (a.team === spot)) || String(a.team || '').localeCompare(String(b.team || '')) || String(a.name).localeCompare(String(b.name)));
         const year = d => (String(d || '').match(/^\d{4}/) || [''])[0];
-        const flag = t => t === spot && spot === 'KOR' ? PaceIcons.svg('flagKR', { size: 20, style: 'margin-right:5px' }) : '';
+        const flag = t => t === spot && spot === 'KOR' ? PaceIcons.svg('flagKR', { size: 22, style: 'vertical-align:-5px' }) : '';
         const line = e => {
             const pb = [e.personal_best ? 'PB ' + e.personal_best : '', e.season_best ? 'SB ' + e.season_best : ''].filter(Boolean).join(' · ');
             const mem = isRelay && members[e.event_entry_id] ? `<div style="font-size:11px;color:#666;margin-top:2px;">${members[e.event_entry_id].members.map(m => esc(m.name)).join(' · ')}</div>` : '';
             const phone = window.innerWidth < 640;   // 폰: PB·SB 는 이름 아래 한 줄 (오른쪽 칸에선 잘린다)
             const pbUnder = phone && pb ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:#666;margin-top:2px;white-space:nowrap;">${esc(pb)}</div>` : '';
             return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 14px;border-top:1px solid #f1f1f1;${e.team === spot ? 'background:#fff6f6;' : ''}">
-                <div style="flex:none;width:52px;font-weight:800;font-size:12px;color:${e.team === spot ? '#8b1a2a' : '#555'};">${flag(e.team)}${esc(e.team || '')}</div>
+                <div style="flex:none;width:52px;font-weight:800;font-size:12px;color:${e.team === spot ? '#8b1a2a' : '#555'};">${e.team === spot && spot === 'KOR' ? flag(e.team) : esc(e.team || '')}</div>
                 <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:${e.team === spot ? 700 : 500};">${esc(isRelay ? (e.name || '') : e.name)}${e.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;">${esc(e.name_alt)}</span>` : ''}${year(e.date_of_birth) ? `<span style="font-size:11px;color:#999;margin-left:6px;">${year(e.date_of_birth)}</span>` : ''}</div>${mem}${pbUnder}</div>
                 ${phone ? '' : `<div style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;">${esc(pb)}</div>`}</div>`;
         };
@@ -3410,8 +3410,8 @@ async function loadRosterModalData(eventId) {
                 //   → 긴 이름(비웨사다니엘가사마)이 소속 열에 겹침. 인라인 white-space:normal 로 되돌리고(인라인이 우선)
                 //   폭이 모자라면 음절 단위로 줄바꿈(word-break:normal + overflow-wrap:anywhere).
                 if (spot) {
-                    html += `<td style="padding:5px 6px;text-align:left;font-weight:800;font-size:11px;color:${isSpot ? '#8b1a2a' : '#555'};white-space:nowrap;">${isSpot && spot === 'KOR' ? PaceIcons.svg('flagKR', { size: 18, style: 'margin-right:3px;vertical-align:-4px' }) : ''}${escT(e.team || '')}</td>`;
-                    html += `<td style="padding:5px 8px;text-align:left;font-weight:${isSpot ? 800 : 600};white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${escT(e.name)}${e.name_alt ? `<span style="font-size:10px;color:#888;margin-left:5px;font-weight:500;">${escT(e.name_alt)}</span>` : ''}${yearOf(e.date_of_birth) ? `<span style="font-size:10px;color:#999;margin-left:5px;font-weight:500;">${yearOf(e.date_of_birth)}</span>` : ''}${window.innerWidth < 640 && (e.personal_best || e.season_best) ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:#666;font-weight:500;margin-top:2px;white-space:nowrap;">${[e.personal_best ? 'PB ' + escT(e.personal_best) : '', e.season_best ? 'SB ' + escT(e.season_best) : ''].filter(Boolean).join(' · ')}</div>` : ''}</td>`;
+                    html += `<td style="padding:7px 6px;text-align:left;font-weight:800;font-size:11px;color:${isSpot ? '#8b1a2a' : '#555'};white-space:nowrap;">${isSpot && spot === 'KOR' ? PaceIcons.svg('flagKR', { size: 22, style: 'vertical-align:-5px' }) : escT(e.team || '')}</td>`;
+                    html += `<td style="padding:7px 8px;text-align:left;font-weight:${isSpot ? 800 : 600};white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.3;">${escT(e.name)}${e.name_alt ? `<span style="font-size:10px;color:#888;margin-left:5px;font-weight:500;">${escT(e.name_alt)}</span>` : ''}${yearOf(e.date_of_birth) ? `<span style="font-size:10px;color:#999;margin-left:5px;font-weight:500;">${yearOf(e.date_of_birth)}</span>` : ''}${window.innerWidth < 640 && (e.personal_best || e.season_best) ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:#666;font-weight:500;margin-top:3px;white-space:nowrap;">${[e.personal_best ? 'PB ' + escT(e.personal_best) : '', e.season_best ? 'SB ' + escT(e.season_best) : ''].filter(Boolean).join(' · ')}</div>` : ''}</td>`;
                     if (window.innerWidth >= 640) html += `<td style="padding:5px 8px;text-align:right;font-family:var(--font-mono);font-size:10.5px;color:#555;white-space:nowrap;line-height:1.25;">${pbsbOf(e)}</td>`;
                 } else {
                     html += `<td style="padding:5px 8px;text-align:left;font-weight:600;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
