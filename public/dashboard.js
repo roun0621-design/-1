@@ -74,7 +74,7 @@ function renderHeroRosterButton() {
         const next = _rosterSortNext(ath).find(a => a.next_key != null);
         const nev = next && next.events.find(e => e.round_status !== 'completed');
         const tm = nev && (nev.scheduled_at ? nev.scheduled_at.slice(11, 16) : nev.time) || '';
-        if (title) title.innerHTML = `${code === 'KOR' ? '대표팀 명단' : code + ' 명단'} <span class="hero-day-chip">${n}명</span>`;
+        if (title) title.innerHTML = `${code === 'KOR' ? '대표팀 명단' : code + ' 명단'} <span style="display:inline-flex;align-items:center;gap:8px;"><span class="hero-day-chip">${n}명</span>${data.medals ? medalTallyHtml(data.medals, 20) : ''}</span>`;
         if (sub) sub.innerHTML = next && nev ? `다음 <strong>${_esc(next.name)}</strong> ${_esc(nev.event_name)} · ${_esc(tm)}` : `${n}명 · 출전 선수와 기록`;
     }).catch(() => { if (sub) sub.textContent = '출전 선수와 기록'; });
 }
@@ -153,10 +153,18 @@ async function openTeamRoster(keep) {
         const mark = ev => {
             const r = ev.result; if (!r) return '';
             if (r.status_code) return `<span style="color:#b3261e;font-weight:700;">${esc(PaceRanking.statusText(r.status_code))}</span>`;
-            const place = r.place ? `<span style="display:inline-block;min-width:22px;padding:0 5px;border-radius:9px;background:${r.place <= 3 ? '#1a2a5e' : '#e9edf6'};color:${r.place <= 3 ? '#fff' : '#1a2a5e'};font-weight:800;text-align:center;margin-right:5px;">${ev.round_type !== 'final' && r.heat_count > 1 && ev.heat_number ? ev.heat_number + '조 ' : ''}${r.place}위</span>` : '';
-            if (r.time_seconds != null) return `${place}<b>${formatTime(r.time_seconds)}</b>${r.wind != null ? ` <span style="color:#888;">(${r.wind > 0 ? '+' : ''}${Number(r.wind).toFixed(1)})</span>` : ''}`;
-            if (r.distance_meters != null) return `${place}<b>${Number(r.distance_meters).toFixed(2)}</b>`;
-            return '';
+            const isFinal = ev.round_type === 'final';
+            const place = r.place
+                ? (isFinal && r.place <= 3 ? medalHtml(r.place, 20) + ' '
+                    : `<span style="display:inline-block;min-width:22px;padding:0 5px;border-radius:9px;background:#e9edf6;color:#1a2a5e;font-weight:800;text-align:center;margin-right:5px;">${!isFinal && r.heat_count > 1 && ev.heat_number ? ev.heat_number + '조 ' : ''}${r.place}위</span>`)
+                : '';
+            const imp = (r.pb_improved ? '<span class="rr-imp">PB 경신</span>' : r.sb_improved ? '<span class="rr-imp">SB 경신</span>' : '');
+            const val = r.time_seconds != null ? formatTime(r.time_seconds) : r.distance_meters != null ? Number(r.distance_meters).toFixed(2) : '';
+            if (!val) return '';
+            const wind = r.time_seconds != null && r.wind != null ? ` <span style="color:#888;">(${r.wind > 0 ? '+' : ''}${Number(r.wind).toFixed(1)})</span>` : '';
+            // 두 줄: 위 순위·기록(·경신), 아래 작게 PB · SB — 경기가 끝나도 PB/SB 는 남긴다
+            const pbsbLine = [ev.personal_best ? 'PB ' + ev.personal_best : '', ev.season_best ? 'SB ' + ev.season_best : ''].filter(Boolean).map(esc).join(' · ');
+            return `<span style="display:inline-flex;flex-direction:column;align-items:flex-end;gap:2px;"><span>${place}<b>${val}</b>${wind}${imp}</span>${pbsbLine ? `<span style="font-size:10px;color:#999;">${pbsbLine}</span>` : ''}</span>`;
         };
         const pbsb = ev => [ev.personal_best ? 'PB ' + ev.personal_best : '', ev.season_best ? 'SB ' + ev.season_best : ''].filter(Boolean).map(esc).join('<br>');   // 폰에서 종목명 자리를 남기려고 PB·SB 를 위아래로
         const stOf = ev => ev.round_status === 'completed' ? (mark(ev) || '<span style="color:#888;">결과</span>') : ev.round_status === 'in_progress' ? '<span style="color:#16a34a;font-weight:800;">LIVE</span>' : '';
@@ -167,12 +175,15 @@ async function openTeamRoster(keep) {
                 <span style="flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${showName ? esc(showName) : `${ev.relay ? '<span style="font-size:10px;color:#7c3aed;margin-right:3px;">계주</span>' : ''}${esc(ev.event_name)} <span style="color:#888;font-weight:500;">${genderL[ev.gender] || ''} ${roundL[ev.round_type] || ''}</span>`}</span>
                 <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;text-align:right;line-height:1.25;">${stOf(ev) || pbsb(ev)}</span></div>`;
         };
-        const nameLine = a => `<div style="font-size:15px;font-weight:800;">${esc(a.name)}${a.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;font-weight:500;">${esc(a.name_alt)}</span>` : ''}${a.birth_year ? `<span style="font-size:11px;color:#999;margin-left:6px;font-weight:500;">${a.birth_year}</span>` : ''}</div>`;
+        const naver = a => a.is_team ? '' : `<a class="naver-link" href="${(window.innerWidth < 720 ? 'https://m.search.naver.com/search.naver?query=' : 'https://search.naver.com/search.naver?query=') + encodeURIComponent('육상 ' + a.name)}" target="_blank" rel="noopener" title="네이버에서 선수 프로필 보기" onclick="event.stopPropagation()">N</a>`;
+        // 계주 팀은 공식 명단의 영문 국가명(Republic of Korea) 대신 우리말로
+        const dispName = a => a.is_team && /republic of korea|^korea$/i.test(a.name || '') ? `대한민국 계주팀${a.gender === 'M' ? '(남)' : a.gender === 'F' ? '(여)' : ''}` : a.name;
+        const nameLine = a => `<div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span>${esc(dispName(a))}</span>${a.name_alt ? `<span style="font-size:11px;color:#888;font-weight:500;">${esc(a.name_alt)}</span>` : ''}${a.birth_year ? `<span style="font-size:11px;color:#999;font-weight:500;">${a.birth_year}</span>` : ''}${naver(a)}</div>`;
         const membersLine = a => a.members && a.members.length ? `<div style="font-size:11px;color:#666;margin-top:1px;">${a.members.map(m => esc(m.name)).join(' · ')}</div>` : '';
         const athletes = data.athletes || [];
         const teams = (data.teams || []).map(t => ({ ...t, members: (t.events[0] && t.events[0].members) || [] }));
         const evCount = new Set(athletes.flatMap(a => a.events.filter(e => !e.relay).map(e => e.event_name + '|' + e.gender))).size;
-        document.getElementById('team-roster-title').textContent = `${teamL} · ${athletes.length}명`;
+        document.getElementById('team-roster-title').innerHTML = `${esc(teamL)} · ${athletes.length}명 ${data.medals ? medalTallyHtml(data.medals, 20) : ''}`;
         _renderSpotFavBtn(document.getElementById('team-roster-fav'));
         const chipsEl = document.getElementById('team-roster-chips');
 
@@ -212,9 +223,11 @@ async function openTeamRoster(keep) {
             events.forEach(e => { const g = _eventGroupOf(e.name, e.category); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(e); });
             // 칩: 종목군 라벨 없이 한 흐름으로 쭉 — 종목군은 색(연한 바탕·진한 글씨)으로만 구분, 고른 칩은 그 색으로 채움
             const chip = e => { const n = e.athletes.length + e.teams.length; const on = e.name === _rosterEventKey; const [bg, fg] = _GROUP_TINT[_eventGroupOf(e.name, e.category)] || _GROUP_TINT['기타'];
-                return `<button type="button" onclick="_rosterPickEvent('${esc(e.name).replace(/'/g, '&#39;')}')" aria-pressed="${on}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:12px;border:1px solid ${on ? fg : 'transparent'};background:${on ? fg : bg};color:${on ? '#fff' : fg};font-size:11.5px;font-weight:${on ? 800 : 700};cursor:pointer;line-height:1.3;min-height:26px;">${esc(e.name)}<span style="font-size:10px;font-weight:700;opacity:.75;">${n}</span>${e.live ? '<span style="width:6px;height:6px;border-radius:50%;background:#16a34a;"></span>' : e.done ? `<span style="width:6px;height:6px;border-radius:50%;background:${on ? '#fff' : '#b79f58'};"></span>` : ''}</button>`; };
+                return `<button type="button" onclick="_rosterPickEvent('${esc(e.name).replace(/'/g, '&#39;')}')" aria-pressed="${on}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:12px;border:1px solid ${on ? fg : 'transparent'};background:${on ? fg : bg};color:${on ? '#fff' : fg};font-size:11.5px;font-weight:${on ? 800 : 700};cursor:pointer;line-height:1.3;min-height:26px;white-space:nowrap;">${esc(e.name)}<span style="font-size:10px;font-weight:700;opacity:.75;">${n}</span>${e.live ? '<span style="width:6px;height:6px;border-radius:50%;background:#16a34a;"></span>' : e.done ? `<span style="width:6px;height:6px;border-radius:50%;background:${on ? '#fff' : '#b79f58'};"></span>` : ''}</button>`; };
             const ordered = _EVENT_GROUP_ORDER.filter(g => groups.has(g)).flatMap(g => groups.get(g));
-            chipsEl.innerHTML = `<div style="padding:8px 14px 6px;border-bottom:1px solid #eee;max-height:34vh;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-wrap:wrap;gap:6px 5px;">${ordered.map(chip).join('')}</div>`;
+            // 가로 스크롤 2줄 — 7줄이던 칩이 목록을 가리지 않게. 고른 칩은 보이는 위치로
+            chipsEl.innerHTML = `<div class="roster-chips" style="padding:8px 14px 8px;border-bottom:1px solid #eee;overflow-x:auto;overscroll-behavior:contain;scrollbar-width:none;display:grid;grid-auto-flow:column;grid-auto-columns:max-content;grid-template-rows:repeat(2,auto);gap:6px 5px;justify-content:start;">${ordered.map(chip).join('')}</div>`;
+            try { const on = chipsEl.querySelector('button[aria-pressed="true"]'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) {}
             const sel = byEvent.get(_rosterEventKey);
             document.getElementById('team-roster-sub').textContent = `${events.length}종목 · 종목을 고르면 출전 선수${ended ? ' · 대회 종료' : ''}`;
             const gOrder = ['M', 'F', 'X'];
@@ -354,6 +367,28 @@ function toggleFavorite(eventName, gender) {
     // 토글을 '켤 때' + 아직 알림 미허용이면 → 알림 켜기 유도 팝업(일주일 보지않기 포함)
     if (!wasOn) { try { window.PaceRisePush && window.PaceRisePush.promptToggle && window.PaceRisePush.promptToggle(); } catch (e) {} }
     renderMatrix();
+}
+
+// ── 결과·LIVE 창 장식: 관심 국가(한국) 선수 줄 강조 + 태극기, 결승 1·2·3위는 메달 원, 배번 없는 대회는 'BIB —' 숨김 ──
+function _decorateResultPanel(panel, evt) {
+    try {
+        const spot = (allEvents.find(e => e.spotlight) || {}).spotlight || null;
+        const isFinal = evt && evt.round_type === 'final';
+        panel.querySelectorAll('.rr[data-team]').forEach(row => {
+            const team = row.getAttribute('data-team');
+            if (spot && team === spot) {
+                row.classList.add('rr-spot');
+                const nm = row.querySelector('.rr-name');
+                if (nm && !nm.querySelector('.ui-icon')) nm.insertAdjacentHTML('afterbegin', PaceIcons.svg('flagKR', { size: 17, style: 'margin-right:4px;vertical-align:-3px' }));
+            }
+            if (isFinal && evt.round_status === 'completed') {
+                const rk = row.querySelector('.rr-rank:not(.rr-rank-st)');
+                const n = rk ? parseInt(rk.textContent, 10) : NaN;
+                if (n >= 1 && n <= 3) { rk.innerHTML = medalHtml(n, 26); rk.classList.add('rr-rank-medal'); }
+            }
+        });
+        if (spot) panel.querySelectorAll('.rr-meta').forEach(m => { m.innerHTML = m.innerHTML.replace(/<i>·<\/i>BIB —|BIB —<i>·<\/i>|BIB —/g, ''); });
+    } catch (e) { /* 장식 실패는 결과 표시를 막지 않는다 */ }
 }
 
 // ── 종목 창(엔트리·스타트 리스트·결과) 머리글의 알림 토글 — 카드의 종 아이콘을 여기로 옮김 ──
@@ -1607,6 +1642,7 @@ async function openResult(eventId) {
             ${_favBtnHtml(evt)}
             <button class="result-panel-close" onclick="closeResult()">&times;</button>
         </div><div class="result-panel-body">${bodyHtml}</div>`;
+        _decorateResultPanel(panel, evt);
 
         if (evt.category === 'combined') {
             _loadCombinedResultsAsync(evt);
@@ -1772,6 +1808,7 @@ async function refreshLiveResult() {
             ${_favBtnHtml(evt)}
             <button class="result-panel-close" onclick="closeLiveResult()">&times;</button>
         </div><div class="result-panel-body">${bodyHtml}</div>`;
+        _decorateResultPanel(panel, evt);
         // Restore video closed state after SSE refresh
         if (_videoWasClosed && videoUrl) {
             toggleModalVideo();
@@ -1891,7 +1928,7 @@ function renderLiveTrackResults(data, relayMembers) {
             const recHtml = r.status_code
                 ? `<div class="rr-rec rr-rec-st">${r.status_code}</div>`
                 : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark}${recBadges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
-            return `<div class="rr rr-nocard${hasRec ? ' rr-has-rec' : ''}">
+            return `<div class="rr rr-nocard${hasRec ? ' rr-has-rec' : ''}" data-team="${r.team || ''}">
                 ${rankHtml}
                 <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
                 <div class="rr-meta">${meta}</div>
@@ -2669,7 +2706,7 @@ function renderTrackResults(data, relayMembers) {
             const recHtml = r.status_code
                 ? `<div class="rr-rec rr-rec-st">${r.status_code}</div>`
                 : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark2}${recBadges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
-            return `<div class="rr${scAttr ? '' : ' rr-nocard'}"${scAttr}>
+            return `<div class="rr${scAttr ? '' : ' rr-nocard'}"${scAttr} data-team="${r.team || ''}">
                 ${rankHtml}
                 <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
                 <div class="rr-meta">${meta}</div>
@@ -2723,7 +2760,7 @@ function _rrFieldDistList(rows, needsWind, opts) {
             cells += `<div class="${cls}"><span class="n">${i}</span>${val}${wind}</div>`;
         }
         const scAttr = (!live && hasRec) ? _scAttr(evt, r, formatHeight(r.best), rankNum, { windAided: bwa }) : '';
-        return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr}>
+        return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr} data-team="${r.team || ''}">
             ${_rrFieldRankHtml(r.status_code, rankNum)}
             <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">${meta}</div>
@@ -2755,7 +2792,7 @@ function _rrFieldHeightList(rows, hts, opts) {
             chips += `<div class="rr-hj-c${h2 === r.best ? ' best' : ''}"><b>${formatHeight(h2)}</b><span>${marks || '&nbsp;'}</span></div>`;
         });
         const scAttr = (!live && hasRec) ? _scAttr(evt, r, formatHeight(r.best), rankNum) : '';
-        return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr}>
+        return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr} data-team="${r.team || ''}">
             ${_rrFieldRankHtml(status, rankNum)}
             <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">${meta}</div>
@@ -2824,7 +2861,7 @@ function _rrCombinedList(rows, subDefs, day1Max, opts) {
         // 두 줄 칸 폭 동일: 칸 수가 적은 줄(7종 2일차 3종목)도 같은 열 수로 깔고 빈칸을 둔다
         const cols = Math.max(day1.length, day2.length);
         const scAttr = (!live && r.total > 0 && opts && opts.scAttr) ? opts.scAttr(r) : '';
-        return `<div class="rr rr-cmb${scAttr ? '' : ' rr-nocard'}${live && r.total > 0 ? ' rr-has-rec' : ''}"${scAttr}>
+        return `<div class="rr rr-cmb${scAttr ? '' : ' rr-nocard'}${live && r.total > 0 ? ' rr-has-rec' : ''}"${scAttr} data-team="${r.team || ''}">
             ${_rrFieldRankHtml(status, rankNum)}
             <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">BIB ${bib(r.bib_number)}<i>·</i><span class="d1">1일차 ${fmtPts(d1)}</span><i>·</i><span class="d2">2일차 ${d2 || nowOrder > day1Max ? fmtPts(d2) : '–'}</span></div>

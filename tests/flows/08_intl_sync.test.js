@@ -236,6 +236,21 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         const runner = r.body.athletes.find(a => a.name_alt === korW100.Name || a.name === korW100.Name);
         const semi = runner.events.find(e => e.event_name === '100m' && e.round_type === 'semifinal');
         expect(semi.result).toMatchObject({ time_seconds: 11.42, place: 2, heat_count: 3 }); expect(Number(semi.result.wind)).toBeCloseTo(-0.3, 5); expect(semi.heat_number).toBe(1);
+        // PB/SB 경신 판정: 11.42 는 PB 11.30 보다 느리고 SB 11.95 보다 빠르다
+        expect(semi.result.pb_improved).toBe(false); expect(semi.result.sb_improved).toBe(true);
+        // 결승 공식 결과에서 한국 선수 3위 → 메달 집계 동 1, 그 종목은 완료
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const others = F('entries_event_W100M.json').Partics.filter(p => p.Org !== 'KOR');
+        fakeResults['W.100M--------------.FNL-.000100--'] = { Key: 'W.100M--------------.FNL-.000100--', Status: 'Official', Results: [
+            { Reg: others[0].Reg, Name: others[0].Name, Org: others[0].Org, Rank: 1, Lane: 4, Result: '11.05' },
+            { Reg: others[1].Reg, Name: others[1].Name, Org: others[1].Org, Rank: 2, Lane: 5, Result: '11.15' },
+            { Reg: korW100.Reg, Name: korW100.Name, Org: 'KOR', Rank: 3, Lane: 6, Result: '11.28' } ] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: ['W.100M--------------.FNL-.000100--'] });
+        const r2 = await request(app).get(`/api/competitions/${fx.comp}/roster`);
+        expect(r2.body.medals).toMatchObject({ gold: 0, silver: 0, bronze: 1 });
+        expect(r2.body.medals.events[0]).toMatchObject({ event_name: '100m', gender: 'F', place: 3 });
+        const fin = r2.body.athletes.find(a => a.id === runner.id).events.find(e => e.round_type === 'final' && e.event_name === '100m');
+        expect(fin.result).toMatchObject({ place: 3, pb_improved: true, sb_improved: true }); expect(fin.round_status).toBe('completed');
         // 관심 국가 없는 대회는 400 (team 파라미터로는 조회 가능)
         const other = await db.get("SELECT id FROM competition WHERE id<>? ORDER BY id LIMIT 1", fx.comp);
         if (other) expect((await request(app).get(`/api/competitions/${other.id}/roster`)).status).toBe(400);

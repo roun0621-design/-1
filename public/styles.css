@@ -2395,3 +2395,10 @@ body { font-variant-numeric: tabular-nums; }
 
 /* ── 더블탭 확대 끄기 (핀치 줌은 그대로) — 빈 곳을 두 번 눌러도 화면이 튀지 않게. 스크롤 상자마다 판정이 끊기므로 전 요소에 건다 ── */
 * { touch-action: manipulation; }
+
+/* ── 메달 원 — common.js medalHtml/medalTallyHtml ── */
+.medal { display:inline-flex; align-items:center; justify-content:center; border-radius:50%; color:#fff; font-weight:800; line-height:1; font-family:var(--font-mono, monospace); font-variant-numeric:tabular-nums; flex:none; box-shadow:inset 0 -1px 0 rgba(0,0,0,.18), 0 1px 1px rgba(0,0,0,.08); vertical-align:middle; }
+.medal.m1 { background:linear-gradient(135deg,#f1d36a,#c7a12a); }
+.medal.m2 { background:linear-gradient(135deg,#e3e6ea,#9ba2ac); }
+.medal.m3 { background:linear-gradient(135deg,#d69b5f,#a1632c); }
+.medal-tally { display:inline-flex; align-items:center; gap:4px; vertical-align:middle; }

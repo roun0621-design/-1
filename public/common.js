@@ -4,6 +4,17 @@
  * v11: Offline sync awareness, document download links, WebSocket scoreboard client, security headers
  */
 
+// ── 메달 원 (금·은·동, 안에 순위 또는 개수) — 대시보드 카드·결과 창·대표팀 명단이 같은 모양 (2026-09-23) ──
+function medalHtml(place, size, text) {
+    const p = Number(place); if (!(p >= 1 && p <= 3)) return '';
+    const s = size || 20;
+    return `<span class="medal m${p}" style="width:${s}px;height:${s}px;font-size:${Math.round(s * 0.55)}px" title="${['금', '은', '동'][p - 1]}메달">${text == null ? p : text}</span>`;
+}
+function medalTallyHtml(m, size) {
+    if (!m) return '';
+    return `<span class="medal-tally">${medalHtml(1, size, m.gold || 0)}${medalHtml(2, size, m.silver || 0)}${medalHtml(3, size, m.bronze || 0)}</span>`;
+}
+
 // ============================================================
 // 폰 글자 크기 (2026-09-22)
 //   폰(720px 미만)에서는 페이지를 기본 1.125배로 보여주고, 여기에 폰의 텍스트 크기 설정(iOS 동적 글꼴)을 곱한다.
