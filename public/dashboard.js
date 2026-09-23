@@ -87,6 +87,21 @@ function _rosterBox(overlay, maxWidth) {
     return { mobile, box: mobile ? 'width:100%;height:94vh;border-radius:18px 18px 0 0;' : `width:92%;max-width:${maxWidth || 560}px;max-height:88vh;border-radius:12px;`,
         handle: mobile ? '<div style="width:40px;height:4px;border-radius:2px;background:#d9d4ca;margin:8px auto 0;flex-shrink:0;"></div>' : '' };
 }
+let _rosterModalKind = null;  // 'team' | 'entries' | 'startlist' — 세 창이 overlay 하나를 쓰므로 어느 창인지 기억
+let _rosterReturn = null;     // 대표팀 명단에서 종목 창/결과 창을 열었을 때 돌아갈 자리 { view, eventKey, scrollTop }
+function _rememberTeamRoster() {
+    if (_rosterModalKind !== 'team') return;
+    const body = document.getElementById('roster-modal-body');
+    _rosterReturn = { view: _rosterView, eventKey: _rosterEventKey, scrollTop: body ? body.scrollTop : 0 };
+}
+// 종목 창(엔트리·스타트 리스트)이나 결과 창을 닫을 때: 대표팀 명단에서 왔으면 그 자리로 돌아간다
+function _returnToTeamRoster() {
+    if (!_rosterReturn) return false;
+    const r = _rosterReturn; _rosterReturn = null;
+    _rosterView = r.view; _rosterEventKey = r.eventKey;
+    openTeamRoster(true).then(() => { const b = document.getElementById('roster-modal-body'); if (b) b.scrollTop = r.scrollTop || 0; });
+    return true;
+}
 let _rosterView = null;      // 'athlete'(선수별 · 다음 경기 순) | 'event'(종목별 · 칩 필터). null 이면 자동: 대회가 끝났으면 종목별
 let _rosterEventKey = null;  // 종목별에서 고른 종목 (name|gender)
 function setRosterSort(m) { _rosterView = m === 'event' ? 'event' : 'athlete'; openTeamRoster(true); }
@@ -115,6 +130,7 @@ async function openTeamRoster(keep) {
         document.body.appendChild(overlay);
     }
     overlay.style.display = 'flex'; if (window.lockBodyScroll) lockBodyScroll();
+    _rosterModalKind = 'team';
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const code = (allEvents.find(e => e.spotlight) || {}).spotlight || 'KOR';
     const teamL = code === 'KOR' ? '대한민국 육상 선수단' : code + ' 선수단';
@@ -175,10 +191,15 @@ async function openTeamRoster(keep) {
                 <span style="flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${showName ? esc(showName) : `${ev.relay ? '<span style="font-size:10px;color:#7c3aed;margin-right:3px;">계주</span>' : ''}${esc(ev.event_name)} <span style="color:#888;font-weight:500;">${genderL[ev.gender] || ''} ${roundL[ev.round_type] || ''}</span>`}</span>
                 <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;text-align:right;line-height:1.25;">${stOf(ev) || pbsb(ev)}</span></div>`;
         };
-        const naver = a => a.is_team ? '' : `<a class="naver-link" href="${(window.innerWidth < 720 ? 'https://m.search.naver.com/search.naver?query=' : 'https://search.naver.com/search.naver?query=') + encodeURIComponent('육상 ' + a.name)}" target="_blank" rel="noopener" title="네이버에서 선수 프로필 보기" onclick="event.stopPropagation()">N</a>`;
+        const compNm = (document.querySelector('.comp-info-name') || {}).textContent || '';
+        const qPrefix = /아시안게임/.test(compNm) ? '아시안게임 ' : '육상 ';
+        const naverUrl = a => (window.innerWidth < 720 ? 'https://m.search.naver.com/search.naver?query=' : 'https://search.naver.com/search.naver?query=') + encodeURIComponent(qPrefix + a.name);
         // 계주 팀은 공식 명단의 영문 국가명(Republic of Korea) 대신 우리말로
         const dispName = a => a.is_team && /republic of korea|^korea$/i.test(a.name || '') ? `대한민국 계주팀${a.gender === 'M' ? '(남)' : a.gender === 'F' ? '(여)' : ''}` : a.name;
-        const nameLine = a => `<div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span>${esc(dispName(a))}</span>${a.name_alt ? `<span style="font-size:11px;color:#888;font-weight:500;">${esc(a.name_alt)}</span>` : ''}${a.birth_year ? `<span style="font-size:11px;color:#999;font-weight:500;">${a.birth_year}</span>` : ''}${naver(a)}</div>`;
+        // 이름 줄 전체가 네이버 프로필 링크(새 탭) — 오른쪽 끝 ↗ 로 밖으로 나감을 표시. 아래 종목 줄은 엔트리/결과 창
+        const nameLine = a => a.is_team
+            ? `<div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span>${esc(dispName(a))}</span></div>`
+            : `<a class="roster-name-link" href="${naverUrl(a)}" target="_blank" rel="noopener" title="네이버에서 선수 프로필 보기" onclick="event.stopPropagation()"><span class="naver-link">N</span><span class="nm">${esc(a.name)}</span>${a.name_alt ? `<span class="alt">${esc(a.name_alt)}</span>` : ''}${a.birth_year ? `<span class="alt">${a.birth_year}</span>` : ''}${PaceIcons.svg('external', { size: 13, cls: 'ext' })}</a>`;
         const membersLine = a => a.members && a.members.length ? `<div style="font-size:11px;color:#666;margin-top:1px;">${a.members.map(m => esc(m.name)).join(' · ')}</div>` : '';
         const athletes = data.athletes || [];
         const teams = (data.teams || []).map(t => ({ ...t, members: (t.events[0] && t.events[0].members) || [] }));
@@ -337,6 +358,11 @@ function onCardTap(e, evtId) {
 function openEventDetail(evtId) {
     const evt = allEvents.find(e => e.id === evtId);
     if (!evt) return;
+    _rememberTeamRoster();
+    if (_rosterReturn && (evt.round_status === 'completed' || evt.round_status === 'in_progress' || callroomCompletedIds.has(evtId))) {
+        // 결과·LIVE 창은 result-overlay(다른 층)라 명단 시트를 잠시 감춘다 — 닫으면 _returnToTeamRoster 가 다시 연다
+        const ov = document.getElementById('roster-modal-overlay'); if (ov) ov.style.display = 'none';
+    }
     if (evt.round_status === 'completed') { openResult(evtId); return; }
     if (evt.round_status === 'in_progress' || callroomCompletedIds.has(evtId)) { openLiveResult(evtId); return; }
     if (evt.heat_count > 0 && (evt.heat_entry_count == null || evt.heat_entry_count > 0)) { openRosterModal(evtId, evt.name); return; }
@@ -1413,6 +1439,7 @@ async function openEntriesModal(eventId, eventName) {
         document.body.appendChild(overlay);
     }
     overlay.style.display = 'flex'; if (window.lockBodyScroll) lockBodyScroll();
+    _rosterModalKind = 'entries';
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const gL = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
@@ -1668,6 +1695,7 @@ function closeResult() {
     // 중복 호출 방지: overlay 가 이미 안 보이면 popModalState 도 skip.
     // popstate 로 인해 closeResult 가 호출된 경우 _modalStack 은 이미 pop 됨.
     if (window.popModalState) popModalState();
+    _returnToTeamRoster();
 }
 
 // ============================================================
@@ -1828,6 +1856,7 @@ function closeLiveResult() {
     if (iframe) iframe.src = '';
     document.getElementById('result-overlay').classList.remove('show');
     if (window.popModalState) popModalState();
+    _returnToTeamRoster();
 }
 
 // ─── 신기록 배너 / 배지 헬퍼 (results.js 와 동일 디자인 톤) ─────
@@ -3180,6 +3209,7 @@ async function openRosterModal(eventId, eventName) {
         document.body.appendChild(overlay);
     }
     overlay.style.display = 'flex'; if (window.lockBodyScroll) lockBodyScroll();
+    _rosterModalKind = 'startlist';
 
     const gL = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
     const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[evt.round_type] || '';
@@ -3204,6 +3234,8 @@ async function openRosterModal(eventId, eventName) {
 }
 
 function closeRosterModal() {
+    if (_rosterModalKind !== 'team' && _rosterReturn) { _rosterModalEventId = null; _returnToTeamRoster(); return; }
+    _rosterModalKind = null; _rosterReturn = null;
     const overlay = document.getElementById('roster-modal-overlay');
     if (overlay) overlay.style.display = 'none';
     if (window.unlockBodyScroll) unlockBodyScroll();
