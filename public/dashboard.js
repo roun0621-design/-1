@@ -1637,7 +1637,7 @@ async function openResult(eventId) {
         try {
             const normName = (typeof normalizeEventNameClient === 'function') ? normalizeEventNameClient(evt.name) : evt.name;
             const compInfo = await API.getCompetitionInfo(getCompetitionId()).catch(() => ({}));
-            window._liveRecords = await API.lookupEventRecords(normName, evt.gender, evt.division || null, compInfo?.series_id || null).catch(() => null);
+            window._liveRecords = await API.lookupEventRecords(normName, evt.gender, evt.division || null, compInfo?.series_id || null, evt.id).catch(() => null);
             window._liveRecDir = (typeof recordDirectionForCategoryClient === 'function') ? recordDirectionForCategoryClient(evt.category) : null;
         } catch(e) { window._liveRecords = null; window._liveRecDir = null; }
 
@@ -1647,6 +1647,8 @@ async function openResult(eventId) {
 
         let bodyHtml = '';
         bodyHtml += buildEmbedVideoHTML(videoUrl);
+        // 기존 기록(WR·AR·GR·NR·DR·CR) 줄 — 완료 결과 창에도 (LIVE 창과 같은 모양)
+        bodyHtml += _buildRecordsBannerHTML(window._liveRecords);
 
         if (evt.category === 'track' || evt.category === 'relay' || evt.category === 'road') {
             let relayMembers = null;
@@ -1800,7 +1802,7 @@ async function refreshLiveResult() {
             liveRecords = await API.lookupEventRecords(
                 normName, evt.gender,
                 evt.division || null,
-                compInfo?.series_id || null
+                compInfo?.series_id || null, evt.id
             ).catch(() => null);
             liveRecDir = (typeof recordDirectionForCategoryClient === 'function')
                 ? recordDirectionForCategoryClient(evt.category) : null;
@@ -1869,6 +1871,9 @@ function _buildRecordsBannerHTML(records) {
                ${rec.record_year ? `<span style="color:var(--text-muted);font-weight:400;">${rec.record_year}</span>` : ''}
            </span>` : '';
     const parts = [
+        chip('WR', '#6a1b9a', records.world),
+        chip('AR', '#0d47a1', records.area),
+        chip('GR', '#b8860b', records.games),
         chip('NR', '#c0392b', records.national),
         chip('DR', '#2980b9', records.division),
         chip('CR', '#27ae60', records.competition)
@@ -3250,14 +3255,24 @@ async function loadRosterModalData(eventId) {
         const evt = allEvents.find(e => e.id === eventId);
         if (!evt) { body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">종목 정보를 찾을 수 없습니다.</div>'; return; }
 
-        const heats = await API.getHeats(eventId);
+        let heats = await API.getHeats(eventId);
+        // 종합경기(7종·10종): 부모에는 조가 없고 세부종목마다 조가 있다 → 세부종목 순서대로 모아 보여준다 (조 이름 앞에 세부종목명)
+        let subOf = new Map();
+        if (evt.category === 'combined' && heats.length === 0) {
+            const subs = allEvents.filter(e => e.parent_event_id === evt.id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
+            for (const sub of subs) {
+                const hs = await API.getHeats(sub.id);
+                hs.forEach(h => { subOf.set(h.id, sub); });
+                heats = heats.concat(hs);
+            }
+        }
         if (heats.length === 0) {
             body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">조 편성이 아직 완료되지 않았습니다.</div>';
             return;
         }
 
         const isFinalSingle = evt.round_type === 'final' && heats.length === 1;
-        const isField = ['field_distance', 'field_height'].includes(evt.category);
+        const isFieldEvt = ['field_distance', 'field_height'].includes(evt.category);
         // 국제대회(관심 국가): 국가 코드 열·태극기·영문명·출생년·PB/SB, 우리 선수 줄은 연한 붉은 배경 — 엔트리 창과 같은 규칙
         const spot = (allEvents.find(e => e.spotlight) || {}).spotlight || null;
         const escT = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -3269,7 +3284,9 @@ async function loadRosterModalData(eventId) {
 
         for (const heat of heats) {
             const entries = await API.getHeatEntries(heat.id);
-            const hLabel = isFinalSingle ? '결승' : (heat.heat_name || `${heat.heat_number}조`);
+            if (subOf.size && entries.length === 0) continue;   // 종합경기: 아직 명단 없는 조는 숨긴다
+            const _sub = subOf.get(heat.id);
+            const hLabel = _sub ? `${_sub.name} ${heat.heat_name || (heat.heat_number + '조')}` : (isFinalSingle ? '결승' : (heat.heat_name || `${heat.heat_number}조`));
 
             // 소집 상태 요약
             const cntChecked = entries.filter(e => e.status === 'checked_in').length;
@@ -3305,6 +3322,7 @@ async function loadRosterModalData(eventId) {
             //   소속은 남은 폭을 차지하고, 긴 팀명은 줄바꿈(word-break)으로 다음 줄로.
             html += `<table class="fill-table" style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">`;
             html += `<thead><tr style="background:#f5f5f5;border-bottom:1px solid #e0e0e0;">`;
+            const isField = _sub ? ['field_distance', 'field_height'].includes(_sub.category) : isFieldEvt;
             html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">${isField ? '순서' : '레인'}</th>`;
             if (hasBib) html += `<th style="padding:5px 8px;text-align:center;width:50px;font-weight:600;color:#777;">배번</th>`;
             if (hasSubGroup) html += `<th style="padding:5px 8px;text-align:center;width:42px;font-weight:600;color:#777;">그룹</th>`;

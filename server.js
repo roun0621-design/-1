@@ -4980,7 +4980,11 @@ app.get('/api/event-records/lookup', async (req, res) => {
             return null;
         }
 
-        const out = { national: null, division: null, competition: null };
+        const out = { national: null, division: null, competition: null, world: null, area: null, games: null };
+        // 종목별 기록(event_records JSON) — 국제대회 동기화가 넣는 WR/AR/GR (event_id 가 오면)
+        if (req.query.event_id) {
+            try { const row = await db.get('SELECT records FROM event_records WHERE event_id=?', parseInt(req.query.event_id, 10)); const j = row ? JSON.parse(row.records || '{}') : {}; for (const k of ['world', 'area', 'games']) if (j && j[k] && j[k].record_value) out[k] = j[k]; } catch (e) {}
+        }
         out.national = await _findOne('national', `AND division_code IS NULL AND series_id IS NULL`, []);
         if (divCode) {
             out.division = await _findOne('division', `AND division_code=? AND series_id IS NULL`, [divCode]);

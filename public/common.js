@@ -301,7 +301,7 @@ function parseRecordValueClient(v) {
 function detectBrokenRecordsClient(newVal, records, direction) {
     const broken = [];
     if (newVal == null || !isFinite(newVal)) return broken;
-    const keys = [['national','NR'], ['division','DR'], ['competition','CR']];
+    const keys = [['world','WR'], ['area','AR'], ['games','GR'], ['national','NR'], ['division','DR'], ['competition','CR']];
     for (const [k, label] of keys) {
         const rec = records ? records[k] : null;
         if (!rec) continue;
@@ -651,10 +651,11 @@ const API = {
     getResults: hid => api('GET', `/api/results?heat_id=${hid}`),
     upsertResult: body => api('POST', '/api/results/upsert', body),
     // Phase C: 신기록 lookup (NR/DR/CR 정확 매칭, approved만)
-    lookupEventRecords: (eventName, gender, divisionCode, seriesId) => {
+    lookupEventRecords: (eventName, gender, divisionCode, seriesId, eventId) => {
         const p = new URLSearchParams({ event_name: eventName, gender });
         if (divisionCode) p.set('division_code', divisionCode);
         if (seriesId) p.set('series_id', String(seriesId));
+        if (eventId) p.set('event_id', String(eventId));   // 종목별 WR/AR/GR (국제대회)
         return api('GET', '/api/event-records/lookup?' + p.toString());
     },
     setManualRank: (entryId, rank) => api('PATCH', `/api/event-entries/${entryId}/manual-rank`, { manual_rank: rank }),

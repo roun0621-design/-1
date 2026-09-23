@@ -170,6 +170,39 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [units[1]], onApplied: a => { if (a.completed) done.push(a.event_id); } });
         expect(done).toEqual([ev.id]);
     });
+    it('스타트 리스트(START_LIST): 외국 선수 PB/SB·배번이 채워지고, 종목 기록(WR/AR/GR)이 event_records 에 들어가 lookup 에 나온다; 7종 부모 카드는 세부종목 조를 합산', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const all = F('entries_event_W100M.json').Partics.filter(p => p.Org !== 'KOR');
+        const unit = 'W.100M--------------.RND1.000300--';
+        const ext = (pb, sb) => [{ Type: 'RESULT_INFO', Code: 'PB', Value: pb }, { Type: 'RESULT_INFO', Code: 'SB', Value: sb }, { Type: 'RESULT_INFO', Code: 'HasPB', Value: '' }];
+        fakeResults[unit] = { Info: { Key: unit, Status: 'START_LIST', StatusDesc: 'Start List' },
+            Results: { Result: '', Records: [{ EvCode: 'W.100M--------------', Records: [
+                { Result: '10.49', Indicator: 'WR', Desc: 'World Record', Loc: 'Indianapolis (USA)', DateTimeRaw: '1988-07-16T00:00:00+09:00', Name: 'GRIFFITH-JOYNER Florence', Org: 'USA' },
+                { Result: '10.79', Indicator: 'AR', Desc: 'Asian Record', Loc: 'Shanghai (CHN)', DateTimeRaw: '1997-10-18T00:00:00+09:00', Name: 'LI Xuemei', Org: 'CHN' },
+                { Result: '11.06', Indicator: 'GR', Desc: 'Games Record', Loc: 'Hangzhou (CHN)', DateTimeRaw: '2023-09-30T00:00:00+09:00', Name: 'GE Manqi', Org: 'CHN' } ] }] },
+            Competitors: [ { Reg: all[5].Reg, Bib: '512', Org: all[5].Org, Name: all[5].Name, Lane: '3', Result: '', IRM: 'OK', RecordInd: '', Extensions: ext('11.20', '11.31') },
+                           { Reg: all[6].Reg, Bib: '613', Org: all[6].Org, Name: all[6].Name, Lane: '4', Result: '', IRM: 'OK', RecordInd: '', Extensions: ext('11.40', '') } ] };
+        const p = B.parseResults(fakeResults[unit]);
+        expect(p.rows.map(r => [r.lane, r.bib, r.pb, r.sb])).toEqual([[3, '512', '11.20', '11.31'], [4, '613', '11.40', '']]);
+        expect(p.records.map(r => r.ind)).toEqual(['WR', 'AR', 'GR']); expect(p.official).toBe(false);
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [unit] });
+        const ev = await db.get("SELECT id FROM event WHERE competition_id=? AND external_key='W.100M--------------#RND1'", fx.comp);
+        const row = await db.get('SELECT ee.personal_best, ee.season_best, a.bib_number, he.lane_number FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id JOIN heat_entry he ON he.event_entry_id=ee.id WHERE ee.event_id=? AND a.barcode=?', ev.id, 'BN:' + all[5].Reg);
+        expect(row).toEqual({ personal_best: '11.20', season_best: '11.31', bib_number: '512', lane_number: 3 });
+        const lk = await request(app).get('/api/event-records/lookup').query({ event_name: '100m', gender: 'F', event_id: ev.id });
+        expect(lk.body.world).toMatchObject({ record_value: '10.49', holder_name: 'GRIFFITH-JOYNER Florence', record_year: '1988' });
+        expect(lk.body.games).toMatchObject({ record_value: '11.06', holder_team: 'CHN' });
+        // 7종: 세부종목 조에 레인이 들어오면 부모 카드가 조·레인 수를 합산해 스타트 리스트로
+        const hep = await db.get("SELECT id FROM event WHERE competition_id=? AND external_key='W.HEPTATH-----------'", fx.comp);
+        const hepSub = await db.get("SELECT h.id AS heat_id, h.external_key, e.id AS ev_id FROM heat h JOIN event e ON e.id=h.event_id WHERE e.parent_event_id=? ORDER BY h.id LIMIT 1", hep.id);
+        const korHep = F('entries_org_KOR.json').Events.find(e => e.EvKey === 'W.HEPTATH-----------');
+        const hp = korHep ? korHep.Partics[0] : F('entries_event_W100M.json').Partics[0];
+        fakeResults[hepSub.external_key] = { Info: { Status: 'START_LIST' }, Competitors: [{ Reg: hp.Reg, Bib: '901', Org: hp.Org, Name: hp.Name, Lane: '2', Result: '', IRM: 'OK', Extensions: [] }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [hepSub.external_key] });
+        const evs = (await request(app).get('/api/events').query({ competition_id: fx.comp })).body;
+        const parent = evs.find(e => e.id === hep.id);
+        expect(parent.heat_count).toBeGreaterThan(0); expect(parent.heat_entry_count).toBe(1);
+    });
     it('선수 보조 정보(한글 이름·PB·SB): 영문 이름으로 찾아 넣고, 다음 동기화가 한글 이름을 덮지 않는다', async () => {
         const r = await request(app).post(`/api/admin/intl/${fx.comp}/athlete-info`).send({ admin_key: ADMIN, rows: [
             { 영문이름: 'seo jihyun', 한글이름: '서지현', PB: '11.30', SB: '11.45' }, { name: 'KIM Juha', name_ko: '김주하', pb: '11.36' }, { name: 'NOBODY X', name_ko: '없음' }] });

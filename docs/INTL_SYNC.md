@@ -39,3 +39,9 @@
 - `parseResults` 가 결과 JSON 의 `Status/StatusDesc/ResultStatus/…` 에서 **Official** 여부를 읽는다(`Unofficial` 은 아님). 공식 결과가 들어온 조는 `sync_state.heat_flags[heatId]='official'`, 종목의 모든 조가 공식이면 `round_status='completed'`(결과 버튼) → `onApplied({completed:true})` → `notifyEventInterest(event,{kind:'result'})` 로 관심 등록자에게 "○○ 결승 결과 발표" 푸시. 같은 종목은 6시간에 한 번만.
 - 정확한 상태 키는 9/23 첫 결과(`probe`)로 확인해 후보 목록을 맞출 것. 키가 없으면 완료로 바뀌지 않으므로 관리자 force-status 로 수동 완료 가능.
 - 관심 종목 키는 `성별|종목명`(라운드 무관). 대시보드: 카드의 종 아이콘은 없애고 엔트리·스타트 리스트·결과·LIVE 창 머리글의 `알림` 토글로, 대표팀 명단 창엔 '전 종목 알림'(우리 선수 종목 전부 한 번에). 흐름 테스트 `tests/api/49_push_interest_flow`.
+
+## 스타트 리스트 · 외국 선수 PB/SB · 종목 기록 (2026-09-24)
+- 공식 API 의 `results/<유닛>` 은 경기 전엔 `Info.Status='START_LIST'` 로 레인·배번을 준다 → 시작 36시간 전부터 10분마다 읽는다(`_startListChecked`). 명단이 아직 없는 조(`Scheduled`)는 '형식 미확인'에 넣지 않는다.
+- 선수별 `Extensions[Code=PB|SB]` 를 출전(event_entry)의 PB/SB 로 채운다 — **비어 있을 때만**(우리 선수는 사용자 표 값 유지). `Bib` 도 배번이 비면 채움. `RecordInd`(GR/AR/WR…)는 결과 비고로.
+- 종목 기록 `Results.Records[].Records[]`(WR·AR·GR)는 `event_records`(종목별 JSON) 의 `world/area/games` 에 저장(세부종목은 부모에). `GET /api/event-records/lookup?…&event_id=` 가 합쳐 주고, 결과·LIVE 창 '기존 기록' 줄과 신기록 배지(`detectBrokenRecordsClient` WR/AR/GR/NR/DR/CR)가 쓴다.
+- 7종·10종: 부모 카드의 조·레인 수는 세부종목 합산(`events_read`), 스타트 리스트 창은 세부종목 조를 순서대로(`100mH 1조 …`), 명단 없는 조는 숨김.
