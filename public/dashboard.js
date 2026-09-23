@@ -395,6 +395,17 @@ function toggleFavorite(eventName, gender) {
     renderMatrix();
 }
 
+// ── 엔트리·스타트 리스트 창 위의 '기존 기록' 줄 (WR·AR·GR·NR…) — 결과 창과 같은 칩 ──
+async function _recordsLineHtml(evt) {
+    try {
+        const normName = (typeof normalizeEventNameClient === 'function') ? normalizeEventNameClient(evt.name) : evt.name;
+        const compInfo = await API.getCompetitionInfo(getCompetitionId()).catch(() => ({}));
+        const recs = await API.lookupEventRecords(normName, evt.gender, evt.division || null, compInfo?.series_id || null, evt.id).catch(() => null);
+        const h = _buildRecordsBannerHTML(recs);
+        return h ? `<div style="padding:0 12px;">${h}</div>` : '';
+    } catch (e) { return ''; }
+}
+
 // ── 결과·LIVE 창 장식: 관심 국가(한국) 선수 줄 강조 + 태극기, 결승 1·2·3위는 메달 원, 배번 없는 대회는 'BIB —' 숨김 ──
 function _decorateResultPanel(panel, evt) {
     try {
@@ -1474,9 +1485,10 @@ async function openEntriesModal(eventId, eventName) {
         };
         const korRows = rows.filter(e => spot && e.team === spot), rest = rows.filter(e => !(spot && e.team === spot));
         document.getElementById('entries-modal-title').textContent = `엔트리 · ${rows.length}${isRelay ? '팀' : '명'}`;
-        body.innerHTML = rows.length ? `${korRows.length ? `<div style="padding:8px 14px 2px;font-size:11px;font-weight:800;color:#8b1a2a;letter-spacing:.05em;">한국 (${korRows.length})</div>${korRows.map(line).join('')}` : ''}
+        const _recLine = await _recordsLineHtml(evt);
+        body.innerHTML = _recLine + (rows.length ? `${korRows.length ? `<div style="padding:8px 14px 2px;font-size:11px;font-weight:800;color:#8b1a2a;letter-spacing:.05em;">한국 (${korRows.length})</div>${korRows.map(line).join('')}` : ''}
             ${rest.length ? `<div style="padding:10px 14px 2px;font-size:11px;font-weight:800;color:#888;letter-spacing:.05em;">${korRows.length ? '다른 국가' : '출전'} (${rest.length}) · 국가 코드순</div>${rest.map(line).join('')}` : ''}`
-            : uiStateHtml('empty', { title: '출전 선수가 아직 없습니다', hint: '공식 엔트리가 올라오면 자동으로 들어옵니다.' });
+            : uiStateHtml('empty', { title: '출전 선수가 아직 없습니다', hint: '공식 엔트리가 올라오면 자동으로 들어옵니다.' }));
     } catch (e) { body.innerHTML = uiStateHtml('error', { title: '출전 선수를 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '' }); }
 }
 
@@ -3282,9 +3294,12 @@ async function loadRosterModalData(eventId) {
         const showCallroomStatus = (evt.round_status === 'in_progress' || evt.round_status === 'heats_generated');
         let html = '';
 
+        const _heatEntries = new Map();
+        for (const heat of heats) _heatEntries.set(heat.id, await API.getHeatEntries(heat.id));
+        const anyFilled = [..._heatEntries.values()].some(l => l.length > 0);
         for (const heat of heats) {
-            const entries = await API.getHeatEntries(heat.id);
-            if (subOf.size && entries.length === 0) continue;   // 종합경기: 아직 명단 없는 조는 숨긴다
+            const entries = _heatEntries.get(heat.id);
+            if (entries.length === 0 && anyFilled) continue;   // 공식 일정엔 8조였다가 4조로 줄어든 경우 등: 명단 없는 조는 숨긴다
             const _sub = subOf.get(heat.id);
             const hLabel = _sub ? `${_sub.name} ${heat.heat_name || (heat.heat_number + '조')}` : (isFinalSingle ? '결승' : (heat.heat_name || `${heat.heat_number}조`));
 
@@ -3396,7 +3411,7 @@ async function loadRosterModalData(eventId) {
             html += `</tbody></table></div>`;
         }
 
-        body.innerHTML = html || '<div style="padding:20px;text-align:center;color:var(--text-muted);">조 편성 데이터가 없습니다.</div>';
+        body.innerHTML = (await _recordsLineHtml(evt)) + (html || '<div style="padding:20px;text-align:center;color:var(--text-muted);">조 편성 데이터가 없습니다.</div>');
 
         // 운영자용 소집실/기록실 링크 추가
         const isAdmin = currentRole === 'admin';
