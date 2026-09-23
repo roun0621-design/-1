@@ -186,9 +186,16 @@ async function openTeamRoster(keep) {
         const stOf = ev => ev.round_status === 'completed' ? (mark(ev) || '<span style="color:#888;">결과</span>') : ev.round_status === 'in_progress' ? '<span style="color:#16a34a;font-weight:800;">LIVE</span>' : '';
         const evLine = (ev, showName) => {
             const done = ev.round_status === 'completed', live = ev.round_status === 'in_progress';
+            const phone = window.innerWidth < 640;
+            const right = stOf(ev) || pbsb(ev).replace('<br>', ' · ');
+            const label = showName ? esc(showName) : `${ev.relay ? '<span style="font-size:10px;color:#7c3aed;margin-right:3px;">계주</span>' : ''}${esc(ev.event_name)} <span style="color:#888;font-weight:500;">${genderL[ev.gender] || ''} ${roundL[ev.round_type] || ''}</span>`;
+            // 폰: 첫 줄 시각·종목, 둘째 줄 결과 또는 PB · SB (오른쪽 칸에 넣으면 잘린다)
+            if (phone) return `<div onclick="openEventDetail(${ev.event_id})" style="padding:7px 0;min-height:36px;cursor:pointer;${done ? 'opacity:.75;' : ''}">
+                <div style="display:flex;align-items:center;gap:8px;"><span style="flex:none;font-family:var(--font-mono);font-size:11px;color:${live ? '#16a34a' : done ? '#999' : '#1a2a5e'};min-width:92px;">${esc(when(ev))}</span><span style="flex:1;min-width:0;font-size:12px;font-weight:600;">${label}</span></div>
+                ${right ? `<div style="padding-left:100px;font-family:var(--font-mono);font-size:11px;color:#555;margin-top:2px;">${right}</div>` : ''}</div>`;
             return `<div onclick="openEventDetail(${ev.event_id})" style="display:flex;align-items:center;gap:8px;padding:7px 0;min-height:36px;cursor:pointer;${done ? 'opacity:.75;' : ''}">
                 <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:${live ? '#16a34a' : done ? '#999' : '#1a2a5e'};min-width:92px;">${esc(when(ev))}</span>
-                <span style="flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${showName ? esc(showName) : `${ev.relay ? '<span style="font-size:10px;color:#7c3aed;margin-right:3px;">계주</span>' : ''}${esc(ev.event_name)} <span style="color:#888;font-weight:500;">${genderL[ev.gender] || ''} ${roundL[ev.round_type] || ''}</span>`}</span>
+                <span style="flex:1;min-width:0;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</span>
                 <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;text-align:right;line-height:1.25;">${stOf(ev) || pbsb(ev)}</span></div>`;
         };
         const compNm = (document.querySelector('.comp-info-name') || {}).textContent || '';
@@ -396,11 +403,13 @@ function toggleFavorite(eventName, gender) {
 }
 
 // ── 엔트리·스타트 리스트 창 위의 '기존 기록' 줄 (WR·AR·GR·NR…) — 결과 창과 같은 칩 ──
+// 국제대회(관심 국가 대회)에서는 NR(한국 기록)을 빼고 WR·AR·GR 만 — 외국 선수 결과에 한국 기록 배지가 붙지 않게
+function _intlRecords(recs) { if (recs && allEvents.some(e => e.spotlight)) { const c = { ...recs }; delete c.national; delete c.division; delete c.competition; return c; } return recs; }
 async function _recordsLineHtml(evt) {
     try {
         const normName = (typeof normalizeEventNameClient === 'function') ? normalizeEventNameClient(evt.name) : evt.name;
         const compInfo = await API.getCompetitionInfo(getCompetitionId()).catch(() => ({}));
-        const recs = await API.lookupEventRecords(normName, evt.gender, evt.division || null, compInfo?.series_id || null, evt.id).catch(() => null);
+        const recs = _intlRecords(await API.lookupEventRecords(normName, evt.gender, evt.division || null, compInfo?.series_id || null, evt.id).catch(() => null));
         const h = _buildRecordsBannerHTML(recs);
         return h ? `<div style="padding:0 12px;">${h}</div>` : '';
     } catch (e) { return ''; }
@@ -1478,10 +1487,12 @@ async function openEntriesModal(eventId, eventName) {
         const line = e => {
             const pb = [e.personal_best ? 'PB ' + e.personal_best : '', e.season_best ? 'SB ' + e.season_best : ''].filter(Boolean).join(' · ');
             const mem = isRelay && members[e.event_entry_id] ? `<div style="font-size:11px;color:#666;margin-top:2px;">${members[e.event_entry_id].members.map(m => esc(m.name)).join(' · ')}</div>` : '';
+            const phone = window.innerWidth < 640;   // 폰: PB·SB 는 이름 아래 한 줄 (오른쪽 칸에선 잘린다)
+            const pbUnder = phone && pb ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:#666;margin-top:2px;white-space:nowrap;">${esc(pb)}</div>` : '';
             return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 14px;border-top:1px solid #f1f1f1;${e.team === spot ? 'background:#fff6f6;' : ''}">
                 <div style="flex:none;width:52px;font-weight:800;font-size:12px;color:${e.team === spot ? '#8b1a2a' : '#555'};">${flag(e.team)}${esc(e.team || '')}</div>
-                <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:${e.team === spot ? 700 : 500};">${esc(isRelay ? (e.name || '') : e.name)}${e.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;">${esc(e.name_alt)}</span>` : ''}${year(e.date_of_birth) ? `<span style="font-size:11px;color:#999;margin-left:6px;">${year(e.date_of_birth)}</span>` : ''}</div>${mem}</div>
-                <div style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;">${esc(pb)}</div></div>`;
+                <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:${e.team === spot ? 700 : 500};">${esc(isRelay ? (e.name || '') : e.name)}${e.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;">${esc(e.name_alt)}</span>` : ''}${year(e.date_of_birth) ? `<span style="font-size:11px;color:#999;margin-left:6px;">${year(e.date_of_birth)}</span>` : ''}</div>${mem}${pbUnder}</div>
+                ${phone ? '' : `<div style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;">${esc(pb)}</div>`}</div>`;
         };
         const korRows = rows.filter(e => spot && e.team === spot), rest = rows.filter(e => !(spot && e.team === spot));
         document.getElementById('entries-modal-title').textContent = `엔트리 · ${rows.length}${isRelay ? '팀' : '명'}`;
@@ -1649,7 +1660,7 @@ async function openResult(eventId) {
         try {
             const normName = (typeof normalizeEventNameClient === 'function') ? normalizeEventNameClient(evt.name) : evt.name;
             const compInfo = await API.getCompetitionInfo(getCompetitionId()).catch(() => ({}));
-            window._liveRecords = await API.lookupEventRecords(normName, evt.gender, evt.division || null, compInfo?.series_id || null, evt.id).catch(() => null);
+            window._liveRecords = _intlRecords(await API.lookupEventRecords(normName, evt.gender, evt.division || null, compInfo?.series_id || null, evt.id).catch(() => null));
             window._liveRecDir = (typeof recordDirectionForCategoryClient === 'function') ? recordDirectionForCategoryClient(evt.category) : null;
         } catch(e) { window._liveRecords = null; window._liveRecDir = null; }
 
@@ -1819,6 +1830,7 @@ async function refreshLiveResult() {
             liveRecDir = (typeof recordDirectionForCategoryClient === 'function')
                 ? recordDirectionForCategoryClient(evt.category) : null;
         } catch(e) {}
+        liveRecords = _intlRecords(liveRecords);
         window._liveRecords = liveRecords;
         window._liveRecDir = liveRecDir;
 
@@ -1978,6 +1990,7 @@ function renderLiveTrackResults(data, relayMembers) {
                 ${rankHtml}
                 <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
                 <div class="rr-meta">${meta}</div>
+                <div class="rr-pbsb-row">${_pbSb(r)}</div>
                 ${recHtml}
                 <div class="rr-go" aria-hidden="true"></div>
                 ${memberHtml}
@@ -2756,6 +2769,7 @@ function renderTrackResults(data, relayMembers) {
                 ${rankHtml}
                 <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
                 <div class="rr-meta">${meta}</div>
+                <div class="rr-pbsb-row">${_pbSb(r)}</div>
                 ${recHtml}
                 <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
                 ${memberHtml}
@@ -2810,6 +2824,7 @@ function _rrFieldDistList(rows, needsWind, opts) {
             ${_rrFieldRankHtml(r.status_code, rankNum)}
             <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">${meta}</div>
+                <div class="rr-pbsb-row">${_pbSb(r)}</div>
             ${recHtml}
             <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
             <div class="rr-att">${cells}</div>
@@ -2842,6 +2857,7 @@ function _rrFieldHeightList(rows, hts, opts) {
             ${_rrFieldRankHtml(status, rankNum)}
             <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">${meta}</div>
+                <div class="rr-pbsb-row">${_pbSb(r)}</div>
             ${recHtml}
             <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
             ${chips ? `<div class="rr-hj">${chips}</div>` : ''}
@@ -3345,9 +3361,10 @@ async function loadRosterModalData(eventId) {
             //   → 이름 열을 표 폭의 24%(데스크톱 ≈125px, 9자까지 한 줄)로 넓히고, 그래도 넘치면
             //     overflow-wrap:anywhere 로 셀 안에서 줄바꿈. 소속은 남은 폭(≈250px)이라 상태 열을 침범하지 않음.
             if (spot) {
-                html += `<th style="padding:5px 8px;text-align:left;width:54px;font-weight:600;color:#777;">국가</th>`;
+                const phone = window.innerWidth < 640;   // 폰: PB·SB 를 이름 아래 한 줄로 (열이 좁아 두 줄로 잘리던 것)
+                html += `<th style="padding:5px 6px;text-align:left;width:${phone ? 46 : 54}px;font-weight:600;color:#777;">국가</th>`;
                 html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">이름</th>`;
-                html += `<th style="padding:5px 8px;text-align:right;width:92px;font-weight:600;color:#777;">PB · SB</th>`;
+                if (!phone) html += `<th style="padding:5px 8px;text-align:right;width:92px;font-weight:600;color:#777;">PB · SB</th>`;
             } else {
                 html += `<th style="padding:5px 8px;text-align:left;width:24%;font-weight:600;color:#777;">이름</th>`;
                 html += `<th style="padding:5px 8px;text-align:left;font-weight:600;color:#777;">소속</th>`;
@@ -3394,8 +3411,8 @@ async function loadRosterModalData(eventId) {
                 //   폭이 모자라면 음절 단위로 줄바꿈(word-break:normal + overflow-wrap:anywhere).
                 if (spot) {
                     html += `<td style="padding:5px 6px;text-align:left;font-weight:800;font-size:11px;color:${isSpot ? '#8b1a2a' : '#555'};white-space:nowrap;">${isSpot && spot === 'KOR' ? PaceIcons.svg('flagKR', { size: 18, style: 'margin-right:3px;vertical-align:-4px' }) : ''}${escT(e.team || '')}</td>`;
-                    html += `<td style="padding:5px 8px;text-align:left;font-weight:${isSpot ? 800 : 600};white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${escT(e.name)}${e.name_alt ? `<span style="font-size:10px;color:#888;margin-left:5px;font-weight:500;">${escT(e.name_alt)}</span>` : ''}${yearOf(e.date_of_birth) ? `<span style="font-size:10px;color:#999;margin-left:5px;font-weight:500;">${yearOf(e.date_of_birth)}</span>` : ''}</td>`;
-                    html += `<td style="padding:5px 8px;text-align:right;font-family:var(--font-mono);font-size:10.5px;color:#555;white-space:nowrap;line-height:1.25;">${pbsbOf(e)}</td>`;
+                    html += `<td style="padding:5px 8px;text-align:left;font-weight:${isSpot ? 800 : 600};white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${escT(e.name)}${e.name_alt ? `<span style="font-size:10px;color:#888;margin-left:5px;font-weight:500;">${escT(e.name_alt)}</span>` : ''}${yearOf(e.date_of_birth) ? `<span style="font-size:10px;color:#999;margin-left:5px;font-weight:500;">${yearOf(e.date_of_birth)}</span>` : ''}${window.innerWidth < 640 && (e.personal_best || e.season_best) ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:#666;font-weight:500;margin-top:2px;white-space:nowrap;">${[e.personal_best ? 'PB ' + escT(e.personal_best) : '', e.season_best ? 'SB ' + escT(e.season_best) : ''].filter(Boolean).join(' · ')}</div>` : ''}</td>`;
+                    if (window.innerWidth >= 640) html += `<td style="padding:5px 8px;text-align:right;font-family:var(--font-mono);font-size:10.5px;color:#555;white-space:nowrap;line-height:1.25;">${pbsbOf(e)}</td>`;
                 } else {
                     html += `<td style="padding:5px 8px;text-align:left;font-weight:600;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
                     html += `<td style="padding:5px 8px;text-align:left;color:#666;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.team || ''}</td>`;
