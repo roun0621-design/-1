@@ -142,10 +142,9 @@ async function openTeamRoster(keep) {
             ${code === 'KOR' ? PaceIcons.svg('flagKR', { size: 30 }) : ''}
             <div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:16px;color:#1a2a5e;line-height:1.2;" id="team-roster-title">${teamL}</div>
                  <div style="font-size:12px;color:#8a7640;margin-top:3px;" id="team-roster-sub">불러오는 중…</div></div>
-            <div id="team-roster-tools"></div>
             <button onclick="closeRosterModal()" aria-label="닫기" style="flex:none;width:32px;height:32px;border-radius:50%;background:#f0ede6;border:none;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;">${PaceIcons.svg('close', { size: 16 })}</button>
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 16px;border-bottom:1px solid #eee;flex-shrink:0;background:#fbfaf6;"><span style="font-size:11px;color:#8a8580;">우리 선수 종목의 소집·결과 알림</span><button type="button" class="fav-modal-btn" id="team-roster-fav" style="margin:0;" onclick="event.stopPropagation(); toggleSpotFavorites(this)"></button></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 16px;border-bottom:1px solid #eee;flex-shrink:0;background:#fbfaf6;"><div id="team-roster-tools"></div><button type="button" class="fav-modal-btn" id="team-roster-fav" style="margin:0;" title="우리 선수 종목의 소집·결과 알림" onclick="event.stopPropagation(); toggleSpotFavorites(this)"></button></div>
         <div id="team-roster-chips" style="flex-shrink:0;"></div>
         <div id="roster-modal-body" style="flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 0 env(safe-area-inset-bottom,0);-webkit-overflow-scrolling:touch;">${uiStateHtml('loading', { title: '선수단 명단을 불러오는 중…' })}</div></div>`;
     if (!keep && window.pushModalState) pushModalState(() => closeRosterModal());
@@ -219,7 +218,7 @@ async function openTeamRoster(keep) {
             // ── 선수별: 다음 경기 순 (모두 끝난 선수는 뒤로) ──
             chipsEl.innerHTML = '';
             const sorted = _rosterSortNext(athletes), teamsSorted = _rosterSortNext(teams);
-            document.getElementById('team-roster-sub').textContent = `${evCount}종목${teams.length ? ` · 계주 ${teams.length}팀` : ''} · 다음 경기 순${ended ? ' · 대회 종료' : ''}`;
+            document.getElementById('team-roster-sub').textContent = `${evCount}종목${teams.length ? ` · 계주 ${teams.length}팀` : ''}${ended ? ' · 대회 종료' : ''}`;
             const row = a => `<div style="padding:10px 16px 6px;border-top:1px solid #f1f1f1;">${nameLine(a)}${membersLine(a)}
                 <div style="margin-top:3px;">${a.events.map(ev => evLine(ev)).join('') || '<div style="font-size:11px;color:#999;">출전 종목 없음</div>'}</div></div>`;
             body.innerHTML = sorted.length
@@ -257,7 +256,7 @@ async function openTeamRoster(keep) {
             chipsEl.innerHTML = `<div class="roster-chips" style="padding:8px 14px 8px;border-bottom:1px solid #eee;overflow-x:auto;overscroll-behavior:contain;scrollbar-width:none;display:grid;grid-auto-flow:column;grid-auto-columns:max-content;grid-template-rows:repeat(2,auto);gap:6px 5px;justify-content:start;">${ordered.map(chip).join('')}</div>`;
             try { const on = chipsEl.querySelector('button[aria-pressed="true"]'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) {}
             const sel = byEvent.get(_rosterEventKey);
-            document.getElementById('team-roster-sub').textContent = `${events.length}종목 · 종목을 고르면 출전 선수${ended ? ' · 대회 종료' : ''}`;
+            document.getElementById('team-roster-sub').textContent = `${events.length}종목${ended ? ' · 대회 종료' : ''}`;
             const gOrder = ['M', 'F', 'X'];
             const secColor = { M: '#1a2a5e', F: '#8b1a2a', X: '#6a1b9a' };   // 남=남색 · 여=버건디 · 혼성=보라 (대시보드 성별 배지와 같은 색)
             const section = (label, list, g) => list.length ? `<div style="padding:8px 16px 2px;font-size:11px;font-weight:800;color:${secColor[g] || '#555'};letter-spacing:.05em;">${label} (${list.length})</div>${list.map(({ a, ev }) => `<div style="padding:6px 16px 4px;border-top:1px solid #f4f4f4;">${nameLine(a)}${membersLine(a)}${evLine(ev, (roundL[ev.round_type] || '') + (ev.heat_number ? ` ${ev.heat_number}조` : ''))}</div>`).join('')}` : '';
