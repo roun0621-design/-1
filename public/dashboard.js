@@ -387,13 +387,11 @@ async function _spotBlocksHtml(evt) {
         const nm = r => r.is_team ? '대한민국' : esc(r.name);
         const roundKo = { preliminary: '예선', semifinal: '준결승', final: '결승' }[d.round_type] || '';
         let top = '';
+        // 간단하게: 이름 · 순위(결승은 메달 원) · 기록 · 진출/탈락 — 조·레인·전체 순위는 아래 목록에서 (2026-09-24)
         const rows = (d.rows || []).map(r => {
-            const place = r.place ? (d.round_type === 'final' && r.place <= 3 ? medalHtml(r.place, 20) + ' ' : `<b>${r.heat_number && d.round_type !== 'final' ? r.heat_number + '조 ' : ''}${r.place}위</b> · `) : '';
-            const ov = r.overall && d.round_type !== 'final' ? ` <span style="color:#888">(전체 ${r.overall}위)</span>` : '';
-            const q = r.qual ? `<span class="spot-chip q" style="margin-left:6px">${r.qual === 'Q' ? '순위 진출' : '기록 진출'}</span>` : (d.status && d.status.kind === 'out' ? '<span class="spot-chip out" style="margin-left:6px">탈락</span>' : '');
-            const fin = d.round_type === 'final' && d.round_status === 'completed' && r.place ? `<span class="spot-chip q" style="margin-left:6px;background:#1a2a5e;border-color:#1a2a5e">최종 ${r.place}위</span>` : '';
-            return `<div style="padding:4px 0"><div style="font-size:14px;font-weight:800">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}${nm(r)}${r.is_team && r.members ? `<span style="font-size:11px;color:#666;font-weight:500;margin-left:8px">${r.members.map(esc).join(' · ')}</span>` : ''}</div>
-                <div style="font-size:13px;margin-top:2px;padding-left:24px">${place}${fmt(r)}${ov}${q}${fin}${r.lane ? `<span style="color:#999;font-size:11px;margin-left:8px">${r.heat_number ? r.heat_number + '조 ' : ''}${r.lane}레인</span>` : ''}</div></div>`;
+            const place = r.place ? (d.round_type === 'final' && r.place <= 3 ? medalHtml(r.place, 20) : `<b>${r.heat_number && d.round_type !== 'final' ? r.heat_number + '조 ' : ''}${r.place}위</b>`) : '';
+            const q = r.qual ? `<span class="spot-chip q">${d.status && d.status.next ? d.status.next + ' 진출' : '진출'}</span>` : (d.status && d.status.kind === 'out' ? '<span class="spot-chip out">탈락</span>' : '');
+            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap"><span style="font-size:14px;font-weight:800">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}${nm(r)}</span>${place}<span style="font-size:14px">${fmt(r)}</span>${q}${r.is_team && r.members ? `<span style="flex-basis:100%;font-size:11px;color:#666;padding-left:24px">${r.members.map(esc).join(' · ')}</span>` : ''}</div>`;
         });
         const pend = (d.pending || []).map(p => `<div style="padding:4px 0;font-size:13px">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}<b>${nm(p)}</b> <span style="color:#666">${p.heat_number ? p.heat_number + '조 ' : ''}${p.lane ? p.lane + '레인' : ''}${p.scheduled_at ? ' · ' + p.scheduled_at.slice(11, 16) + ' 출발' : ''} · 예정</span></div>`);
         if (rows.length || pend.length) {
@@ -1137,9 +1135,39 @@ function _evSortIdx(name) {
     return 999;
 }
 
+// 시간별 보기로 처음 열 때: 지금 시각에 가장 가까운(아직 안 끝난) 종목 카드로 부드럽게 스크롤 + 잠깐 강조 (시간표 창의 '지금' 규칙과 같은 생각)
+let _scrolledToNow = false;
+function _scrollToNow() {
+    if (_scrolledToNow) return;
+    const rows = [...document.querySelectorAll('#events-container tr[data-sched]')];
+    if (!rows.length) return;
+    _scrolledToNow = true;
+    const now = new Date(); const pad = n => String(n).padStart(2, '0');
+    const nowKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    // 진행 중 > 지금 이후 첫 종목 > (다 지났으면) 마지막 종목
+    let target = rows.find(r => r.querySelector('.status-live'))
+        || rows.find(r => !r.hasAttribute('data-done') && r.getAttribute('data-sched') >= nowKey)
+        || rows.find(r => !r.hasAttribute('data-done'))
+        || rows[rows.length - 1];
+    if (!target || target === rows[0]) return;   // 맨 위면 움직일 필요 없음
+    const scroller = document.getElementById('events-scroll-region');
+    const toolbar = document.getElementById('dash-toolbar');
+    setTimeout(() => {
+        const card = target.closest('.matrix-section') && target;   // 카드(행) 위치
+        const stick = toolbar ? toolbar.getBoundingClientRect().height + 8 : 8;
+        if (scroller && scroller.scrollHeight > scroller.clientHeight) {
+            const y = card.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - stick;
+            scroller.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+        } else {
+            const y = card.getBoundingClientRect().top + window.scrollY - stick - 60;
+            window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+        }
+        target.classList.add('row-now-flash'); setTimeout(() => target.classList.remove('row-now-flash'), 1600);
+    }, 250);
+}
 // 정렬 모드: 종목별(WA 순서) / 시간별(다음 경기 시각순, 날짜 묶음) — 대회별로 기억
 let _sortMode = 'event';
-function _loadSortMode() { try { _sortMode = localStorage.getItem('pace_sort_mode_' + getCompetitionId()) === 'time' ? 'time' : 'event'; } catch (e) { _sortMode = 'event'; } }
+function _loadSortMode() { try { const v = localStorage.getItem('pace_sort_mode_' + getCompetitionId()); _sortMode = v === 'event' ? 'event' : 'time'; } catch (e) { _sortMode = 'time'; } }   // 기본 시간별(2026-09-24) — 시간표 없는 대회는 renderMatrix 가 종목별로 되돌린다
 function setSortMode(m) { _sortMode = m === 'time' ? 'time' : 'event'; try { localStorage.setItem('pace_sort_mode_' + getCompetitionId(), _sortMode); } catch (e) {} renderMatrix(); }
 // 홀짝 버튼 모양의 정렬 토글 (대시보드·명단 창 공용)
 function segToggleHtml(mode, onclickFn, opts) {
@@ -1256,6 +1284,7 @@ function renderMatrix() {
         keyed.sort((a, b) => (a.sk == null) - (b.sk == null) || (a.sk && b.sk ? (a.sk.key < b.sk.key ? -1 : a.sk.key > b.sk.key ? 1 : 0) : 0) || _evSortIdx(a.g.name) - _evSortIdx(b.g.name) || _genderSortIdx(a.g.gender) - _genderSortIdx(b.g.gender));
         const buckets = [];
         keyed.forEach(({ g, sk }) => {
+            g._sk = sk;
             const label = !sk ? '시간 미정' : sk.date ? (() => { const dt = new Date(sk.date + 'T00:00:00'); return isFinite(dt) ? `${dt.getMonth() + 1}/${dt.getDate()}(${'일월화수목금토'[dt.getDay()]})${sk.is_today ? ' · 오늘' : ''}` : sk.date; })() : sk.day ? `${sk.day}일차` : '시간 미정';
             let b = buckets[buckets.length - 1]; if (!b || b.label !== label) { b = { label, groups: [] }; buckets.push(b); }
             b.groups.push(g);
@@ -1278,6 +1307,7 @@ function renderMatrix() {
     }
     container.innerHTML = html;
     updateLiveJumpBadge(liveGroups.length);
+    if (_sortMode === 'time') _scrollToNow();
 }
 
 let _sortToggleInTitle = false, _sortToggleDone = false;
@@ -1356,7 +1386,7 @@ function renderCategoryTable(groups, label, isLive) {
                 : schedEvt.day ? `<span class="card-chip chip-day">${schedEvt.day}일차</span>` : '';
             const tBorder = schedEvt.is_today ? '#e8dfc0' : '#e2e4e8';
             const _doneAll = g.rounds.length > 0 && g.rounds.every(r => r.round_status === 'completed');
-            timeBadge = _doneAll ? dayLabel : `${dayLabel}<span class="card-chip chip-time num-display" style="color:${tColor};background:${tBg};border-color:${tBorder};" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
+            timeBadge = _sortMode === 'time' ? '' : _doneAll ? dayLabel : `${dayLabel}<span class="card-chip chip-time num-display" style="color:${tColor};background:${tBg};border-color:${tBorder};" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
         }
 
         // Division badge for display mode (color-coded by age group)
@@ -1426,7 +1456,7 @@ function renderCategoryTable(groups, label, isLive) {
         const _isFav = favs.includes(_rowGender + '|' + g.name);
         // 알림 토글은 카드에서 빼고 종목 창(엔트리·스타트 리스트·결과) 머리글로 옮겼다 (2026-09-22) — 카드 제목 줄이 밀리지 않게
         const favCell = '';
-        html += `<tr data-row-gender="${_rowGender}"${_tapAttr}>
+        html += `<tr data-row-gender="${_rowGender}"${_tapAttr}${g._sk ? ` data-sched="${g._sk.key}"` : ''}${g.rounds.every(r => r.round_status === 'completed') ? ' data-done="1"' : ''}>
             ${favCell}
             <td class="event-name">${genderBadge}${g.name}${divBadge}${g.spotlight ? `<span class="spot-badge" title="${g.spotlight === 'KOR' ? '한국 선수 출전' : g.spotlight + ' 출전'}">${g.spotlight === 'KOR' ? PaceIcons.svg('flagKR', { size: 22 }) : g.spotlight}</span>${_spotChipHtml(g.spot_status)}` : ''}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
             ${_isDisplayMode ? `<td data-label="영상" class="${videoCell ? '' : 'cell-empty'}">${videoCell}</td>` : ''}

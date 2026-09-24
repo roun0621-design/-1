@@ -318,6 +318,9 @@
         .spot-chip.place { background:#eef0f4; color:#333; border:1px solid #d9dde5; }
         .spot-chip-wrap { display:inline-flex; align-items:center; gap:3px; margin-left:5px; vertical-align:middle; }
         .spot-block { margin:8px 0 12px; padding:10px 12px; background:#fff6f6; border:1px solid #f1d5d5; border-radius:10px; }
+        /* 시간별 보기로 열 때 '지금' 종목 카드 잠깐 강조 */
+        .row-now-flash { animation: rowNowFlash 1.6s ease-out; }
+        @keyframes rowNowFlash { 0% { box-shadow: 0 0 0 3px rgba(183,159,88,.55); } 100% { box-shadow: 0 0 0 0 rgba(183,159,88,0); } }
         .rr-alt { margin-left:6px; font-size:11px; font-weight:500; color:var(--text-muted); }
         .rr-pbsb { margin-left:8px; font-size:11px; color:var(--text-muted); font-family:var(--font-mono); }
         /* PB·SB 세 번째 줄(폰): 이름·소속 줄이 아니라 자기 줄(2~3열 폭)에 — 긴 이름·기록에 밀려 잘리지 않게. PC 는 이름 옆 그대로 */
