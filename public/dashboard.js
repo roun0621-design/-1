@@ -182,7 +182,9 @@ async function openTeamRoster(keep) {
             return `<span style="display:inline-flex;flex-direction:column;align-items:flex-end;gap:2px;"><span>${place}<b>${val}</b>${wind}${imp}</span>${pbsbLine ? `<span style="font-size:10px;color:#999;">${pbsbLine}</span>` : ''}</span>`;
         };
         const pbsb = ev => [ev.personal_best ? 'PB ' + ev.personal_best : '', ev.season_best ? 'SB ' + ev.season_best : ''].filter(Boolean).map(esc).join('<br>');   // 폰에서 종목명 자리를 남기려고 PB·SB 를 위아래로
-        const stOf = ev => ev.round_status === 'completed' ? (mark(ev) || '<span style="color:#888;">결과</span>') : ev.round_status === 'in_progress' ? '<span style="color:#16a34a;font-weight:800;">LIVE</span>' : '';
+        // 예선·준결승이 끝나면 진출/탈락 칩을 기록 옆에 (결승은 순위 배지가 이미 있음)
+        const advChip = ev => { if (ev.round_type === 'final' || !ev.result || ev.result.status_code) return ''; const nextKo = ev.round_type === 'preliminary' && allEvents.some(e => e.name === ev.event_name && e.gender === ev.gender && e.round_type === 'semifinal') ? '준결승' : '결승'; if (ev.result.qual) return `<span class="spot-chip q">${nextKo} 진출</span>`; return ev.round_status === 'completed' ? `<span class="spot-chip out">${ev.round_type === 'semifinal' ? '준결승' : '예선'} 탈락</span>` : ''; };
+        const stOf = ev => ev.round_status === 'completed' ? ((mark(ev) || '<span style="color:#888;">결과</span>') + advChip(ev)) : ev.round_status === 'in_progress' ? ('<span style="color:#16a34a;font-weight:800;">LIVE</span>' + advChip(ev)) : '';
         const evLine = (ev, showName) => {
             const done = ev.round_status === 'completed', live = ev.round_status === 'in_progress';
             const phone = window.innerWidth < 640;
@@ -360,6 +362,51 @@ function jumpToLive() {
 function onCardTap(e, evtId) {
     if (e.target.closest('.round-btn, .fav-cell, .fav-toggle, a, button')) return;
     openEventDetail(evtId);
+}
+// ── 우리 선수 상태 칩 (카드·명단): 결승 진출(초록) · 탈락(회색 작게) · 최종 순위(메달 원 또는 회색 N위) ──
+function _spotChipHtml(st) {
+    if (!st) return '';
+    if (st.kind === 'final') {
+        const places = st.places || [];
+        if (!places.length) return st.label ? `<span class="spot-chip out">${st.label}</span>` : '';
+        const parts = places.slice(0, 2).map(p => p <= 3 ? medalHtml(p, 18) : `<span class="spot-chip place">${p}위</span>`);
+        return `<span class="spot-chip-wrap">${parts.join('')}${places.length > 2 ? `<span class="spot-chip out">외 ${places.length - 2}</span>` : ''}</span>`;
+    }
+    if (st.kind === 'qualified') return `<span class="spot-chip q">${st.short}${st.count > 1 ? ' · ' + st.count : ''}</span>`;
+    if (st.kind === 'out') return `<span class="spot-chip out">${st.short}</span>`;
+    return '';
+}
+// 결과·LIVE 창: 위 '우리 선수' 블록 + 아래 '진출 규칙·진출자' 블록 (GET /api/events/:id/spotlight)
+async function _spotBlocksHtml(evt) {
+    try {
+        if (!allEvents.some(e => e.spotlight)) return { top: '', bottom: '' };
+        const d = await api('GET', `/api/events/${evt.id}/spotlight`);
+        if (!d || !d.spot) return { top: '', bottom: '' };
+        const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const fmt = r => r.status_code ? `<b style="color:#b3261e">${esc(PaceRanking.statusText(r.status_code))}</b>` : r.mark == null ? '' : `<b>${r.is_time ? formatTime(r.mark) : Number(r.mark).toFixed(2)}</b>`;
+        const nm = r => r.is_team ? '대한민국' : esc(r.name);
+        const roundKo = { preliminary: '예선', semifinal: '준결승', final: '결승' }[d.round_type] || '';
+        let top = '';
+        const rows = (d.rows || []).map(r => {
+            const place = r.place ? (d.round_type === 'final' && r.place <= 3 ? medalHtml(r.place, 20) + ' ' : `<b>${r.heat_number && d.round_type !== 'final' ? r.heat_number + '조 ' : ''}${r.place}위</b> · `) : '';
+            const ov = r.overall && d.round_type !== 'final' ? ` <span style="color:#888">(전체 ${r.overall}위)</span>` : '';
+            const q = r.qual ? `<span class="spot-chip q" style="margin-left:6px">${r.qual === 'Q' ? '순위 진출' : '기록 진출'}</span>` : (d.status && d.status.kind === 'out' ? '<span class="spot-chip out" style="margin-left:6px">탈락</span>' : '');
+            const fin = d.round_type === 'final' && d.round_status === 'completed' && r.place ? `<span class="spot-chip q" style="margin-left:6px;background:#1a2a5e;border-color:#1a2a5e">최종 ${r.place}위</span>` : '';
+            return `<div style="padding:4px 0"><div style="font-size:14px;font-weight:800">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}${nm(r)}${r.is_team && r.members ? `<span style="font-size:11px;color:#666;font-weight:500;margin-left:8px">${r.members.map(esc).join(' · ')}</span>` : ''}</div>
+                <div style="font-size:13px;margin-top:2px;padding-left:24px">${place}${fmt(r)}${ov}${q}${fin}${r.lane ? `<span style="color:#999;font-size:11px;margin-left:8px">${r.heat_number ? r.heat_number + '조 ' : ''}${r.lane}레인</span>` : ''}</div></div>`;
+        });
+        const pend = (d.pending || []).map(p => `<div style="padding:4px 0;font-size:13px">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}<b>${nm(p)}</b> <span style="color:#666">${p.heat_number ? p.heat_number + '조 ' : ''}${p.lane ? p.lane + '레인' : ''}${p.scheduled_at ? ' · ' + p.scheduled_at.slice(11, 16) + ' 출발' : ''} · 예정</span></div>`);
+        if (rows.length || pend.length) {
+            const head = d.status ? `<span class="spot-chip ${d.status.kind === 'out' ? 'out' : 'q'}" style="margin-left:auto">${esc(d.status.label)}</span>` : '';
+            top = `<div class="spot-block"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:11px;font-weight:800;color:#8b1a2a;letter-spacing:.05em">한국 선수 · ${roundKo}</span>${head}</div>${rows.join('')}${pend.join('')}</div>`;
+        }
+        let bottom = '';
+        if (d.rule || (d.qualified && d.qualified.length)) {
+            const ql = (d.qualified || []).map(x => `<div style="display:flex;gap:8px;align-items:center;padding:3px 0;font-size:12px;${x.team === d.spot ? 'color:#8b1a2a;font-weight:800' : ''}"><span style="flex:none;width:22px;font-weight:800;color:${x.qual === 'Q' ? '#1b7f4d' : '#8a7640'}">${x.qual}</span><span style="flex:none;width:40px;font-weight:700">${x.team === d.spot ? PaceIcons.svg('flagKR', { size: 16, style: 'vertical-align:-3px' }) : esc(x.team)}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.team === d.spot && x.is_team ? '대한민국' : esc(x.name)}</span><span style="flex:none;color:#666">${x.heat_number ? x.heat_number + '조 ' : ''}${x.place ? x.place + '위' : ''}</span><span style="flex:none;font-family:var(--font-mono)">${x.mark == null ? '' : x.is_time ? formatTime(x.mark) : Number(x.mark).toFixed(2)}</span></div>`);
+            bottom = `<div class="spot-block" style="margin-top:14px">${d.rule ? `<div style="font-size:12px;color:#555;margin-bottom:6px"><b>진출 규칙</b> ${esc(d.rule.text_ko)}</div>` : ''}${ql.length ? `<div style="font-size:11px;font-weight:800;color:#8a8580;letter-spacing:.05em;margin:6px 0 2px">${d.status && d.status.next ? d.status.next : '다음 라운드'} 진출 (${ql.length})</div>${ql.join('')}` : ''}</div>`;
+        }
+        return { top, bottom };
+    } catch (e) { return { top: '', bottom: '' }; }
 }
 function openEventDetail(evtId) {
     const evt = allEvents.find(e => e.id === evtId);
@@ -1159,6 +1206,7 @@ function renderMatrix() {
         if (!eventGroups[gKey]) eventGroups[gKey] = { name: e.name, category: e.category, gender: e.gender, division: e.division || '', rounds: [], spotlight: null };
         eventGroups[gKey].rounds.push(e);
         if (e.spotlight) eventGroups[gKey].spotlight = e.spotlight;      // 국제대회: 관심 국가(KOR) 선수 출전 종목
+        if (e.spot_status) { const pr = { final: 3, semifinal: 2, preliminary: 1 }[e.round_type] || 0; const cur = eventGroups[gKey]._spotPr || 0; if (pr >= cur) { eventGroups[gKey].spot_status = e.spot_status; eventGroups[gKey]._spotPr = pr; } }
     });
 
     const allGroups = [];
@@ -1383,7 +1431,7 @@ function renderCategoryTable(groups, label, isLive) {
         const favCell = '';
         html += `<tr data-row-gender="${_rowGender}"${_tapAttr}>
             ${favCell}
-            <td class="event-name">${genderBadge}${g.name}${divBadge}${g.spotlight ? `<span class="spot-badge" title="${g.spotlight === 'KOR' ? '한국 선수 출전' : g.spotlight + ' 출전'}">${g.spotlight === 'KOR' ? PaceIcons.svg('flagKR', { size: 22 }) : g.spotlight}</span>` : ''}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
+            <td class="event-name">${genderBadge}${g.name}${divBadge}${g.spotlight ? `<span class="spot-badge" title="${g.spotlight === 'KOR' ? '한국 선수 출전' : g.spotlight + ' 출전'}">${g.spotlight === 'KOR' ? PaceIcons.svg('flagKR', { size: 22 }) : g.spotlight}</span>${_spotChipHtml(g.spot_status)}` : ''}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
             ${_isDisplayMode ? `<td data-label="영상" class="${videoCell ? '' : 'cell-empty'}">${videoCell}</td>` : ''}
             ${(_isDisplayMode || _colRounds.wl) ? `<td data-label="${_isDisplayMode ? '명단' : 'W/L'}" class="${(_isDisplayMode ? rosterCell : wlCell) ? '' : 'cell-empty'}">${_isDisplayMode ? rosterCell : wlCell}</td>` : ''}
             ${_colRounds.preliminary ? _roundCell(prelim, '예선') : ''}
@@ -1671,6 +1719,8 @@ async function openResult(eventId) {
         bodyHtml += buildEmbedVideoHTML(videoUrl);
         // 기존 기록(WR·AR·GR·NR·DR·CR) 줄 — 완료 결과 창에도 (LIVE 창과 같은 모양)
         bodyHtml += _buildRecordsBannerHTML(window._liveRecords);
+        const _spot = await _spotBlocksHtml(evt);
+        bodyHtml += _spot.top;
 
         if (evt.category === 'track' || evt.category === 'relay' || evt.category === 'road') {
             let relayMembers = null;
@@ -1688,6 +1738,7 @@ async function openResult(eventId) {
             bodyHtml += '<div style="color:var(--text-muted);">결과 데이터 없음</div>';
         }
 
+        bodyHtml += _spot.bottom;
         panel.innerHTML = `<div class="result-panel-header">
             <h3>${evt.name} ${roundL} ${gL}</h3>
             ${_favBtnHtml(evt)}
@@ -1837,6 +1888,8 @@ async function refreshLiveResult() {
         bodyHtml += buildEmbedVideoHTML(videoUrl);
         // 기존 기록 배너 (NR/DR/CR 미리 보기)
         bodyHtml += _buildRecordsBannerHTML(liveRecords);
+        const _spotL = await _spotBlocksHtml(evt);
+        bodyHtml += _spotL.top;
 
         if (evt.category === 'track' || evt.category === 'relay' || evt.category === 'road') {
             let relayMembers = null;
@@ -1854,6 +1907,7 @@ async function refreshLiveResult() {
             bodyHtml += '<div style="color:var(--text-muted);">결과 데이터 없음</div>';
         }
 
+        bodyHtml += _spotL.bottom;
         bodyHtml += `<div style="margin-top:12px;font-size:11px;color:var(--text-muted);text-align:center;">자동 새로고침 | ${new Date().toLocaleTimeString('ko-KR')}</div>`;
 
         panel.innerHTML = `<div class="result-panel-header">
@@ -1969,7 +2023,7 @@ function renderLiveTrackResults(data, relayMembers) {
                 const members = relayMembers.filter(m => m.event_entry_id === r.event_entry_id);
                 if (members.length > 0) {
                     const sorted = [...members].sort((a, b) => (a.leg_order || 99) - (b.leg_order || 99));
-                    memberHtml = `<div class="rr-members">${sorted.map(m => `<span>${m.leg_order ? m.leg_order + '주 ' : ''}${m.name}<i>#${bib(m.bib_number)}</i></span>`).join('')}</div>`;
+                    memberHtml = `<div class="rr-members">${sorted.map(m => `<span>${m.leg_order ? m.leg_order + '주 ' : ''}${m.name}${m.bib_number ? `<i>#${m.bib_number}</i>` : ''}</span>`).join('')}</div>`;
                 }
             }
             const rankHtml = r.status_code
@@ -2747,7 +2801,7 @@ function renderTrackResults(data, relayMembers) {
                 const members = relayMembers.filter(m => m.event_entry_id === r.event_entry_id);
                 if (members.length > 0) {
                     const sorted = [...members].sort((a, b) => (a.leg_order || 99) - (b.leg_order || 99));
-                    memberHtml = `<div class="rr-members">${sorted.map(m => `<span>${m.leg_order ? m.leg_order + '주 ' : ''}${m.name}<i>#${bib(m.bib_number)}</i></span>`).join('')}</div>`;
+                    memberHtml = `<div class="rr-members">${sorted.map(m => `<span>${m.leg_order ? m.leg_order + '주 ' : ''}${m.name}${m.bib_number ? `<i>#${m.bib_number}</i>` : ''}</span>`).join('')}</div>`;
                 }
             }
             const _scRec = hasRec ? formatTime(r.time_seconds) : '';
