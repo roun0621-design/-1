@@ -395,7 +395,8 @@ async function _spotBlocksHtml(evt) {
         // 간단하게: 이름 · 순위(결승은 메달 원) · 기록 · 진출/탈락 — 조·레인·전체 순위는 아래 목록에서 (2026-09-24)
         const rows = (d.rows || []).map(r => {
             const place = r.place ? (d.round_type === 'final' && r.place <= 3 ? medalHtml(r.place, 20) : `<b>${r.heat_number && d.round_type !== 'final' ? r.heat_number + '조 ' : ''}${r.place}위</b>`) : '';
-            const q = r.qual ? `<span class="spot-chip q">${d.status && d.status.next ? d.status.next + ' 진출' : '진출'}</span>` : (d.status && d.status.kind === 'out' ? '<span class="spot-chip out">탈락</span>' : '');
+            // 한 명(팀)뿐이면 머리줄 칩이 같은 말을 하니 줄 칩은 생략 (기록·태그가 한 줄에 들어가게)
+            const q = (d.rows || []).length <= 1 && d.status ? '' : r.qual ? `<span class="spot-chip q">${d.status && d.status.next ? d.status.next + ' 진출' : '진출'}</span>` : (d.status && d.status.kind === 'out' ? '<span class="spot-chip out">탈락</span>' : '');
             return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap"><span style="font-size:14px;font-weight:800">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}${nm(r)}</span>${place}<span style="font-size:14px">${fmt(r)}${_recTagHtml(r.tag)}</span>${q}${r.is_team && r.members ? `<span style="flex-basis:100%;font-size:11px;color:#666;padding-left:24px">${r.members.map(esc).join(' · ')}</span>` : ''}</div>`;
         });
         const pend = (d.pending || []).map(p => `<div style="padding:4px 0;font-size:13px">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}<b>${nm(p)}</b> <span style="color:#666">${p.heat_number ? p.heat_number + '조 ' : ''}${p.lane ? p.lane + '레인' : ''}${p.scheduled_at ? ' · ' + p.scheduled_at.slice(11, 16) + ' 출발' : ''} · 예정</span></div>`);
@@ -453,7 +454,7 @@ function toggleFavorite(eventName, gender) {
 
 // ── 엔트리·스타트 리스트 창 위의 '기존 기록' 줄 (WR·AR·GR·NR…) — 결과 창과 같은 칩 ──
 // 국제대회(관심 국가 대회)에서는 NR(한국 기록)을 빼고 WR·AR·GR 만 — 외국 선수 결과에 한국 기록 배지가 붙지 않게
-function _intlRecords(recs) { if (recs && allEvents.some(e => e.spotlight)) { const c = { ...recs }; delete c.national; delete c.division; delete c.competition; return c; } return recs; }
+function _intlRecords(recs) { if (recs && allEvents.some(e => e.spotlight)) { const c = { ...recs }; delete c.division; delete c.competition; return c; } return recs; }   // 국제대회: WR·AR·GR·NR (부·대회 기록은 없음)
 async function _recordsLineHtml(evt) {
     try {
         const normName = (typeof normalizeEventNameClient === 'function') ? normalizeEventNameClient(evt.name) : evt.name;
@@ -1992,9 +1993,7 @@ function _buildRecordsBannerHTML(records) {
     if (!records) return '';
     const attr = v => String(v == null ? '' : v).replace(/"/g, '&quot;');
     const chip = (label, color, rec) => rec
-        ? `<span class="record-chip" role="button" tabindex="0" onclick="_recBannerToggle(this)" data-label="${label}" data-color="${color}" data-holder="${attr(rec.holder_name)}" data-team="${attr(rec.holder_team)}" data-venue="${attr(rec.venue)}" data-date="${attr(rec.record_date)}" data-year="${attr(rec.record_year)}" style="display:inline-flex;align-items:center;gap:4px;background:${color}15;border:1px solid ${color}55;color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;font-family:var(--font-mono);cursor:pointer;">
-               <strong>${label}</strong> ${(rec.record_value||'').toString()}
-           </span>` : '';
+        ? `<span class="record-chip" role="button" tabindex="0" onclick="_recBannerToggle(this)" data-label="${label}" data-color="${color}" data-holder="${attr(rec.holder_name)}" data-team="${attr(rec.holder_team)}" data-venue="${attr(rec.venue)}" data-date="${attr(rec.record_date)}" data-year="${attr(rec.record_year)}" style="background:${color}15;border:1px solid ${color}55;color:${color};"><b>${label}</b>${(rec.record_value||'').toString()}</span>` : '';
     const parts = [
         chip('WR', '#6a1b9a', records.world),
         chip('AR', '#0d47a1', records.area),
@@ -2006,7 +2005,7 @@ function _buildRecordsBannerHTML(records) {
     if (parts.length === 0) return '';
     return `<div class="record-banner-mobile" style="margin:8px 0 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;padding:8px 12px;background:#fffbea;border:1px solid #f1d68a;border-radius:8px;">
         <span style="color:var(--text-muted);font-weight:600;white-space:nowrap;">기존 기록</span>
-        <span class="record-chips" style="display:inline-flex;flex-wrap:wrap;gap:4px;">${parts.join('')}</span>
+        <span class="record-chips">${parts.join('')}</span>
         <div class="record-detail-line" hidden style="flex-basis:100%;font-size:11px;line-height:1.4;padding-top:4px;border-top:1px dashed #ead9a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
     </div>`;
 }
@@ -2020,6 +2019,7 @@ function _buildRecordBadgesHTML(newValNum) {
 // 비고란용 신기록 라벨 텍스트 (예: "CR" 또는 "NR DR CR") — 깬 기록 전부
 function _recLabelText(newValNum) {
     if (!window._liveRecords || !window._liveRecDir) return '';
+    if (allEvents.some(e => e.spotlight)) return '';   // 국제대회: 태그는 비고(_recTagOf)에서만
     if (newValNum == null || !isFinite(newValNum)) return '';
     if (typeof detectBrokenRecordsClient !== 'function') return '';
     const broken = detectBrokenRecordsClient(newValNum, window._liveRecords, window._liveRecDir);
