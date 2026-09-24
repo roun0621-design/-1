@@ -396,11 +396,19 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [ev.external_key] });
         expect((await db.get('SELECT COUNT(*) c FROM result WHERE heat_id=?', ev.heat_id)).c).toBe(2);   // 최고 + 1차 시기
         expect((await db.get('SELECT round_status FROM event WHERE id=?', ev.id)).round_status).toBe('in_progress');
-        // 3) 공식 사이트가 기록을 거둬들임(정정) → 우리 기록도 지우고 상태 되돌림
+        // 3) 공식 사이트가 기록을 거둬들임(정정) → 우리 기록도 지움. 경기 중(RUNNING)이면 기록이 없어도 '진행 중'은 유지 (여자 10,000m 처럼 중간 기록 없이 달리는 동안)
         fakeResults[ev.external_key] = { Info: { Status: 'RUNNING', StatusDesc: 'Running' }, Competitors: [{ ...A, Result: '', Splits: [] }] };
         await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [ev.external_key] });
         expect((await db.get('SELECT COUNT(*) c FROM result WHERE heat_id=?', ev.heat_id)).c).toBe(0);
+        expect((await db.get('SELECT round_status FROM event WHERE id=?', ev.id)).round_status).toBe('in_progress');
+        // 4) 다시 스타트 리스트 단계로 돌아가면 '예정'으로
+        fakeResults[ev.external_key] = { Info: { Status: 'START_LIST', StatusDesc: 'Start List' }, Competitors: [{ ...A, Result: '', Splits: [] }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [ev.external_key] });
         expect((await db.get('SELECT round_status FROM event WHERE id=?', ev.id)).round_status).toBe('created');
+        // 5) 경기 시작(RUNNING) — 기록 0 이어도 '진행 중'(카드 LIVE)
+        fakeResults[ev.external_key] = { Info: { Status: 'RUNNING', StatusDesc: 'Running' }, Competitors: [{ ...A, Result: '', Splits: [] }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [ev.external_key] });
+        expect((await db.get('SELECT round_status FROM event WHERE id=?', ev.id)).round_status).toBe('in_progress');
     });
     it('우리 선수 상태: 예선 다음이 준결승인 종목은 "준결승 진출" — 준결승에 아직 출전(스타트 리스트)이 없어도', async () => {
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
