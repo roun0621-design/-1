@@ -35,6 +35,8 @@ const _REC_TAG_ORDER = ['WR', 'AR', 'GR', 'NR', 'PB', 'SB'];
 function _recTagOf(remark) { const t = String(remark || '').split(/\s+/); for (const k of _REC_TAG_ORDER) if (t.includes(k)) return k; return null; }
 function _recTagHtml(tag) { return tag ? `<span class="rec-tag rec-tag-${tag}">${tag}</span>` : ''; }
 function _remarkRest(remark) { return String(remark || '').split(/\s+/).filter(x => x && !_REC_TAG_ORDER.includes(x)).join(' '); }   // 진출(Q·q) 등 나머지
+// 창 제목: 7종·10종 세부종목이면 '부모 · 세부종목'(라운드 없이) — '높이뛰기 결승'로 보여 개별 종목과 헷갈렸다 (2026-09-24)
+function _evtTitle(evt, roundL) { if (evt && evt.parent_event_id) { const p = allEvents.find(e => e.id === evt.parent_event_id); return (p ? p.name + ' · ' : '') + String(evt.name || '').replace(/^\[.*?\]\s*/, ''); } return `${evt.name} ${roundL}`; }
 function _pbSb(r) { const p = []; if (r && r.personal_best) p.push('PB ' + r.personal_best); if (r && r.season_best) p.push('SB ' + r.season_best); return p.length ? `<span class="rr-pbsb">${p.join(' · ')}</span>` : ''; }
 function toggleSpotlight() {
     _spotlightOnly = !_spotlightOnly;
@@ -1806,7 +1808,7 @@ async function openResult(eventId) {
 
         bodyHtml += _spot.bottom;
         panel.innerHTML = `<div class="result-panel-header">
-            <h3>${evt.name} ${roundL} ${gL}</h3>
+            <h3>${_evtTitle(evt, roundL)} ${gL}</h3>
             ${_favBtnHtml(evt)}
             <button class="result-panel-close" onclick="closeResult()">&times;</button>
         </div><div class="result-panel-body">${bodyHtml}</div>`;
@@ -1977,7 +1979,7 @@ async function refreshLiveResult() {
         bodyHtml += `<div style="margin-top:12px;font-size:11px;color:var(--text-muted);text-align:center;">자동 새로고침 | ${new Date().toLocaleTimeString('ko-KR')}</div>`;
 
         panel.innerHTML = `<div class="result-panel-header">
-            <h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>${evt.name} ${roundL} ${gL}</h3>
+            <h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>${_evtTitle(evt, roundL)} ${gL}</h3>
             ${_favBtnHtml(evt)}
             <button class="result-panel-close" onclick="closeLiveResult()">&times;</button>
         </div><div class="result-panel-body">${bodyHtml}</div>`;
