@@ -1968,13 +1968,27 @@ function closeLiveResult() {
 }
 
 // ─── 신기록 배너 / 배지 헬퍼 (results.js 와 동일 디자인 톤) ─────
+// 기존 기록 띠: 칩은 '라벨 기록'만 — 탭하면 아래 한 줄로 보유자·팀·연도(같은 칩 다시 탭하면 접힘). 공간 아끼기 (2026-09-24)
+const _REC_LABEL_KO = { WR: '세계기록', AR: '아시아기록', GR: '대회기록', NR: '한국기록', DR: '부 기록', CR: '대회기록' };
+function _recBannerToggle(el) {
+    const banner = el.closest('.record-banner-mobile'); if (!banner) return;
+    const line = banner.querySelector('.record-detail-line'); if (!line) return;
+    const was = el.classList.contains('on');
+    banner.querySelectorAll('.record-chip.on').forEach(c => c.classList.remove('on'));
+    if (was) { line.hidden = true; return; }
+    el.classList.add('on');
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const d = el.dataset;
+    const parts = [d.holder, d.team, d.year].filter(Boolean).map(esc);   // 이름 · 팀 · 연도 — 한 줄에 맞게 (장소·날짜는 뺀다)
+    line.innerHTML = `<span style="color:${d.color};font-weight:800;margin-right:6px">${esc(d.label)}</span><span style="color:#666">${_REC_LABEL_KO[d.label] || ''}</span>${parts.length ? ' · ' + parts.join(' · ') : ''}`;
+    line.hidden = false;
+}
 function _buildRecordsBannerHTML(records) {
     if (!records) return '';
+    const attr = v => String(v == null ? '' : v).replace(/"/g, '&quot;');
     const chip = (label, color, rec) => rec
-        ? `<span style="display:inline-flex;align-items:center;gap:4px;background:${color}15;border:1px solid ${color}55;color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;font-family:var(--font-mono);">
+        ? `<span class="record-chip" role="button" tabindex="0" onclick="_recBannerToggle(this)" data-label="${label}" data-color="${color}" data-holder="${attr(rec.holder_name)}" data-team="${attr(rec.holder_team)}" data-venue="${attr(rec.venue)}" data-date="${attr(rec.record_date)}" data-year="${attr(rec.record_year)}" style="display:inline-flex;align-items:center;gap:4px;background:${color}15;border:1px solid ${color}55;color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;font-family:var(--font-mono);cursor:pointer;">
                <strong>${label}</strong> ${(rec.record_value||'').toString()}
-               ${rec.holder_name ? `<span style="color:var(--text-muted);font-weight:400;">${rec.holder_name}</span>` : ''}
-               ${rec.record_year ? `<span style="color:var(--text-muted);font-weight:400;">${rec.record_year}</span>` : ''}
            </span>` : '';
     const parts = [
         chip('WR', '#6a1b9a', records.world),
@@ -1988,6 +2002,7 @@ function _buildRecordsBannerHTML(records) {
     return `<div class="record-banner-mobile" style="margin:8px 0 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;padding:8px 12px;background:#fffbea;border:1px solid #f1d68a;border-radius:8px;">
         <span style="color:var(--text-muted);font-weight:600;white-space:nowrap;">기존 기록</span>
         <span class="record-chips" style="display:inline-flex;flex-wrap:wrap;gap:4px;">${parts.join('')}</span>
+        <div class="record-detail-line" hidden style="flex-basis:100%;font-size:11px;line-height:1.4;padding-top:4px;border-top:1px dashed #ead9a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
     </div>`;
 }
 // 기록 값 옆 괄호 신기록 표기 (예: " (CR)" / " (NR, CR)")
