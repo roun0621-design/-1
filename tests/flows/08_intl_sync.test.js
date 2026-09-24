@@ -381,6 +381,41 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         const full = await request(app).get(`/api/results?heat_id=${tjHeat.id}`);
         expect(full.status).toBe(200);
     });
+    it('경기 전 응답(START_LIST)에 실린 기록은 받지 않고, 공식 사이트에서 사라진 기록은 지우며 진행 중을 되돌린다 (9/24 남자 원반던지기)', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const ev = await db.get("SELECT e.id, h.id AS heat_id, h.external_key FROM event e JOIN heat h ON h.event_id=e.id WHERE e.competition_id=? AND e.name='원반던지기' AND e.gender='M' AND e.parent_event_id IS NULL ORDER BY h.id LIMIT 1", fx.comp);
+        expect(ev).toBeTruthy();
+        const A = { Reg: '99000001', Bib: '245', Org: 'CHN', Name: 'TUERGONG Abuduaini', Lane: '1', IRM: 'OK', RecordInd: '', Extensions: [] };
+        // 1) 스타트 리스트 단계인데 Result 에 값이 실려 옴 → 무시
+        fakeResults[ev.external_key] = { Info: { Status: 'START_LIST', StatusDesc: 'Start List' }, Competitors: [{ ...A, Result: '20.91', Splits: [{ Category: 'MAIN', Distance: '1', AttResult: '', Result: '20.91', IRM: 'OK', Status: 'OK', Extensions: [] }] }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [ev.external_key] });
+        expect((await db.get('SELECT COUNT(*) c FROM result WHERE heat_id=?', ev.heat_id)).c).toBe(0);
+        expect((await db.get('SELECT round_status FROM event WHERE id=?', ev.id)).round_status).not.toBe('in_progress');
+        // 2) 경기 중(RUNNING) 기록 → 반영, 진행 중
+        fakeResults[ev.external_key] = { Info: { Status: 'RUNNING', StatusDesc: 'Running' }, Competitors: [{ ...A, Rk: '1', Result: '61.20', Splits: [{ Category: 'MAIN', Distance: '1', AttResult: '', Result: '61.20', IRM: 'OK', Status: 'OK', Extensions: [] }] }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [ev.external_key] });
+        expect((await db.get('SELECT COUNT(*) c FROM result WHERE heat_id=?', ev.heat_id)).c).toBe(2);   // 최고 + 1차 시기
+        expect((await db.get('SELECT round_status FROM event WHERE id=?', ev.id)).round_status).toBe('in_progress');
+        // 3) 공식 사이트가 기록을 거둬들임(정정) → 우리 기록도 지우고 상태 되돌림
+        fakeResults[ev.external_key] = { Info: { Status: 'RUNNING', StatusDesc: 'Running' }, Competitors: [{ ...A, Result: '', Splits: [] }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [ev.external_key] });
+        expect((await db.get('SELECT COUNT(*) c FROM result WHERE heat_id=?', ev.heat_id)).c).toBe(0);
+        expect((await db.get('SELECT round_status FROM event WHERE id=?', ev.id)).round_status).toBe('created');
+    });
+    it('우리 선수 상태: 예선 다음이 준결승인 종목은 "준결승 진출" — 준결승에 아직 출전(스타트 리스트)이 없어도', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const kor = F('entries_org_KOR.json').Events.find(e => e.EvKey === 'M.100M--------------').Partics[0];
+        const pre = await db.get("SELECT e.id, h.id AS heat_id, h.external_key FROM event e JOIN heat h ON h.event_id=e.id WHERE e.competition_id=? AND e.external_key='M.100M--------------#RND1' ORDER BY h.id LIMIT 1", fx.comp);
+        expect(pre).toBeTruthy();
+        expect(await db.get("SELECT id FROM event WHERE competition_id=? AND external_key='M.100M--------------#SFNL'", fx.comp)).toBeTruthy();
+        fakeResults[pre.external_key] = { Info: { Status: 'OFFICIAL', StatusDesc: 'Official' }, Competitors: [{ Reg: kor.Reg, Bib: '301', Org: 'KOR', Name: kor.Name, Lane: '4', Rk: '2', Result: '10.31', IRM: 'OK', Qualified: 'Q', RecordInd: '', Extensions: [] }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [pre.external_key] });
+        const evs = (await request(app).get('/api/events').query({ competition_id: fx.comp })).body;
+        const row = evs.find(e => e.id === pre.id);
+        expect(row.spot_status).toMatchObject({ kind: 'qualified', short: '준결승 진출' });
+        const sp = await request(app).get(`/api/events/${pre.id}/spotlight`);
+        expect(sp.body.status).toMatchObject({ kind: 'qualified', next: '준결승' });
+    });
     it('일정 다시: 공식 일정에서 사라진 조·라운드(남자 세단뛰기 예선 → 직결)는 명단·기록이 없으면 지우고 출전은 결승으로 옮긴다', async () => {
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
         const before = await db.all("SELECT e.id, e.round_type, (SELECT COUNT(*) FROM heat WHERE event_id=e.id) hc, (SELECT COUNT(*) FROM event_entry WHERE event_id=e.id) ec FROM event e WHERE e.competition_id=? AND e.external_key LIKE 'M.TRPLJUMP%' ORDER BY e.id", fx.comp);
