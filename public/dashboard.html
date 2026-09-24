@@ -320,13 +320,15 @@
         .dash-spot-btn.active { background:#1a2a5e; color:#fff; border-color:#1a2a5e; }
         .spot-badge { display:inline-block; margin-left:6px; line-height:1; vertical-align:middle; }
         /* 우리 선수 상태 칩 — 태극기 옆: 진출(초록) · 탈락(회색 작게) · 최종 순위(메달 원/회색) */
-        .spot-chip { display:inline-block; margin-left:5px; padding:2px 7px; border-radius:9px; font-size:10.5px; font-weight:800; line-height:1.2; vertical-align:middle; white-space:nowrap; }
+        .spot-chip { display:inline-block; margin-left:5px; padding:1.5px 7px 2.5px; border-radius:9px; font-size:10.5px; font-weight:800; line-height:1.2; vertical-align:middle; white-space:nowrap; }
         .spot-chip.q { background:#e6f4ec; color:#1b7f4d; border:1px solid #bfe3cc; }
         .spot-chip.out { background:#f1efe9; color:#8a8580; border:1px solid #e2ddd2; font-weight:600; font-size:10px; }
         .spot-chip.place { background:#eef0f4; color:#333; border:1px solid #d9dde5; }
         .spot-chip-wrap { display:inline-flex; align-items:center; gap:3px; margin-left:5px; vertical-align:middle; }
         /* 기록 옆 태그 — 신기록(WR·AR·GR·NR)은 채움, PB·SB 는 초록 */
-        .rec-tag { display:inline-block; margin-left:5px; padding:1px 5px; border-radius:6px; font-size:10px; font-weight:800; line-height:1.3; vertical-align:2px; font-family:inherit; letter-spacing:.02em; }
+        /* Noto Sans KR 는 글자 잉크가 줄 상자 중심보다 ~0.7px 아래에 놓인다(캔버스 측정) → 한글 칩은 위 1.5/아래 2.5 패딩으로 보정. 영문 대문자 태그는 D2Coding — 본문 한글 글꼴(Noto Sans KR)은 영문 대문자가 줄 안에서 아래로 처져 보인다 (NEXT 칩과 같은 이유) */
+        .rec-tag { display:inline-flex; align-items:center; margin-left:5px; padding:1px 5px; border-radius:6px; font-size:10px; font-weight:800; line-height:1.4; vertical-align:2px; font-family:'D2Coding', monospace; letter-spacing:.06em; }
+        .round-btn.btn-live { font-family:'D2Coding', monospace; letter-spacing:.08em; font-weight:800; }
         .rec-tag-WR { background:#6a1b9a; color:#fff; } .rec-tag-AR { background:#0d47a1; color:#fff; } .rec-tag-GR { background:#b8860b; color:#fff; } .rec-tag-NR { background:#c0392b; color:#fff; }
         .rec-tag-PB { background:#e6f4ec; color:#1b7f4d; border:1px solid #bfe3cc; } .rec-tag-SB { background:#fff; color:#1b7f4d; border:1px solid #bfe3cc; }
         /* 기존 기록 칩: 라벨은 작게, 값은 등폭 — 폰에서 WR·AR·GR·NR 네 개가 한 줄에 */
@@ -374,11 +376,11 @@
         /* 종목명 옆 칩 묶음(상태 · Day · 시간 · Call Room): 같은 높이·글자크기, 칩 사이 8px */
         .card-chips { display:inline-flex; align-items:center; gap:8px; margin-left:10px; vertical-align:middle; }
         .card-chip { display:inline-block; font-size:10px; font-weight:700; line-height:1.4; padding:2px 7px; border-radius:999px; white-space:nowrap; }
-        .card-chip.chip-day { color:#6b7280; background:#f1f2f4; border:1px solid #e2e4e8; font-weight:600; letter-spacing:.2px; }
+        .card-chip.chip-day { color:#6b7280; background:#f1f2f4; border:1px solid #e2e4e8; font-weight:600; letter-spacing:.2px; padding-top:1.5px; padding-bottom:2.5px; }
         .card-chip.chip-time { border:1px solid transparent; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:.3px; }
         .card-chips .ico-callroom { margin-left:0; font-size:10px; padding:2px 7px; border-radius:999px; line-height:1.4; }
         @media (max-width:640px) { .card-chips { flex-wrap:wrap; gap:6px; margin-left:8px; } }
-        .status-badge { display:inline-block; vertical-align:middle; font-size:10px; font-weight:800; letter-spacing:.2px; padding:2px 7px; border-radius:999px; white-space:nowrap; line-height:1.4; }
+        .status-badge { display:inline-block; vertical-align:middle; font-size:10px; font-weight:800; letter-spacing:.2px; padding:1.5px 7px 2.5px; border-radius:999px; white-space:nowrap; line-height:1.4; }
         .status-badge.status-live { color:#0f7b3f; background:#dcfce7; border:1px solid #86efac; }
         .status-badge.status-live::before { content:'●'; margin-right:3px; color:#16a34a; }
         .status-badge.status-done { color:#6b7280; background:#f1f2f4; border:1px solid #e2e4e8; }
