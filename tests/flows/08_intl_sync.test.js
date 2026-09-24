@@ -300,9 +300,21 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: ['W.100M--------------.FNL-.000100--'] });
         const r2 = await request(app).get(`/api/competitions/${fx.comp}/roster`);
         expect(r2.body.medals).toMatchObject({ gold: 0, silver: 0, bronze: 1 });
+
         expect(r2.body.medals.events[0]).toMatchObject({ event_name: '100m', gender: 'F', place: 3 });
         const fin = r2.body.athletes.find(a => a.id === runner.id).events.find(e => e.round_type === 'final' && e.event_name === '100m');
         expect(fin.result).toMatchObject({ place: 3, pb_improved: true, sb_improved: true }); expect(fin.round_status).toBe('completed');
+        // 우리 선수 상태: /api/events 의 spot_status(결승 3위) · /api/events/:id/spotlight (한국 선수 블록·진출자)
+        const evs = (await request(app).get('/api/events').query({ competition_id: fx.comp })).body;
+        const finEv = evs.find(e => e.id === fin.event_id);
+        expect(finEv.spot_status).toMatchObject({ kind: 'final', label: '3위', places: [3] });
+        const semiEv = evs.find(e => e.external_key === 'W.100M--------------#SFNL');
+        const sp = await request(app).get(`/api/events/${semiEv.id}/spotlight`);
+        expect(sp.status).toBe(200); expect(sp.body.spot).toBe('KOR');
+        expect(sp.body.rows.length).toBeGreaterThanOrEqual(1); expect(sp.body.rows[0]).toMatchObject({ heat_number: 1, place: 2, qual: 'Q' });
+        expect(sp.body.status).toMatchObject({ kind: 'qualified', label: '결승 진출' });
+        expect(sp.body.qualified.some(q => q.team === 'KOR')).toBe(true);
+        expect(semiEv.spot_status).toMatchObject({ kind: 'qualified' });
         // 관심 국가 없는 대회는 400 (team 파라미터로는 조회 가능)
         const other = await db.get("SELECT id FROM competition WHERE id<>? ORDER BY id LIMIT 1", fx.comp);
         if (other) expect((await request(app).get(`/api/competitions/${other.id}/roster`)).status).toBe(400);

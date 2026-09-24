@@ -213,7 +213,7 @@
                 white-space:normal;
                 padding:0 46px 4px 0;   /* 우측: 우상단 알림 토글과 겹침 방지 */
                 margin-bottom:0;
-                border-bottom:1px solid #f0f0f0;
+                border-bottom:1px solid #f0f0f0 !important;   /* styles.css 의 tr:last-child td { border-bottom:none } 이 섹션 마지막 카드의 구분선을 지우던 것 */
                 line-height:1.35;
             }
             .matrix-table td.event-name::before { content:none; }
@@ -310,13 +310,13 @@
         .dash-spot-btn { flex:0 0 auto; height:32px; padding:0 12px 0 8px; margin-right:6px; border:1px solid var(--gray); border-radius:18px; background:var(--white); color:#555; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
         .dash-spot-btn .flag { font-size:16px; line-height:1; }
         .dash-spot-btn.active { background:#1a2a5e; color:#fff; border-color:#1a2a5e; }
-        .spot-badge { display:inline-block; margin-left:6px; line-height:1; vertical-align:-3px; }
+        .spot-badge { display:inline-block; margin-left:6px; line-height:1; vertical-align:middle; }
         /* 우리 선수 상태 칩 — 태극기 옆: 진출(초록) · 탈락(회색 작게) · 최종 순위(메달 원/회색) */
-        .spot-chip { display:inline-block; margin-left:5px; padding:2px 7px; border-radius:9px; font-size:10.5px; font-weight:800; line-height:1.2; vertical-align:1px; white-space:nowrap; }
+        .spot-chip { display:inline-block; margin-left:5px; padding:2px 7px; border-radius:9px; font-size:10.5px; font-weight:800; line-height:1.2; vertical-align:middle; white-space:nowrap; }
         .spot-chip.q { background:#e6f4ec; color:#1b7f4d; border:1px solid #bfe3cc; }
         .spot-chip.out { background:#f1efe9; color:#8a8580; border:1px solid #e2ddd2; font-weight:600; font-size:10px; }
         .spot-chip.place { background:#eef0f4; color:#333; border:1px solid #d9dde5; }
-        .spot-chip-wrap { display:inline-flex; align-items:center; gap:3px; margin-left:5px; vertical-align:-3px; }
+        .spot-chip-wrap { display:inline-flex; align-items:center; gap:3px; margin-left:5px; vertical-align:middle; }
         .spot-block { margin:8px 0 12px; padding:10px 12px; background:#fff6f6; border:1px solid #f1d5d5; border-radius:10px; }
         .rr-alt { margin-left:6px; font-size:11px; font-weight:500; color:var(--text-muted); }
         .rr-pbsb { margin-left:8px; font-size:11px; color:var(--text-muted); font-family:var(--font-mono); }
