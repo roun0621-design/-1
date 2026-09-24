@@ -1139,7 +1139,8 @@ function _evSortIdx(name) {
 let _scrolledToNow = false;
 function _scrollToNow() {
     if (_scrolledToNow) return;
-    const rows = [...document.querySelectorAll('#events-container tr[data-sched]')];
+    // 7종·10종은 며칠에 걸쳐 진행 중이라 항상 LIVE — '지금' 판단에서 뺀다 (2026-09-24)
+    const rows = [...document.querySelectorAll('#events-container tr[data-sched]:not([data-combined])')];
     if (!rows.length) return;
     _scrolledToNow = true;
     const now = new Date(); const pad = n => String(n).padStart(2, '0');
@@ -1162,7 +1163,7 @@ function _scrollToNow() {
             const y = card.getBoundingClientRect().top + window.scrollY - stick - 60;
             window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
         }
-        target.classList.add('row-now-flash'); setTimeout(() => target.classList.remove('row-now-flash'), 1600);
+        target.classList.add('row-now-flash'); setTimeout(() => target.classList.remove('row-now-flash'), 2200);   // 금색 테두리 두 번 깜빡임
     }, 250);
 }
 // 정렬 모드: 종목별(WA 순서) / 시간별(다음 경기 시각순, 날짜 묶음) — 대회별로 기억
@@ -1386,7 +1387,8 @@ function renderCategoryTable(groups, label, isLive) {
                 : schedEvt.day ? `<span class="card-chip chip-day">${schedEvt.day}일차</span>` : '';
             const tBorder = schedEvt.is_today ? '#e8dfc0' : '#e2e4e8';
             const _doneAll = g.rounds.length > 0 && g.rounds.every(r => r.round_status === 'completed');
-            timeBadge = _sortMode === 'time' ? '' : _doneAll ? dayLabel : `${dayLabel}<span class="card-chip chip-time num-display" style="color:${tColor};background:${tBg};border-color:${tBorder};" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
+            const _timeChip = `<span class="card-chip chip-time num-display" style="color:${tColor};background:${tBg};border-color:${tBorder};" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
+            timeBadge = _doneAll ? (_sortMode === 'time' ? '' : dayLabel) : (_sortMode === 'time' ? _timeChip : dayLabel + _timeChip);
         }
 
         // Division badge for display mode (color-coded by age group)
@@ -1456,7 +1458,7 @@ function renderCategoryTable(groups, label, isLive) {
         const _isFav = favs.includes(_rowGender + '|' + g.name);
         // 알림 토글은 카드에서 빼고 종목 창(엔트리·스타트 리스트·결과) 머리글로 옮겼다 (2026-09-22) — 카드 제목 줄이 밀리지 않게
         const favCell = '';
-        html += `<tr data-row-gender="${_rowGender}"${_tapAttr}${g._sk ? ` data-sched="${g._sk.key}"` : ''}${g.rounds.every(r => r.round_status === 'completed') ? ' data-done="1"' : ''}>
+        html += `<tr data-row-gender="${_rowGender}"${_tapAttr}${g._sk ? ` data-sched="${g._sk.key}"` : ''}${g.rounds.every(r => r.round_status === 'completed') ? ' data-done="1"' : ''}${g.catKey === 'combined' ? ' data-combined="1"' : ''}>
             ${favCell}
             <td class="event-name">${genderBadge}${g.name}${divBadge}${g.spotlight ? `<span class="spot-badge" title="${g.spotlight === 'KOR' ? '한국 선수 출전' : g.spotlight + ' 출전'}">${g.spotlight === 'KOR' ? PaceIcons.svg('flagKR', { size: 22 }) : g.spotlight}</span>${_spotChipHtml(g.spot_status)}` : ''}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
             ${_isDisplayMode ? `<td data-label="영상" class="${videoCell ? '' : 'cell-empty'}">${videoCell}</td>` : ''}
