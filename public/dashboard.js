@@ -207,7 +207,7 @@ async function openTeamRoster(keep) {
                 <span style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;text-align:right;line-height:1.25;">${stOf(ev) || pbsb(ev)}</span></div>`;
         };
         const compNm = (document.querySelector('.comp-info-name') || {}).textContent || '';
-        const qPrefix = /아시안게임/.test(compNm) ? '아시안게임 ' : '육상 ';
+        const qPrefix = /아시안게임/.test(compNm) ? '아시안게임 육상 ' : '육상 ';   // 네이버 검색어: '아시안게임 육상 이름' (동명이인·타 종목 선수와 구분)
         const naverUrl = a => (window.innerWidth < 720 ? 'https://m.search.naver.com/search.naver?query=' : 'https://search.naver.com/search.naver?query=') + encodeURIComponent(qPrefix + a.name);
         // 계주 팀은 공식 명단의 영문 국가명(Republic of Korea) 대신 우리말로
         const dispName = a => { if (!(a.is_team && /republic of korea|^korea$/i.test(a.name || ''))) return a.name; const g = (a.events || []).some(e => /mixed/i.test(e.event_name || '') || e.gender === 'X') ? 'X' : a.gender; return `대한민국 계주팀${g === 'M' ? '(남)' : g === 'F' ? '(여)' : '(혼성)'}`; };   // 혼성 계주 팀은 저장 성별이 M 이라 종목으로 판단
@@ -2793,6 +2793,7 @@ async function _cResultShowSub(order) {
 // ============================================================
 function _scAttr(evt, r, record, rank, extra) {
     if (!record || !r || !r.name) return '';
+    if (allEvents.some(e => e.spotlight)) return '';   // 국제대회: 기록 카드(SNS 공유) 없음 — 국내 대회용 카드라 외국 선수 줄에 붙는 게 어색 (2026-09-25)
     const isRelay = evt?.category === 'relay';
     const payload = {
         eventName: evt?.name || '',
