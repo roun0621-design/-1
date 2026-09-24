@@ -1655,7 +1655,7 @@ function openVideoModal(url, title) {
                 <span class="pr-footer-sep">|</span>
                 <a href="https://instagram.com/pace.rise" target="_blank" rel="noopener">@pace.rise</a>
                 <span class="pr-footer-sep">|</span>
-                <a href="mailto:pacerise.run@gmail.com">pacerise.run@gmail.com</a>
+                <a href="mailto:info@pace-rise.com">info@pace-rise.com</a>
             </div>
             <div class="pr-footer-privacy">
                 <details>
@@ -1667,7 +1667,7 @@ function openVideoModal(url, title) {
                         <p><strong>4. 보관 기간</strong><br>수집된 정보는 <strong>영구 보관</strong>됩니다.<br>대회 기록의 역사적 가치 및 통계 활용을 위해 별도 삭제하지 않습니다.<br>삭제를 원하시는 경우 아래 연락처로 요청해 주세요.</p>
                         <p><strong>5. 제3자 제공</strong><br>대회 주최·주관 단체 및 소속 연맹에 대회 운영 목적으로 제공됩니다.<br>경기 결과는 누구나 열람 가능한 형태로 공개될 수 있습니다.</p>
                         <p><strong>6. 정보주체의 권리</strong><br>본인 정보의 열람, 정정, 삭제를 요청할 수 있습니다.<br>대회 주최측 또는 PACE RISE에 연락하여 요청해 주세요.</p>
-                        <p><strong>7. 문의</strong><br>PACE RISE: pacerise.run@gmail.com<br>각 대회별 주최·주관 단체 연락처는 해당 대회 정보를 참고해 주세요.</p>
+                        <p><strong>7. 문의</strong><br>PACE RISE: info@pace-rise.com<br>각 대회별 주최·주관 단체 연락처는 해당 대회 정보를 참고해 주세요.</p>
                     </div>
                 </details>
             </div>
