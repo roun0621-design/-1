@@ -1167,7 +1167,17 @@ function _scrollRowTo(target, behavior) {
         window.scrollTo({ top: Math.max(0, y), behavior });
     }
 }
-function _flashRow(target) { target.classList.remove('row-now-flash'); void target.offsetWidth; target.classList.add('row-now-flash'); }
+// 금색 테두리 네 번 깜빡임 — CSS 애니메이션이 아니라 JS 로 클래스를 켜고 끈다 (iOS '동작 줄이기'가 켜져 있으면 애니메이션이 0.01ms 로 잘려 안 보였다)
+let _blinkTimers = [];
+function _flashRow(target) {
+    _blinkTimers.forEach(clearTimeout); _blinkTimers = [];
+    document.querySelectorAll('.row-now-on').forEach(el => el.classList.remove('row-now-on'));
+    const STEP = 320, TIMES = 4;
+    for (let i = 0; i < TIMES; i++) {
+        _blinkTimers.push(setTimeout(() => target.classList.add('row-now-on'), i * STEP * 2));
+        _blinkTimers.push(setTimeout(() => target.classList.remove('row-now-on'), i * STEP * 2 + STEP));
+    }
+}
 function _scrollToNow() {
     if (_scrolledToNow) return;
     if (!_nowRows().length) return;
