@@ -1142,35 +1142,51 @@ function _evSortIdx(name) {
 }
 
 // 시간별 보기로 처음 열 때: 지금 시각에 가장 가까운(아직 안 끝난) 종목 카드로 부드럽게 스크롤 + 잠깐 강조 (시간표 창의 '지금' 규칙과 같은 생각)
-let _scrolledToNow = false;
-function _scrollToNow() {
-    if (_scrolledToNow) return;
-    // 7종·10종은 며칠에 걸쳐 진행 중이라 항상 LIVE — '지금' 판단에서 뺀다 (2026-09-24)
-    const rows = [...document.querySelectorAll('#events-container tr[data-sched]:not([data-combined])')];
-    if (!rows.length) return;
-    _scrolledToNow = true;
+let _scrolledToNow = false;     // 세션당 한 번 (실제로 움직인 뒤에 true)
+let _nowFlashUntil = 0, _nowFlashKey = null;   // 다시 그려져도(데이터가 뒤늦게 더 오면 카드가 통째로 교체된다) 같은 카드를 다시 찾아 위치·강조를 유지
+function _nowRows() { return [...document.querySelectorAll('#events-container tr[data-sched]:not([data-combined])')]; }   // 7종·10종은 며칠 내내 LIVE 라 제외
+function _nowKeyOf(r) { const n = r.querySelector('.event-name'); return r.getAttribute('data-sched') + '|' + (n ? n.textContent.trim().slice(0, 30) : ''); }
+function _pickNowRow(rows) {
     const now = new Date(); const pad = n => String(n).padStart(2, '0');
     const nowKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
     // 진행 중 > 지금 이후 첫 종목 > (다 지났으면) 마지막 종목
-    let target = rows.find(r => r.querySelector('.status-live'))
+    return rows.find(r => r.querySelector('.status-live'))
         || rows.find(r => !r.hasAttribute('data-done') && r.getAttribute('data-sched') >= nowKey)
         || rows.find(r => !r.hasAttribute('data-done'))
-        || rows[rows.length - 1];
-    if (!target || target === rows[0]) return;   // 맨 위면 움직일 필요 없음
+        || rows[rows.length - 1] || null;
+}
+// 카드가 화면 세로 중앙에 오도록 (폰: 화면 중간 기준)
+function _scrollRowTo(target, behavior) {
     const scroller = document.getElementById('events-scroll-region');
-    const toolbar = document.getElementById('dash-toolbar');
+    const rect = target.getBoundingClientRect();
+    if (scroller && scroller.scrollHeight > scroller.clientHeight + 4) {
+        const y = rect.top - scroller.getBoundingClientRect().top + scroller.scrollTop - (scroller.clientHeight - rect.height) / 2;
+        scroller.scrollTo({ top: Math.max(0, y), behavior });
+    } else {
+        const y = rect.top + window.scrollY - (window.innerHeight - rect.height) / 2;
+        window.scrollTo({ top: Math.max(0, y), behavior });
+    }
+}
+function _flashRow(target) { target.classList.remove('row-now-flash'); void target.offsetWidth; target.classList.add('row-now-flash'); }
+function _scrollToNow() {
+    if (_scrolledToNow) return;
+    if (!_nowRows().length) return;
+    _scrolledToNow = true;
     setTimeout(() => {
-        const card = target.closest('.matrix-section') && target;   // 카드(행) 위치
-        const stick = toolbar ? toolbar.getBoundingClientRect().height + 8 : 8;
-        if (scroller && scroller.scrollHeight > scroller.clientHeight) {
-            const y = card.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - stick;
-            scroller.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
-        } else {
-            const y = card.getBoundingClientRect().top + window.scrollY - stick - 60;
-            window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
-        }
-        target.classList.add('row-now-flash'); setTimeout(() => target.classList.remove('row-now-flash'), 2200);   // 금색 테두리 두 번 깜빡임
-    }, 250);
+        const target = _pickNowRow(_nowRows());    // 그 사이 다시 그려졌을 수 있으니 지금 DOM 에서 다시 고른다
+        if (!target) return;
+        _nowFlashKey = _nowKeyOf(target); _nowFlashUntil = Date.now() + 4000;
+        _scrollRowTo(target, 'smooth');
+        _flashRow(target);
+    }, 300);
+}
+// 렌더 직후: 방금 '지금' 카드로 옮겼는데 다시 그려졌다면 같은 카드를 찾아 위치(즉시)와 깜빡임을 이어간다
+function _keepNowAfterRender() {
+    if (!_nowFlashKey || Date.now() > _nowFlashUntil) return;
+    const target = _nowRows().find(r => _nowKeyOf(r) === _nowFlashKey);
+    if (!target) return;
+    _scrollRowTo(target, 'auto');
+    _flashRow(target);
 }
 // 정렬 모드: 종목별(WA 순서) / 시간별(다음 경기 시각순, 날짜 묶음) — 대회별로 기억
 let _sortMode = 'event';
@@ -1314,7 +1330,7 @@ function renderMatrix() {
     }
     container.innerHTML = html;
     updateLiveJumpBadge(liveGroups.length);
-    if (_sortMode === 'time') _scrollToNow();
+    if (_sortMode === 'time') { _scrollToNow(); _keepNowAfterRender(); }
 }
 
 let _sortToggleInTitle = false, _sortToggleDone = false;
