@@ -320,6 +320,64 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         if (other) expect((await request(app).get(`/api/competitions/${other.id}/roster`)).status).toBe(400);
         expect((await request(app).get(`/api/competitions/${fx.comp}/roster?team=JPN`)).body.athletes.length).toBeGreaterThan(0);
     });
+    it('기록 표시: 한국 선수가 우리 기록표의 한국기록을 넘으면 비고 NR + 기록표·승인 로그 갱신, PB/SB 는 같은 종목 모든 라운드 출전에 전파(결승 스타트 리스트), 명단·한국 선수 블록에 태그', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const korW100 = F('entries_org_KOR.json').Events.find(e => e.EvKey === 'W.100M--------------').Partics[0];
+        // 한국기록 F 100m 11.49 (우리 기록표) — 앞 테스트의 결승 11.28 을 다시 읽으면 NR·PB
+        await db.run("INSERT INTO event_record (record_type, event_name, gender, division_code, series_id, record_value, holder_name, holder_team, record_year, approved) VALUES ('national','100m','F',NULL,NULL,'11.49','이영숙','KOR','1994',1)");
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: ['W.100M--------------.FNL-.000100--'] });
+        const fin = await db.get("SELECT id FROM event WHERE competition_id=? AND external_key='W.100M--------------#FNL-'", fx.comp);
+        const res = await db.get('SELECT r.remark, r.time_seconds FROM result r JOIN heat h ON h.id=r.heat_id JOIN event_entry ee ON ee.id=r.event_entry_id JOIN athlete a ON a.id=ee.athlete_id WHERE h.event_id=? AND a.barcode=?', fin.id, 'BN:' + korW100.Reg);
+        expect(res.time_seconds).toBe(11.28); expect(res.remark.split(' ')).toEqual(expect.arrayContaining(['NR', 'PB']));
+        const nr = await db.get("SELECT record_value, holder_name, holder_team, record_year FROM event_record WHERE record_type='national' AND event_name='100m' AND gender='F'");
+        expect(nr).toMatchObject({ record_value: '11.28', holder_team: 'KOR', record_year: '2026' }); expect(nr.holder_name).toBeTruthy();
+        const log = await db.get("SELECT status, previous_value, new_value, reviewed_by FROM record_breaking_log WHERE record_type='national' AND event_name='100m' AND gender='F' ORDER BY id DESC LIMIT 1");
+        expect(log).toMatchObject({ status: 'approved', previous_value: '11.49', new_value: '11.28', reviewed_by: 'intl-sync' });
+        // PB 전파: 같은 종목(여자 100m)의 예선·준결승·결승 출전 모두 PB 11.28
+        const pbs = await db.all("SELECT ee.personal_best FROM event_entry ee JOIN event e ON e.id=ee.event_id JOIN athlete a ON a.id=ee.athlete_id WHERE e.competition_id=? AND e.name='100m' AND e.gender='F' AND a.barcode=?", fx.comp, 'BN:' + korW100.Reg);
+        expect(pbs.length).toBeGreaterThanOrEqual(2); expect(pbs.every(p => p.personal_best === '11.28')).toBe(true);
+        // 다시 읽어도(값이 PB 와 같아도) 태그는 유지되고 기록표는 그대로
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: ['W.100M--------------.FNL-.000100--'] });
+        const res2 = await db.get('SELECT r.remark FROM result r JOIN heat h ON h.id=r.heat_id JOIN event_entry ee ON ee.id=r.event_entry_id JOIN athlete a ON a.id=ee.athlete_id WHERE h.event_id=? AND a.barcode=?', fin.id, 'BN:' + korW100.Reg);
+        expect(res2.remark.split(' ')).toEqual(expect.arrayContaining(['NR', 'PB']));
+        expect((await db.get("SELECT COUNT(*) c FROM record_breaking_log WHERE record_type='national' AND event_name='100m' AND gender='F'")).c).toBe(1);
+        // 화면용: 명단 result.tag · 한국 선수 블록 rows[].tag
+        const ro = await request(app).get(`/api/competitions/${fx.comp}/roster`);
+        const runner = ro.body.athletes.find(a => a.name_alt === korW100.Name || a.name === korW100.Name);
+        expect(runner.events.find(e => e.round_type === 'final' && e.event_name === '100m').result).toMatchObject({ tag: 'NR', pb_improved: true });
+        const sp = await request(app).get(`/api/events/${fin.id}/spotlight`);
+        expect(sp.body.rows[0]).toMatchObject({ tag: 'NR', place: 3 });
+        // 외국 선수는 NR 없음 (주최 측 HasPB 가 오면 PB)
+        const others = F('entries_event_W100M.json').Partics.filter(p => p.Org !== 'KOR');
+        const o = await db.get('SELECT r.remark FROM result r JOIN heat h ON h.id=r.heat_id JOIN event_entry ee ON ee.id=r.event_entry_id JOIN athlete a ON a.id=ee.athlete_id WHERE h.event_id=? AND a.barcode=?', fin.id, 'BN:' + others[0].Reg);
+        expect(o.remark).not.toMatch(/NR/);
+    });
+    it('필드 시기표(Splits): 높이는 height_attempt(O/X), 거리는 시도별 result — 최고 기록만 있는 행도 화면 규칙이 읽는다', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const woo = F('entries_org_KOR.json').Events.find(e => e.EvKey === 'M.HIGHJUMP----------').Partics[0];
+        const hjHeat = await db.get("SELECT h.id, h.external_key, e.id AS ev_id FROM heat h JOIN event e ON e.id=h.event_id WHERE e.competition_id=? AND e.name='높이뛰기' AND e.gender='M' AND e.round_type='final' ORDER BY h.id LIMIT 1", fx.comp);
+        expect(hjHeat).toBeTruthy();
+        const sp = (dist, att, res) => ({ Category: 'MAIN', Distance: dist, AttResult: att, Result: res, IRM: 'OK', Status: att ? 'OK' : 'Discard', Extensions: [] });
+        fakeResults[hjHeat.external_key] = { Info: { Status: 'OFFICIAL', StatusDesc: 'Official' }, Competitors: [
+            { Reg: woo.Reg, Bib: '101', Org: 'KOR', Name: woo.Name, Rk: '1', Result: '2.24', IRM: 'OK', RecordInd: '', Extensions: [], Splits: [sp('2.20', 'O', '2.20'), sp('2.24', 'XO', '2.24'), sp('2.28', 'XXX', '2.28'), sp('2.31', '', '')] } ] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [hjHeat.external_key] });
+        const ha = await db.all('SELECT bar_height, attempt_number, result_mark FROM height_attempt WHERE heat_id=? ORDER BY bar_height, attempt_number', hjHeat.id);
+        expect(ha.map(a => [Number(a.bar_height), a.attempt_number, a.result_mark])).toEqual([[2.2, 1, 'O'], [2.24, 1, 'X'], [2.24, 2, 'O'], [2.28, 1, 'X'], [2.28, 2, 'X'], [2.28, 3, 'X']]);
+        const best = await db.get('SELECT distance_meters, remark FROM result WHERE heat_id=? AND attempt_number IS NULL', hjHeat.id);
+        expect(best.distance_meters).toBe(2.24);
+        // 거리: 남자 세단뛰기 결승 — 시도 1 16.80, 2 X, 3 -(패스), 4 17.02(+0.8)
+        const tj = F('entries_org_KOR.json').Events.find(e => e.EvKey === 'M.TRPLJUMP----------').Partics[0];
+        const tjHeat = await db.get("SELECT h.id, h.external_key FROM heat h JOIN event e ON e.id=h.event_id WHERE e.competition_id=? AND e.name='세단뛰기' AND e.gender='M' AND e.round_type='final' ORDER BY h.id LIMIT 1", fx.comp);
+        const spd = (n, res, w) => ({ Category: 'MAIN', Distance: String(n), AttResult: '', Result: res, IRM: 'OK', Status: res ? 'OK' : 'Discard', Extensions: w != null ? [{ Type: 'SPLIT_RESULT', Code: 'Wind', Value: String(w) }] : [] });
+        fakeResults[tjHeat.external_key] = { Info: { Status: 'RUNNING' }, Competitors: [
+            { Reg: tj.Reg, Bib: '102', Org: 'KOR', Name: tj.Name, Rk: '1', Result: '17.02', IRM: 'OK', RecordInd: '', Extensions: [{ Type: 'RESULT_INFO', Code: 'Wind', Value: '+0.8' }], Splits: [spd(1, '16.80', 0.3), spd(2, 'X', null), spd(3, '-', null), spd(4, '17.02', 0.8), spd(5, '', null), spd(6, '', null)] } ] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [tjHeat.external_key] });
+        const att = await db.all('SELECT attempt_number, distance_meters, wind FROM result WHERE heat_id=? AND attempt_number IS NOT NULL ORDER BY attempt_number', tjHeat.id);
+        expect(att.map(a => [a.attempt_number, a.distance_meters, a.wind == null ? null : Number(a.wind)])).toEqual([[1, 16.8, 0.3], [2, 0, null], [3, -1, null], [4, 17.02, 0.8]]);
+        // 결과 API: 시도 행과 최고 행이 함께 오고, 라운드/명단은 최고 행(NULL attempt)을 쓴다
+        const full = await request(app).get(`/api/results?heat_id=${tjHeat.id}`);
+        expect(full.status).toBe(200);
+    });
     it('일정 다시: 공식 일정에서 사라진 조·라운드(남자 세단뛰기 예선 → 직결)는 명단·기록이 없으면 지우고 출전은 결승으로 옮긴다', async () => {
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
         const before = await db.all("SELECT e.id, e.round_type, (SELECT COUNT(*) FROM heat WHERE event_id=e.id) hc, (SELECT COUNT(*) FROM event_entry WHERE event_id=e.id) ec FROM event e WHERE e.competition_id=? AND e.external_key LIKE 'M.TRPLJUMP%' ORDER BY e.id", fx.comp);

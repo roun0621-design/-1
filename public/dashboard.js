@@ -30,6 +30,11 @@ const _BELL_OFF = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke=
 let _searchQuery = '';   // 종목명 부분일치 (예: 400 → 400m·400mH·4X400mR, 멀리 → 멀리뛰기)
 let _spotlightOnly = false;   // 국제대회: 관심 국가(한국) 선수 출전 종목만
 // 국제대회: 선수 행에 PB·SB (있을 때만)
+// 기록 옆 작은 태그 하나 (WR·AR·GR·NR·PB·SB) — 비고에서 뽑는다. 줄을 늘리지 않는다 (2026-09-24)
+const _REC_TAG_ORDER = ['WR', 'AR', 'GR', 'NR', 'PB', 'SB'];
+function _recTagOf(remark) { const t = String(remark || '').split(/\s+/); for (const k of _REC_TAG_ORDER) if (t.includes(k)) return k; return null; }
+function _recTagHtml(tag) { return tag ? `<span class="rec-tag rec-tag-${tag}">${tag}</span>` : ''; }
+function _remarkRest(remark) { return String(remark || '').split(/\s+/).filter(x => x && !_REC_TAG_ORDER.includes(x)).join(' '); }   // 진출(Q·q) 등 나머지
 function _pbSb(r) { const p = []; if (r && r.personal_best) p.push('PB ' + r.personal_best); if (r && r.season_best) p.push('SB ' + r.season_best); return p.length ? `<span class="rr-pbsb">${p.join(' · ')}</span>` : ''; }
 function toggleSpotlight() {
     _spotlightOnly = !_spotlightOnly;
@@ -173,7 +178,7 @@ async function openTeamRoster(keep) {
                 ? (isFinal && r.place <= 3 ? medalHtml(r.place, 20) + ' '
                     : `<span style="display:inline-block;min-width:22px;padding:0 5px;border-radius:9px;background:#e9edf6;color:#1a2a5e;font-weight:800;text-align:center;margin-right:5px;">${!isFinal && r.heat_count > 1 && ev.heat_number ? ev.heat_number + '조 ' : ''}${r.place}위</span>`)
                 : '';
-            const imp = (r.pb_improved ? '<span class="rr-imp">PB 경신</span>' : r.sb_improved ? '<span class="rr-imp">SB 경신</span>' : '');
+            const imp = _recTagHtml(r.tag || (r.pb_improved ? 'PB' : r.sb_improved ? 'SB' : null));
             const val = r.time_seconds != null ? formatTime(r.time_seconds) : r.distance_meters != null ? Number(r.distance_meters).toFixed(2) : '';
             if (!val) return '';
             const wind = r.time_seconds != null && r.wind != null ? ` <span style="color:#888;">(${r.wind > 0 ? '+' : ''}${Number(r.wind).toFixed(1)})</span>` : '';
@@ -203,7 +208,7 @@ async function openTeamRoster(keep) {
         const qPrefix = /아시안게임/.test(compNm) ? '아시안게임 ' : '육상 ';
         const naverUrl = a => (window.innerWidth < 720 ? 'https://m.search.naver.com/search.naver?query=' : 'https://search.naver.com/search.naver?query=') + encodeURIComponent(qPrefix + a.name);
         // 계주 팀은 공식 명단의 영문 국가명(Republic of Korea) 대신 우리말로
-        const dispName = a => a.is_team && /republic of korea|^korea$/i.test(a.name || '') ? `대한민국 계주팀${a.gender === 'M' ? '(남)' : a.gender === 'F' ? '(여)' : ''}` : a.name;
+        const dispName = a => { if (!(a.is_team && /republic of korea|^korea$/i.test(a.name || ''))) return a.name; const g = (a.events || []).some(e => /mixed/i.test(e.event_name || '') || e.gender === 'X') ? 'X' : a.gender; return `대한민국 계주팀${g === 'M' ? '(남)' : g === 'F' ? '(여)' : '(혼성)'}`; };   // 혼성 계주 팀은 저장 성별이 M 이라 종목으로 판단
         // 이름 줄 전체가 네이버 프로필 링크(새 탭) — 오른쪽 끝 ↗ 로 밖으로 나감을 표시. 아래 종목 줄은 엔트리/결과 창
         const nameLine = a => a.is_team
             ? `<div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span>${esc(dispName(a))}</span></div>`
@@ -391,7 +396,7 @@ async function _spotBlocksHtml(evt) {
         const rows = (d.rows || []).map(r => {
             const place = r.place ? (d.round_type === 'final' && r.place <= 3 ? medalHtml(r.place, 20) : `<b>${r.heat_number && d.round_type !== 'final' ? r.heat_number + '조 ' : ''}${r.place}위</b>`) : '';
             const q = r.qual ? `<span class="spot-chip q">${d.status && d.status.next ? d.status.next + ' 진출' : '진출'}</span>` : (d.status && d.status.kind === 'out' ? '<span class="spot-chip out">탈락</span>' : '');
-            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap"><span style="font-size:14px;font-weight:800">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}${nm(r)}</span>${place}<span style="font-size:14px">${fmt(r)}</span>${q}${r.is_team && r.members ? `<span style="flex-basis:100%;font-size:11px;color:#666;padding-left:24px">${r.members.map(esc).join(' · ')}</span>` : ''}</div>`;
+            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap"><span style="font-size:14px;font-weight:800">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}${nm(r)}</span>${place}<span style="font-size:14px">${fmt(r)}${_recTagHtml(r.tag)}</span>${q}${r.is_team && r.members ? `<span style="flex-basis:100%;font-size:11px;color:#666;padding-left:24px">${r.members.map(esc).join(' · ')}</span>` : ''}</div>`;
         });
         const pend = (d.pending || []).map(p => `<div style="padding:4px 0;font-size:13px">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}<b>${nm(p)}</b> <span style="color:#666">${p.heat_number ? p.heat_number + '조 ' : ''}${p.lane ? p.lane + '레인' : ''}${p.scheduled_at ? ' · ' + p.scheduled_at.slice(11, 16) + ' 출발' : ''} · 예정</span></div>`);
         if (rows.length || pend.length) {
@@ -2078,11 +2083,11 @@ function renderLiveTrackResults(data, relayMembers) {
                 `BIB ${bib(r.bib_number)}`,
                 r.sub_group ? `${r.sub_group}그룹` : '',
                 _isWindAided && hasRec ? '<b>참고기록</b>' : '',
-                r.remark ? `<b>${r.remark}</b>` : '',
+                _remarkRest(r.remark) ? `<b>${_remarkRest(r.remark)}</b>` : '',
             ].filter(Boolean).join('<i>·</i>');
             const recHtml = r.status_code
                 ? `<div class="rr-rec rr-rec-st">${r.status_code}</div>`
-                : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark}${recBadges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
+                : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark}${recBadges}${_recTagHtml(_recTagOf(r.remark))}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
             return `<div class="rr rr-nocard${hasRec ? ' rr-has-rec' : ''}" data-team="${r.team || ''}">
                 ${rankHtml}
                 <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
@@ -2103,11 +2108,12 @@ function renderLiveFieldDistResults(data) {
         _liveHeatId = h.id;
         const rows = h.entries.map(e => {
             const er = (h.results || []).filter(r => r.event_entry_id === e.event_entry_id);
-            const att = {}, attWind = {};
+            const att = {}, attWind = {}; let bestOnly = null, bestOnlyWind = null;
             // Extract status_code from any result row (DNS/DNF/NM)
             let sc = '';
             er.forEach(r => {
                 if (r.attempt_number) { att[r.attempt_number] = r.distance_meters; attWind[r.attempt_number] = r.wind; }
+                else if (r.distance_meters != null && r.distance_meters > 0) { bestOnly = r.distance_meters; bestOnlyWind = r.wind; }   // 시기 없이 최고 기록만(국제대회 동기화)
                 if (r.status_code && !sc) sc = r.status_code.toUpperCase();
             });
             // Auto-NM: WA Rule 25.6 — 8명 이하면 6차시기까지, 초과면 3차시기까지 파울이어야 NM
@@ -2118,15 +2124,16 @@ function renderLiveFieldDistResults(data) {
             const _totalAth = h.entries.length;
             const _nmThreshold = _totalAth <= 8 ? 6 : 3;
             if (!sc && (foulCount + passCount) >= _nmThreshold && valid.length === 0 && allDists.length >= _nmThreshold) sc = 'NM';
-            const best = valid.length > 0 ? Math.max(...valid) : null;
+            const best = valid.length > 0 ? Math.max(...valid) : bestOnly;
             // WA: later attempt is the official record for same distance
-            let bestWind = null;
-            if (best != null) { for (let i = 6; i >= 1; i--) { if (att[i] === best) { bestWind = attWind[i]; break; } } }
+            let bestWind = valid.length > 0 ? null : bestOnlyWind;
+            if (best != null && valid.length > 0) { for (let i = 6; i >= 1; i--) { if (att[i] === best) { bestWind = attWind[i]; break; } } }
             // Build sorted valid distances (descending) for WA tie-breaking
             const sortedValid = [];
             for (let i = 1; i <= 6; i++) { if (att[i] != null && att[i] > 0) sortedValid.push(att[i]); }
             sortedValid.sort((a, b) => b - a);
-            return { ...e, att, attWind, best, bestWind, status_code: sc, sortedValid };
+            const remark = ((er.find(r => r.attempt_number == null && r.remark) || {}).remark) || '';
+            return { ...e, att, attWind, best, bestWind, status_code: sc, sortedValid, remark };
         }).sort((a, b) => {
             { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.best == null) return 1; if (b.best == null) return -1;
@@ -2244,7 +2251,8 @@ function renderLiveFieldHeightResults(data) {
             const best = _hs.best, totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest;
             const isNM = _hs.isNM;
             const status_code = ((h.results || []).find(r => r.event_entry_id === e.event_entry_id && PaceRanking.isStatus(r.status_code)) || {}).status_code || '';
-            return { ...e, hd, best: status_code ? null : best, isNM, totalFails, failsAtBest, status_code };
+            const _bestOnly = ea.length ? null : (((h.results || []).find(r => r.event_entry_id === e.event_entry_id && r.attempt_number == null && r.distance_meters > 0) || {}).distance_meters || null);   // 시기 없이 최고 높이만(국제대회 동기화)
+            return { ...e, hd, remark: (((h.results || []).find(r => r.event_entry_id === e.event_entry_id && r.attempt_number == null) || {}).remark) || '', best: status_code ? null : (best != null ? best : _bestOnly), isNM: _bestOnly ? false : isNM, totalFails, failsAtBest, status_code };
         }).sort((a, b) => {
             { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.best == null && b.best == null) return 0;
@@ -2857,11 +2865,11 @@ function renderTrackResults(data, relayMembers) {
                 `${smallNumLabel} ${r.lane_number || '—'}`,
                 `BIB ${bib(r.bib_number)}`,
                 r.sub_group ? `${r.sub_group}그룹` : '',
-                r.remark ? `<b>${r.remark}</b>` : '',
+                _remarkRest(r.remark) ? `<b>${_remarkRest(r.remark)}</b>` : '',
             ].filter(Boolean).join('<i>·</i>');
             const recHtml = r.status_code
                 ? `<div class="rr-rec rr-rec-st">${r.status_code}</div>`
-                : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark2}${recBadges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
+                : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark2}${recBadges}${_recTagHtml(_recTagOf(r.remark))}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
             return `<div class="rr${scAttr ? '' : ' rr-nocard'}"${scAttr} data-team="${r.team || ''}">
                 ${rankHtml}
                 <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
@@ -2900,7 +2908,7 @@ function _rrFieldDistList(rows, needsWind, opts) {
         const hasRec = !r.status_code && r.best != null;
         const rankNum = typeof r.rank === 'number' ? r.rank : null;
         const bwa = needsWind && hasRec && r.bestWind != null && parseFloat(r.bestWind) > 2.0;
-        const badges = (hasRec && !bwa) ? _rrRecordBadges(r.best) : '';
+        const badges = ((hasRec && !bwa) ? _rrRecordBadges(r.best) : '') + (hasRec ? _recTagHtml(_recTagOf(r.remark)) : '');
         let bestIdx = 0;
         if (hasRec) { for (let i = 6; i >= 1; i--) { if (r.att[i] === r.best) { bestIdx = i; break; } } }
         const recHtml = r.status_code
@@ -2935,7 +2943,7 @@ function _rrFieldHeightList(rows, hts, opts) {
         const status = r.isNM ? 'NM' : (r.status_code || '');
         const hasRec = !status && r.best != null;
         const rankNum = typeof r.rank === 'number' ? r.rank : null;
-        const badges = hasRec ? _rrRecordBadges(r.best) : '';
+        const badges = hasRec ? _rrRecordBadges(r.best) + _recTagHtml(_recTagOf(r.remark)) : '';
         const recHtml = status ? `<div class="rr-rec rr-rec-st">${status}</div>` : (hasRec ? `<div class="rr-rec">${formatHeight(r.best)}${badges}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
         const meta = [`순번 ${r.lane_number || '—'}`, `BIB ${bib(r.bib_number)}`].join('<i>·</i>');
         let chips = '';
@@ -3045,10 +3053,11 @@ function renderFieldDistResults(data) {
     data.heats.forEach(h => {
         const rows = h.entries.map(e => {
             const er = (h.results || []).filter(r => r.event_entry_id === e.event_entry_id);
-            const att = {}, attWind = {};
+            const att = {}, attWind = {}; let bestOnly = null, bestOnlyWind = null;
             let sc = '';
             er.forEach(r => {
                 if (r.attempt_number) { att[r.attempt_number] = r.distance_meters; attWind[r.attempt_number] = r.wind; }
+                else if (r.distance_meters != null && r.distance_meters > 0) { bestOnly = r.distance_meters; bestOnlyWind = r.wind; }   // 시기 없이 최고 기록만(국제대회 동기화)
                 if (r.status_code && !sc) sc = r.status_code.toUpperCase();
             });
             // Auto-NM: WA Rule 25.6 — 8명 이하면 6차시기까지, 초과면 3차시기까지
@@ -3059,14 +3068,15 @@ function renderFieldDistResults(data) {
             const _totalAth3 = h.entries.length;
             const _nmThreshold3 = _totalAth3 <= 8 ? 6 : 3;
             if (!sc && (foulCount + passCount2) >= _nmThreshold3 && valid.length === 0 && allDists.length >= _nmThreshold3) sc = 'NM';
-            const best = valid.length > 0 ? Math.max(...valid) : null;
-            let bestWind = null;
-            if (best != null) { for (let i = 6; i >= 1; i--) { if (att[i] === best) { bestWind = attWind[i]; break; } } }
+            const best = valid.length > 0 ? Math.max(...valid) : bestOnly;
+            let bestWind = valid.length > 0 ? null : bestOnlyWind;
+            if (best != null && valid.length > 0) { for (let i = 6; i >= 1; i--) { if (att[i] === best) { bestWind = attWind[i]; break; } } }
             // Build sorted valid distances (descending) for WA tie-breaking
             const sortedValid = [];
             for (let i = 1; i <= 6; i++) { if (att[i] != null && att[i] > 0) sortedValid.push(att[i]); }
             sortedValid.sort((a, b) => b - a);
-            return { ...e, att, attWind, best, bestWind, status_code: sc, sortedValid };
+            const remark = ((er.find(r => r.attempt_number == null && r.remark) || {}).remark) || '';
+            return { ...e, att, attWind, best, bestWind, status_code: sc, sortedValid, remark };
         }).sort((a, b) => {
             { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.best == null) return 1; if (b.best == null) return -1;
@@ -3170,7 +3180,8 @@ function renderFieldHeightResults(data) {
             const _hs = PaceRanking.heightStats(hd, hts);   // 공용 모듈 (WA TR 26.2·26.8)
             const best = _hs.best, totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest, isNM = _hs.isNM;
             const status_code = ((h.results || []).find(r => r.event_entry_id === e.event_entry_id && PaceRanking.isStatus(r.status_code)) || {}).status_code || '';
-            return { ...e, hd, best: status_code ? null : best, totalFails, failsAtBest, isNM, status_code };
+            const _bestOnly = ea.length ? null : (((h.results || []).find(r => r.event_entry_id === e.event_entry_id && r.attempt_number == null && r.distance_meters > 0) || {}).distance_meters || null);   // 시기 없이 최고 높이만(국제대회 동기화)
+            return { ...e, hd, remark: (((h.results || []).find(r => r.event_entry_id === e.event_entry_id && r.attempt_number == null) || {}).remark) || '', best: status_code ? null : (best != null ? best : _bestOnly), totalFails, failsAtBest, isNM: _bestOnly ? false : isNM, status_code };
         }).sort((a, b) => {
             { const st = PaceRanking.compareStatus(a, b); if (st != null) return st; }     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.best == null && b.best == null) return 0;
