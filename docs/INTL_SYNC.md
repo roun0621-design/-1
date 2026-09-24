@@ -45,3 +45,8 @@
 - 선수별 `Extensions[Code=PB|SB]` 를 출전(event_entry)의 PB/SB 로 채운다 — **비어 있을 때만**(우리 선수는 사용자 표 값 유지). `Bib` 도 배번이 비면 채움. `RecordInd`(GR/AR/WR…)는 결과 비고로.
 - 종목 기록 `Results.Records[].Records[]`(WR·AR·GR)는 `event_records`(종목별 JSON) 의 `world/area/games` 에 저장(세부종목은 부모에). `GET /api/event-records/lookup?…&event_id=` 가 합쳐 주고, 결과·LIVE 창 '기존 기록' 줄과 신기록 배지(`detectBrokenRecordsClient` WR/AR/GR/NR/DR/CR)가 쓴다.
 - 7종·10종: 부모 카드의 조·레인 수는 세부종목 합산(`events_read`), 스타트 리스트 창은 세부종목 조를 순서대로(`100mH 1조 …`), 명단 없는 조는 숨김.
+
+## 7종·10종 (2026-09-24)
+- 세부종목 조(`W.HEPTATH-----------.100H.000100--`)의 공식 결과가 오면 세부종목 결과와 함께 **부모(7종경기) 종합표(`combined_score`)** 에 기록·**공식 점수**(`Extensions.Points`)를 넣는다 — 우리 WA 점수표가 아니라 공식 점수. 부모는 첫 세부종목부터 `in_progress`(카드 LIVE → 기존 종합표 화면: 세부종목 칸·일차 점수·합계·선두/차이).
+- 부모 완료(결과 버튼·메달·알림)는 **모든 세부종목이 공식 완료**됐을 때만. 세부종목 완료로는 알림이 나가지 않는다(`onApplied.completed` 는 부모 기준).
+- 엔트리 동기화의 '빠진 출전 삭제'는 종합표 행이 있는 출전은 지우지 않는다.

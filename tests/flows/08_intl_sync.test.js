@@ -203,6 +203,25 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         const parent = evs.find(e => e.id === hep.id);
         expect(parent.heat_count).toBeGreaterThan(0); expect(parent.heat_entry_count).toBe(1);
     });
+    it('7종경기: 세부종목(100mH) 공식 결과 → 부모 종합표에 기록·공식 점수, 부모는 진행 중; 세부종목 완료만으로는 부모가 완료되지 않는다', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const hep = await db.get("SELECT id FROM event WHERE competition_id=? AND external_key='W.HEPTATH-----------'", fx.comp);
+        const sub = await db.get("SELECT e.id AS ev_id, h.id AS heat_id, h.external_key FROM event e JOIN heat h ON h.event_id=e.id WHERE e.parent_event_id=? AND e.external_key LIKE '%#100H' ORDER BY h.heat_number LIMIT 1", hep.id);
+        const korHep = F('entries_org_KOR.json').Events.find(e => e.EvKey === 'W.HEPTATH-----------');
+        const hp = korHep ? korHep.Partics[0] : F('entries_event_W100M.json').Partics[3];
+        const ext = (o) => Object.entries(o).map(([Code, Value]) => ({ Type: 'RESULT_INFO', Code, Value }));
+        fakeResults[sub.external_key] = { Info: { Status: 'OFFICIAL', StatusDesc: 'Official' }, Competitors: [
+            { Reg: hp.Reg, Bib: '901', Org: hp.Org, Name: hp.Name, Lane: '4', Rk: '1', Result: '13.99', IRM: 'OK', Extensions: ext({ Points: '980', AccPoints: '980', AccRk_Combined: '4', Wind: '-0.4' }) } ] };
+        // 이 조를 미리 만들어 둔 조 목록에 넣고(sync 가 heats 를 DB 에서 읽으므로 그대로), 결과 동기화
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [sub.external_key] });
+        const cs = await db.get("SELECT cs.sub_event_name, cs.sub_event_order, cs.raw_record, cs.wa_points FROM combined_score cs JOIN event_entry ee ON ee.id=cs.event_entry_id JOIN athlete a ON a.id=ee.athlete_id WHERE ee.event_id=? AND a.barcode=?", hep.id, 'BN:' + hp.Reg);
+        expect(cs).toMatchObject({ sub_event_order: 1, raw_record: 13.99, wa_points: 980 }); expect(cs.sub_event_name).toMatch(/100mH/);
+        const st = await db.all('SELECT id, round_status FROM event WHERE id IN (?, ?)', hep.id, sub.ev_id);
+        expect(st.find(x => x.id === hep.id).round_status).toBe('in_progress');       // 부모: 진행 중 (카드 LIVE → 종합표)
+        expect(st.find(x => x.id === sub.ev_id).round_status).toBe('in_progress');   // 세부종목: 조가 여러 개라 1조만 공식이면 아직
+        const scores = await request(app).get('/api/combined-scores').query({ event_id: hep.id });
+        expect(scores.body.some(x => x.wa_points === 980)).toBe(true);
+    });
     it('선수 보조 정보(한글 이름·PB·SB): 영문 이름으로 찾아 넣고, 다음 동기화가 한글 이름을 덮지 않는다', async () => {
         const r = await request(app).post(`/api/admin/intl/${fx.comp}/athlete-info`).send({ admin_key: ADMIN, rows: [
             { 영문이름: 'seo jihyun', 한글이름: '서지현', PB: '11.30', SB: '11.45' }, { name: 'KIM Juha', name_ko: '김주하', pb: '11.36' }, { name: 'NOBODY X', name_ko: '없음' }] });
