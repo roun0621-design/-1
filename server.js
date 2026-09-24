@@ -4986,6 +4986,14 @@ app.get('/api/event-records/lookup', async (req, res) => {
             try { const row = await db.get('SELECT records FROM event_records WHERE event_id=?', parseInt(req.query.event_id, 10)); const j = row ? JSON.parse(row.records || '{}') : {}; for (const k of ['world', 'area', 'games']) if (j && j[k] && j[k].record_value) out[k] = j[k]; } catch (e) {}
         }
         out.national = await _findOne('national', `AND division_code IS NULL AND series_id IS NULL`, []);
+        // 이 대회에서 세운 한국기록이면(국제대회 동기화 자동 승인) 종전 기록을 함께 — 칩은 채워서, 탭하면 '종전 3:22.87 · 2025'
+        if (out.national && req.query.event_id) {
+            try {
+                const ev = await db.get('SELECT competition_id FROM event WHERE id=?', parseInt(req.query.event_id, 10));
+                const lg = ev ? await db.get("SELECT previous_value, review_note FROM record_breaking_log WHERE record_type='national' AND status='approved' AND previous_record_id=? AND competition_id=? ORDER BY id DESC LIMIT 1", out.national.id, ev.competition_id) : null;
+                if (lg) { const m = String(lg.review_note || '').match(/종전 (.+)$/); out.national = { ...out.national, new_here: true, prev: m ? m[1] : (lg.previous_value || '') }; }
+            } catch (e) {}
+        }
         if (divCode) {
             out.division = await _findOne('division', `AND division_code=? AND series_id IS NULL`, [divCode]);
         }

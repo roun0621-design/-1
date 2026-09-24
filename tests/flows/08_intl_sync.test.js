@@ -333,6 +333,9 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         expect(nr).toMatchObject({ record_value: '11.28', holder_team: 'KOR', record_year: '2026' }); expect(nr.holder_name).toBeTruthy();
         const log = await db.get("SELECT status, previous_value, new_value, reviewed_by FROM record_breaking_log WHERE record_type='national' AND event_name='100m' AND gender='F' ORDER BY id DESC LIMIT 1");
         expect(log).toMatchObject({ status: 'approved', previous_value: '11.49', new_value: '11.28', reviewed_by: 'intl-sync' });
+        // 결과 창 '기존 기록' lookup: 이 대회에서 세운 기록 → new_here + 종전
+        const lk = await request(app).get('/api/event-records/lookup').query({ event_name: '100m', gender: 'F', event_id: fin.id });
+        expect(lk.body.national).toMatchObject({ record_value: '11.28', new_here: true, prev: '11.49 · 이영숙 · 1994' });
         // PB 전파: 같은 종목(여자 100m)의 예선·준결승·결승 출전 모두 PB 11.28
         const pbs = await db.all("SELECT ee.personal_best FROM event_entry ee JOIN event e ON e.id=ee.event_id JOIN athlete a ON a.id=ee.athlete_id WHERE e.competition_id=? AND e.name='100m' AND e.gender='F' AND a.barcode=?", fx.comp, 'BN:' + korW100.Reg);
         expect(pbs.length).toBeGreaterThanOrEqual(2); expect(pbs.every(p => p.personal_best === '11.28')).toBe(true);

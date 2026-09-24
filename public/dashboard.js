@@ -1141,9 +1141,9 @@ function _evSortIdx(name) {
     return 999;
 }
 
-// 시간별 보기로 처음 열 때: 지금 시각에 가장 가까운(아직 안 끝난) 종목 카드로 부드럽게 스크롤 + 잠깐 강조 (시간표 창의 '지금' 규칙과 같은 생각)
+// 시간별 보기로 처음 열 때: 지금 시각에 가장 가까운(아직 안 끝난) 종목 카드로 부드럽게 스크롤(화면 중앙) — 표시는 NEXT 칩·LIVE 깜빡임(_markNext)
 let _scrolledToNow = false;     // 세션당 한 번 (실제로 움직인 뒤에 true)
-let _nowFlashUntil = 0, _nowFlashKey = null;   // 다시 그려져도(데이터가 뒤늦게 더 오면 카드가 통째로 교체된다) 같은 카드를 다시 찾아 위치·강조를 유지
+let _nowFlashUntil = 0, _nowFlashKey = null;   // 다시 그려져도(데이터가 뒤늦게 더 오면 카드가 통째로 교체된다) 같은 카드를 다시 찾아 위치를 유지
 function _nowRows() { return [...document.querySelectorAll('#events-container tr[data-sched]:not([data-combined])')]; }   // 7종·10종은 며칠 내내 LIVE 라 제외
 function _nowKeyOf(r) { const n = r.querySelector('.event-name'); return r.getAttribute('data-sched') + '|' + (n ? n.textContent.trim().slice(0, 30) : ''); }
 function _pickNowRow(rows) {
@@ -1167,16 +1167,23 @@ function _scrollRowTo(target, behavior) {
         window.scrollTo({ top: Math.max(0, y), behavior });
     }
 }
-// 금색 테두리 네 번 깜빡임 — CSS 애니메이션이 아니라 JS 로 클래스를 켜고 끈다 (iOS '동작 줄이기'가 켜져 있으면 애니메이션이 0.01ms 로 잘려 안 보였다)
-let _blinkTimers = [];
-function _flashRow(target) {
-    _blinkTimers.forEach(clearTimeout); _blinkTimers = [];
-    document.querySelectorAll('.row-now-on').forEach(el => el.classList.remove('row-now-on'));
-    const STEP = 320, TIMES = 4;
-    for (let i = 0; i < TIMES; i++) {
-        _blinkTimers.push(setTimeout(() => target.classList.add('row-now-on'), i * STEP * 2));
-        _blinkTimers.push(setTimeout(() => target.classList.remove('row-now-on'), i * STEP * 2 + STEP));
+// 깜빡임은 JS 가 .blink-on 을 켜고 끈다 (iOS '동작 줄이기'가 CSS 애니메이션을 끄기 때문). 대상: LIVE 배지 · NEXT 칩
+let _blinkTimer = null, _blinkPhase = false;
+function _ensureBlinker() {
+    if (_blinkTimer) return;
+    _blinkTimer = setInterval(() => { _blinkPhase = !_blinkPhase; document.querySelectorAll('.blinker').forEach(el => el.classList.toggle('blink-on', _blinkPhase)); }, 600);
+}
+// 렌더 뒤: '지금' 종목에 표시 — 진행 중이면 LIVE 배지가 깜빡, 아니면 시간 칩 옆에 NEXT 칩(깜빡). 종목별·시간별 공통, 7종·10종 제외
+function _markNext() {
+    document.querySelectorAll('.chip-next').forEach(el => el.remove());
+    document.querySelectorAll('.status-live').forEach(el => el.classList.add('blinker'));
+    const target = _pickNowRow(_nowRows());
+    if (target && !target.querySelector('.status-live')) {
+        const chip = document.createElement('span'); chip.className = 'card-chip chip-next blinker'; chip.textContent = 'NEXT';
+        const t = target.querySelector('.chip-time'); const wrap = target.querySelector('.card-chips');
+        if (t) t.insertAdjacentElement('afterend', chip); else if (wrap) wrap.appendChild(chip);
     }
+    _ensureBlinker();
 }
 function _scrollToNow() {
     if (_scrolledToNow) return;
@@ -1187,16 +1194,13 @@ function _scrollToNow() {
         if (!target) return;
         _nowFlashKey = _nowKeyOf(target); _nowFlashUntil = Date.now() + 4000;
         _scrollRowTo(target, 'smooth');
-        _flashRow(target);
     }, 300);
 }
-// 렌더 직후: 방금 '지금' 카드로 옮겼는데 다시 그려졌다면 같은 카드를 찾아 위치(즉시)와 깜빡임을 이어간다
+// 렌더 직후: 방금 '지금' 카드로 옮겼는데 다시 그려졌다면 같은 카드를 찾아 위치를 이어간다
 function _keepNowAfterRender() {
     if (!_nowFlashKey || Date.now() > _nowFlashUntil) return;
     const target = _nowRows().find(r => _nowKeyOf(r) === _nowFlashKey);
-    if (!target) return;
-    _scrollRowTo(target, 'auto');
-    _flashRow(target);
+    if (target) _scrollRowTo(target, 'auto');
 }
 // 정렬 모드: 종목별(WA 순서) / 시간별(다음 경기 시각순, 날짜 묶음) — 대회별로 기억
 let _sortMode = 'event';
@@ -1340,6 +1344,7 @@ function renderMatrix() {
     }
     container.innerHTML = html;
     updateLiveJumpBadge(liveGroups.length);
+    _markNext();
     if (_sortMode === 'time') { _scrollToNow(); _keepNowAfterRender(); }
 }
 
@@ -2012,6 +2017,7 @@ function _recBannerToggle(el) {
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const d = el.dataset;
     const parts = [d.holder, d.team, d.year].filter(Boolean).map(esc);   // 이름 · 팀 · 연도 — 한 줄에 맞게 (장소·날짜는 뺀다)
+    if (d.prev) parts.push('<span style="color:#999">종전 ' + esc(d.prev) + '</span>');   // 이 대회에서 세운 기록이면 종전 기록도
     line.innerHTML = `<span style="color:${d.color};font-weight:800;margin-right:6px">${esc(d.label)}</span><span style="color:#666">${_REC_LABEL_KO[d.label] || ''}</span>${parts.length ? ' · ' + parts.join(' · ') : ''}`;
     line.hidden = false;
 }
@@ -2019,7 +2025,7 @@ function _buildRecordsBannerHTML(records) {
     if (!records) return '';
     const attr = v => String(v == null ? '' : v).replace(/"/g, '&quot;');
     const chip = (label, color, rec) => rec
-        ? `<span class="record-chip" role="button" tabindex="0" onclick="_recBannerToggle(this)" data-label="${label}" data-color="${color}" data-holder="${attr(rec.holder_name)}" data-team="${attr(rec.holder_team)}" data-venue="${attr(rec.venue)}" data-date="${attr(rec.record_date)}" data-year="${attr(rec.record_year)}" style="background:${color}15;border:1px solid ${color}55;color:${color};"><b>${label}</b>${(rec.record_value||'').toString()}</span>` : '';
+        ? `<span role="button" tabindex="0" onclick="_recBannerToggle(this)" data-label="${label}" data-color="${color}" data-holder="${attr(rec.holder_name)}" data-team="${attr(rec.holder_team)}" data-venue="${attr(rec.venue)}" data-date="${attr(rec.record_date)}" data-year="${attr(rec.record_year)}" data-prev="${attr(rec.prev || '')}" class="record-chip${rec.new_here ? ' record-chip-new' : ''}" style="${rec.new_here ? `background:${color};border:1px solid ${color};color:#fff;` : `background:${color}15;border:1px solid ${color}55;color:${color};`}" title="${rec.new_here ? '이 대회에서 세운 기록' : ''}"><b>${label}</b>${(rec.record_value||'').toString()}</span>` : '';
     const parts = [
         chip('WR', '#6a1b9a', records.world),
         chip('AR', '#0d47a1', records.area),

@@ -61,7 +61,7 @@
 
 ## 기록 표시(NR·PB·SB)와 필드 시기표 (2026-09-24)
 - 주최 측 API 는 한국기록·계주 팀 PB 를 관리하지 않는다(KOR 혼성 계주 3:18.66 에 `RecordInd`·`HasPB` 모두 빈 값). 그래서 `sync._recordFlags` 가 결과마다 판정해 비고(`result.remark`)에 `NR`·`PB`·`SB` 를 적는다(공식 GR·AR·WR 표시와 Q·q 는 그대로 함께).
-  - **NR**: 관심 국가(KOR) 선수·팀만. 우리 기록표 `event_record(record_type='national')` 를 종목명 정규화로 찾아 비교(동률 포함). **공식 결과**면 기록표를 새 값·보유자·연도로 갱신하고 `record_breaking_log` 에 `approved`(reviewed_by `intl-sync`) 한 줄. 7종·10종 세부종목은 제외, 풍속 +2.0 초과는 제외.
+  - **NR**: 관심 국가(KOR) 선수·팀만. 우리 기록표 `event_record(record_type='national')` 를 종목명 정규화로 찾아 비교(동률 포함). **공식 결과**면 기록표를 새 값·보유자·연도로 갱신하고 `record_breaking_log` 에 `approved`(reviewed_by `intl-sync`, review_note 끝에 `종전 값 · 보유자 · 연도`) 한 줄 — `/api/event-records/lookup?event_id=` 가 그 대회에서 세운 기록이면 `national.new_here`·`prev` 로 돌려준다. 7종·10종 세부종목은 제외, 풍속 +2.0 초과는 제외.
   - **PB/SB**: 기준은 같은 종목(이름·성별) 모든 라운드 출전의 PB/SB 중 최고(+개인 종목은 선수 표 값), 또는 주최 측 `HasPB/HasSB`. 공식 결과면 같은 종목 모든 라운드 출전의 PB/SB 를 갱신 → 결승 스타트 리스트·명단에 새 PB 가 바로 보인다. 다시 읽어 값이 PB 와 같아져도 태그는 유지(동률=PB).
 - 화면: 기록 바로 오른쪽에 태그 **하나**(WR>AR>GR>NR>PB>SB, `placing.recordTag`) — 결과·LIVE 행, 한국 선수 블록, 대표팀 명단. 비고의 Q·q 는 하단 메타에 남는다. 줄을 늘리지 않는다.
 - 필드 시기표: 결과 JSON 의 `Splits` 를 읽는다. 높이 `{Distance:'1.71', AttResult:'XO'}` → `height_attempt`(높이·시도별 O/X/-), 거리 `{Distance:'3', Result:'13.45'|'X'|'-'}` + `Wind` → `result`(시도별, 파울 0·패스 -1). 최고 기록은 그대로 `attempt_number NULL` 행. 화면은 시기표가 없어도 최고 기록만 있는 행을 읽는다.
