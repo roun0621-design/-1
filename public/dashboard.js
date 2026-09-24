@@ -1355,7 +1355,8 @@ function renderCategoryTable(groups, label, isLive) {
                 : schedEvt.scheduled_date ? (() => { const dt = new Date(schedEvt.scheduled_date + 'T00:00:00'); return isFinite(dt) ? `<span class="card-chip chip-day">${dt.getMonth() + 1}/${dt.getDate()}(${'일월화수목금토'[dt.getDay()]})</span>` : ''; })()
                 : schedEvt.day ? `<span class="card-chip chip-day">${schedEvt.day}일차</span>` : '';
             const tBorder = schedEvt.is_today ? '#e8dfc0' : '#e2e4e8';
-            timeBadge = `${dayLabel}<span class="card-chip chip-time num-display" style="color:${tColor};background:${tBg};border-color:${tBorder};" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
+            const _doneAll = g.rounds.length > 0 && g.rounds.every(r => r.round_status === 'completed');
+            timeBadge = _doneAll ? dayLabel : `${dayLabel}<span class="card-chip chip-time num-display" style="color:${tColor};background:${tBg};border-color:${tBorder};" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
         }
 
         // Division badge for display mode (color-coded by age group)
@@ -1395,11 +1396,8 @@ function renderCategoryTable(groups, label, isLive) {
         if (_liveR) {
             const _rl = { preliminary: '예선', semifinal: '준결승', final: '결승' }[_liveR.round_type] || '';
             statusBadge = `<span class="status-badge status-live">진행 중${_rl ? ' · ' + _rl : ''}</span>`;
-        } else if (_allDone) {
-            statusBadge = `<span class="status-badge status-done">종료</span>`;
-        } else {
-            statusBadge = `<span class="status-badge status-upcoming">예정</span>`;
         }
+        // '종료'·'예정' 배지는 뺐다(2026-09-24) — 라운드 버튼(결과/스타트 리스트/엔트리)이 이미 말해 준다. 끝난 종목은 날짜만, 앞으로 할 종목은 날짜+시간
 
         // ── 비활성(존재하지 않는) 라운드 표기 통일: '—' 박스 대신 메타라인 "○○ 없음" ──
         const _cols = [];
@@ -1407,8 +1405,7 @@ function renderCategoryTable(groups, label, isLive) {
         if (_colRounds.semifinal) _cols.push(['준결승', semi]);
         if (_colRounds.final) _cols.push(['결승', fin]);
         const _missing = _cols.filter(([, e]) => !e).map(([l]) => l);
-        const metaMissing = (_missing.length && _missing.length < _cols.length)
-            ? `<span class="card-meta-missing">${_missing.join('·')} 없음</span>` : '';
+        const metaMissing = '';   // '예선·준결승 없음' 줄은 뺐다(2026-09-24) — 없는 라운드는 칸이 안 보이는 것으로 충분
 
         // 라운드 셀: 없으면 빈 칸(모바일 라벨도 숨김) — '—' 제거
         const _roundCell = (evt, label) => {
