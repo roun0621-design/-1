@@ -2040,7 +2040,7 @@ function _buildRecordsBannerHTML(records) {
     return `<div class="record-banner-mobile" style="margin:8px 0 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;padding:8px 12px;background:#fffbea;border:1px solid #f1d68a;border-radius:8px;">
         <span style="color:var(--text-muted);font-weight:600;white-space:nowrap;">기존 기록</span>
         <span class="record-chips${parts.length < 3 ? ' few' : ''}">${parts.join('')}</span>
-        <div class="record-detail-line" hidden style="flex-basis:100%;font-size:11px;line-height:1.4;padding-top:4px;border-top:1px dashed #ead9a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+        <div class="record-detail-line" hidden style="flex-basis:100%;font-size:11px;line-height:1.4;padding-top:4px;border-top:1px dashed #ead9a0;word-break:keep-all;"></div>
     </div>`;
 }
 // 기록 값 옆 괄호 신기록 표기 (예: " (CR)" / " (NR, CR)")
