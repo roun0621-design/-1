@@ -131,6 +131,14 @@
         .gender-tab-btn.active[data-gender="F"] { border-bottom-color:#8b1a2a; background:#f0e0e4; }
         .gender-tab-btn.active[data-gender="X"] { border-bottom-color:#b79f58; background:#f8f4ea; }
         .events-scroll { flex:1; overflow-y:auto; overflow-x:auto; -webkit-overflow-scrolling:touch; padding:8px 0; }
+        /* PC: 맥 오버레이 스크롤바가 버튼·카드 오른쪽을 덮어서 — 얇은 고정 스크롤바(자리 차지)로 바꾸고 안쪽에 여백 */
+        @media (min-width:641px) {
+            .events-scroll { padding-right:6px; scrollbar-gutter:stable; scrollbar-width:thin; scrollbar-color:#d6d2c6 transparent; }
+            .events-scroll::-webkit-scrollbar { width:8px; }
+            .events-scroll::-webkit-scrollbar-track { background:transparent; }
+            .events-scroll::-webkit-scrollbar-thumb { background:#d6d2c6; border-radius:8px; border:2px solid transparent; background-clip:padding-box; }
+            .events-scroll::-webkit-scrollbar-thumb:hover { background:#b8b3a5; background-clip:padding-box; }
+        }
         .dashboard-layout { display:flex; flex-direction:column; height:calc(100vh - 60px); overflow:hidden; }
         .matrix-section { margin-bottom:16px; }
         .matrix-section-title { font-size:12px; font-weight:800; color:var(--text-muted); padding:6px 10px; background:var(--bg); border-radius:4px; margin-bottom:6px; letter-spacing:1.2px; }
