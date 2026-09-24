@@ -308,6 +308,21 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         if (other) expect((await request(app).get(`/api/competitions/${other.id}/roster`)).status).toBe(400);
         expect((await request(app).get(`/api/competitions/${fx.comp}/roster?team=JPN`)).body.athletes.length).toBeGreaterThan(0);
     });
+    it('일정 다시: 공식 일정에서 사라진 조·라운드(남자 세단뛰기 예선 → 직결)는 명단·기록이 없으면 지우고 출전은 결승으로 옮긴다', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const before = await db.all("SELECT e.id, e.round_type, (SELECT COUNT(*) FROM heat WHERE event_id=e.id) hc, (SELECT COUNT(*) FROM event_entry WHERE event_id=e.id) ec FROM event e WHERE e.competition_id=? AND e.external_key LIKE 'M.TRPLJUMP%' ORDER BY e.id", fx.comp);
+        expect(before.some(e => e.round_type === 'preliminary' && e.hc > 0)).toBe(true);
+        const preEntries = before.find(e => e.round_type === 'preliminary').ec;
+        const noQual = async (source, tail) => { const r = await fakeFetch(source, tail); return /^schedule\/daily\//.test(tail) && Array.isArray(r) ? r.filter(u => !/^M\.TRPLJUMP.*\.QUAL\./.test(u.Key)) : r; };
+        const st = await sync.setupStructure(db, comp, { fetch: noQual });
+        expect(st.stats.removed_heats).toBeGreaterThanOrEqual(2); expect(st.stats.removed_rounds).toBe(1);
+        const after = await db.all("SELECT e.round_type, (SELECT COUNT(*) FROM event_entry WHERE event_id=e.id) ec FROM event e WHERE e.competition_id=? AND e.external_key LIKE 'M.TRPLJUMP%'", fx.comp);
+        expect(after.map(e => e.round_type)).toEqual(['final']); expect(after[0].ec).toBeGreaterThanOrEqual(preEntries);
+        expect((await db.get("SELECT COUNT(*) c FROM timetable WHERE competition_id=? AND event_name='세단뛰기' AND category='남자' AND round='예선'", fx.comp)).c).toBe(0);
+        // 원래 일정으로 다시 돌리면 예선이 되살아난다
+        const back = await sync.setupStructure(db, comp, { fetch: fakeFetch });
+        expect(back.stats.heats).toBeGreaterThanOrEqual(2);
+    });
     it('상태 API 와 권한', async () => {
         const s = await request(app).get(`/api/admin/intl/${fx.comp}/status`).set('x-admin-key', OP);
         expect(s.status).toBe(200); expect(s.body.counts.events).toBeGreaterThan(48); expect(s.body.source.champ).toBe('AG2026'); expect(s.body.state.structure_at).toBeTruthy();
