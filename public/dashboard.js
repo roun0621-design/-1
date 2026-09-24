@@ -1499,7 +1499,7 @@ function renderCategoryTable(groups, label, isLive) {
         const favCell = '';
         html += `<tr data-row-gender="${_rowGender}"${_tapAttr}${g._sk ? ` data-sched="${g._sk.key}"` : ''}${g.rounds.every(r => r.round_status === 'completed') ? ' data-done="1"' : ''}${g.catKey === 'combined' ? ' data-combined="1"' : ''}>
             ${favCell}
-            <td class="event-name">${genderBadge}${g.name}${divBadge}${g.spotlight ? `<span class="spot-badge" title="${g.spotlight === 'KOR' ? '한국 선수 출전' : g.spotlight + ' 출전'}">${g.spotlight === 'KOR' ? PaceIcons.svg('flagKR', { size: 22 }) : g.spotlight}</span>${_spotChipHtml(g.spot_status)}` : ''}<span class="card-chips">${statusBadge}${timeBadge}</span>${metaMissing}</td>
+            <td class="event-name">${genderBadge}${g.name}${divBadge}<span class="name-tail">${g.spotlight ? `<span class="spot-badge" title="${g.spotlight === 'KOR' ? '한국 선수 출전' : g.spotlight + ' 출전'}">${g.spotlight === 'KOR' ? PaceIcons.svg('flagKR', { size: 22 }) : g.spotlight}</span>${_spotChipHtml(g.spot_status)}` : ''}<span class="card-chips">${statusBadge}${timeBadge}</span></span>${metaMissing}</td>
             ${_isDisplayMode ? `<td data-label="영상" class="${videoCell ? '' : 'cell-empty'}">${videoCell}</td>` : ''}
             ${(_isDisplayMode || _colRounds.wl) ? `<td data-label="${_isDisplayMode ? '명단' : 'W/L'}" class="${(_isDisplayMode ? rosterCell : wlCell) ? '' : 'cell-empty'}">${_isDisplayMode ? rosterCell : wlCell}</td>` : ''}
             ${_colRounds.preliminary ? _roundCell(prelim, '예선') : ''}
