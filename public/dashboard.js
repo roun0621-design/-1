@@ -23,8 +23,8 @@ let _displayRoster = []; // 노출용 대회 명단
 let _currentDivision = '전체'; // 부별 필터
 
 // 알림(관심) 토글 아이콘 — 종(bell) / 종-끄기(bell-off)
-const _BELL_ON = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
-const _BELL_OFF = '<svg class="fav-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+const _BELL_ON = PaceIcons.svg('bell', { size: 16, cls: 'fav-bell' });      // 알림 켜짐 (선 아이콘 체계 공통)
+const _BELL_OFF = PaceIcons.svg('bellOff', { size: 16, cls: 'fav-bell' });
 
 // ── 종목 검색 (툴바 아이콘 → 그 자리에 검색칸) ─────────────────────
 let _searchQuery = '';   // 종목명 부분일치 (예: 400 → 400m·400mH·4X400mR, 멀리 → 멀리뛰기)
@@ -297,7 +297,7 @@ function _renderFilterPanel() {
     const chip = (on, label, onclick, g) => `<button type="button" class="fc${on ? ' on' : ''}"${g ? ` data-g="${g}"` : ''} onclick="${onclick}" aria-pressed="${on}">${esc(label)}</button>`;
     const rows = [];
     // 검색 — 폰에선 툴바 돋보기 대신 여기 (종목명 부분일치: 400 → 400m·400mH·4X400mR)
-    rows.push(`<div class="fs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/></svg><input id="filter-search" type="search" inputmode="search" autocomplete="off" placeholder="종목 검색 · 예) 400, 멀리" value="${esc(_searchQuery || '')}" oninput="_filterSearch(this.value)" onkeydown="if(event.key==='Escape'){this.value='';_filterSearch('');}">${_searchQuery ? `<button type="button" class="fs-x" aria-label="지우기" onclick="_filterSearch(''); _renderFilterPanel();">&times;</button>` : ''}</div>`);
+    rows.push(`<div class="fs">${PaceIcons.svg('search', { size: 16, style: 'flex:none;color:#8a8580' })}<input id="filter-search" type="search" inputmode="search" autocomplete="off" placeholder="종목 검색 · 예) 400, 멀리" value="${esc(_searchQuery || '')}" oninput="_filterSearch(this.value)" onkeydown="if(event.key==='Escape'){this.value='';_filterSearch('');}">${_searchQuery ? `<button type="button" class="fs-x" aria-label="지우기" onclick="_filterSearch(''); _renderFilterPanel();">&times;</button>` : ''}</div>`);
     // 성별 — 종목에 있는 성별만 (행사 모드에서 성별 탭을 숨긴 대회는 줄 자체를 뺀다)
     const genderBar = document.getElementById('gender-tabs');
     const genders = [...new Set(allEvents.filter(e => !e.parent_event_id).map(e => e.gender).filter(Boolean))];
@@ -897,18 +897,18 @@ function renderHeroSchedule() {
     row.classList.toggle('live', !!liveItem);
     if (liveItem) {
         card.classList.add('live');
-        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>';
+        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>';
         titleEl.innerHTML = `<span class="hero-live-dot"></span> LIVE 진행중 ${_heroDayChip(targetDay)}`;
         const nextTxt = nextItem ? ` · 다음 <strong>${_esc(nextItem.event_name)}</strong> ${nextItem.time}` : '';
         subEl.innerHTML = `<strong>${_esc(liveItem.event_name)}</strong> ${_esc(liveItem.round||'')} · ${liveItem.time}${nextTxt}`;
     } else if (isToday && nextItem) {
         card.classList.remove('live');
-        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
         titleEl.innerHTML = `오늘의 시간표 ${_heroDayChip(targetDay)}`;
         subEl.innerHTML = `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`;
     } else {
         card.classList.remove('live');
-        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+        iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
         titleEl.innerHTML = `시간표 ${_heroDayChip(targetDay)}`;
         const subTxt = nextItem
             ? `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`
@@ -957,7 +957,7 @@ function switchGender(g, btn) {
         const mainEl = document.querySelector('main.main-content');
         if (mainEl) mainEl.setAttribute('data-active-gender', g);
     } catch (_) { /* noop */ }
-    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 성별 변경 시 division 탭 목록도 새 성별에 맞게 다시 렌더링
+    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 성별 변경 시 division 탭 목록도 새 성별에 맞게 다시 렌더링
     //    (남자 탭에서 여자/혼성 division 이 보이던 버그 수정)
     if (typeof renderDivisionTabs === 'function') renderDivisionTabs();
     renderMatrix();
@@ -1016,7 +1016,7 @@ function renderDivisionTabs() {
         const genderTabs = document.getElementById('gender-tabs');
         if (genderTabs) genderTabs.after(divBar);
     }
-    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 현재 성별 탭(M/F/X)에 해당하는 events 만 division 목록 추출
+    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg> FIX: 현재 성별 탭(M/F/X)에 해당하는 events 만 division 목록 추출
     //    이전엔 모든 events 의 division 합집합을 보여줘서 "남자" 탭에서도 "선수권(여)" 등이 표시됨.
     //    'ALL' 탭은 전 성별 합집합으로 보여줌 (사용자가 전체 division 을 한눈에 볼 수 있게)
     const existingDivs = [...new Set(
@@ -1644,7 +1644,7 @@ function renderDisplayBtn(evt) {
     const rc = _roundColors[evt.round_type] || { color: '#1565c0', bg: '#e3f2fd', border: '#90caf9' };
     if (evt.result_url) {
         // 노출용: 외부(연맹) 사이트로 넘어가는 칩 → external-link(↗) 아이콘 표시
-        const extIco = '<svg class="ext-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>';
+        const extIco = PaceIcons.svg('external', { size: 12, cls: 'ext-ico' });
         return `<a class="round-btn round-btn-ext" href="${evt.result_url}" target="_blank" rel="noopener" style="background:${rc.bg};color:${rc.color};border:1px solid ${rc.border};cursor:pointer;font-size:10px;padding:3px 8px;text-decoration:none;font-weight:700;" title="결과 보기 (외부 링크로 이동)">${roundL || '결과'}${extIco}</a>`;
     }
     return `<span class="round-btn btn-disabled" style="font-size:10px;padding:3px 6px;" title="결과 링크 없음">${roundL || '—'}</span>`;
@@ -2387,7 +2387,7 @@ function renderLiveCombinedResults(data) {
                 subDefs.forEach(se => {
                     const sc = scores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
                     const p = sc ? (sc.wa_points || 0) : 0;
-                    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
+                    // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
                     pts[se.order] = { points: p, raw: sc ? sc.raw_record : null, status_code: sc ? (sc.status_code || '') : '' };
                     total += p;
                 });
@@ -2421,7 +2421,7 @@ function renderLiveCombinedResults(data) {
                                 const p = r.pts[se.order];
                                 if (!p || p.raw == null)
                                     return `<td style="color:#ccc;font-size:10px;">—</td>`;
-                                // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 이 있으면 우선 표시.
+                                // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 이 있으면 우선 표시.
                                 //     'X'/'PASS'/'-' 등 시도 마크 는 status_code 가 아닌 일부 레거시 데이터 이므로 화이트리스트만 채택.
                                 if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) {
                                     const _sc = p.status_code;
@@ -2490,7 +2490,7 @@ async function _loadCombinedResultsAsync(evt) {
             subDefs.forEach(se => {
                 const sc = scores.find(s => s.event_entry_id === e.event_entry_id && s.sub_event_order === se.order);
                 const p = sc ? (sc.wa_points || 0) : 0;
-                // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
+                // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code (DNS/DNF/DQ/NM) 을 함께 보관 — 0점이어도 DNF/DNS 는 그대로 표시
                 pts[se.order] = { points: p, raw: sc ? sc.raw_record : null, status_code: sc ? (sc.status_code || '') : '' };
                 total += p;
             });
@@ -2537,7 +2537,7 @@ async function _loadCombinedResultsAsync(evt) {
                             const p = r.pts[se.order];
                             if (!p || p.raw == null)
                                 return `<td style="color:#ccc;font-size:10px;cursor:pointer;" onclick="_cResultShowSub(${se.order})">—</td>`;
-                            // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code 는 화이트리스트(DNS/DNF/DQ/NM)만 인정.
+                            // <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> status_code 는 화이트리스트(DNS/DNF/DQ/NM)만 인정.
                             if (p.status_code && ['DNS','DNF','DQ','NM'].includes(p.status_code)) {
                                 const _sc = p.status_code;
                                 const _scColor = (_sc === 'DQ') ? '#a02050' : 'var(--danger)';
@@ -2571,7 +2571,7 @@ async function _loadCombinedResultsAsync(evt) {
                     }).join('')}</tbody>
                 </table>
             </div></div>
-            <p style="margin-top:6px;font-size:10px;color:var(--text-muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
+            <p style="margin-top:6px;font-size:10px;color:var(--text-muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> ${evt.name || (evt.gender === 'M' ? '10종경기' : '7종경기')} 최종 결과 | WA 점수 합산 · 종목명 클릭 시 세부기록 표시</p>
             <div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border);">
                 <div style="font-weight:700;font-size:13px;margin-bottom:6px;">종목별 세부기록</div>
                 <div style="margin-bottom:4px;">
@@ -3361,7 +3361,7 @@ function openPacingPopup(eventName) {
     }
 
     panel.innerHTML = `<div class="result-panel-header">
-        <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> ${eventName} W/L Target</h3>
+        <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> ${eventName} W/L Target</h3>
         ${prCloseBtn('closePacingPopup()', { cls: 'result-panel-close' })}
     </div><div class="result-panel-body">${html}</div>`;
     overlay.classList.add('show'); if (!overlay.classList.contains('locked')) { overlay.classList.add('locked'); if (window.lockBodyScroll) lockBodyScroll(); }
@@ -3500,7 +3500,7 @@ async function loadRosterModalData(eventId) {
             // 소집 상태 뱃지
             if (showCallroomStatus) {
                 if (allChecked) {
-                    html += `<span style="font-size:10px;background:#b79f58;color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;">소집 완료 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg></span>`;
+                    html += `<span style="font-size:10px;background:#b79f58;color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;">소집 완료 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg></span>`;
                 } else if (cntChecked > 0 || cntNoShow > 0) {
                     html += `<span style="font-size:10px;color:#555;">`;
                     html += `<span style="color:#b79f58;font-weight:700;">출석 ${cntChecked}</span>`;

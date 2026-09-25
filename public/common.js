@@ -414,12 +414,12 @@ function _updateOfflineBanner() {
         banner.style.display = 'block';
         banner.style.background = '#e74c3c';
         banner.style.color = '#fff';
-        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 오프라인 — 기록은 로컬에 저장됩니다${_offlineState.pendingCount > 0 ? ` (대기 ${_offlineState.pendingCount}건)` : ''}`;
+        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 오프라인 — 기록은 로컬에 저장됩니다${_offlineState.pendingCount > 0 ? ` (대기 ${_offlineState.pendingCount}건)` : ''}`;
     } else if (_offlineState.pendingCount > 0) {
         banner.style.display = 'block';
         banner.style.background = '#f39c12';
         banner.style.color = '#fff';
-        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 동기화 중... (${_offlineState.pendingCount}건 대기)`;
+        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 동기화 중... (${_offlineState.pendingCount}건 대기)`;
     } else {
         banner.style.display = 'none';
     }
@@ -864,7 +864,7 @@ function _showRecordBreakToast(data) {
     overlay.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10000;max-width:420px;background:linear-gradient(135deg,#fff6dd,#fffbea);border:2px solid #d4a017;border-radius:12px;padding:14px 18px;box-shadow:0 8px 32px rgba(212,160,23,.35);cursor:pointer;animation:slideInRight .35s ease;font-family:var(--font-base,system-ui);';
     overlay.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:24px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg></span>
+            <span style="font-size:24px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg></span>
             <strong style="color:#7a4f00;font-size:14px;letter-spacing:.3px;">${detected} 갱신 감지</strong>
         </div>
         <div style="color:#5a3a00;font-size:13px;line-height:1.45;">
@@ -1509,7 +1509,7 @@ async function refreshPage(btn) {
     setTimeout(() => { if (btn) btn.classList.remove('spinning'); }, 600);
 }
 // 닫기(X) 버튼 HTML — 모든 창이 같은 모양을 쓴다 (styles.css .pr-close)
-function prCloseBtn(onclick, extra) { return `<button type="button" class="pr-close${extra && extra.dark ? ' pr-close-dark' : ''}${extra && extra.cls ? ' ' + extra.cls : ''}" aria-label="닫기" onclick="${onclick}"${extra && extra.style ? ` style="${extra.style}"` : ''}><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button>`; }
+function prCloseBtn(onclick, extra) { return `<button type="button" class="pr-close${extra && extra.dark ? ' pr-close-dark' : ''}${extra && extra.cls ? ' ' + extra.cls : ''}" aria-label="닫기" onclick="${onclick}"${extra && extra.style ? ` style="${extra.style}"` : ''}><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button>`; }
 window.prCloseBtn = prCloseBtn;
 function openMobileMenu() {
     const overlay = document.getElementById('mobile-menu-overlay');
@@ -2022,7 +2022,7 @@ async function openTimetable(compId) {
                     <h3 style="font-size:18px;font-weight:800;margin:0;color:#4a4a4a;">경기 시간표</h3>
                     <p style="font-size:11px;color:#8a8a8a;margin:3px 0 0;font-weight:500;">Competition Timetable · 총 ${totalItems}개 경기</p>
                 </div>
-                <button type="button" class="pr-close" aria-label="닫기" onclick="document.getElementById('timetable-overlay').remove()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+                ${prCloseBtn("document.getElementById('timetable-overlay').remove()")}
             </div>
             <div id="tt-day-tabs" style="display:flex;gap:2px;margin-top:10px;align-items:center;justify-content:center;position:relative;"></div>
         </div>`;
@@ -2140,10 +2140,10 @@ async function openTimetable(compId) {
             const idx = dayKeys.indexOf(activeDay);
             const cntOf = d => { const dd = data.days[d] || {}; return (dd.track || []).length + (dd.field || []).length; };
             // 애플식으로 담백하게: 테두리 없는 쉐브론(터치 영역 40px, 글리프 20px), 가운데는 글자만(날짜 굵게 · 일차 연하게), 아래로 작은 목록
-            const chev = dir => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${dir < 0 ? '15 5 8 12 15 19' : '9 5 16 12 9 19'}"/></svg>`;
+            const chev = dir => `<svg class="ui-icon" width="20" height="20" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${dir < 0 ? 'M30 12L18 24l12 12' : 'M18 12l12 12-12 12'}"/></svg>`;   // 공통 아이콘 체계(48 viewBox, 선 ≈1.2px)
             const btn = (dis, dir) => `<button type="button" ${dis ? 'disabled' : ''} onclick="window._ttShowDay(${dis ? activeDay : dayKeys[idx + dir]})" aria-label="${dir < 0 ? '이전 날' : '다음 날'}" style="width:40px;height:40px;border-radius:50%;border:0;background:transparent;color:${dis ? '#d0d0d0' : '#333'};cursor:${dis ? 'default' : 'pointer'};display:inline-flex;align-items:center;justify-content:center;">${chev(dir)}</button>`;
             tabContainer.innerHTML = `${btn(idx <= 0, -1)}
-                <button type="button" id="tt-day-current" onclick="window._ttToggleDayList()" aria-haspopup="listbox" aria-expanded="false" style="height:40px;padding:0 10px;border:0;background:transparent;color:#1f1d1a;font-size:16px;font-weight:700;letter-spacing:-.01em;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">${_ttDayLabel(activeDay, data.days[activeDay] || {}, data)}<span style="font-size:12px;font-weight:500;color:#888;">${cntOf(activeDay)}경기</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+                <button type="button" id="tt-day-current" onclick="window._ttToggleDayList()" aria-haspopup="listbox" aria-expanded="false" style="height:40px;padding:0 10px;border:0;background:transparent;color:#1f1d1a;font-size:16px;font-weight:700;letter-spacing:-.01em;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">${_ttDayLabel(activeDay, data.days[activeDay] || {}, data)}<span style="font-size:12px;font-weight:500;color:#888;">${cntOf(activeDay)}경기</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
                 ${btn(idx >= dayKeys.length - 1, 1)}
                 <div id="tt-day-list" role="listbox" hidden style="position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:5;background:#fff;border:1px solid #e5e5e5;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.14);min-width:230px;padding:4px;">
                     ${dayKeys.map(d => `<button type="button" role="option" aria-selected="${d === activeDay}" onclick="window._ttShowDay(${d})" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:0;border-radius:8px;background:${d === activeDay ? '#f5f0e0' : 'transparent'};color:#333;font-size:13px;font-weight:${d === activeDay ? 700 : 500};cursor:pointer;text-align:left;">${_ttDayLabel(d, data.days[d] || {}, data)}<span style="font-size:11px;color:#888;">${cntOf(d)}경기</span></button>`).join('')}
@@ -2597,7 +2597,7 @@ async function openDocumentList() {
 async function docDownloadResultPNG(eventId, btn) {
     if (!eventId) return;
     const origText = btn.innerHTML;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 생성중...';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 생성중...';
     btn.disabled = true;
     try {
         const resp = await fetch('/api/documents/result-sheet/' + eventId + '/png');
@@ -2786,7 +2786,7 @@ function _showConflictModal(conflicts) {
 
     const items = conflicts.map((c, i) => `
         <div style="border:1px solid #e5e5e5; border-radius:8px; padding:12px; margin-bottom:10px; background:#fff;">
-            <div style="font-weight:600; color:#c62828; margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 항목 ${i+1}</div>
+            <div style="font-weight:600; color:#c62828; margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 항목 ${i+1}</div>
             <div style="font-size:13px; color:#555; margin-bottom:4px;"><b>경로:</b> ${c.url || '-'}</div>
             <div style="font-size:13px; color:#888; margin-bottom:4px;"><b>오프라인 입력값 (거부됨):</b> ${formatValue(c.rejected_offline_value)}</div>
             <div style="font-size:13px; color:#2e7d32;"><b>운영진 기록 (유지됨):</b> ${formatValue(c.server_value)}</div>
@@ -2796,7 +2796,7 @@ function _showConflictModal(conflicts) {
     overlay.innerHTML = `
         <div style="background:#fff; border-radius:12px; max-width:560px; width:100%; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
             <div style="padding:18px 20px; background:#fff3cd; border-bottom:1px solid #ffe082;">
-                <div style="font-size:18px; font-weight:700; color:#856404;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 오프라인 동기화 — 충돌 알림</div>
+                <div style="font-size:18px; font-weight:700; color:#856404;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 오프라인 동기화 — 충돌 알림</div>
                 <div style="font-size:13px; color:#856404; margin-top:6px; line-height:1.5;">
                     아래 ${conflicts.length}건의 오프라인 입력값은 <b>운영진이 그 사이에 입력한 기록</b>이 우선되어 <b>적용되지 않았습니다.</b><br>
                     필요시 운영진 기록을 확인하고 수동으로 다시 입력해주세요.
@@ -2877,7 +2877,7 @@ function _showConflictModal(conflicts) {
         el.innerHTML = `<img src="/icons/icon-192.png" alt="">
             <div class="t"><b>PACE RISE : Node 앱</b><span>실시간 기록 알림 · 더 빠른 결과 확인</span></div>
             <a class="get" href="${href}" target="_blank" rel="noopener">앱 받기</a>
-            <button type="button" class="x pr-close" aria-label="닫기"><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button>`;
+            <button type="button" class="x pr-close" aria-label="닫기"><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button>`;
         el.querySelector('.x').addEventListener('click', () => {
             try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {}
             el.remove();

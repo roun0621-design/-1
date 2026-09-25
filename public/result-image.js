@@ -200,7 +200,7 @@
         const modal = document.createElement('div'); modal.id = 'ri-modal';
         modal.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:16px;overflow:auto;';
         modal.innerHTML = `<div style="width:min(420px,100%);background:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 20px 60px rgba(0,0,0,.35)">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><b style="font-size:14px">이미지 저장</b><button id="ri-close" type="button" class="pr-close" aria-label="닫기"><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><b style="font-size:14px">이미지 저장</b><button id="ri-close" type="button" class="pr-close" aria-label="닫기"><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button></div>
             <div style="font-size:11px;color:#888;margin-bottom:8px">${pages.length > 1 ? `조마다 한 장 · ${pages.length}장` : '한 장'} · 만드는 중…</div>
             <div id="ri-list" style="display:flex;flex-direction:column;gap:12px"></div></div>`;
         document.body.appendChild(modal); if (window.lockBodyScroll) lockBodyScroll();

@@ -56,7 +56,11 @@
         const size = o.size ? (typeof o.size === 'number' ? o.size + 'px' : o.size) : '1em';
         const style = (o.style ? esc(o.style) + ';' : '');
         const title = o.title ? `<title>${esc(o.title)}</title>` : '';
-        return `<svg class="ui-icon${o.cls ? ' ' + esc(o.cls) : ''}" width="${size}" height="${size}" viewBox="0 0 48 48" ${A} aria-hidden="${o.title ? 'false' : 'true'}"${style ? ` style="${style}"` : ''}>${title}${p}</svg>`;
+        // 선 굵기: 그려지는 선이 크기와 상관없이 ≈1.2px 가 되게 (16px 이면 3.6, 22px 이면 2.6, 48px 이면 1.6) — 작은 아이콘이 실처럼 얇아 다른 아이콘과 달라 보였다
+        const px = typeof o.size === 'number' ? o.size : 16;
+        const sw = o.strokeWidth != null ? o.strokeWidth : Math.max(1.6, Math.min(3.6, Math.round(1.2 * 48 / px * 10) / 10));
+        const attrs = A.replace('stroke-width="2"', `stroke-width="${sw}"`);
+        return `<svg class="ui-icon${o.cls ? ' ' + esc(o.cls) : ''}" width="${size}" height="${size}" viewBox="0 0 48 48" ${attrs} aria-hidden="${o.title ? 'false' : 'true'}"${style ? ` style="${style}"` : ''}>${title}${p}</svg>`;
     }
     const api = { svg, names: Object.keys(PATHS) };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
