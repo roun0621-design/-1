@@ -11,6 +11,7 @@ const fmtT = (s, road) => { if (s == null) return ''; if (s >= 3600) { const h =
 const DAY1 = process.env.DAY1 || '2026-09-23';   // 대회 첫날
 const dayNo = d => Math.round((Date.parse(d + 'T00:00:00+09:00') - Date.parse(DAY1 + 'T00:00:00+09:00')) / 864e5) + 1;
 const dLabel = d => { const dt = new Date(d + 'T00:00:00+09:00'); return `${dt.getMonth() + 1}/${dt.getDate()}(${DOW[dt.getDay()]})`; };
+const shortRule = t => String(t || '').replace(/각 조 (\d+)위까지\(Q\)/, '조 $1위').replace(/\s*\+\s*기록 상위 (\d+)\(q\)/, ' + 기록 $1').replace(/\s*(준결승|결승) 진출/, ' → $1');
 const hasSemi = (name, g) => events.some(e => e.name === name && e.gender === g && e.round_type === 'semifinal');
 
 // ── 결과 행 모으기 ──
@@ -48,9 +49,9 @@ h1{font-size:60px;line-height:1.15;font-weight:900;letter-spacing:-.03em;margin:
 .body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-start}
 .day{margin-top:16px;font-size:25px;font-weight:800;color:#8b1a2a;letter-spacing:.04em;padding-bottom:6px;border-bottom:2px solid #ead9a0;display:flex;align-items:center;gap:10px}
 .day small{font-weight:600;color:#9a958c;font-size:21px}
-.row{display:flex;align-items:center;gap:14px;padding:8px 0;border-bottom:1px solid #ece8de}
-.row .ev{flex:0 0 10.6em;font-weight:700;color:#333;white-space:nowrap;display:flex;align-items:baseline;gap:6px}.row .ev .evn{min-width:0;overflow:hidden;text-overflow:ellipsis}.row .ev .rt{flex:none}.row .ev .rt{font-weight:800;margin-left:4px}.rt.preliminary{color:#1565c0}.rt.semifinal{color:#e65100}.rt.final{color:#b3261e}
-.row .nm{flex:1;min-width:0;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row:has(+ .memrow){border-bottom:none;padding-bottom:2px}.memrow{font-size:.62em;color:#777;font-weight:500;padding:0 0 8px 17.4em;border-bottom:1px solid #ece8de;white-space:nowrap}
+.row{display:flex;align-items:center;gap:14px;padding:.32em 0;border-bottom:1px solid #ece8de}
+.row .ev{flex:0 0 auto;max-width:11em;font-weight:700;color:#333;white-space:nowrap;display:flex;align-items:baseline;gap:6px}.row .ev .evn{min-width:0;overflow:hidden;text-overflow:ellipsis}.row .ev .rt{flex:none}.row .ev .rt{font-weight:800;margin-left:4px}.rt.preliminary{color:#1565c0}.rt.semifinal{color:#e65100}.rt.final{color:#b3261e}
+.row .nm{flex:1;min-width:5.5em;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row:has(+ .memrow){border-bottom:none;padding-bottom:2px}.memrow{font-size:.62em;color:#777;font-weight:500;padding:0 0 8px 17.4em;border-bottom:1px solid #ece8de;white-space:nowrap}
 .row .res{flex:none;display:flex;align-items:center;gap:8px}.row .res .ct{flex:0 0 2.1em;display:flex;justify-content:flex-end}.row .res .cq{flex:0 0 4.3em;display:flex;justify-content:flex-end}.row .res .cp{flex:0 0 3.4em;display:flex;justify-content:flex-end}.row .res .cm{flex:0 0 5.4em;text-align:right}
 .pl{display:inline-block;min-width:44px;padding:2px 10px;border-radius:9px;background:#e9edf6;color:#1a2a5e;font-weight:800;font-size:.8em;text-align:center;white-space:nowrap}
 .st{color:#b3261e;font-weight:800;font-size:.8em}
@@ -67,10 +68,10 @@ h1{font-size:60px;line-height:1.15;font-weight:900;letter-spacing:-.03em;margin:
 .cv-line{display:flex;align-items:center;gap:18px;margin-top:70px;font-size:30px;font-weight:700;color:#8a7640;letter-spacing:.03em}
 .cv-title{font-size:84px;font-weight:900;letter-spacing:-.03em;line-height:1.15;margin-top:24px;word-break:keep-all;margin-bottom:auto}
 /* 예정 */
-.srow{display:flex;align-items:center;gap:16px;padding:6px 0;border-bottom:1px solid #ece8de}
+.srow{display:flex;align-items:center;gap:16px;padding:.28em 0;border-bottom:1px solid #ece8de}
 .srow .tm{flex:0 0 4em;font-family:'D2Coding',monospace;font-size:1.05em;font-weight:700;color:#8a7640}
 .srow .mid{flex:1;min-width:0}.srow .ev{font-weight:700;color:#333}.srow .ev .rt{font-weight:800}.srow .nm{font-weight:900;font-size:1.08em;margin-top:1px}.srow .pbsb{font-family:'D2Coding',monospace;font-size:.82em;color:#555;margin-top:2px}.srow .subs{font-size:.78em;color:#777;margin-top:2px}
-.srow .rk{flex:none;text-align:right;align-self:center}.srow .nm{margin-top:0}.rkp{display:inline-block;padding:4px 11px;border-radius:10px;background:#f1efe9;color:#6b665e;font-family:'D2Coding',monospace;font-weight:800;font-size:.82em;white-space:nowrap}.rkp.good{background:#e6f4ec;color:#1b7f4d}.rkp b{font-family:'D2Coding',monospace;font-size:.8em;letter-spacing:.08em;margin-right:7px;font-weight:800}.rkn{font-size:.74em;color:#8a8580;margin-top:4px}
+.srow .rk{flex:none;text-align:right;align-self:center}.srow .nm{margin-top:0}.rkp{display:inline-block;padding:.22em .6em;border-radius:.5em;background:#f1efe9;color:#6b665e;font-family:'D2Coding',monospace;font-weight:800;font-size:1.02em;white-space:nowrap}.rkp.good{background:#e6f4ec;color:#1b7f4d}.rkp b{font-family:'D2Coding',monospace;font-size:.72em;letter-spacing:.08em;margin-right:.4em;font-weight:800}.rkn{font-size:.72em;color:#8a8580;margin-top:.25em}
 `;
 const TG = `<svg width="0" height="0" style="position:absolute"><defs><g id="tg"><g stroke="none" transform="rotate(33)"><circle r="7" fill="#1a2a5e"/><path d="M-7 0A7 7 0 0 1 7 0A3.5 3.5 0 0 0 0 0A3.5 3.5 0 0 1 -7 0Z" fill="#c8102e"/></g></g></defs></svg>`;
 const flag = (sz) => `<span class="flag" style="width:${sz}px;height:${Math.round(sz * .68)}px"><svg viewBox="-12 -8 24 16" width="${sz - 8}" height="${Math.round((sz - 8) * .68)}"><use href="#tg"/></svg></span>`;
@@ -90,7 +91,7 @@ function resultCards(days, title, filePrefix) {
   const medals = roster.medals;
   return pages.map((pg, i) => {
     const total = pg.reduce((a, x) => a + x.rows.length, 0);
-    const fs = total >= 12 ? 25 : total >= 9 ? 27 : 30;
+    const dayHeads = pg.length; const avail = 880 - dayHeads * 60; const rowH = avail / Math.max(total, 1); const fs = Math.round(Math.max(26, Math.min(30, rowH * 0.42)));   // 30 넘으면 우측 열이 이름 칸을 잡아먹는다
     const body = pg.map(x => `<div class="day">${dLabel(x.d)} · ${dayNo(x.d)}일차 <small>${x.rows.length}경기</small></div>${x.rows.map(r => rowHtml(r, fs)).join('')}`).join('');
     const sub = `메달 <b style="color:#c7a12a">금 ${medals.gold}</b> · <b style="color:#9ba2ac">은 ${medals.silver}</b> · <b style="color:#a1632c">동 ${medals.bronze}</b> &nbsp;·&nbsp; 대회 공식 결과 기준`;
     return { file: `${filePrefix}_${i + 1}.png`, html: `<section class="card">${head(`2026 아이치·나고야 아시안게임 육상 · 대한민국`, title, sub, `${String(i + 2).padStart(2, '0')} / ${String(pages.length + 1).padStart(2, '0')}`)}<div class="body">${body}</div>${foot()}</section>` };
@@ -100,10 +101,10 @@ function resultCards(days, title, filePrefix) {
 function scheduleCards(day, list, filePrefix) {
   const per = Math.ceil(list.length / Math.ceil(list.length / 8)); const pages = []; for (let i = 0; i < list.length; i += per) pages.push(list.slice(i, i + per));   // 최대 8행, 페이지 간 균등
   return pages.map((pg, i) => {
-    const fs = pg.length >= 8 ? 22 : pg.length >= 7 ? 24 : pg.length >= 5 ? 27 : 30;
+    const rowH = 900 / Math.max(pg.length, 1); const fs = Math.round(Math.max(22, Math.min(30, rowH * 0.215)));
     const rowsHtml = pg.map(x => {
       const rk = x.rank && x.rank.all ? (x.rt === 'final' || x.rank.heats === 1 ? `<span class="rkp${x.rank.all.r <= 3 ? ' good' : ''}"><b>RANK</b>${x.rank.all.r}/${x.rank.all.n}</span>` : `<span class="rkp${x.rank.heat && x.rank.heat.r <= 3 ? ' good' : ''}"><b>RANK</b>${x.rank.heat.r}/${x.rank.heat.n}</span><div class="rkn">조 기준 · 전체 ${x.rank.all.r}/${x.rank.all.n}${x.rank.lane ? ` · ${x.rank.heat_number ? x.rank.heat_number + '조 ' : ''}${x.rank.lane}레인` : ''}</div>`) : (x.combined ? `<span class="rkp"><b>10종</b>Day 1</span>` : x.entries ? `<span class="rkp"><b>엔트리</b>${x.entries}명</span>` : '');
-      return `<div class="srow" style="font-size:${fs}px"><div class="tm">${x.time}</div><div class="mid"><div class="ev">${G[x.g]} ${esc(x.ev)} <span class="rt ${x.combined ? '' : x.rt}">${x.combined ? 'Day 1' : (R[x.rt] || '')}${x.heat && x.rt !== 'final' && !x.combined ? ' ' + x.heat + '조' : ''}</span></div><div class="nm">${esc(x.name)}</div>${x.subs ? `<div class="subs">${esc(x.subs)}${x.subs.split('·').length < 5 ? ' · 21:20 400m' : ''}</div>` : `<div class="pbsb">${x.pb ? 'PB ' + esc(x.pb) : ''}${x.sb ? ' · SB ' + esc(x.sb) : ''}${x.rule ? ` · <span style="font-family:'Noto Sans KR';color:#8a8580">${esc(x.rule)}</span>` : ''}</div>`}</div><div class="rk">${rk}</div></div>`;
+      return `<div class="srow" style="font-size:${fs}px"><div class="tm">${x.time}</div><div class="mid"><div class="ev">${G[x.g]} ${esc(x.ev)} <span class="rt ${x.combined ? '' : x.rt}">${x.combined ? 'Day 1' : (R[x.rt] || '')}${x.heat && x.rt !== 'final' && !x.combined ? ' ' + x.heat + '조' : ''}</span></div><div class="nm">${esc(x.name)}</div>${x.subs ? `<div class="subs">${esc(x.subs)}${x.subs.split('·').length < 5 ? ' · 21:20 400m' : ''}</div>` : `<div class="pbsb">${x.pb ? 'PB ' + esc(x.pb) : ''}${x.sb ? ' · SB ' + esc(x.sb) : ''}${x.rule ? ` · <span style="font-family:'Noto Sans KR';color:#8a8580;white-space:nowrap">${esc(shortRule(x.rule))}</span>` : ''}</div>`}</div><div class="rk">${rk}</div></div>`;
     }).join('');
     return { file: `${filePrefix}_${i + 1}.png`, html: `<section class="card">${head(`2026 아이치·나고야 아시안게임 육상 · 대한민국`, `${dLabel(day)} 오늘의 출전`, `${dayNo(day)}일차 · 한국 선수 ${list.length}경기 · 한국시간 · RANK는 스타트 리스트 PB 순번(참고)`, `${String(i + 2).padStart(2, '0')} / ${String(pages.length + 1).padStart(2, '0')}`)}<div class="body">${rowsHtml}</div>${foot()}</section>` };
   });
