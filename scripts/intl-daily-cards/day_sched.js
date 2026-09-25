@@ -1,10 +1,10 @@
 // 특정 날짜의 한국 선수 출전 목록 + 스타트 리스트 PB 순번 (앱 규칙과 동일)
-const day = process.argv[2]; const base = 'http://localhost:3199';
+const day = process.argv[2]; const base = process.env.BASE || 'https://pace-rise-node.com'; const COMP = process.env.COMP || '63';
 const parse = v => { if (v == null || v === '') return null; const s = String(v).trim(); if (s.includes(':')) { const p = s.split(':').map(parseFloat); return p.length === 2 ? p[0] * 60 + p[1] : p[0] * 3600 + p[1] * 60 + p[2]; } const n = parseFloat(s); return isNaN(n) ? null : n; };
 (async () => {
   const j = async u => (await fetch(base + u)).json();
-  const roster = await j('/api/competitions/2/roster');
-  const events = await j('/api/events?competition_id=2');
+  const roster = await j(`/api/competitions/${COMP}/roster`);
+  const events = await j(`/api/events?competition_id=${COMP}`);
   const out = [];
   const seenEv = new Map();
   for (const a of [...roster.athletes, ...roster.teams]) for (let e of a.events) {

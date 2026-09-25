@@ -77,3 +77,6 @@ Static pages in `public/` (no framework, no bundler) — `record.html`+`record.j
 - `docs/MODULARIZATION_PROGRESS.md` — server.js decomposition plan & safety rules.
 - `docs/EXTERNAL_API.md`, `SCOREBOARD_API_GUIDE.md`, `FIELD_EVENT_GUIDE.md` — API/feature references.
 - `db/schema.sql` / `db/schema.pg.sql` — table definitions (30+ tables).
+
+## 대회 기간 인계 (2026-09 아시안게임)
+다른 맥에서 이어서 작업할 때는 먼저 `docs/HANDOFF_AG2026.md` 를 읽는다 — 운영 대회 id, 지금까지 결과, 매일 만드는 인스타 데일리 카드 절차(`scripts/intl-daily-cards/`), 진행 중인 iOS 푸시 작업이 정리돼 있다.

@@ -1,13 +1,15 @@
 // 데일리 카드 생성기 — 결과 다이제스트(일차별) + 출전 예정(하루). 입력: roster.json(결과), dayN.json(예정), events.json
 const fs = require('fs'); const path = require('path');
-const S = path.dirname(__dirname);
+// 데이터 폴더: DATA 환경변수(기본 = 이 폴더의 work/). fetch.js 가 roster.json·events.json 을 여기 받아 둔다
+const S = process.env.DATA || path.join(__dirname, 'work');
 const roster = JSON.parse(fs.readFileSync(S + '/roster.json', 'utf8'));
 const events = JSON.parse(fs.readFileSync(S + '/events.json', 'utf8'));
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const G = { M: '남자', F: '여자', X: '혼성' }, R = { preliminary: '예선', semifinal: '준결승', final: '결승' };
 const DOW = '일월화수목금토';
 const fmtT = (s, road) => { if (s == null) return ''; if (s >= 3600) { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60; return `${h}:${String(m).padStart(2, '0')}:${String(Math.round(r)).padStart(2, '0')}`; } if (s >= 60) { const m = Math.floor(s / 60), r = s - m * 60; return `${m}:${r < 10 ? '0' : ''}${r.toFixed(2)}`; } return s.toFixed(2); };
-const dayNo = d => Math.round((Date.parse(d + 'T00:00:00+09:00') - Date.parse('2026-09-23T00:00:00+09:00')) / 864e5) + 1;
+const DAY1 = process.env.DAY1 || '2026-09-23';   // 대회 첫날
+const dayNo = d => Math.round((Date.parse(d + 'T00:00:00+09:00') - Date.parse(DAY1 + 'T00:00:00+09:00')) / 864e5) + 1;
 const dLabel = d => { const dt = new Date(d + 'T00:00:00+09:00'); return `${dt.getMonth() + 1}/${dt.getDate()}(${DOW[dt.getDay()]})`; };
 const hasSemi = (name, g) => events.some(e => e.name === name && e.gender === g && e.round_type === 'semifinal');
 
@@ -114,6 +116,6 @@ if (require.main === module) {
   if (mode === 'results') { const days = process.argv[3].split(','); const title = process.argv[4]; out.push(coverCard(title.replace('<br>', ' '), process.argv[5] + '_0.png')); out.push(...resultCards(days, title.replace('<br>', ' '), process.argv[5])); }
   if (mode === 'schedule') { const day = process.argv[3]; const list = JSON.parse(fs.readFileSync(process.argv[4], 'utf8')); out.push(coverCard(`${dLabel(day)} 오늘의 출전`, process.argv[5] + '_0.png')); out.push(...scheduleCards(day, list, process.argv[5])); }
   const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Audiowide&display=swap"><style>${CSS}</style></head><body>${TG}${out.map(o => o.html).join('')}</body></html>`;
-  fs.writeFileSync(__dirname + '/page.html', html); fs.writeFileSync(__dirname + '/page.json', JSON.stringify(out.map(o => o.file)));
+  fs.mkdirSync(S, { recursive: true }); fs.writeFileSync(S + '/page.html', html); fs.writeFileSync(S + '/page.json', JSON.stringify(out.map(o => o.file))); try { fs.copyFileSync(path.join(__dirname, 'appicon.png'), S + '/appicon.png'); } catch (e) {}
   console.log('cards', out.map(o => o.file).join(', '));
 }
