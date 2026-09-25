@@ -67,3 +67,32 @@ describe('웹푸시(FCM)', () => {
         expect(res.status).toBe(400);
     });
 });
+
+describe('네이티브 앱 푸시(앱스토어 iOS·안드로이드)', () => {
+    it('토큰 등록에 platform 저장 — 없으면 web, 이상한 값도 web', async () => {
+        const db = require('../../server.js').db;
+        for (const [plat, want] of [['ios', 'ios'], ['android', 'android'], [undefined, 'web'], ['tv', 'web']]) {
+            const token = 'native-' + (plat || 'none') + '-' + Date.now();
+            const res = await request(app).post('/api/push/register').send({ token, platform: plat });
+            expect(res.status).toBe(200);
+            const row = await db.get('SELECT platform FROM push_token WHERE token=?', token);
+            expect(row.platform).toBe(want);
+        }
+    });
+    it('플랫폼별 메시지 — iOS 는 notification+apns(alert·sound), 안드로이드는 notification+android, 웹은 data-only', () => {
+        const { buildMessage } = require('../../lib/pushSender.js');
+        const ios = buildMessage('ios', { title: '결과', body: '여자 100m 결승', data: { event_id: 7, url: '/dashboard.html?comp=63' } });
+        expect(ios.notification).toEqual({ title: '결과', body: '여자 100m 결승' });
+        expect(ios.apns.payload.aps.sound).toBe('default'); expect(ios.apns.headers['apns-priority']).toBe('10');
+        expect(ios.data).toMatchObject({ title: '결과', event_id: '7', url: '/dashboard.html?comp=63' });
+        const and = buildMessage('android', { title: 't', body: 'b' });
+        expect(and.notification).toEqual({ title: 't', body: 'b' }); expect(and.android.priority).toBe('high');
+        const web = buildMessage('web', { title: 't', body: 'b', data: { x: 1 } });
+        expect(web.notification).toBeUndefined(); expect(web.data).toEqual({ title: 't', body: 'b', x: '1' }); expect(web.webpush.headers.Urgency).toBe('high');
+    });
+    it('sendToTokens 는 문자열·{token,platform} 섞어 받아도 안전(미설정이면 skipped)', async () => {
+        const { sendToTokens } = require('../../lib/pushSender.js');
+        const r = await sendToTokens(['a', { token: 'b', platform: 'ios' }], { title: 't', body: 'b' });
+        expect(r.ok).toBe(false); expect(r.skipped).toBe(true);
+    });
+});

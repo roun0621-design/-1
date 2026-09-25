@@ -9,6 +9,55 @@
     var _cfg = null;
     var _token = null;
 
+    // ── 네이티브 앱 브리지 (앱스토어 iOS / 안드로이드 래퍼) ──────────────────────────────
+    // 껍데기(WKWebView)는 웹푸시가 안 되므로 네이티브가 FCM 토큰을 받아 여기로 넘긴다. 약속:
+    //   네이티브 → 웹 (문서 시작 시 주입):  window.PaceNativePush = { platform: 'ios' | 'android' }
+    //   웹 → 네이티브 (권한 요청):          window.webkit.messageHandlers.pacePush.postMessage({ type: 'request' })   (안드로이드: window.PaceNativePushAndroid.request())
+    //   네이티브 → 웹 (토큰/거부):          window.PaceNativePush.onToken(token)   /   window.PaceNativePush.onDenied()
+    //   알림 탭:                            네이티브가 data.url 로 웹뷰를 이동
+    var _nativeWait = null;
+    function _native() { return (window.PaceNativePush && window.PaceNativePush.platform) ? window.PaceNativePush : null; }
+    function _isWrapperWithoutBridge() {   // 옛 빌드의 앱스토어 앱: iOS 인데 사파리도 아니고(WKWebView 는 UA 에 Safari/ 가 없다) 브리지도 없다
+        var ua = navigator.userAgent || '';
+        return /iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua) && !_native();
+    }
+    async function _registerNativeToken(token, platform) {
+        var rr = await fetch('/api/push/register', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: token, audience: currentAudience(), competition_id: currentCompId(), platform: platform })
+        });
+        if (!rr.ok) return { ok: false, reason: 'register-failed-' + rr.status };
+        _token = token;
+        try { localStorage.setItem('pr_native_push_token', token); localStorage.setItem('pr_push_granted', '1'); } catch (e) {}
+        syncFavorites();
+        return { ok: true, token: token };
+    }
+    function _installNativeHooks() {
+        var n = _native(); if (!n) return;
+        n.onToken = function (token) {
+            var r = _registerNativeToken(String(token || ''), n.platform);
+            if (_nativeWait) { var w = _nativeWait; _nativeWait = null; r.then(w.resolve, w.resolve); }
+        };
+        n.onDenied = function () { if (_nativeWait) { var w = _nativeWait; _nativeWait = null; w.resolve({ ok: false, reason: 'denied' }); } };
+        n.ready = true;
+    }
+    function _nativeRequest() {
+        return new Promise(function (resolve) {
+            _nativeWait = { resolve: resolve };
+            setTimeout(function () { if (_nativeWait) { _nativeWait = null; resolve({ ok: false, reason: 'native-timeout' }); } }, 20000);
+            try {
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pacePush) window.webkit.messageHandlers.pacePush.postMessage({ type: 'request' });
+                else if (window.PaceNativePushAndroid && window.PaceNativePushAndroid.request) window.PaceNativePushAndroid.request();
+                else { _nativeWait = null; resolve({ ok: false, reason: 'no-bridge' }); }
+            } catch (e) { _nativeWait = null; resolve({ ok: false, reason: 'bridge-error' }); }
+        });
+    }
+    // 이미 허용한 기기인가 (웹: Notification.permission, 네이티브: 토큰을 받아 둔 적이 있는가)
+    function _granted() {
+        if (_native()) { try { return !!localStorage.getItem('pr_native_push_token'); } catch (e) { return false; } }
+        return ('Notification' in window) && Notification.permission === 'granted';
+    }
+
     function loadScript(src) {
         return new Promise(function (resolve, reject) {
             if (document.querySelector('script[src="' + src + '"]')) { resolve(); return; }
@@ -38,6 +87,13 @@
     }
 
     async function _registerToken(requestPermission) {
+        if (_native()) {   // 네이티브 앱: 브리지로 권한·토큰
+            _installNativeHooks();
+            var saved = null; try { saved = localStorage.getItem('pr_native_push_token'); } catch (e) {}
+            if (saved && !requestPermission) return _registerNativeToken(saved, _native().platform);
+            return _nativeRequest();
+        }
+        if (_isWrapperWithoutBridge()) return { ok: false, reason: 'wrapper-old' };
         var cfg = await getConfig();
         if (!cfg || !cfg.configured) return { ok: false, reason: 'not-configured' };
         if (!window.isSecureContext) return { ok: false, reason: 'insecure' };  // http면 푸시 불가
@@ -97,6 +153,8 @@
             var r = await _registerToken(true);
             if (r.ok) { uiAlert('알림이 켜졌습니다. 이제 공지를 받을 수 있어요.'); }
             else if (r.reason === 'insecure') { uiAlert('보안(https) 주소가 아니라서 알림을 켤 수 없어요.\n주소창이 https:// 로 시작하는지 확인해 주세요. (http/IP 접속은 불가)'); }
+            else if (r.reason === 'wrapper-old') { uiAlert('앱 알림은 다음 앱 업데이트에서 지원돼요.\n앱스토어에서 업데이트해 주세요.'); }
+            else if (r.reason === 'native-timeout' || r.reason === 'no-bridge') { uiAlert('알림 설정 응답이 없어요. 앱을 완전히 닫았다가 다시 열어 주세요.'); }
             else if (r.reason === 'unsupported') {
                 // iOS 앱스토어 심사 대응: iOS에서는 타 플랫폼(안드로이드/크롬) 언급을 넣지 않는다.
                 var _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '');
@@ -119,7 +177,8 @@
     // 이미 허용한 사용자는 자동 재등록(권한 요청 없음)
     async function autoInit() {
         try {
-            if (('Notification' in window) && Notification.permission === 'granted') {
+            if (_native()) _installNativeHooks();   // 네이티브가 실행 직후 onToken 을 부를 수 있게 먼저 걸어 둔다
+            if (_granted()) {
                 await _registerToken(false);
             }
         } catch (e) { /* 조용히 무시 */ }
@@ -162,7 +221,7 @@
     function showPushPrompt(opts) {
         opts = opts || {};
         // force(테스트)면 허용 상태여도 표시. 평소엔 이미 허용이면 안 띄움
-        if (!opts.force && (!('Notification' in window) || Notification.permission === 'granted')) return;
+        if (!opts.force && ((!_native() && !('Notification' in window)) || _granted())) return;
         if (document.getElementById('pr-push-ov')) return; // 중복 방지
         _injectPromptStyle();
         var ov = document.createElement('div'); ov.className = 'pr-push-ov'; ov.id = 'pr-push-ov';
@@ -193,7 +252,7 @@
             // 테스트: 주소에 ?pushprompt=1 붙이면 이미 허용했어도 강제로 한번 보여줌
             var force = /[?&]pushprompt=1/.test(location.search);
             if (force) { showPushPrompt({ title: '경기 알림 받기', message: '관심 종목의 소집·결과를 휴대폰 알림으로 받아보세요. (테스트 표시)', force: true }); return; }
-            if (!('Notification' in window) || Notification.permission === 'granted') return;
+            if ((!_native() && !('Notification' in window)) || _granted()) return;
             if (_dismissed('pace_push_home_dismiss')) return;
             var cfg = await getConfig();
             if (!cfg || !cfg.configured) return;
@@ -203,12 +262,13 @@
 
     // 종목 토글을 켤 때 유도(아직 알림 미허용일 때만)
     function promptToggle() {
-        if (!('Notification' in window) || Notification.permission === 'granted') return;
+        if ((!_native() && !('Notification' in window)) || _granted()) return;
         if (_dismissed('pace_push_toggle_dismiss')) return;
         showPushPrompt({ title: '경기 알림 켜기', message: '이 종목의 소집·결과 알림을 받으려면 알림을 켜주세요.', dismissKey: 'pace_push_toggle_dismiss' });
     }
 
-    window.PaceRisePush = { enable: enable, autoInit: autoInit, syncFavorites: syncFavorites, maybeShowHomePrompt: maybeShowHomePrompt, promptToggle: promptToggle };
+    window.PaceRisePush = { enable: enable, autoInit: autoInit, syncFavorites: syncFavorites, maybeShowHomePrompt: maybeShowHomePrompt, promptToggle: promptToggle, isGranted: _granted, isNative: function () { return !!_native(); } };
+    if (_native()) _installNativeHooks();
     // 페이지 로드 후: 자동 재등록(이미 허용 시) + 홈 유도 팝업(미허용 시)
     function _onReady() {
         setTimeout(autoInit, 1500);

@@ -25,7 +25,7 @@ describe('관심 종목 알림 흐름', () => {
         expect((await request(app).post('/api/push/interests').send({ token: 'tok-B', competition_id: comp, keys: ['F|100m'] })).body.count).toBe(1);
         const event = await db.get('SELECT * FROM event WHERE id=?', ev);
         const r = await push.notifyEventInterest(event, { kind: 'result', title: '남자 높이뛰기 결승 결과 발표', body: '확인' });
-        expect(r.sent).toBe(1); expect(sent[0].tokens).toEqual(['tok-A']); expect(sent[0].msg.title).toMatch(/높이뛰기/);
+        expect(r.sent).toBe(1); expect(sent[0].tokens).toEqual([{ token: 'tok-A', platform: 'web' }]); expect(sent[0].msg.title).toMatch(/높이뛰기/);
         const r2 = await push.notifyEventInterest(event, { kind: 'result', title: 'x' });
         expect(r2.deduped).toBe(true); expect(sent.length).toBe(1);
         // 관심을 지우면 안 간다 (다른 종류 kind 로 확인 — 중복 방지와 무관)

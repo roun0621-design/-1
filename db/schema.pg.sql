@@ -680,6 +680,7 @@ CREATE TABLE IF NOT EXISTS "push_token" (
     "audience" TEXT NOT NULL DEFAULT 'public',
     "competition_id" BIGINT,
     "user_agent" TEXT NOT NULL DEFAULT '',
+    "platform" TEXT NOT NULL DEFAULT 'web',
     "active" BIGINT NOT NULL DEFAULT 1,
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "updated_at" TEXT NOT NULL DEFAULT NOW()

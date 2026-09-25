@@ -883,6 +883,8 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS push_token (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`); } catch(e) { console.error('[DB] push_token error:', e.message); }
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience)`); } catch(e) {}
+// 네이티브 앱(앱스토어 iOS·안드로이드) 토큰 구분 — iOS 는 APNs 알림 형식으로 보내야 표시된다 (2026-09-25)
+try { db.exec(`ALTER TABLE push_token ADD COLUMN platform TEXT NOT NULL DEFAULT 'web'`); } catch(e) {}
 // 관심 종목(즐겨찾기) — fav_key = '성별|종목명' (예: 'M|100m')
 try { db.exec(`CREATE TABLE IF NOT EXISTS push_interest (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1756,6 +1758,7 @@ if (db.isAsync) {
                 updated_at TEXT NOT NULL DEFAULT NOW()
             )`); } catch(e) { console.error('[PG migration] push_token error:', e.message); }
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience)`); } catch(e) {}
+            try { await db.run(`ALTER TABLE push_token ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'web'`); } catch(e) {}
             try { await db.run(`CREATE TABLE IF NOT EXISTS push_interest (
                 id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                 token TEXT NOT NULL,
