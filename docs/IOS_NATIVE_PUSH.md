@@ -65,3 +65,12 @@
 
 ## 안드로이드(나중)
 같은 약속으로 `window.PaceNativePush = { platform:'android' }` + `window.PaceNativePushAndroid.request()` (JavascriptInterface) 만 만들면 서버는 그대로 동작한다. TWA(PWABuilder 안드로이드)는 크롬 웹푸시가 그대로 되므로 보통 필요 없다.
+
+## (추가, 2026-09-26) 결과 이미지 '사진 앱에 저장' 브리지 — `paceSave`
+앱스토어 앱(WKWebView)은 공유창(`navigator.share`)과 다운로드가 안 되므로, 결과 이미지 저장을 네이티브가 맡는다. 없으면 웹이 "이미지를 길게 눌러 '사진에 추가'"로 안내한다.
+
+Claude Code 프롬프트에 아래를 덧붙인다:
+```
+7. 메시지 핸들러 "paceSave" 도 등록해 줘. body 는 { name: String, base64: String }(PNG). Data(base64Encoded:) → UIImage → PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from:) } 로 사진 앱에 저장하고, 끝나면 웹에 window.PaceNativePush.onSaved(true|false) 를 evaluateJavaScript 로 호출해. Info.plist 에 NSPhotoLibraryAddUsageDescription("경기 결과 이미지를 사진 앱에 저장합니다") 추가. 권한이 거부돼 있으면 onSaved(false).
+```
+웹 쪽(`public/result-image.js`)은 `window.webkit.messageHandlers.paceSave` 가 있으면 그쪽으로 보내고 "사진 앱에 저장했습니다" 토스트를 띄운다.

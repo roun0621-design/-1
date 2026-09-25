@@ -156,12 +156,23 @@
             ignoreElements: node => node !== stage && node.parentElement === document.body && !stage.contains(node) });   // 고정 헤더·툴바·모달이 이미지에 찍히지 않게
         return new Promise(res => canvas.toBlob(res, 'image/png'));
     }
+    // 저장 경로 (환경마다 다르다)
+    //   1) 공유창(navigator.share + 파일): 사파리·홈 화면 웹앱 → '이미지 저장'으로 사진 앱에
+    //   2) 앱스토어 앱(WKWebView): 네이티브 브리지 paceSave 가 있으면 사진 앱에 바로 저장, 없으면 '길게 눌러 사진에 추가' 안내 (a[download] 는 WKWebView 에서 아무 일도 안 일어난다)
+    //   3) PC: PNG 다운로드
+    const _isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent || '');
+    const _blobToBase64 = blob => new Promise(res => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.readAsDataURL(blob); });
     async function _save(blob, name) {
         const file = new File([blob], name, { type: 'image/png' });
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return 'shared'; } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; } }
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.paceSave) {
+            try { window.webkit.messageHandlers.paceSave.postMessage({ name, base64: await _blobToBase64(blob) }); return 'native'; } catch (e) {}
+        }
+        if (_isIOS()) return 'longpress';
         const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000);
         return 'downloaded';
     }
+    const _canShareFiles = () => { try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([new Blob(['x'])], 'x.png', { type: 'image/png' })] })); } catch (e) { return false; } };
     function _closeModal() { const m = document.getElementById('ri-modal'); if (m) m.remove(); const st = document.getElementById('ri-stage'); if (st) st.remove(); if (window.unlockBodyScroll) unlockBodyScroll(); }
     async function openResultImage(eventId) {
         if (document.getElementById('ri-modal')) return;
@@ -189,8 +200,10 @@
                 const url = URL.createObjectURL(blob);
                 const name = `${(pages[i].title || 'result').replace(/[^\w가-힣().-]+/g, '_')}_${Date.now()}.png`;
                 const item = document.createElement('div');
-                item.innerHTML = `<img src="${url}" style="width:100%;border-radius:8px;border:1px solid #e5e5e5;display:block"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><span style="font-size:12px;color:#666">${esc(pages[i].title)} · ${pages[i].rows}명</span><button class="btn btn-sm btn-primary" style="font-size:12px">저장 / 공유</button></div>`;
-                item.querySelector('button').onclick = async () => { const r = await _save(blob, name); if (r === 'downloaded' && window.toast) toast('저장했습니다', 'success'); };
+                const longPressOnly = _isIOS() && !_canShareFiles() && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.paceSave);
+                item.innerHTML = `<img src="${url}" alt="${esc(pages[i].title)}" style="width:100%;border-radius:8px;border:1px solid #e5e5e5;display:block;-webkit-touch-callout:default"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px"><span style="font-size:12px;color:#666">${esc(pages[i].title)} · ${pages[i].rows}명</span>${longPressOnly ? '<span style="font-size:12px;color:#8b1a2a;font-weight:700;text-align:right">이미지를 길게 눌러 \'사진에 추가\'</span>' : '<button class="btn btn-sm btn-primary" style="font-size:12px">저장 / 공유</button>'}</div>`;
+                const btn = item.querySelector('button');
+                if (btn) btn.onclick = async () => { const r = await _save(blob, name); if (window.toast) { if (r === 'downloaded') toast('저장했습니다', 'success'); else if (r === 'native') toast('사진 앱에 저장했습니다', 'success'); else if (r === 'longpress') toast("이미지를 길게 눌러 '사진에 추가'를 선택하세요", 'info'); } };
                 list.appendChild(item);
             }
             const note = modal.querySelector('div[style*="color:#888"]'); if (note) note.textContent = `${pages.length > 1 ? `조마다 한 장 · ${pages.length}장` : '한 장'} · 길게 눌러 저장할 수도 있어요`;
