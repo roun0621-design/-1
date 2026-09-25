@@ -1249,14 +1249,21 @@ function renderPageNav(currentPage) {
         btnGroup.appendChild(loginBtn);
         headerInner.appendChild(btnGroup);
 
-        // ── Mobile hamburger button ──
+        // ── 폰 머리글 오른쪽: 새로고침 + 메뉴 (선 아이콘, 같은 크기·같은 테두리) ──
         if (!document.getElementById('hamburger-btn')) {
+            const acts = document.createElement('div'); acts.className = 'header-phone-actions';
+            const refresh = document.createElement('button');
+            refresh.className = 'hamburger-btn refresh-btn'; refresh.id = 'refresh-btn'; refresh.type = 'button';
+            refresh.setAttribute('aria-label', '새로고침'); refresh.title = '새로고침';
+            refresh.innerHTML = (window.PaceIcons ? PaceIcons.svg('refresh', { size: 20 }) : '↻');
+            refresh.onclick = function () { refreshPage(refresh); };
             const hamburger = document.createElement('button');
-            hamburger.className = 'hamburger-btn';
-            hamburger.id = 'hamburger-btn';
-            hamburger.innerHTML = '&#9776;';
+            hamburger.className = 'hamburger-btn'; hamburger.id = 'hamburger-btn'; hamburger.type = 'button';
+            hamburger.setAttribute('aria-label', '메뉴');
+            hamburger.innerHTML = (window.PaceIcons ? PaceIcons.svg('menu', { size: 22 }) : '&#9776;');
             hamburger.onclick = function() { openMobileMenu(); };
-            headerInner.appendChild(hamburger);
+            acts.appendChild(refresh); acts.appendChild(hamburger);
+            headerInner.appendChild(acts);
         }
     }
 
@@ -1491,6 +1498,15 @@ function lockBodyScrollUntilRemoved(el) {
     lockBodyScroll();
     const mo = new MutationObserver(() => { if (!el.isConnected) { mo.disconnect(); unlockBodyScroll(); } });
     mo.observe(document.body, { childList: true, subtree: false });
+}
+// 새로고침: 대시보드처럼 데이터 로더(loadData)가 있으면 페이지를 다시 그리지 않고 데이터만 다시 받고, 없으면 페이지 새로고침
+async function refreshPage(btn) {
+    if (btn) btn.classList.add('spinning');
+    try {
+        if (typeof window.loadData === 'function') { await window.loadData(); if (window.toast) toast('새로고침했습니다', 'success'); }
+        else { location.reload(); return; }
+    } catch (e) { location.reload(); return; }
+    setTimeout(() => { if (btn) btn.classList.remove('spinning'); }, 600);
 }
 function openMobileMenu() {
     const overlay = document.getElementById('mobile-menu-overlay');

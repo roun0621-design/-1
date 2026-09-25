@@ -40,6 +40,8 @@
         eyeOff:  '<path d="M6 24s7-12 18-12 18 12 18 12-7 12-18 12S6 24 6 24z"/><path d="M8 8l32 32"/>',
         wrench:  '<path d="M38 10a10 10 0 0 1-13 12L11 36a3 3 0 0 1-4-4l14-14A10 10 0 0 1 33 5l-5 5 4 4z"/>',
         undo:    '<path d="M18 12H8v10"/><path d="M8 22a16 16 0 1 1 5 16"/>',
+        refresh: '<path d="M40 24a16 16 0 1 1-4.7-11.3"/><path d="M40 8v9h-9"/>',
+        menu:    '<path d="M9 14h30M9 24h30M9 34h30"/>',
         external:'<path d="M20 8H8v32h32V28"/><path d="M28 8h12v12M40 8L22 26"/>',
         trophy:  '<path d="M14 6h20v12a10 10 0 0 1-20 0z"/><path d="M14 10H6v4a8 8 0 0 0 8 6M34 10h8v4a8 8 0 0 1-8 6M24 28v8M16 42h16M18 36h12"/>',
         search:  '<circle cx="21" cy="21" r="12"/><path d="M30 30l10 10"/>',
