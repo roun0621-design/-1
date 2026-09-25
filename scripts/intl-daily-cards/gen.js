@@ -26,6 +26,7 @@ function resultRows(days) {
     rows.push({ d, t: e.scheduled_at.slice(11, 16), g: e.gender, ev: e.event_name, rt: e.round_type, name: a.is_team ? '대한민국' : a.name, members: a.is_team && e.members ? e.members.map(m => m.name).join(' · ') : '', heat: e.heat_number, heats: r.heat_count, place: r.place, mark, tag: r.tag, next, status: r.status_code, final: e.round_type === 'final' });
   }
   rows.sort((p, q) => (p.d + p.t + p.ev).localeCompare(q.d + q.t + q.ev));
+  for (const r of rows) if (r.members === '' && r.name === '대한민국') { const o = rows.find(x => x !== r && x.ev === r.ev && x.g === r.g && x.members); if (o) r.members = o.members; }
   for (const r of rows) if (r.tag === 'PB' || r.tag === 'SB') { const prev = rows.find(x => x !== r && x.name === r.name && x.ev === r.ev && x.g === r.g && x.mark === r.mark && (x.d + x.t) < (r.d + r.t) && x.tag === r.tag); if (prev) r.tag = '=' + r.tag; }
   return rows;
 }
@@ -33,7 +34,7 @@ const medal = (p, size) => p >= 1 && p <= 3 ? `<span class="md m${p}" style="wid
 function rowHtml(r, fs) {
   const place = r.status ? `<span class="st">${esc(r.status)}</span>` : r.final ? (r.place <= 3 ? medal(r.place, Math.round(fs * 1.5)) : `<span class="pl">${r.place}위</span>`) : `<span class="pl">${r.heats > 1 && r.heat ? r.heat + '조 ' : ''}${r.place ? r.place + '위' : ''}</span>`;
   const tag = r.tag ? `<span class="tag ${r.tag.replace('=', '\\=')}">${r.tag}</span>` : ''; const chip = r.next ? `<span class="chip ${/진출/.test(r.next) ? 'q' : 'out'}">${r.next}</span>` : '';
-  return `<div class="row" style="font-size:${fs}px"><div class="ev"><span class="evn">${G[r.g]} ${esc(String(r.ev).replace(/\s*\(Mixed\)/i, '').replace('하프마라톤경보', '하프마라톤 경보'))}</span><span class="rt ${r.rt}">${R[r.rt] || ''}</span></div><div class="nm">${esc(r.name)}</div><div class="res"><span class="ct">${tag}</span><span class="cq">${chip}</span><span class="cp">${place}</span><span class="cm"><span class="mk">${esc(r.mark)}</span></span></div></div>${r.members ? `<div class="memrow" style="font-size:${fs}px">${esc(r.members)}</div>` : ''}`;
+  return `<div class="row" style="font-size:${fs}px"><div class="ev"><span class="evn">${G[r.g]} ${esc(String(r.ev).replace(/\s*\(Mixed\)/i, '').replace('하프마라톤경보', '하프마라톤 경보'))}</span><span class="rt ${r.rt}">${R[r.rt] || ''}</span></div><div class="nm"${r.name.length >= 8 ? ' style="font-size:.84em"' : ''}>${esc(r.name)}</div><div class="res"><span class="ct">${tag}</span><span class="cq">${chip}</span><span class="cp">${place}</span><span class="cm"><span class="mk">${esc(r.mark)}</span></span></div></div>${r.members ? `<div class="memrow" style="font-size:${fs}px">${esc(r.members)}</div>` : ''}`;
 }
 const CSS = `
 *{box-sizing:border-box}body{margin:0;background:#888;font-family:'Noto Sans KR','Apple SD Gothic Neo',sans-serif;color:#1f1d1a;-webkit-font-smoothing:antialiased}
@@ -46,7 +47,7 @@ h1{font-size:60px;line-height:1.15;font-weight:900;letter-spacing:-.03em;margin:
 .rule{width:110px;height:4px;background:#b79f58;margin:16px 0 4px}
 .body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-start}
 .day{margin-top:16px;font-size:25px;font-weight:800;color:#8b1a2a;letter-spacing:.04em;padding-bottom:6px;border-bottom:2px solid #ead9a0;display:flex;align-items:center;gap:10px}
-.day small{font-weight:600;color:#9a958c;font-size:19px}
+.day small{font-weight:600;color:#9a958c;font-size:21px}
 .row{display:flex;align-items:center;gap:14px;padding:8px 0;border-bottom:1px solid #ece8de}
 .row .ev{flex:0 0 10.6em;font-weight:700;color:#333;white-space:nowrap;display:flex;align-items:baseline;gap:6px}.row .ev .evn{min-width:0;overflow:hidden;text-overflow:ellipsis}.row .ev .rt{flex:none}.row .ev .rt{font-weight:800;margin-left:4px}.rt.preliminary{color:#1565c0}.rt.semifinal{color:#e65100}.rt.final{color:#b3261e}
 .row .nm{flex:1;min-width:0;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row:has(+ .memrow){border-bottom:none;padding-bottom:2px}.memrow{font-size:.62em;color:#777;font-weight:500;padding:0 0 8px 17.4em;border-bottom:1px solid #ece8de;white-space:nowrap}
@@ -66,10 +67,10 @@ h1{font-size:60px;line-height:1.15;font-weight:900;letter-spacing:-.03em;margin:
 .cv-line{display:flex;align-items:center;gap:18px;margin-top:70px;font-size:30px;font-weight:700;color:#8a7640;letter-spacing:.03em}
 .cv-title{font-size:84px;font-weight:900;letter-spacing:-.03em;line-height:1.15;margin-top:24px;word-break:keep-all;margin-bottom:auto}
 /* 예정 */
-.srow{display:flex;align-items:center;gap:16px;padding:7px 0;border-bottom:1px solid #ece8de}
+.srow{display:flex;align-items:center;gap:16px;padding:6px 0;border-bottom:1px solid #ece8de}
 .srow .tm{flex:0 0 4em;font-family:'D2Coding',monospace;font-size:1.05em;font-weight:700;color:#8a7640}
-.srow .mid{flex:1;min-width:0}.srow .ev{font-weight:700;color:#333}.srow .ev .rt{font-weight:800}.srow .nm{font-weight:900;font-size:1.08em;margin-top:1px}.srow .pbsb{font-family:'D2Coding',monospace;font-size:.78em;color:#555;margin-top:2px}.srow .subs{font-size:.7em;color:#777;margin-top:2px}
-.srow .rk{flex:none;text-align:right;align-self:center}.rkp{display:inline-block;padding:4px 11px;border-radius:10px;background:#f1efe9;color:#6b665e;font-family:'D2Coding',monospace;font-weight:800;font-size:.82em;white-space:nowrap}.rkp.good{background:#e6f4ec;color:#1b7f4d}.rkp b{font-family:'D2Coding',monospace;font-size:.8em;letter-spacing:.08em;margin-right:7px;font-weight:800}.rkn{font-size:.62em;color:#9a958c;margin-top:4px}
+.srow .mid{flex:1;min-width:0}.srow .ev{font-weight:700;color:#333}.srow .ev .rt{font-weight:800}.srow .nm{font-weight:900;font-size:1.08em;margin-top:1px}.srow .pbsb{font-family:'D2Coding',monospace;font-size:.82em;color:#555;margin-top:2px}.srow .subs{font-size:.78em;color:#777;margin-top:2px}
+.srow .rk{flex:none;text-align:right;align-self:center}.rkp{display:inline-block;padding:4px 11px;border-radius:10px;background:#f1efe9;color:#6b665e;font-family:'D2Coding',monospace;font-weight:800;font-size:.82em;white-space:nowrap}.rkp.good{background:#e6f4ec;color:#1b7f4d}.rkp b{font-family:'D2Coding',monospace;font-size:.8em;letter-spacing:.08em;margin-right:7px;font-weight:800}.rkn{font-size:.74em;color:#8a8580;margin-top:4px}
 `;
 const TG = `<svg width="0" height="0" style="position:absolute"><defs><g id="tg"><g stroke="none" transform="rotate(33)"><circle r="7" fill="#1a2a5e"/><path d="M-7 0A7 7 0 0 1 7 0A3.5 3.5 0 0 0 0 0A3.5 3.5 0 0 1 -7 0Z" fill="#c8102e"/></g></g></defs></svg>`;
 const flag = (sz) => `<span class="flag" style="width:${sz}px;height:${Math.round(sz * .68)}px"><svg viewBox="-12 -8 24 16" width="${sz - 8}" height="${Math.round((sz - 8) * .68)}"><use href="#tg"/></svg></span>`;
