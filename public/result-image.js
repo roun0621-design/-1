@@ -172,6 +172,10 @@
         const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000);
         return 'downloaded';
     }
+    // 앱스토어 앱(PWABuilder WKWebView) 판별: PWABuilder 템플릿이 심는 메시지 핸들러(print·push-*) 또는 iOS 인데 UA 에 Safari/ 가 없음.
+    //   옛 빌드는 사진 앱 권한 설명이 없어 '이미지 저장'(길게 누르기·공유창 모두)을 고르면 iOS 가 앱을 종료한다 → paceSave 브리지가 생기기 전엔 스크린샷 안내
+    const _isWrapper = () => { try { const mh = window.webkit && window.webkit.messageHandlers; if (mh && (mh.print || mh['push-subscribe'] || mh['push-permission-request'] || mh.pacePush)) return true; } catch (e) {} return _isIOS() && !/Safari\//.test(navigator.userAgent || ''); };
+    const _hasNativeSave = () => !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.paceSave);
     const _canShareFiles = () => { try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([new Blob(['x'])], 'x.png', { type: 'image/png' })] })); } catch (e) { return false; } };
     function _fullscreen(url, title) {
         if (document.getElementById('ri-fs')) return;
@@ -212,16 +216,23 @@
                 const name = `${(pages[i].title || 'result').replace(/[^\w가-힣().-]+/g, '_')}_${Date.now()}.png`;
                 const item = document.createElement('div');
                 // 옛 앱스토어 빌드(브리지 없음): 길게 눌러 '사진 저장'을 고르면 iOS 가 앱을 강제 종료한다(Info.plist 사진 권한 설명 누락) → 길게 누르기 메뉴를 막고 업데이트 안내
-                const oldWrapper = _isIOS() && !_canShareFiles() && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.paceSave);
-                item.innerHTML = `<img src="${url}" alt="${esc(pages[i].title)}" style="width:100%;border-radius:8px;border:1px solid #e5e5e5;display:block;-webkit-touch-callout:${oldWrapper ? 'none' : 'default'};-webkit-user-select:none"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px"><span style="font-size:12px;color:#666">${esc(pages[i].title)} · ${pages[i].rows}명</span>${oldWrapper ? '<button class="btn btn-sm btn-primary" style="font-size:12px">전체 화면 → 스크린샷</button>' : '<button class="btn btn-sm btn-primary" style="font-size:12px">저장 / 공유</button>'}</div>`;
+                const oldWrapper = _isWrapper() && !_hasNativeSave();
+                item.innerHTML = `<img src="${url}" alt="${esc(pages[i].title)}" style="width:100%;border-radius:8px;border:1px solid #e5e5e5;display:block;-webkit-touch-callout:${oldWrapper ? 'none' : 'default'};-webkit-user-select:none"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px"><span style="font-size:12px;color:#666">${esc(pages[i].title)} · ${pages[i].rows}명</span>${oldWrapper ? '<span style="display:inline-flex;gap:6px"><button class="btn btn-sm btn-primary" style="font-size:12px">전체 화면 → 스크린샷</button>' + (_canShareFiles() ? '<button class="btn btn-sm btn-outline ri-share" style="font-size:12px">공유</button>' : '') + '</span>' : '<button class="btn btn-sm btn-primary" style="font-size:12px">저장 / 공유</button>'}</div>`;
                 const btn = item.querySelector('button');
-                if (oldWrapper) { item.querySelector('img').addEventListener('contextmenu', e => e.preventDefault()); btn.onclick = () => _fullscreen(url, pages[i].title); }
+                if (oldWrapper) {
+                    item.querySelector('img').addEventListener('contextmenu', e => e.preventDefault());
+                    btn.onclick = () => _fullscreen(url, pages[i].title);
+                    const sh = item.querySelector('.ri-share');   // 인스타·메시지·파일로 보내기는 됨 — 공유창의 '이미지 저장'만 옛 빌드에서 앱이 종료된다
+                    if (sh) sh.onclick = async () => { const file = new File([blob], name, { type: 'image/png' }); try { await navigator.share({ files: [file], title: name }); } catch (e) {} };
+                }
                 else if (btn) btn.onclick = async () => { const r = await _save(blob, name); if (window.toast) { if (r === 'downloaded') toast('저장했습니다', 'success'); else if (r === 'native') toast('사진 앱에 저장했습니다', 'success'); else if (r === 'longpress') toast("이미지를 길게 눌러 '사진에 추가'를 선택하세요", 'info'); } };
                 list.appendChild(item);
             }
             const note = modal.querySelector('div[style*="color:#888"]');
-            const anyOld = _isIOS() && !_canShareFiles() && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.paceSave);
-            if (note) note.textContent = `${pages.length > 1 ? `조마다 한 장 · ${pages.length}장` : '한 장'} · ${anyOld ? '전체 화면으로 띄운 뒤 스크린샷을 찍으면 저장돼요 (앱 업데이트 후엔 버튼 한 번에 사진 앱 저장)' : '길게 눌러 저장할 수도 있어요'}`;
+            const anyOld = _isWrapper() && !_hasNativeSave();
+            if (note) note.innerHTML = anyOld
+                ? `<b style="color:#8b1a2a">저장은 '전체 화면 → 스크린샷'으로 해 주세요.</b> 공유창의 '이미지 저장'은 앱 업데이트 후 지원돼요(지금 누르면 앱이 닫혀요). 인스타·메시지로 보내기는 '공유'로.`
+                : `${pages.length > 1 ? `조마다 한 장 · ${pages.length}장` : '한 장'} · 저장 / 공유를 누르면 사진 앱에 저장하거나 바로 보낼 수 있어요`;
         } catch (e) { list.innerHTML = `<div style="color:#b3261e;font-size:12px">이미지 만들기 실패: ${esc(e.message || e)}</div>`; }
     }
     window.openResultImage = openResultImage;

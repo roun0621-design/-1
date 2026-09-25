@@ -19,7 +19,9 @@
     function _native() { return (window.PaceNativePush && window.PaceNativePush.platform) ? window.PaceNativePush : null; }
     function _isWrapperWithoutBridge() {   // 옛 빌드의 앱스토어 앱: iOS 인데 사파리도 아니고(WKWebView 는 UA 에 Safari/ 가 없다) 브리지도 없다
         var ua = navigator.userAgent || '';
-        return /iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua) && !_native();
+        var mh = null; try { mh = window.webkit && window.webkit.messageHandlers; } catch (e) {}
+        var pwab = !!(mh && (mh.print || mh['push-subscribe'] || mh['push-permission-request']));   // PWABuilder iOS 템플릿이 심는 핸들러
+        return !_native() && (pwab || (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua)));
     }
     async function _registerNativeToken(token, platform) {
         var rr = await fetch('/api/push/register', {
