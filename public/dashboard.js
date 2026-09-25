@@ -102,6 +102,9 @@ function _rememberTeamRoster() {
     _rosterReturn = { view: _rosterView, eventKey: _rosterEventKey, scrollTop: body ? body.scrollTop : 0 };
 }
 // 종목 창(엔트리·스타트 리스트)이나 결과 창을 닫을 때: 대표팀 명단에서 왔으면 그 자리로 돌아간다
+// 명단·엔트리·스타트 리스트가 같이 쓰는 시트(roster-modal-overlay)의 보임/잠금 — 잠금은 시트가 실제로 열리고 닫힐 때만 1회씩 (겹치는 창 때문에 횟수를 센다)
+function _rosterSheetShow(ov) { if (!ov) return; if (ov.dataset.open !== '1') { ov.dataset.open = '1'; if (window.lockBodyScroll) lockBodyScroll(); } ov.style.display = 'flex'; }
+function _rosterSheetHide(ov) { if (!ov) return; ov.style.display = 'none'; if (ov.dataset.open === '1') { ov.dataset.open = ''; if (window.unlockBodyScroll) unlockBodyScroll(); } }
 function _returnToTeamRoster() {
     if (!_rosterReturn) return false;
     const r = _rosterReturn; _rosterReturn = null;
@@ -136,7 +139,7 @@ async function openTeamRoster(keep) {
         overlay.onclick = (e) => { if (e.target === overlay) closeRosterModal(); };
         document.body.appendChild(overlay);
     }
-    overlay.style.display = 'flex'; if (window.lockBodyScroll) lockBodyScroll();
+    _rosterSheetShow(overlay);
     _rosterModalKind = 'team';
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const code = (allEvents.find(e => e.spotlight) || {}).spotlight || 'KOR';
@@ -420,7 +423,7 @@ function openEventDetail(evtId) {
     _rememberTeamRoster();
     if (_rosterReturn && (evt.round_status === 'completed' || evt.round_status === 'in_progress' || callroomCompletedIds.has(evtId))) {
         // 결과·LIVE 창은 result-overlay(다른 층)라 명단 시트를 잠시 감춘다 — 닫으면 _returnToTeamRoster 가 다시 연다
-        const ov = document.getElementById('roster-modal-overlay'); if (ov) ov.style.display = 'none';
+        const ov = document.getElementById('roster-modal-overlay'); if (ov) _rosterSheetHide(ov);
     }
     if (evt.round_status === 'completed') { openResult(evtId); return; }
     if (evt.round_status === 'in_progress' || callroomCompletedIds.has(evtId)) { openLiveResult(evtId); return; }
@@ -1578,7 +1581,7 @@ async function openEntriesModal(eventId, eventName) {
         overlay.onclick = (e) => { if (e.target === overlay) closeRosterModal(); };
         document.body.appendChild(overlay);
     }
-    overlay.style.display = 'flex'; if (window.lockBodyScroll) lockBodyScroll();
+    _rosterSheetShow(overlay);
     _rosterModalKind = 'entries';
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const gL = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
@@ -1727,7 +1730,7 @@ async function openDisplayRoster(eventId, eventName, division) {
         <h3>${eventName} ${gLabel}${divLabel} — 스타트 리스트</h3>
         <button class="result-panel-close" onclick="closeResult()">&times;</button>
     </div><div class="result-panel-body">${bodyHtml}</div>`;
-    overlay.classList.add('show');
+    overlay.classList.add('show'); if (!overlay.classList.contains('locked')) { overlay.classList.add('locked'); if (window.lockBodyScroll) lockBodyScroll(); }
     if (window.pushModalState) pushModalState(() => closeResult());
 }
 
@@ -1746,7 +1749,7 @@ async function openEventVideoModal(eventId, title) {
         <h3>${title} — 영상</h3>
         <button class="result-panel-close" onclick="closeResult()">&times;</button>
     </div><div class="result-panel-body">${body}</div>`;
-    overlay.classList.add('show');
+    overlay.classList.add('show'); if (!overlay.classList.contains('locked')) { overlay.classList.add('locked'); if (window.lockBodyScroll) lockBodyScroll(); }
     if (window.pushModalState) pushModalState(() => closeResult());
 }
 
@@ -1767,7 +1770,7 @@ async function openResult(eventId) {
                 <div class="skeleton skeleton-text" style="width:85%;"></div>
             </div>
         </div>`;
-    overlay.classList.add('show');
+    overlay.classList.add('show'); if (!overlay.classList.contains('locked')) { overlay.classList.add('locked'); if (window.lockBodyScroll) lockBodyScroll(); }
     if (window.pushModalState) pushModalState(() => closeResult());
 
     try {
@@ -1838,7 +1841,7 @@ function closeResult() {
     iframes.forEach(f => f.parentNode && f.parentNode.removeChild(f));
 
     const overlay = document.getElementById('result-overlay');
-    if (overlay) overlay.classList.remove('show');
+    if (overlay) { overlay.classList.remove('show'); if (overlay.classList.contains('locked')) { overlay.classList.remove('locked'); if (window.unlockBodyScroll) unlockBodyScroll(); } }
 
     // 중복 호출 방지: overlay 가 이미 안 보이면 popModalState 도 skip.
     // popstate 로 인해 closeResult 가 호출된 경우 _modalStack 은 이미 pop 됨.
@@ -1919,7 +1922,7 @@ async function openLiveResult(eventId) {
                 <div class="skeleton skeleton-text" style="width:75%;"></div>
             </div>
         </div>`;
-    overlay.classList.add('show');
+    overlay.classList.add('show'); if (!overlay.classList.contains('locked')) { overlay.classList.add('locked'); if (window.lockBodyScroll) lockBodyScroll(); }
     if (window.pushModalState) pushModalState(() => closeLiveResult());
     await refreshLiveResult();
 }
@@ -2006,7 +2009,7 @@ function closeLiveResult() {
     _liveHeatId = null;
     const iframe = document.querySelector('#result-panel iframe');
     if (iframe) iframe.src = '';
-    document.getElementById('result-overlay').classList.remove('show');
+    { const ov = document.getElementById('result-overlay'); ov.classList.remove('show'); if (ov.classList.contains('locked')) { ov.classList.remove('locked'); if (window.unlockBodyScroll) unlockBodyScroll(); } }
     if (window.popModalState) popModalState();
     _returnToTeamRoster();
 }
@@ -3361,11 +3364,11 @@ function openPacingPopup(eventName) {
         <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> ${eventName} W/L Target</h3>
         <button class="result-panel-close" onclick="closePacingPopup()">&times;</button>
     </div><div class="result-panel-body">${html}</div>`;
-    overlay.classList.add('show');
+    overlay.classList.add('show'); if (!overlay.classList.contains('locked')) { overlay.classList.add('locked'); if (window.lockBodyScroll) lockBodyScroll(); }
 }
 
 function closePacingPopup() {
-    document.getElementById('result-overlay').classList.remove('show');
+    const ov = document.getElementById('result-overlay'); ov.classList.remove('show'); if (ov.classList.contains('locked')) { ov.classList.remove('locked'); if (window.unlockBodyScroll) unlockBodyScroll(); }
 }
 
 // 종합기록지 버튼 삭제됨 — 관리자 문서 탭에서 다운로드
@@ -3389,7 +3392,7 @@ async function openRosterModal(eventId, eventName) {
         overlay.onclick = (e) => { if (e.target === overlay) closeRosterModal(); };
         document.body.appendChild(overlay);
     }
-    overlay.style.display = 'flex'; if (window.lockBodyScroll) lockBodyScroll();
+    _rosterSheetShow(overlay);
     _rosterModalKind = 'startlist';
 
     const gL = evt.gender === 'M' ? '남자' : evt.gender === 'F' ? '여자' : '혼성';
@@ -3418,8 +3421,7 @@ function closeRosterModal() {
     if (_rosterModalKind !== 'team' && _rosterReturn) { _rosterModalEventId = null; _returnToTeamRoster(); return; }
     _rosterModalKind = null; _rosterReturn = null;
     const overlay = document.getElementById('roster-modal-overlay');
-    if (overlay) overlay.style.display = 'none';
-    if (window.unlockBodyScroll) unlockBodyScroll();
+    if (overlay) _rosterSheetHide(overlay);
     _rosterModalEventId = null;
 }
 

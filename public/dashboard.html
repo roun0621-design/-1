@@ -176,7 +176,8 @@
         .result-panel-header h3 { margin:0; font-size:16px; font-weight:800; letter-spacing:0.3px; }
         .result-panel-close { width:42px; height:42px; border-radius:50%; border:none; background:var(--danger); font-size:22px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#fff; transition:all .15s; flex-shrink:0; box-shadow:0 2px 8px rgba(220,53,69,.35); line-height:1; padding:0; font-family:Arial,sans-serif; }
         .result-panel-close:hover { background:#c82333; transform:scale(1.1); }
-        .result-panel-body { flex:1; overflow-y:auto; overflow-x:auto; padding:14px 16px; -webkit-overflow-scrolling:touch; scrollbar-width:thin; max-width:100%; }
+        .result-panel-body { flex:1; overflow-y:auto; overflow-x:auto; padding:14px 16px; -webkit-overflow-scrolling:touch; scrollbar-width:thin; max-width:100%; overscroll-behavior:contain; }
+        #roster-modal-body, #ri-modal { overscroll-behavior:contain; }   /* 창 끝에서 튕겨도 뒤 화면으로 스크롤이 새지 않게 */
         @media (max-width:768px) {
             .result-panel-close { width:38px; height:38px; font-size:20px; }
             .result-panel-header { padding:10px 14px; }
@@ -271,6 +272,9 @@
             #division-tabs { padding:2px 0 !important; }
             #division-tabs .gender-tab-btn { padding:5px 12px !important; font-size:12px; }
             .events-scroll { padding:2px 0; }
+            /* 폰 터치 타깃: 라운드 버튼·정렬 토글은 손가락 크기(≥32px)로 — 글자 크기는 그대로, 세로 여백만 */
+            .matrix-table .round-btn { display:inline-flex; align-items:center; justify-content:center; min-height:32px; padding:0 10px !important; }
+            .seg-toggle button { min-height:30px; padding:0 11px; }
             /* 상단: 대회정보 박스 */
             .comp-info-line { padding:6px 12px; font-size:12px; gap:6px; margin-bottom:0; }
             /* 상단: 시간표 히어로 카드 — 위아래 여백·내부 패딩 축소 */

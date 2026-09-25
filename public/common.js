@@ -1470,19 +1470,28 @@ function _buildMobileMenu(pages, currentPage, role) {
 }
 
 // 창(시트)이 떠 있는 동안 뒤 페이지가 스크롤되지 않게 — iOS 는 overflow:hidden 만으로는 스크롤이 새어 나가서 body 를 고정한다
-let _bodyLockY = null;
+//   창이 겹칠 때(명단 → 종목 창 → 이미지)를 위해 횟수를 센다 — 먼저 닫히는 창이 잠금을 풀어 버리지 않게 (2026-09-26)
+let _bodyLockY = null, _bodyLockN = 0;
 function lockBodyScroll() {
+    _bodyLockN++;
     if (_bodyLockY != null) return;
     _bodyLockY = window.scrollY || document.documentElement.scrollTop || 0;
     document.body.style.top = `-${_bodyLockY}px`; document.body.style.position = 'fixed'; document.body.style.left = '0'; document.body.style.right = '0'; document.body.style.width = '100%'; document.body.style.overflow = 'hidden';
 }
-function unlockBodyScroll() {
-    if (_bodyLockY == null) return;
+function unlockBodyScroll(force) {
+    _bodyLockN = force ? 0 : Math.max(0, _bodyLockN - 1);
+    if (_bodyLockN > 0 || _bodyLockY == null) return;
     const y = _bodyLockY; _bodyLockY = null;
     document.body.style.position = ''; document.body.style.top = ''; document.body.style.left = ''; document.body.style.right = ''; document.body.style.width = ''; document.body.style.overflow = '';
     window.scrollTo(0, y);
 }
 
+// remove() 로 닫는 창(시간표 등): 열 때 잠그고, DOM 에서 빠지면 자동으로 푼다
+function lockBodyScrollUntilRemoved(el) {
+    lockBodyScroll();
+    const mo = new MutationObserver(() => { if (!el.isConnected) { mo.disconnect(); unlockBodyScroll(); } });
+    mo.observe(document.body, { childList: true, subtree: false });
+}
 function openMobileMenu() {
     const overlay = document.getElementById('mobile-menu-overlay');
     const menu = document.getElementById('mobile-menu');
@@ -1974,6 +1983,7 @@ async function openTimetable(compId) {
         overlay.id = 'timetable-overlay';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);';
         overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+        lockBodyScrollUntilRemoved(overlay);   // 시간표가 떠 있는 동안 뒤 화면 스크롤 잠금 (X·배경 탭·날짜 이동 어디서 remove 되든 풀린다)
 
         const modal = document.createElement('div');
         // 높이를 고정(88vh)해서 경기 수가 적든 많든 머리글·닫기·날짜 이동이 늘 같은 자리에 있게 한다 (내용은 안에서 스크롤)
@@ -1998,7 +2008,7 @@ async function openTimetable(compId) {
             <div id="tt-day-tabs" style="display:flex;gap:2px;margin-top:10px;align-items:center;justify-content:center;position:relative;"></div>
         </div>`;
 
-        const contentHtml = `<div id="tt-content" style="overflow-y:auto;padding:16px 22px 22px;flex:1;"></div>`;
+        const contentHtml = `<div id="tt-content" style="overflow-y:auto;overscroll-behavior:contain;padding:16px 22px 22px;flex:1;"></div>`;
         // 시간표 행 반응형 레이아웃 — 데스크톱 1줄 정렬 / 모바일(≤600px) 2줄 스택(종목명 잘림 방지)
         const styleHtml = `<style>
             .tt-row{display:grid;align-items:center;gap:4px 8px;padding:9px 12px;
