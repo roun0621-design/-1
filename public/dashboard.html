@@ -342,9 +342,13 @@
         .record-chip.record-chip-new.on { box-shadow:0 0 0 2px #fff inset; }
         @media (min-width:641px) { .record-banner-mobile > .record-chips { width:auto; flex-wrap:wrap; gap:4px; } .record-chip { flex:none; padding:2px 8px; font-size:11px; gap:4px; } .record-chip b { font-size:10px; } }
         /* 스타트 리스트: PB 기준 순번 — 줄의 PB 옆 작은 회색 #n, 진출 범위 안이면 초록 */
-        .pb-rank { display:inline-block; margin-left:6px; padding:0 5px; border-radius:6px; background:#f1efe9; color:#8a8580; font-size:9.5px; font-weight:800; font-family:'D2Coding',monospace; line-height:1.5; vertical-align:1px; }
+        .pb-rank { display:inline-block; margin-right:6px; padding:0 5px; border-radius:6px; background:#f1efe9; color:#8a8580; font-size:9.5px; font-weight:800; font-family:'D2Coding',monospace; line-height:1.5; vertical-align:1px; }
         .pb-rank.good { background:#e6f4ec; color:#1b7f4d; }
-        .pb-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#1b7f4d; margin-left:6px; vertical-align:middle; }
+        /* 한국 선수 블록의 RANK 알약: 조 순번/조 인원 (· 전체) — 진출 범위 안이면 초록 */
+        .rank-pill { display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:9px; background:#f1efe9; color:#6b665e; font-size:12px; font-weight:800; font-family:'D2Coding',monospace; line-height:1.4; white-space:nowrap; }
+        .rank-pill b { font-size:9.5px; letter-spacing:.08em; font-weight:800; }
+        .rank-pill small { font-size:10px; font-weight:600; color:#8a8580; }
+        .rank-pill.good { background:#e6f4ec; color:#1b7f4d; } .rank-pill.good small { color:#4f8f68; }
         .spot-block { margin:8px 0 12px; padding:10px 12px; background:#fff6f6; border:1px solid #f1d5d5; border-radius:10px; }
         /* 시간별 보기로 열 때 '지금' 종목 카드 잠깐 강조 */
         /* '지금' 종목 표시 — NEXT 칩(금색, 시간 칩 옆)과 LIVE 배지가 깜빡인다. JS 가 .blink-on 을 0.6초마다 켜고 끈다 */
