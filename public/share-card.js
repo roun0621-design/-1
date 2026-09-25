@@ -62,7 +62,7 @@ function _scInjectStyles() {
     max-width:400px; max-height:92vh; overflow-y:auto; text-align:center; }
 .sc-sheet-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .sc-sheet-head strong { font-size:15px; font-weight:700; color:#111; }
-.sc-x { border:none; background:none; font-size:26px; line-height:1; color:#999; cursor:pointer; padding:0 4px; }
+.sc-x { }
 
 /* 실제 카드는 1080x1350 고정. 미리보기는 transform 으로 축소만 한다.
    (축소 렌더가 아니라 원본을 그대로 캡처하므로 결과물 품질에 영향 없음) */
@@ -256,7 +256,7 @@ function openShareCard(payload) {
             <div class="sc-sheet" onclick="event.stopPropagation()">
                 <div class="sc-sheet-head">
                     <strong>기록 카드</strong>
-                    <button class="sc-x" onclick="closeShareCard()">&times;</button>
+                    ${window.prCloseBtn ? prCloseBtn('closeShareCard()', { cls: 'sc-x' }) : '<button class="sc-x pr-close" onclick="closeShareCard()">×</button>'}
                 </div>
                 <div class="sc-stage" id="sc-stage"></div>
                 <div class="sc-opts">

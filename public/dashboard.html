@@ -174,12 +174,11 @@
         .result-panel { background:var(--white); border-radius:var(--radius-lg); width:90vw; max-width:800px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,.18); }
         .result-panel-header { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:var(--white); border-bottom:2px solid var(--gray); flex-shrink:0; position:sticky; top:0; z-index:10; }
         .result-panel-header h3 { margin:0; font-size:16px; font-weight:800; letter-spacing:0.3px; }
-        .result-panel-close { width:42px; height:42px; border-radius:50%; border:none; background:var(--danger); font-size:22px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#fff; transition:all .15s; flex-shrink:0; box-shadow:0 2px 8px rgba(220,53,69,.35); line-height:1; padding:0; font-family:Arial,sans-serif; }
-        .result-panel-close:hover { background:#c82333; transform:scale(1.1); }
+        .result-panel-close { margin-left:6px; }   /* 모양은 공통 .pr-close */
         .result-panel-body { flex:1; overflow-y:auto; overflow-x:auto; padding:14px 16px; -webkit-overflow-scrolling:touch; scrollbar-width:thin; max-width:100%; overscroll-behavior:contain; }
         #roster-modal-body, #ri-modal { overscroll-behavior:contain; }   /* 창 끝에서 튕겨도 뒤 화면으로 스크롤이 새지 않게 */
         @media (max-width:768px) {
-            .result-panel-close { width:38px; height:38px; font-size:20px; }
+
             .result-panel-header { padding:10px 14px; }
             .result-panel-header h3 { font-size:13px; }
             .result-panel-body { padding:10px 6px; }
@@ -534,7 +533,7 @@
                         </button>
                         <div class="dash-search-field" id="dash-search-field" hidden>
                             <input id="event-search" type="search" inputmode="search" autocomplete="off" placeholder="종목 검색 · 예) 400, 멀리" oninput="onEventSearch(this.value)" onkeydown="if(event.key==='Escape'){closeEventSearch();}">
-                            <button type="button" class="dash-search-close" aria-label="검색 닫기" onclick="closeEventSearch()">&times;</button>
+                            <button type="button" class="dash-search-close pr-close" aria-label="검색 닫기" onclick="closeEventSearch()"><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button>
                         </div>
                     </div>
                     <div id="dash-sort-slot"></div>

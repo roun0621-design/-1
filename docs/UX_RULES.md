@@ -120,3 +120,4 @@
 - 스크롤되는 창 본문은 `overscroll-behavior:contain`(끝에서 튕겨도 뒤로 새지 않게).
 - 폰 터치 타깃: 라운드 버튼 32px, 정렬 토글 30px(글자 크기는 그대로).
 - 점검 스크립트: 잠금 균형은 `$S/lock_audit.js`, 탭·스와이프는 `$S/touch_audit.js` (puppeteer, 폰 뷰포트).
+- 닫기(X) 버튼은 어디서나 하나: `prCloseBtn(onclick)`(common.js) → `.pr-close` 34px 연한 원 + 선 X. 새 창을 만들 때 `&times;`·빨간 원·글자 × 를 쓰지 않는다. 폰 머리글의 새로고침·메뉴도 같은 선 아이콘 체계(`PaceIcons` refresh·menu).

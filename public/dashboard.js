@@ -152,7 +152,7 @@ async function openTeamRoster(keep) {
             ${code === 'KOR' ? PaceIcons.svg('flagKR', { size: 30 }) : ''}
             <div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:16px;color:#1a2a5e;line-height:1.2;" id="team-roster-title">${teamL}</div>
                  <div style="font-size:12px;color:#8a7640;margin-top:3px;" id="team-roster-sub">불러오는 중…</div></div>
-            <button onclick="closeRosterModal()" aria-label="닫기" style="flex:none;width:32px;height:32px;border-radius:50%;background:#f0ede6;border:none;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;">${PaceIcons.svg('close', { size: 16 })}</button>
+${prCloseBtn('closeRosterModal()')}
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 16px;border-bottom:1px solid #eee;flex-shrink:0;background:#fbfaf6;"><div id="team-roster-tools"></div><button type="button" class="fav-modal-btn" id="team-roster-fav" style="margin:0;" title="우리 선수 종목의 소집·결과 알림" onclick="event.stopPropagation(); toggleSpotFavorites(this)"></button></div>
         <div id="team-roster-chips" style="flex-shrink:0;"></div>
@@ -1593,7 +1593,7 @@ async function openEntriesModal(eventId, eventName) {
             <div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:15px;color:#1a2a5e;" id="entries-modal-title">엔트리</div>
                  <div style="font-size:12px;color:#8a7640;margin-top:2px;">${gL} ${esc(eventName)} ${roundL}${sched && sched.time ? ` · ${sched.scheduled_date || ''} ${sched.time}` : ''}</div></div>
             ${_favBtnHtml(evt)}
-            <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
+            ${prCloseBtn('closeRosterModal()')}
         </div>
         <div id="roster-modal-body" style="flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 0 env(safe-area-inset-bottom,0);">${uiStateHtml('loading', { title: '출전 선수를 불러오는 중…' })}</div></div>`;
     if (window.pushModalState) pushModalState(() => closeRosterModal());
@@ -1728,7 +1728,7 @@ async function openDisplayRoster(eventId, eventName, division) {
 
     panel.innerHTML = `<div class="result-panel-header">
         <h3>${eventName} ${gLabel}${divLabel} — 스타트 리스트</h3>
-        <button class="result-panel-close" onclick="closeResult()">&times;</button>
+        ${prCloseBtn('closeResult()', { cls: 'result-panel-close' })}
     </div><div class="result-panel-body">${bodyHtml}</div>`;
     overlay.classList.add('show'); if (!overlay.classList.contains('locked')) { overlay.classList.add('locked'); if (window.lockBodyScroll) lockBodyScroll(); }
     if (window.pushModalState) pushModalState(() => closeResult());
@@ -1747,7 +1747,7 @@ async function openEventVideoModal(eventId, title) {
     const body = embed || '<div style="text-align:center;padding:30px;color:#888;">등록된 영상이 없습니다.</div>';
     panel.innerHTML = `<div class="result-panel-header">
         <h3>${title} — 영상</h3>
-        <button class="result-panel-close" onclick="closeResult()">&times;</button>
+        ${prCloseBtn('closeResult()', { cls: 'result-panel-close' })}
     </div><div class="result-panel-body">${body}</div>`;
     overlay.classList.add('show'); if (!overlay.classList.contains('locked')) { overlay.classList.add('locked'); if (window.lockBodyScroll) lockBodyScroll(); }
     if (window.pushModalState) pushModalState(() => closeResult());
@@ -1760,7 +1760,7 @@ async function openEventVideoModal(eventId, title) {
 async function openResult(eventId) {
     const overlay = document.getElementById('result-overlay');
     const panel = document.getElementById('result-panel');
-    panel.innerHTML = `<div class="result-panel-header"><h3>결과 불러오는 중…</h3><button class="result-panel-close" onclick="closeResult()">&times;</button></div>
+    panel.innerHTML = `<div class="result-panel-header"><h3>결과 불러오는 중…</h3>${prCloseBtn('closeResult()', { cls: 'result-panel-close' })}</div>
         <div class="result-panel-body" style="padding:20px;">
             <div class="skeleton-block" style="box-shadow:none;padding:0;">
                 <div class="skeleton skeleton-title"></div>
@@ -1818,7 +1818,7 @@ async function openResult(eventId) {
         panel.innerHTML = `<div class="result-panel-header">
             <h3>${_evtTitle(evt, roundL)} ${gL}</h3>
             ${_imgBtnHtml(evt)}${_favBtnHtml(evt)}
-            <button class="result-panel-close" onclick="closeResult()">&times;</button>
+            ${prCloseBtn('closeResult()', { cls: 'result-panel-close' })}
         </div><div class="result-panel-body">${bodyHtml}</div>`;
         _decorateResultPanel(panel, evt);
 
@@ -1828,7 +1828,7 @@ async function openResult(eventId) {
     } catch (e) {
         panel.innerHTML = `<div class="result-panel-header">
             <h3>오류</h3>
-            <button class="result-panel-close" onclick="closeResult()">&times;</button>
+            ${prCloseBtn('closeResult()', { cls: 'result-panel-close' })}
         </div><div class="result-panel-body"><div style="color:var(--danger);">결과를 불러올 수 없습니다.</div></div>`;
     }
 }
@@ -1913,7 +1913,7 @@ async function openLiveResult(eventId) {
     _liveEventId = eventId;
     const overlay = document.getElementById('result-overlay');
     const panel = document.getElementById('result-panel');
-    panel.innerHTML = `<div class="result-panel-header"><h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>로딩 중…</h3><button class="result-panel-close" onclick="closeLiveResult()">&times;</button></div>
+    panel.innerHTML = `<div class="result-panel-header"><h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>로딩 중…</h3>${prCloseBtn('closeLiveResult()', { cls: 'result-panel-close' })}</div>
         <div class="result-panel-body" style="padding:20px;">
             <div class="skeleton-block" style="box-shadow:none;padding:0;">
                 <div class="skeleton skeleton-title"></div>
@@ -1989,7 +1989,7 @@ async function refreshLiveResult() {
         panel.innerHTML = `<div class="result-panel-header">
             <h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>${_evtTitle(evt, roundL)} ${gL}</h3>
             ${_imgBtnHtml(evt)}${_favBtnHtml(evt)}
-            <button class="result-panel-close" onclick="closeLiveResult()">&times;</button>
+            ${prCloseBtn('closeLiveResult()', { cls: 'result-panel-close' })}
         </div><div class="result-panel-body">${bodyHtml}</div>`;
         _decorateResultPanel(panel, evt);
         // Restore video closed state after SSE refresh
@@ -1999,7 +1999,7 @@ async function refreshLiveResult() {
     } catch (e) {
         panel.innerHTML = `<div class="result-panel-header">
             <h3>오류</h3>
-            <button class="result-panel-close" onclick="closeLiveResult()">&times;</button>
+            ${prCloseBtn('closeLiveResult()', { cls: 'result-panel-close' })}
         </div><div class="result-panel-body"><div style="color:var(--danger);">실시간 데이터를 불러올 수 없습니다.</div></div>`;
     }
 }
@@ -3362,7 +3362,7 @@ function openPacingPopup(eventName) {
 
     panel.innerHTML = `<div class="result-panel-header">
         <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> ${eventName} W/L Target</h3>
-        <button class="result-panel-close" onclick="closePacingPopup()">&times;</button>
+        ${prCloseBtn('closePacingPopup()', { cls: 'result-panel-close' })}
     </div><div class="result-panel-body">${html}</div>`;
     overlay.classList.add('show'); if (!overlay.classList.contains('locked')) { overlay.classList.add('locked'); if (window.lockBodyScroll) lockBodyScroll(); }
 }
@@ -3406,7 +3406,7 @@ async function openRosterModal(eventId, eventName) {
                 <div style="font-size:12px;color:#b79f58;margin-top:2px;">${gL} ${eventName} ${roundL}</div>
             </div>
             ${_favBtnHtml(evt)}
-            <button onclick="closeRosterModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;padding:0 4px;">&times;</button>
+            ${prCloseBtn('closeRosterModal()')}
         </div>
         <div id="roster-modal-body" style="flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 0 env(safe-area-inset-bottom,0);">
             <div style="padding:30px;text-align:center;color:var(--text-muted);">불러오는 중...</div>

@@ -1458,7 +1458,7 @@ function _buildMobileMenu(pages, currentPage, role) {
     menu.innerHTML = `
         <div class="mobile-menu-header">
             <span class="mm-brand">PACE RISE <span class="mm-colon">:</span> <span class="mm-scope">Node</span></span>
-            <button class="mobile-menu-close" onclick="closeMobileMenu()">&times;</button>
+            ${prCloseBtn('closeMobileMenu()', { cls: 'mobile-menu-close' })}
         </div>
         <div class="mobile-menu-nav">${navLinks}</div>
         <div class="mobile-menu-footer">
@@ -1508,6 +1508,9 @@ async function refreshPage(btn) {
     } catch (e) { location.reload(); return; }
     setTimeout(() => { if (btn) btn.classList.remove('spinning'); }, 600);
 }
+// 닫기(X) 버튼 HTML — 모든 창이 같은 모양을 쓴다 (styles.css .pr-close)
+function prCloseBtn(onclick, extra) { return `<button type="button" class="pr-close${extra && extra.dark ? ' pr-close-dark' : ''}${extra && extra.cls ? ' ' + extra.cls : ''}" aria-label="닫기" onclick="${onclick}"${extra && extra.style ? ` style="${extra.style}"` : ''}><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button>`; }
+window.prCloseBtn = prCloseBtn;
 function openMobileMenu() {
     const overlay = document.getElementById('mobile-menu-overlay');
     const menu = document.getElementById('mobile-menu');
@@ -1640,7 +1643,7 @@ function openVideoModal(url, title) {
     if (title) {
         const hdr = document.createElement('div');
         hdr.style.cssText = 'padding:10px 16px;background:#111;color:#fff;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center;';
-        hdr.innerHTML = `<span>${title}</span><button onclick="this.closest('#video-modal-overlay').remove()" style="background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;line-height:1;">&times;</button>`;
+        hdr.innerHTML = `<span>${title}</span>${prCloseBtn("this.closest('#video-modal-overlay').remove()")}`;
         modal.appendChild(hdr);
     }
     const body = document.createElement('div');
@@ -2019,7 +2022,7 @@ async function openTimetable(compId) {
                     <h3 style="font-size:18px;font-weight:800;margin:0;color:#4a4a4a;">경기 시간표</h3>
                     <p style="font-size:11px;color:#8a8a8a;margin:3px 0 0;font-weight:500;">Competition Timetable · 총 ${totalItems}개 경기</p>
                 </div>
-                <button aria-label="닫기" onclick="document.getElementById('timetable-overlay').remove()" style="background:rgba(120,120,128,0.12);border:0;width:34px;height:34px;border-radius:50%;cursor:pointer;color:#3a3a3c;display:flex;align-items:center;justify-content:center;flex:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+                <button type="button" class="pr-close" aria-label="닫기" onclick="document.getElementById('timetable-overlay').remove()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
             </div>
             <div id="tt-day-tabs" style="display:flex;gap:2px;margin-top:10px;align-items:center;justify-content:center;position:relative;"></div>
         </div>`;
@@ -2528,7 +2531,7 @@ async function openDocumentList() {
                         <h3 style="font-size:18px;font-weight:800;margin:0;color:#6b5520;">기록지 / 문서</h3>
                         <p style="font-size:11px;color:#c4b070;margin:3px 0 0;font-weight:500;">총 ${totalDocs}개 문서</p>
                     </div>
-                    <button onclick="this.closest('#doc-list-overlay').remove()" style="background:rgba(255,255,255,0.8);border:1px solid #e8dfc0;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;transition:all 0.15s;font-weight:300;" onmouseover="this.style.background='#fff';this.style.borderColor='#c4b070'" onmouseout="this.style.background='rgba(255,255,255,0.8)';this.style.borderColor='#e8dfc0'">&times;</button>
+                    ${prCloseBtn("this.closest('#doc-list-overlay').remove()")}
                 </div>
             </div>
             <div style="padding:10px 22px;border-bottom:1px solid #f0f0f0;flex-shrink:0;background:#fafafa;">
@@ -2874,7 +2877,7 @@ function _showConflictModal(conflicts) {
         el.innerHTML = `<img src="/icons/icon-192.png" alt="">
             <div class="t"><b>PACE RISE : Node 앱</b><span>실시간 기록 알림 · 더 빠른 결과 확인</span></div>
             <a class="get" href="${href}" target="_blank" rel="noopener">앱 받기</a>
-            <button class="x" aria-label="닫기">&times;</button>`;
+            <button type="button" class="x pr-close" aria-label="닫기"><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button>`;
         el.querySelector('.x').addEventListener('click', () => {
             try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {}
             el.remove();

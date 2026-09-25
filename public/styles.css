@@ -1594,6 +1594,11 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 /* ============================================================
    MOBILE HAMBURGER MENU
    ============================================================ */
+/* 닫기(X) 버튼 — 모든 창·시트·팝업 공통: 연한 원 + 선 X (2026-09-26, 제각각이던 ×·빨간 원·회색 글자 통일) */
+.pr-close { flex: none; width: 34px; height: 34px; min-height: 0; border-radius: 50%; border: none; background: #f0ede6; color: #555; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; line-height: 1; transition: background .12s; }
+.pr-close:hover { background: #e6e1d6; } .pr-close:active { background: #ddd7c9; transform: scale(.94); }
+.pr-close .ui-icon { width: 16px; height: 16px; display: block; }
+.pr-close.pr-close-dark { background: rgba(255,255,255,.14); color: #fff; } .pr-close.pr-close-dark:hover { background: rgba(255,255,255,.24); }
 .hamburger-btn {
     display: none; /* shown only on mobile */
     background: none; border: 1.5px solid var(--gray-mid); color: var(--text);
@@ -1632,10 +1637,7 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 }
 .mobile-menu-header .mm-brand .mm-colon { color: #b79f58; }
 .mobile-menu-header .mm-brand .mm-scope { color: #b79f58; }
-.mobile-menu-close {
-    background: none; border: none; font-size: 22px; cursor: pointer;
-    color: var(--text-muted); padding: 4px; line-height: 1;
-}
+.mobile-menu-close { }   /* 공통 .pr-close */
 
 .mobile-menu-nav { padding: 8px 0; flex: 1; }
 .mobile-menu-nav a {
@@ -2393,7 +2395,7 @@ body { font-variant-numeric: tabular-nums; }
     #comp-doc-btn, #comp-tt-btn { min-height: 36px !important; padding-top: 6px !important; padding-bottom: 6px !important; }
     .header-login-btn { min-height: 36px; }
     .font-size-ctrl button { width: 36px; height: 36px; }
-    .mobile-menu-close { min-width: 40px; min-height: 40px; }
+    .mobile-menu-close { }
 }
 
 /* ── 인라인 SVG 아이콘 (lib/icons.js · 이모지 대체) ── */
