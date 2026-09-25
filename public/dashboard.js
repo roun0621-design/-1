@@ -490,6 +490,11 @@ function _decorateResultPanel(panel, evt) {
 }
 
 // ── 종목 창(엔트리·스타트 리스트·결과) 머리글의 알림 토글 — 카드의 종 아이콘을 여기로 옮김 ──
+// 결과·LIVE 창 머리글의 '이미지 저장' 버튼 — 인스타용 한 장 이미지 (result-image.js). 7종·10종 종합표는 아직 없음
+function _imgBtnHtml(evt) {
+    if (!evt || evt.category === 'combined' || typeof openResultImage !== 'function') return '';
+    return `<button type="button" class="fav-modal-btn img-modal-btn" title="결과 표를 한 장 이미지로 저장·공유" onclick="event.stopPropagation(); openResultImage(${evt.id})">${PaceIcons.svg('camera', { size: 16 })}<span>이미지</span></button>`;
+}
 function _favBtnHtml(evt) {
     if (!evt) return '';
     const g = evt.gender || 'X', on = getFavorites().includes(g + '|' + evt.name);
@@ -1809,7 +1814,7 @@ async function openResult(eventId) {
         bodyHtml += _spot.bottom;
         panel.innerHTML = `<div class="result-panel-header">
             <h3>${_evtTitle(evt, roundL)} ${gL}</h3>
-            ${_favBtnHtml(evt)}
+            ${_imgBtnHtml(evt)}${_favBtnHtml(evt)}
             <button class="result-panel-close" onclick="closeResult()">&times;</button>
         </div><div class="result-panel-body">${bodyHtml}</div>`;
         _decorateResultPanel(panel, evt);
@@ -1980,7 +1985,7 @@ async function refreshLiveResult() {
 
         panel.innerHTML = `<div class="result-panel-header">
             <h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>${_evtTitle(evt, roundL)} ${gL}</h3>
-            ${_favBtnHtml(evt)}
+            ${_imgBtnHtml(evt)}${_favBtnHtml(evt)}
             <button class="result-panel-close" onclick="closeLiveResult()">&times;</button>
         </div><div class="result-panel-body">${bodyHtml}</div>`;
         _decorateResultPanel(panel, evt);
