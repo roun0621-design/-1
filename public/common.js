@@ -1503,10 +1503,17 @@ function lockBodyScrollUntilRemoved(el) {
 async function refreshPage(btn) {
     if (btn) btn.classList.add('spinning');
     try {
-        if (typeof window.loadData === 'function') { await window.loadData(); if (typeof showToast === 'function') showToast('완료', 'success', 900); }
+        if (typeof window.loadData === 'function') await window.loadData();
         else { location.reload(); return; }
     } catch (e) { location.reload(); return; }
-    setTimeout(() => { if (btn) btn.classList.remove('spinning'); }, 600);
+    // 글자 토스트 없이 버튼 안에서만: 돌던 아이콘이 잠깐 ✓ 로 바뀌었다가 돌아온다
+    setTimeout(() => {
+        if (!btn) return;
+        btn.classList.remove('spinning');
+        const orig = btn.innerHTML;
+        btn.innerHTML = (window.PaceIcons ? PaceIcons.svg('check', { size: 20 }) : '✓'); btn.classList.add('done');
+        setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('done'); }, 800);
+    }, 500);
 }
 // 닫기(X) 버튼 HTML — 모든 창이 같은 모양을 쓴다 (styles.css .pr-close)
 function prCloseBtn(onclick, extra) { return `<button type="button" class="pr-close${extra && extra.dark ? ' pr-close-dark' : ''}${extra && extra.cls ? ' ' + extra.cls : ''}" aria-label="닫기" onclick="${onclick}"${extra && extra.style ? ` style="${extra.style}"` : ''}><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button>`; }

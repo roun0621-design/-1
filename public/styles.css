@@ -1612,6 +1612,7 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 .header-phone-actions .hamburger-btn { margin-left: 0; width: 38px !important; height: 38px !important; min-height: 0 !important; padding: 0; border-radius: 11px; border: 1.5px solid #e2ddd2; background: #fff; color: #1a2a5e; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 .header-phone-actions .hamburger-btn .ui-icon { display: block; }
 .header-phone-actions .refresh-btn.spinning .ui-icon { animation: prSpin .6s linear infinite; }
+.header-phone-actions .refresh-btn.done { color: #1b7f4d; border-color: #bfe3cc; background: #e6f4ec; }
 @keyframes prSpin { to { transform: rotate(360deg); } }
 
 .mobile-menu-overlay {
