@@ -3456,6 +3456,21 @@ async function loadRosterModalData(eventId) {
         const _heatEntries = new Map();
         for (const heat of heats) _heatEntries.set(heat.id, await API.getHeatEntries(heat.id));
         const anyFilled = [..._heatEntries.values()].some(l => l.length > 0);
+        // ── PB 기준 순번 (국제대회): 조 안 순번·전체 순번 — 참고치. 7종·10종은 제외. 진출 규칙(각 조 N위)이 있으면 그 안이면 초록 ──
+        const _pbRank = new Map();   // event_entry_id → { heat, all, n_heat, n_all }
+        let _qHeat = 0, _pbNote = '';
+        if (spot && evt.category !== 'combined' && !subOf.size) {
+            const higher = ['field_distance', 'field_height'].includes(evt.category);
+            const num = e => { const v = parseRecordValueClient(e.personal_best); return v == null || !(v > 0) ? null : v; };
+            const rankList = list => { const withPb = list.filter(e => num(e) != null).sort((a, b) => higher ? num(b) - num(a) : num(a) - num(b)); const r = new Map(); let rk = 0; withPb.forEach((e, i) => { if (i === 0 || num(e) !== num(withPb[i - 1])) rk = i + 1; r.set(e.event_entry_id, rk); }); return { r, n: withPb.length }; };
+            const allEntries = [..._heatEntries.values()].flat();
+            const all = rankList(allEntries);
+            // PB 가 절반도 안 채워진 명단(계주 팀 등)은 순번이 의미 없다 → 표시 안 함
+            if (all.n < 3 || all.n * 2 < allEntries.length) { /* skip */ } else
+            for (const heat of heats) { const hl = rankList(_heatEntries.get(heat.id) || []); for (const e of (_heatEntries.get(heat.id) || [])) _pbRank.set(e.event_entry_id, { heat: hl.r.get(e.event_entry_id) || null, n_heat: hl.n, all: all.r.get(e.event_entry_id) || null, n_all: all.n, heat_number: heat.heat_number }); }
+            if (evt.round_type !== 'final') { try { const d = await api('GET', `/api/events/${evt.id}/spotlight`); const m = String((d && d.rule && d.rule.text) || '').match(/first\s+(\d+)/i); if (m) _qHeat = parseInt(m[1], 10); _pbNote = d && d.rule && d.rule.text_ko ? d.rule.text_ko : ''; } catch (e) {} }
+        }
+        const _rankTag = e => { const r = _pbRank.get(e.event_entry_id); if (!r) return ''; const isFinalR = evt.round_type === 'final' || heats.length === 1; const n = isFinalR ? r.all : r.heat; if (!n) return ''; const good = isFinalR ? n <= 3 : (_qHeat ? n <= _qHeat : n <= 3); return `<span class="pb-rank${good ? ' good' : ''}" title="PB 기준 ${isFinalR ? '전체' : '조'} 순번">#${n}</span>`; };
         for (const heat of heats) {
             const entries = _heatEntries.get(heat.id);
             if (entries.length === 0 && anyFilled) continue;   // 공식 일정엔 8조였다가 4조로 줄어든 경우 등: 명단 없는 조는 숨긴다
@@ -3554,8 +3569,8 @@ async function loadRosterModalData(eventId) {
                 //   폭이 모자라면 음절 단위로 줄바꿈(word-break:normal + overflow-wrap:anywhere).
                 if (spot) {
                     html += `<td style="padding:7px 6px;text-align:left;font-weight:800;font-size:11px;color:${isSpot ? '#8b1a2a' : '#555'};white-space:nowrap;">${isSpot && spot === 'KOR' ? PaceIcons.svg('flagKR', { size: 22, style: 'vertical-align:-5px' }) : escT(e.team || '')}</td>`;
-                    html += `<td style="padding:7px 8px;text-align:left;font-weight:${isSpot ? 800 : 600};white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.3;">${escT(e.name)}${e.name_alt ? `<span style="font-size:10px;color:#888;margin-left:5px;font-weight:500;">${escT(e.name_alt)}</span>` : ''}${yearOf(e.date_of_birth) ? `<span style="font-size:10px;color:#999;margin-left:5px;font-weight:500;">${yearOf(e.date_of_birth)}</span>` : ''}${window.innerWidth < 640 && (e.personal_best || e.season_best) ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:#666;font-weight:500;margin-top:3px;white-space:nowrap;">${[e.personal_best ? 'PB ' + escT(e.personal_best) : '', e.season_best ? 'SB ' + escT(e.season_best) : ''].filter(Boolean).join(' · ')}</div>` : ''}</td>`;
-                    if (window.innerWidth >= 640) html += `<td style="padding:5px 8px;text-align:right;font-family:var(--font-mono);font-size:10.5px;color:#555;white-space:nowrap;line-height:1.25;">${pbsbOf(e)}</td>`;
+                    html += `<td style="padding:7px 8px;text-align:left;font-weight:${isSpot ? 800 : 600};white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.3;">${escT(e.name)}${e.name_alt ? `<span style="font-size:10px;color:#888;margin-left:5px;font-weight:500;">${escT(e.name_alt)}</span>` : ''}${yearOf(e.date_of_birth) ? `<span style="font-size:10px;color:#999;margin-left:5px;font-weight:500;">${yearOf(e.date_of_birth)}</span>` : ''}${window.innerWidth < 640 && (e.personal_best || e.season_best) ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:#666;font-weight:500;margin-top:3px;white-space:nowrap;">${[e.personal_best ? 'PB ' + escT(e.personal_best) : '', e.season_best ? 'SB ' + escT(e.season_best) : ''].filter(Boolean).join(' · ')}${_rankTag(e)}</div>` : ''}</td>`;
+                    if (window.innerWidth >= 640) html += `<td style="padding:5px 8px;text-align:right;font-family:var(--font-mono);font-size:10.5px;color:#555;white-space:nowrap;line-height:1.25;">${pbsbOf(e)}${_rankTag(e)}</td>`;
                 } else {
                     html += `<td style="padding:5px 8px;text-align:left;font-weight:600;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;
                     html += `<td style="padding:5px 8px;text-align:left;color:#666;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.team || ''}</td>`;
@@ -3571,7 +3586,21 @@ async function loadRosterModalData(eventId) {
             html += `</tbody></table></div>`;
         }
 
-        body.innerHTML = (await _recordsLineHtml(evt)) + (html || '<div style="padding:20px;text-align:center;color:var(--text-muted);">조 편성 데이터가 없습니다.</div>');
+        // 한국 선수 블록: 이름 · 조·레인 · PB · 조 순번 / 전체 순번 (PB 기준, 참고치)
+        let spotTop = '';
+        if (spot && _pbRank.size) {
+            const mine = []; for (const heat of heats) for (const e of (_heatEntries.get(heat.id) || [])) if (e.team === spot) mine.push({ e, heat });
+            if (mine.length) {
+                const isFinalR = evt.round_type === 'final' || heats.length === 1;
+                const isField = ['field_distance', 'field_height'].includes(evt.category);
+                const lines = mine.map(({ e, heat }) => { const r = _pbRank.get(e.event_entry_id) || {}; const where = `${isFinalR ? '' : heat.heat_number + '조 '}${e.lane_number ? e.lane_number + (isField ? '번' : '레인') : ''}`.trim();
+                    const rk = !e.personal_best ? '<span style="color:#999">PB 없음</span>' : isFinalR ? `<b>전체 ${r.all ? r.all + '번째' : '—'}</b> <span style="color:#888">(${r.n_all}명)</span>` : `<b>${r.heat ? '조 ' + r.heat + '번째' : '—'}</b> <span style="color:#888">/ 전체 ${r.all ? r.all + '번째' : '—'} (${r.n_all}명)</span>`;
+                    const good = r.heat && (isFinalR ? r.all <= 3 : (_qHeat ? r.heat <= _qHeat : r.heat <= 3));
+                    return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;flex-wrap:wrap;font-size:13px"><span style="font-weight:800;font-size:14px">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}${evt.category === 'relay' && spot === 'KOR' ? '대한민국' : escT(e.name)}</span><span style="color:#666">${where}</span>${e.personal_best ? `<span style="font-family:var(--font-mono)">PB ${escT(e.personal_best)}</span>` : ''}<span>${rk}${good ? '<span class="pb-dot" title="진출 범위 안(PB 기준)"></span>' : ''}</span></div>`; });
+                spotTop = `<div class="spot-block"><div style="display:flex;align-items:center;gap:8px;margin-bottom:2px"><span style="font-size:11px;font-weight:800;color:#8b1a2a;letter-spacing:.05em">한국 선수 · 스타트 리스트</span><span style="margin-left:auto;font-size:10px;color:#999">PB 기준 순번 · 참고</span></div>${lines.join('')}${_pbNote ? `<div style="font-size:11px;color:#888;margin-top:4px">진출 규칙 ${escT(_pbNote)}</div>` : ''}</div>`;
+            }
+        }
+        body.innerHTML = (await _recordsLineHtml(evt)) + spotTop + (html || '<div style="padding:20px;text-align:center;color:var(--text-muted);">조 편성 데이터가 없습니다.</div>');
 
         // 운영자용 소집실/기록실 링크 추가
         const isAdmin = currentRole === 'admin';
