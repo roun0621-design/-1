@@ -173,6 +173,17 @@
         return 'downloaded';
     }
     const _canShareFiles = () => { try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([new Blob(['x'])], 'x.png', { type: 'image/png' })] })); } catch (e) { return false; } };
+    function _fullscreen(url, title) {
+        if (document.getElementById('ri-fs')) return;
+        const fsv = document.createElement('div'); fsv.id = 'ri-fs';
+        fsv.style.cssText = 'position:fixed;inset:0;z-index:100002;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+        fsv.innerHTML = `<img src="${url}" alt="${esc(title)}" style="max-width:100vw;max-height:100vh;width:100vw;height:auto;display:block;-webkit-touch-callout:none;-webkit-user-select:none">
+            <div id="ri-fs-hint" style="position:absolute;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom,0));text-align:center;color:#fff;font-size:13px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.8);pointer-events:none">지금 스크린샷을 찍으세요 · 화면을 탭하면 돌아갑니다</div>`;
+        fsv.querySelector('img').addEventListener('contextmenu', e => e.preventDefault());
+        fsv.addEventListener('click', () => fsv.remove());
+        document.body.appendChild(fsv);
+        setTimeout(() => { const h = document.getElementById('ri-fs-hint'); if (h) h.style.opacity = '0'; h && (h.style.transition = 'opacity .6s'); }, 2500);   // 안내 글은 2.5초 뒤 사라져 스크린샷에 안 남게
+    }
     function _closeModal() { const m = document.getElementById('ri-modal'); if (m) m.remove(); const st = document.getElementById('ri-stage'); if (st) st.remove(); if (window.unlockBodyScroll) unlockBodyScroll(); }
     async function openResultImage(eventId) {
         if (document.getElementById('ri-modal')) return;
@@ -202,13 +213,15 @@
                 const item = document.createElement('div');
                 // 옛 앱스토어 빌드(브리지 없음): 길게 눌러 '사진 저장'을 고르면 iOS 가 앱을 강제 종료한다(Info.plist 사진 권한 설명 누락) → 길게 누르기 메뉴를 막고 업데이트 안내
                 const oldWrapper = _isIOS() && !_canShareFiles() && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.paceSave);
-                item.innerHTML = `<img src="${url}" alt="${esc(pages[i].title)}" style="width:100%;border-radius:8px;border:1px solid #e5e5e5;display:block;-webkit-touch-callout:${oldWrapper ? 'none' : 'default'};-webkit-user-select:none"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px"><span style="font-size:12px;color:#666">${esc(pages[i].title)} · ${pages[i].rows}명</span>${oldWrapper ? '<span style="font-size:12px;color:#8b1a2a;font-weight:700;text-align:right">사진 저장은 앱 업데이트 후 지원돼요</span>' : '<button class="btn btn-sm btn-primary" style="font-size:12px">저장 / 공유</button>'}</div>`;
-                if (oldWrapper) item.querySelector('img').addEventListener('contextmenu', e => e.preventDefault());
+                item.innerHTML = `<img src="${url}" alt="${esc(pages[i].title)}" style="width:100%;border-radius:8px;border:1px solid #e5e5e5;display:block;-webkit-touch-callout:${oldWrapper ? 'none' : 'default'};-webkit-user-select:none"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px"><span style="font-size:12px;color:#666">${esc(pages[i].title)} · ${pages[i].rows}명</span>${oldWrapper ? '<button class="btn btn-sm btn-primary" style="font-size:12px">전체 화면 → 스크린샷</button>' : '<button class="btn btn-sm btn-primary" style="font-size:12px">저장 / 공유</button>'}</div>`;
                 const btn = item.querySelector('button');
-                if (btn) btn.onclick = async () => { const r = await _save(blob, name); if (window.toast) { if (r === 'downloaded') toast('저장했습니다', 'success'); else if (r === 'native') toast('사진 앱에 저장했습니다', 'success'); else if (r === 'longpress') toast("이미지를 길게 눌러 '사진에 추가'를 선택하세요", 'info'); } };
+                if (oldWrapper) { item.querySelector('img').addEventListener('contextmenu', e => e.preventDefault()); btn.onclick = () => _fullscreen(url, pages[i].title); }
+                else if (btn) btn.onclick = async () => { const r = await _save(blob, name); if (window.toast) { if (r === 'downloaded') toast('저장했습니다', 'success'); else if (r === 'native') toast('사진 앱에 저장했습니다', 'success'); else if (r === 'longpress') toast("이미지를 길게 눌러 '사진에 추가'를 선택하세요", 'info'); } };
                 list.appendChild(item);
             }
-            const note = modal.querySelector('div[style*="color:#888"]'); if (note) note.textContent = `${pages.length > 1 ? `조마다 한 장 · ${pages.length}장` : '한 장'} · 길게 눌러 저장할 수도 있어요`;
+            const note = modal.querySelector('div[style*="color:#888"]');
+            const anyOld = _isIOS() && !_canShareFiles() && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.paceSave);
+            if (note) note.textContent = `${pages.length > 1 ? `조마다 한 장 · ${pages.length}장` : '한 장'} · ${anyOld ? '전체 화면으로 띄운 뒤 스크린샷을 찍으면 저장돼요 (앱 업데이트 후엔 버튼 한 번에 사진 앱 저장)' : '길게 눌러 저장할 수도 있어요'}`;
         } catch (e) { list.innerHTML = `<div style="color:#b3261e;font-size:12px">이미지 만들기 실패: ${esc(e.message || e)}</div>`; }
     }
     window.openResultImage = openResultImage;
