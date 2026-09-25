@@ -200,8 +200,10 @@
                 const url = URL.createObjectURL(blob);
                 const name = `${(pages[i].title || 'result').replace(/[^\w가-힣().-]+/g, '_')}_${Date.now()}.png`;
                 const item = document.createElement('div');
-                const longPressOnly = _isIOS() && !_canShareFiles() && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.paceSave);
-                item.innerHTML = `<img src="${url}" alt="${esc(pages[i].title)}" style="width:100%;border-radius:8px;border:1px solid #e5e5e5;display:block;-webkit-touch-callout:default"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px"><span style="font-size:12px;color:#666">${esc(pages[i].title)} · ${pages[i].rows}명</span>${longPressOnly ? '<span style="font-size:12px;color:#8b1a2a;font-weight:700;text-align:right">이미지를 길게 눌러 \'사진에 추가\'</span>' : '<button class="btn btn-sm btn-primary" style="font-size:12px">저장 / 공유</button>'}</div>`;
+                // 옛 앱스토어 빌드(브리지 없음): 길게 눌러 '사진 저장'을 고르면 iOS 가 앱을 강제 종료한다(Info.plist 사진 권한 설명 누락) → 길게 누르기 메뉴를 막고 업데이트 안내
+                const oldWrapper = _isIOS() && !_canShareFiles() && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.paceSave);
+                item.innerHTML = `<img src="${url}" alt="${esc(pages[i].title)}" style="width:100%;border-radius:8px;border:1px solid #e5e5e5;display:block;-webkit-touch-callout:${oldWrapper ? 'none' : 'default'};-webkit-user-select:none"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px"><span style="font-size:12px;color:#666">${esc(pages[i].title)} · ${pages[i].rows}명</span>${oldWrapper ? '<span style="font-size:12px;color:#8b1a2a;font-weight:700;text-align:right">사진 저장은 앱 업데이트 후 지원돼요</span>' : '<button class="btn btn-sm btn-primary" style="font-size:12px">저장 / 공유</button>'}</div>`;
+                if (oldWrapper) item.querySelector('img').addEventListener('contextmenu', e => e.preventDefault());
                 const btn = item.querySelector('button');
                 if (btn) btn.onclick = async () => { const r = await _save(blob, name); if (window.toast) { if (r === 'downloaded') toast('저장했습니다', 'success'); else if (r === 'native') toast('사진 앱에 저장했습니다', 'success'); else if (r === 'longpress') toast("이미지를 길게 눌러 '사진에 추가'를 선택하세요", 'info'); } };
                 list.appendChild(item);
