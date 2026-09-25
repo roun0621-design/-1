@@ -1503,7 +1503,7 @@ function lockBodyScrollUntilRemoved(el) {
 async function refreshPage(btn) {
     if (btn) btn.classList.add('spinning');
     try {
-        if (typeof window.loadData === 'function') { await window.loadData(); if (window.toast) toast('새로고침했습니다', 'success'); }
+        if (typeof window.loadData === 'function') { await window.loadData(); if (typeof showToast === 'function') showToast('새로고침했습니다', 'success', 1200); }
         else { location.reload(); return; }
     } catch (e) { location.reload(); return; }
     setTimeout(() => { if (btn) btn.classList.remove('spinning'); }, 600);
