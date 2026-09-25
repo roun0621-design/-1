@@ -37,20 +37,20 @@ function rowHtml(r, fs) {
 }
 const CSS = `
 *{box-sizing:border-box}body{margin:0;background:#888;font-family:'Noto Sans KR','Apple SD Gothic Neo',sans-serif;color:#1f1d1a;-webkit-font-smoothing:antialiased}
-.card{width:1080px;height:1350px;position:relative;overflow:hidden;background:#fbfaf6;padding:70px 64px 56px;display:flex;flex-direction:column}
+.card{width:1080px;height:1350px;position:relative;overflow:hidden;background:#fbfaf6;padding:60px 64px 50px;display:flex;flex-direction:column}
 .brand{font-family:'Audiowide',sans-serif;font-size:26px;letter-spacing:2px;color:#1a2a5e}.brand span{color:#b79f58}
 .top{display:flex;align-items:center;justify-content:space-between}.top .pg{font-family:'Audiowide',sans-serif;font-size:20px;color:#b79f58;letter-spacing:2px}
-.eyebrow{margin-top:34px;font-size:24px;font-weight:700;color:#8a7640;letter-spacing:.05em;display:flex;align-items:center;gap:14px}
+.eyebrow{margin-top:24px;font-size:24px;font-weight:700;color:#8a7640;letter-spacing:.05em;display:flex;align-items:center;gap:14px}
 h1{font-size:60px;line-height:1.15;font-weight:900;letter-spacing:-.03em;margin:8px 0 0;word-break:keep-all}
-.sub{font-size:24px;color:#6f6a62;margin-top:10px;font-weight:500}
-.rule{width:110px;height:4px;background:#b79f58;margin:22px 0 8px}
+.sub{font-size:26px;color:#6f6a62;margin-top:10px;font-weight:500}
+.rule{width:110px;height:4px;background:#b79f58;margin:16px 0 4px}
 .body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-start}
-.day{margin-top:18px;font-size:22px;font-weight:800;color:#8b1a2a;letter-spacing:.04em;padding-bottom:6px;border-bottom:2px solid #ead9a0;display:flex;align-items:center;gap:10px}
+.day{margin-top:16px;font-size:25px;font-weight:800;color:#8b1a2a;letter-spacing:.04em;padding-bottom:6px;border-bottom:2px solid #ead9a0;display:flex;align-items:center;gap:10px}
 .day small{font-weight:600;color:#9a958c;font-size:19px}
-.row{display:flex;align-items:center;gap:14px;padding:9px 0;border-bottom:1px solid #ece8de}
-.row .ev{flex:0 0 272px;font-weight:700;color:#333;white-space:nowrap;display:flex;align-items:baseline;gap:6px}.row .ev .evn{min-width:0;overflow:hidden;text-overflow:ellipsis}.row .ev .rt{flex:none}.row .ev .rt{font-weight:800;margin-left:4px}.rt.preliminary{color:#1565c0}.rt.semifinal{color:#e65100}.rt.final{color:#b3261e}
-.row .nm{flex:1;min-width:0;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row:has(+ .memrow){border-bottom:none;padding-bottom:2px}.memrow{font-size:.62em;color:#777;font-weight:500;padding:0 0 8px 286px;border-bottom:1px solid #ece8de;white-space:nowrap}
-.row .res{flex:none;display:flex;align-items:center;gap:8px}.row .res .ct{flex:0 0 52px;display:flex;justify-content:flex-end}.row .res .cq{flex:0 0 106px;display:flex;justify-content:flex-end}.row .res .cp{flex:0 0 84px;display:flex;justify-content:flex-end}.row .res .cm{flex:0 0 136px;text-align:right}
+.row{display:flex;align-items:center;gap:14px;padding:8px 0;border-bottom:1px solid #ece8de}
+.row .ev{flex:0 0 10.6em;font-weight:700;color:#333;white-space:nowrap;display:flex;align-items:baseline;gap:6px}.row .ev .evn{min-width:0;overflow:hidden;text-overflow:ellipsis}.row .ev .rt{flex:none}.row .ev .rt{font-weight:800;margin-left:4px}.rt.preliminary{color:#1565c0}.rt.semifinal{color:#e65100}.rt.final{color:#b3261e}
+.row .nm{flex:1;min-width:0;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row:has(+ .memrow){border-bottom:none;padding-bottom:2px}.memrow{font-size:.62em;color:#777;font-weight:500;padding:0 0 8px 17.4em;border-bottom:1px solid #ece8de;white-space:nowrap}
+.row .res{flex:none;display:flex;align-items:center;gap:8px}.row .res .ct{flex:0 0 2.1em;display:flex;justify-content:flex-end}.row .res .cq{flex:0 0 4.3em;display:flex;justify-content:flex-end}.row .res .cp{flex:0 0 3.4em;display:flex;justify-content:flex-end}.row .res .cm{flex:0 0 5.4em;text-align:right}
 .pl{display:inline-block;min-width:44px;padding:2px 10px;border-radius:9px;background:#e9edf6;color:#1a2a5e;font-weight:800;font-size:.8em;text-align:center;white-space:nowrap}
 .st{color:#b3261e;font-weight:800;font-size:.8em}
 .mk{font-family:'D2Coding',monospace;font-weight:700;font-size:1.05em}
@@ -66,8 +66,8 @@ h1{font-size:60px;line-height:1.15;font-weight:900;letter-spacing:-.03em;margin:
 .cv-line{display:flex;align-items:center;gap:18px;margin-top:70px;font-size:30px;font-weight:700;color:#8a7640;letter-spacing:.03em}
 .cv-title{font-size:84px;font-weight:900;letter-spacing:-.03em;line-height:1.15;margin-top:24px;word-break:keep-all;margin-bottom:auto}
 /* 예정 */
-.srow{display:flex;align-items:center;gap:16px;padding:8px 0;border-bottom:1px solid #ece8de}
-.srow .tm{flex:0 0 96px;font-family:'D2Coding',monospace;font-size:1.05em;font-weight:700;color:#8a7640}
+.srow{display:flex;align-items:center;gap:16px;padding:7px 0;border-bottom:1px solid #ece8de}
+.srow .tm{flex:0 0 4em;font-family:'D2Coding',monospace;font-size:1.05em;font-weight:700;color:#8a7640}
 .srow .mid{flex:1;min-width:0}.srow .ev{font-weight:700;color:#333}.srow .ev .rt{font-weight:800}.srow .nm{font-weight:900;font-size:1.08em;margin-top:1px}.srow .pbsb{font-family:'D2Coding',monospace;font-size:.78em;color:#555;margin-top:2px}.srow .subs{font-size:.7em;color:#777;margin-top:2px}
 .srow .rk{flex:none;text-align:right;align-self:center}.rkp{display:inline-block;padding:4px 11px;border-radius:10px;background:#f1efe9;color:#6b665e;font-family:'D2Coding',monospace;font-weight:800;font-size:.82em;white-space:nowrap}.rkp.good{background:#e6f4ec;color:#1b7f4d}.rkp b{font-family:'D2Coding',monospace;font-size:.8em;letter-spacing:.08em;margin-right:7px;font-weight:800}.rkn{font-size:.62em;color:#9a958c;margin-top:4px}
 `;
@@ -84,12 +84,12 @@ function resultCards(days, title, filePrefix) {
   const byDay = days.map(d => ({ d, rows: rows.filter(r => r.d === d) })).filter(x => x.rows.length);
   // 페이지 나누기: 한 페이지 ≤ 13행
   const pages = []; let cur = [], n = 0;
-  for (const x of byDay) { if (n && n + x.rows.length > 13) { pages.push(cur); cur = []; n = 0; } cur.push(x); n += x.rows.length; }
+  for (const x of byDay) { if (n && n + x.rows.length > 12) { pages.push(cur); cur = []; n = 0; } cur.push(x); n += x.rows.length; }
   if (cur.length) pages.push(cur);
   const medals = roster.medals;
   return pages.map((pg, i) => {
     const total = pg.reduce((a, x) => a + x.rows.length, 0);
-    const fs = total >= 13 ? 22 : total >= 10 ? 24 : 26;
+    const fs = total >= 12 ? 25 : total >= 9 ? 27 : 30;
     const body = pg.map(x => `<div class="day">${dLabel(x.d)} · ${dayNo(x.d)}일차 <small>${x.rows.length}경기</small></div>${x.rows.map(r => rowHtml(r, fs)).join('')}`).join('');
     const sub = `메달 <b style="color:#c7a12a">금 ${medals.gold}</b> · <b style="color:#9ba2ac">은 ${medals.silver}</b> · <b style="color:#a1632c">동 ${medals.bronze}</b> &nbsp;·&nbsp; 대회 공식 결과 기준`;
     return { file: `${filePrefix}_${i + 1}.png`, html: `<section class="card">${head(`2026 아이치·나고야 아시안게임 육상 · 대한민국`, title, sub, `${String(i + 2).padStart(2, '0')} / ${String(pages.length + 1).padStart(2, '0')}`)}<div class="body">${body}</div>${foot()}</section>` };
@@ -97,9 +97,9 @@ function resultCards(days, title, filePrefix) {
 }
 // ── 예정 카드 ──
 function scheduleCards(day, list, filePrefix) {
-  const pages = []; for (let i = 0; i < list.length; i += 8) pages.push(list.slice(i, i + 8));
+  const per = Math.ceil(list.length / Math.ceil(list.length / 8)); const pages = []; for (let i = 0; i < list.length; i += per) pages.push(list.slice(i, i + per));   // 최대 8행, 페이지 간 균등
   return pages.map((pg, i) => {
-    const fs = pg.length >= 8 ? 20 : pg.length >= 6 ? 23 : 26;
+    const fs = pg.length >= 8 ? 23 : pg.length >= 7 ? 25 : pg.length >= 5 ? 27 : 30;
     const rowsHtml = pg.map(x => {
       const rk = x.rank && x.rank.all ? (x.rt === 'final' || x.rank.heats === 1 ? `<span class="rkp${x.rank.all.r <= 3 ? ' good' : ''}"><b>RANK</b>${x.rank.all.r}/${x.rank.all.n}</span>` : `<span class="rkp${x.rank.heat && x.rank.heat.r <= 3 ? ' good' : ''}"><b>RANK</b>${x.rank.heat.r}/${x.rank.heat.n}</span><div class="rkn">조 기준 · 전체 ${x.rank.all.r}/${x.rank.all.n}${x.rank.lane ? ` · ${x.rank.heat_number ? x.rank.heat_number + '조 ' : ''}${x.rank.lane}레인` : ''}</div>`) : (x.combined ? `<span class="rkp"><b>10종</b>Day 1</span>` : x.entries ? `<span class="rkp"><b>엔트리</b>${x.entries}명</span>` : '');
       return `<div class="srow" style="font-size:${fs}px"><div class="tm">${x.time}</div><div class="mid"><div class="ev">${G[x.g]} ${esc(x.ev)} <span class="rt ${x.combined ? '' : x.rt}">${x.combined ? 'Day 1' : (R[x.rt] || '')}${x.heat && x.rt !== 'final' && !x.combined ? ' ' + x.heat + '조' : ''}</span></div><div class="nm">${esc(x.name)}</div>${x.subs ? `<div class="subs">${esc(x.subs)}${x.subs.split('·').length < 5 ? ' · 21:20 400m' : ''}</div>` : `<div class="pbsb">${x.pb ? 'PB ' + esc(x.pb) : ''}${x.sb ? ' · SB ' + esc(x.sb) : ''}${x.rule ? ` · <span style="font-family:'Noto Sans KR';color:#8a8580">${esc(x.rule)}</span>` : ''}</div>`}</div><div class="rk">${rk}</div></div>`;
