@@ -174,9 +174,16 @@
         .result-panel { background:var(--white); border-radius:var(--radius-lg); width:90vw; max-width:800px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,.18); }
         .result-panel-header { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:var(--white); border-bottom:2px solid var(--gray); flex-shrink:0; position:sticky; top:0; z-index:10; }
         .result-panel-header h3 { margin:0; font-size:16px; font-weight:800; letter-spacing:0.3px; }
-        /* 진행 중 창: 제목 뒤 작은 빨간 점 + LIVE (금색 박스 대신) */
-        .live-dot-chip { display:inline-flex; align-items:center; gap:5px; margin-left:8px; font-size:10.5px; font-weight:800; color:#c0392b; letter-spacing:.06em; vertical-align:2px; }
-        .live-dot-chip::before { content:''; width:7px; height:7px; border-radius:50%; background:#c0392b; }
+        /* 결과·LIVE 창 제목: 두 줄로 고정 — 위 줄 (LIVE 칩 +) 성별, 아래 줄 종목·라운드. 폰에서 '남자'만 다음 줄로 떨어지던 것 */
+        .rp-title { display:flex; flex-direction:column; gap:2px; min-width:0; }
+        .rp-title .rp-top { display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#8a8580; letter-spacing:.02em; }
+        .rp-title .rp-main { font-size:17px; font-weight:800; letter-spacing:-.01em; line-height:1.25; word-break:keep-all; }
+        .result-panel-header .rp-title { flex:1; }
+        /* 폰: 머리글 버튼은 아이콘만(글자 숨김) — 긴 종목명이 단어 중간에서 꺾이지 않게 제목 폭 확보 */
+        @media (max-width:640px) { .result-panel-header .fav-modal-btn span { display:none; } .result-panel-header .fav-modal-btn { padding:0 9px; min-width:34px; justify-content:center; margin-right:4px; } .result-panel-header .rp-main { font-size:16px; } }
+        .live-chip { display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:999px; background:#fdecec; color:#c0392b; font-size:11px; font-weight:800; letter-spacing:.08em; line-height:1.2; }
+        .live-chip::before { content:''; width:8px; height:8px; border-radius:50%; background:#c0392b; }
+        .live-chip.blink-on { opacity:.35; }
         .result-panel-close { margin-left:6px; }   /* 모양은 공통 .pr-close */
         .result-panel-body { flex:1; overflow-y:auto; overflow-x:auto; padding:14px 16px; -webkit-overflow-scrolling:touch; scrollbar-width:thin; max-width:100%; overscroll-behavior:contain; }
         #roster-modal-body, #ri-modal { overscroll-behavior:contain; }   /* 창 끝에서 튕겨도 뒤 화면으로 스크롤이 새지 않게 */

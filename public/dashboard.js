@@ -1816,7 +1816,7 @@ async function openResult(eventId) {
 
         bodyHtml += _spot.bottom;
         panel.innerHTML = `<div class="result-panel-header">
-            <h3>${gL} ${_evtTitle(evt, roundL)}</h3>
+            <h3 class="rp-title"><span class="rp-top">${gL}</span><span class="rp-main">${_evtTitle(evt, roundL)}</span></h3>
             ${_imgBtnHtml(evt)}${_favBtnHtml(evt)}
             ${prCloseBtn('closeResult()', { cls: 'result-panel-close' })}
         </div><div class="result-panel-body">${bodyHtml}</div>`;
@@ -1987,7 +1987,7 @@ async function refreshLiveResult() {
         bodyHtml += `<div style="margin-top:12px;font-size:11px;color:var(--text-muted);text-align:center;">자동 새로고침 | ${new Date().toLocaleTimeString('ko-KR')}</div>`;
 
         panel.innerHTML = `<div class="result-panel-header">
-            <h3>${gL} ${_evtTitle(evt, roundL)}<span class="live-dot-chip">LIVE</span></h3>
+            <h3 class="rp-title"><span class="rp-top"><span class="live-chip blinker">LIVE</span>${gL}</span><span class="rp-main">${_evtTitle(evt, roundL)}</span></h3>
             ${_imgBtnHtml(evt)}${_favBtnHtml(evt)}
             ${prCloseBtn('closeLiveResult()', { cls: 'result-panel-close' })}
         </div><div class="result-panel-body">${bodyHtml}</div>`;
