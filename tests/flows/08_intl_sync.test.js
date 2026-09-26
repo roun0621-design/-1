@@ -438,6 +438,27 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: heats.map(h => h.external_key) });
         expect((await db.get('SELECT round_status FROM event WHERE id=?', ev.id)).round_status).toBe('completed');
     });
+    it('일정 갱신: 조 시각이 바뀌면(여자 200m 예선 11:30 → 19:55) 조 시각과 시간표 줄이 새 시각으로 바뀌고 옛 줄은 남지 않는다; runOnce 는 대회 기간 30분마다 일정을 다시 읽는다', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const unit = schedule.find(u => u.Key === 'W.200M--------------.RND1.000100--'); expect(unit).toBeTruthy();
+        const before = await db.get("SELECT h.id, h.scheduled_at, h.event_id FROM heat h WHERE h.external_key='W.200M--------------.RND1.000100--'");
+        const orig = unit.DateTimeRaw; unit.DateTimeRaw = orig.replace(/T\d\d:\d\d/, 'T19:55');
+        try {
+            const a = await sync.setupStructure(db, comp, { fetch: fakeFetch });
+            const after = await db.get('SELECT scheduled_at FROM heat WHERE id=?', before.id);
+            expect(after.scheduled_at).toMatch(/T19:55/); expect(after.scheduled_at).not.toBe(before.scheduled_at);
+            const tt = await db.all('SELECT time FROM timetable WHERE competition_id=? AND event_id=? ORDER BY time', fx.comp, before.event_id);
+            expect(tt.length).toBeGreaterThan(0); expect(tt.every(r => r.time >= '19:55')).toBe(true);   // 옛 11:30 줄 없음
+            expect(a.stats.timetable_removed || 0).toBeGreaterThan(0);
+            // runOnce: structure_at 이 30분 넘었으면 다시 읽는다
+            const st = JSON.parse((await db.get('SELECT sync_state FROM competition WHERE id=?', fx.comp)).sync_state);
+            st.structure_at = new Date(Date.now() - 31 * 60000).toISOString();
+            await db.run('UPDATE competition SET sync_state=?, start_date=?, end_date=? WHERE id=?', JSON.stringify(st), new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10), new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10), fx.comp);
+            const c2 = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+            const r = await sync.runOnce(db, c2, { fetch: fakeFetch });
+            expect(r.structure).toBeTruthy();
+        } finally { unit.DateTimeRaw = orig; await sync.setupStructure(db, comp, { fetch: fakeFetch }); await db.run('UPDATE competition SET start_date=?, end_date=? WHERE id=?', comp.start_date, comp.end_date, fx.comp); }
+    });
     it('일정 다시: 공식 일정에서 사라진 조·라운드(남자 세단뛰기 예선 → 직결)는 명단·기록이 없으면 지우고 출전은 결승으로 옮긴다', async () => {
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
         const before = await db.all("SELECT e.id, e.round_type, (SELECT COUNT(*) FROM heat WHERE event_id=e.id) hc, (SELECT COUNT(*) FROM event_entry WHERE event_id=e.id) ec FROM event e WHERE e.competition_id=? AND e.external_key LIKE 'M.TRPLJUMP%' ORDER BY e.id", fx.comp);
