@@ -121,7 +121,7 @@ function connect() {
         try {
             const msg = JSON.parse(e.data);
             if (msg.type === 'scoreboard_state') renderScoreboard(msg.data);
-            if (msg.type === 'scoreboard_result_update' || msg.type === 'scoreboard_wind_update' || msg.type === 'scoreboard_event_status_changed') {
+            if (/^scoreboard_(result_update|wind_update|height_update|event_status_changed|event_completed|heat_update)$/.test(msg.type)) {
                 if (compId) ws.send(JSON.stringify({ type: 'request_current', competition_id: compId }));
             }
         } catch(e) {}
@@ -146,10 +146,11 @@ function renderScoreboard(data) {
     }
 
     const evt = data.event;
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const gL = evt.gender === 'M' ? 'Men' : evt.gender === 'F' ? 'Women' : 'Mixed';
     const roundL = { preliminary: 'Prelim', semifinal: 'Semi', final: 'Final' }[evt.round_type] || '';
     
-    let titleHtml = `${gL} ${evt.name}`;
+    let titleHtml = `${gL} ${esc(evt.name)}`;
     if (data.is_joint) {
         titleHtml += ' <span class="sb-joint-badge" style="background:#f59e0b;color:#000;">JOINT</span>';
     }
@@ -166,44 +167,37 @@ function renderScoreboard(data) {
         return;
     }
 
-    const isTrack = evt.category === 'track' || evt.category === 'relay' || evt.category === 'road';
     const isJoint = data.is_joint;
+    // 순위·기록 표기는 서버가 공용 규칙으로 계산해 보낸다(동률 = 같은 순위, 실격·기권은 순위 없음). 화면은 그대로 보여주기만 한다.
     const sorted = [...data.entries].sort((a, b) => {
-        const aS = a.status_code === 'DNS' || a.status_code === 'DNF';
-        const bS = b.status_code === 'DNS' || b.status_code === 'DNF';
-        if (aS && !bS) return 1;
-        if (!aS && bS) return -1;
-        if (a.record == null && b.record == null) return (a.lane_number || 0) - (b.lane_number || 0);
-        if (a.record == null) return 1;
-        if (b.record == null) return -1;
-        return isTrack ? a.record - b.record : b.record - a.record;
+        const ar = a.rank != null ? a.rank : Infinity, br = b.rank != null ? b.rank : Infinity;
+        if (ar !== br) return ar - br;
+        const aS = !!a.status_code, bS = !!b.status_code;
+        if (aS !== bS) return aS ? 1 : -1;
+        if (aS && bS) { const o = { NM: 1, DNF: 2, DQ: 3, DNS: 4 }; const d = (o[a.status_code] || 9) - (o[b.status_code] || 9); if (d) return d; }   // 공용 규칙(public/lib/ranking.js)과 같은 순서
+        return (a.lane_number || 0) - (b.lane_number || 0);
     });
 
-    let rank = 0;
-    const html = sorted.map((e, i) => {
-        const special = e.status_code === 'DNS' || e.status_code === 'DNF' || e.status_code === 'DQ';
-        if (!special && e.record != null) rank++;
+    const html = sorted.map(e => {
+        const special = !!e.status_code;
+        const rank = e.rank;
         const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
-        const recStr = special ? e.status_code : (e.record != null ? formatTime(e.record, isTrack) : '');
-        
-        // Federation badge for joint events
+        const recStr = special ? esc(e.status_code) : esc(e.record_text || '');
         let fedBadge = '';
         if (isJoint && e.federation) {
             const fedCode = e.federation;
             const fedClass = FED_LABELS[fedCode] ? fedCode : 'default';
-            const fedText = FED_LABELS[fedCode] || fedCode;
-            fedBadge = `<span class="sb-fed-badge ${fedClass}">${fedText}</span>`;
+            fedBadge = `<span class="sb-fed-badge ${esc(fedClass)}">${esc(FED_LABELS[fedCode] || fedCode)}</span>`;
         }
-        
-        return `<div class="sb-row ${special ? 'dns' : ''} ${rank <= 3 && !special ? 'highlight' : ''}">
-            <div class="sb-rank ${rankClass}">${special ? '' : (e.record != null ? rank : '')}</div>
-            <div class="sb-bib">${e.bib_number || ''}</div>
+        return `<div class="sb-row ${special ? 'dns' : ''} ${rank != null && rank <= 3 ? 'highlight' : ''}">
+            <div class="sb-rank ${rankClass}">${rank != null ? rank : ''}</div>
+            <div class="sb-bib">${esc(e.bib_number)}</div>
             <div class="sb-name-team">
-                <div class="sb-name">${e.name || ''}${fedBadge}</div>
-                <div class="sb-team">${e.team || ''}</div>
+                <div class="sb-name">${esc(e.name)}${fedBadge}</div>
+                <div class="sb-team">${esc(e.team)}</div>
             </div>
             <div class="sb-record ${special ? 'dns-mark' : ''}">${recStr}</div>
-            <div class="sb-lane">Lane ${e.lane_number || '-'}</div>
+            <div class="sb-lane">Lane ${esc(e.lane_number || '-')}</div>
         </div>`;
     }).join('');
 

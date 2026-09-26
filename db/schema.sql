@@ -18,7 +18,11 @@ CREATE TABLE IF NOT EXISTS competition (
     federation TEXT DEFAULT '',
     division_type TEXT DEFAULT '',
     mode TEXT NOT NULL DEFAULT 'operation',         -- 'operation' | 'display'
-    series_id INTEGER REFERENCES competition_series(id)
+    series_id INTEGER REFERENCES competition_series(id),
+    home_visibility TEXT NOT NULL DEFAULT 'auto',    -- 'auto' | 'pinned'(홈 고정) | 'hidden'(홈 숨김)
+    manual_status_lock INTEGER NOT NULL DEFAULT 0,   -- 1=관리자 '대회 재개'로 수동 상태고정 → 날짜 자동갱신(active→completed) 제외
+    sync_source TEXT DEFAULT NULL,                   -- 국제대회 동기화 출처 JSON {provider, base, champ, disc, lang} (lib/intl)
+    sync_state TEXT DEFAULT NULL                     -- 마지막 동기화 상태 JSON
 );
 
 -- Events (종목) — linked to competition
@@ -36,7 +40,8 @@ CREATE TABLE IF NOT EXISTS event (
     video_url TEXT DEFAULT '',
     callroom_event_memo TEXT DEFAULT '',
     division TEXT NOT NULL DEFAULT '',
-    result_url TEXT DEFAULT ''
+    result_url TEXT DEFAULT '',
+    external_key TEXT DEFAULT NULL                  -- 국제대회 동기화: 공식 결과 API 의 종목 키 (lib/intl)
 );
 
 -- Athletes (선수) — linked to competition
@@ -58,6 +63,8 @@ CREATE TABLE IF NOT EXISTS event_entry (
     athlete_id INTEGER NOT NULL REFERENCES athlete(id),
     status TEXT NOT NULL DEFAULT 'registered' CHECK(status IN ('registered','checked_in','no_show')),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    personal_best TEXT DEFAULT '',                  -- 종목별 PB (국제대회 선수 보조 정보)
+    season_best TEXT DEFAULT '',                    -- 종목별 SB
     UNIQUE(event_id, athlete_id)
 );
 
@@ -67,6 +74,8 @@ CREATE TABLE IF NOT EXISTS heat (
     event_id INTEGER NOT NULL REFERENCES event(id),
     heat_number INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    external_key TEXT DEFAULT NULL,                 -- 국제대회 동기화: 공식 결과 API 의 조(유닛) 키
+    scheduled_at TEXT DEFAULT NULL,                 -- 조 시작 시각 (ISO, 국제대회 동기화)
     UNIQUE(event_id, heat_number)
 );
 
@@ -209,7 +218,8 @@ CREATE TABLE IF NOT EXISTS division_master (
     school_level TEXT NOT NULL CHECK(school_level IN ('OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED')),
     sort_order INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    grade INTEGER DEFAULT NULL                      -- 학년 단위 부(초3~6·중1~3·고1~3)만 값 있음 (Phase 7-②)
 );
 
 -- Competition Series (대회 시리즈 = 회차 묶음)
@@ -276,7 +286,8 @@ CREATE TABLE IF NOT EXISTS record_breaking_log (
     detected_at TEXT NOT NULL DEFAULT (datetime('now')),
     reviewed_at TEXT,
     reviewed_by TEXT,
-    review_note TEXT NOT NULL DEFAULT ''
+    review_note TEXT NOT NULL DEFAULT '',
+    is_tie INTEGER NOT NULL DEFAULT 0               -- 타이기록(CT·DT·KT): 기존 기록과 같은 값 (Phase 7-④)
 );
 
 -- ============================================================
@@ -296,6 +307,7 @@ INSERT OR IGNORE INTO division_master (code, label_ko, gender, school_level, sor
     ('F_GEN',   '여자일반부', 'F', 'GEN',  150),
     ('F_OPEN',  '여자공개부', 'F', 'OPEN', 160),
     ('MIXED',   '통합부',     'X', 'MIXED', 900);
+-- 학년 단위 부 20행은 서버 부팅 시 lib/division.js gradeDivisionSeed() 로 시드 (M_ELEM3~6, M_MID1~3, M_HIGH1~3, F_…)
 
 -- ============================================================
 -- competition / event parity (PG에는 있지만 SQLite schema.sql에는 누락됐던 컬럼들)
@@ -319,4 +331,14 @@ CREATE TABLE IF NOT EXISTS operation_key (
     role TEXT NOT NULL DEFAULT 'operation' CHECK(role IN ('operation','admin')),
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 트랙 기록(attempt_number IS NULL) 중복 방지 — UNIQUE(heat_id,event_entry_id,attempt_number) 는 NULL 에 효력이 없다
+CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_entry_id) WHERE attempt_number IS NULL;
+
+-- 워드 상장 양식 (현장 인쇄용) — scope_key: 'global' | 'c<대회id>', config: JSON (lib/awardDocxTemplate.js)
+CREATE TABLE IF NOT EXISTS award_docx_template (
+    scope_key TEXT PRIMARY KEY,
+    config TEXT NOT NULL,
+    updated_at TEXT
 );

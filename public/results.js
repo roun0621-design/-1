@@ -14,10 +14,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!(await requireCompetition())) return;
     renderPageNav('results');
     // Parallel: info bar + events load simultaneously
-    const [, events] = await Promise.all([
-        renderCompInfoBar(),
-        API.getAllEvents(getCompetitionId())
-    ]);
+    uiState('results-matrix-container', 'loading', { title: '종목을 불러오는 중…' });
+    let events;
+    try {
+        [, events] = await Promise.all([
+            renderCompInfoBar(),
+            API.getAllEvents(getCompetitionId())
+        ]);
+    } catch (e) {
+        uiState('results-matrix-container', 'error', { title: '종목을 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '네트워크나 서버 상태를 확인하세요.' });
+        throw e;
+    }
     allEvents = events;
     renderResultsMatrix();
     renderAuditLog();
@@ -281,7 +288,7 @@ function renderResultsMatrix() {
         html += `</tbody></table></div>`;
     });
 
-    if (!html) html = '<div class="empty-state">종목이 없습니다.</div>';
+    if (!html) html = uiStateHtml('empty', { title: '아직 결과가 없습니다', hint: '완료된 종목이 생기면 여기에 나타납니다.' });
     container.innerHTML = html;
 }
 
@@ -319,7 +326,7 @@ async function downloadAllGroups(format) {
     if (!rSelectedEvent) return;
     try {
         const data = await API.getFullResults(rSelectedEvent.id);
-        if (!data || !data.heats || data.heats.length === 0) { alert('데이터가 없습니다.'); return; }
+        if (!data || !data.heats || data.heats.length === 0) { uiAlert('데이터가 없습니다.'); return; }
 
         const evt = data.event;
         const gL = { M: '남자', F: '여자', X: '혼성' }[evt.gender] || '';
@@ -337,7 +344,7 @@ async function downloadAllGroups(format) {
             allRows.push([`대회명: ${compName}`]);
             allRows.push([`장소: ${venue}`]);
             allRows.push([`부별: ${gL}`, `종목: ${evt.name}`, `라운드: ${roundLabel}`]);
-            allRows.push([`출력일: ${new Date().toLocaleDateString('ko-KR')}`]);
+            allRows.push([`출력일: ${new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)}`]);
             allRows.push([]); // empty row
 
             for (const heat of data.heats) {
@@ -355,7 +362,7 @@ async function downloadAllGroups(format) {
         } else if (format === 'pdf') {
             let allHtml = `<div style="padding:20px;font-family:sans-serif;">`;
             allHtml += `<h2 style="text-align:center;">${compName}</h2>`;
-            allHtml += `<p style="text-align:center;font-size:12px;color:#666;">${venue} | ${gL} | ${evt.name} ${roundLabel} | ${new Date().toLocaleDateString('ko-KR')}</p>`;
+            allHtml += `<p style="text-align:center;font-size:12px;color:#666;">${venue} | ${gL} | ${evt.name} ${roundLabel} | ${new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)}</p>`;
             for (const heat of data.heats) {
                 if (data.heats.length > 1) allHtml += `<h3 style="margin-top:24px;">${heat.heat_number}조</h3>`;
                 allHtml += buildHeatHtmlTable(evt, heat);
@@ -365,7 +372,7 @@ async function downloadAllGroups(format) {
             w.document.write(`<html><head><title>${fileName}</title></head><body>${allHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
             w.document.close();
         }
-    } catch (e) { console.error(e); alert('다운로드 실패'); }
+    } catch (e) { console.error(e); uiAlert('다운로드 실패'); }
 }
 
 function buildHeatRows(evt, heat) {
@@ -376,8 +383,7 @@ function buildHeatRows(evt, heat) {
             const r = (heat.results || []).find(r => r.event_entry_id === e.event_entry_id);
             return { ...e, time_seconds: r ? r.time_seconds : null, status_code: r ? (r.status_code || '') : '', remark: r ? (r.remark || '') : '' };
         }).sort((a, b) => {
-            if (a.status_code && !b.status_code) return 1;
-            if (!a.status_code && b.status_code) return -1;
+            const st = PaceRanking.compareStatus(a, b); if (st != null) return st;     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.time_seconds == null) return 1; if (b.time_seconds == null) return -1;
             return a.time_seconds - b.time_seconds;
         });
@@ -387,7 +393,7 @@ function buildHeatRows(evt, heat) {
             r.rank = r.time_seconds == null ? '' : ((i > 0 && rows[i-1].time_seconds === r.time_seconds && !rows[i-1].status_code) ? rows[i-1].rank : rk); rk = i + 2;
         });
         const _rdfmtE = isRoadEvent(rSelectedEvent?.name) ? { noDecimal: true } : undefined;
-        return [header, ...rows.map(r => [r.rank, r.lane_number || '', bib(r.bib_number), r.name, r.team || '', r.status_code ? '' : (r.time_seconds != null ? formatTime(r.time_seconds, _rdfmtE) : ''), r.status_code || (r.remark || '')])];
+        return [header, ...rows.map(r => [r.rank, r.lane_number || '', bib(r.bib_number), r.name, r.team || '', r.status_code ? '' : (r.time_seconds != null ? formatTime(r.time_seconds, _rdfmtE) : ''), (r.status_code ? PaceRanking.statusText(r.status_code, r.remark) : (r.remark || ''))])];
     } else if (cat === 'field_distance') {
         const header = ['순위', 'BIB', '선수명', '소속', '1', '2', '3', '4', '5', '6', 'BEST'];
         const rows = heat.entries.map(e => {
@@ -599,7 +605,7 @@ async function loadResultsData() {
         window._currentEventRecords = null;
         window._currentEventDirection = null;
     }
-    document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date().toLocaleDateString('ko-KR')}</p>${recordsBannerHtml}${windInfoHtml}${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
+    document.getElementById('results-header-area').innerHTML = `<h2>${rSelectedEvent.name} ${gL}</h2><p>${compInfo.name || ''} — ${new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)}</p>${recordsBannerHtml}${windInfoHtml}${videoHtml ? `<div style="margin-top:6px;">${videoHtml}</div>` : ''}`;
 
     const allArea = document.getElementById('results-all-area');
     const tableEl = document.getElementById('results-table');
@@ -631,7 +637,7 @@ async function loadResultsData() {
     else if (cat === 'combined') await renderCombinedResults();
     else {
         document.getElementById('results-thead').innerHTML = '';
-        document.getElementById('results-tbody').innerHTML = '<tr><td class="empty-state">데이터 없음</td></tr>';
+        document.getElementById('results-tbody').innerHTML = `<tr><td colspan="12">${uiStateHtml('empty', { title: '아직 기록이 없습니다', hint: '기록 입력이 끝나면 여기에 나타납니다.' })}</td></tr>`;
     }
 }
 
@@ -676,8 +682,7 @@ async function renderAllGroupsView(container) {
 
     // Sort all by time for unified ranking
     const unified = [...allRows].sort((a, b) => {
-        if (a.status_code && !b.status_code) return 1;
-        if (!a.status_code && b.status_code) return -1;
+        const st = PaceRanking.compareStatus(a, b); if (st != null) return st;     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
         if (a.time_seconds == null) return 1; if (b.time_seconds == null) return -1;
         return a.time_seconds - b.time_seconds;
     });
@@ -706,7 +711,7 @@ async function renderAllGroupsView(container) {
         const windCell = needsWind ? `<td style="font-size:11px;font-family:var(--font-mono);${heatW != null && heatW > 2.0 ? 'font-weight:700;' : ''}">${heatW != null ? formatWind(heatW) : ''}</td>` : '';
         // 비고: status_code(DNF/DQ 등), Q/q, 풍속 초과 시 참고기록
         let uRemarkText = '';
-        if (r.status_code) uRemarkText = r.status_code;
+        if (r.status_code) uRemarkText = PaceRanking.statusText(r.status_code, r.remark);   // 'DQ (TR 16.8)' — 사유는 비고에
         else if (isWindAided) uRemarkText = '참고기록';
         else if (r.qualType) uRemarkText = r.qualType;
         else uRemarkText = r.remark || '';
@@ -733,8 +738,7 @@ async function renderAllGroupsView(container) {
     for (const heat of heats) {
         const hd = heatData[heat.id];
         const rows = [...hd.rows].sort((a, b) => {
-            if (a.status_code && !b.status_code) return 1;
-            if (!a.status_code && b.status_code) return -1;
+            const st = PaceRanking.compareStatus(a, b); if (st != null) return st;     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
             if (a.time_seconds == null) return 1; if (b.time_seconds == null) return -1;
             return a.time_seconds - b.time_seconds;
         });
@@ -762,7 +766,7 @@ async function renderAllGroupsView(container) {
             const wMark = isWindAided ? '<span class="wind-aided-mark">w</span>' : '';
             // 비고: status_code(DNF/DQ 등), Q/q, 풍속 초과 시 참고기록
             let grpRemarkText = '';
-            if (r.status_code) grpRemarkText = r.status_code;
+            if (r.status_code) grpRemarkText = PaceRanking.statusText(r.status_code, r.remark);   // 'DQ (TR 16.8)' — 사유는 비고에
             else if (isWindAided) grpRemarkText = '참고기록';
             else if (r.qualType) grpRemarkText = r.qualType;
             else grpRemarkText = r.remark || '';
@@ -818,8 +822,7 @@ async function renderTrackResults(entries) {
         return { ...e, time_seconds: r ? r.time_seconds : null, status_code: r ? (r.status_code || '') : '', remark: r ? (r.remark || '') : '', qualType: q ? (q.qualification_type || '') : '' };
     }).sort((a, b) => {
         // Status codes at bottom
-        if (a.status_code && !b.status_code) return 1;
-        if (!a.status_code && b.status_code) return -1;
+        const st = PaceRanking.compareStatus(a, b); if (st != null) return st;     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
         if (a.time_seconds == null) return 1; if (b.time_seconds == null) return -1;
         return a.time_seconds - b.time_seconds;
     });
@@ -845,7 +848,7 @@ async function renderTrackResults(entries) {
         }
         // 비고: status_code(DNF/DQ 등), Q/q, 풍속 초과 시 참고기록
         let remarkText = '';
-        if (r.status_code) remarkText = r.status_code;
+        if (r.status_code) remarkText = PaceRanking.statusText(r.status_code, r.remark);   // 'DQ (TR 16.8)' — 사유는 비고에
         else if (isWA) remarkText = '참고기록';
         else if (r.qualType) remarkText = r.qualType;
         else remarkText = r.remark || '';
@@ -892,8 +895,7 @@ async function renderUnifiedTrackResults() {
     }
     // Sort all by time
     allRows.sort((a, b) => {
-        if (a.status_code && !b.status_code) return 1;
-        if (!a.status_code && b.status_code) return -1;
+        const st = PaceRanking.compareStatus(a, b); if (st != null) return st;     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
         if (a.time_seconds == null) return 1; if (b.time_seconds == null) return -1;
         return a.time_seconds - b.time_seconds;
     });
@@ -926,7 +928,7 @@ async function renderUnifiedTrackResults() {
         const windCell = needsWind ? `<td style="font-size:11px;font-family:var(--font-mono);${heatW != null && heatW > 2.0 ? 'font-weight:700;' : ''}">${heatW != null ? formatWind(heatW) : ''}</td>` : '';
         // 비고: status_code(DNF/DQ 등), 풍속 초과 시 참고기록
         let allRemarkText = '';
-        if (r.status_code) allRemarkText = r.status_code;
+        if (r.status_code) allRemarkText = PaceRanking.statusText(r.status_code, r.remark);   // 'DQ (TR 16.8)' — 사유는 비고에
         else if (isWindAided) allRemarkText = '참고기록';
         else allRemarkText = r.remark || '';
         const allRemarkStyle = r.status_code ? 'color:var(--danger);font-weight:600;font-size:11px;'
@@ -974,9 +976,10 @@ async function renderFieldDistanceResults(entries) {
         const sortedValid = [];
         for (let i = 1; i <= 6; i++) { if (att[i] != null && att[i] > 0) sortedValid.push(att[i]); }
         sortedValid.sort((a, b) => b - a);
-        const status_code = er.find(r => r.status_code && ['DNS','DNF','DQ','NM'].includes(r.status_code))?.status_code || '';
+        const status_code = er.find(r => PaceRanking.isStatus(r.status_code))?.status_code || '';
         return { ...e, att, attWind, best, bestWind, sortedValid, status_code };
     }).sort((a, b) => {
+        const st = PaceRanking.compareStatus(a, b); if (st != null) return st;     // 상태코드(DQ 등)는 기록이 있어도 뒤로
         if (a.best == null) return 1; if (b.best == null) return -1;
         if (b.best !== a.best) return b.best - a.best;
         // WA tie-break: 2nd best, 3rd best, etc.
@@ -1070,6 +1073,7 @@ async function renderFieldDistanceResults(entries) {
 // ============================================================
 async function renderFieldHeightResults(entries) {
     const ha = await API.getHeightAttempts(rSelectedHeatId);
+    let _hRes = []; try { _hRes = await API.getResults(rSelectedHeatId); } catch (e) { _hRes = []; }     // DNS/DQ 등 상태코드
     const hts = [...new Set(ha.map(a => a.bar_height))].sort((a, b) => a - b);
     let h = '<tr><th>RANK</th><th>BIB</th><th style="text-align:left;">선수명</th><th style="text-align:left;">소속</th>';
     hts.forEach(h2 => { h += `<th style="font-size:10px;">${formatHeight(h2)}</th>`; });
@@ -1078,17 +1082,12 @@ async function renderFieldHeightResults(entries) {
     const rows = entries.map(e => {
         const ea = ha.filter(a => a.event_entry_id === e.event_entry_id);
         const hd = {}; ea.forEach(a => { if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
-        let best = null, totalFails = 0, failsAtBest = 0, hasAttempts = false;
-        hts.forEach(h2 => {
-            const d = hd[h2]; if (!d) return;
-            hasAttempts = true;
-            const xCount = Object.values(d).filter(m => m === 'X').length;
-            totalFails += xCount;
-            if (Object.values(d).includes('O')) { best = h2; failsAtBest = xCount; }
-        });
-        const isNM = best == null && hasAttempts && totalFails >= 3;
-        return { ...e, hd, best, totalFails, failsAtBest, isNM };
+        const _hs = PaceRanking.heightStats(hd, hts);   // 공용 모듈 (WA TR 26.2·26.8)
+        const best = _hs.best, totalFails = _hs.totalFails, failsAtBest = _hs.failsAtBest, isNM = _hs.isNM;
+        const status_code = (_hRes.find(r => r.event_entry_id === e.event_entry_id && PaceRanking.isStatus(r.status_code)) || {}).status_code || (isNM ? 'NM' : '');
+        return { ...e, hd, best: status_code ? null : best, totalFails, failsAtBest, isNM, status_code };
     }).sort((a, b) => {
+        const st = PaceRanking.compareStatus(a, b); if (st != null) return st;     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
         if (a.best == null && b.best == null) return 0;
         if (a.best == null) return 1; if (b.best == null) return -1;
         if (b.best !== a.best) return b.best - a.best;
@@ -1115,7 +1114,7 @@ async function renderFieldHeightResults(entries) {
                 return `<span style="display:inline-block;background:${cc};color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;" title="${lbl} 갱신"><strong><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor"/></svg></strong>${lbl}</span>`;
             }).join('');
         }
-        const rmk = r.isNM ? 'NM' : '';
+        const rmk = r.status_code || '';
         const rmkStyle = r.isNM ? 'color:var(--danger);font-weight:600;font-size:11px;' : 'font-size:11px;';
         return `<tr><td>${medal}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td><td style="font-size:12px;">${r.team || ''}</td>${c}<td style="font-weight:700;">${bestDisp}${recordBadges}</td><td style="${rmkStyle}">${rmk}</td></tr>`;
     }).join('');
@@ -1126,13 +1125,14 @@ async function renderFieldHeightResults(entries) {
 // ============================================================
 async function renderCombinedResults() {
     const evt = rSelectedEvent;
-    await API.syncCombinedScores(evt.id);
+    if (localStorage.getItem('pace_admin_key')) { try { await API.syncCombinedScores(evt.id); } catch (e) {} }   // 관람객은 저장된 점수 그대로 (키 없는 POST 는 403)
     const scores = await API.getCombinedScores(evt.id);
     const subDefs = evt.gender === 'M' ? DECATHLON_EVENTS : HEPTATHLON_EVENTS;
     const allEntries = await API.getEventEntries(evt.id);
     const subEvents = await API.getCombinedSubEvents(evt.id);
+    const _canWrite = !!localStorage.getItem('pace_admin_key');     // 점수 보정(POST)은 운영키가 있을 때만
     for (const sc of scores) {
-        if (sc.raw_record > 0) {
+        if (_canWrite && sc.raw_record > 0) {
             const def = subDefs.find(d => d.order === sc.sub_event_order);
             if (def && calcWAPoints(def.key, sc.raw_record) !== sc.wa_points) {
                 await API.saveCombinedScore({ event_entry_id: sc.event_entry_id, sub_event_name: sc.sub_event_name, sub_event_order: sc.sub_event_order, raw_record: sc.raw_record, wa_points: calcWAPoints(def.key, sc.raw_record) });
@@ -1143,10 +1143,10 @@ async function renderCombinedResults() {
     const day1Max = evt.gender === 'M' ? 5 : 4;
     let hdr = '<tr><th>RANK</th><th>BIB</th><th style="text-align:left;">선수명</th>';
     subDefs.forEach(se => {
-        if (se.order === 1) hdr += '<th style="font-size:9px;padding:3px 4px;background:#e8ecf4;color:#1a2a5e;font-weight:700;border-left:3px solid #1a2a5e;">DAY 1</th>';
-        if (se.order === day1Max + 1) hdr += '<th style="font-size:9px;padding:3px 4px;background:#f4e8ec;color:#8b1a2a;font-weight:700;border-left:3px solid #8b1a2a;">DAY 2</th>';
+        if (se.order === 1) hdr += '<th style="font-size:11px;padding:3px 4px;background:#e8ecf4;color:#1a2a5e;font-weight:700;border-left:3px solid #1a2a5e;">DAY 1</th>';
+        if (se.order === day1Max + 1) hdr += '<th style="font-size:11px;padding:3px 4px;background:#f4e8ec;color:#8b1a2a;font-weight:700;border-left:3px solid #8b1a2a;">DAY 2</th>';
         const bg = se.order <= day1Max ? 'background:#eef1f7;' : 'background:#f7f0f2;';
-        hdr += `<th style="font-size:9px;padding:3px 2px;writing-mode:vertical-lr;max-width:26px;${bg}">${se.name}</th>`;
+        hdr += `<th style="font-size:11px;padding:3px 2px;writing-mode:vertical-lr;max-width:26px;${bg}">${se.name}</th>`;
     });
     hdr += '<th>총점</th></tr>';
     document.getElementById('results-thead').innerHTML = hdr;
@@ -1218,7 +1218,7 @@ async function _showCombinedSubResult(subOrder) {
     if (!dbSub) { area.innerHTML = '<div class="empty-state">세부 종목을 찾을 수 없습니다.</div>'; return; }
     
     const subHeats = await API.getHeats(dbSub.id);
-    if (subHeats.length === 0) { area.innerHTML = '<div class="empty-state">히트가 없습니다.</div>'; return; }
+    if (subHeats.length === 0) { area.innerHTML = '<div class="empty-state">조가 없습니다.</div>'; return; }
     
     const heatId = subHeats[0].id;
     const entries = await API.getHeatEntries(heatId);
@@ -1247,8 +1247,7 @@ function _renderCombinedSubTrackResult(area, seDef, entries, results) {
         return { ...e, time_seconds: r ? r.time_seconds : null, status_code: r ? r.status_code : null };
     });
     dataRows.sort((a, b) => {
-        if (a.status_code && !b.status_code) return 1;
-        if (!a.status_code && b.status_code) return -1;
+        const st = PaceRanking.compareStatus(a, b); if (st != null) return st;     // 상태코드는 뒤로 (NM → DNF → DQ → DNS)
         if (a.time_seconds == null && b.time_seconds == null) return 0;
         if (a.time_seconds == null) return 1;
         if (b.time_seconds == null) return -1;
@@ -1328,15 +1327,8 @@ function _renderCombinedSubHeightResult(area, seDef, entries, attempts) {
         const ea = attempts.filter(a => a.event_entry_id === e.event_entry_id);
         const hd = {};
         ea.forEach(a => { if (!hd[a.bar_height]) hd[a.bar_height] = {}; hd[a.bar_height][a.attempt_number] = a.result_mark; });
-        let best = null, elim = false, totalFails = 0, failsAtBest = 0;
-        heights.forEach(h => {
-            const d = hd[h]; if (!d) return;
-            const xCount = Object.values(d).filter(m => m === 'X').length;
-            totalFails += xCount;
-            if (Object.values(d).includes('O')) { best = h; failsAtBest = xCount; }
-            if (xCount >= 3) elim = true;
-        });
-        return { ...e, heightData: hd, bestHeight: best, eliminated: elim, totalFails, failsAtBest };
+        const _hs = PaceRanking.heightStats(hd, heights);   // 공용 모듈 (WA TR 26.2·26.8)
+        return { ...e, heightData: hd, bestHeight: _hs.best, eliminated: _hs.eliminated, totalFails: _hs.totalFails, failsAtBest: _hs.failsAtBest };
     });
     const ranked = dataRows.filter(r => r.bestHeight != null).sort((a, b) => {
         if (b.bestHeight !== a.bestHeight) return b.bestHeight - a.bestHeight;
@@ -1407,12 +1399,12 @@ function exportExcel() {
 async function exportPNG() {
     const el = document.getElementById('results-content');
     if (!el) return;
-    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const a = document.createElement('a'); a.download = `${rSelectedEvent ? rSelectedEvent.name : 'results'}.png`; a.href = c.toDataURL('image/png'); a.click(); } catch (e) { alert('이미지 생성 실패'); }
+    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const a = document.createElement('a'); a.download = `${rSelectedEvent ? rSelectedEvent.name : 'results'}.png`; a.href = c.toDataURL('image/png'); a.click(); } catch (e) { uiAlert('이미지 생성 실패'); }
 }
 async function exportPDF() {
     const el = document.getElementById('results-content');
     if (!el) return;
-    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const w = window.open('', '_blank'); w.document.write(`<html><head><title>Results</title></head><body style="margin:0;padding:20px;"><img src="${c.toDataURL('image/png')}" style="max-width:100%;"><script>window.onload=function(){window.print();}<\/script></body></html>`); w.document.close(); } catch (e) { alert('PDF 생성 실패'); }
+    try { const c = await html2canvas(el, { scale: 2, backgroundColor: '#fff' }); const w = window.open('', '_blank'); w.document.write(`<html><head><title>Results</title></head><body style="margin:0;padding:20px;"><img src="${c.toDataURL('image/png')}" style="max-width:100%;"><script>window.onload=function(){window.print();}<\/script></body></html>`); w.document.close(); } catch (e) { uiAlert('PDF 생성 실패'); }
 }
 
 // IO 1080x1350 PNG generator removed — was 882 lines of unreachable code.

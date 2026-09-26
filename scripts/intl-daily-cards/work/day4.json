@@ -1,0 +1,442 @@
+[
+ {
+  "time": "07:30",
+  "ev": "마라톤",
+  "g": "M",
+  "rt": "final",
+  "name": "김홍록",
+  "members": "",
+  "pb": "2:12:09",
+  "sb": "2:12:09",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 13,
+    "n": 18
+   },
+   "all": {
+    "r": 13,
+    "n": 18
+   },
+   "heats": 1,
+   "lane": 11,
+   "heat_number": 1
+  },
+  "rule": "",
+  "entries": 19,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "07:30",
+  "ev": "마라톤",
+  "g": "M",
+  "rt": "final",
+  "name": "박민호",
+  "members": "",
+  "pb": "2:10:13",
+  "sb": "2:11:05",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 9,
+    "n": 18
+   },
+   "all": {
+    "r": 9,
+    "n": 18
+   },
+   "heats": 1,
+   "lane": 12,
+   "heat_number": 1
+  },
+  "rule": "",
+  "entries": 19,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "07:50",
+  "ev": "마라톤",
+  "g": "F",
+  "rt": "final",
+  "name": "임예진",
+  "members": "",
+  "pb": "2:28:59",
+  "sb": "",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 15,
+    "n": 17
+   },
+   "all": {
+    "r": 15,
+    "n": 17
+   },
+   "heats": 1,
+   "lane": 13,
+   "heat_number": 1
+  },
+  "rule": "",
+  "entries": 18,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "07:50",
+  "ev": "마라톤",
+  "g": "F",
+  "rt": "final",
+  "name": "최경선",
+  "members": "",
+  "pb": "2:28:49",
+  "sb": "",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 14,
+    "n": 17
+   },
+   "all": {
+    "r": 14,
+    "n": 17
+   },
+   "heats": 1,
+   "lane": 12,
+   "heat_number": 1
+  },
+  "rule": "",
+  "entries": 18,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "09:05",
+  "ev": "10종경기",
+  "g": "M",
+  "rt": "final",
+  "name": "이유성",
+  "members": "",
+  "pb": "7237",
+  "sb": "7237",
+  "heat": 1,
+  "rank": null,
+  "rule": "",
+  "entries": 48,
+  "relay": false,
+  "subs": "09:05 100m · 09:45 멀리뛰기 · 11:25 포환던지기 · 18:05 높이뛰기",
+  "combined": true
+ },
+ {
+  "time": "09:13",
+  "ev": "10종경기",
+  "g": "M",
+  "rt": "final",
+  "name": "박준영",
+  "members": "",
+  "pb": "7135",
+  "sb": "7135",
+  "heat": 2,
+  "rank": null,
+  "rule": "",
+  "entries": 48,
+  "relay": false,
+  "subs": "09:13 100m · 09:45 멀리뛰기 · 11:25 포환던지기 · 18:05 높이뛰기",
+  "combined": true
+ },
+ {
+  "time": "12:31",
+  "ev": "200m",
+  "g": "M",
+  "rt": "preliminary",
+  "name": "이재성",
+  "members": "",
+  "pb": "20.53",
+  "sb": "20.64",
+  "heat": 3,
+  "rank": {
+   "heat": {
+    "r": 3,
+    "n": 7
+   },
+   "all": {
+    "r": 11,
+    "n": 32
+   },
+   "heats": 6,
+   "lane": 4,
+   "heat_number": 3
+  },
+  "rule": "각 조 4위까지(Q) + 기록 상위 4(q) 결승 진출",
+  "entries": 34,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "12:39",
+  "ev": "200m",
+  "g": "M",
+  "rt": "preliminary",
+  "name": "나마디조엘진",
+  "members": "",
+  "pb": "20.50",
+  "sb": "20.50",
+  "heat": 4,
+  "rank": {
+   "heat": {
+    "r": 2,
+    "n": 6
+   },
+   "all": {
+    "r": 8,
+    "n": 32
+   },
+   "heats": 6,
+   "lane": 3,
+   "heat_number": 4
+  },
+  "rule": "각 조 4위까지(Q) + 기록 상위 4(q) 결승 진출",
+  "entries": 34,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "20:00",
+  "ev": "포환던지기",
+  "g": "M",
+  "rt": "final",
+  "name": "박시훈",
+  "members": "",
+  "pb": "19.10",
+  "sb": "19.10",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 12,
+    "n": 13
+   },
+   "all": {
+    "r": 12,
+    "n": 13
+   },
+   "heats": 1,
+   "lane": 9,
+   "heat_number": 1
+  },
+  "rule": "",
+  "entries": 13,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "20:35",
+  "ev": "세단뛰기",
+  "g": "M",
+  "rt": "final",
+  "name": "김동혁",
+  "members": "",
+  "pb": "16.27",
+  "sb": "16.27",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 10,
+    "n": 12
+   },
+   "all": {
+    "r": 10,
+    "n": 12
+   },
+   "heats": 1,
+   "lane": 6,
+   "heat_number": 1
+  },
+  "rule": "",
+  "entries": 13,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "20:35",
+  "ev": "세단뛰기",
+  "g": "M",
+  "rt": "final",
+  "name": "김장우",
+  "members": "",
+  "pb": "17.13",
+  "sb": "16.94",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 3,
+    "n": 12
+   },
+   "all": {
+    "r": 3,
+    "n": 12
+   },
+   "heats": 1,
+   "lane": 7,
+   "heat_number": 1
+  },
+  "rule": "",
+  "entries": 13,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "20:51",
+  "ev": "1500m",
+  "g": "M",
+  "rt": "preliminary",
+  "name": "박종학",
+  "members": "",
+  "pb": "3:40.47",
+  "sb": "3:42.27",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 5,
+    "n": 10
+   },
+   "all": {
+    "r": 9,
+    "n": 19
+   },
+   "heats": 2,
+   "lane": 6,
+   "heat_number": 1
+  },
+  "rule": "각 조 6위까지(Q) 결승 진출",
+  "entries": 22,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "21:01",
+  "ev": "1500m",
+  "g": "M",
+  "rt": "preliminary",
+  "name": "이재웅",
+  "members": "",
+  "pb": "3:36.01",
+  "sb": "3:37.75",
+  "heat": 2,
+  "rank": {
+   "heat": {
+    "r": 1,
+    "n": 9
+   },
+   "all": {
+    "r": 2,
+    "n": 19
+   },
+   "heats": 2,
+   "lane": 6,
+   "heat_number": 2
+  },
+  "rule": "각 조 6위까지(Q) 결승 진출",
+  "entries": 22,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "21:45",
+  "ev": "400m",
+  "g": "F",
+  "rt": "final",
+  "name": "김서윤",
+  "members": "",
+  "pb": "53.81",
+  "sb": "53.81",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 8,
+    "n": 8
+   },
+   "all": {
+    "r": 8,
+    "n": 8
+   },
+   "heats": 1,
+   "lane": 3,
+   "heat_number": 1
+  },
+  "rule": "",
+  "entries": 8,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "22:15",
+  "ev": "1500m",
+  "g": "F",
+  "rt": "final",
+  "name": "김유진",
+  "members": "",
+  "pb": "4:17.00",
+  "sb": "4:19.65",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 7,
+    "n": 10
+   },
+   "all": {
+    "r": 7,
+    "n": 10
+   },
+   "heats": 1,
+   "lane": 8,
+   "heat_number": 1
+  },
+  "rule": "",
+  "entries": 11,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ },
+ {
+  "time": "22:15",
+  "ev": "1500m",
+  "g": "F",
+  "rt": "final",
+  "name": "박나연",
+  "members": "",
+  "pb": "4:13.87",
+  "sb": "4:13.87",
+  "heat": 1,
+  "rank": {
+   "heat": {
+    "r": 6,
+    "n": 10
+   },
+   "all": {
+    "r": 6,
+    "n": 10
+   },
+   "heats": 1,
+   "lane": 9,
+   "heat_number": 1
+  },
+  "rule": "",
+  "entries": 11,
+  "relay": false,
+  "subs": "",
+  "combined": false
+ }
+]

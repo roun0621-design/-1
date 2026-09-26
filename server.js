@@ -4,6 +4,41 @@
  * v5: WebSocket scoreboard, PDF documents, broadcast overlay, security enhancements
  */
 require('dotenv').config();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [Deploy 하드닝 — 2026-05] 필수 npm 패키지 self-check
+//   - 프로덕션에서 `npm install --omit=dev` 누락으로 502 가 났던 적이 있음
+//     (cookie-parser, jsonwebtoken, bcryptjs 미설치)
+//   - require() 가 실패하면 PM2 가 crash loop 에 빠지고 원인을 알기 힘듦
+//   - 부팅 시 명시적으로 모든 필수 모듈을 체크하고, 누락된 게 있으면
+//     명확한 한 줄 에러로 종료 (PM2 logs 첫 줄에 바로 보이도록)
+// ─────────────────────────────────────────────────────────────────────────────
+(function selfCheckRequiredModules() {
+    const required = [
+        'express', 'compression', 'multer', 'xlsx', 'helmet', 'ws',
+        'pdfkit', 'canvas', 'express-rate-limit',
+        // Auth Phase 1+2 핵심
+        'bcryptjs', 'jsonwebtoken', 'cookie-parser',
+        // DB
+        'better-sqlite3', 'pg',
+        // dotenv 는 위에서 이미 로드됨
+    ];
+    const missing = [];
+    for (const name of required) {
+        try { require.resolve(name); }
+        catch (_) { missing.push(name); }
+    }
+    if (missing.length) {
+        const msg = `[FATAL] 필수 npm 패키지 누락: ${missing.join(', ')}\n` +
+                    `        해결: npm ci --omit=dev  (또는 npm install --omit=dev ${missing.join(' ')})\n` +
+                    `        프로덕션에선 ${process.cwd()} 에서 실행하세요.`;
+        console.error('\n' + '='.repeat(70));
+        console.error(msg);
+        console.error('='.repeat(70) + '\n');
+        process.exit(1);
+    }
+})();
+// ─────────────────────────────────────────────────────────────────────────────
 const express = require('express');
 const compression = require('compression');
 const path = require('path');
@@ -19,8 +54,12 @@ const bcrypt = require('bcryptjs');
 const { initDatabase, DB_PATH } = require('./db/init');
 const { getDb } = require('./lib/db');
 const { detectRecordBreaks, detectCombinedRecordBreaks, normalizeEventName: normalizeEventNameServer } = require('./lib/recordCompare');
+const { normalizeDivisionLabel, divisionCodeFor: _divisionCodeFor, gradeDivisionSeed: _gradeDivisionSeed } = require('./lib/division');
+const PaceRanking = require('./public/lib/ranking');   // 순위·상태코드(DNS/DNF/DQ/NM) 공용 규칙 — 서버·브라우저 동일
 const WebSocket = require('ws');
 const PDFDocument = require('pdfkit');
+const code128 = require('./lib/code128');
+const timingParse = require('./lib/timingParse');   // .lif/.txt/xlsx 공통: 시간·상태·라운드·성별 해석
 const { createCanvas, registerFont } = require('canvas');
 const http = require('http');
 const crypto = require('crypto');
@@ -31,7 +70,26 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const UPLOAD_TMP = '/tmp/uploads/';
 if (!fs.existsSync(UPLOAD_TMP)) fs.mkdirSync(UPLOAD_TMP, { recursive: true });
-const upload = multer({ dest: UPLOAD_TMP, limits: { fileSize: 10 * 1024 * 1024 } });
+const _multerUpload = multer({ dest: UPLOAD_TMP, limits: { fileSize: 10 * 1024 * 1024 } });
+// multer 는 req.body 를 새로 만들기 때문에, JWT 브리지(_applyJwtBridge)가 넣어둔 admin_key 가 사라진다 →
+// 파싱이 끝난 뒤 한 번 더 주입한다. (호출부 25곳은 그대로 upload.single/array 사용)
+const upload = {};
+for (const m of ['single', 'array', 'fields', 'any', 'none']) {
+    upload[m] = (...a) => { const mw = _multerUpload[m](...a); return (req, res, next) => mw(req, res, (err) => {
+        if (err) return next(err);
+        _applyJwtBridge(req);
+        // 쓰기 가드(멀티파트): 본문이 파싱된 지금에서야 키를 볼 수 있다. 업로드 라우트는 전부 운영/관리 기능.
+        if (!_hasValidWriteKey(req)) {
+            for (const f of [].concat(req.file || [], req.files || [])) { try { fs.unlinkSync(f.path); } catch (e) {} }
+            return res.status(403).json({ error: '인증 키가 필요합니다. (운영키 또는 관리자 로그인)' });
+        }
+        // 종료 잠금(멀티파트): competition_id 가 폼 필드로 오므로 여기서 검사한다
+        _blockedByCompEnd(req, res).then(blocked => {
+            if (!blocked) return next();
+            for (const f of [].concat(req.file || [], req.files || [])) { try { fs.unlinkSync(f.path); } catch (e) {} }
+        }).catch(() => next());
+    }); };
+}
 
 // ---- KST (한국표준시, UTC+9) Helper ----
 function kstNow() {
@@ -53,6 +111,13 @@ function parseDbTimestampMs(v) {
     if (typeof v !== 'string') return NaN;
     let s = v.trim();
     if (!s) return NaN;
+    // 0) 시간대 표기가 없는 값(SQLite datetime('now') = UTC)은 UTC 로 읽는다.
+    //    예전엔 new Date('2026-09-18 06:40:00') 이 '현지 시각'으로 읽혀 9시간 앞선 값이 됐고, 오프라인 충돌 판정(서버가 더 최신인가)이
+    //    9시간 안에서는 절대 참이 되지 않아 옛 오프라인 값이 최신 수정을 덮었다.
+    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) {
+        const ms0 = new Date(s.replace(' ', 'T') + 'Z').getTime();
+        if (Number.isFinite(ms0)) return ms0;
+    }
     // 1) 그대로 파싱 시도 (Node 20+ 은 PG 공백/+00 형식도 받음)
     let ms = new Date(s).getTime();
     if (Number.isFinite(ms)) return ms;
@@ -73,20 +138,43 @@ function parseDbTimestampMs(v) {
 }
 
 // ---- Auto Backup System ----
+const backupS3 = require('./lib/backupS3');   // 오프사이트(S3) 복제 — 미설정 시 no-op
 const BACKUP_DIR = path.join(__dirname, 'backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 const BACKUP_MAX_DAYS = 7;
 
-function performBackup(tag = 'daily') {
+/**
+ * 로컬 일관성 백업 + 오프사이트(S3) 업로드.
+ *   - SQLite: better-sqlite3 의 .backup() 온라인 백업 API 사용 → WAL 까지 병합된
+ *     "단일 .db 파일"로 떨어진다. (기존 copyFileSync 3-파일 방식은 .db/-wal 복사 사이에
+ *     체크포인트가 끼면 깨질 수 있어 폐기)
+ *   - PostgreSQL(db.isAsync): 파일 백업이 무의미 → 건너뜀(RDS 자동 백업이 담당).
+ *   - 백업 직후 S3 로 fire-and-forget 업로드 → 인스턴스 소실 시에도 백업 보존.
+ */
+async function performBackup(tag = 'daily') {
     try {
+        if (db.isAsync) {
+            // PG 모드: 파일 스냅샷 무의미. (RDS 자동 백업/스냅샷으로 대체)
+            return null;
+        }
         const ts = kstNow().replace(/[: ]/g, '-');
         const backupFile = path.join(BACKUP_DIR, `backup_${tag}_${ts}.db`);
-        fs.copyFileSync(DB_PATH, backupFile);
-        // WAL 파일도 함께 백업
-        if (fs.existsSync(DB_PATH + '-wal')) fs.copyFileSync(DB_PATH + '-wal', backupFile + '-wal');
-        if (fs.existsSync(DB_PATH + '-shm')) fs.copyFileSync(DB_PATH + '-shm', backupFile + '-shm');
+
+        // 일관성 보장 온라인 백업: WAL 병합된 단일 파일 생성
+        if (db.raw && typeof db.raw.backup === 'function') {
+            await db.raw.backup(backupFile);
+        } else {
+            // 폴백(부팅 초기 등 raw 핸들 미가용): 기존 파일 복사 방식
+            fs.copyFileSync(DB_PATH, backupFile);
+            if (fs.existsSync(DB_PATH + '-wal')) fs.copyFileSync(DB_PATH + '-wal', backupFile + '-wal');
+            if (fs.existsSync(DB_PATH + '-shm')) fs.copyFileSync(DB_PATH + '-shm', backupFile + '-shm');
+        }
         console.log(`[Backup] ${tag} 백업 완료: ${path.basename(backupFile)}`);
         cleanOldBackups();
+
+        // 오프사이트 업로드(설정 시에만 동작). 실패해도 로컬 백업 흐름은 막지 않음.
+        backupS3.uploadBackup(backupFile, tag).catch(e => console.error('[Backup] S3 업로드 오류:', e.message));
+
         return backupFile;
     } catch (e) {
         console.error('[Backup] 백업 실패:', e.message);
@@ -99,6 +187,7 @@ function cleanOldBackups() {
         const cutoff = Date.now() - BACKUP_MAX_DAYS * 24 * 60 * 60 * 1000;
         fs.readdirSync(BACKUP_DIR)
             .filter(f => f.startsWith('backup_') && f.endsWith('.db'))
+            .filter(f => !/^backup_final/.test(f))      // 대회 종료 스냅샷(final<대회id>)은 영구 보관 — 7일 뒤 그 대회의 마지막 상태가 사라지지 않게
             .forEach(f => {
                 const fpath = path.join(BACKUP_DIR, f);
                 if (fs.statSync(fpath).mtimeMs < cutoff) {
@@ -131,14 +220,17 @@ function _lastBackupAgeMs(tag) {
     } catch(e) { return Infinity; }
 }
 
+// 테스트처럼 require 로 불러온 경우엔 스케줄러를 돌리지 않는다 (임시 DB 의 백업이 backups/ 에 쌓여 watchdog 판단을 흐렸다)
+const _BACKUP_SCHEDULER_ON = require.main === module;
+
 // 매일 새벽 3시 (KST = UTC+9 → UTC 18시) 정시 daily 백업
-cron.schedule('0 18 * * *', () => performBackup('daily'));
+if (_BACKUP_SCHEDULER_ON) cron.schedule('0 18 * * *', () => performBackup('daily'));
 
 // 매 시각 정시 hourly 백업
-cron.schedule('0 * * * *', () => performBackup('hourly'));
+if (_BACKUP_SCHEDULER_ON) cron.schedule('0 * * * *', () => performBackup('hourly'));
 
 // 5분마다 watchdog — cron 이 놓친 백업을 자동 복구
-setInterval(() => {
+if (_BACKUP_SCHEDULER_ON) setInterval(() => {
     try {
         // daily: 마지막 daily 백업 후 24시간 이상 지났으면 즉시 실행
         if (_lastBackupAgeMs('daily') >= 24 * 60 * 60 * 1000) {
@@ -154,7 +246,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // 서버 시작 시 1회 백업 + 시작 직후 hourly/daily 가 비어있으면 즉시 생성
-setTimeout(() => {
+if (_BACKUP_SCHEDULER_ON) setTimeout(() => {
     performBackup('startup');
     // 시작 시점에 daily/hourly 가 너무 오래된 상태면 즉시 부트스트랩
     if (_lastBackupAgeMs('daily') >= 24 * 60 * 60 * 1000) performBackup('daily');
@@ -163,26 +255,65 @@ setTimeout(() => {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+// 프록시(nginx 등) 뒤에서 req.ip 가 실제 클라이언트 IP 가 되도록. 미설정이면 모든 요청이 프록시 IP 하나로 잡혀
+// 레이트리밋이 전 사용자 공용이 되고, X-Forwarded-For 를 직접 읽으면 클라이언트가 IP 를 조작할 수 있다.
+//   TRUST_PROXY: 홉 수(기본 1) | 'false'(프록시 없음) | 'true' | 서브넷 문자열
+{
+    const tp = process.env.TRUST_PROXY;
+    app.set('trust proxy', tp == null || tp === '' ? 1 : (tp === 'false' ? false : tp === 'true' ? true : (/^\d+$/.test(tp) ? parseInt(tp, 10) : tp)));
+}
 
+// 부팅 작업(인증 테이블·마이그레이션·시드·PG 캐시)이 끝나기 전의 요청은 기다린다
+app.use((req, res, next) => { if (_bootDone) return next(); _bootReady.then(() => { _bootDone = true; next(); }, () => { _bootDone = true; next(); }); });
+let _bootDone = false;
 // ---- Security Middleware ----
+// CSP (2026-09 Phase 1 XSS 방어선): 화면이 inline script/onclick 을 쓰므로 script 는 'unsafe-inline' 을 남기되,
+//   외부 출처(스크립트·연결·프레임)는 실제 쓰는 호스트만 — GA·Firebase(푸시)·Google Fonts·YouTube 임베드.
+//   object-src 'none' · base-uri 'self' · frame-ancestors 'self'(다른 사이트가 우리 화면을 iframe 으로 감싸지 못함; OBS 브라우저 소스는 iframe 이 아니라 영향 없음)
+//   새 외부 출처를 쓰면 여기에 추가한다 (브라우저 콘솔 'Refused to …' 로 바로 드러난다).
+const CSP_DIRECTIVES = {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "'unsafe-inline'", 'https://www.googletagmanager.com', 'https://www.gstatic.com', 'https://*.google-analytics.com'],
+    scriptSrcAttr: ["'unsafe-inline'"],
+    styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+    fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+    imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+    mediaSrc: ["'self'", 'blob:', 'data:'],
+    connectSrc: ["'self'", 'ws:', 'wss:', 'https://*.google-analytics.com', 'https://*.analytics.google.com', 'https://*.googletagmanager.com', 'https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.google.com'],
+    frameSrc: ["'self'", 'https://www.youtube.com', 'https://youtube.com', 'https://www.youtube-nocookie.com'],
+    frameAncestors: ["'self'"],
+    workerSrc: ["'self'", 'blob:'],
+    manifestSrc: ["'self'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+};
 app.use(helmet({
-    contentSecurityPolicy: false,   // CSP는 프론트엔드 inline script 때문에 비활성
+    contentSecurityPolicy: { useDefaults: false, directives: CSP_DIRECTIVES },
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: false,
     crossOriginResourcePolicy: false,  // YouTube 등 외부 리소스 임베드 허용
-    // YouTube iframe 임베드를 위해 X-Frame-Options 완화
-    frameguard: false,
+    frameguard: { action: 'sameorigin' },   // CSP frame-ancestors 와 같은 뜻 (구형 브라우저용)
     referrerPolicy: { policy: 'no-referrer-when-downgrade' },  // YouTube 임베드 호환
 }));
+// GET 요청의 키는 헤더(x-admin-key)로도 받는다 — 화면이 키를 URL 에 싣지 않도록 (2026-09 Phase 1, 키의 URL 쿼리 전송).
+//   기존 라우트는 req.query.key 를 읽으므로, 헤더가 있고 쿼리에 없으면 쿼리에 옮겨 넣는다 (Express 5 의 query 는 getter → 인스턴스 속성으로 덮음).
+app.use((req, res, next) => {
+    if (req.method === 'GET') {
+        const h = req.headers['x-admin-key'];
+        if (h && !req.query.key) Object.defineProperty(req, 'query', { value: { ...req.query, key: String(h) }, writable: true, configurable: true, enumerable: true });
+    }
+    next();
+});
 app.use(rateLimit({
     windowMs: 60 * 1000,   // 1분
-    max: 3000,             // IP당 최대 3000회/분
+    max: parseInt(process.env.RATE_LIMIT_MAX || '3000', 10),  // IP당 분당 한도(기본 3000, 부하측정 시 env로 상향)
     message: { error: '요청이 너무 많습니다. 잠시 후 다시 시도하세요.' }
 }));
 // 인증 API는 더 엄격하게 제한 (무차별 대입 방지)
 const authLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 30,               // 1분에 30회
+    max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '30', 10),   // 1분에 30회 (테스트는 한 IP 에서 로그인이 몰리므로 global-setup 이 상향)
     message: { error: '로그인 시도가 너무 많습니다. 1분 후 다시 시도하세요.' }
 });
 
@@ -190,6 +321,79 @@ app.use(compression());
 app.use(express.json());
 // AUTH Phase 2: JWT 쿠키 파싱 (HttpOnly access_token / refresh_token)
 try { app.use(require('cookie-parser')()); } catch (e) { console.warn('[auth] cookie-parser 미설치:', e.message); }
+
+// ─── JWT → 레거시 키 브리지 (2026-09 인증 정리) ─────────────────────────────
+//   라우트 ~90곳이 isAdminKey(req.query.key / body.admin_key / x-admin-key) 로 권한을 검사한다.
+//   관리자가 JWT(쿠키 pr_access 또는 Authorization: Bearer)로 로그인했으면, 요청마다 1회용 내부 토큰을 만들어
+//   그 자리들에 넣어 준다 → 브라우저가 관리자 비밀번호를 보관·전송할 필요가 없어진다.
+//   · 토큰은 'jwtb:' + 난수, 서버 메모리에만 있고 응답이 끝나면 폐기 (밖으로 나가지 않음)
+//   · 쿠키로 인증된 변경 요청은 Origin 이 같은 호스트일 때만 브리지 (CSRF 방지)
+//   · viewer 역할은 브리지하지 않음
+const _bridgeTokens = new Map(); // token → { role, name, userId }
+function _bridgeOf(key) { return (typeof key === 'string' && key.startsWith('jwtb:')) ? (_bridgeTokens.get(key) || null) : null; }
+function _applyJwtBridge(req) {
+    const t = req && req._bridgeToken;
+    if (!t) return;
+    req.headers['x-admin-key'] = t;
+    if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) req.body.admin_key = t;
+    // Express 5 의 req.query 는 매번 다시 파싱하는 getter → 인스턴스 속성으로 덮어써야 값이 유지된다
+    const qv = Object.assign({}, req.query, { key: t, admin_key: t });
+    Object.defineProperty(req, 'query', { value: qv, writable: true, configurable: true, enumerable: true });
+}
+app.use(async (req, res, next) => {
+    try {
+        if (!req.path.startsWith('/api/') || req.path.startsWith('/api/auth/')) return next();
+        const auth = req.headers['authorization'] || '';
+        const bm = auth.match(/^Bearer\s+(.+)$/i);
+        const cookieTok = req.cookies && req.cookies.pr_access;
+        const tok = bm ? bm[1].trim() : cookieTok;
+        if (!tok) return next();
+        // 쿠키 인증 + 변경 요청 → Origin 확인 (헤더 Bearer 는 교차 사이트에서 자동 첨부되지 않으므로 제외)
+        if (!bm && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+            const origin = req.headers.origin;
+            if (origin) { let h = ''; try { h = new URL(origin).host; } catch (e) {} if (h !== req.headers.host) return next(); }
+        }
+        const payload = await require('./lib/auth/jwt').verifyAccess(db, tok);
+        if (!payload || !payload.role || payload.role === 'viewer') return next();
+        const t = 'jwtb:' + crypto.randomBytes(18).toString('hex');
+        _bridgeTokens.set(t, { role: payload.role, name: payload.username || 'user', userId: payload.sub });
+        req._bridgeToken = t;
+        req.user = req.user || { id: payload.sub, username: payload.username, role: payload.role, source: 'jwt' };
+        res.on('close', () => _bridgeTokens.delete(t));
+        _applyJwtBridge(req);
+    } catch (e) { /* 브리지 실패는 무인증과 동일 */ }
+    next();
+});
+
+// ─── 쓰기 가드 (2026-09) ─────────────────────────────────────────────────
+//   점검에서 변경 라우트 40개가 키 검사 없이 열려 있었다: 기록 입력(/api/results/upsert — 진행 중 종목은 누구나 기록을 쓸 수 있었음),
+//   기록 초기화, 결승/준결승 생성, 레인 변경, 소집 처리, 풍속, 진출자 선정, 릴레이 주자, .lif/.txt 가져오기 등.
+//   → /api 의 모든 POST/PUT/PATCH/DELETE 는 유효한 키(운영키·관리자·기록위원 또는 JWT 세션)를 요구한다.
+//   라우트별 세부 권한(관리자 전용 등)은 기존 검사가 그대로 추가로 적용된다.
+//   클라이언트 api() 는 저장된 키를 쓰기 요청에 자동으로 실어 보내므로 로그인한 심판·운영진은 영향이 없다.
+const WRITE_GUARD_PUBLIC = [
+    /^\/api\/auth\//,                          // 로그인·갱신·로그아웃·키 확인
+    /^\/api\/admin\/verify$/,
+    /^\/api\/push\/(register|unregister|interests)$/,   // 관람객 푸시 구독
+    /^\/api\/event\/[^/]+\/(record|send-cert)$/,       // 공개 기록 페이지(슬러그) — 자체 키 검사
+    /^\/api\/external\//,                      // 외부 연동 — 자체 API 키(externalApiAuth)
+];
+function _writeKeyOf(req) {
+    return (req.body && typeof req.body === 'object' && (req.body.admin_key || req.body.operation_key || req.body.key))
+        || req.headers['x-admin-key'] || (req.query && (req.query.admin_key || req.query.key)) || '';
+}
+function _hasValidWriteKey(req) {
+    const k = String(_writeKeyOf(req) || '');
+    return !!k && (isOperationKey(k) || isAdminOrManager(k) || isRecordOfficerKey(k));
+}
+app.use((req, res, next) => {
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) || !req.path.startsWith('/api/')) return next();
+    if (WRITE_GUARD_PUBLIC.some(re => re.test(req.path))) return next();
+    // multipart 는 아직 본문이 없다 → multer 래퍼(upload.*)가 파싱 직후 같은 검사를 한다
+    if (/^multipart\/form-data/i.test(req.headers['content-type'] || '')) return next();
+    if (_hasValidWriteKey(req)) return next();
+    return res.status(403).json({ error: '인증 키가 필요합니다. (운영키 또는 관리자 로그인)' });
+});
 
 // ------------------------------------------------------------
 // 글로벌 쓰기 가드 미들웨어 — 종료된 대회는 운영자/녹화관 쓰기 금지
@@ -212,6 +416,9 @@ const COMP_END_GUARD_EXEMPT = [
     /^\/api\/admin\/login$/,
     /^\/api\/operation-log/,
     /^\/api\/audit-log/,
+    /^\/api\/push\//,   // 푸시 토큰 등록/해제는 대회 데이터 수정이 아님 — 종료 대회에서도 허용
+    /^\/api\/certificates?\//,   // 상장·기록증 발급은 대회 데이터를 바꾸지 않는다 — 시상은 종료 뒤에도 이어진다
+    /^\/api\/auth\//,
 ];
 async function _extractCompetitionIdFromRequest(req) {
     try {
@@ -221,6 +428,24 @@ async function _extractCompetitionIdFromRequest(req) {
 
         const b = req.body || {};
         const q = req.query || {};
+
+        // URL 의 id — 이 미들웨어는 라우트 매칭 전이라 req.params 가 비어 있다. 경로에서 직접 읽는다.
+        //   (예전엔 /api/heats/:id/wind, /api/events/:id/complete, /api/event-entries/:id/memo 처럼 본문에 id 가 없는 요청은 잠금을 그냥 통과했다)
+        const mPath = req.path.match(/^\/api\/(events|heats|event-entries|heat-entries|athletes|results|height-attempts|joint-groups|relay-members|pacing|wa-correct)\/(\d+)(?:\/|$)/);
+        if (mPath) {
+            const id = parseInt(mPath[2]);
+            const SQL = {
+                'events': 'SELECT competition_id FROM event WHERE id=?',
+                'heats': 'SELECT e.competition_id AS competition_id FROM heat h JOIN event e ON e.id=h.event_id WHERE h.id=?',
+                'event-entries': 'SELECT e.competition_id AS competition_id FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.id=?',
+                'heat-entries': 'SELECT e.competition_id AS competition_id FROM heat_entry he JOIN heat h ON h.id=he.heat_id JOIN event e ON e.id=h.event_id WHERE he.id=?',
+                'athletes': 'SELECT competition_id FROM athlete WHERE id=?',
+                'results': 'SELECT e.competition_id AS competition_id FROM result r JOIN heat h ON h.id=r.heat_id JOIN event e ON e.id=h.event_id WHERE r.id=?',
+                'height-attempts': 'SELECT e.competition_id AS competition_id FROM height_attempt ha JOIN heat h ON h.id=ha.heat_id JOIN event e ON e.id=h.event_id WHERE ha.id=?',
+                'joint-groups': 'SELECT competition_id FROM joint_group WHERE id=?',
+            }[mPath[1]];
+            if (SQL) { try { const r = await db.get(SQL, id); if (r && r.competition_id) return r.competition_id; } catch (e) { /* 테이블/열이 없으면 아래 단계로 */ } }
+        }
 
         // 직접 competition_id
         const direct = b.competition_id || q.competition_id || b.comp_id || q.comp_id;
@@ -249,6 +474,21 @@ async function _extractCompetitionIdFromRequest(req) {
             const ee = await db.get('SELECT e.competition_id AS competition_id FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.id=?', entryId);
             if (ee) return ee.competition_id;
         }
+        // heat_entry_id → heat_entry→heat→event
+        if (b.heat_entry_id) {
+            const he = await db.get('SELECT e.competition_id AS competition_id FROM heat_entry he JOIN heat h ON h.id=he.heat_id JOIN event e ON e.id=h.event_id WHERE he.id=?', b.heat_entry_id);
+            if (he) return he.competition_id;
+        }
+        // items: [{event_id}] (외부 API 일괄 연결) → 첫 항목 기준
+        if (Array.isArray(b.items) && b.items.length && b.items[0] && b.items[0].event_id) {
+            const ev = await db.get('SELECT competition_id FROM event WHERE id=?', b.items[0].event_id);
+            if (ev) return ev.competition_id;
+        }
+        // event_ids: [..] (소집 일괄 처리 등) → 첫 종목 기준
+        if (Array.isArray(b.event_ids) && b.event_ids.length) {
+            const ev = await db.get('SELECT competition_id FROM event WHERE id=?', b.event_ids[0]);
+            if (ev) return ev.competition_id;
+        }
         // athlete_id → athlete.competition_id
         const athId = b.athlete_id || q.athlete_id;
         if (athId) {
@@ -258,29 +498,27 @@ async function _extractCompetitionIdFromRequest(req) {
     } catch (e) { /* 추출 실패는 통과시킴 */ }
     return null;
 }
-app.use(async (req, res, next) => {
-    if (!WRITE_METHODS.has(req.method)) return next();
-    // 정적 자원이나 API 외부 요청은 통과
-    if (!req.path.startsWith('/api/')) return next();
-    // 면제 경로
-    for (const re of COMP_END_GUARD_EXEMPT) if (re.test(req.path)) return next();
-    // 키 추출 (본문 / 쿼리)
-    const key = (req.body && (req.body.admin_key || req.body.operation_key || req.body.key))
-            || (req.query && (req.query.admin_key || req.query.key));
-    // 관리자 키는 무조건 통과
-    if (key && isAdminKey(key)) return next();
-    // competition_id 추출 시도
+// 종료 잠금 판정 — 막아야 하면 응답을 보내고 true. (전역 미들웨어 + multer 래퍼가 함께 쓴다: 멀티파트는 파싱 뒤에야 본문을 볼 수 있다)
+async function _blockedByCompEnd(req, res) {
+    for (const re of COMP_END_GUARD_EXEMPT) if (re.test(req.path)) return false;
+    // 키: 본문·헤더(x-admin-key)·쿼리 — 예전엔 헤더를 보지 않아 헤더로만 키를 보내는 관리자 요청이 종료 후 막혔다
+    const key = _writeKeyOf(req);
+    if (key && isAdminKey(key)) return false;
     const compId = await _extractCompetitionIdFromRequest(req);
-    if (!compId) return next(); // 추출 못 하면 통과
+    if (!compId) return false; // 추출 못 하면 통과 (라우트별 가드에 위임)
     try {
         if (await isCompetitionEnded(compId)) {
-            return res.status(403).json({
-                error: '대회가 종료되었습니다. 관리자 권한으로만 수정할 수 있습니다.',
-                competition_ended: true,
-                competition_id: compId,
-            });
+            res.status(403).json({ error: '대회가 종료되었습니다. 관리자 권한으로만 수정할 수 있습니다.', competition_ended: true, competition_id: compId });
+            return true;
         }
     } catch (e) { /* 가드 실패 시 통과 (가용성 우선) */ }
+    return false;
+}
+app.use(async (req, res, next) => {
+    if (!WRITE_METHODS.has(req.method)) return next();
+    if (!req.path.startsWith('/api/')) return next();
+    if (/^multipart\/form-data/i.test(req.headers['content-type'] || '')) return next();   // multer 래퍼에서 검사
+    if (await _blockedByCompEnd(req, res)) return;
     next();
 });
 
@@ -288,6 +526,91 @@ app.use(async (req, res, next) => {
 app.get('/results.html', (req, res) => {
     const comp = req.query.comp ? `?comp=${req.query.comp}` : '';
     res.redirect(`/dashboard.html${comp}`);
+});
+
+// 행사(event) 간편 기록입력 — /e/<slug>/입력 (또는 /record) → 전용 입력 페이지
+//   ※ /e/:slug (대시보드)보다 먼저 등록할 필요는 없으나(세그먼트 수가 달라 충돌 없음) 가독성상 위에 둠
+app.get('/e/:slug/:page', (req, res, next) => {
+    let p = req.params.page;
+    try { p = decodeURIComponent(p); } catch (e) {}
+    if (p === '입력' || p === 'record') return sendStampedHtml(res, 'event-record.html');
+    return next();
+});
+
+// 행사(event) 화이트라벨 — /e/<brand-slug> → 대시보드(클라이언트가 slug로 브랜딩 적용)
+app.get('/e/:slug', (req, res) => {
+    sendStampedHtml(res, 'dashboard.html');
+});
+
+// 행사 브랜드 이미지 업로드 (로고/워터마크) — 관리자
+app.post('/api/admin/competitions/:id/brand-image', upload.single('image'), async (req, res) => {
+    try {
+        if (!isAdminKey(req.body && req.body.admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+        if (!req.file) return res.status(400).json({ error: '파일이 업로드되지 않았습니다.' });
+        const position = req.body.position;
+        if (!['logo', 'watermark'].includes(position)) return res.status(400).json({ error: 'position(logo|watermark) 필요' });
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.id);
+        if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
+        const destDir = path.join(__dirname, 'public', 'uploads', 'brand');
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        for (const oe of ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']) {
+            const op = path.join(destDir, `brand_${position}_${comp.id}${oe}`);
+            try { if (fs.existsSync(op)) fs.unlinkSync(op); } catch (e) {}
+        }
+        const ext = (path.extname(req.file.originalname) || '.png').toLowerCase();
+        const filename = `brand_${position}_${comp.id}${ext}`;
+        fs.copyFileSync(req.file.path, path.join(destDir, filename));
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        const publicUrl = `/uploads/brand/${filename}`;
+        const col = position === 'logo' ? 'brand_logo_path' : 'brand_watermark_path';
+        await db.run(`UPDATE competition SET ${col}=? WHERE id=?`, publicUrl, comp.id);
+        res.json({ success: true, url: publicUrl + '?v=' + Date.now(), path: publicUrl });
+    } catch (e) { console.error('[BRAND][upload]', e); res.status(500).json({ error: e.message }); }
+});
+
+// TWA(안드로이드 앱) Digital Asset Links — /.well-known/* 는 dotfile 이라 기본 static 이
+// 무시하므로 별도 마운트로 서빙. (assetlinks.json 채우면 앱에서 주소창 숨김 검증됨)
+app.use('/.well-known', express.static(path.join(__dirname, 'public', '.well-known')));
+
+// ─── iOS 앱(WKWebView) 대응: App Store 심사 가이드 2.3.10 ────────────────────
+//   iOS 래퍼는 User-Agent 에 "PWAShell" 표식을 붙인다(WebView.swift). 그 요청에는
+//   Android/타 스토어 안내를 서버에서 아예 제거하고 서빙한다(안드로이드 웹 사용자는 그대로).
+//   index.html 의 <!--PWASHELL-STRIP--> ~ <!--/PWASHELL-STRIP--> 구간을 제거.
+function isIOSAppShell(req) {
+    return /PWAShell/i.test(req.headers['user-agent'] || '');
+}
+// 캐시 버전 자동화: HTML 의 ?v= 와 sw.js 의 CACHE_NAME 을 파일 해시로 바꿔 내보낸다 (손으로 올리던 번호는 이제 의미 없음)
+const assetVersion = require('./lib/assetVersion').create(path.join(__dirname, 'public'));
+function sendStampedHtml(res, file, next) {
+    fs.readFile(path.join(__dirname, 'public', file), 'utf8', (err, html) => {
+        if (err) return next ? next() : res.status(404).end();
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.type('html').send(assetVersion.stampHtml(html));
+    });
+}
+app.get('/sw.js', (req, res, next) => {
+    fs.readFile(path.join(__dirname, 'public', 'sw.js'), 'utf8', (err, js) => {
+        if (err) return next();
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.type('application/javascript').send(assetVersion.stampSw(js));
+    });
+});
+app.get(/^\/(?:[A-Za-z0-9_-]+\.html)?$/, (req, res, next) => {
+    const file = req.path === '/' ? 'index.html' : req.path.slice(1);
+    if (file === 'open.html') return next();      // 아래 iOS 우회 라우트가 처리
+    const p = path.join(__dirname, 'public', file);
+    fs.readFile(p, 'utf8', (err, html) => {
+        if (err) return next();
+        let out = html;
+        if (file === 'index.html' && isIOSAppShell(req)) out = out.replace(/<!--PWASHELL-STRIP-->[\s\S]*?<!--\/PWASHELL-STRIP-->/g, '');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.type('html').send(assetVersion.stampHtml(out));
+    });
+});
+// open.html 은 Android intent 리다이렉트 전용 → iOS 앱에서는 홈으로 우회
+app.get('/open.html', (req, res, next) => {
+    if (isIOSAppShell(req)) return res.redirect('/');
+    next();
 });
 
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -302,8 +625,77 @@ app.use(express.static(path.join(__dirname, 'public'), {
 // Serve favicon from icons
 app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.ico')));
 
+// ─── Health check — scripts/deploy.sh 및 nginx/외부 모니터링 용도 ──────────
+//   정상: 200 + 상태 JSON
+//   서버는 살아있지만 auth 마이그 실패: 200 (legacy 로그인은 정상 동작하므로)
+//   완전 장애: Express 자체가 응답 못 함 → connection refused / 502
+// ---- 보안 자가점검 (부팅 1회, 경고만) ----
+try {
+    const { runSecuritySelfCheck } = require('./lib/securityCheck');
+    global.__securityWarnings = runSecuritySelfCheck();
+    if (global.__securityWarnings.length) {
+        console.warn(`\n[보안 자가점검] ⚠️  약한 설정 ${global.__securityWarnings.length}건 감지:`);
+        global.__securityWarnings.forEach(m => console.warn('  - ' + m));
+        console.warn('  → 운영 환경이면 .env 의 해당 값을 강하게 바꾸고 재시작하세요.\n');
+    } else {
+        console.log('[보안 자가점검] ✅ 기본 자격증명 점검 통과');
+    }
+} catch (e) {
+    global.__securityWarnings = [];
+    console.warn('[보안 자가점검] 실행 실패:', e.message);
+}
+
+// .env 가 아니라 '실제 적용 중인' 자격증명(DB system_config)을 점검 — 관리 화면에서 약한 값으로 바꿔도 잡힌다
+function _refreshDbSecurityWarnings() {
+    setTimeout(() => {
+        try {
+            const { _WEAK } = require('./lib/securityCheck');
+            const w = [];
+            const op = ACCESS_KEYS.operation;
+            const opWeak = _opKeyIsHash(op) ? getConfigKey('operation_key_weak', '0') === '1' : (!op || String(op).length < 6 || _WEAK.has(String(op).toLowerCase()));
+            if (opWeak) w.push('운영키(기본키)가 약함 — 6자 미만이거나 흔한 값. 관리자 → 접근 키에서 변경하세요');
+            const h = ACCESS_KEYS.adminHash;
+            if (h) for (const c of _WEAK) { if (bcrypt.compareSync(c, h)) { w.push(`관리자 키가 흔한 값("${c}")입니다 — 즉시 변경하세요`); break; } }
+            global.__dbSecurityWarnings = w;
+            if (w.length) { console.warn('[보안 자가점검·DB] ⚠️  ' + w.join(' / ')); }
+        } catch (e) { global.__dbSecurityWarnings = []; }
+    }, 0);
+}
+setTimeout(_refreshDbSecurityWarnings, 1500); // ACCESS_KEYS 초기화 이후
+app.get('/api/admin/security-status', (req, res) => {
+    const k = req.headers['x-admin-key'] || req.query.key;
+    if (!isAdminKey(String(k || ''))) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+    res.json({ warnings: [...(global.__dbSecurityWarnings || []), ...(global.__securityWarnings || []).filter(m => /JWT_SECRET|ADMIN_ID/.test(m))] });
+});
+
+app.get('/api/health', async (req, res) => {
+    const mem = process.memoryUsage();
+    const base = {
+        backend: db.isAsync ? 'postgres' : 'sqlite',
+        security_warnings: (global.__securityWarnings || []).length + (global.__dbSecurityWarnings || []).length,
+        authMig: global.__authMigOk ? 'ok' : (global.__authMigError ? 'failed' : 'pending'),
+        authMigError: global.__authMigError || null,
+        uptime_sec: Math.floor(process.uptime()),
+        node: process.version,
+        rss_mb: Math.round(mem.rss / 1048576),
+        heap_used_mb: Math.round(mem.heapUsed / 1048576),
+        ts: new Date().toISOString(),
+    };
+    // 실제 DB 연결 확인 — 가벼운 SELECT 1 (SQLite/PG 양쪽 호환).
+    // DB 가 죽으면 503 을 반환해 모니터/배포 헬스체크가 장애를 감지하게 한다.
+    try {
+        await db.get('SELECT 1 AS ok');
+        res.json({ ok: true, db: 'up', ...base });
+    } catch (e) {
+        res.status(503).json({ ok: false, db: 'down', dbError: e.message, ...base });
+    }
+});
+
 // /open — Android intent:// 중간 리다이렉트 페이지 (카카오톡/인스타 인앱브라우저 대응)
-app.get('/open', (req, res) => res.sendFile(path.join(__dirname, 'public', 'open.html')));
+app.get('/open', (req, res) => {
+    if (isIOSAppShell(req)) return res.redirect('/');   // 2.3.10: iOS 앱엔 Android 리다이렉트 페이지 노출 금지
+    res.sendFile(path.join(__dirname, 'public', 'open.html'));
+});
 
 // DB 어댑터 사용 (lib/db.js).
 // 기존 better-sqlite3 인터페이스 100% 호환 — db.prepare/.get/.all/.run/.exec/.transaction/.pragma 모두 정상 동작.
@@ -317,6 +709,9 @@ const db = getDb();
 // PG 모드(db.isAsync=true)에서는 db/schema.pg.sql 이 모든 테이블/컬럼/인덱스를
 // 이미 정의하므로 이 블록 전체를 건너뛴다. SQLite 부트 시에만 멱등 마이그레이션 실행.
 // ──────────────────────────────────────────────────────────────────
+// 부팅 시 비동기로 도는 시드·마이그레이션들 — 요청을 받기 전에 끝나야 한다 (_pgBootAsync 가 기다린다)
+const _bootTasks = [];
+
 if (!db.isAsync) {
 try { db.exec(`CREATE TABLE IF NOT EXISTS operation_key (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -333,6 +728,9 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS system_config (
 )`); } catch(e) {}
 // Add can_manage column if missing (migration)
 try { db.exec(`ALTER TABLE operation_key ADD COLUMN can_manage INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
+// (2026-09 결정) 운영키는 해시로 저장한다: key_value = bcrypt 해시, key_prefix = 앞 3자(후보 좁히기), key_hint = 화면 표시용 'abc••••'
+try { db.exec(`ALTER TABLE operation_key ADD COLUMN key_prefix TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE operation_key ADD COLUMN key_hint TEXT DEFAULT ''`); } catch(e) {}
 // Event Records table (종목별 기록 관리)
 try { db.exec(`CREATE TABLE IF NOT EXISTS event_record (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -353,12 +751,17 @@ try { db.exec(`ALTER TABLE result ADD COLUMN status_code TEXT DEFAULT ''`); } ca
 // Add wind columns (migration)
 try { db.exec(`ALTER TABLE result ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE heat ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
+// 오프라인 재전송 충돌 판정용 — 풍속·소집 상태가 마지막으로 바뀐 시각 (2026-09)
+try { db.exec(`ALTER TABLE heat ADD COLUMN wind_updated_at TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE event_entry ADD COLUMN status_updated_at TEXT DEFAULT NULL`); } catch(e) {}
 // 오프라인 충돌 감지용 — height_attempt 에 updated_at 추가 (result 는 이미 보유)
 try { db.exec(`ALTER TABLE height_attempt ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))`); } catch(e) {}
 // 혼성경기 종합기록지의 DNS/DNF/DQ/NM 표시용 — combined_score 에 status_code 추가
 try { db.exec(`ALTER TABLE combined_score ADD COLUMN status_code TEXT DEFAULT ''`); } catch(e) {}
 // Phase C 후속: record_breaking_log에 풍속 컬럼 추가 (NR/DR/CR 감지 시점의 풍속 보존)
 try { db.exec(`ALTER TABLE record_breaking_log ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
+// 타이기록(CT·DT·KT) — 기존 기록과 같은 값 (Phase 7-④, 2026-09)
+try { db.exec(`ALTER TABLE record_breaking_log ADD COLUMN is_tie INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 
 // ============================================================
 // 상장(Certificate) 시스템 — 양식 저장 + 발행 로그
@@ -386,9 +789,28 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_template (
     font_family TEXT NOT NULL DEFAULT 'NanumSquare',
     is_default INTEGER NOT NULL DEFAULT 0,                -- 기본 양식 1개만 ON
     sort_order INTEGER NOT NULL DEFAULT 0,
+    watermark_image_path TEXT NOT NULL DEFAULT '',        -- 중앙 워터마크 이미지(비우면 없음)
+    watermark_opacity REAL NOT NULL DEFAULT 0.07,         -- 0.02~0.5
+    watermark_scale REAL NOT NULL DEFAULT 0.45,           -- 페이지폭 대비 0.1~0.9
+    border_color TEXT NOT NULL DEFAULT '#b8945a',         -- 테두리/포인트 색
+    panel_color TEXT NOT NULL DEFAULT '#faf8f2',          -- 기록증 기록 패널 배경색
+    text_color TEXT NOT NULL DEFAULT '#1a1a1a',           -- 본문 글씨 색(제목·이름·본문·날짜·발급자)
+    label_color TEXT NOT NULL DEFAULT '#8a7f6a',          -- 보조 글씨 색(대회명·메타·패널 라벨)
+    accent_color TEXT NOT NULL DEFAULT '#7a3a00',         -- 강조 색(기록값·종목 강조)
+    panel_opacity REAL NOT NULL DEFAULT 1.0,              -- 기록 패널 투명도(0.2~1.0, 낮추면 뒤 워터마크가 비침)
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`); } catch(e) { console.error('[DB] certificate_template create error:', e.message); }
+// 기존 SQLite DB 대비 멱등 컬럼 추가 (워터마크/색상)
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN watermark_image_path TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN watermark_opacity REAL NOT NULL DEFAULT 0.07`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN watermark_scale REAL NOT NULL DEFAULT 0.45`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN border_color TEXT NOT NULL DEFAULT '#b8945a'`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN panel_color TEXT NOT NULL DEFAULT '#faf8f2'`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN text_color TEXT NOT NULL DEFAULT '#1a1a1a'`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN label_color TEXT NOT NULL DEFAULT '#8a7f6a'`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN accent_color TEXT NOT NULL DEFAULT '#7a3a00'`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN panel_opacity REAL NOT NULL DEFAULT 1.0`); } catch(e) {}
 
 try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_issue_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -430,6 +852,8 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS sms_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     competition_id INTEGER,
     athlete_id INTEGER,
+    event_id INTEGER,
+    heat_number INTEGER,
     phone_number TEXT NOT NULL,
     message TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',  -- pending|sent|failed|simulated
@@ -440,9 +864,38 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS sms_log (
     sent_at TEXT NOT NULL DEFAULT (datetime('now')),
     triggered_by TEXT NOT NULL DEFAULT ''    -- e.g. 'manual', 'cert_batch'
 )`); } catch(e) { console.error('[DB] sms_log error:', e.message); }
+// 기존 sms_log 에 event_id/heat_number 없으면 추가 (SQLite 멱등 마이그레이션 — 종목·조별 발송현황용)
+try { db.exec(`ALTER TABLE sms_log ADD COLUMN event_id INTEGER`); } catch(e) {}
+try { db.exec(`ALTER TABLE sms_log ADD COLUMN heat_number INTEGER`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC)`); } catch(e) {}
 // ========== END SMS Schema ==========
+
+// ========== Push(FCM 웹푸시) 토큰 ==========
+try { db.exec(`CREATE TABLE IF NOT EXISTS push_token (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,
+    audience TEXT NOT NULL DEFAULT 'public',   -- 'public' | 'staff'
+    competition_id INTEGER,
+    user_agent TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) { console.error('[DB] push_token error:', e.message); }
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience)`); } catch(e) {}
+// 네이티브 앱(앱스토어 iOS·안드로이드) 토큰 구분 — iOS 는 APNs 알림 형식으로 보내야 표시된다 (2026-09-25)
+try { db.exec(`ALTER TABLE push_token ADD COLUMN platform TEXT NOT NULL DEFAULT 'web'`); } catch(e) {}
+// 관심 종목(즐겨찾기) — fav_key = '성별|종목명' (예: 'M|100m')
+try { db.exec(`CREATE TABLE IF NOT EXISTS push_interest (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL,
+    competition_id INTEGER,
+    fav_key TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) { console.error('[DB] push_interest error:', e.message); }
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_push_interest_lookup ON push_interest(competition_id, fav_key)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_push_interest_token ON push_interest(token)`); } catch(e) {}
+// ========== END Push Schema ==========
 
 // ========== AUTH Phase 1: app_user / session_refresh / login_audit ==========
 // (실제 호출은 SQLite-only 블록 종료 후 — 양쪽 백엔드에서 모두 실행되어야 함)
@@ -450,9 +903,30 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete
 global.__authMigError = null;
 global.__authMigOk = false;
 
+
+// Migrate existing numeric wind values to "N.N m/s" text format for scoreboard compatibility
+// (SQLite 부팅 전용 마이그레이션 — PG 백엔드에서는 별도 마이그레이션 스크립트로 처리)
+if (!db.isAsync) {
+    try {
+        const numericWindHeats = db.raw.prepare("SELECT id, wind FROM heat WHERE wind IS NOT NULL AND CAST(wind AS TEXT) NOT LIKE '% m/s'").all();
+        if (numericWindHeats.length > 0) {
+            const upd = db.raw.prepare('UPDATE heat SET wind=? WHERE id=?');
+            const tx = db.raw.transaction(() => {
+                for (const h of numericWindHeats) {
+                    const v = parseFloat(h.wind);
+                    if (!isNaN(v)) upd.run(v.toFixed(1) + ' m/s', h.id);
+                }
+            });
+            tx();
+            console.log(`[DB Migration] heat.wind: ${numericWindHeats.length}건 → "N.N m/s" 형식으로 변환`);
+        }
+    } catch(e) { console.error('[DB Migration] wind format migration error:', e.message); }
+}
+
+// (2026-09) 이 시드는 예전에 SQLite 전용 블록 안에 들어 있어 PG 에서는 기본 상장 양식이 생성되지 않았다 → 블록 밖으로 이동
 // 기본 상장 템플릿 시드 (최초 1회) — 시상장 + 완주증
 // SQLite/PostgreSQL 양쪽에서 동작하도록 통합 db API 사용 (비동기)
-(async () => {
+_bootTasks.push((async () => {
     try {
         const cntRow = await db.get('SELECT COUNT(*) AS c FROM certificate_template');
         const cnt = cntRow ? Number(cntRow.c) : 0;
@@ -488,26 +962,7 @@ global.__authMigOk = false;
             console.log('[DB] certificate_template seeded (4 templates)');
         }
     } catch(e) { console.error('[DB] certificate_template seed error:', e.message); }
-})();
-
-// Migrate existing numeric wind values to "N.N m/s" text format for scoreboard compatibility
-// (SQLite 부팅 전용 마이그레이션 — PG 백엔드에서는 별도 마이그레이션 스크립트로 처리)
-if (!db.isAsync) {
-    try {
-        const numericWindHeats = db.raw.prepare("SELECT id, wind FROM heat WHERE wind IS NOT NULL AND CAST(wind AS TEXT) NOT LIKE '% m/s'").all();
-        if (numericWindHeats.length > 0) {
-            const upd = db.raw.prepare('UPDATE heat SET wind=? WHERE id=?');
-            const tx = db.raw.transaction(() => {
-                for (const h of numericWindHeats) {
-                    const v = parseFloat(h.wind);
-                    if (!isNaN(v)) upd.run(v.toFixed(1) + ' m/s', h.id);
-                }
-            });
-            tx();
-            console.log(`[DB Migration] heat.wind: ${numericWindHeats.length}건 → "N.N m/s" 형식으로 변환`);
-        }
-    } catch(e) { console.error('[DB Migration] wind format migration error:', e.message); }
-}
+})());
 // Add heat_name to heat (custom display name, e.g. "준결1조", "A조")
 try { db.exec(`ALTER TABLE heat ADD COLUMN heat_name TEXT DEFAULT NULL`); } catch(e) {}
 // Add scoreboard_key to heat (전광판 매칭키, e.g. "남자실업부 100m 예선 1조")
@@ -523,6 +978,8 @@ try { db.exec(`ALTER TABLE athlete ADD COLUMN personal_best TEXT DEFAULT ''`); }
 try { db.exec(`ALTER TABLE athlete ADD COLUMN date_of_birth TEXT DEFAULT ''`); } catch(e) {}
 // Add callroom_memo to event_entry (소집실 메모)
 try { db.exec(`ALTER TABLE event_entry ADD COLUMN callroom_memo TEXT DEFAULT ''`); } catch(e) {}
+// Add manual_rank to event_entry (수직도약 순위결정전 등 동기록 시 수동 순위)
+try { db.exec(`ALTER TABLE event_entry ADD COLUMN manual_rank INTEGER`); } catch(e) {}
 // Add callroom_event_memo to event (소집실 종목 메모 — 인쇄 시 제목 하단에 표시)
 try { db.exec(`ALTER TABLE event ADD COLUMN callroom_event_memo TEXT DEFAULT ''`); } catch(e) {}
 // Add federation column to competition (KTFL=실업, KUAF=대학, ''=없음)
@@ -679,8 +1136,11 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS federation_list (
     badge_bg TEXT NOT NULL DEFAULT '#e3f2fd',
     badge_color TEXT NOT NULL DEFAULT '#1565c0',
     sort_order INTEGER NOT NULL DEFAULT 0,
+    hidden INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`); } catch(e) {}
+// 연맹 숨김: 1이면 홈·운영 화면의 대회 목록에서 그 연맹 대회 전체가 빠짐 (관리자 페이지에서만 보임)
+try { db.exec(`ALTER TABLE federation_list ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 // Add gender label columns to federation_list (전광판 성별 매핑)
 try { db.exec(`ALTER TABLE federation_list ADD COLUMN gender_label_m TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE federation_list ADD COLUMN gender_label_f TEXT DEFAULT ''`); } catch(e) {}
@@ -693,6 +1153,8 @@ try {
             ('KTFL', '한국실업육상연맹', '#e3f2fd', '#1565c0', 1),
             ('KUAF', '한국대학육상연맹', '#fce4ec', '#c62828', 2)`);
     }
+    // 한국중·고육상연맹 (Phase 7, 2026-09) — 기존 DB 에도 멱등 추가. 대회의 연맹을 KJAF 로 두면 요강 점검·연맹 기록지 규칙이 켜진다
+    db.exec(`INSERT OR IGNORE INTO federation_list (code, name, badge_bg, badge_color, sort_order) VALUES ('KJAF', '한국중고육상연맹', '#e8f5e9', '#2e7d32', 3)`);
 } catch(e) {}
 
 // Home popup tables (CMS for home page popups)
@@ -714,6 +1176,8 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS home_popup (
 )`); } catch(e) {}
 // Add sort_order column to home_popup if missing (migration)
 try { db.exec(`ALTER TABLE home_popup ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
+// Add competition_id to home_popup (NULL = 공통/전체 노출, 특정 id = 그 대회 전용) — 대회별 팝업
+try { db.exec(`ALTER TABLE home_popup ADD COLUMN competition_id INTEGER DEFAULT NULL`); } catch(e) {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS home_popup_section (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     popup_id INTEGER NOT NULL REFERENCES home_popup(id) ON DELETE CASCADE,
@@ -740,6 +1204,37 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_heat_entry_heat ON heat_entry(heat
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_heat_entry_event_entry ON heat_entry(event_entry_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_result_heat ON result(heat_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_result_event_entry ON result(event_entry_id)`); } catch(e) {}
+// (2026-09) 트랙 기록(attempt_number IS NULL)의 중복 방지.
+//   UNIQUE(heat_id, event_entry_id, attempt_number) 는 NULL 을 서로 다른 값으로 보기 때문에 트랙 기록에는 효력이 없었다 →
+//   더블탭·가져오기와 수기 입력의 동시 요청이 같은 선수의 행을 2개 만들 수 있었고, 그러면 화면은 옛 행을 보여주고 수정은 새 행에 들어갔다.
+//   기존 중복은 가장 최근 행(수정이 들어가던 행)만 남기고 정리한 뒤 부분 유니크 인덱스를 건다.
+if (!db.isAsync) {
+    try {
+        const dup = db.raw.prepare(`SELECT COUNT(*) AS c FROM result WHERE attempt_number IS NULL AND id NOT IN (SELECT MAX(id) FROM result WHERE attempt_number IS NULL GROUP BY heat_id, event_entry_id)`).get();
+        if (dup && dup.c > 0) {
+            db.exec(`DELETE FROM result WHERE attempt_number IS NULL AND id NOT IN (SELECT MAX(id) FROM result WHERE attempt_number IS NULL GROUP BY heat_id, event_entry_id)`);
+            console.warn(`[DB Migration] 트랙 기록 중복 ${dup.c}행 정리 (선수·조당 최신 1행 유지)`);
+        }
+        db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_entry_id) WHERE attempt_number IS NULL`);
+    } catch (e) { console.warn('[DB Migration] ux_result_no_attempt 생성 실패:', e.message); }
+}
+// (2026-09) 계주 종목명 표기 통일: 저장값에 '4X100mR'(대문자 X)와 '4×800mR'(곱셈 기호)가 섞여 있었다 → 모두 '4X…mR'.
+//   종목명이 들어간 전광판 키(heat.scoreboard_key)도 함께 바꾼다. 같은 대회에 두 표기가 모두 있으면(유니크 충돌) 그 행은 건너뛴다.
+if (!db.isAsync) {
+    try {
+        const rows = db.raw.prepare("SELECT id, name FROM event WHERE name LIKE '%4×%'").all();
+        let done = 0;
+        for (const r of rows) {
+            const to = r.name.replace(/4×/g, '4X');
+            try {
+                db.raw.prepare('UPDATE event SET name=? WHERE id=?').run(to, r.id);
+                db.raw.prepare("UPDATE heat SET scoreboard_key=REPLACE(scoreboard_key, ?, ?) WHERE event_id=? AND scoreboard_key LIKE '%4×%'").run(r.name, to, r.id);
+                done++;
+            } catch (e) { console.warn(`[DB Migration] 계주 표기 통일 건너뜀 (event ${r.id} ${r.name}): ${e.message}`); }
+        }
+        if (done) console.log(`[DB Migration] 계주 종목명 표기 통일: ${done}건 (4× → 4X)`);
+    } catch (e) { console.warn('[DB Migration] 계주 표기 통일 실패:', e.message); }
+}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_height_attempt_heat ON height_attempt(heat_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_combined_score_entry ON combined_score(event_entry_id)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_relay_member_entry ON relay_member(event_entry_id)`); } catch(e) {}
@@ -778,8 +1273,22 @@ try {
 // — 스키마 정의에서 UNIQUE 제약. 별도 인덱스 불필요.
 
 // ---- Display-mode (노출용) migrations ----
-// competition.mode: 'operation' (운영용) or 'display' (노출용)
+// competition.mode: 'operation' (운영용) | 'display' (노출용) | 'event' (행사용 화이트라벨)
 try { db.exec(`ALTER TABLE competition ADD COLUMN mode TEXT NOT NULL DEFAULT 'operation'`); } catch(e) {}
+// 행사(event) 화이트라벨: /e/<slug> 경로 + 브랜드 로고·워터마크·포인트색
+try { db.exec(`ALTER TABLE competition ADD COLUMN event_slug TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN brand_logo_path TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN brand_watermark_path TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN brand_color_point TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN brand_color_accent TEXT NOT NULL DEFAULT ''`); } catch(e) {}
+// 행사모드 노출 override: 'auto' 또는 쉼표목록(genders: 'M,F' / rounds: 'preliminary,final')
+try { db.exec(`ALTER TABLE competition ADD COLUMN event_show_genders TEXT NOT NULL DEFAULT 'auto'`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN event_show_rounds TEXT NOT NULL DEFAULT 'auto'`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
+// competition.home_visibility: 홈 노출 강제 설정 — 'auto'(±3일 윈도우) | 'pinned'(항상 상단 고정) | 'hidden'(홈에서 숨김)
+try { db.exec(`ALTER TABLE competition ADD COLUMN home_visibility TEXT NOT NULL DEFAULT 'auto'`); } catch(e) {}
+// competition.manual_status_lock: 관리자가 '대회 재개'로 수동 상태변경한 경우 1 — 날짜 기반 자동 상태갱신(active→completed)을 막아 재잠금을 방지
+try { db.exec(`ALTER TABLE competition ADD COLUMN manual_status_lock INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 // event.division: 중등부/고등부/대학부/일반부/국제/U20
 try { db.exec(`ALTER TABLE event ADD COLUMN division TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 // event.result_url: 외부 결과 링크 URL (노출용 대회에서 사용)
@@ -961,6 +1470,26 @@ try {
     const tx = db.raw.transaction(() => { for (const r of seedRows) ins.run(...r); });
     tx();
 } catch(e) { console.error('[DB Migration v4] division_master seed error:', e.message); }
+// 학년 단위 부 (Phase 7-②, 2026-09): division_master.grade + 초3~6·중1~3·고1~3 × 남녀 = 20행 (멱등). 학년별 대회의 부별 기록(DR)·연맹 기록지 시트에 쓴다
+try { db.exec(`ALTER TABLE division_master ADD COLUMN grade INTEGER DEFAULT NULL`); } catch(e) {}
+try {
+    const ins = db.raw.prepare(`INSERT OR IGNORE INTO division_master (code,label_ko,gender,school_level,sort_order,grade) VALUES (?,?,?,?,?,?)`);
+    db.raw.transaction(() => { for (const r of _gradeDivisionSeed()) ins.run(...r); })();
+} catch(e) { console.error('[DB Migration] division_master grade seed error:', e.message); }
+// 선수 학년 (Phase 7-②): 학년별 대회 참가 자격·연맹 명단
+try { db.exec(`ALTER TABLE athlete ADD COLUMN grade INTEGER DEFAULT NULL`); } catch(e) {}
+// 국제대회 동기화 (2026-09, lib/intl): 공식 결과 API 와 맞물리는 외부 키·시각, 선수 보조 표기(한글/영문)·시즌 최고
+try { db.exec(`ALTER TABLE competition ADD COLUMN sync_source TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN sync_state TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE event ADD COLUMN external_key TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE heat ADD COLUMN external_key TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE heat ADD COLUMN scheduled_at TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE athlete ADD COLUMN name_alt TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE athlete ADD COLUMN season_best TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE event_entry ADD COLUMN personal_best TEXT DEFAULT ''`); } catch(e) {}   // 종목별 PB/SB (국제대회)
+try { db.exec(`ALTER TABLE event_entry ADD COLUMN season_best TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_external ON event(external_key)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_heat_external ON heat(external_key)`); } catch(e) {}
 // Indexes for record-related queries
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_record_lookup ON event_record(event_name, gender, record_type)`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_record_division ON event_record(division_code, event_name, gender)`); } catch(e) {}
@@ -979,7 +1508,10 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_record_breaking_comp ON record_bre
 //   - 부팅 자체는 막지 않음 (legacy 로그인은 여전히 동작해야 하므로)
 //   - 글로벌 플래그 global.__authMigOk / __authMigError 로 상태 보관
 //   - 진단/복구는 /api/_diag/auth-state, /api/_diag/auth-init 으로 가능
-(async () => {
+// 되돌리기 스냅샷 테이블 (Phase 6, lib/undo.js) — 두 백엔드 공통, 7일 지난 것 정리
+const _undo = require('./lib/undo');
+_bootTasks.push((async () => { try { await _undo.ensureTable(db); await _undo.prune(db); } catch (e) { console.error('[undo] table:', e.message); } })());
+_bootTasks.push((async () => {
     try {
         const { runAuthMigrations } = require('./lib/auth/migrations');
         await runAuthMigrations(db);
@@ -994,13 +1526,13 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_record_breaking_comp ON record_bre
         console.error('[auth-mig] FATAL — JWT 로그인이 불가능한 상태입니다:', e.message, extras.join(' '));
         if (e && e.query) console.error('[auth-mig] failing query:', String(e.query).substring(0, 500));
     }
-})();
+})());
 
 // ─── Records Management v4 — PostgreSQL 마이그레이션 (비동기, idempotent) ───
 // PG 모드에서는 schema.pg.sql 을 운영자가 한 번 실행하지만, 새 테이블/컬럼이
 // 누락된 기존 DB에 대비해 boot 시 멱등 마이그레이션을 시도한다.
 if (db.isAsync) {
-    (async () => {
+    _bootTasks.push((async () => {
         try {
             await db.run(`CREATE TABLE IF NOT EXISTS division_master (
                 code TEXT PRIMARY KEY,
@@ -1079,6 +1611,10 @@ if (db.isAsync) {
             )`);
             // competition.series_id 추가 (멱등)
             try { await db.run(`ALTER TABLE competition ADD COLUMN IF NOT EXISTS series_id BIGINT`); } catch(e) {}
+            // competition.manual_status_lock 추가 (멱등) — '대회 재개' 수동 상태변경 보호 플래그
+            try { await db.run(`ALTER TABLE competition ADD COLUMN IF NOT EXISTS manual_status_lock INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
+            // home_popup.competition_id 추가 (멱등) — 대회별 공지 팝업 (NULL=공통). schema.pg.sql 누락분 보정
+            try { await db.run(`ALTER TABLE home_popup ADD COLUMN IF NOT EXISTS competition_id BIGINT`); } catch(e) {}
             // Seed division_master (13 rows, idempotent)
             const seedRows = [
                 ['M_ELEM','남자초등부','M','ELEM',10],['M_MID','남자중학부','M','MID',20],
@@ -1098,6 +1634,18 @@ if (db.isAsync) {
             }
             const dmCnt = await db.get('SELECT COUNT(*)::int AS c FROM division_master').catch(() => ({ c: -1 }));
             console.log(`[DB Migration v4 PG] division_master seed: ${seedOk} ok, ${seedFail} fail, total rows=${dmCnt.c}` + (firstErr ? ` (first error: ${firstErr})` : ''));
+            // 학년 단위 부 + 선수 학년 (Phase 7-②, 멱등)
+            try { await db.run(`ALTER TABLE division_master ADD COLUMN IF NOT EXISTS grade INTEGER`); } catch(e) {}
+            try { await db.run(`ALTER TABLE athlete ADD COLUMN IF NOT EXISTS grade INTEGER`); } catch(e) {}
+            // 국제대회 동기화 (lib/intl)
+            for (const [t, c, d] of [['competition', 'sync_source', 'TEXT'], ['competition', 'sync_state', 'TEXT'], ['event', 'external_key', 'TEXT'], ['heat', 'external_key', 'TEXT'], ['heat', 'scheduled_at', 'TEXT'], ['athlete', 'name_alt', "TEXT DEFAULT ''"], ['athlete', 'season_best', "TEXT DEFAULT ''"], ['event_entry', 'personal_best', "TEXT DEFAULT ''"], ['event_entry', 'season_best', "TEXT DEFAULT ''"]]) {
+                try { await db.run(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS ${c} ${d}`); } catch(e) {}
+            }
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_external ON event(external_key)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_heat_external ON heat(external_key)`); } catch(e) {}
+            for (const r of _gradeDivisionSeed()) {
+                try { await db.run(`INSERT INTO division_master (code,label_ko,gender,school_level,sort_order,grade) VALUES (?,?,?,?,?,?) ON CONFLICT (code) DO NOTHING`, ...r); } catch(e) { console.error('[DB Migration PG] grade division seed:', e.message); }
+            }
             // Indexes
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_lookup ON event_record(event_name, gender, record_type)`); } catch(e) {}
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_division ON event_record(division_code, event_name, gender)`); } catch(e) {}
@@ -1105,6 +1653,122 @@ if (db.isAsync) {
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_record_breaking_status ON record_breaking_log(status, detected_at)`); } catch(e) {}
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_record_breaking_comp ON record_breaking_log(competition_id, status)`); } catch(e) {}
             console.log('[DB Migration v4 PG] records management tables ready');
+
+            // ============================================================
+            // 상장(Certificate) + 문자(SMS) 시스템 — PG 멱등 생성
+            // (SQLite 부트 블록 server.js:467~545 의 PG 포팅. schema.pg.sql 누락 대비)
+            // ============================================================
+            try { await db.run(`CREATE TABLE IF NOT EXISTS certificate_template (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                competition_id BIGINT,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'award',
+                title_text TEXT NOT NULL DEFAULT '상  장',
+                body_template TEXT NOT NULL,
+                rank_label_style TEXT NOT NULL DEFAULT 'ordinal',
+                signer_org TEXT NOT NULL DEFAULT '',
+                signer_title TEXT NOT NULL DEFAULT '회장',
+                signer_name TEXT NOT NULL DEFAULT '',
+                logo_left_path TEXT NOT NULL DEFAULT '',
+                logo_right_path TEXT NOT NULL DEFAULT '',
+                seal_image_path TEXT NOT NULL DEFAULT '',
+                paper_orientation TEXT NOT NULL DEFAULT 'portrait',
+                show_record_value BIGINT NOT NULL DEFAULT 1,
+                show_athlete_team BIGINT NOT NULL DEFAULT 1,
+                show_date BIGINT NOT NULL DEFAULT 1,
+                background_color TEXT NOT NULL DEFAULT '#fffdf6',
+                border_style TEXT NOT NULL DEFAULT 'double-gold',
+                font_family TEXT NOT NULL DEFAULT 'NanumSquare',
+                is_default BIGINT NOT NULL DEFAULT 0,
+                sort_order BIGINT NOT NULL DEFAULT 0,
+                watermark_image_path TEXT NOT NULL DEFAULT '',
+                watermark_opacity DOUBLE PRECISION NOT NULL DEFAULT 0.07,
+                watermark_scale DOUBLE PRECISION NOT NULL DEFAULT 0.45,
+                border_color TEXT NOT NULL DEFAULT '#b8945a',
+                panel_color TEXT NOT NULL DEFAULT '#faf8f2',
+                text_color TEXT NOT NULL DEFAULT '#1a1a1a',
+                label_color TEXT NOT NULL DEFAULT '#8a7f6a',
+                accent_color TEXT NOT NULL DEFAULT '#7a3a00',
+                panel_opacity DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+                created_at TEXT NOT NULL DEFAULT NOW(),
+                updated_at TEXT NOT NULL DEFAULT NOW()
+            )`); } catch(e) { console.error('[PG migration] certificate_template error:', e.message); }
+
+            try { await db.run(`CREATE TABLE IF NOT EXISTS certificate_issue_log (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                competition_id BIGINT NOT NULL,
+                template_id BIGINT NOT NULL,
+                event_id BIGINT,
+                athlete_id BIGINT NOT NULL,
+                rank_value BIGINT,
+                record_value TEXT NOT NULL DEFAULT '',
+                issued_at TEXT NOT NULL DEFAULT NOW(),
+                issued_by TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            )`); } catch(e) { console.error('[PG migration] certificate_issue_log error:', e.message); }
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue_log(competition_id, issued_at DESC)`); } catch(e) {}
+
+            try { await db.run(`CREATE TABLE IF NOT EXISTS sms_config (
+                id BIGINT PRIMARY KEY CHECK (id = 1),
+                provider TEXT NOT NULL DEFAULT 'aligo',
+                api_key TEXT NOT NULL DEFAULT '',
+                user_id TEXT NOT NULL DEFAULT '',
+                sender_number TEXT NOT NULL DEFAULT '',
+                sender_name TEXT NOT NULL DEFAULT '',
+                sim_mode BIGINT NOT NULL DEFAULT 1,
+                default_template TEXT NOT NULL DEFAULT '안녕하세요 {athlete_name}님,\n{competition_name} {event_name} 결과:\n{rank_label} {record_value}\n상장 다운로드: {cert_url}',
+                monthly_quota BIGINT NOT NULL DEFAULT 0,
+                sent_this_month BIGINT NOT NULL DEFAULT 0,
+                last_reset_month TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT NOW()
+            )`); } catch(e) { console.error('[PG migration] sms_config error:', e.message); }
+            // 단일 row 보장
+            try { await db.run(`INSERT INTO sms_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`); } catch(e) {}
+
+            try { await db.run(`CREATE TABLE IF NOT EXISTS sms_log (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                competition_id BIGINT,
+                athlete_id BIGINT,
+                event_id BIGINT,
+                heat_number BIGINT,
+                phone_number TEXT NOT NULL,
+                message TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                provider TEXT NOT NULL DEFAULT 'aligo',
+                provider_msg_id TEXT NOT NULL DEFAULT '',
+                error_message TEXT NOT NULL DEFAULT '',
+                cost BIGINT NOT NULL DEFAULT 0,
+                sent_at TEXT NOT NULL DEFAULT NOW(),
+                triggered_by TEXT NOT NULL DEFAULT ''
+            )`); } catch(e) { console.error('[PG migration] sms_log error:', e.message); }
+            // sms_log.event_id/heat_number 추가 (멱등) — 종목·조별 발송현황용. schema.pg.sql 누락분 보정
+            try { await db.run(`ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS event_id BIGINT`); } catch(e) {}
+            try { await db.run(`ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS heat_number BIGINT`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC)`); } catch(e) {}
+
+            try { await db.run(`CREATE TABLE IF NOT EXISTS push_token (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                token TEXT NOT NULL UNIQUE,
+                audience TEXT NOT NULL DEFAULT 'public',
+                competition_id BIGINT,
+                user_agent TEXT NOT NULL DEFAULT '',
+                active BIGINT NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT NOW(),
+                updated_at TEXT NOT NULL DEFAULT NOW()
+            )`); } catch(e) { console.error('[PG migration] push_token error:', e.message); }
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience)`); } catch(e) {}
+            try { await db.run(`ALTER TABLE push_token ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'web'`); } catch(e) {}
+            try { await db.run(`CREATE TABLE IF NOT EXISTS push_interest (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                token TEXT NOT NULL,
+                competition_id BIGINT,
+                fav_key TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT NOW()
+            )`); } catch(e) { console.error('[PG migration] push_interest error:', e.message); }
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_push_interest_lookup ON push_interest(competition_id, fav_key)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_push_interest_token ON push_interest(token)`); } catch(e) {}
+            console.log('[DB Migration v4 PG] certificate/sms/push tables ready');
         } catch (e) {
             console.error('[DB Migration v4 PG] error:', e.message);
         }
@@ -1139,6 +1803,7 @@ if (db.isAsync) {
             await pgIdempotentAddCol('heat_entry', 'sub_group', `TEXT DEFAULT NULL`);
             // event_entry: callroom_memo
             await pgIdempotentAddCol('event_entry', 'callroom_memo', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('event_entry', 'manual_rank', `INTEGER`);
             // event: callroom_event_memo, video_url
             await pgIdempotentAddCol('event', 'callroom_event_memo', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('event', 'video_url', `TEXT DEFAULT ''`);
@@ -1146,23 +1811,57 @@ if (db.isAsync) {
             await pgIdempotentAddCol('competition', 'federation', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'division_type', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'video_url', `TEXT DEFAULT ''`);
-            // athlete: federation, personal_best, date_of_birth
+            // competition: 행사(event) 화이트라벨 — slug + 브랜드 로고/워터마크/색
+            await pgIdempotentAddCol('competition', 'event_slug', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'brand_logo_path', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'brand_watermark_path', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'brand_color_point', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'brand_color_accent', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'event_show_genders', `TEXT NOT NULL DEFAULT 'auto'`);
+            await pgIdempotentAddCol('competition', 'event_show_rounds', `TEXT NOT NULL DEFAULT 'auto'`);
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
+            // competition: 홈 노출 강제 설정 (auto | pinned | hidden)
+            await pgIdempotentAddCol('competition', 'home_visibility', `TEXT NOT NULL DEFAULT 'auto'`);
+            // federation_list: 연맹 숨김 (홈·운영 화면 목록에서 소속 대회 전체 제외)
+            await pgIdempotentAddCol('federation_list', 'hidden', `BIGINT NOT NULL DEFAULT 0`);
+            // 연맹 기본값 (PG 는 빈 테이블 시드가 없었음) + 한국중·고육상연맹 (Phase 7)
+            for (const f of [['KTFL', '한국실업육상연맹', '#e3f2fd', '#1565c0', 1], ['KUAF', '한국대학육상연맹', '#fce4ec', '#c62828', 2], ['KJAF', '한국중고육상연맹', '#e8f5e9', '#2e7d32', 3]]) {
+                try { await db.run(`INSERT INTO federation_list (code, name, badge_bg, badge_color, sort_order) VALUES (?,?,?,?,?) ON CONFLICT (code) DO NOTHING`, ...f); } catch(e) {}
+            }
+            // athlete: federation, personal_best, date_of_birth, phone(SMS 발송용)
             await pgIdempotentAddCol('athlete', 'federation', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'personal_best', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'date_of_birth', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('athlete', 'phone', `TEXT NOT NULL DEFAULT ''`);
+            // certificate_template: 워터마크 (중앙 로고 이미지)
+            await pgIdempotentAddCol('certificate_template', 'watermark_image_path', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('certificate_template', 'watermark_opacity', `DOUBLE PRECISION NOT NULL DEFAULT 0.07`);
+            await pgIdempotentAddCol('certificate_template', 'watermark_scale', `DOUBLE PRECISION NOT NULL DEFAULT 0.45`);
+            await pgIdempotentAddCol('certificate_template', 'border_color', `TEXT NOT NULL DEFAULT '#b8945a'`);
+            await pgIdempotentAddCol('certificate_template', 'panel_color', `TEXT NOT NULL DEFAULT '#faf8f2'`);
+            await pgIdempotentAddCol('certificate_template', 'text_color', `TEXT NOT NULL DEFAULT '#1a1a1a'`);
+            await pgIdempotentAddCol('certificate_template', 'label_color', `TEXT NOT NULL DEFAULT '#8a7f6a'`);
+            await pgIdempotentAddCol('certificate_template', 'accent_color', `TEXT NOT NULL DEFAULT '#7a3a00'`);
+            await pgIdempotentAddCol('certificate_template', 'panel_opacity', `DOUBLE PRECISION NOT NULL DEFAULT 1.0`);
             // qualification_selection: qualification_type
             await pgIdempotentAddCol('qualification_selection', 'qualification_type', `TEXT DEFAULT ''`);
             // record_breaking_log: wind
             await pgIdempotentAddCol('record_breaking_log', 'wind', `DOUBLE PRECISION DEFAULT NULL`);
+            await pgIdempotentAddCol('record_breaking_log', 'is_tie', `INTEGER NOT NULL DEFAULT 0`);
             // event_link: joint_scoreboard_key
             await pgIdempotentAddCol('event_link', 'joint_scoreboard_key', `TEXT DEFAULT NULL`);
             // operation_key: can_manage
             await pgIdempotentAddCol('operation_key', 'can_manage', `BIGINT NOT NULL DEFAULT 0`);
+            await pgIdempotentAddCol('operation_key', 'key_prefix', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('operation_key', 'key_hint', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('doc_template', 'comprehensive', `TEXT DEFAULT '{}'`);
+            await pgIdempotentAddCol('heat', 'wind_updated_at', `TEXT DEFAULT NULL`);
+            await pgIdempotentAddCol('event_entry', 'status_updated_at', `TEXT DEFAULT NULL`);
             console.log('[PG migration] idempotent column migrations complete (combined_score.status_code 등)');
         } catch (e) {
             console.error('[PG migration] idempotent column migrations error:', e.message);
         }
-    })();
+    })());
 }
 
 // ─── system_config 메모리 캐시 (Phase 2-G-2-extra-3b-1) ───────────────
@@ -1241,35 +1940,84 @@ const ACCESS_KEYS = {
 };
 const ADMIN_ID = () => getConfigKey('admin_id', 'admin');
 
-// ─── operation_key 메모리 캐시 (Phase 2-G-2-extra-3b-2) ───────────────
-// 목적: isOperationKey/isAdminOrManager/getJudgeName/getKeyRole 의 DB hit을 boot 1회 + 변경 시로 축소.
-//   매 request마다 발생하던 DB query 제거. caller 89건 무변경 유지.
-// 캐시 형태: Map<key_value, { judge_name, can_manage, active }>
-const _opKeyCache = new Map();
-function _loadOpKeyCacheSync() {
-    if (db.isAsync) return; // PG: 별도 async 로더 필요(추후)
-    try {
-        const rows = db.raw.prepare('SELECT key_value, judge_name, can_manage, active FROM operation_key WHERE active=1').all();
-        _opKeyCache.clear();
-        for (const r of rows) _opKeyCache.set(r.key_value, r);
-    } catch (e) {
-        console.error('[opkey-cache] sync load failed:', e.message);
+// ─── operation_key 메모리 캐시 ───────────────────────────────────────
+// (2026-09 결정) 키는 bcrypt 해시로 저장한다. 요청마다 해시를 비교하면 느리므로(기록 입력 경로) 한 번 확인된 평문 키는
+//   메모리에 기억해 둔다(_opKeyVerified). 캐시를 다시 읽으면(발급·삭제·1분 주기) 기억도 지운다.
+//   캐시 형태: _opKeyRows = [{ id, key_value(해시), key_prefix, key_hint, judge_name, can_manage, active }]
+const OPKEY_BCRYPT_COST = 8;          // 심판 키는 짧은 편이라 10 보다 낮춰 첫 확인을 빠르게 (약 15ms)
+const _opKeyPrefix = k => String(k || '').slice(0, 3);
+const _opKeyHint = k => { const t = String(k || ''); return t.length <= 2 ? '••••' : t.slice(0, 2) + '•'.repeat(Math.max(4, t.length - 2)); };
+const _opKeyIsHash = v => /^\$2[aby]\$/.test(String(v || ''));
+let _opKeyRows = [];
+const _opKeyVerified = new Map();     // 평문 키 → row
+const _opKeyCache = { has: k => !!_opKeyLookup(k), get: k => _opKeyLookup(k), get size() { return _opKeyRows.length; } };
+function _opKeySetRows(rows) { _opKeyRows = rows; _opKeyVerified.clear(); }
+function _opKeyLookup(key) {
+    if (!key || typeof key !== 'string') return null;
+    const hit = _opKeyVerified.get(key); if (hit) return hit;
+    const pre = _opKeyPrefix(key);
+    for (const r of _opKeyRows) {
+        if (!r.active) continue;
+        if (_opKeyIsHash(r.key_value)) {
+            if (r.key_prefix && r.key_prefix !== pre) continue;
+            try { if (bcrypt.compareSync(key, r.key_value)) { _opKeyVerified.set(key, r); return r; } } catch (e) {}
+        } else if (r.key_value === key) { _opKeyVerified.set(key, r); return r; }     // 아직 해시되지 않은 옛 행
     }
+    return null;
+}
+function _loadOpKeyCacheSync() {
+    if (db.isAsync) return;
+    try { _opKeySetRows(db.raw.prepare('SELECT id, key_value, key_prefix, key_hint, judge_name, can_manage, active FROM operation_key WHERE active=1').all()); }
+    catch (e) { console.error('[opkey-cache] sync load failed:', e.message); }
 }
 async function _reloadOpKeyCacheAsync() {
+    try { _opKeySetRows(await db.all('SELECT id, key_value, key_prefix, key_hint, judge_name, can_manage, active FROM operation_key WHERE active=1')); }
+    catch (e) { console.error('[opkey-cache] async reload failed:', e.message); }
+}
+// 부팅 마이그레이션: 평문으로 남아 있는 키를 해시로 (원본은 key_hint 에 앞 2자만 남긴다)
+async function _migrateOpKeysToHash() {
     try {
-        const rows = await db.all('SELECT key_value, judge_name, can_manage, active FROM operation_key WHERE active=1');
-        _opKeyCache.clear();
-        for (const r of rows) _opKeyCache.set(r.key_value, r);
-    } catch (e) {
-        console.error('[opkey-cache] async reload failed:', e.message);
-    }
+        const rows = await db.all('SELECT id, key_value FROM operation_key');
+        let n = 0;
+        for (const r of rows) {
+            if (_opKeyIsHash(r.key_value)) continue;
+            await db.run('UPDATE operation_key SET key_value=?, key_prefix=?, key_hint=? WHERE id=?', bcrypt.hashSync(String(r.key_value), OPKEY_BCRYPT_COST), _opKeyPrefix(r.key_value), _opKeyHint(r.key_value), r.id);
+            n++;
+        }
+        if (n) console.log(`[opkey] 운영키 ${n}개를 해시로 저장 (평문 제거)`);
+    } catch (e) { console.error('[opkey] 해시 마이그레이션 실패:', e.message); }
 }
 if (!db.isAsync) _loadOpKeyCacheSync();
+_bootTasks.push(_migrateOpKeysToHash().then(() => _reloadOpKeyCacheAsync()));
+// 다른 인스턴스·DB 직접 수정으로 폐기된 운영키가 재시작 전까지 살아있지 않도록 1분마다 다시 읽는다
+setInterval(() => { _reloadOpKeyCacheAsync().catch(() => {}); }, 60 * 1000).unref();
+
+// 기본 운영키(system_config.operation_key) — 역시 해시로 저장. 설정 시 평문은 한 번만 돌려준다
+const _defaultOpVerified = { key: null };
+function isDefaultOperationKey(key) {
+    const stored = ACCESS_KEYS.operation;
+    if (!stored || !key) return false;
+    if (!_opKeyIsHash(stored)) return key === stored;                       // 아직 해시되지 않은 값
+    if (_defaultOpVerified.key === key) return true;
+    try { if (bcrypt.compareSync(key, stored)) { _defaultOpVerified.key = key; return true; } } catch (e) {}
+    return false;
+}
+function setDefaultOperationKey(plain) {
+    const p = String(plain || '');
+    const { _WEAK } = require('./lib/securityCheck');
+    setConfigKey('operation_key', bcrypt.hashSync(p, OPKEY_BCRYPT_COST));
+    setConfigKey('operation_key_hint', _opKeyHint(p));
+    setConfigKey('operation_key_weak', (p.length < 6 || _WEAK.has(p.toLowerCase())) ? '1' : '0');
+    _defaultOpVerified.key = null;
+}
+// 부팅: 평문으로 저장돼 있던 기본 운영키를 해시로 (SQLite 는 여기서, PG 는 _pgBootAsync 에서)
+if (!db.isAsync) { const _op = ACCESS_KEYS.operation; if (_op && !_opKeyIsHash(_op)) setDefaultOperationKey(_op); }
 
 function isOperationKey(key) {
     if (!key) return false;
-    if (key === ACCESS_KEYS.operation) return true;
+    const _b = _bridgeOf(key); if (_b) return ['admin', 'manager', 'operator'].includes(_b.role);
+    if (typeof key === 'string' && key.startsWith('jwtb:')) return false; // 만료/위조 브리지 토큰
+    if (isDefaultOperationKey(key)) return true;
     if (bcrypt.compareSync(key, ACCESS_KEYS.adminHash)) return true;
     return _opKeyCache.has(key);
 }
@@ -1287,9 +2035,12 @@ function orderByBibSql(colExpr = 'bib_number') {
 }
 function isAdminKey(key) {
     if (!key) return false;
+    const _b = _bridgeOf(key); if (_b) return _b.role === 'admin';
+    if (typeof key === 'string' && key.startsWith('jwtb:')) return false; // 만료/위조 브리지 토큰
     return bcrypt.compareSync(key, ACCESS_KEYS.adminHash);
 }
 function isAdminOrManager(key) {
+    const _b = _bridgeOf(key); if (_b) return _b.role === 'admin' || _b.role === 'manager';
     if (isAdminKey(key)) return true;
     const r = _opKeyCache.get(key);
     return !!(r && r.can_manage);
@@ -1298,6 +2049,7 @@ function isAdminOrManager(key) {
 //   ACCESS_KEYS.recordOfficer 가 비어있으면 항상 false (비활성).
 function isRecordOfficerKey(key) {
     if (!key) return false;
+    const _b = _bridgeOf(key); if (_b) return _b.role === 'record_officer';
     const stored = ACCESS_KEYS.recordOfficer;
     if (!stored) return false; // 비활성 상태
     return key === stored;
@@ -1308,18 +2060,21 @@ function isRecordOfficerOrAdmin(key) {
     return isRecordOfficerKey(key);
 }
 function getJudgeName(key) {
+    const _b = _bridgeOf(key); if (_b) return _b.role === 'admin' ? '관리자' : _b.name;
     if (isAdminKey(key)) return '관리자';
     if (isRecordOfficerKey(key)) return '기록위원';
-    if (key === ACCESS_KEYS.operation) return '운영(기본키)';
+    if (isDefaultOperationKey(key)) return '운영(기본키)';
     const r = _opKeyCache.get(key);
     return r ? r.judge_name : 'unknown';
 }
 function getKeyRole(key) {
+    const _b = _bridgeOf(key);
+    if (_b) return ({ admin: 'admin', manager: 'admin', operator: 'operation', record_officer: 'record_officer' })[_b.role] || null;
     if (isAdminKey(key)) return 'admin';
     if (isRecordOfficerKey(key)) return 'record_officer';
     const r = _opKeyCache.get(key);
     if (r) return r.can_manage ? 'admin' : 'operation';
-    if (key === ACCESS_KEYS.operation) return 'operation';
+    if (isDefaultOperationKey(key)) return 'operation';
     return null;
 }
 
@@ -1366,8 +2121,9 @@ async function verifyJudgeLogin(judgeName, key) {
     } catch(_) { /* compareSync 실패 시 그냥 진행 */ }
 
     // Judge login: judge_name + key_value 둘 다 일치해야 통과
-    const dbKey = await db.get('SELECT * FROM operation_key WHERE judge_name=? AND key_value=? AND active=1', judgeName, key);
-    if (dbKey) return { role: dbKey.can_manage ? 'admin' : 'operation', judge_name: dbKey.judge_name };
+    const cands = await db.all('SELECT * FROM operation_key WHERE judge_name=? AND active=1', judgeName);
+    const dbKey = cands.find(r => _opKeyIsHash(r.key_value) ? (r.key_prefix === _opKeyPrefix(key) || !r.key_prefix) && bcrypt.compareSync(String(key || ''), r.key_value) : r.key_value === key);
+    if (dbKey) { _opKeyVerified.set(key, dbKey); return { role: dbKey.can_manage ? 'admin' : 'operation', judge_name: dbKey.judge_name }; }
     return null;
 }
 
@@ -1379,15 +2135,37 @@ function broadcastSSE(eventType, data) {
         try { c.write(msg); return true; }
         catch { return false; }
     });
-    // Also forward to WebSocket scoreboard clients
+    // Also forward to WebSocket scoreboard clients — 구독한 대회의 것만 (예전엔 모든 대회의 모든 변경을 모든 오버레이에 보내
+    // 오버레이마다 8번의 DB 조회를 되풀이하게 했다). 대회를 알 수 없는 이벤트는 전체 전송(예전과 같음).
     if (typeof wsClients !== 'undefined' && ['result_update', 'wind_update', 'height_update', 'event_status_changed', 'event_completed', 'heat_update', 'entry_status', 'callroom_complete'].includes(eventType)) {
-        const wsMsg = JSON.stringify({ type: 'scoreboard_' + eventType, data, timestamp: Date.now() });
-        wsClients.forEach(ws => {
-            if (ws.readyState === 1) { // WebSocket.OPEN
-                try { ws.send(wsMsg); } catch(e) {}
-            }
-        });
+        _wsForward(eventType, data).catch(() => {});
     }
+}
+const _wsCompCache = new Map();      // 'e:<event_id>' | 'h:<heat_id>' → competition_id
+async function _wsCompOf(data) {
+    if (!data) return null;
+    if (data.competition_id) return Number(data.competition_id);
+    const key = data.event_id ? 'e:' + data.event_id : data.heat_id ? 'h:' + data.heat_id : null;
+    if (!key) return null;
+    if (_wsCompCache.has(key)) return _wsCompCache.get(key);
+    let comp = null;
+    try {
+        const row = data.event_id ? await db.get('SELECT competition_id FROM event WHERE id=?', data.event_id)
+            : await db.get('SELECT e.competition_id FROM heat h JOIN event e ON e.id=h.event_id WHERE h.id=?', data.heat_id);
+        comp = row ? row.competition_id : null;
+    } catch (e) { comp = null; }
+    if (_wsCompCache.size > 5000) _wsCompCache.clear();
+    _wsCompCache.set(key, comp);
+    return comp;
+}
+async function _wsForward(eventType, data) {
+    const comp = await _wsCompOf(data);
+    const wsMsg = JSON.stringify({ type: 'scoreboard_' + eventType, data: comp ? { ...data, competition_id: comp } : data, timestamp: Date.now() });
+    wsClients.forEach(ws => {
+        if (ws.readyState !== 1) return;                       // WebSocket.OPEN
+        if (comp && ws._compId && String(ws._compId) !== String(comp)) return;
+        try { ws.send(wsMsg); } catch (e) {}
+    });
 }
 
 // ---- WA Scoring ----
@@ -1421,7 +2199,7 @@ const AUDIT_INSERT_SQL = `INSERT INTO audit_log (competition_id,table_name,recor
 const OPLOG_INSERT_SQL = `INSERT INTO operation_log (competition_id,message,category,performed_by,created_at) VALUES (?,?,?,?,?)`;
 function audit(table, id, action, oldV, newV, by = 'operator', compId = null, req = null) {
     const ts = kstNow();
-    const ip = req ? (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim() : null;
+    const ip = req ? (req.ip || req.socket?.remoteAddress || null) : null; // trust proxy 설정을 따르는 req.ip 사용 (XFF 직접 파싱 금지)
     const ua = req ? (req.headers['user-agent'] || '').substring(0, 256) : null;
     const oldJson = oldV ? JSON.stringify(oldV) : null;
     const newJson = newV ? JSON.stringify(newV) : null;
@@ -1450,7 +2228,7 @@ function opLog(message, category = 'general', performedBy = 'system', compId = n
 // Federation event mapping
 const FED_EVENT_MAP = {
     '100m':{name:'100m',category:'track'},'200m':{name:'200m',category:'track'},'400m':{name:'400m',category:'track'},
-    '800m':{name:'800m',category:'track'},'1500m':{name:'1500m',category:'track'},'5000m':{name:'5000m',category:'track'},
+    '800m':{name:'800m',category:'track'},'1000m':{name:'1000m',category:'track'},'1500m':{name:'1500m',category:'track'},'5000m':{name:'5000m',category:'track'},
     '5000mW':{name:'5000mW',category:'track'},'10000m':{name:'10,000m',category:'track'},
     '10000mW':{name:'10,000mW',category:'track'},'10,000mW':{name:'10,000mW',category:'track'},
     '100mH':{name:'100mH',category:'track'},
@@ -1517,14 +2295,25 @@ function resolveFedEventName(rawName) {
 
     return null;
 }
+// 연맹 명단 엑셀의 종목1/종목2 열 위치 — 헤더명으로 탐색, 없으면 레거시 고정 위치(E·F열).
+//   배포 양식(PACERISE_upload_template.xlsx)은 E열이 휴대폰이라 고정 인덱스로 읽으면 종목이 누락되던 문제 방지.
+function fedEventColIdx(headers) {
+    const hn = (headers || []).map(h => String(h || '').replace(/\s+/g, '').toLowerCase());
+    const i1 = hn.findIndex(h => /^(종목1|종목|event1|event)$/.test(h));
+    const i2 = hn.findIndex(h => /^(종목2|event2)$/.test(h));
+    if (i1 >= 0) return [i1, i2 >= 0 ? i2 : -1];
+    return [4, 5];
+}
 const FED_RELAY_MAP = {
     '400mR':{name:'4X100mR',category:'relay'},'1600mR':{name:'4X400mR',category:'relay'},
     'Mixed':{name:'4X400mR(Mixed)',category:'relay',gender:'X'},
-    '4 x 1500mR':{name:'4×1500mR',category:'relay'},'4 x 800mR':{name:'4×800mR',category:'relay'},
+    '4 x 1500mR':{name:'4X1500mR',category:'relay'},'4 x 800mR':{name:'4X800mR',category:'relay'},
     '4x100mR':{name:'4X100mR',category:'relay'},'4x400mR':{name:'4X400mR',category:'relay'},
-    '4x800mR':{name:'4×800mR',category:'relay'},'4x1500mR':{name:'4×1500mR',category:'relay'},
+    '4x800mR':{name:'4X800mR',category:'relay'},'4x1500mR':{name:'4X1500mR',category:'relay'},
     '4X100mR':{name:'4X100mR',category:'relay'},'4X400mR':{name:'4X400mR',category:'relay'},
-    '4X800mR':{name:'4×800mR',category:'relay'},
+    '4X800mR':{name:'4X800mR',category:'relay'},
+    '4X1500mR':{name:'4X1500mR',category:'relay'},'4×800mR':{name:'4X800mR',category:'relay'},'4×1500mR':{name:'4X1500mR',category:'relay'},
+    '4×100mR':{name:'4X100mR',category:'relay'},'4×400mR':{name:'4X400mR',category:'relay'},
     '4x400mR(Mixed)':{name:'4X400mR(Mixed)',category:'relay',gender:'X'},
     '4X400mR(Mixed)':{name:'4X400mR(Mixed)',category:'relay',gender:'X'},
 };
@@ -1539,6 +2328,16 @@ function isShortTrackEvent(eventName) {
     if (n.includes('100m') || n.includes('200m') || n.includes('400m') || n.includes('800m')) return true;
     if (n.includes('릴레이') || n.includes('relay')) return true;
     return false;
+}
+
+// 출신 조 안에서의 순위 (트랙: 유효 기록 중 몇 번째로 빠른가). 시드 순서(TR 20.3.2)에 필요. 필드는 null.
+async function _placeInSourceHeat(event, eventEntryId) {
+    if (!['track', 'relay', 'road'].includes(event.category)) return null;
+    const row = await db.get(`SELECT r.heat_id, MIN(r.time_seconds) AS t FROM result r JOIN heat h ON h.id=r.heat_id
+        WHERE h.event_id=? AND r.event_entry_id=? AND r.time_seconds>0 AND (r.status_code IS NULL OR r.status_code='') GROUP BY r.heat_id ORDER BY t LIMIT 1`, event.id, eventEntryId);
+    if (!row || row.t == null) return null;
+    const faster = await db.get(`SELECT COUNT(DISTINCT event_entry_id) AS c FROM result WHERE heat_id=? AND time_seconds>0 AND time_seconds<? AND (status_code IS NULL OR status_code='')`, row.heat_id, row.t);
+    return ((faster && faster.c) || 0) + 1;
 }
 
 // WA Rule 20.4 - Serpentine (zigzag) distribution by performance
@@ -1574,18 +2373,16 @@ async function waSeededDistribution(event, qualifiedSels, groupCount, db) {
                 if (r && r.best) { bestPerf = -r.best; sourceHeat = h.heat_number; }
             }
         }
-        athletePerf.push({ ...sel, athlete_id: origEntry.athlete_id, team: athlete ? athlete.team : '', perf: bestPerf, sourceHeat });
+        athletePerf.push({ ...sel, athlete_id: origEntry.athlete_id, team: athlete ? athlete.team : '', perf: bestPerf, sourceHeat, place: await _placeInSourceHeat(event, sel.event_entry_id) });
     }
 
     // WA seeding: Q (순위 진출) first by performance, then q (기록 진출) by performance
     // A q athlete cannot outrank a Q athlete even with a better record
-    const qOrder = { 'Q': 0, 'q': 1, '': 2 };
-    athletePerf.sort((a, b) => {
-        const aQ = qOrder[a.qualification_type] ?? 2;
-        const bQ = qOrder[b.qualification_type] ?? 2;
-        if (aQ !== bQ) return aQ - bQ;
-        return a.perf - b.perf;
-    });
+    //   (TR 20.3.2: Q 안에서는 조 순위가 먼저 — 조 1위들 기록순, 조 2위들 기록순 … — lib/seeding.js)
+    {
+        const ordered = require('./lib/seeding').seedOrder(athletePerf);
+        athletePerf.length = 0; athletePerf.push(...ordered);
+    }
 
     // Serpentine distribution: row 1 L→R, row 2 R→L, etc.
     const groups = Array.from({ length: groupCount }, () => []);
@@ -2018,116 +2815,61 @@ require('./lib/routes/auth')(app, { db, authLimiter, bcrypt });
 // GET/POST/PUT/DELETE /api/admin/users + revoke-sessions
 require('./lib/routes/admin_users')(app, { db, bcrypt, jwtHelpers: require('./lib/auth/jwt') });
 
-// ============================================================
-// DIAG: auth-state 진단 + 복구 라우트 (운영 디버깅용)
-//   - GET  /api/_diag/auth-state   : app_user 테이블 존재여부 / row 수 / 마이그레이션 상태
-//   - POST /api/_diag/auth-init    : runAuthMigrations 재실행 (legacy admin key 헤더 필요)
-//   - POST /api/_diag/admin-reset  : ROUNKIM 등 관리자 비번을 system_config.admin_pw 와 동기화
-//     (사전조건: x-admin-key 헤더에 legacy admin key 일치)
-// ============================================================
-function diagRequireAdminKey(req, res) {
-    const k = req.headers['x-admin-key'] || req.query.adminKey;
-    if (!isAdminKey(String(k || ''))) {
-        res.status(403).json({ error: 'forbidden — admin key required (x-admin-key header)' });
-        return false;
-    }
-    return true;
+// (2026-09) /api/_diag/* 진단 라우트 제거 — jwt_secret·admin_pw 값 미리보기를 응답했고 ?adminKey= 쿼리 인증을 허용했음.
+//   필요 시 서버 셸에서 직접 확인: sqlite3 db/competition.db "select id,username,role,active from app_user"
+
+// ─── 레거시 키 로그인 보호 (2026-09): 실패 누적 잠금 + login_audit 기록 ───
+//   JWT 계정은 5회 실패→10분 잠금이 있었지만 키 로그인 경로는 분당 한도뿐이었다.
+//   IP+심판명 단위로 10분 안에 10회 실패하면 10분 잠금. 성공/실패 모두 login_audit 에 남긴다(username=심판명, 사유 legacy_*).
+const _legacyFails = new Map(); // id → { n, first, until }
+function _legacyId(req, name) { return `${req.ip || ''}|${String(name || '').trim().toLowerCase()}`; }
+function _legacyLockedFor(id) { const r = _legacyFails.get(id); return (r && r.until && r.until > Date.now()) ? Math.ceil((r.until - Date.now()) / 1000) : 0; }
+function _legacyFail(id) {
+    const now = Date.now(); let r = _legacyFails.get(id);
+    if (!r || now - r.first > 10 * 60 * 1000) r = { n: 0, first: now, until: 0 };
+    r.n++; if (r.n >= 10) r.until = now + 10 * 60 * 1000;
+    _legacyFails.set(id, r);
+    if (_legacyFails.size > 5000) for (const [k, v] of _legacyFails) if (now - v.first > 20 * 60 * 1000) _legacyFails.delete(k);
 }
-
-app.get('/api/_diag/auth-state', async (req, res) => {
-    if (!diagRequireAdminKey(req, res)) return;
-    try {
-        const out = {
-            backend: db.getBackendName ? db.getBackendName() : (db.isAsync ? 'postgres' : 'sqlite'),
-            authMigOk: !!global.__authMigOk,
-            authMigError: global.__authMigError || null,
-        };
-        // app_user 테이블 존재 여부
-        try {
-            const cntRow = await db.get('SELECT COUNT(*) AS c FROM app_user');
-            out.app_user_count = cntRow ? Number(cntRow.c) : 0;
-            // 사용자 목록 (해시는 prefix 만)
-            const rows = await db.all('SELECT id, username, role, active, COALESCE(SUBSTRING(password_hash FROM 1 FOR 15), \'\') AS hash_prefix FROM app_user ORDER BY id');
-            out.app_users = rows;
-        } catch (e) {
-            out.app_user_error = String(e && e.message || e);
-        }
-        // system_config 핵심 키 (값은 prefix 만)
-        try {
-            const cfg = await db.all("SELECT key, COALESCE(SUBSTRING(value FROM 1 FOR 25), '') AS value_preview FROM system_config WHERE key IN ('admin_id','admin_pw','jwt_secret')");
-            out.system_config = cfg;
-        } catch (e) {
-            out.system_config_error = String(e && e.message || e);
-        }
-        res.json(out);
-    } catch (e) {
-        res.status(500).json({ error: String(e && e.message || e) });
-    }
-});
-
-app.post('/api/_diag/auth-init', async (req, res) => {
-    if (!diagRequireAdminKey(req, res)) return;
-    try {
-        const { runAuthMigrations } = require('./lib/auth/migrations');
-        await runAuthMigrations(db);
-        global.__authMigOk = true;
-        global.__authMigError = null;
-        console.log('[auth-mig] manual re-run OK via /api/_diag/auth-init');
-        res.json({ ok: true, message: 'runAuthMigrations 재실행 완료' });
-    } catch (e) {
-        global.__authMigError = String(e && e.message || e);
-        console.error('[auth-mig] manual re-run FAILED:', e.message, e.code || '', e.detail || '');
-        res.status(500).json({
-            ok: false,
-            error: String(e && e.message || e),
-            code: e && e.code || null,
-            detail: e && e.detail || null,
-            query: e && e.query ? String(e.query).substring(0, 500) : null
-        });
-    }
-});
-
-app.post('/api/_diag/admin-reset', async (req, res) => {
-    if (!diagRequireAdminKey(req, res)) return;
-    try {
-        const { runAuthMigrations } = require('./lib/auth/migrations');
-        await runAuthMigrations(db);
-        // 이 시점 후 app_user 의 관리자 row 가 system_config.admin_pw 와 동기화되어 있어야 함
-        const adminUsername = ADMIN_ID();
-        const row = await db.get('SELECT id, username, role, active FROM app_user WHERE username=?', adminUsername);
-        if (!row) {
-            return res.status(500).json({ ok: false, error: `app_user('${adminUsername}') 시드 실패 — migrations 결과 확인 필요` });
-        }
-        res.json({ ok: true, message: `관리자 계정 동기화 완료`, user: row });
-    } catch (e) {
-        res.status(500).json({ ok: false, error: String(e && e.message || e), code: e && e.code || null });
-    }
-});
-
+async function _legacyAudit(req, name, success, reason) {
+    try { await db.run('INSERT INTO login_audit (user_id, username, success, failure_reason, ip, user_agent) VALUES (?,?,?,?,?,?)', null, String(name || '(key-only)').slice(0, 64), success ? 1 : 0, reason, req.ip || null, req.headers['user-agent'] || null); } catch (e) {}
+}
 app.post('/api/auth/verify', authLimiter, async (req, res) => {
     const { key, judge_name } = req.body;
+    const lid = _legacyId(req, judge_name);
+    const wait = _legacyLockedFor(lid);
+    if (wait) { await _legacyAudit(req, judge_name, false, 'legacy_locked'); return res.status(429).json({ error: `로그인 시도가 너무 많습니다. ${Math.ceil(wait / 60)}분 후 다시 시도하세요.` }); }
     // New: judge_name + key login
     if (judge_name && key) {
         const result = await verifyJudgeLogin(judge_name, key);
-        if (result) return res.json({ success: true, role: result.role, label: result.role === 'admin' ? '관리자' : '운영', judge_name: result.judge_name });
+        if (result) { _legacyFails.delete(lid); await _legacyAudit(req, judge_name, true, 'legacy_judge'); return res.json({ success: true, role: result.role, label: result.role === 'admin' ? '관리자' : '운영', judge_name: result.judge_name }); }
+        _legacyFail(lid); await _legacyAudit(req, judge_name, false, 'legacy_bad_key');
         return res.status(403).json({ error: '심판명 또는 운영키가 일치하지 않습니다.' });
     }
-    // Legacy: key-only login (backward compat)
+    // Legacy: key-only (저장된 운영키의 역할 확인용). 관리자 비밀번호는 이 경로로 통과시키지 않는다 —
+    //   "관리자는 /login.html 관리자 탭(JWT)으로만" 정책(verifyJudgeLogin)과 맞춤.
     if (key) {
-        if (isAdminKey(key)) return res.json({ success: true, role: 'admin', label: '관리자', judge_name: '관리자' });
+        if (!_bridgeOf(key) && isAdminKey(key)) { await _legacyAudit(req, null, false, 'legacy_admin_pw_rejected'); return res.status(403).json({ error: '관리자는 로그인 화면의 관리자 탭에서 로그인하세요.' }); }
         if (isOperationKey(key)) {
             const jn = getJudgeName(key);
+            _legacyFails.delete(lid);
             return res.json({ success: true, role: getKeyRole(key) || 'operation', label: '운영', judge_name: jn });
         }
+        _legacyFail(lid); await _legacyAudit(req, null, false, 'legacy_bad_key');
     }
     res.status(403).json({ error: '유효하지 않은 키입니다.' });
 });
-app.post('/api/admin/verify', authLimiter, (req, res) => {
+app.post('/api/admin/verify', authLimiter, async (req, res) => {
     const { admin_key } = req.body;
+    const lid = _legacyId(req, '(admin-verify)');
+    const wait = _legacyLockedFor(lid);
+    if (wait) return res.status(429).json({ error: `시도가 너무 많습니다. ${Math.ceil(wait / 60)}분 후 다시 시도하세요.` });
     if (isOperationKey(admin_key) || isAdminKey(admin_key)) {
         const jn = getJudgeName(admin_key);
+        _legacyFails.delete(lid);
         return res.json({ success: true, judge_name: jn });
     }
+    _legacyFail(lid); await _legacyAudit(req, '(admin-verify)', false, 'legacy_bad_key');
     res.status(403).json({ error: 'Invalid admin key' });
 });
 // /api/staff/verify removed — was never called from any client.
@@ -2137,7 +2879,7 @@ app.post('/api/admin/verify', authLimiter, (req, res) => {
 // COMPETITIONS CRUD — lib/routes/competitions.js 로 추출
 // ============================================================
 require("./lib/routes/competitions")(app, {
-    db, isAdminKey, isOperationKey, isAdminOrManager, opLog, broadcastSSE, kstNow
+    db, isAdminKey, isOperationKey, isAdminOrManager, opLog, broadcastSSE, kstNow, performBackup
 });
 
 
@@ -2179,1205 +2921,40 @@ require('./lib/routes/home_popups')(app, { db, isAdminKey, opLog });
 // ============================================================
 // EVENTS — scoped to competition
 // ============================================================
-// Heat allocations view — shows all heats/lanes for an event (used in manual edit UI)
-app.get('/api/events/:id/heat-allocations', async (req, res) => {
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    const result = await Promise.all(heats.map(async h => {
-        const entries = await db.all(`SELECT he.lane_number, he.sub_group, he.id AS heat_entry_id, ee.id AS event_entry_id, ee.status,
-               a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender
-        FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-        JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`, h.id);
-        return { ...h, entries };
-    }));
-    res.json({ event, heats: result });
-});
-app.get('/api/events', async (req, res) => {
-    const { gender, category, competition_id } = req.query;
-    let q = 'SELECT * FROM event WHERE 1=1';
-    const p = [];
-    if (competition_id) { q += ' AND competition_id=?'; p.push(competition_id); }
-    if (gender) { q += ' AND gender=?'; p.push(gender); }
-    if (category) { q += ' AND category=?'; p.push(category); }
-    q += ' ORDER BY sort_order, id';
-    const events = await db.all(q, ...p);
-    // Attach heat_count so dashboard can show roster button for events with heats
-    // (PG-safe: 단일 GROUP BY 쿼리로 일괄 조회, 이전 N+1 sync prepare 제거)
-    if (events.length > 0) {
-        const ids = events.map(e => e.id);
-        const placeholders = ids.map(() => '?').join(',');
-        const counts = await db.all(`SELECT event_id, COUNT(*) AS cnt FROM heat WHERE event_id IN (${placeholders}) GROUP BY event_id`, ...ids);
-        const countMap = new Map(counts.map(c => [c.event_id, Number(c.cnt)]));
-        events.forEach(e => { e.heat_count = countMap.get(e.id) || 0; });
-    }
-    res.json(events);
-});
-app.get('/api/events/:id', async (req, res) => {
-    const e = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!e) return res.status(404).json({ error: 'Not found' });
-    res.json(e);
-});
-app.get('/api/events/:id/entries', async (req, res) => {
-    res.json(await db.all(`
-        SELECT ee.id AS event_entry_id, ee.status, ee.event_id,
-               a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender
-        FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id
-        WHERE ee.event_id=? ORDER BY ${orderByBibSql('a.bib_number')}
-    `, req.params.id));
-});
-
-// ============================================================
-// HEATS
-// ============================================================
-app.get('/api/heats', async (req, res) => {
-    if (!req.query.event_id) return res.status(400).json({ error: 'event_id required' });
-    res.json(await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', req.query.event_id));
-});
-app.get('/api/heats/:id/entries', async (req, res) => {
-    const statusFilter = req.query.status;
-    let query = `SELECT he.id AS heat_entry_id, he.lane_number, he.sub_group,
-               ee.id AS event_entry_id, ee.status, ee.callroom_memo,
-               a.id AS athlete_id, a.name, a.bib_number, a.team, a.gender, a.barcode
-        FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-        JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?`;
-    const params = [req.params.id];
-    if (statusFilter) { query += ` AND ee.status=?`; params.push(statusFilter); }
-    query += ` ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`;
-    res.json(await db.all(query, ...params));
-});
-
+// ── 종목 목록·상세·엔트리·조 배정 조회, 조 목록·조 엔트리 조회 (대시보드·기록입력·소집이 읽는 핵심 조회) → lib/routes/events_read.js (2026-09-22) ──
+const _events_readRoutes = require('./lib/routes/events_read')(app, { db, orderByBibSql });
 // ============================================================
 // RESULTS
 // ============================================================
 // RESULTS 라우트들은 lib/routes/results.js 로 추출됨 (10차)
-require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd });
-// ============================================================
-app.post('/api/heats/:id/wind', async (req, res) => {
-    const { wind } = req.body;
-    const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
-    if (!heat) return res.status(404).json({ error: 'Heat not found' });
-    // Store as "N.N m/s" text format for scoreboard system compatibility
-    let windValue = null;
-    if (wind != null && wind !== '') {
-        const v = parseFloat(wind);
-        if (!isNaN(v)) windValue = v.toFixed(1) + ' m/s';
-    }
-    await db.run('UPDATE heat SET wind=? WHERE id=?', windValue, heat.id);
-    broadcastSSE('wind_update', { heat_id: heat.id, wind: windValue });
-    res.json({ success: true, wind: windValue });
-});
-app.get('/api/heats/:id/wind', async (req, res) => {
-    const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
-    if (!heat) return res.status(404).json({ error: 'Heat not found' });
-    res.json({ heat_id: heat.id, wind: heat.wind });
-});
-
-// Rename heat (custom display name)
-app.post('/api/heats/:id/rename', async (req, res) => {
-    const key = req.body.admin_key || req.headers['x-admin-key'] || '';
-    if (!isOperationKey(key)) return res.status(403).json({ error: '인증 필요' });
-    const heat = await db.get('SELECT * FROM heat WHERE id=?', parseInt(req.params.id));
-    if (!heat) return res.status(404).json({ error: 'Heat not found' });
-    const heat_name = req.body.heat_name != null ? String(req.body.heat_name).trim() || null : null;
-
-    // Also update scoreboard_key if provided in request, or regenerate from heat_name
-    let scoreboard_key = heat.scoreboard_key; // keep existing by default
-    if (req.body.scoreboard_key !== undefined) {
-        // Explicit scoreboard_key override
-        scoreboard_key = req.body.scoreboard_key ? String(req.body.scoreboard_key).trim() : null;
-    } else if (heat_name && heat.scoreboard_key) {
-        // Auto-update: replace the heat number suffix in scoreboard_key
-        // e.g., scoreboard_key "남자실업부 100m 예선 1조" + heat_name "예선 3조" → "남자실업부 100m 예선 3조"
-        // Extract heat number from heat_name if it contains "N조"
-        const heatNameMatch = heat_name.match(/(\d+)\s*조/);
-        if (heatNameMatch) {
-            scoreboard_key = heat.scoreboard_key.replace(/\d+조$/, heatNameMatch[1] + '조');
-        }
-    }
-
-    await db.run('UPDATE heat SET heat_name=?, scoreboard_key=? WHERE id=?', heat_name, scoreboard_key, heat.id);
-    broadcastSSE('heat_update', { heat_id: heat.id, event_id: heat.event_id, heat_name, scoreboard_key });
-    res.json({ success: true, heat_id: heat.id, heat_name, scoreboard_key });
-});
-
-// Update scoreboard_key directly
-app.post('/api/heats/:id/scoreboard-key', async (req, res) => {
-    const key = req.body.admin_key || req.headers['x-admin-key'] || '';
-    if (!isOperationKey(key)) return res.status(403).json({ error: '인증 필요' });
-    const heat = await db.get('SELECT * FROM heat WHERE id=?', parseInt(req.params.id));
-    if (!heat) return res.status(404).json({ error: 'Heat not found' });
-    const scoreboard_key = req.body.scoreboard_key != null ? String(req.body.scoreboard_key).trim() || null : null;
-    await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', scoreboard_key, heat.id);
-    broadcastSSE('heat_update', { heat_id: heat.id, event_id: heat.event_id, scoreboard_key });
-    res.json({ success: true, heat_id: heat.id, scoreboard_key });
-});
-
-// ============================================================
-// LIVE RESULTS API — for dashboard real-time view
-// ============================================================
-app.get('/api/events/:id/live-results', async (req, res) => {
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    // Also load qualifications if available
-    const quals = await db.all('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
-    const result = await Promise.all(heats.map(async h => {
-        const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status,
-               a.name, a.bib_number, a.team FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-               JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`, h.id);
-        if (event.category === 'field_height') {
-            return { ...h, entries, height_attempts: await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', h.id) };
-        }
-        return { ...h, entries, results: await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', h.id) };
-    }));
-    res.json({ event, heats: result, qualifications: quals });
-});
-
-// ============================================================
-// HEIGHT ATTEMPTS
-// ============================================================
-app.get('/api/height-attempts', async (req, res) => {
-    if (!req.query.heat_id) return res.status(400).json({ error: 'heat_id required' });
-    res.json(await db.all(`
-        SELECT ha.*, a.name, a.bib_number, a.team
-        FROM height_attempt ha JOIN event_entry ee ON ee.id=ha.event_entry_id
-        JOIN athlete a ON a.id=ee.athlete_id
-        WHERE ha.heat_id=? ORDER BY ha.bar_height, ha.event_entry_id, ha.attempt_number
-    `, req.query.heat_id));
-});
-app.post('/api/height-attempts/save', async (req, res) => {
-    const { heat_id, event_entry_id, bar_height, attempt_number, result_mark, admin_key, offline_input_at } = req.body;
-    if (!heat_id || !event_entry_id || !bar_height || !attempt_number)
-        return res.status(400).json({ error: 'heat_id, event_entry_id, bar_height, attempt_number required' });
-
-    // Check if event is completed — require admin_key
-    const _hHeat = await db.get('SELECT * FROM heat WHERE id=?', heat_id);
-    if (_hHeat) {
-        const _hEvt = await db.get('SELECT * FROM event WHERE id=?', _hHeat.event_id);
-        // Post-competition lock
-        if (_hEvt && await requireAdminAfterCompEnd(_hEvt.competition_id, admin_key, res)) return;
-        if (_hEvt && _hEvt.round_status === 'completed' && !isAdminKey(admin_key) && !isOperationKey(admin_key))
-            return res.status(403).json({ error: '완료된 경기의 기록 수정은 관리자 키가 필요합니다.' });
-    }
-
-    // Empty mark = delete the attempt (toggle back to empty)
-    if (!result_mark || result_mark === '') {
-        const existing = await db.get('SELECT * FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND bar_height=? AND attempt_number=?', heat_id, event_entry_id, bar_height, attempt_number);
-        if (existing) {
-            await db.run('DELETE FROM height_attempt WHERE id=?', existing.id);
-            broadcastSSE('height_update', { heat_id, event_entry_id, bar_height });
-        }
-        return res.json({ success: true, deleted: true });
-    }
-
-    // Normalize: accept both '-' and 'PASS' as pass mark, store as 'PASS' (DB constraint)
-    let normalizedMark = result_mark;
-    if (normalizedMark === '-') normalizedMark = 'PASS';
-    // Auto-update round_status to in_progress when first height attempt is saved
-    const heat = await db.get('SELECT * FROM heat WHERE id=?', heat_id);
-    if (heat) {
-        const event = await db.get('SELECT * FROM event WHERE id=?', heat.event_id);
-        if (event && (event.round_status === 'heats_generated' || event.round_status === 'created')) {
-            await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
-            broadcastSSE('event_status_changed', { event_id: event.id, round_status: 'in_progress' });
-            const gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
-            const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
-            opLog(`${event.name} ${roundL} ${gL} 기록 입력 시작 (자동 진행중 전환)`, 'record', 'system', event.competition_id);
-        }
-        // Also update parent combined event status if this is a sub-event
-        if (event && event.parent_event_id) {
-            const parentEvt = await db.get('SELECT * FROM event WHERE id=?', event.parent_event_id);
-            if (parentEvt && parentEvt.category === 'combined' && (parentEvt.round_status === 'heats_generated' || parentEvt.round_status === 'created')) {
-                await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", parentEvt.id);
-                broadcastSSE('event_status_changed', { event_id: parentEvt.id, round_status: 'in_progress' });
-                opLog(`${parentEvt.name} 기록 입력 시작 (세부종목 자동 진행중 전환)`, 'record', 'system', parentEvt.competition_id);
-            }
-        }
-    }
-    try {
-        const existing = await db.get('SELECT * FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND bar_height=? AND attempt_number=?', heat_id, event_entry_id, bar_height, attempt_number);
-        if (existing) {
-            // ─── 오프라인 동기화 충돌 감지 ─────────────────────────
-            // PG/SQLite 양쪽 timestamp 텍스트 형식을 모두 안전하게 파싱 (parseDbTimestampMs)
-            if (offline_input_at && existing.updated_at) {
-                const serverUpdatedMs = parseDbTimestampMs(existing.updated_at);
-                const offlineMs = Number(offline_input_at);
-                if (Number.isFinite(serverUpdatedMs) && Number.isFinite(offlineMs) && serverUpdatedMs > offlineMs) {
-                    return res.status(409).json({
-                        error: 'CONFLICT_NEWER_ON_SERVER',
-                        message: '운영진이 그 사이에 기록을 갱신했습니다. 오프라인 입력값은 적용되지 않았습니다.',
-                        server_value: { result_mark: existing.result_mark, updated_at: existing.updated_at },
-                        rejected_offline_value: { result_mark, bar_height, attempt_number, offline_input_at }
-                    });
-                }
-            }
-            const _nowFH = db.isAsync ? 'NOW()' : "datetime('now')";
-            await db.run(`UPDATE height_attempt SET result_mark=?,updated_at=${_nowFH} WHERE id=?`, normalizedMark, existing.id);
-            const upd = await db.get('SELECT * FROM height_attempt WHERE id=?', existing.id);
-            broadcastSSE('height_update', { heat_id, event_entry_id, bar_height });
-            res.json(upd);
-        } else {
-            const info = await db.run('INSERT INTO height_attempt (heat_id,event_entry_id,bar_height,attempt_number,result_mark) VALUES (?,?,?,?,?)', heat_id, event_entry_id, bar_height, attempt_number, normalizedMark);
-            const ins = await db.get('SELECT * FROM height_attempt WHERE id=?', info.lastInsertRowid);
-            broadcastSSE('height_update', { heat_id, event_entry_id, bar_height });
-            res.json(ins);
-        }
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
-});
-
-// Delete all height attempts for a specific bar_height in a heat
-app.post('/api/height-attempts/delete-bar', async (req, res) => {
-    const { heat_id, bar_height, admin_key } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    if (!heat_id || bar_height == null) return res.status(400).json({ error: 'heat_id and bar_height required' });
-    // Check if event is completed — require admin_key
-    const _dbHeat = await db.get('SELECT * FROM heat WHERE id=?', heat_id);
-    if (_dbHeat) {
-        const _dbEvt = await db.get('SELECT * FROM event WHERE id=?', _dbHeat.event_id);
-        if (_dbEvt && _dbEvt.round_status === 'completed' && !isAdminKey(admin_key) && !isOperationKey(admin_key))
-            return res.status(403).json({ error: '완료된 경기의 기록 삭제는 관리자 키가 필요합니다.' });
-    }
-    const deleted = await db.run('DELETE FROM height_attempt WHERE heat_id=? AND bar_height=?', heat_id, parseFloat(bar_height));
-    broadcastSSE('height_update', { heat_id, bar_height });
-    res.json({ success: true, deleted: deleted.changes });
-});
-
+const _resultsRoutes = require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit, parseDbTimestampMs, DECATHLON_KEYS, HEPTATHLON_KEYS, getJudgeName });
+// ── 조 풍속·이름·전광판 키, 라이브 결과, 높이 시도 저장/삭제 → lib/routes/heat_meta.js (2026-09-22) ──
+const _heat_metaRoutes = require('./lib/routes/heat_meta')(app, { _resultsRoutes, broadcastSSE, db, isAdminKey, isOperationKey, opLog, orderByBibSql, parseDbTimestampMs, requireAdminAfterCompEnd });
 // ============================================================
 // COMBINED SCORES — lib/routes/combined_scores.js 로 추출
 // ============================================================
 require("./lib/routes/combined_scores")(app, {
-    db, isAdminKey, isOperationKey, opLog, broadcastSSE
+    db, isAdminKey, isOperationKey, opLog, broadcastSSE,
+    // WA 점수 계산용 상수/함수 — combined_scores.js 의 /sync /repair 가 필요로 함.
+    // 누락 시 ReferenceError: DECATHLON_KEYS is not defined 로 500 떨어짐 (2026-06 fix)
+    DECATHLON_KEYS, HEPTATHLON_KEYS, WA_TABLES, calcWAPoints,
+    // 종료된 대회 혼성점수 잠금 — 누락 시 try/catch에 삼켜져 잠금이 무력화됨 (2026-06 fix)
+    requireAdminAfterCompEnd
 });
 
+// ── 바코드 조회·출전 상태·메모·수동 순위·종목 소집 메모(소집 보조) → lib/routes/entry_meta.js (2026-09-22) ──
+const _entry_metaRoutes = require('./lib/routes/entry_meta')(app, { broadcastSSE, db, parseDbTimestampMs, requireAdminAfterCompEnd, syncCombinedSubEventCheckin: (...a) => syncCombinedSubEventCheckin(...a) /* callroom 모듈이 바로 뒤에서 마운트 */ });
 // ============================================================
-// CALLROOM
+// 소집(콜룸) 출석·완료 · 경기 완료 — lib/routes/callroom.js 로 추출 (2026-09)
 // ============================================================
-app.get('/api/barcode/:code', async (req, res) => {
-    const raw = req.params.code.trim();
-
-    // W/w prefix → female athlete by bib
-    const wMatch = raw.match(/^[Ww][-]?(\d+)$/);
-    if (wMatch) {
-        const bibNum = wMatch[1].replace(/^0+/, '') || '0';
-        const a = await db.get("SELECT * FROM athlete WHERE bib_number=? AND gender='F'", bibNum);
-        if (!a) return res.status(404).json({ error: 'Barcode not found' });
-        return res.json(a);
-    }
-
-    // Normal barcode normalization
-    const variants = [raw];
-    let numPart = null;
-    const pr2026Match = raw.match(/^PR2026(\d+)$/i);
-    const prMatch = raw.match(/^PR[-]?0*(\d+)$/i);
-    if (pr2026Match) numPart = pr2026Match[1];
-    else if (prMatch) numPart = prMatch[1];
-    else if (/^\d+$/.test(raw)) numPart = raw.replace(/^0+/, '') || '0';
-    if (numPart) {
-        variants.push(`PR-${numPart}`, `PR${numPart}`, `PR${numPart.padStart(4, '0')}`, numPart);
-    }
-    let a = null;
-    for (const v of variants) {
-        a = await db.get('SELECT * FROM athlete WHERE barcode=?', v);
-        if (a) break;
-    }
-    if (!a) {
-        for (const v of variants) {
-            a = await db.get('SELECT * FROM athlete WHERE bib_number=?', v);
-            if (a) break;
-        }
-    }
-    if (!a) return res.status(404).json({ error: 'Barcode not found' });
-    res.json(a);
-});
-app.patch('/api/event-entries/:id/status', async (req, res) => {
-    const { status, admin_key } = req.body;
-    if (!['registered', 'checked_in', 'no_show'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
-    const entry = await db.get('SELECT * FROM event_entry WHERE id=?', req.params.id);
-    if (!entry) return res.status(404).json({ error: 'Not found' });
-    // Post-competition lock
-    const _evt = await db.get('SELECT competition_id FROM event WHERE id=?', entry.event_id);
-    if (_evt && await requireAdminAfterCompEnd(_evt.competition_id, admin_key, res)) return;
-    await db.run('UPDATE event_entry SET status=? WHERE id=?', status, req.params.id);
-    await syncCombinedSubEventCheckin(entry.event_id, entry.athlete_id, status);
-    const _he = await db.get('SELECT heat_id FROM heat_entry WHERE event_entry_id=?', entry.id);
-    broadcastSSE('entry_status', { event_entry_id: entry.id, status, event_id: entry.event_id, heat_id: _he ? _he.heat_id : null });
-    res.json(await db.get('SELECT * FROM event_entry WHERE id=?', req.params.id));
-});
-// Save callroom memo
-app.patch('/api/event-entries/:id/memo', async (req, res) => {
-    const { memo } = req.body;
-    const entry = await db.get('SELECT * FROM event_entry WHERE id=?', req.params.id);
-    if (!entry) return res.status(404).json({ error: 'Not found' });
-    await db.run('UPDATE event_entry SET callroom_memo=? WHERE id=?', memo || '', req.params.id);
-    res.json({ success: true });
-});
-// Get/Save event-level callroom memo (소집실 종목 메모 — 인쇄 시 제목 하단)
-app.get('/api/events/:id/callroom-memo', async (req, res) => {
-    const evt = await db.get('SELECT callroom_event_memo FROM event WHERE id=?', req.params.id);
-    if (!evt) return res.status(404).json({ error: 'Event not found' });
-    res.json({ memo: evt.callroom_event_memo || '' });
-});
-app.patch('/api/events/:id/callroom-memo', async (req, res) => {
-    const { memo } = req.body;
-    const evt = await db.get('SELECT id FROM event WHERE id=?', req.params.id);
-    if (!evt) return res.status(404).json({ error: 'Event not found' });
-    await db.run('UPDATE event SET callroom_event_memo=? WHERE id=?', memo || '', req.params.id);
-    res.json({ success: true, memo: memo || '' });
-});
-app.post('/api/callroom/checkin', async (req, res) => {
-    const { barcode, event_id, admin_key } = req.body;
-    if (!barcode) return res.status(400).json({ error: 'barcode required' });
-
-    // Determine competition_id from event_id for scoped athlete search
-    let competition_id = null;
-    if (event_id) {
-        const evt = await db.get('SELECT competition_id FROM event WHERE id=?', event_id);
-        if (evt) competition_id = evt.competition_id;
-    }
-    // Post-competition lock removed for callroom — callroom stays accessible after competition ends
-
-    // ── Robust barcode normalization ──
-    // Supports: PR-298, PR0298, PR298, 298, PR2026298, W63 (female by bib)
-    const raw = barcode.trim();
-
-    // ── W/w prefix → female athlete by bib number ──
-    const wMatch = raw.match(/^[Ww][-]?(\d+)$/);
-    if (wMatch) {
-        const bibNum = wMatch[1].replace(/^0+/, '') || '0';
-        let athlete = null;
-        if (competition_id) {
-            athlete = await db.get("SELECT * FROM athlete WHERE bib_number=? AND gender='F' AND competition_id=?", bibNum, competition_id);
-        }
-        if (!athlete) {
-            athlete = await db.get("SELECT * FROM athlete WHERE bib_number=? AND gender='F'", bibNum);
-        }
-        if (!athlete) return res.status(404).json({ error: `여자 배번 ${bibNum} 선수를 찾을 수 없습니다`, barcode });
-        // Jump directly to entry lookup (skip normal barcode search)
-        return await continueCheckin(res, athlete, event_id, competition_id);
-    }
-
-    // ── Normal barcode variants ──
-    const variants = new Set();
-    variants.add(raw);
-    let numPart = null;
-    const pr2026Match = raw.match(/^PR2026(\d+)$/i);
-    const prMatch = raw.match(/^PR[-]?0*(\d+)$/i);
-    if (pr2026Match) numPart = pr2026Match[1];
-    else if (prMatch) numPart = prMatch[1];
-    else if (/^\d+$/.test(raw)) numPart = raw.replace(/^0+/, '') || '0';
-    if (numPart) {
-        variants.add(`PR-${numPart}`);
-        variants.add(`PR${numPart}`);
-        variants.add(`PR${numPart.padStart(4, '0')}`);
-        variants.add(numPart);
-        variants.add(numPart.padStart(2, '0'));
-    }
-    const variantArr = [...variants];
-
-    async function findAthlete(scope) {
-        for (const v of variantArr) {
-            const a = scope
-                ? await db.get('SELECT * FROM athlete WHERE barcode=? AND competition_id=?', v, scope)
-                : await db.get('SELECT * FROM athlete WHERE barcode=?', v);
-            if (a) return a;
-        }
-        for (const v of variantArr) {
-            const a = scope
-                ? await db.get('SELECT * FROM athlete WHERE bib_number=? AND competition_id=?', v, scope)
-                : await db.get('SELECT * FROM athlete WHERE bib_number=?', v);
-            if (a) return a;
-        }
-        return null;
-    }
-
-    let athlete = null;
-    if (competition_id) athlete = await findAthlete(competition_id);
-    if (!athlete) athlete = await findAthlete(null);
-    if (!athlete) return res.status(404).json({ error: '선수를 찾을 수 없습니다', barcode });
-    return await continueCheckin(res, athlete, event_id, competition_id);
-});
-
-// Shared checkin logic: find entry → update status → respond
-async function continueCheckin(res, athlete, event_id, competition_id) {
-    let entry;
-    if (event_id) {
-        entry = await db.get('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, athlete.id);
-        if (!entry) {
-            let cid = competition_id;
-            if (!cid) {
-                const evRow = await db.get('SELECT competition_id FROM event WHERE id=?', event_id);
-                cid = evRow ? evRow.competition_id : null;
-            }
-            if (cid) {
-                const allEntries = await db.all(`
-                    SELECT ee.*, e.name as event_name FROM event_entry ee 
-                    JOIN event e ON ee.event_id=e.id 
-                    WHERE ee.athlete_id=? AND e.competition_id=?
-                    ORDER BY CASE ee.status WHEN 'registered' THEN 0 WHEN 'checked_in' THEN 1 ELSE 2 END
-                `, athlete.id, cid);
-                if (allEntries.length > 0) {
-                    entry = allEntries.find(e => e.status === 'registered') || allEntries[0];
-                }
-            }
-        }
-    } else {
-        entry = await db.get("SELECT * FROM event_entry WHERE athlete_id=? AND status='registered' LIMIT 1", athlete.id);
-    }
-    if (!entry) return res.status(404).json({ error: '해당 종목에 등록되지 않은 선수입니다', athlete: { name: athlete.name, bib: athlete.bib_number } });
-
-    const wasAlready = entry.status === 'checked_in';
-    if (!wasAlready) {
-        await db.run("UPDATE event_entry SET status='checked_in' WHERE id=?", entry.id);
-        await syncCombinedSubEventCheckin(entry.event_id, athlete.id, 'checked_in');
-        const _he2 = await db.get('SELECT heat_id FROM heat_entry WHERE event_entry_id=?', entry.id);
-        broadcastSSE('entry_status', { event_entry_id: entry.id, status: 'checked_in', event_id: entry.event_id, heat_id: _he2 ? _he2.heat_id : null });
-    }
-
-    const heatEntry = await db.get(`SELECT he.heat_id, h.heat_number FROM heat_entry he JOIN heat h ON he.heat_id=h.id WHERE he.event_entry_id=?`, entry.id);
-
-    res.json({
-        success: true, already: wasAlready, athlete,
-        entry: { ...entry, status: 'checked_in' },
-        heat_id: heatEntry ? heatEntry.heat_id : null,
-        heat_number: heatEntry ? heatEntry.heat_number : null,
-        event_id: entry.event_id
-    });
-}
-
-// Helper: sync combined sub-event entries when parent is checked in
-async function syncCombinedSubEventCheckin(parentEventId, athleteId, status) {
-    const parentEvt = await db.get('SELECT * FROM event WHERE id=?', parentEventId);
-    if (!parentEvt || parentEvt.category !== 'combined') return;
-    const subEvents = await db.all('SELECT id FROM event WHERE parent_event_id=?', parentEventId);
-    for (const sub of subEvents) {
-        const subEntry = await db.get('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?', sub.id, athleteId);
-        if (subEntry && subEntry.status !== status) {
-            await db.run('UPDATE event_entry SET status=? WHERE id=?', status, subEntry.id);
-        }
-    }
-}
-
-// Bulk sync: set all sub-event entries to match parent checked_in status
-app.post('/api/combined/sync-checkin', async (req, res) => {
-    const { event_id } = req.body;
-    if (!event_id) return res.status(400).json({ error: 'event_id required' });
-    const evt = await db.get('SELECT * FROM event WHERE id=?', event_id);
-    if (!evt || evt.category !== 'combined') return res.status(400).json({ error: 'Not a combined event' });
-    const parentEntries = await db.all('SELECT * FROM event_entry WHERE event_id=?', event_id);
-    const subEvents = await db.all('SELECT id FROM event WHERE parent_event_id=?', event_id);
-    let synced = 0;
-    await db.transaction(async () => {
-        for (const pe of parentEntries) {
-            for (const sub of subEvents) {
-                const subEntry = await db.get('SELECT * FROM event_entry WHERE event_id=? AND athlete_id=?', sub.id, pe.athlete_id);
-                if (subEntry && subEntry.status !== pe.status) {
-                    await db.run('UPDATE event_entry SET status=? WHERE id=?', pe.status, subEntry.id);
-                    synced++;
-                }
-            }
-        }
-    })();
-    res.json({ success: true, synced });
-});
-
+const { syncCombinedSubEventCheckin } = require('./lib/routes/callroom')(app, { db, isOperationKey, isAdminKey, opLog, broadcastSSE, audit, notifyEventInterest: (...a) => notifyEventInterest(...a) });
 // ============================================================
-// QUALIFICATIONS
+// QUALIFICATIONS — lib/routes/qualifications.js 로 추출
 // ============================================================
-app.get('/api/qualifications', async (req, res) => {
-    if (!req.query.event_id) return res.status(400).json({ error: 'event_id required' });
-    res.json(await db.all(`SELECT qs.*, a.name, a.bib_number, a.team FROM qualification_selection qs
-        JOIN event_entry ee ON ee.id=qs.event_entry_id JOIN athlete a ON a.id=ee.athlete_id WHERE qs.event_id=?`, req.query.event_id));
-});
-app.post('/api/qualifications/save', async (req, res) => {
-    const { event_id, selections } = req.body;
-    if (!event_id || !selections) return res.status(400).json({ error: 'Missing fields' });
-    await db.transaction(async () => {
-        for (const s of selections) {
-            await db.run(`INSERT INTO qualification_selection (event_id,event_entry_id,selected,qualification_type) VALUES (?,?,?,?)
-                ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=excluded.selected, qualification_type=excluded.qualification_type, updated_at=${db.isAsync ? 'NOW()' : "datetime('now')"}`,
-                event_id, s.event_entry_id, s.selected ? 1 : 0, s.qualification_type || '');
-        }
-    })();
-    res.json({ success: true });
-});
-app.post('/api/qualifications/approve', async (req, res) => {
-    const { event_id } = req.body;
-    if (!event_id) return res.status(400).json({ error: 'event_id required' });
-    const _nowFQ = db.isAsync ? 'NOW()' : "datetime('now')";
-    await db.run(`UPDATE qualification_selection SET approved=1,approved_by='admin',updated_at=${_nowFQ} WHERE event_id=? AND selected=1`, event_id);
-    res.json({ success: true });
-});
-
-// ============================================================
-// ROUND MANAGEMENT
-// ============================================================
-app.post('/api/events/:id/complete', async (req, res) => {
-    const { judge_name, admin_key } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '유효하지 않은 운영키입니다.' });
-    if (!judge_name || !judge_name.trim()) return res.status(400).json({ error: 'Judge name required' });
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    if (event.round_status === 'completed') return res.status(400).json({ error: '이미 완료된 경기입니다.' });
-    if (event.round_status !== 'in_progress') return res.status(400).json({ error: '진행 중인 경기만 완료 처리할 수 있습니다.' });
-    await db.run("UPDATE event SET round_status='completed' WHERE id=?", event.id);
-    broadcastSSE('event_completed', { event_id: event.id, judge_name });
-    const gL = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
-    const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
-    opLog(`${event.name} ${roundL} 경기완료 - ${judge_name}`, 'completion', judge_name, event.competition_id);
-    res.json({ success: true, event: await db.get('SELECT * FROM event WHERE id=?', event.id) });
-});
-app.post('/api/events/:id/revert-complete', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    if (event.round_status !== 'completed') return res.status(400).json({ error: '완료 상태의 경기만 되돌릴 수 있습니다.' });
-    await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
-    broadcastSSE('event_reverted', { event_id: event.id });
-    opLog(`${event.name} 경기완료 취소 (관리자)`, 'revert', 'admin', event.competition_id);
-    res.json({ success: true, event: await db.get('SELECT * FROM event WHERE id=?', event.id) });
-});
-app.post('/api/events/:id/callroom-complete', async (req, res) => {
-    const { judge_name, heat_id, admin_key } = req.body;
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    // Post-competition lock removed for callroom — callroom stays accessible after competition ends
-    if (event.round_status === 'completed') return res.status(400).json({ error: '이미 완료된 경기입니다.' });
-    // Allow multiple callroom-complete calls for different heats (예선 1조, 2조, etc.)
-    if (event.round_status !== 'in_progress') {
-        await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
-    }
-    const performer = judge_name || 'operator';
-    const roundL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
-    // If heat_id provided, identify which heat number
-    let heatLabel = '';
-    if (heat_id) {
-        const heats = await db.all('SELECT id FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-        const heatIdx = heats.findIndex(h => h.id === parseInt(heat_id));
-        if (heatIdx >= 0) heatLabel = ` ${heatIdx + 1}조`;
-    }
-    // Auto-insert DNS result for no_show entries in the relevant heat(s)
-    let dnsCount = 0;
-    const targetHeats = heat_id
-        ? [await db.get('SELECT * FROM heat WHERE id=?', parseInt(heat_id))]
-        : await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    for (const h of targetHeats) {
-        if (!h) continue;
-        const noShowEntries = await db.all(`
-            SELECT he.event_entry_id FROM heat_entry he
-            JOIN event_entry ee ON ee.id = he.event_entry_id
-            WHERE he.heat_id = ? AND ee.status = 'no_show'
-        `, h.id);
-        for (const ns of noShowEntries) {
-            // Only insert if no result row exists yet for this entry in this heat
-            const existing = await db.get('SELECT id FROM result WHERE heat_id=? AND event_entry_id=? LIMIT 1', h.id, ns.event_entry_id);
-            if (!existing) {
-                await db.run(`INSERT OR IGNORE INTO result (heat_id, event_entry_id, attempt_number, status_code) VALUES (?, ?, NULL, 'DNS')`, h.id, ns.event_entry_id);
-                dnsCount++;
-            }
-        }
-    }
-    if (dnsCount > 0) {
-        opLog(`${event.name} ${roundL}${heatLabel} 결석 선수 ${dnsCount}명 DNS 자동 처리`, 'callroom', performer, event.competition_id);
-    }
-
-    audit('event', event.id, 'UPDATE', { round_status: event.round_status }, { action: 'callroom_complete', round_status: 'in_progress', heat_id: heat_id || null }, performer, event.competition_id, req);
-    broadcastSSE('callroom_complete', { event_id: event.id, judge_name: performer, heat_id: heat_id || null });
-    opLog(`${event.name} ${roundL}${heatLabel} 소집 완료 - ${performer}`, 'callroom', performer, event.competition_id);
-    res.json({ success: true, dns_auto: dnsCount });
-});
-app.post('/api/events/:id/create-final', async (req, res) => {
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    const existingFinal = await db.get("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND round_type='final' AND competition_id=? AND parent_event_id IS NULL AND id!=?", event.name, event.gender, event.category, event.competition_id, event.id);
-    if (existingFinal) return res.status(400).json({ error: '이미 결승이 존재합니다.' });
-    const qualified = await db.all(`SELECT event_entry_id, qualification_type FROM qualification_selection WHERE event_id=? AND selected=1 AND approved=1`, event.id);
-    if (qualified.length === 0) return res.status(400).json({ error: 'No approved qualifiers' });
-
-    const isShortTrack_ = isShortTrackEvent(event.name);
-    // For finals, check if we need multiple heats (>8 athletes for ≤800m)
-    const { group_count: finalGroupCount } = req.body;
-    const numHeats = finalGroupCount || 1;
-
-    const info = await db.run(`INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,'final','heats_generated')`, event.competition_id, event.name, event.category, event.gender);
-    const finalEventId = info.lastInsertRowid;
-
-    // Build athlete data for WA seeding — with best performance for sorting
-    const qualSels = await Promise.all(qualified.map(async q => {
-        const origEntry = await db.get('SELECT * FROM event_entry WHERE id=?', q.event_entry_id);
-        if (!origEntry) return { event_entry_id: q.event_entry_id, athlete_id: null, qualification_type: q.qualification_type || '', perf: Infinity };
-        // Get best performance across all heats of the source event
-        let bestPerf = Infinity;
-        const heats = await db.all('SELECT id FROM heat WHERE event_id=?', event.id);
-        for (const h of heats) {
-            const entryInHeat = await db.get('SELECT id FROM heat_entry WHERE heat_id=? AND event_entry_id=?', h.id, q.event_entry_id);
-            if (!entryInHeat) continue;
-            if (event.category === 'track' || event.category === 'relay' || event.category === 'road') {
-                const r = await db.get('SELECT MIN(time_seconds) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds > 0', h.id, q.event_entry_id);
-                if (r && r.best != null && r.best < bestPerf) bestPerf = r.best;
-            } else if (event.category === 'field_distance') {
-                const r = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters > 0', h.id, q.event_entry_id);
-                if (r && r.best) bestPerf = -r.best; // negate so ascending sort = best first
-            } else if (event.category === 'field_height') {
-                const r = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", h.id, q.event_entry_id);
-                if (r && r.best) bestPerf = -r.best;
-            }
-        }
-        return { event_entry_id: q.event_entry_id, athlete_id: origEntry.athlete_id, qualification_type: q.qualification_type || '', perf: bestPerf };
-    }));
-
-    // WA seeding: Q (순위 진출) first by performance, then q (기록 진출) by performance
-    // A q athlete cannot outrank a Q athlete even with a better record
-    const qOrder = { 'Q': 0, 'q': 1, '': 2 };
-    qualSels.sort((a, b) => {
-        const aQ = qOrder[a.qualification_type] ?? 2;
-        const bQ = qOrder[b.qualification_type] ?? 2;
-        if (aQ !== bQ) return aQ - bQ;   // Q before q before unqualified
-        return a.perf - b.perf;            // within same group: best performance first
-    });
-
-    // Fetch the newly created final event for scoreboard key generation
-    const finalEvent = await db.get('SELECT * FROM event WHERE id=?', finalEventId);
-
-    if (numHeats === 1) {
-        const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,1)', finalEventId);
-        // Auto-generate scoreboard_key
-        const sbKey = await generateScoreboardKey(finalEvent, 1, db, numHeats);
-        await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
-        // WA lane assignment for single heat with pattern-based random shuffle
-        const lanes = waAssignLanesBulk(qualSels, qualSels.length, isShortTrack_, event.name);
-        for (let idx = 0; idx < qualSels.length; idx++) {
-            const ath = qualSels[idx];
-            const newEntry = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", finalEventId, ath.athlete_id);
-            await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
-        }
-    } else {
-        // Multi-heat final with WA seeding
-        const seeded = await waSeededDistribution(event, qualSels, numHeats, db);
-        for (let g = 0; g < numHeats; g++) {
-            const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', finalEventId, g + 1);
-            // Auto-generate scoreboard_key
-            const sbKey = await generateScoreboardKey(finalEvent, g + 1, db, numHeats);
-            await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
-            const groupAthletes = seeded[g] || [];
-            // Sort within group by performance for correct WA lane assignment
-            groupAthletes.sort((a, b) => a.perf - b.perf);
-            const lanes = waAssignLanesBulk(groupAthletes, groupAthletes.length, isShortTrack_, event.name);
-            for (let idx = 0; idx < groupAthletes.length; idx++) {
-                const ath = groupAthletes[idx];
-                const newEntry = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", finalEventId, ath.athlete_id);
-                await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
-            }
-        }
-    }
-    opLog(`${event.name} ${event.gender === 'M' ? '남자' : '여자'} 결승 라운드 생성 (${qualified.length}명 진출)`, 'round', 'system', event.competition_id);
-    // SSE broadcast so dashboard/results pages pick up the new final event
-    broadcastSSE('event_status_changed', { event_id: finalEventId, round_status: 'heats_generated' });
-    // 시간표 자동 재매칭 (결승 라운드가 새로 생겼으므로 시간표의 "결승" 행과 연결 가능)
-    try { await autoLinkTimetable(event.competition_id); } catch(autoErr) { console.warn('[autoLink after final] ', autoErr.message); }
-    res.json({ success: true, final_event_id: finalEventId, count: qualified.length });
-});
-
-// GET /api/events/:id/lane-assignments — Return lane assignments with WA rule explanations
-app.get('/api/events/:id/lane-assignments', async (req, res) => {
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-
-    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    if (heats.length === 0) return res.json({ heats: [] });
-
-    const isShortTrack = isShortTrackEvent(event.name);
-    const pattern = getLanePattern(event.name);
-    const patternLabel = pattern === 'A' ? '100m/허들 패턴' : pattern === 'B' ? '200m 패턴' : pattern === 'C' ? '400m/800m/릴레이 패턴' : '기본 배정';
-
-    // Lane group descriptions by pattern
-    const groupDescs = {};
-    if (pattern === 'A') {
-        groupDescs[3] = '시드 1~4위 그룹 (레인 3,4,5,6)';
-        groupDescs[4] = '시드 1~4위 그룹 (레인 3,4,5,6)';
-        groupDescs[5] = '시드 1~4위 그룹 (레인 3,4,5,6)';
-        groupDescs[6] = '시드 1~4위 그룹 (레인 3,4,5,6)';
-        groupDescs[2] = '시드 5~6위 그룹 (레인 2,7)';
-        groupDescs[7] = '시드 5~6위 그룹 (레인 2,7)';
-        groupDescs[1] = '시드 7~8위 그룹 (레인 1,8)';
-        groupDescs[8] = '시드 7~8위 그룹 (레인 1,8)';
-    } else if (pattern === 'B') {
-        groupDescs[5] = '시드 1~3위 그룹 (레인 5,6,7)';
-        groupDescs[6] = '시드 1~3위 그룹 (레인 5,6,7)';
-        groupDescs[7] = '시드 1~3위 그룹 (레인 5,6,7)';
-        groupDescs[3] = '시드 4~6위 그룹 (레인 3,4,8)';
-        groupDescs[4] = '시드 4~6위 그룹 (레인 3,4,8)';
-        groupDescs[8] = '시드 4~6위 그룹 (레인 3,4,8)';
-        groupDescs[1] = '시드 7~8위 그룹 (레인 1,2)';
-        groupDescs[2] = '시드 7~8위 그룹 (레인 1,2)';
-    } else if (pattern === 'C') {
-        groupDescs[4] = '시드 1~4위 그룹 (레인 4,5,6,7)';
-        groupDescs[5] = '시드 1~4위 그룹 (레인 4,5,6,7)';
-        groupDescs[6] = '시드 1~4위 그룹 (레인 4,5,6,7)';
-        groupDescs[7] = '시드 1~4위 그룹 (레인 4,5,6,7)';
-        groupDescs[3] = '시드 5~6위 그룹 (레인 3,8)';
-        groupDescs[8] = '시드 5~6위 그룹 (레인 3,8)';
-        groupDescs[1] = '시드 7~8위 그룹 (레인 1,2)';
-        groupDescs[2] = '시드 7~8위 그룹 (레인 1,2)';
-    }
-
-    const result = await Promise.all(heats.map(async heat => {
-        const entries = await db.all(`
-            SELECT he.id AS heat_entry_id, he.event_entry_id, he.lane_number,
-                   ee.athlete_id, a.name, a.bib_number, a.team
-            FROM heat_entry he
-            JOIN event_entry ee ON ee.id = he.event_entry_id
-            JOIN athlete a ON a.id = ee.athlete_id
-            WHERE he.heat_id = ?
-            ORDER BY he.lane_number
-        `, heat.id);
-
-        // Build seed rank by looking at source event results
-        // Find source event (preliminary/semifinal) that led to this event
-        const sourceEvent = await db.all("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND competition_id=? AND round_type IN ('preliminary','semifinal') AND id!=?", event.name, event.gender, event.category, event.competition_id, event.id);
-
-        // Get qualification info for each athlete
-        const athleteDetails = await Promise.all(entries.map(async e => {
-            let qualType = '';
-            let seedRank = null;
-            let bestPerf = null;
-            let bestPerfDisplay = '';
-            let reason = '';
-
-            // Find qualification info
-            for (const src of sourceEvent) {
-                const q = await db.get('SELECT qualification_type FROM qualification_selection WHERE event_id=? AND event_entry_id=? AND selected=1 AND approved=1', src.id, e.event_entry_id);
-                if (!q) {
-                    // Find by athlete_id instead (new event_entry in final)
-                    const origEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', src.id, e.athlete_id);
-                    if (origEntry) {
-                        const q2 = await db.get('SELECT qualification_type FROM qualification_selection WHERE event_id=? AND event_entry_id=? AND selected=1 AND approved=1', src.id, origEntry.id);
-                        if (q2) qualType = q2.qualification_type || '';
-                    }
-                } else {
-                    qualType = q.qualification_type || '';
-                }
-            }
-
-            const laneNum = e.lane_number;
-            const groupReason = groupDescs[laneNum] || '';
-            const qualLabel = qualType === 'Q' ? '순위 진출(Q)' : qualType === 'q' ? '기록 진출(q)' : '';
-
-            if (isShortTrack && pattern) {
-                reason = `WA ${patternLabel}: ${groupReason}${qualLabel ? ' / ' + qualLabel : ''} → 그룹 내 랜덤 배정으로 레인 ${laneNum}`;
-            } else {
-                reason = `순서 배정: 레인 ${laneNum}`;
-            }
-
-            return {
-                heat_entry_id: e.heat_entry_id,
-                event_entry_id: e.event_entry_id,
-                athlete_id: e.athlete_id,
-                name: e.name,
-                bib_number: e.bib_number,
-                team: e.team,
-                lane_number: laneNum,
-                qualification_type: qualType,
-                reason: reason
-            };
-        }));
-
-        return {
-            heat_id: heat.id,
-            heat_number: heat.heat_number,
-            heat_name: heat.heat_name || `Heat ${heat.heat_number}`,
-            entries: athleteDetails
-        };
-    }));
-
-    res.json({
-        event_id: event.id,
-        event_name: event.name,
-        pattern: pattern,
-        pattern_label: patternLabel,
-        is_short_track: isShortTrack,
-        heats: result
-    });
-});
-
-app.post('/api/events/:id/create-semifinal', async (req, res) => {
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    const existingSemi = await db.get("SELECT id FROM event WHERE name=? AND gender=? AND category=? AND round_type='semifinal' AND competition_id=? AND parent_event_id IS NULL", event.name, event.gender, event.category, event.competition_id);
-    if (existingSemi) return res.status(400).json({ error: '이미 준결승이 존재합니다.' });
-    const { group_count, selections } = req.body;
-    if (!group_count || group_count < 1) return res.status(400).json({ error: 'group_count required' });
-    if (!selections || selections.length === 0) return res.status(400).json({ error: 'No selections' });
-    const qualifiedSels = selections.filter(s => s.selected);
-    const qualifiedIds = qualifiedSels.map(s => s.event_entry_id);
-    if (qualifiedIds.length === 0) return res.status(400).json({ error: 'No qualified athletes' });
-
-    // WA Rule: max 8 athletes per heat for events ≤800m
-    const isShortTrack = isShortTrackEvent(event.name);
-    if (isShortTrack) {
-        const maxPerHeat = 8;
-        const requiredHeats = Math.ceil(qualifiedIds.length / maxPerHeat);
-        if (group_count < requiredHeats) {
-            return res.status(400).json({ error: `800m 이하 종목은 조당 최대 8명입니다. 최소 ${requiredHeats}개 조가 필요합니다.` });
-        }
-    }
-
-    let semiEventId;
-    await db.transaction(async () => {
-        for (const sel of qualifiedSels) {
-            await db.run(`INSERT INTO qualification_selection (event_id,event_entry_id,selected,approved,approved_by,qualification_type) VALUES (?,?,1,1,'admin',?)
-                ON CONFLICT(event_id,event_entry_id) DO UPDATE SET selected=1,approved=1,qualification_type=excluded.qualification_type`, event.id, sel.event_entry_id, sel.qualification_type || '');
-        }
-        const info = await db.run(`INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,'semifinal','heats_generated')`, event.competition_id, event.name, event.category, event.gender);
-        semiEventId = info.lastInsertRowid;
-
-        // Fetch the newly created semi event for scoreboard key generation
-        const semiEvent = await db.get('SELECT * FROM event WHERE id=?', semiEventId);
-
-        // WA serpentine seeding: sort athletes by performance, distribute in zigzag
-        const seeded = await waSeededDistribution(event, qualifiedSels, group_count, db);
-        for (let g = 0; g < group_count; g++) {
-            const heatInfo = await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,?)', semiEventId, g + 1);
-            // Auto-generate scoreboard_key
-            const sbKey = await generateScoreboardKey(semiEvent, g + 1, db, group_count);
-            await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', sbKey, heatInfo.lastInsertRowid);
-            const groupAthletes = seeded[g] || [];
-            // Sort within group by performance for correct WA lane assignment
-            groupAthletes.sort((a, b) => a.perf - b.perf);
-            const lanes = waAssignLanesBulk(groupAthletes, groupAthletes.length, isShortTrack, event.name);
-            for (let idx = 0; idx < groupAthletes.length; idx++) {
-                const ath = groupAthletes[idx];
-                const newEntry = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", semiEventId, ath.athlete_id);
-                await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number) VALUES (?,?,?)', heatInfo.lastInsertRowid, newEntry.lastInsertRowid, lanes[idx]);
-            }
-        }
-    })();
-    opLog(`${event.name} 준결승 생성 (${qualifiedIds.length}명, ${group_count}개 조)`, 'round', 'system', event.competition_id);
-    // SSE broadcast so dashboard/results pages pick up the new semifinal event
-    broadcastSSE('event_status_changed', { event_id: semiEventId, round_status: 'heats_generated' });
-    // 시간표 자동 재매칭 (준결승 라운드가 새로 생겼으므로 시간표의 "준결승" 행과 연결 가능)
-    try { await autoLinkTimetable(event.competition_id); } catch(autoErr) { console.warn('[autoLink after semifinal] ', autoErr.message); }
-    res.json({ success: true, semi_event_id: semiEventId, count: qualifiedIds.length });
-});
-app.delete('/api/events/:id', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    // FIX: 노출용(display) 모드 대회는 자동 결승 생성 로직이 없으므로 예선 삭제 허용
-    // 운영용(operation) 대회에서만 예선 삭제 보호 가드 적용
-    const _comp = await db.get('SELECT mode FROM competition WHERE id=?', event.competition_id);
-    const _isDisplayMode = _comp && _comp.mode === 'display';
-    if (!_isDisplayMode && event.round_type === 'preliminary' && !event.parent_event_id) {
-        return res.status(400).json({ error: '예선은 삭제할 수 없습니다.' });
-    }
-    await db.transaction(async () => {
-        const heats = await db.all('SELECT id FROM heat WHERE event_id=?', event.id);
-        for (const h of heats) {
-            await db.run('DELETE FROM result WHERE heat_id=?', h.id);
-            await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id);
-            await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id);
-        }
-        await db.run('DELETE FROM heat WHERE event_id=?', event.id);
-        await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', event.id);
-        await db.run('DELETE FROM event_entry WHERE event_id=?', event.id);
-        await db.run('DELETE FROM qualification_selection WHERE event_id=?', event.id);
-        await db.run('DELETE FROM event WHERE id=?', event.id);
-    })();
-    res.json({ success: true });
-});
-
-// ============================================================
-// COMBINED (10종/7종) SUB-EVENT CRUD
-// ============================================================
-
-// GET /api/events/:id/sub-events — List sub-events of a combined parent
-app.get('/api/events/:id/sub-events', async (req, res) => {
-    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!parent) return res.status(404).json({ error: 'Event not found' });
-    if (parent.category !== 'combined') return res.status(400).json({ error: '혼성경기(combined)만 세부종목을 가질 수 있습니다.' });
-    const subs = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', parent.id);
-    // Enrich with entry_count and heat_count — PG-safe batch query
-    if (subs.length > 0) {
-        const ids = subs.map(s => s.id);
-        const ph = ids.map(() => '?').join(',');
-        const entryCounts = await db.all(`SELECT event_id, COUNT(*) as cnt FROM event_entry WHERE event_id IN (${ph}) GROUP BY event_id`, ...ids);
-        const heatCounts = await db.all(`SELECT event_id, COUNT(*) as cnt FROM heat WHERE event_id IN (${ph}) GROUP BY event_id`, ...ids);
-        const entryMap = new Map(entryCounts.map(c => [c.event_id, Number(c.cnt)]));
-        const heatMap = new Map(heatCounts.map(c => [c.event_id, Number(c.cnt)]));
-        subs.forEach(s => {
-            s.entry_count = entryMap.get(s.id) || 0;
-            s.heat_count = heatMap.get(s.id) || 0;
-        });
-    }
-    res.json(subs);
-});
-
-// POST /api/events/:id/sub-events — Add a sub-event to a combined parent
-app.post('/api/events/:id/sub-events', async (req, res) => {
-    const { admin_key, name, category } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!parent) return res.status(404).json({ error: 'Event not found' });
-    if (parent.category !== 'combined') return res.status(400).json({ error: '혼성경기만 세부종목을 추가할 수 있습니다.' });
-    if (!name || !category) return res.status(400).json({ error: '종목명과 카테고리는 필수입니다.' });
-
-    const validCats = ['track', 'field_distance', 'field_height'];
-    if (!validCats.includes(category)) return res.status(400).json({ error: '세부종목 카테고리는 track, field_distance, field_height 중 하나여야 합니다.' });
-
-    // Determine prefix from parent name
-    const prefix = parent.name.includes('10종') ? '[10종]' : parent.name.includes('7종') ? '[7종]' : `[${parent.name}]`;
-    const subName = name.startsWith('[') ? name : `${prefix} ${name}`;
-
-    // Get next sort_order
-    const maxSort = await db.get('SELECT MAX(sort_order) AS m FROM event WHERE parent_event_id=?', parent.id);
-    const nextSort = (maxSort?.m || 0) + 1;
-
-    let subEventId;
-    await db.transaction(async () => {
-        const info = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)', parent.competition_id, subName, category, parent.gender, 'final', 'heats_generated', parent.id, nextSort);
-        subEventId = info.lastInsertRowid;
-
-        // Copy athletes from parent
-        const parentEntries = await db.all('SELECT id, athlete_id FROM event_entry WHERE event_id=?', parent.id);
-        for (const pe of parentEntries) {
-            await db.run('INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?, ?, ?)', subEventId, pe.athlete_id, 'registered');
-        }
-
-        // Create 1 heat and assign all athletes
-        const heatInfo = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)', subEventId);
-        const subEntries = await db.all('SELECT id FROM event_entry WHERE event_id=?', subEventId);
-        for (let idx = 0; idx < subEntries.length; idx++) {
-            const se = subEntries[idx];
-            await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heatInfo.lastInsertRowid, se.id, idx + 1);
-        }
-    })();
-
-    opLog(`세부종목 추가: ${subName} (부모: ${parent.name})`, 'event', 'admin', parent.competition_id);
-    const created = await db.get('SELECT * FROM event WHERE id=?', subEventId);
-    res.json({ success: true, sub_event: created });
-});
-
-// PUT /api/events/:id/sub-events/:subId — Update a sub-event (name, category, sort_order)
-app.put('/api/events/:id/sub-events/:subId', async (req, res) => {
-    const { admin_key, name, category, sort_order } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!parent) return res.status(404).json({ error: 'Parent event not found' });
-    const sub = await db.get('SELECT * FROM event WHERE id=? AND parent_event_id=?', req.params.subId, parent.id);
-    if (!sub) return res.status(404).json({ error: 'Sub-event not found' });
-
-    const updates = [];
-    const params = [];
-    if (name !== undefined) {
-        const prefix = parent.name.includes('10종') ? '[10종]' : parent.name.includes('7종') ? '[7종]' : `[${parent.name}]`;
-        const subName = name.startsWith('[') ? name : `${prefix} ${name}`;
-        updates.push('name=?');
-        params.push(subName);
-    }
-    if (category !== undefined) {
-        const validCats = ['track', 'field_distance', 'field_height'];
-        if (!validCats.includes(category)) return res.status(400).json({ error: '유효하지 않은 카테고리' });
-        updates.push('category=?');
-        params.push(category);
-    }
-    if (sort_order !== undefined) {
-        updates.push('sort_order=?');
-        params.push(sort_order);
-    }
-    if (updates.length === 0) return res.status(400).json({ error: '수정할 항목이 없습니다.' });
-
-    params.push(sub.id);
-    await db.run(`UPDATE event SET ${updates.join(',')} WHERE id=?`, ...params);
-    const updated = await db.get('SELECT * FROM event WHERE id=?', sub.id);
-    res.json({ success: true, sub_event: updated });
-});
-
-// DELETE /api/events/:parentId/sub-events/:subId — Delete a sub-event
-app.delete('/api/events/:id/sub-events/:subId', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!parent) return res.status(404).json({ error: 'Parent event not found' });
-    const sub = await db.get('SELECT * FROM event WHERE id=? AND parent_event_id=?', req.params.subId, parent.id);
-    if (!sub) return res.status(404).json({ error: 'Sub-event not found' });
-
-    await db.transaction(async () => {
-        const heats = await db.all('SELECT id FROM heat WHERE event_id=?', sub.id);
-        for (const h of heats) {
-            await db.run('DELETE FROM result WHERE heat_id=?', h.id);
-            await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id);
-            await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id);
-        }
-        await db.run('DELETE FROM heat WHERE event_id=?', sub.id);
-        await db.run('DELETE FROM event_entry WHERE event_id=?', sub.id);
-        // sub_event_order는 sort_order rank (1-base, ORDER BY sort_order, id 기준)
-        const subOrderRow = await db.get(
-            'SELECT COUNT(*) as cnt FROM event WHERE parent_event_id=? AND (sort_order < ? OR (sort_order = ? AND id <= ?))',
-            parent.id, sub.sort_order, sub.sort_order, sub.id
-        );
-        const subOrderRank = (subOrderRow && subOrderRow.cnt) || 0;
-        if (subOrderRank > 0) {
-            await db.run('DELETE FROM combined_score WHERE sub_event_order=? AND event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', subOrderRank, parent.id);
-        }
-        await db.run('DELETE FROM event WHERE id=?', sub.id);
-    })();
-    opLog(`세부종목 삭제: ${sub.name} (부모: ${parent.name})`, 'event', 'admin', parent.competition_id);
-    res.json({ success: true });
-});
-
-// POST /api/events/:id/sub-events/reorder — Reorder sub-events
-app.post('/api/events/:id/sub-events/reorder', async (req, res) => {
-    const { admin_key, order } = req.body; // order = [subEventId, subEventId, ...]
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    if (!order || !Array.isArray(order)) return res.status(400).json({ error: 'order 배열이 필요합니다.' });
-    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!parent) return res.status(404).json({ error: 'Parent event not found' });
-
-    await db.transaction(async () => {
-        for (let idx = 0; idx < order.length; idx++) {
-            await db.run('UPDATE event SET sort_order=? WHERE id=? AND parent_event_id=?', idx + 1, order[idx], parent.id);
-        }
-    })();
-    res.json({ success: true });
-});
-
-// POST /api/events/:id/sub-events/sync-athletes — Sync parent athletes to all sub-events
-app.post('/api/events/:id/sub-events/sync-athletes', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const parent = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!parent) return res.status(404).json({ error: 'Parent event not found' });
-
-    const parentAthleteRows = await db.all('SELECT athlete_id FROM event_entry WHERE event_id=?', parent.id);
-    const parentAthletes = parentAthleteRows.map(e => e.athlete_id);
-    const subs = await db.all('SELECT id FROM event WHERE parent_event_id=?', parent.id);
-    let addedCount = 0;
-
-    await db.transaction(async () => {
-        for (const sub of subs) {
-            const existingAthleteRows = await db.all('SELECT athlete_id FROM event_entry WHERE event_id=?', sub.id);
-            const existingAthletes = new Set(existingAthleteRows.map(e => e.athlete_id));
-            for (const athId of parentAthletes) {
-                if (!existingAthletes.has(athId)) {
-                    const info = await db.run('INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?, ?, ?)', sub.id, athId, 'registered');
-                    // Add to existing heat (heat 1)
-                    const heat = await db.get('SELECT id FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1', sub.id);
-                    if (heat) {
-                        const laneCountRow = await db.get('SELECT COUNT(*) AS c FROM heat_entry WHERE heat_id=?', heat.id);
-                        const laneCount = (laneCountRow && laneCountRow.c) || 0;
-                        await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat.id, info.lastInsertRowid, laneCount + 1);
-                    }
-                    addedCount++;
-                }
-            }
-        }
-    })();
-
-    res.json({ success: true, added: addedCount, sub_event_count: subs.length });
-});
-
-// POST /api/lanes/bulk-update — Update lane assignments by heat_entry_id
-app.post('/api/lanes/bulk-update', async (req, res) => {
-    const { assignments } = req.body;
-    if (!assignments || !Array.isArray(assignments)) return res.status(400).json({ error: 'assignments array required' });
-
-    try {
-        await db.transaction(async () => {
-            for (const a of assignments) {
-                if (!a.heat_entry_id || !a.lane_number) continue;
-                await db.run('UPDATE heat_entry SET lane_number = ? WHERE id = ?', a.lane_number, a.heat_entry_id);
-            }
-        })();
-        res.json({ success: true, updated: assignments.length });
-    } catch (err) {
-        res.status(500).json({ error: '레인 업데이트 실패: ' + err.message });
-    }
-});
-
-app.post('/api/lanes/assign', async (req, res) => {
-    const { heat_id, assignments } = req.body;
-    if (!heat_id || !assignments) return res.status(400).json({ error: 'Missing fields' });
-    await db.transaction(async () => {
-        for (const a of assignments) {
-            await db.run('UPDATE heat_entry SET lane_number=? WHERE heat_id=? AND event_entry_id=?', a.lane_number, heat_id, a.event_entry_id);
-        }
-    })();
-    res.json({ success: true });
-});
-
-// Update heat entries — batch move athletes between heats and update lane numbers
-app.post('/api/admin/heats/update-entries', async (req, res) => {
-    const { heat_id, entries, admin_key } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    if (!heat_id || !entries) return res.status(400).json({ error: 'Missing fields' });
-    await db.transaction(async () => {
-        for (const e of entries) {
-            await db.run('UPDATE heat_entry SET lane_number=? WHERE heat_id=? AND event_entry_id=?', e.lane_number, heat_id, e.event_entry_id);
-        }
-    })();
-    res.json({ success: true });
-});
-
-// Update sub_group (A/B) for a heat entry
-app.post('/api/admin/heat-entry/set-group', async (req, res) => {
-    const { heat_entry_id, event_entry_id, heat_id, sub_group, admin_key } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const g = sub_group ? String(sub_group).toUpperCase() : null;
-    if (heat_entry_id) {
-        await db.run('UPDATE heat_entry SET sub_group=? WHERE id=?', g, heat_entry_id);
-    } else if (heat_id && event_entry_id) {
-        await db.run('UPDATE heat_entry SET sub_group=? WHERE heat_id=? AND event_entry_id=?', g, heat_id, event_entry_id);
-    } else {
-        return res.status(400).json({ error: 'heat_entry_id or (heat_id + event_entry_id) required' });
-    }
-    res.json({ success: true, sub_group: g });
-});
-
-// ============================================================
-// ROUND STATUS
-// ============================================================
-app.get('/api/round-status', async (req, res) => {
-    const compId = req.query.competition_id;
-    let q = 'SELECT * FROM event WHERE parent_event_id IS NULL';
-    const p = [];
-    if (compId) { q += ' AND competition_id=?'; p.push(compId); }
-    q += ' ORDER BY sort_order, id';
-    const events = await db.all(q, ...p);
-    const result = await Promise.all(events.map(async e => {
-        const heats = await db.all('SELECT id FROM heat WHERE event_id=?', e.id);
-        let totalEntries = 0, totalResults = 0;
-        for (const h of heats) {
-            const entRow = await db.get('SELECT COUNT(*) AS c FROM heat_entry WHERE heat_id=?', h.id);
-            totalEntries += (entRow && entRow.c) || 0;
-            const resRow = await db.get('SELECT COUNT(DISTINCT event_entry_id) AS c FROM result WHERE heat_id=?', h.id);
-            totalResults += (resRow && resRow.c) || 0;
-        }
-        return { ...e, heat_count: heats.length, total_entries: totalEntries, total_results: totalResults };
-    }));
-    res.json(result);
-});
-
-// ============================================================
-// FULL RESULTS EXPORT
-// ============================================================
-app.get('/api/events/:id/full-results', async (req, res) => {
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    const quals = await db.all('SELECT * FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
-    const result = await Promise.all(heats.map(async h => {
-        const entries = await db.all(`SELECT he.lane_number, he.sub_group, ee.id AS event_entry_id, ee.status,
-               a.name, a.bib_number, a.team FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-               JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=? ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}`, h.id);
-        if (event.category === 'field_height') {
-            return { ...h, entries, height_attempts: await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', h.id) };
-        }
-        return { ...h, entries, results: await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', h.id) };
-    }));
-    res.json({ event, heats: result, qualifications: quals });
-});
+require('./lib/routes/qualifications')(app, { db });
+// ── 라운드 생성·종목 삭제·세부종목·레인(결승/준결승 생성, 레인 배정 조회, 종목 삭제(되돌리기 스냅샷), 세부종목 CRUD·정렬·선수 동기화, 레인 일괄 수정/배정, 전체 결과) → lib/routes/rounds.js (2026-09-22) ──
+const _roundsRoutes = require('./lib/routes/rounds')(app, { _placeInSourceHeat, _undo, autoLinkDisplayTimetable: (...a) => autoLinkDisplayTimetable(...a) /* display 모듈이 뒤에서 마운트 */, broadcastSSE, db, generateScoreboardKey, getLanePattern, isAdminKey, isOperationKey, isShortTrackEvent, opLog, orderByBibSql, waAssignLanesBulk, waSeededDistribution });
+const _undoSnapshotEvent = _roundsRoutes._undoSnapshotEvent;
 
 // ============================================================
 // LOGS
@@ -3388,10 +2965,24 @@ app.get('/api/audit-log', async (req, res) => {
     res.json(await db.all('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 30'));
 });
 app.get('/api/operation-log', async (req, res) => {
-    const limit = parseInt(req.query.limit) || 100;
+    // ?limit= · competition_id= · category=record|callroom|… · from=YYYY-MM-DD&to=YYYY-MM-DD(한국 날짜) · format=csv  (lib/logRange.js)
+    let limit = parseInt(req.query.limit) || 100; if (limit > 5000) limit = 5000;
     const compId = req.query.competition_id;
-    if (compId) return res.json(await db.all('SELECT * FROM operation_log WHERE competition_id=? ORDER BY created_at DESC LIMIT ?', compId, limit));
-    res.json(await db.all('SELECT * FROM operation_log ORDER BY created_at DESC LIMIT ?', limit));
+    const LR = require('./lib/logRange');
+    const range = LR.parseRange(req.query);
+    const win = LR.sqlDayWindow(range, 'created_at');
+    const where = [], params = [];
+    if (compId) { where.push('competition_id=?'); params.push(compId); }
+    if (req.query.category) { where.push('category=?'); params.push(String(req.query.category)); }
+    if (win.sql) { where.push(win.sql); params.push(...win.params); }
+    const rows = (await db.all(`SELECT * FROM operation_log${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY created_at DESC LIMIT ?`, ...params, limit)).filter(r => LR.inRange(range, r.created_at, parseDbTimestampMs));
+    if (String(req.query.format || '').toLowerCase() === 'csv') {
+        const csv = LR.toCsv(rows, [{ key: 'created_at', label: '시각(UTC)' }, { key: 'category', label: '분류' }, { key: 'performed_by', label: '수행자' }, { key: 'competition_id', label: '대회' }, { key: 'message', label: '내용' }]);
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="operation_log_${range && range.fromDay ? range.fromDay : 'all'}_${range && range.toDay ? range.toDay : 'all'}.csv"`);
+        return res.send(csv);
+    }
+    res.json(rows);
 });
 
 // ============================================================
@@ -3441,8 +3032,9 @@ app.get('/api/sse', (req, res) => {
 // ============================================================
 app.get('/api/public/events', async (req, res) => {
     const compId = req.query.competition_id;
-    if (compId) return res.json(await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id", compId));
-    res.json(await db.all("SELECT * FROM event WHERE parent_event_id IS NULL ORDER BY sort_order, id"));
+    // 대회를 지정해야 한다 — 예전엔 없으면 모든 대회의 모든 종목을 한 번에 내보냈다 (호출부 없음)
+    if (!compId) return res.status(400).json({ error: 'competition_id 필요' });
+    res.json(await db.all("SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY sort_order, id", compId));
 });
 app.get('/api/public/callroom-status', async (req, res) => {
     const logs = await db.all("SELECT * FROM audit_log WHERE table_name='event' AND new_values LIKE '%callroom_complete%' ORDER BY created_at DESC LIMIT 50");
@@ -3505,1012 +3097,16 @@ app.get('/api/public/callroom-summary', async (req, res) => {
     res.json(result);
 });
 
-// ============================================================
-// ADMIN: KEY MANAGEMENT (supports multi-key with judge names)
-// ============================================================
-app.post('/api/admin/change-keys', (req, res) => {
-    const { admin_key, new_operation_key, new_admin_key, new_admin_id, new_record_officer_key } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    if (new_operation_key && new_operation_key.length >= 4) ACCESS_KEYS.operation = new_operation_key;
-    if (new_admin_key && new_admin_key.length >= 4) ACCESS_KEYS.admin = new_admin_key;  // setter hashes automatically
-    if (new_admin_id && new_admin_id.trim()) setConfigKey('admin_id', new_admin_id.trim());
-    // Phase C 확장: 기록위원 키. 빈 문자열 명시 시 비활성, 4자 이상이면 설정
-    if (typeof new_record_officer_key === 'string') {
-        const trimmed = new_record_officer_key.trim();
-        if (trimmed === '' || trimmed.length >= 4) {
-            ACCESS_KEYS.recordOfficer = trimmed;
-        }
-    }
-    res.json({
-        success: true,
-        operation_key: ACCESS_KEYS.operation,
-        admin_id: ADMIN_ID(),
-        record_officer_key: ACCESS_KEYS.recordOfficer,
-        record_officer_active: !!ACCESS_KEYS.recordOfficer,
-    });
-});
-app.get('/api/admin/current-keys', (req, res) => {
-    if (!isAdminKey(req.query.key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    res.json({
-        operation: ACCESS_KEYS.operation,
-        admin_id: ADMIN_ID(),
-        record_officer_key: ACCESS_KEYS.recordOfficer,
-        record_officer_active: !!ACCESS_KEYS.recordOfficer,
-    });
-});
-// Public endpoint: get registered judge/operator names (for callroom completion dropdown)
-app.get('/api/registered-judges', async (req, res) => {
-    const judges = await db.all('SELECT judge_name FROM operation_key WHERE active=1 ORDER BY judge_name');
-    res.json(judges.map(j => j.judge_name));
-});
-
-// Multi-key CRUD
-app.get('/api/admin/operation-keys', async (req, res) => {
-    if (!isAdminKey(req.query.key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    res.json(await db.all('SELECT id, judge_name, key_value, role, can_manage, active, created_at FROM operation_key ORDER BY created_at DESC'));
-});
-app.post('/api/admin/operation-keys', async (req, res) => {
-    const { admin_key, judge_name, key_value, can_manage } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    if (!judge_name || !key_value || key_value.length < 4) return res.status(400).json({ error: '심판명과 키(4자 이상)를 입력하세요.' });
-    try {
-        const info = await db.run('INSERT INTO operation_key (judge_name, key_value, can_manage) VALUES (?, ?, ?)', judge_name, key_value, can_manage ? 1 : 0);
-        await _reloadOpKeyCacheAsync();
-        opLog(`운영키 생성: ${judge_name}${can_manage ? ' (관리권한)' : ''}`, 'admin', 'admin');
-        res.json(await db.get('SELECT * FROM operation_key WHERE id=?', info.lastInsertRowid));
-    } catch (e) { res.status(400).json({ error: '키가 중복되었습니다.' }); }
-});
-app.delete('/api/admin/operation-keys/:id', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const key = await db.get('SELECT * FROM operation_key WHERE id=?', req.params.id);
-    if (!key) return res.status(404).json({ error: 'Not found' });
-    await db.run('DELETE FROM operation_key WHERE id=?', req.params.id);
-    await _reloadOpKeyCacheAsync();
-    opLog(`운영키 삭제: ${key.judge_name}`, 'admin', 'admin');
-    res.json({ success: true });
-});
-
-// ============================================================
-// SITE CONFIG (editable install guide, manual, about texts & links)
-// ============================================================
-app.get('/api/site-config', async (req, res) => {
-    // Public: returns all site_* config keys
-    const rows = await db.all("SELECT key, value FROM system_config WHERE key LIKE 'site_%'");
-    const config = {};
-    rows.forEach(r => { config[r.key] = r.value; });
-    res.json(config);
-});
-app.post('/api/admin/site-config', async (req, res) => {
-    const { admin_key, configs } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '운영키가 필요합니다.' });
-    if (!configs || typeof configs !== 'object') return res.status(400).json({ error: 'configs object required' });
-    await db.transaction(async () => {
-        for (const [k, v] of Object.entries(configs)) {
-            if (k.startsWith('site_')) await db.run('INSERT INTO system_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', k, String(v));
-        }
-    })();
-    opLog('사이트 설정 업데이트', 'admin', 'admin');
-    res.json({ success: true });
-});
-app.patch('/api/admin/operation-keys/:id', async (req, res) => {
-    const { admin_key, active, can_manage } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const key = await db.get('SELECT * FROM operation_key WHERE id=?', req.params.id);
-    if (!key) return res.status(404).json({ error: 'Not found' });
-    const newActive = active !== undefined ? (active ? 1 : 0) : key.active;
-    const newCanManage = can_manage !== undefined ? (can_manage ? 1 : 0) : key.can_manage;
-    await db.run('UPDATE operation_key SET active=?, can_manage=? WHERE id=?', newActive, newCanManage, req.params.id);
-    await _reloadOpKeyCacheAsync();
-    const updated = await db.get('SELECT * FROM operation_key WHERE id=?', req.params.id);
-    if (can_manage !== undefined) {
-        opLog(`${key.judge_name} 심판 권한 변경: ${newCanManage ? '관리자' : '운영'}`, 'admin', 'admin');
-    }
-    res.json(updated);
-});
-
-// ============================================================
-// PUBLIC: Athletes by competition (callroom / record use)
-// ============================================================
-app.get('/api/athletes', async (req, res) => {
-    const compId = req.query.competition_id;
-    if (!compId) return res.status(400).json({ error: 'competition_id 필요' });
-    res.json(await db.all(`SELECT * FROM athlete WHERE competition_id=? ORDER BY ${orderByBibSql()}, id`, compId));
-});
-
-// Athlete entries — list events an athlete is entered in
-app.get('/api/athletes/:id/entries', async (req, res) => {
-    const athleteId = req.params.id;
-    try {
-        const rows = await db.all(`
-            SELECT ee.id as event_entry_id, ee.event_id, ee.status,
-                   e.name as event_name, e.round_type, e.category, e.gender,
-                   he.heat_id, he.lane_number,
-                   h.heat_number
-            FROM event_entry ee
-            JOIN event e ON e.id = ee.event_id
-            LEFT JOIN heat_entry he ON he.event_entry_id = ee.id
-            LEFT JOIN heat h ON h.id = he.heat_id
-            WHERE ee.athlete_id = ?
-            ORDER BY e.sort_order, e.name
-        `, athleteId);
-        res.json(rows);
-    } catch (e) { res.json([]); }
-});
-
-// ============================================================
-// ADMIN: ATHLETE CRUD (scoped to competition)
-// ============================================================
-app.get('/api/admin/athletes', async (req, res) => {
-    if (!isAdminKey(req.query.key) && !isOperationKey(req.query.key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const compId = req.query.competition_id;
-    if (compId) return res.json(await db.all(`SELECT * FROM athlete WHERE competition_id=? ORDER BY ${orderByBibSql()}`, compId));
-    res.json(await db.all(`SELECT * FROM athlete ORDER BY ${orderByBibSql()}`));
-});
-// 전화번호 정규화 (CRUD 공용)
-function _normalizeAthletePhone(p) {
-    if (p === undefined || p === null) return '';
-    let s = String(p).trim();
-    if (!s) return '';
-    s = s.replace(/[^0-9+]/g, '');
-    if (s.startsWith('+82')) s = '0' + s.slice(3);
-    else if (s.startsWith('82') && s.length >= 11) s = '0' + s.slice(2);
-    if (/^1\d{9}$/.test(s)) s = '0' + s;
-    return s;
-}
-
-app.post('/api/admin/athletes', async (req, res) => {
-    const { admin_key, competition_id, name, bib_number, team, gender, barcode, phone } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    if (!name || !gender || !competition_id) return res.status(400).json({ error: '필수 항목이 누락되었습니다 (이름, 성별, 대회ID).' });
-    try {
-        const bib = bib_number ? String(bib_number).trim() : null;
-        const bc = barcode || '';
-        const ph = _normalizeAthletePhone(phone);
-        const info = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone) VALUES (?,?,?,?,?,?,?)', competition_id, name, bib, team || '', bc, gender, ph);
-        res.json(await db.get('SELECT * FROM athlete WHERE id=?', info.lastInsertRowid));
-    } catch (e) { res.status(400).json({ error: '등록 오류: ' + e.message }); }
-});
-app.put('/api/admin/athletes/:id', async (req, res) => {
-    const { admin_key, name, bib_number, team, gender, barcode, phone } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const old = await db.get('SELECT * FROM athlete WHERE id=?', req.params.id);
-    if (!old) return res.status(404).json({ error: 'Not found' });
-    try {
-        const newBib = bib_number !== undefined ? (bib_number ? String(bib_number).trim() : null) : old.bib_number;
-        const newPhone = phone !== undefined ? _normalizeAthletePhone(phone) : (old.phone || '');
-        await db.run('UPDATE athlete SET name=?,bib_number=?,team=?,gender=?,barcode=?,phone=? WHERE id=?', name || old.name, newBib, team ?? old.team, gender || old.gender, barcode ?? old.barcode, newPhone, old.id);
-        res.json(await db.get('SELECT * FROM athlete WHERE id=?', old.id));
-    } catch (e) { res.status(400).json({ error: '수정 오류: ' + e.message }); }
-});
-app.delete('/api/admin/athletes/:id', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const ath = await db.get('SELECT * FROM athlete WHERE id=?', req.params.id);
-    if (!ath) return res.status(404).json({ error: 'Not found' });
-    await db.transaction(async () => {
-        const entries = await db.all('SELECT id FROM event_entry WHERE athlete_id=?', ath.id);
-        for (const e of entries) {
-            await db.run('DELETE FROM result WHERE event_entry_id=?', e.id);
-            await db.run('DELETE FROM height_attempt WHERE event_entry_id=?', e.id);
-            await db.run('DELETE FROM heat_entry WHERE event_entry_id=?', e.id);
-            await db.run('DELETE FROM combined_score WHERE event_entry_id=?', e.id);
-            await db.run('DELETE FROM qualification_selection WHERE event_entry_id=?', e.id);
-        }
-        await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE athlete_id=?)', ath.id);
-        await db.run('DELETE FROM event_entry WHERE athlete_id=?', ath.id);
-        await db.run('DELETE FROM athlete WHERE id=?', ath.id);
-    })();
-    res.json({ success: true });
-});
-
-// ---- Athlete ↔ Event Assignment ----
-app.get('/api/admin/athletes/:id/events', async (req, res) => {
-    if (!isAdminKey(req.query.key) && !isOperationKey(req.query.key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    res.json(await db.all(`
-        SELECT ee.id AS event_entry_id, ee.event_id, ee.status, e.name AS event_name, e.category, e.gender, e.round_type
-        FROM event_entry ee JOIN event e ON e.id=ee.event_id
-        WHERE ee.athlete_id=? ORDER BY e.sort_order, e.id
-    `, req.params.id));
-});
-app.post('/api/admin/athletes/:id/events', async (req, res) => {
-    const { admin_key, event_id } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const ath = await db.get('SELECT * FROM athlete WHERE id=?', req.params.id);
-    if (!ath) return res.status(404).json({ error: 'Athlete not found' });
-    const evt = await db.get('SELECT * FROM event WHERE id=?', event_id);
-    if (!evt) return res.status(404).json({ error: 'Event not found' });
-
-    // For relay events: add athlete as relay_member to existing team, don't create new team
-    if (evt.category === 'relay') {
-        // Find existing team entry for this athlete's team
-        const teamName = ath.team || ath.name;
-        const existingTeamEntry = await db.get(`
-            SELECT ee.id FROM event_entry ee
-            JOIN athlete a ON a.id = ee.athlete_id
-            WHERE ee.event_id = ? AND a.name = ?
-        `, event_id, teamName);
-
-        if (existingTeamEntry) {
-            // Add as relay member to existing team
-            const existingMember = await db.get('SELECT id FROM relay_member WHERE event_entry_id=? AND athlete_id=?', existingTeamEntry.id, ath.id);
-            if (existingMember) return res.status(409).json({ error: '이미 등록된 릴레이 멤버입니다.' });
-            const maxLegRow = await db.get('SELECT MAX(leg_order) AS mx FROM relay_member WHERE event_entry_id=?', existingTeamEntry.id);
-            const maxLeg = (maxLegRow && maxLegRow.mx) || 0;
-            await db.run('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)', existingTeamEntry.id, ath.id, maxLeg + 1);
-            return res.json({ success: true, event_entry_id: existingTeamEntry.id, added_as: 'relay_member' });
-        }
-        // No existing team → create a dummy team athlete and add this athlete as relay_member
-        const rGender = evt.gender === 'X' ? 'M' : evt.gender;
-        let teamAthlete = await db.get('SELECT * FROM athlete WHERE competition_id=? AND name=? AND bib_number=?', evt.competition_id, teamName, teamName);
-        if (!teamAthlete) {
-            const teamInfo = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', evt.competition_id, teamName, teamName, teamName, `RELAY_${teamName}`, rGender);
-            teamAthlete = await db.get('SELECT * FROM athlete WHERE id=?', teamInfo.lastInsertRowid);
-        }
-        // Create event_entry for the team
-        let teamEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, teamAthlete.id);
-        if (!teamEntry) {
-            const teInfo = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", event_id, teamAthlete.id);
-            teamEntry = { id: teInfo.lastInsertRowid };
-            // Assign to first heat
-            let heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1', event_id);
-            if (!heat) {
-                const hInfo = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)', event_id);
-                heat = { id: hInfo.lastInsertRowid };
-            }
-            const maxLaneRow = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat.id);
-            const maxLane = (maxLaneRow && maxLaneRow.mx) || 0;
-            await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat.id, teamEntry.id, maxLane + 1);
-        }
-        // Add the athlete as relay member
-        await db.run('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)', teamEntry.id, ath.id, 1);
-        return res.json({ success: true, event_entry_id: teamEntry.id, added_as: 'relay_member_new_team' });
-    }
-
-    const exists = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, ath.id);
-    if (exists) return res.status(409).json({ error: '이미 등록된 종목입니다.' });
-
-    await db.transaction(async () => {
-        // 1. Create event_entry
-        const info = await db.run("INSERT INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", event_id, ath.id);
-        const entryId = info.lastInsertRowid;
-
-        // 2. Auto-assign to first heat (create heat if none exists)
-        let heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number LIMIT 1', event_id);
-        if (!heat) {
-            const hInfo = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 1)', event_id);
-            heat = { id: hInfo.lastInsertRowid };
-        }
-        // Determine next lane number
-        const maxLaneRow = await db.get('SELECT MAX(lane_number) AS mx FROM heat_entry WHERE heat_id=?', heat.id);
-        const maxLane = (maxLaneRow && maxLaneRow.mx) || 0;
-        await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?)', heat.id, entryId, maxLane + 1);
-
-        audit('event_entry', entryId, 'INSERT', null, { event_id, athlete_id: ath.id }, 'admin', evt.competition_id, req);
-        broadcastSSE('entry_status', { event_entry_id: entryId, status: 'registered' });
-    })();
-
-    const eeRow = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', event_id, ath.id);
-    res.json({ success: true, event_entry_id: eeRow ? eeRow.id : null });
-});
-app.delete('/api/admin/athletes/:athleteId/events/:entryId', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const entry = await db.get('SELECT * FROM event_entry WHERE id=?', req.params.entryId);
-    if (!entry) return res.status(404).json({ error: 'Entry not found' });
-    await db.transaction(async () => {
-        await db.run('DELETE FROM result WHERE event_entry_id=?', entry.id);
-        await db.run('DELETE FROM height_attempt WHERE event_entry_id=?', entry.id);
-        await db.run('DELETE FROM heat_entry WHERE event_entry_id=?', entry.id);
-        await db.run('DELETE FROM combined_score WHERE event_entry_id=?', entry.id);
-        await db.run('DELETE FROM qualification_selection WHERE event_entry_id=?', entry.id);
-        await db.run('DELETE FROM relay_member WHERE event_entry_id=?', entry.id);
-        await db.run('DELETE FROM event_entry WHERE id=?', entry.id);
-    })();
-    res.json({ success: true });
-});
-
-// ============================================================
-// ADMIN: EVENT CRUD
-// ============================================================
-app.get('/api/admin/events', async (req, res) => {
-    if (!isAdminKey(req.query.key) && !isOperationKey(req.query.key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const compId = req.query.competition_id;
-    if (compId) return res.json(await db.all('SELECT * FROM event WHERE competition_id=? ORDER BY sort_order, id', compId));
-    res.json(await db.all('SELECT * FROM event ORDER BY sort_order, id'));
-});
-// Standard athletics event order (WA + KAAF) - reusable
-// Order: Sprints(100~400) → Middle(800~1500) → Long(3000~10000) → Hurdles → SC → Walks(track) → Road → Jumps → Throws → Combined → Relays
-const STANDARD_EVENT_ORDER = [
-    // Sprints
-    '100m','200m','400m',
-    // Middle distance
-    '800m','1500m','1마일','Mile',
-    // Long distance
-    '3000m','5000m','10000m',
-    // Hurdles
-    '100mH','110mH','400mH',
-    // Steeplechase
-    '2000mSC','3000mSC',
-    // Track walks
-    '3000mW','5000mW','10000mW',
-    // Road walks
-    '20kmW','35kmW','50kmW',
-    // Road running
-    '하프마라톤','마라톤',
-    // Vertical jumps
-    '높이뛰기','장대높이뛰기',
-    // Horizontal jumps
-    '멀리뛰기','세단뛰기',
-    // Throws
-    '포환던지기','원반던지기','해머던지기','창던지기',
-    // Combined
-    '5종경기','7종경기','10종경기',
-    // Relays
-    '4x100mR','4x400mR','4x400mR(혼성)','4x800mR','4x1500mR',
-];
-// Normalize event name for robust matching (whitespace removed, lowercase, unified relay/walk/hurdle/SC/marathon tokens)
-function _normEvtName(s) {
-    if (!s) return '';
-    let t = String(s).trim().toLowerCase();
-    // Unify relay multiplication signs and remove spaces
-    t = t.replace(/[×x✕✖＊*]/g, 'x');
-    t = t.replace(/\s+/g, '');
-    t = t.replace(/,/g, '');
-    // Relay normalization: "4x100m릴레이" / "4x100r" → "4x100mr"
-    t = t.replace(/(\d+)x(\d+)m?릴레이/g, '$1x$2mr');
-    t = t.replace(/(\d+)x(\d+)r(?![a-z0-9])/g, '$1x$2mr');
-    // Mixed relay
-    t = t.replace(/mixed/g, '혼성');
-    t = t.replace(/\(mix\)/g, '(혼성)');
-    // If "혼성" appears before a relay token, convert to suffix form: "혼성4x400mr" → "4x400mr(혼성)"
-    t = t.replace(/혼성(\d+x\d+mr)/g, '$1(혼성)');
-    // Walk normalization: "20km경보" / "20킬로경보" → "20kmw"
-    t = t.replace(/(\d+)\s*km\s*(?:경보|w)\b/gi, '$1kmw');
-    t = t.replace(/(\d+)\s*m\s*(?:경보|w)\b/gi, '$1mw');
-    t = t.replace(/(\d+)킬로경보/g, '$1kmw');
-    t = t.replace(/경보/g, 'w');
-    // Hurdles: "100m허들" → "100mh"
-    t = t.replace(/(\d+)m?허들/g, '$1mh');
-    t = t.replace(/허들/g, 'h');
-    // Steeplechase: "3000m장애물" → "3000msc"
-    t = t.replace(/(\d+)m?장애물/g, '$1msc');
-    t = t.replace(/장애물/g, 'sc');
-    // Marathon variants
-    t = t.replace(/하프\s*마라톤/g, '하프마라톤');
-    t = t.replace(/halfmarathon/g, '하프마라톤');
-    t = t.replace(/marathon/g, '마라톤');
-    return t;
-}
-function getStandardSortOrder(eventName) {
-    if (!eventName) return 9990;
-    const normTarget = _normEvtName(eventName);
-    // 1) Exact match (after normalization)
-    let idx = STANDARD_EVENT_ORDER.findIndex(s => _normEvtName(s) === normTarget);
-    if (idx >= 0) return (idx + 1) * 10;
-    // 2) Pattern-based fallback by category keyword
-    //    Use regex to avoid the "100m matches 100mH" trap
-    const patterns = [
-        // Track walks
-        { re: /^(\d+)mw$/, get: m => `${m[1]}mw` },
-        // Road walks
-        { re: /^(\d+)kmw$/, get: m => `${m[1]}kmw` },
-        // Hurdles
-        { re: /^(\d+)mh$/, get: m => `${m[1]}mh` },
-        // Steeplechase
-        { re: /^(\d+)msc$/, get: m => `${m[1]}msc` },
-        // Relays
-        { re: /^(\d+)x(\d+)mr(\(혼성\))?$/, get: m => `${m[1]}x${m[2]}mr${m[3]||''}` },
-        // Plain track distance
-        { re: /^(\d+)m$/, get: m => `${m[1]}m` },
-    ];
-    for (const p of patterns) {
-        const mt = normTarget.match(p.re);
-        if (!mt) continue;
-        const probe = p.get(mt);
-        const j = STANDARD_EVENT_ORDER.findIndex(s => _normEvtName(s) === probe);
-        if (j >= 0) return (j + 1) * 10;
-    }
-    // 3) Substring fallback - but exclude track-distance vs hurdle/walk/SC confusion
-    //    Only allow substring match if normalized target does NOT contain extra suffixes
-    const safeForSubstr = !/[hwc]|sc|mr/.test(normTarget) || /^(\d+)(m|km)/.test(normTarget) === false;
-    if (safeForSubstr) {
-        idx = STANDARD_EVENT_ORDER.findIndex(s => {
-            const ns = _normEvtName(s);
-            return ns.length >= 2 && (normTarget.includes(ns) || ns.includes(normTarget));
-        });
-        if (idx >= 0) return (idx + 1) * 10;
-    }
-    return 9990;
-}
-async function autoSortCompetitionEvents(competitionId) {
-    const events = await db.all('SELECT * FROM event WHERE competition_id=? AND parent_event_id IS NULL', competitionId);
-    await db.transaction(async () => {
-        for (const evt of events) {
-            const order = getStandardSortOrder(evt.name);
-            await db.run('UPDATE event SET sort_order=? WHERE id=?', order, evt.id);
-            await db.run('UPDATE event SET sort_order=? WHERE parent_event_id=?', order, evt.id);
-        }
-    })();
-}
-
-app.post('/api/admin/events', async (req, res) => {
-    const { admin_key, competition_id, name, category, gender, round_type, sort_order, division, video_url, result_url } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    if (!name || !category || !gender || !competition_id) return res.status(400).json({ error: '필수 항목이 누락되었습니다.' });
-    try {
-        const autoOrder = sort_order || getStandardSortOrder(name);
-        const info = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order,division,video_url,result_url) VALUES (?,?,?,?,?,?,?,?,?,?)', competition_id, name, category, gender, round_type || 'final', 'created', autoOrder, division || '', video_url || '', result_url || '');
-        const evt = await db.get('SELECT * FROM event WHERE id=?', info.lastInsertRowid);
-        await db.run('INSERT INTO heat (event_id,heat_number) VALUES (?,1)', evt.id);
-        // 시간표 자동 재매칭 (새 종목이 생겼으므로 시간표의 매칭되지 않은 행과 연결 가능)
-        try { await autoLinkTimetable(competition_id); } catch(autoErr) { console.warn('[autoLink after event create] ', autoErr.message); }
-        res.json(evt);
-    } catch (e) { res.status(400).json({ error: '추가 오류: ' + e.message }); }
-});
-app.put('/api/admin/events/:id', async (req, res) => {
-    const { admin_key, name, category, gender, round_type, sort_order, round_status, video_url, division, result_url } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const old = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!old) return res.status(404).json({ error: 'Not found' });
-    await db.run('UPDATE event SET name=?,category=?,gender=?,round_type=?,sort_order=?,round_status=?,video_url=?,division=?,result_url=? WHERE id=?', name || old.name, category || old.category, gender || old.gender, round_type || old.round_type, sort_order ?? old.sort_order, round_status || old.round_status, video_url ?? old.video_url ?? '', division ?? old.division ?? '', result_url ?? old.result_url ?? '', old.id);
-    // 종목 이름/성별/라운드가 바뀌었을 가능성이 있으므로 시간표 재매칭 시도 (단 수동 매칭은 보호)
-    if (name !== old.name || gender !== old.gender || round_type !== old.round_type) {
-        try { await autoLinkTimetable(old.competition_id); } catch(autoErr) { console.warn('[autoLink after event update] ', autoErr.message); }
-    }
-    res.json(await db.get('SELECT * FROM event WHERE id=?', old.id));
-});
-
-// Event video URL (accessible by operation key holders)
-app.put('/api/events/:id/video-url', async (req, res) => {
-    const { key, video_url } = req.body;
-    if (!isOperationKey(key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const evt = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!evt) return res.status(404).json({ error: 'Not found' });
-    await db.run('UPDATE event SET video_url=? WHERE id=?', video_url || '', evt.id);
-    res.json({ ok: true, video_url: video_url || '' });
-});
-app.get('/api/events/:id/video-url', async (req, res) => {
-    const evt = await db.get('SELECT video_url FROM event WHERE id=?', req.params.id);
-    if (!evt) return res.status(404).json({ error: 'Not found' });
-    res.json({ video_url: evt.video_url || '' });
-});
-
-// Auto-sort events by standard athletics order (WA + KAAF)
-// Allow operation key as well so on-site staff can trigger this without master admin key
-app.post('/api/admin/events/auto-sort', async (req, res) => {
-    const { admin_key, competition_id } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
-    await autoSortCompetitionEvents(competition_id);
-    const row = await db.get('SELECT COUNT(*) as cnt FROM event WHERE competition_id=? AND parent_event_id IS NULL', competition_id);
-    const count = row ? row.cnt : 0;
-    res.json({ success: true, message: `${count}개 종목 자동정렬 완료 (WA 표준 순서)` });
-});
-
-app.delete('/api/admin/events/:id', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Not found' });
-    await db.transaction(async () => {
-        const subs = await db.all('SELECT id FROM event WHERE parent_event_id=?', event.id);
-        for (const sub of subs) {
-            const subHeats = await db.all('SELECT id FROM heat WHERE event_id=?', sub.id);
-            for (const h of subHeats) { await db.run('DELETE FROM result WHERE heat_id=?', h.id); await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id); await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id); }
-            await db.run('DELETE FROM heat WHERE event_id=?', sub.id); await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', sub.id); await db.run('DELETE FROM event_entry WHERE event_id=?', sub.id); await db.run('DELETE FROM event WHERE id=?', sub.id);
-        }
-        const heats = await db.all('SELECT id FROM heat WHERE event_id=?', event.id);
-        for (const h of heats) { await db.run('DELETE FROM result WHERE heat_id=?', h.id); await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id); await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id); }
-        await db.run('DELETE FROM heat WHERE event_id=?', event.id);
-        await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', event.id);
-        await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', event.id);
-        await db.run('DELETE FROM qualification_selection WHERE event_id=?', event.id);
-        await db.run('DELETE FROM event_entry WHERE event_id=?', event.id);
-        await db.run('DELETE FROM event WHERE id=?', event.id);
-    })();
-    res.json({ success: true });
-});
-
-// ============================================================
-// ADMIN: HEAT MANAGEMENT (merge, add, delete, move athlete)
-// ============================================================
-app.post('/api/admin/events/:id/add-heat', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    const maxHeat = await db.get('SELECT MAX(heat_number) AS mx FROM heat WHERE event_id=?', event.id);
-    const nextNum = (maxHeat.mx || 0) + 1;
-    const info = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, ?)', event.id, nextNum);
-    res.json({ success: true, heat_id: info.lastInsertRowid, heat_number: nextNum });
-});
-app.delete('/api/admin/heats/:id', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
-    if (!heat) return res.status(404).json({ error: 'Heat not found' });
-    await db.transaction(async () => {
-        await db.run('DELETE FROM result WHERE heat_id=?', heat.id);
-        await db.run('DELETE FROM height_attempt WHERE heat_id=?', heat.id);
-        await db.run('DELETE FROM heat_entry WHERE heat_id=?', heat.id);
-        await db.run('DELETE FROM heat WHERE id=?', heat.id);
-    })();
-    res.json({ success: true });
-});
-// Remove athlete from heat (without deleting event_entry — just unlink from heat)
-app.post('/api/admin/heats/:id/remove-entry', async (req, res) => {
-    const { admin_key, event_entry_id, delete_event_entry, force } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    const heat = await db.get('SELECT * FROM heat WHERE id=?', req.params.id);
-    if (!heat) return res.status(404).json({ error: 'Heat not found' });
-    const he = await db.get('SELECT * FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
-    if (!he) return res.status(404).json({ error: '해당 선수가 이 조에 없습니다.' });
-
-    // delete_event_entry=true 인 경우 결과 데이터 존재 여부 체크
-    let removedResultCount = 0;
-    if (delete_event_entry) {
-        const r1 = await db.get('SELECT COUNT(*) AS n FROM result WHERE event_entry_id=?', event_entry_id);
-        const r2 = await db.get('SELECT COUNT(*) AS n FROM height_attempt WHERE event_entry_id=?', event_entry_id);
-        const r3 = await db.get('SELECT COUNT(*) AS n FROM combined_score WHERE event_entry_id=?', event_entry_id);
-        removedResultCount = (r1?.n || 0) + (r2?.n || 0) + (r3?.n || 0);
-        if (removedResultCount > 0 && !force) {
-            return res.status(409).json({
-                error: '기록 데이터가 존재합니다',
-                detail: `이 선수에 ${removedResultCount}건의 기록이 저장되어 있습니다. 강제로 삭제하려면 force=true 와 함께 다시 요청하세요.`,
-                result_count: removedResultCount,
-                needs_force: true,
-            });
-        }
-    }
-
-    await db.transaction(async () => {
-        // Remove from heat
-        await db.run('DELETE FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
-        // Optionally also delete the event_entry (full removal from event)
-        if (delete_event_entry) {
-            await db.run('DELETE FROM result WHERE event_entry_id=?', event_entry_id);
-            await db.run('DELETE FROM height_attempt WHERE event_entry_id=?', event_entry_id);
-            await db.run('DELETE FROM combined_score WHERE event_entry_id=?', event_entry_id);
-            await db.run('DELETE FROM qualification_selection WHERE event_entry_id=?', event_entry_id);
-            await db.run('DELETE FROM relay_member WHERE event_entry_id=?', event_entry_id);
-            await db.run('DELETE FROM event_entry WHERE id=?', event_entry_id);
-        }
-    })();
-    broadcastSSE('entry_status', { event_entry_id, status: 'removed' });
-    res.json({ success: true, removed_results: removedResultCount });
-});
-app.post('/api/admin/heats/:id/move-entry', async (req, res) => {
-    const { admin_key, event_entry_id, target_heat_id, lane_number } = req.body;
-    if (!isOperationKey(admin_key)) return res.status(403).json({ error: '인증 키가 필요합니다.' });
-    await db.transaction(async () => {
-        // Remove from current heat
-        await db.run('DELETE FROM heat_entry WHERE heat_id=? AND event_entry_id=?', req.params.id, event_entry_id);
-        // Add to target heat
-        await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?, ?, ?) ON CONFLICT(heat_id, event_entry_id) DO UPDATE SET lane_number=excluded.lane_number', target_heat_id, event_entry_id, lane_number || null);
-    })();
-    res.json({ success: true });
-});
-// Force event status change (admin override)
-app.post('/api/admin/events/:id/force-status', async (req, res) => {
-    const { admin_key, round_status, round_type } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    const updates = [];
-    const params = [];
-    if (round_status) { updates.push('round_status=?'); params.push(round_status); }
-    if (round_type) { updates.push('round_type=?'); params.push(round_type); }
-    if (updates.length === 0) return res.status(400).json({ error: 'Nothing to update' });
-    params.push(event.id);
-    await db.run(`UPDATE event SET ${updates.join(',')} WHERE id=?`, ...params);
-    opLog(`${event.name} 강제 상태변경: ${round_status || ''} ${round_type || ''}`, 'admin', 'admin', event.competition_id);
-    broadcastSSE('event_reverted', { event_id: event.id });
-    res.json({ success: true, event: await db.get('SELECT * FROM event WHERE id=?', event.id) });
-});
-
-// ============================================================
-// ADMIN: DB RESET (per competition)
-// ============================================================
-app.post('/api/admin/reset-db', async (req, res) => {
-    const { admin_key, competition_id } = req.body;
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
-    await db.transaction(async () => {
-        const events = await db.all('SELECT id FROM event WHERE competition_id=?', competition_id);
-        for (const evt of events) {
-            const heats = await db.all('SELECT id FROM heat WHERE event_id=?', evt.id);
-            for (const h of heats) { await db.run('DELETE FROM result WHERE heat_id=?', h.id); await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id); await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id); }
-            await db.run('DELETE FROM heat WHERE event_id=?', evt.id);
-            await db.run('DELETE FROM relay_member WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', evt.id);
-            await db.run('DELETE FROM combined_score WHERE event_entry_id IN (SELECT id FROM event_entry WHERE event_id=?)', evt.id);
-            await db.run('DELETE FROM qualification_selection WHERE event_id=?', evt.id);
-            await db.run('DELETE FROM event_entry WHERE event_id=?', evt.id);
-        }
-        await db.run('DELETE FROM event WHERE competition_id=?', competition_id);
-        await db.run('DELETE FROM athlete WHERE competition_id=?', competition_id);
-    })();
-    res.json({ success: true, message: '해당 대회 데이터가 초기화되었습니다.' });
-});
-
-// ============================================================
-// ADMIN: BACKUP
-// ============================================================
-app.get('/api/admin/backup', async (req, res) => {
-    if (!isOperationKey(req.query.key)) return res.status(403).json({ error: '운영키가 필요합니다.' });
-    const format = req.query.format || 'json';
-    const compId = req.query.competition_id;
-    const tables = ['competition','event','athlete','event_entry','heat','heat_entry','result','height_attempt','combined_score','qualification_selection','relay_member','audit_log','operation_log'];
-    const backup = {};
-    for (const t of tables) {
-        try {
-            if (compId && t !== 'operation_log' && t !== 'audit_log') {
-                // Scoped backup: filter by competition_id where possible
-                if (t === 'competition') backup[t] = await db.all('SELECT * FROM competition WHERE id=?', compId);
-                else if (t === 'event') backup[t] = await db.all('SELECT * FROM event WHERE competition_id=?', compId);
-                else if (t === 'athlete') backup[t] = await db.all('SELECT * FROM athlete WHERE competition_id=?', compId);
-                else if (t === 'event_entry') backup[t] = await db.all('SELECT ee.* FROM event_entry ee JOIN event e ON ee.event_id=e.id WHERE e.competition_id=?', compId);
-                else if (t === 'heat') backup[t] = await db.all('SELECT h.* FROM heat h JOIN event e ON h.event_id=e.id WHERE e.competition_id=?', compId);
-                else if (t === 'heat_entry') backup[t] = await db.all('SELECT he.* FROM heat_entry he JOIN heat h ON he.heat_id=h.id JOIN event e ON h.event_id=e.id WHERE e.competition_id=?', compId);
-                else if (t === 'result') backup[t] = await db.all('SELECT r.* FROM result r JOIN heat h ON r.heat_id=h.id JOIN event e ON h.event_id=e.id WHERE e.competition_id=?', compId);
-                else if (t === 'height_attempt') backup[t] = await db.all('SELECT ha.* FROM height_attempt ha JOIN heat h ON ha.heat_id=h.id JOIN event e ON h.event_id=e.id WHERE e.competition_id=?', compId);
-                else if (t === 'combined_score') backup[t] = await db.all('SELECT cs.* FROM combined_score cs JOIN event_entry ee ON cs.event_entry_id=ee.id JOIN event e ON ee.event_id=e.id WHERE e.competition_id=?', compId);
-                else if (t === 'qualification_selection') backup[t] = await db.all('SELECT qs.* FROM qualification_selection qs JOIN event e ON qs.event_id=e.id WHERE e.competition_id=?', compId);
-                else if (t === 'relay_member') backup[t] = await db.all('SELECT rm.* FROM relay_member rm JOIN event_entry ee ON rm.event_entry_id=ee.id JOIN event e ON ee.event_id=e.id WHERE e.competition_id=?', compId);
-                else backup[t] = await db.all(`SELECT * FROM ${t}`);
-            } else {
-                backup[t] = await db.all(`SELECT * FROM ${t}`);
-            }
-        } catch(e) { backup[t] = []; }
-    }
-    backup._timestamp = new Date().toISOString();
-
-    if (format === 'xlsx') {
-        // Excel format: each table as a sheet
-        const wb = XLSX.utils.book_new();
-        for (const [name, rows] of Object.entries(backup)) {
-            if (name === '_timestamp' || !Array.isArray(rows) || rows.length === 0) continue;
-            const ws = XLSX.utils.json_to_sheet(rows);
-            XLSX.utils.book_append_sheet(wb, ws, name.substring(0, 31));
-        }
-        const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename="pace-rise-backup-${new Date().toISOString().slice(0,10)}.xlsx"`);
-        return res.send(buf);
-    }
-
-    // Default JSON
-    res.setHeader('Content-Disposition', `attachment; filename="pace-rise-backup-${new Date().toISOString().slice(0,10)}.json"`);
-    res.json(backup);
-});
-
-// ─── 파일 백업 (.db dump) 상태 조회 & 수동 트리거 ───────────────────────────
-// performBackup() 로 만들어진 backups/*.db 들의 현황을 조회/관리.
-// daily/hourly/startup/live/manual 태그별 통계, 최근 백업 목록, 다음 예정 시각 등.
-
-app.get('/api/admin/db-backup/status', (req, res) => {
-    if (!isOperationKey(req.query.key)) return res.status(403).json({ error: '운영키가 필요합니다.' });
-    try {
-        const files = fs.readdirSync(BACKUP_DIR)
-            .filter(f => f.startsWith('backup_') && f.endsWith('.db'))
-            .map(f => {
-                const fpath = path.join(BACKUP_DIR, f);
-                const st = fs.statSync(fpath);
-                const m = f.match(/^backup_([^_]+)_(.+)\.db$/);
-                return {
-                    name: f, tag: m ? m[1] : 'unknown',
-                    size: st.size, mtime: st.mtime,
-                    ageMs: Date.now() - st.mtimeMs
-                };
-            })
-            .sort((a, b) => b.mtime - a.mtime);
-
-        const tagStats = {};
-        for (const f of files) {
-            if (!tagStats[f.tag]) tagStats[f.tag] = { count: 0, totalSize: 0, latest: null };
-            tagStats[f.tag].count++;
-            tagStats[f.tag].totalSize += f.size;
-            if (!tagStats[f.tag].latest || f.mtime > new Date(tagStats[f.tag].latest)) {
-                tagStats[f.tag].latest = f.mtime;
-            }
-        }
-
-        res.json({
-            total_count: files.length,
-            total_size_bytes: files.reduce((s, f) => s + f.size, 0),
-            backup_dir: BACKUP_DIR,
-            max_retention_days: BACKUP_MAX_DAYS,
-            by_tag: tagStats,
-            recent_10: files.slice(0, 10).map(f => ({
-                name: f.name, tag: f.tag,
-                size_kb: Math.round(f.size / 1024),
-                mtime: f.mtime,
-                age_minutes: Math.round(f.ageMs / 60000)
-            })),
-            health: {
-                daily_age_hours: tagStats.daily ? Math.round((Date.now() - new Date(tagStats.daily.latest)) / 3600000) : null,
-                hourly_age_minutes: tagStats.hourly ? Math.round((Date.now() - new Date(tagStats.hourly.latest)) / 60000) : null,
-                daily_ok: tagStats.daily && (Date.now() - new Date(tagStats.daily.latest)) < 25 * 60 * 60 * 1000,
-                hourly_ok: tagStats.hourly && (Date.now() - new Date(tagStats.hourly.latest)) < 70 * 60 * 1000
-            }
-        });
-    } catch (e) {
-        res.status(500).json({ error: '백업 상태 조회 실패: ' + e.message });
-    }
-});
-
-app.post('/api/admin/db-backup/trigger', (req, res) => {
-    if (!isOperationKey(req.body.admin_key)) return res.status(403).json({ error: '운영키가 필요합니다.' });
-    const tag = (req.body.tag || 'manual').replace(/[^a-z0-9]/gi, '').slice(0, 20) || 'manual';
-    const file = performBackup(tag);
-    if (!file) return res.status(500).json({ error: '백업 생성 실패' });
-    res.json({ success: true, file: path.basename(file), tag });
-});
-
-// ============================================================
-// 통백업 / 통복원 (Full Snapshot Backup & Restore)
-// ------------------------------------------------------------
-// ZIP 안에 DB(competition.db + WAL/SHM) + public/uploads/ 전체 + manifest.json 을 묶음.
-// 복원은 매우 위험하므로:
-//   - 관리자 키 필수
-//   - 복원 직전 현재 상태를 자동으로 백업 (rollback 용)
-//   - 복원 후 서버 재시작이 권장됨 (DB 핸들 새로 열기 위해)
-// PostgreSQL 백엔드는 이 기능 미지원 (SQLite 파일 기반 전제)
-// ============================================================
-
-// 풀백업 전용 multer (큰 파일 허용, 최대 200MB)
-const _fullBackupUpload = multer({
-    dest: UPLOAD_TMP,
-    limits: { fileSize: 200 * 1024 * 1024 }
-});
-
-// 풀백업에 포함할 자산 디렉토리들 (DB 외부에 저장된 사용자 데이터)
-const _FULL_BACKUP_ASSET_DIRS = [
-    { src: path.join(__dirname, 'public', 'uploads'), zipPrefix: 'public/uploads' },
-    { src: path.join(__dirname, 'uploads'),           zipPrefix: 'uploads' },
-];
-
-// GET /api/admin/full-backup/download
-// 통백업 ZIP 다운로드 — SQLite 파일 + 업로드 자산 + manifest.json
-app.get('/api/admin/full-backup/download', (req, res) => {
-    if (db.isAsync) {
-        return res.status(400).json({ error: '통백업/복원은 SQLite 백엔드 전용입니다. PostgreSQL 환경에선 외부 도구(pg_dump)를 사용하세요.' });
-    }
-    if (!isAdminKey(req.query.key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    try {
-        const AdmZip = require('adm-zip');
-        const zip = new AdmZip();
-        const manifest = {
-            type: 'pace-rise-full-backup',
-            version: 1,
-            created_at: new Date().toISOString(),
-            db_backend: 'sqlite',
-            files: [],
-        };
-
-        // 1) DB 파일들 — 일관성 확보를 위해 WAL 체크포인트 후 복사
-        try { db.raw.exec('PRAGMA wal_checkpoint(TRUNCATE);'); } catch(_) {}
-        const dbBase = path.basename(DB_PATH);
-        if (fs.existsSync(DB_PATH)) {
-            const buf = fs.readFileSync(DB_PATH);
-            zip.addFile(`db/${dbBase}`, buf);
-            manifest.files.push({ path: `db/${dbBase}`, size: buf.length, kind: 'sqlite-main' });
-        }
-        for (const ext of ['-wal', '-shm']) {
-            const p = DB_PATH + ext;
-            if (fs.existsSync(p)) {
-                const buf = fs.readFileSync(p);
-                zip.addFile(`db/${dbBase}${ext}`, buf);
-                manifest.files.push({ path: `db/${dbBase}${ext}`, size: buf.length, kind: 'sqlite' + ext });
-            }
-        }
-
-        // 2) 자산 디렉토리들 — 재귀적으로 추가
-        function _walk(dir, basePath, zipPrefix) {
-            if (!fs.existsSync(dir)) return;
-            const entries = fs.readdirSync(dir, { withFileTypes: true });
-            for (const ent of entries) {
-                if (ent.name.startsWith('.')) continue; // .gitkeep 등 제외
-                const full = path.join(dir, ent.name);
-                const rel = path.relative(basePath, full).replace(/\\/g, '/');
-                const zipPath = `${zipPrefix}/${rel}`;
-                if (ent.isDirectory()) {
-                    _walk(full, basePath, zipPrefix);
-                } else if (ent.isFile()) {
-                    try {
-                        const buf = fs.readFileSync(full);
-                        zip.addFile(zipPath, buf);
-                        manifest.files.push({ path: zipPath, size: buf.length, kind: 'asset' });
-                    } catch(_) {}
-                }
-            }
-        }
-        for (const asset of _FULL_BACKUP_ASSET_DIRS) {
-            _walk(asset.src, asset.src, asset.zipPrefix);
-        }
-
-        // 3) manifest.json 마지막에 추가
-        const totalAssetSize = manifest.files.filter(f => f.kind === 'asset').reduce((s, f) => s + f.size, 0);
-        manifest.summary = {
-            total_files: manifest.files.length,
-            db_files: manifest.files.filter(f => f.kind.startsWith('sqlite')).length,
-            asset_files: manifest.files.filter(f => f.kind === 'asset').length,
-            total_asset_bytes: totalAssetSize,
-        };
-        zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'));
-
-        const zipBuf = zip.toBuffer();
-        const ts = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
-        res.setHeader('Content-Type', 'application/zip');
-        res.setHeader('Content-Disposition', `attachment; filename="pace-rise-full-backup-${ts}.zip"`);
-        res.send(zipBuf);
-    } catch (e) {
-        console.error('[FullBackup] 다운로드 실패:', e);
-        res.status(500).json({ error: '통백업 생성 실패: ' + e.message });
-    }
-});
-
-// POST /api/admin/full-backup/preview
-// ZIP 업로드 → manifest 파싱 + 무결성 검사 (실제 복원은 하지 않음)
-app.post('/api/admin/full-backup/preview', _fullBackupUpload.single('file'), (req, res) => {
-    if (db.isAsync) {
-        try { if (req.file) fs.unlinkSync(req.file.path); } catch(_) {}
-        return res.status(400).json({ error: '통백업/복원은 SQLite 백엔드 전용입니다.' });
-    }
-    if (!isAdminKey(req.body.admin_key)) {
-        try { if (req.file) fs.unlinkSync(req.file.path); } catch(_) {}
-        return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    }
-    if (!req.file) return res.status(400).json({ error: 'ZIP 파일이 필요합니다.' });
-    try {
-        const AdmZip = require('adm-zip');
-        const zip = new AdmZip(req.file.path);
-        const entries = zip.getEntries();
-        const manifestEntry = entries.find(e => e.entryName === 'manifest.json');
-        if (!manifestEntry) {
-            return res.status(400).json({ error: 'manifest.json이 없습니다. 올바른 PACE RISE 통백업 ZIP이 아닙니다.' });
-        }
-        const manifest = JSON.parse(manifestEntry.getData().toString('utf8'));
-        if (manifest.type !== 'pace-rise-full-backup') {
-            return res.status(400).json({ error: '백업 타입 불일치: ' + manifest.type });
-        }
-        // DB 파일 존재 여부
-        const dbBase = path.basename(DB_PATH);
-        const hasDb = entries.some(e => e.entryName === `db/${dbBase}`);
-        if (!hasDb) {
-            return res.status(400).json({ error: `DB 파일이 없습니다 (db/${dbBase}).` });
-        }
-        // 자산 카운트
-        const assetCount = entries.filter(e => !e.entryName.startsWith('db/') && e.entryName !== 'manifest.json').length;
-        res.json({
-            ok: true,
-            manifest: {
-                version: manifest.version,
-                created_at: manifest.created_at,
-                db_backend: manifest.db_backend,
-                summary: manifest.summary,
-            },
-            zip_size: fs.statSync(req.file.path).size,
-            db_present: hasDb,
-            entries_count: entries.length,
-            asset_count: assetCount,
-            tmp_path: req.file.path, // 다음 단계 apply에서 재사용 (file_id 처럼)
-        });
-    } catch (e) {
-        try { if (req.file) fs.unlinkSync(req.file.path); } catch(_) {}
-        res.status(500).json({ error: '백업 ZIP 분석 실패: ' + e.message });
-    }
-});
-
-// POST /api/admin/full-backup/restore
-// ZIP 업로드 → 즉시 복원. 매우 위험.
-// confirm='RESTORE'를 명시적으로 받음. 복원 직전 자동 안전 백업 수행.
-app.post('/api/admin/full-backup/restore', _fullBackupUpload.single('file'), (req, res) => {
-    if (db.isAsync) {
-        try { if (req.file) fs.unlinkSync(req.file.path); } catch(_) {}
-        return res.status(400).json({ error: '통백업/복원은 SQLite 백엔드 전용입니다.' });
-    }
-    if (!isAdminKey(req.body.admin_key)) {
-        try { if (req.file) fs.unlinkSync(req.file.path); } catch(_) {}
-        return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    }
-    if (req.body.confirm !== 'RESTORE') {
-        try { if (req.file) fs.unlinkSync(req.file.path); } catch(_) {}
-        return res.status(400).json({ error: '복원 확인 문자열이 일치하지 않습니다. confirm=RESTORE 필요.' });
-    }
-    if (!req.file) return res.status(400).json({ error: 'ZIP 파일이 필요합니다.' });
-
-    const zipPath = req.file.path;
-    try {
-        const AdmZip = require('adm-zip');
-        const zip = new AdmZip(zipPath);
-        const entries = zip.getEntries();
-        const manifestEntry = entries.find(e => e.entryName === 'manifest.json');
-        if (!manifestEntry) throw new Error('manifest.json이 없습니다.');
-        const manifest = JSON.parse(manifestEntry.getData().toString('utf8'));
-        if (manifest.type !== 'pace-rise-full-backup') throw new Error('백업 타입 불일치');
-        const dbBase = path.basename(DB_PATH);
-        const dbEntry = entries.find(e => e.entryName === `db/${dbBase}`);
-        if (!dbEntry) throw new Error(`DB 파일이 없습니다: db/${dbBase}`);
-
-        // ── Step 1: 현재 상태 안전 백업 (rollback 용) ──
-        let rollbackFile = null;
-        try {
-            try { db.raw.exec('PRAGMA wal_checkpoint(TRUNCATE);'); } catch(_) {}
-            rollbackFile = performBackup('prerestore');
-            console.log('[FullRestore] 복원 전 자동 백업:', rollbackFile);
-        } catch (e) {
-            console.warn('[FullRestore] 자동 백업 실패(무시):', e.message);
-        }
-
-        // ── Step 2: SQLite 연결을 닫고 파일 교체 ──
-        // better-sqlite3는 close() 후 다시 열기 어려우므로, DB 파일을 덮어쓴 후 서버 재시작 안내.
-        // 단, 같은 프로세스에서 이어 쓰기 위해 db.raw.close() → 새 인스턴스 교체는 위험하므로
-        // 본 라우트는 "파일 교체 + 재시작 권장" 모델로 동작.
-        try { db.raw.close(); } catch(_) {}
-
-        // 기존 WAL/SHM 정리 (서로 다른 백업에서 온 wal과 main이 섞이면 손상 위험)
-        for (const ext of ['-wal', '-shm']) {
-            try { if (fs.existsSync(DB_PATH + ext)) fs.unlinkSync(DB_PATH + ext); } catch(_) {}
-        }
-
-        // ── Step 3: 새 DB 파일 쓰기 ──
-        fs.writeFileSync(DB_PATH, dbEntry.getData());
-        // 백업에 포함된 wal/shm은 동일 시점의 main과 짝이 맞을 때만 의미가 있음.
-        // PRAGMA wal_checkpoint(TRUNCATE)로 백업할 때 wal을 비웠으므로 보통 wal은 비어있거나 없음.
-        // 복원 시에도 wal은 비워둔 채 새 인스턴스가 다시 만들도록 함.
-
-        // ── Step 4: 자산 디렉토리 복원 ──
-        // 기존 자산을 모두 삭제하지는 않음 (운영 안전). 백업 내 파일만 덮어씀.
-        let restoredAssets = 0;
-        for (const ent of entries) {
-            if (ent.entryName === 'manifest.json') continue;
-            if (ent.entryName.startsWith('db/')) continue;
-            if (ent.isDirectory) continue;
-            // 보안: zip-slip 방지 — 절대경로/상위 디렉토리 참조 금지
-            if (/(^|\/)\.\.(\/|$)/.test(ent.entryName) || ent.entryName.startsWith('/')) continue;
-            // 자산 경로 매핑: public/uploads/* → /home/user/webapp/public/uploads/*
-            //                 uploads/*        → /home/user/webapp/uploads/*
-            let outPath = null;
-            for (const asset of _FULL_BACKUP_ASSET_DIRS) {
-                if (ent.entryName.startsWith(asset.zipPrefix + '/')) {
-                    const rel = ent.entryName.substring(asset.zipPrefix.length + 1);
-                    outPath = path.join(asset.src, rel);
-                    break;
-                }
-            }
-            if (!outPath) continue;
-            try {
-                fs.mkdirSync(path.dirname(outPath), { recursive: true });
-                fs.writeFileSync(outPath, ent.getData());
-                restoredAssets++;
-            } catch (e) {
-                console.warn('[FullRestore] 자산 쓰기 실패:', outPath, e.message);
-            }
-        }
-
-        try { fs.unlinkSync(zipPath); } catch(_) {}
-
-        // 응답 후 서버 종료 — PM2가 자동 재시작하여 새 DB 핸들로 부팅
-        res.json({
-            ok: true,
-            message: '복원 완료. 서버가 자동 재시작됩니다.',
-            restored_assets: restoredAssets,
-            rollback_file: rollbackFile ? path.basename(rollbackFile) : null,
-            manifest_created_at: manifest.created_at,
-        });
-
-        // 응답 전송 후 1.5초 뒤 graceful exit → PM2가 재시작
-        setTimeout(() => {
-            console.log('[FullRestore] 복원 완료, 서버 재시작 (PM2 auto-restart 기대)');
-            process.exit(0);
-        }, 1500);
-    } catch (e) {
-        try { fs.unlinkSync(zipPath); } catch(_) {}
-        console.error('[FullRestore] 실패:', e);
-        res.status(500).json({ error: '복원 실패: ' + e.message });
-    }
-});
+// ── 관리자 키·운영키·사이트 설정(키 변경/조회, 운영키 발급·재발급·삭제·수정, 등록 심판, site-config) → lib/routes/admin_keys.js (2026-09-22) ──
+const _admin_keysRoutes = require('./lib/routes/admin_keys')(app, { ACCESS_KEYS, ADMIN_ID, OPKEY_BCRYPT_COST, _opKeyHint, _opKeyIsHash, _opKeyLookup, _opKeyPrefix, _refreshDbSecurityWarnings, _reloadOpKeyCacheAsync, bcrypt, crypto, db, getConfigKey, getJudgeName, isAdminKey, isDefaultOperationKey, isOperationKey, opLog, setConfigKey, setDefaultOperationKey });
+// ── 관리자 선수·종목·조 관리(공개 선수 조회, 선수 CRUD·출전, 종목 CRUD·자동정렬·영상 URL, 조 추가/삭제/선수 이동, 상태 강제 변경) → lib/routes/admin_events.js (2026-09-22) ──
+const _admin_eventsRoutes = require('./lib/routes/admin_events')(app, { _undo, _undoSnapshotEvent, audit, autoLinkDisplayTimetable: (...a) => autoLinkDisplayTimetable(...a) /* display 모듈이 뒤에서 마운트 */, broadcastSSE, db, getJudgeName, isAdminKey, isOperationKey, opLog, orderByBibSql });
+const _normalizeAthletePhone = _admin_eventsRoutes._normalizeAthletePhone;
+const _normalizeGrade = _admin_eventsRoutes._normalizeGrade;
+const _normEvtName = _admin_eventsRoutes._normEvtName;
+const autoSortCompetitionEvents = _admin_eventsRoutes.autoSortCompetitionEvents;
+// ── 관리자 백업·복원(DB 초기화·JSON 백업·파일 백업 상태/트리거·전체 백업 다운로드/미리보기/복원) → lib/routes/admin_backup.js (2026-09-22) ──
+const _admin_backupRoutes = require('./lib/routes/admin_backup')(app, { BACKUP_DIR, BACKUP_MAX_DAYS, DB_PATH, UPLOAD_TMP, XLSX, _applyJwtBridge, backupS3, db, fs, isAdminKey, isOperationKey, multer, path, performBackup });
 
 // ============================================================
 // FEDERATION EXCEL UPLOAD (scoped to competition)
@@ -4529,13 +3125,14 @@ app.post('/api/federation/preview', upload.single('file'), (req, res) => {
         const dataRows = rows.slice(1).filter(r => r[0] && r[1]);
         const relayColMap = {};
         headers.forEach((h, idx) => { const key = String(h).trim(); if (FED_RELAY_MAP[key]) relayColMap[key] = { idx, ...FED_RELAY_MAP[key] }; });
+        const [_evCol1, _evCol2] = fedEventColIdx(headers);
         const eventSet = new Map();
         const relayTeams = new Map();
         dataRows.forEach(row => {
             const _g2414 = String(row[2] || '').trim();
             const gender = (_g2414 === '남' || _g2414 === '남자') ? 'M' : (_g2414 === '여' || _g2414 === '여자') ? 'F' : null;
             if (!gender) return;
-            [row[4], row[5]].forEach(evtName => {
+            [row[_evCol1], _evCol2 >= 0 ? row[_evCol2] : ''].forEach(evtName => {
                 if (!evtName) return;
                 const mapped = resolveFedEventName(String(evtName).trim());
                 if (!mapped) return;
@@ -4579,6 +3176,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
         const dataRows = rows.slice(1).filter(r => r[0] && r[1]);
         const relayColMap = {};
         headers.forEach((h, idx) => { const key = String(h).trim(); if (FED_RELAY_MAP[key]) relayColMap[key] = { idx, ...FED_RELAY_MAP[key] }; });
+        const [_evCol1, _evCol2] = fedEventColIdx(headers);
         let stats = { athletes: 0, events: 0, entries: 0, heats: 0, relayTeams: 0 };
         const createdEventNames = [];  // ⭐ 트랜잭션 안에서 push, 응답에서 전달
 
@@ -4626,8 +3224,17 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 const hn = String(h || '').trim().toLowerCase();
                 return hn === '\ubc30\ubc88' || hn === 'bib' || hn === '\ubc30\ubc88\ud638' || hn === 'bib_number';
             });
+            // 휴대폰 컬럼 탐색 (SMS·기록증 발송용) — 헤더명으로 위치 자동 인식
+            const _phoneColIdx = headers.findIndex(h => {
+                const hn = String(h || '').trim().toLowerCase();
+                return /^(휴대폰|핸드폰|전화|전화번호|연락처|phone|phone_number|mobile)$/.test(hn);
+            });
+            // 학년 컬럼 (학년별 대회·중고연맹 명단, Phase 7-②) — 헤더 '학년'
+            const _gradeColIdx = headers.findIndex(h => /^(학년|grade)$/i.test(String(h || '').trim()));
             const _barcodeMap = new Map(); // key: name|team|gender -> barcode
             const _bibMap = new Map(); // key: name|team|gender -> bib
+            const _phoneMap = new Map(); // key: name|team|gender -> phone (숫자만)
+            const _gradeMap = new Map(); // key: name|team|gender -> grade (1~6)
             // barcode와 bib_number는 별도 필드로 유지 (바코드≠배번)
 
             dataRows.forEach(row => {
@@ -4648,7 +3255,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 }
                 // barcode와 bib_number는 별도 필드로 유지
 
-                [row[4], row[5]].forEach(evtName => {
+                [row[_evCol1], _evCol2 >= 0 ? row[_evCol2] : ''].forEach(evtName => {
                     if (!evtName) return;
                     const mapped = resolveFedEventName(String(evtName).trim());
                     if (!mapped) return;
@@ -4665,6 +3272,11 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 if (rowBib) {
                     _bibMap.set(`${name}|${team}|${gender}`, rowBib);
                 }
+                if (_phoneColIdx >= 0 && row[_phoneColIdx]) {
+                    const rowPhone = String(row[_phoneColIdx]).replace(/[^0-9]/g, '');
+                    if (rowPhone) _phoneMap.set(`${name}|${team}|${gender}`, rowPhone);
+                }
+                if (_gradeColIdx >= 0) { const gr = _normalizeGrade(row[_gradeColIdx]); if (gr) _gradeMap.set(`${name}|${team}|${gender}`, gr); }
                 for (const [colKey, relayInfo] of Object.entries(relayColMap)) {
                     if (String(row[relayInfo.idx] || '').trim().toUpperCase() === 'O') {
                         const rGender = relayInfo.gender || gender;
@@ -4698,7 +3310,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     // Field, combined, road events are always 'final'
                     // Only track short-distance events can have preliminary rounds
                     const ALWAYS_FINAL_CATEGORIES = ['field_distance', 'field_height', 'combined', 'relay', 'road'];
-                    const ALWAYS_FINAL_EVENTS = ['5000m','5000mW','10,000m','10,000mW','10000m','3000mSC','3000m장애물','마라톤','하프마라톤','20KmW','35kmW','10K','5K'];
+                    const ALWAYS_FINAL_EVENTS = ['1000m','5000m','5000mW','10,000m','10,000mW','10000m','3000mSC','3000m장애물','마라톤','하프마라톤','20KmW','35kmW','10K','5K'];
                     const isFinalOnly = ALWAYS_FINAL_CATEGORIES.includes(info.category) || ALWAYS_FINAL_EVENTS.some(e => info.name === e || info.name.startsWith(e + ' '));
                     const rt = (!isFinalOnly && info.athletes.length > heatSize) ? 'preliminary' : 'final';
                     try {
@@ -4803,11 +3415,16 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                         if (!bibConflict) await db.run('UPDATE athlete SET bib_number=? WHERE id=? AND (bib_number IS NULL OR bib_number = ?)', bib, existingId, '');
                     }
                     if (bc) await db.run('UPDATE athlete SET barcode=? WHERE id=? AND (barcode IS NULL OR barcode = ?)', bc, existingId, bc);
+                    const ph = _phoneMap.get(key) || null;
+                    if (ph) await db.run("UPDATE athlete SET phone=? WHERE id=? AND (phone IS NULL OR phone = '')", ph, existingId);
+                    const gr = _gradeMap.get(key) || null;
+                    if (gr) await db.run('UPDATE athlete SET grade=? WHERE id=?', gr, existingId);
                     return existingId;
                 }
                 const bib = _bibMap.get(key) || null;
                 const bc = _barcodeMap.get(key) || '';
-                const r = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', competition_id, name, bib, team, bc, gender);
+                const ph = _phoneMap.get(key) || '';
+                const r = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone,grade) VALUES (?,?,?,?,?,?,?,?)', competition_id, name, bib, team, bc, gender, ph, _gradeMap.get(key) || null);
                 athleteCache.set(key, r.lastInsertRowid);
                 stats.athletes++;
                 return r.lastInsertRowid;
@@ -4892,9 +3509,10 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 if (info.category !== 'combined') continue;
                 const parentId = eventCache.get(`${info.name}|${info.category}|${info.gender}`);
                 if (!parentId) continue;
-                const existingSubsRow = await db.get('SELECT COUNT(*) AS c FROM event WHERE parent_event_id=?', parentId);
-                const existingSubs = (existingSubsRow && existingSubsRow.c) || 0;
-                if (existingSubs > 0) continue;
+                // 이미 생성된 세부종목의 차수(sort_order) 집합 — '일부만 있으면 전체 스킵'이 아니라
+                // '누락된 차수만' 생성한다. (예: 7종에 필드만 있고 트랙(100mH/200m/800m)이 빠진 경우 보충)
+                const existingSubRows = await db.all('SELECT sort_order FROM event WHERE parent_event_id=?', parentId);
+                const existingOrders = new Set((existingSubRows || []).map(r => Number(r.sort_order)));
                 // ─── 종목별 sub-events 매핑 (gender 분기 포함) ───
                 let subs, prefix;
                 if (info.name === '10종경기') {
@@ -4910,6 +3528,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     continue;  // 알 수 없는 combined 종목 → 스킵
                 }
                 for (const sub of subs) {
+                    if (existingOrders.has(Number(sub.order))) continue; // 이미 있는 차수는 건너뛰고 누락분만 생성 (중복 방지)
                     const subName = `${prefix} ${sub.name}`;
                     const subR = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)', competition_id, subName, sub.category, info.gender, 'final', 'heats_generated', parentId, sub.order);
                     const subEventId = subR.lastInsertRowid;
@@ -5054,6 +3673,29 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 }
             }
 
+            // ─── scoreboard_key 백필 ───
+            // 연맹 import 의 조 생성 경로들은 scoreboard_key 를 설정하지 않으므로,
+            // 키가 비어있는 모든 조에 대해 generateScoreboardKey 로 일괄 생성한다.
+            // (generateScoreboardKey 는 연맹 라벨 없어도 남자/여자/혼성 기본 라벨로 폴백 → null 아님)
+            const _keylessHeats = await db.all(`
+                SELECT h.id AS heat_id, h.heat_number, h.event_id,
+                       e.name, e.gender, e.round_type, e.competition_id
+                FROM heat h JOIN event e ON e.id = h.event_id
+                WHERE e.competition_id=? AND (h.scoreboard_key IS NULL OR h.scoreboard_key='')
+            `, competition_id);
+            const _heatCountByEvent = new Map();
+            for (const _h of _keylessHeats) {
+                if (!_heatCountByEvent.has(_h.event_id)) {
+                    const _c = await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', _h.event_id);
+                    _heatCountByEvent.set(_h.event_id, Number(_c && _c.c) || 1);
+                }
+            }
+            for (const _h of _keylessHeats) {
+                const _evt = { id: _h.event_id, name: _h.name, gender: _h.gender, round_type: _h.round_type, competition_id: _h.competition_id };
+                const _sbKey = await generateScoreboardKey(_evt, _h.heat_number, db, _heatCountByEvent.get(_h.event_id));
+                if (_sbKey) await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', _sbKey, _h.heat_id);
+            }
+
         })();
         opLog(`연맹 명단 업로드: 선수 ${stats.athletes}명, 종목 ${stats.events}개${createdEventNames.length ? ` (신규: ${createdEventNames.slice(0, 5).join(', ')}${createdEventNames.length > 5 ? ` 외 ${createdEventNames.length - 5}개` : ''})` : ''}`, 'import', 'admin', competition_id);
         // ⭐ created_event_names: 재업로드 시 0개면 정상. 누락된 종목이 새로 만들어졌다면 여기서 확인 가능
@@ -5092,6 +3734,7 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
             else if (/^(배번|배번호|bib|bib_number)$/i.test(hn)) hdrMap.bib = idx;
             else if (/^(바코드|바코드번호|barcode|바코드\s*번호)$/i.test(hn)) hdrMap.barcode = idx;
             else if (/^(휴대폰|핸드폰|전화|전화번호|연락처|phone|phone_number|mobile)$/i.test(hn)) hdrMap.phone = idx;
+            else if (/^(학년|grade)$/i.test(hn)) hdrMap.grade = idx;
         });
 
         // Determine format: header-detected or legacy fixed columns
@@ -5127,7 +3770,7 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
             };
 
             for (const row of dataRows) {
-                let name, team, genderRaw, bib, barcode, phone;
+                let name, team, genderRaw, bib, barcode, phone, grade = null;
                 if (useHeaders) {
                     name = String(row[hdrMap.name] || '').trim();
                     team = hdrMap.team !== undefined ? String(row[hdrMap.team] || '').trim() : '';
@@ -5135,6 +3778,7 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
                     bib = hdrMap.bib !== undefined ? (String(row[hdrMap.bib] || '').trim() || null) : null;
                     barcode = hdrMap.barcode !== undefined ? (String(row[hdrMap.barcode] || '').trim() || '') : '';
                     phone = hdrMap.phone !== undefined ? normPhone(row[hdrMap.phone]) : '';
+                    grade = hdrMap.grade !== undefined ? _normalizeGrade(row[hdrMap.grade]) : null;     // '3학년'·'3'·3
                 } else {
                     // Legacy fixed columns: bib | name | team | gender | barcode | phone(optional)
                     bib = String(row[0] || '').trim() || null;
@@ -5165,12 +3809,16 @@ app.post('/api/athletes/upload', upload.single('file'), async (req, res) => {
                             await db.run('UPDATE athlete SET phone=? WHERE id=?', phone, existing.id);
                             didUpdate = true;
                         }
+                        if (grade && existing.grade !== grade) {
+                            await db.run('UPDATE athlete SET grade=? WHERE id=?', grade, existing.id);
+                            didUpdate = true;
+                        }
                         if (didUpdate) stats.updated = (stats.updated || 0) + 1;
                     }
                     stats.skipped++; continue;
                 }
-                await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone) VALUES (?,?,?,?,?,?,?)', competition_id, name, bib, team, barcode, gender, phone || '');
-                existingCache.set(key, { id: null, bib_number: bib, barcode, phone });
+                await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender,phone,grade) VALUES (?,?,?,?,?,?,?,?)', competition_id, name, bib, team, barcode, gender, phone || '', grade);
+                existingCache.set(key, { id: null, bib_number: bib, barcode, phone, grade });
                 stats.added++;
             }
         })();
@@ -5203,7 +3851,8 @@ app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => 
         headers.forEach((h, idx) => {
             const hn = String(h || '').trim();
             if (/^(선수명|성명|이름|name)$/i.test(hn)) hdrMap.name = idx;
-            else if (/^(팀명|소속|팀|team)$/i.test(hn)) hdrMap.team = idx;
+            else if (/^(팀명|소속|소속명|팀|team)$/i.test(hn)) hdrMap.team = idx;      // 소속명: 연맹 배번 명단 원본
+            else if (/^(생년월일|birth|birth_date)$/i.test(hn)) hdrMap.birth = idx;
             else if (/^(성별|gender)$/i.test(hn)) hdrMap.gender = idx;
             else if (/^(배번|배번호|bib|bib_number|번호)$/i.test(hn)) hdrMap.bib = idx;
             else if (/^(바코드|barcode|바코드번호)$/i.test(hn)) hdrMap.barcode = idx;
@@ -5236,18 +3885,25 @@ app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => 
 
         // Parse rows - deduplicate by name+team(+gender if available)
         const excelMap = new Map();
+        const _altKey = new Map();            // '이름|소속|성별#배번' → '이름(yy)|소속|성별'
         for (const row of rows.slice(1)) {
             const name = String(row[hdrMap.name] || '').trim();
             if (!name) continue;
             const team = hdrMap.team !== undefined ? String(row[hdrMap.team] || '').trim() : '';
             const genderRaw = hasGenderCol ? String(row[hdrMap.gender] || '').trim() : '';
             const gender = (genderRaw === '남' || genderRaw === '남자' || genderRaw === 'M') ? 'M' : (genderRaw === '여' || genderRaw === '여자' || genderRaw === 'F') ? 'F' : null;
-            const bib = hdrMap.bib !== undefined ? String(row[hdrMap.bib] || '').trim() : '';
+            let bib = hdrMap.bib !== undefined ? String(row[hdrMap.bib] || '').trim() : '';
+            if (/^\d+$/.test(bib)) bib = bib.replace(/^0+(?=\d)/, '');      // 연맹 원본은 '00012' — 시스템 배번은 '12' (앞자리 0 때문에 전원 '변경'으로 잡히던 것 방지)
             if (!bib) continue;
+            // 동명이인: 시스템은 '홍길동(06)' 처럼 출생연도를 붙여 구분한다 → 생년월일이 있으면 그 이름으로도 찾는다
+            const _by = hdrMap.birth !== undefined ? String(row[hdrMap.birth] || '').replace(/\D/g, '') : '';
+            const _yy = _by.length >= 8 ? _by.slice(2, 4) : (_by.length === 6 ? _by.slice(0, 2) : '');
             // If gender column exists but value is invalid, skip
             if (hasGenderCol && !gender) continue;
             const key = gender ? `${name}|${team}|${gender}` : `${name}|${team}`;
             if (!excelMap.has(key)) excelMap.set(key, { bib, hasGender: !!gender });
+            else if (_yy) { const k2 = gender ? `${name}(${_yy})|${team}|${gender}` : `${name}(${_yy})|${team}`; if (!excelMap.has(k2)) excelMap.set(k2, { bib, hasGender: !!gender }); }
+            if (_yy) _altKey.set(key + '#' + bib, gender ? `${name}(${_yy})|${team}|${gender}` : `${name}(${_yy})|${team}`);
         }
 
         const results = { matched: 0, updated: 0, already_same: 0, not_found: [], total_excel: excelMap.size };
@@ -5261,6 +3917,10 @@ app.post('/api/athletes/update-bib', upload.single('file'), async (req, res) => 
                 // Fallback: match by name+team only
                 const found = existingNoGender.get(key);
                 if (found) existing = found; // null means ambiguous → skip
+            }
+            if (!existing && _altKey.has(key + '#' + newBib)) {      // 동명이인 표기로 재시도
+                const k2 = _altKey.get(key + '#' + newBib);
+                existing = hasGender ? existingCache.get(k2) : (existingNoGender.get(k2) || null);
             }
             if (existing) {
                 results.matched++;
@@ -5471,741 +4131,11 @@ app.post('/api/events/upload', upload.single('file'), async (req, res) => {
 // ============================================================
 
 // Helper: Normalize event name from Excel to DB name
-function normalizeEventName(raw) {
-    if (!raw) return null;
-    const s = String(raw).trim();
-    // Map common variations
-    const map = {
-        '10000m': '10,000m', '10000mW': '10,000mW',
-        '4x100mR': '4X100mR', '4X100mR': '4X100mR', '4 x 100mR': '4X100mR',
-        '4x400mR': '4X400mR', '4X400mR': '4X400mR', '4 x 400mR': '4X400mR',
-        '4x400mR(Mixed)': '4X400mR(Mixed)', 'Mixed 4x400mR': '4X400mR(Mixed)', 'Mixed4x400mR': '4X400mR(Mixed)',
-        '4x400mR Mixed': '4X400mR(Mixed)', '4X400mR Mixed': '4X400mR(Mixed)', '4 x 400mR Mixed': '4X400mR(Mixed)',
-        '4x1500mR': '4×1500mR', '4X1500mR': '4×1500mR', '4 x 1500mR': '4×1500mR',
-        '4x800mR': '4×800mR', '4X800mR': '4×800mR', '4 x 800mR': '4×800mR',
-    };
-    return map[s] || s;
-}
-
-// Helper: Normalize gender from Excel
-function normalizeGender(raw) {
-    if (!raw) return null;
-    const s = String(raw).trim();
-    if (s === '남' || s === 'M' || s === '남자') return 'M';
-    if (s === '여' || s === 'F' || s === '여자') return 'F';
-    if (s === '혼성' || s === 'X' || s === '혼') return 'X';
-    return null;
-}
-
-// Helper: Normalize round from Excel
-function normalizeRound(raw) {
-    if (!raw) return 'final';
-    const s = String(raw).trim().toLowerCase();
-    if (s === '예선' || s === 'preliminary' || s === '예') return 'preliminary';
-    if (s === '준결승' || s === 'semifinal' || s === '준결') return 'semifinal';
-    if (s === '결승' || s === 'final' || s === '결') return 'final';
-    // 10종/7종 sub-events are stored as round_type='final' in DB
-    if (/10종|십종|decathlon|7종|칠종|heptathlon/i.test(s)) return 'final';
-    // Patterns like "3-2+2", "2-3+2" → preliminary (multiple heats with advancement)
-    if (/^\d+-\d+\+\d+$/.test(s)) return 'preliminary';
-    // Excel date serial numbers (예선 misread as date) → treat as preliminary
-    if (/^\d{4,5}$/.test(s)) return 'preliminary';
-    return 'final';
-}
-
-// Parse heat assignment Excel: returns grouped events
-function parseHeatAssignmentExcel(filePath) {
-    const wb = XLSX.readFile(filePath);
-    // Try to find sheet named '조편성', otherwise use first sheet
-    const sheetName = wb.SheetNames.find(n => n.includes('조편성')) || wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-    if (rows.length < 2) throw new Error('데이터가 없습니다.');
-
-    // Detect headers
-    const headers = rows[0].map(h => String(h || '').trim());
-    
-    // Find column indices by header name (flexible matching)
-    const colIdx = {};
-    headers.forEach((h, idx) => {
-        const hl = h.toLowerCase();
-        if (hl === '성별' || hl === 'gender') colIdx.gender = idx;
-        else if (hl === '종목' || hl === 'event' || hl === '종목명') colIdx.event = idx;
-        else if (hl === '라운드' || hl === 'round') colIdx.round = idx;
-        else if (hl === '조' || hl === 'heat' || hl === '조번호') colIdx.heat = idx;
-        else if (hl === '그룹' || hl === 'group' || hl === '그룹명') colIdx.group = idx;
-        else if (hl === '순서' || hl === 'lane' || hl === '레인' || hl === '레인/순서') colIdx.lane = idx;
-        else if (hl === '배번' || hl === 'bib' || hl === '번호') colIdx.bib = idx;
-        else if (hl === '성명' || hl === 'name' || hl === '선수명') colIdx.name = idx;
-        else if (hl === '소속' || hl === 'team' || hl === '팀명') colIdx.team = idx;
-    });
-
-    // Validate required columns
-    if (colIdx.event === undefined) throw new Error("'종목' 컬럼을 찾을 수 없습니다.");
-    if (colIdx.name === undefined) throw new Error("'성명' 컬럼을 찾을 수 없습니다.");
-
-    const dataRows = rows.slice(1).filter(r => r[colIdx.event] && r[colIdx.name]);
-    
-    // Group by event key: gender + event_name + round_type
-    const eventGroups = new Map();
-    
-    for (const row of dataRows) {
-        const gender = normalizeGender(row[colIdx.gender !== undefined ? colIdx.gender : -1]);
-        let eventName = normalizeEventName(row[colIdx.event]);
-        const rawRound = colIdx.round !== undefined ? String(row[colIdx.round] || '').trim() : '';
-        
-        // Detect 10종/7종 in round column → prefix event name with [10종]/[7종]
-        const is10jong = /10종|십종|decathlon/i.test(rawRound);
-        const is7jong = /7종|칠종|heptathlon/i.test(rawRound);
-        if (is10jong && eventName && !eventName.startsWith('[10종]')) {
-            eventName = `[10종] ${eventName}`;
-        } else if (is7jong && eventName && !eventName.startsWith('[7종]')) {
-            eventName = `[7종] ${eventName}`;
-        }
-        
-        const round = normalizeRound(rawRound);
-        // 10종/7종 세부종목은 조 번호를 항상 1로 강제 (전체 선수가 1조에서 뜀)
-        let heatNum = colIdx.heat !== undefined ? parseInt(row[colIdx.heat]) || 1 : 1;
-        if (is10jong || is7jong) heatNum = 1;
-        let group = colIdx.group !== undefined ? (row[colIdx.group] ? String(row[colIdx.group]).replace(/[\s\u3000]+/g, '').toUpperCase() : null) : null;
-        if (group === '') group = null;
-        const lane = colIdx.lane !== undefined ? parseInt(row[colIdx.lane]) || null : null;
-        const bib = colIdx.bib !== undefined ? (row[colIdx.bib] != null ? String(row[colIdx.bib]).trim() : null) : null;
-        const name = String(row[colIdx.name]).trim();
-        const team = colIdx.team !== undefined ? String(row[colIdx.team] || '').replace(/[\s\u3000]+$/g, '').trim() : '';
-
-        if (!eventName || !name) continue;
-
-        const eventKey = `${gender || '?'}|${eventName}|${round}`;
-        if (!eventGroups.has(eventKey)) {
-            eventGroups.set(eventKey, {
-                gender, eventName, round,
-                entries: []
-            });
-        }
-        eventGroups.get(eventKey).entries.push({
-            heat: heatNum, group, lane, bib, name, team
-        });
-    }
-
-    // ============================================================
-    // 라운드 혼재 자동 병합: 같은 성별+종목에서 소수 선수만 다른 라운드로
-    // 되어있으면 엑셀 입력 오류로 간주하여 다수 라운드 쪽으로 병합
-    // 예: 남 400mH 예선:10명, 결승:1명 → 1명을 예선으로 병합
-    // 단, 10종/7종 세부종목과의 혼재는 제외 (이건 정상)
-    // ============================================================
-    const mergeWarnings = [];
-    const byGenderEvent = new Map(); // 'M|400mH' → [{eventKey, round, count}]
-    for (const [eventKey, group] of eventGroups) {
-        const ge = `${group.gender}|${group.eventName}`;
-        if (!byGenderEvent.has(ge)) byGenderEvent.set(ge, []);
-        byGenderEvent.get(ge).push({ eventKey, round: group.round, count: group.entries.length });
-    }
-
-    for (const [ge, rounds] of byGenderEvent) {
-        if (rounds.length < 2) continue;
-        // 10종/7종 세부종목은 병합 대상이 아님 (round column에 '10종','7종' 등이 있으면 이미 별도 eventName)
-        // 여기서 걸리는 건 순수하게 예선/결승/준결승이 혼재된 경우만
-        const total = rounds.reduce((s, r) => s + r.count, 0);
-        // 가장 선수가 많은 라운드 찾기
-        rounds.sort((a, b) => b.count - a.count);
-        const majority = rounds[0];
-        // 소수 라운드들 (전체의 20% 미만인 그룹)
-        const minorities = rounds.slice(1).filter(r => r.count < total * 0.2);
-        if (minorities.length === 0) continue;
-
-        for (const minor of minorities) {
-            const minorGroup = eventGroups.get(minor.eventKey);
-            const majorGroup = eventGroups.get(majority.eventKey);
-            if (!minorGroup || !majorGroup) continue;
-
-            const [g, evName] = ge.split('|');
-            const gLabel = g === 'M' ? '남' : g === 'F' ? '여' : '혼성';
-            const minRoundLabel = { preliminary: '예선', semifinal: '준결승', final: '결승' }[minor.round] || minor.round;
-            const majRoundLabel = { preliminary: '예선', semifinal: '준결승', final: '결승' }[majority.round] || majority.round;
-
-            // 소수 그룹의 선수를 다수 그룹으로 이동
-            for (const entry of minorGroup.entries) {
-                majorGroup.entries.push(entry);
-            }
-            // 소수 그룹 제거
-            eventGroups.delete(minor.eventKey);
-
-            const names = minorGroup.entries.map(e => e.name).join(', ');
-            mergeWarnings.push(
-                `${gLabel} ${evName}: ${names} (${minor.count}명)이 '${minRoundLabel}'로 되어있으나 ` +
-                `다수(${majority.count}명)가 '${majRoundLabel}'이므로 '${majRoundLabel}'로 병합했습니다.`
-            );
-            console.log(`[조편성 라운드 병합] ${gLabel} ${evName}: ${minRoundLabel}(${minor.count}명) → ${majRoundLabel}(${majority.count}명)으로 병합 [${names}]`);
-        }
-    }
-
-    return { eventGroups, totalRows: dataRows.length, sheetName, mergeWarnings };
-}
-
-// PREVIEW API — Compare Excel data with DB, show changes
-app.post('/api/heat-assignment/preview', upload.single('file'), async (req, res) => {
-    if (!isAdminKey(req.body.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    if (!req.file) return res.status(400).json({ error: '파일이 필요합니다.' });
-    const competition_id = parseInt(req.body.competition_id);
-    if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
-
-    try {
-        const { eventGroups, totalRows, sheetName, mergeWarnings } = parseHeatAssignmentExcel(req.file.path);
-        
-        const preview = [];
-        
-        for (const [eventKey, group] of eventGroups) {
-            const { gender, eventName, round, entries } = group;
-            
-            // Find matching event in DB
-            let dbEvent = null;
-            if (gender && gender !== '?') {
-                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL', competition_id, eventName, gender, round);
-            }
-            // Fallback: try without round_type match (some events only have final)
-            if (!dbEvent && gender && gender !== '?') {
-                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL', competition_id, eventName, gender);
-            }
-            // Fallback: try without parent_event_id constraint (for child events like [10종] 100m, [7종] 100mH)
-            if (!dbEvent && gender && gender !== '?') {
-                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=?', competition_id, eventName, gender, round);
-            }
-            if (!dbEvent && gender && gender !== '?') {
-                dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=?', competition_id, eventName, gender);
-            }
-            // Fuzzy fallback: LIKE match for partial names (e.g., "10K 국제 남자부" → DB has "10K국제남자부")
-            if (!dbEvent && gender && gender !== '?') {
-                const stripped = eventName.replace(/\s+/g, '%');
-                dbEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND REPLACE(REPLACE(name,' ',''),' ','') = ? AND gender=?", competition_id, eventName.replace(/\s+/g, ''), gender);
-                if (!dbEvent) {
-                    dbEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND name LIKE ? AND gender=?", competition_id, `%${stripped}%`, gender);
-                }
-            }
-            
-            if (!dbEvent) {
-                // Try to find similar events as suggestions
-                let suggestions = [];
-                if (gender && gender !== '?') {
-                    const sugRows = await db.all('SELECT id, name, round_type FROM event WHERE competition_id=? AND gender=? AND parent_event_id IS NULL ORDER BY name', competition_id, gender);
-                    suggestions = sugRows.map(e => ({ id: e.id, name: e.name, round: e.round_type }));
-                }
-                preview.push({
-                    eventKey, eventName, gender, round,
-                    status: 'not_found',
-                    message: `종목을 찾을 수 없습니다: ${gender === 'M' ? '남' : gender === 'F' ? '여' : '혼성'} ${eventName}`,
-                    excelEntries: entries.length,
-                    dbEntries: 0,
-                    hasResults: false,
-                    changes: [],
-                    suggestions,
-                    canAutoCreate: true
-                });
-                continue;
-            }
-
-            // Get current DB heats + entries for this event
-            const dbHeats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', dbEvent.id);
-            const dbHeatEntries = [];
-            for (const h of dbHeats) {
-                const hEntries = await db.all(`
-                    SELECT he.id, he.heat_id, he.lane_number, he.event_entry_id, he.sub_group,
-                           a.name, a.bib_number, a.team, a.id as athlete_id
-                    FROM heat_entry he
-                    JOIN event_entry ee ON ee.id = he.event_entry_id
-                    JOIN athlete a ON a.id = ee.athlete_id
-                    WHERE he.heat_id = ?
-                    ORDER BY he.lane_number
-                `, h.id);
-                dbHeatEntries.push({ heat: h, entries: hEntries });
-            }
-
-            // Check if results exist for this event
-            let resultCount = 0;
-            let heightAttemptCount = 0;
-            for (const h of dbHeats) {
-                const rRow = await db.get('SELECT COUNT(*) as c FROM result WHERE heat_id=?', h.id);
-                resultCount += (rRow && rRow.c) || 0;
-                const haRow = await db.get('SELECT COUNT(*) as c FROM height_attempt WHERE heat_id=?', h.id);
-                heightAttemptCount += (haRow && haRow.c) || 0;
-            }
-            const hasResults = resultCount > 0 || heightAttemptCount > 0;
-
-            // Build flat DB state for comparison: use Set of full key (handles duplicate lanes in field events)
-            const dbFullKeys = new Set();
-            for (const hd of dbHeatEntries) {
-                for (const e of hd.entries) {
-                    dbFullKeys.add(`${hd.heat.heat_number}|${e.lane_number}|${e.sub_group || ''}|${e.name}|${e.team}`);
-                }
-            }
-
-            // Keep Excel original lane numbers (e.g., A:1-18, B:19-26) — no renumbering
-
-            // Build flat Excel state
-            const excelFullKeys = new Set();
-            for (const e of entries) {
-                excelFullKeys.add(`${e.heat}|${e.lane || 0}|${e.group || ''}|${e.name}|${e.team}`);
-            }
-
-            // Compare: detect changes
-            const changes = [];
-            let isIdentical = true;
-
-            // Check if heats/athletes differ
-            const dbAthleteSet = new Set();
-            for (const hd of dbHeatEntries) {
-                for (const e of hd.entries) {
-                    dbAthleteSet.add(`${e.name}|${e.team}`);
-                }
-            }
-            const excelAthleteSet = new Set();
-            for (const e of entries) {
-                excelAthleteSet.add(`${e.name}|${e.team}`);
-            }
-
-            // Athletes added (in Excel but not in DB)
-            for (const ea of excelAthleteSet) {
-                if (!dbAthleteSet.has(ea)) {
-                    isIdentical = false;
-                    const [name, team] = ea.split('|');
-                    changes.push({ type: 'added', name, team });
-                }
-            }
-
-            // Athletes removed (in DB but not in Excel)
-            for (const da of dbAthleteSet) {
-                if (!excelAthleteSet.has(da)) {
-                    isIdentical = false;
-                    const [name, team] = da.split('|');
-                    changes.push({ type: 'removed', name, team });
-                }
-            }
-
-            // Heat count changed
-            const excelHeatNums = new Set(entries.map(e => e.heat));
-            if (excelHeatNums.size !== dbHeats.length) {
-                isIdentical = false;
-                changes.push({ type: 'heat_count', from: dbHeats.length, to: excelHeatNums.size });
-            }
-
-            // Lane reassignment check (if same athletes but different lanes/heats)
-            if (changes.length === 0) {
-                if (dbFullKeys.size !== excelFullKeys.size) {
-                    isIdentical = false;
-                    changes.push({ type: 'lane_change', detail: `레인/순서 변경됨` });
-                } else {
-                    for (const key of excelFullKeys) {
-                        if (!dbFullKeys.has(key)) {
-                            isIdentical = false;
-                            changes.push({ type: 'lane_change', detail: `레인/순서 변경됨` });
-                            break;
-                        }
-                    }
-                }
-            }
-
-            const genderLabel = gender === 'M' ? '남' : gender === 'F' ? '여' : '혼성';
-            const roundLabel = round === 'preliminary' ? '예선' : round === 'semifinal' ? '준결승' : '결승';
-
-            preview.push({
-                eventKey,
-                eventName: `${genderLabel} ${eventName}`,
-                eventId: dbEvent.id,
-                gender, round,
-                status: isIdentical ? 'unchanged' : (hasResults ? 'has_results' : 'changed'),
-                message: isIdentical
-                    ? '변경없음 (스킵)'
-                    : hasResults
-                        ? `기록이 있습니다 (${resultCount + heightAttemptCount}건). 변경 시 기록이 초기화됩니다.`
-                        : '변경 적용 가능',
-                excelEntries: entries.length,
-                dbEntries: dbHeatEntries.reduce((sum, hd) => sum + hd.entries.length, 0),
-                hasResults,
-                resultCount: resultCount + heightAttemptCount,
-                changes,
-                excelHeats: excelHeatNums.size
-            });
-        }
-
-        // Sort: changed first, then has_results, then unchanged, then not_found
-        const statusOrder = { changed: 0, has_results: 1, unchanged: 2, not_found: 3 };
-        preview.sort((a, b) => (statusOrder[a.status] || 9) - (statusOrder[b.status] || 9));
-
-        res.json({
-            success: true,
-            sheetName,
-            totalRows,
-            eventCount: eventGroups.size,
-            preview,
-            mergeWarnings: mergeWarnings || []
-        });
-    } catch (err) {
-        console.error('[Heat Assignment Preview Error]', err);
-        res.status(500).json({ error: '조편성 미리보기 오류: ' + err.message });
-    }
-});
-
-// /api/heat-assignment/create-events removed — was never called from any client.
-// The /api/heat-assignment/apply route now creates missing events inline as part of its transaction.
-
-// APPLY API — Actually update heats based on Excel
-app.post('/api/heat-assignment/apply', upload.single('file'), async (req, res) => {
-    if (!isAdminKey(req.body.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    if (!req.file) return res.status(400).json({ error: '파일이 필요합니다.' });
-    const competition_id = parseInt(req.body.competition_id);
-    if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
-
-    // forceEventIds: comma-separated event IDs to force update even if results exist
-    const forceEventIds = new Set(
-        (req.body.force_event_ids || '').split(',').map(s => parseInt(s.trim())).filter(n => n > 0)
-    );
-
-    try {
-        // Validate competition exists
-        const comp = await db.get('SELECT id FROM competition WHERE id=?', competition_id);
-        if (!comp) {
-            return res.status(400).json({ success: false, error: `대회를 찾을 수 없습니다 (ID: ${competition_id})` });
-        }
-
-        const { eventGroups, mergeWarnings } = parseHeatAssignmentExcel(req.file.path);
-        const stats = { updated: 0, skipped: 0, skippedUnchanged: 0, skippedHasResults: 0, notFound: 0, athletesAdded: 0, entriesCreated: 0 };
-
-        await db.transaction(async () => {
-            // Cache all athletes for this competition by name+team
-            const athleteCache = new Map();
-            (await db.all('SELECT * FROM athlete WHERE competition_id=?', competition_id))
-                .forEach(a => {
-                    athleteCache.set(`${a.name}|${a.team}|${a.gender}`, a);
-                    // Also index by name+team (without gender) for flexible matching
-                    if (!athleteCache.has(`${a.name}|${a.team}`)) {
-                        athleteCache.set(`${a.name}|${a.team}`, a);
-                    }
-                });
-            
-            // (PG 호환: sync prepare 제거. 아래 루프에서 await db.run 사용.)
-
-            // Build scoreboard_key: look up federation gender labels for this competition
-            const comp = await db.get('SELECT * FROM competition WHERE id=?', competition_id);
-            let _sbLabelM = '', _sbLabelF = '', _sbLabelX = '';
-            if (comp && comp.federation) {
-                const fed = await db.get('SELECT * FROM federation_list WHERE code=?', comp.federation);
-                if (fed) {
-                    _sbLabelM = fed.gender_label_m || '';
-                    _sbLabelF = fed.gender_label_f || '';
-                    _sbLabelX = fed.gender_label_x || '';
-                }
-            }
-            function buildScoreboardKey(gender, eventName, roundType, heatNum, totalHeats) {
-                const gLabel = gender === 'M' ? _sbLabelM : gender === 'F' ? _sbLabelF : _sbLabelX;
-                if (!gLabel) return null; // no federation label configured → skip
-                const rLabel = { preliminary: '예선', semifinal: '준결승', final: '결승' }[roundType] || roundType;
-                // 결승이 1조뿐이면 "조" 생략 (예: "남자실업부 100m 결승")
-                if (roundType === 'final' && totalHeats === 1) {
-                    return `${gLabel} ${eventName} ${rLabel}`;
-                }
-                return `${gLabel} ${eventName} ${rLabel} ${heatNum}조`;
-            }
-            for (const [eventKey, group] of eventGroups) {
-                const { gender, eventName, round, entries } = group;
-
-                // Keep Excel original lane numbers — no renumbering
-                // Excel has sequential lane numbers across groups (A:1-18, B:19-26) and that's correct
-
-                // Find matching event in DB
-                let dbEvent = null;
-                if (gender && gender !== '?') {
-                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=? AND parent_event_id IS NULL', competition_id, eventName, gender, round);
-                }
-                if (!dbEvent && gender && gender !== '?') {
-                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND parent_event_id IS NULL', competition_id, eventName, gender);
-                }
-                // Fallback: try without parent_event_id constraint (for child events like [10종] 100m, [7종] 100mH)
-                if (!dbEvent && gender && gender !== '?') {
-                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=? AND round_type=?', competition_id, eventName, gender, round);
-                }
-                if (!dbEvent && gender && gender !== '?') {
-                    dbEvent = await db.get('SELECT * FROM event WHERE competition_id=? AND name=? AND gender=?', competition_id, eventName, gender);
-                }
-
-                if (!dbEvent) {
-                    stats.notFound++;
-                    continue;
-                }
-
-                // Get current DB state
-                const dbHeats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', dbEvent.id);
-                
-                // Check if data is identical (quick comparison: same athlete count and names)
-                const dbAthleteNames = new Set();
-                for (const h of dbHeats) {
-                    const hEntries = await db.all(`
-                        SELECT a.name, a.team FROM heat_entry he
-                        JOIN event_entry ee ON ee.id = he.event_entry_id
-                        JOIN athlete a ON a.id = ee.athlete_id
-                        WHERE he.heat_id = ?
-                    `, h.id);
-                    hEntries.forEach(e => dbAthleteNames.add(`${e.name}|${e.team}`));
-                }
-                const excelAthleteNames = new Set(entries.map(e => `${e.name}|${e.team}`));
-                
-                // Deep comparison: check if heats, lanes, and athletes are all the same
-                let isIdentical = dbAthleteNames.size === excelAthleteNames.size;
-                if (isIdentical) {
-                    for (const n of excelAthleteNames) {
-                        if (!dbAthleteNames.has(n)) { isIdentical = false; break; }
-                    }
-                }
-                if (isIdentical) {
-                    // Also check lane assignments (use Set of full keys to handle duplicate lanes in field events)
-                    const dbStateSet = new Set();
-                    for (const h of dbHeats) {
-                        const hEntries = await db.all(`
-                            SELECT he.lane_number, he.sub_group, a.name, a.team
-                            FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-                            JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-                        `, h.id);
-                        hEntries.forEach(e => dbStateSet.add(`${h.heat_number}|${e.lane_number}|${e.sub_group || ''}|${e.name}|${e.team}`));
-                    }
-                    const excelStateSet = new Set();
-                    for (const e of entries) {
-                        excelStateSet.add(`${e.heat}|${e.lane || 0}|${e.group || ''}|${e.name}|${e.team}`);
-                    }
-                    if (dbStateSet.size !== excelStateSet.size) {
-                        isIdentical = false;
-                    } else {
-                        for (const key of excelStateSet) {
-                            if (!dbStateSet.has(key)) { isIdentical = false; break; }
-                        }
-                    }
-                }
-
-                if (isIdentical) {
-                    stats.skippedUnchanged++;
-                    stats.skipped++;
-                    continue;
-                }
-
-                // Check if results exist
-                let resultCount = 0;
-                for (const h of dbHeats) {
-                    const rRow = await db.get('SELECT COUNT(*) as c FROM result WHERE heat_id=?', h.id);
-                    resultCount += (rRow && rRow.c) || 0;
-                    const haRow = await db.get('SELECT COUNT(*) as c FROM height_attempt WHERE heat_id=?', h.id);
-                    resultCount += (haRow && haRow.c) || 0;
-                }
-
-                if (resultCount > 0 && !forceEventIds.has(dbEvent.id)) {
-                    stats.skippedHasResults++;
-                    stats.skipped++;
-                    continue;
-                }
-
-                // === APPLY CHANGES ===
-                
-                // 1. Delete existing heats, heat_entries, results for this event
-                for (const h of dbHeats) {
-                    await db.run('DELETE FROM result WHERE heat_id=?', h.id);
-                    await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id);
-                    await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id);
-                }
-                await db.run('DELETE FROM heat WHERE event_id=?', dbEvent.id);
-
-                // 2. For relay events: also clear old event_entries (team "athletes")
-                const isRelay = dbEvent.category === 'relay';
-
-                // 3. Group entries by heat number
-                const heatGroups = new Map();
-                for (const e of entries) {
-                    if (!heatGroups.has(e.heat)) heatGroups.set(e.heat, []);
-                    heatGroups.get(e.heat).push(e);
-                }
-
-                // 3.5 Re-number heats sequentially (1,2,3...) if Excel has gaps or wrong numbers
-                // e.g., Excel says heat=3 but only 1 heat exists → renumber to 1
-                const sortedHeatKeys = [...heatGroups.keys()].sort((a, b) => a - b);
-                const heatRenumberMap = new Map();
-                sortedHeatKeys.forEach((origNum, idx) => {
-                    heatRenumberMap.set(origNum, idx + 1);
-                });
-
-                // 4. Create heats and heat entries
-                for (const [origHeatNum, heatEntries] of [...heatGroups].sort((a, b) => a[0] - b[0])) {
-                    const heatNum = heatRenumberMap.get(origHeatNum);
-                    const sbKey = buildScoreboardKey(gender, eventName, round, heatNum, heatGroups.size);
-                    const heatRow = await db.run('INSERT INTO heat (event_id,heat_number,scoreboard_key) VALUES (?,?,?)', dbEvent.id, heatNum, sbKey);
-                    const heatId = heatRow.lastInsertRowid;
-
-                    for (const entry of heatEntries) {
-                        // Find or create athlete
-                        let athlete = null;
-                        const effGender = gender === 'X' ? 'M' : gender;
-
-                        if (isRelay) {
-                            // Relay: entry.name is team name
-                            athlete = athleteCache.get(`${entry.name}|${entry.name}|${effGender}`)
-                                || athleteCache.get(`${entry.name}|${entry.team}|${effGender}`)
-                                || athleteCache.get(`${entry.name}|${entry.name}`);
-                        } else {
-                            // Individual: find by name+team+gender, then name+team
-                            athlete = athleteCache.get(`${entry.name}|${entry.team}|${effGender}`)
-                                || athleteCache.get(`${entry.name}|${entry.team}`);
-                            
-                            // Also try finding by bib number if provided
-                            // IMPORTANT: Only match if name also matches to prevent wrong athlete assignment
-                            if (!athlete && entry.bib) {
-                                const byBib = await db.get('SELECT * FROM athlete WHERE competition_id=? AND bib_number=?', competition_id, String(entry.bib));
-                                if (byBib && byBib.name === entry.name) {
-                                    athlete = byBib;
-                                }
-                                // If bib matches but name differs, it's a different athlete — do NOT use
-                            }
-                        }
-
-                        if (!athlete) {
-                            // Create new athlete — bib only if provided and not already taken
-                            let newBib = entry.bib ? String(entry.bib) : null;
-                            if (newBib) {
-                                const bibTaken = await db.get('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=?', competition_id, newBib, effGender || 'M');
-                                if (bibTaken) newBib = null; // bib already used by another athlete of same gender, leave NULL
-                            }
-                            // Do NOT auto-assign bib — keep NULL if not provided
-                            const bc = ''; // barcode managed by user
-                            const newGender = isRelay ? (effGender || 'M') : (effGender || 'M');
-                            const r = await db.run('INSERT INTO athlete (competition_id,name,bib_number,team,barcode,gender) VALUES (?,?,?,?,?,?)', competition_id, entry.name, newBib, entry.team || entry.name, bc, newGender);
-                            athlete = { id: r.lastInsertRowid, name: entry.name, bib_number: newBib, team: entry.team || entry.name, gender: newGender };
-                            athleteCache.set(`${entry.name}|${entry.team || entry.name}|${newGender}`, athlete);
-                            athleteCache.set(`${entry.name}|${entry.team || entry.name}`, athlete);
-                            stats.athletesAdded++;
-                        } else if (entry.bib && !athlete.bib_number) {
-                            // Athlete exists but has no bib — update from heat assignment data
-                            const bibStr = String(entry.bib);
-                            const bibTaken = await db.get('SELECT id FROM athlete WHERE competition_id=? AND bib_number=? AND gender=? AND id!=?', competition_id, bibStr, athlete.gender || effGender || 'M', athlete.id);
-                            if (!bibTaken) {
-                                await db.run('UPDATE athlete SET bib_number=? WHERE id=? AND bib_number IS NULL', bibStr, athlete.id);
-                                athlete.bib_number = bibStr;
-                            }
-                        }
-
-                        // Ensure event_entry exists
-                        const entryResult = await db.run("INSERT OR IGNORE INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", dbEvent.id, athlete.id);
-                        let eventEntryId = entryResult.changes > 0 ? entryResult.lastInsertRowid : null;
-                        if (!eventEntryId) {
-                            const existing = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', dbEvent.id, athlete.id);
-                            eventEntryId = existing ? existing.id : null;
-                        }
-
-                        if (eventEntryId) {
-                            // Prevent UNIQUE constraint violation: skip if this event_entry is already in this heat
-                            const alreadyInHeat = await db.get('SELECT id FROM heat_entry WHERE heat_id=? AND event_entry_id=?', heatId, eventEntryId);
-                            if (!alreadyInHeat) {
-                                await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number,sub_group) VALUES (?,?,?,?)', heatId, eventEntryId, entry.lane, entry.group || null);
-                                stats.entriesCreated++;
-                            }
-                        }
-                    }
-                }
-
-                // 5. COMBINED (10종/7종) SUB-EVENT FIX:
-                //    When applying heat assignment to a combined sub-event (e.g., [7종] 100mH),
-                //    the Excel may only contain athletes competing on a specific day.
-                //    But ALL parent event athletes must be in each sub-event's heat_entry
-                //    for call-room and result entry to work properly.
-                //    → After processing Excel entries, add missing parent athletes to the heat.
-                if (dbEvent.parent_event_id) {
-                    const parentEvt = await db.get('SELECT * FROM event WHERE id=?', dbEvent.parent_event_id);
-                    if (parentEvt && parentEvt.category === 'combined') {
-                        // Get all athletes from parent event_entry
-                        const parentEntries = await db.all('SELECT ee.athlete_id, a.name, a.team FROM event_entry ee JOIN athlete a ON ee.athlete_id=a.id WHERE ee.event_id=?', dbEvent.parent_event_id);
-                        
-                        // Get currently assigned heat(s) for this sub-event
-                        const currentHeats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', dbEvent.id);
-                        // Use the first heat (combined sub-events typically have 1 heat)
-                        let targetHeatId = currentHeats.length > 0 ? currentHeats[0].id : null;
-                        if (!targetHeatId) {
-                            // No heat exists yet → create one
-                            const sbKey = buildScoreboardKey(gender, eventName, round, 1, 1);
-                            const hRow = await db.run('INSERT INTO heat (event_id,heat_number,scoreboard_key) VALUES (?,?,?)', dbEvent.id, 1, sbKey);
-                            targetHeatId = hRow.lastInsertRowid;
-                        }
-                        
-                        // Find max lane number currently in this heat
-                        const maxLane = await db.get('SELECT MAX(lane_number) as m FROM heat_entry WHERE heat_id=?', targetHeatId);
-                        let nextLane = (maxLane && maxLane.m) ? maxLane.m + 1 : 1;
-                        
-                        for (const pEntry of parentEntries) {
-                            // Ensure event_entry exists in sub-event
-                            const eeResult = await db.run("INSERT OR IGNORE INTO event_entry (event_id,athlete_id,status) VALUES (?,?,'registered')", dbEvent.id, pEntry.athlete_id);
-                            let eeId = eeResult.changes > 0 ? eeResult.lastInsertRowid : null;
-                            if (!eeId) {
-                                const existing = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', dbEvent.id, pEntry.athlete_id);
-                                eeId = existing ? existing.id : null;
-                            }
-                            if (!eeId) continue;
-                            
-                            // Check if already in any heat for this sub-event
-                            const alreadyAssigned = await db.get('SELECT he.id FROM heat_entry he JOIN heat h ON he.heat_id=h.id WHERE h.event_id=? AND he.event_entry_id=?', dbEvent.id, eeId);
-                            
-                            if (!alreadyAssigned) {
-                                // Not in heat → add to the target heat with next available lane
-                                await db.run('INSERT INTO heat_entry (heat_id,event_entry_id,lane_number,sub_group) VALUES (?,?,?,?)', targetHeatId, eeId, nextLane++, null);
-                                stats.entriesCreated++;
-                            }
-                        }
-                    }
-                }
-
-                // 5b. Handle athletes no longer in this event's heats
-                //    We do NOT delete event_entry rows — they may be referenced by
-                //    combined_score, qualification_selection, relay_member, or sub-events.
-                //    The athlete is simply not in any heat anymore (effectively DNS).
-                //    This is safe because heat_entry rows were already deleted above.
-
-                // 6. RELAY: Auto-populate relay_member from team roster
-                //    For each relay team entry, find athletes belonging to the same team
-                //    and add them as relay_member if not already present.
-                if (isRelay) {
-                    const allEventEntries = await db.all('SELECT ee.id, ee.athlete_id, a.name, a.team FROM event_entry ee JOIN athlete a ON ee.athlete_id=a.id WHERE ee.event_id=?', dbEvent.id);
-                    
-                    for (const teamEntry of allEventEntries) {
-                        // "Team athlete" records: name === team (e.g., name='광주광역시청', team='광주광역시청')
-                        if (teamEntry.name !== teamEntry.team) continue;
-                        
-                        // Check if this team entry already has relay members
-                        const existingMembersRow = await db.get('SELECT COUNT(*) AS c FROM relay_member WHERE event_entry_id=?', teamEntry.id);
-                        const existingMembers = (existingMembersRow && existingMembersRow.c) || 0;
-                        if (existingMembers > 0) continue; // Already has members, skip
-                        
-                        // Find individual athletes from the same team
-                        const effGender = gender === 'X' ? null : gender; // For mixed, accept any gender
-                        let teamAthletes;
-                        if (effGender) {
-                            teamAthletes = await db.all('SELECT id, name, team FROM athlete WHERE competition_id=? AND team=? AND gender=? AND name!=team ORDER BY id', competition_id, teamEntry.team, effGender);
-                        } else {
-                            teamAthletes = await db.all('SELECT id, name, team FROM athlete WHERE competition_id=? AND team=? AND name!=team ORDER BY id', competition_id, teamEntry.team);
-                        }
-                        
-                        // Add each athlete as relay member
-                        let legOrder = 1;
-                        for (const ath of teamAthletes) {
-                            await db.run('INSERT OR IGNORE INTO relay_member (event_entry_id, athlete_id, leg_order) VALUES (?,?,?)', teamEntry.id, ath.id, legOrder++);
-                        }
-                        if (teamAthletes.length > 0) {
-                            stats.relayMembersAdded = (stats.relayMembersAdded || 0) + teamAthletes.length;
-                        }
-                    }
-                }
-
-                stats.updated++;
-            }
-        })();
-
-        opLog(`조편성 업로드: ${stats.updated}개 종목 변경, ${stats.skippedUnchanged}개 스킵(변경없음), ${stats.skippedHasResults}개 스킵(기록있음)${stats.relayMembersAdded ? ', 릴레이 멤버 ' + stats.relayMembersAdded + '명 자동등록' : ''}`, 'import', 'admin', competition_id);
-        res.json({ success: true, message: '조편성 적용 완료', stats, mergeWarnings: mergeWarnings || [] });
-    } catch (err) {
-        console.error('[Heat Assignment Apply Error]', err);
-        res.status(500).json({ error: '조편성 적용 오류: ' + err.message });
-    }
-});
+// Helper: 엑셀 종목명 → 저장 표기 (lib/eventName.js 로 이동)
+// ============================================================
+// 조편성 업로드 (preview/apply) — lib/routes/heat_assignment.js 로 추출 (2026-09)
+// ============================================================
+require('./lib/routes/heat_assignment')(app, { db, upload, isAdminKey, opLog, normalizeDivisionLabel, resolveFedEventName, guessEventCategory, autoLinkDisplayTimetable: (...a) => autoLinkDisplayTimetable(...a) });   // display 모듈이 뒤에서 마운트되므로 늦게 바인딩
 
 // ============================================================
 // PACING LIGHT API (페이싱 라이트)
@@ -6231,474 +4161,19 @@ app.get('/api/public/pacing', async (req, res) => {
 });
 
 // ============================================================
-// 전광판 (Scoreboard) .lif File Import
+// 계측 결과 가져오기 (.lif / 기록 xlsx / .txt) — lib/routes/timing_import.js 로 추출 (2026-09)
 // ============================================================
+const _timingImport = require('./lib/routes/timing_import')(app, { db, upload, isAdminKey, opLog, broadcastSSE, audit, getResultsRoutes: () => _resultsRoutes });
+const { normBib: _recxNormBib, divToken: _recxDivToken, genderOf: _recxGenderOf, round: _recxRound } = _timingImport.recx;
 
-/**
- * Parse a .lif file buffer (UTF-16 LE with BOM).
- * Returns { header: { status, competitionNum, eventNum, eventName, scoreboardKey, timestamp }, rows: [...] }
- */
-function parseLifBuffer(buffer) {
-    // Decode UTF-16 LE (may have BOM)
-    let text;
-    if (buffer[0] === 0xFF && buffer[1] === 0xFE) {
-        text = buffer.toString('utf16le'); // Node handles BOM
-    } else {
-        // Try utf16le anyway
-        text = buffer.toString('utf16le');
-    }
-    // Remove BOM if present
-    text = text.replace(/^\uFEFF/, '');
-    
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length === 0) throw new Error('.lif 파일이 비어 있습니다.');
-
-    // Parse header line
-    const hParts = lines[0].split(',');
-    const status = (hParts[0] || '').trim();
-    const competitionNum = (hParts[1] || '').trim();
-    const eventNum = (hParts[2] || '').trim();
-    const rawEventName = (hParts[3] || '').trim();
-    const timestamp = (hParts[hParts.length - 1] || '').trim();
-
-    // Extract wind speed from header
-    // When wind data is present: hParts[4] = wind value (e.g., "-1.8"), hParts[5] contains "m/s"
-    // When no wind: hParts[4] is empty or does not pair with "m/s" in hParts[5]
-    let wind = null;
-    const windCandidate = (hParts[4] || '').trim();
-    const windUnit = (hParts[5] || '').trim();
-    if (windCandidate && windUnit && /m\/s/i.test(windUnit)) {
-        const parsedWind = parseFloat(windCandidate);
-        if (!isNaN(parsedWind)) {
-            wind = parsedWind;
-        }
-    }
-
-    // Extract scoreboard_key from event name
-    // e.g., "남초부 60m 예선 1조 (2+4)" → scoreboard_key = "남초부 60m 예선 1조"
-    // e.g., "여중부 100mH 결승" → scoreboard_key = "여중부 100mH 결승" (keep as-is for finals)
-    let scoreboardKey = rawEventName
-        .replace(/\s*\([\d\+]+\)\s*$/, '')   // Remove "(2+4)" suffix
-        .trim();
-
-    // If no "N조" suffix and it's NOT a final, append "1조" for matching
-    // Finals with single heat should NOT have "1조" appended
-    if (!/\d+조$/.test(scoreboardKey)) {
-        // Check if this looks like a final (contains 결승)
-        if (!/결승/.test(scoreboardKey)) {
-            scoreboardKey += ' 1조';
-        }
-    }
-
-    // Parse data rows
-    const rows = [];
-    for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(',');
-        const rank = (parts[0] || '').trim();
-        const bib = (parts[1] || '').trim();
-        const lane = (parts[2] || '').trim();
-        // parts[3] is usually empty
-        const name = (parts[4] || '').trim();
-        const team = (parts[5] || '').trim();
-        const rawTime = (parts[6] || '').trim();
-        // parts[7] empty
-        const timeDiffOrAbs = (parts[8] || '').trim(); // For rank=1 this is absolute time, for others it's diff
-
-        // Determine row type
-        if (!rank && !bib && lane) {
-            // Empty lane
-            rows.push({ type: 'empty', lane: parseInt(lane) });
-        } else if (rank === 'DNS') {
-            rows.push({ type: 'DNS', bib, lane: parseInt(lane), name, team });
-        } else if (rank === 'DNF') {
-            rows.push({ type: 'DNF', bib, lane: parseInt(lane), name, team });
-        } else if (rank === 'DQ') {
-            rows.push({ type: 'DQ', bib, lane: parseInt(lane), name, team });
-        } else if (rank && bib && name) {
-            // Valid result row
-            const time = parseFloat(rawTime);
-            rows.push({
-                type: 'result',
-                rank: parseInt(rank),
-                bib,
-                lane: parseInt(lane),
-                name,
-                team,
-                time: isNaN(time) ? null : time,
-            });
-        }
-    }
-
-    return {
-        header: {
-            status,
-            competitionNum,
-            eventNum,
-            eventName: rawEventName,
-            scoreboardKey,
-            timestamp,
-            wind,
-        },
-        rows,
-    };
-}
-
-/**
- * POST /api/scoreboard/preview
- * Upload .lif files and preview parsed data + matching status
- */
-app.post('/api/scoreboard/preview', upload.array('files', 50), async (req, res) => {
-    try {
-        const { competition_id } = req.body;
-        if (!competition_id) return res.status(400).json({ error: 'competition_id 필수' });
-
-        const files = req.files;
-        if (!files || files.length === 0) return res.status(400).json({ error: '.lif 파일을 선택해 주세요.' });
-
-        const results = [];
-        for (const file of files) {
-            try {
-                const buf = fs.readFileSync(file.path);
-                const parsed = parseLifBuffer(buf);
-
-                // Try to find matching heat by scoreboard_key
-                let heat = await db.get(`
-                    SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
-                    FROM heat h
-                    JOIN event e ON e.id = h.event_id
-                    WHERE h.scoreboard_key = ? AND e.competition_id = ?
-                `, parsed.header.scoreboardKey, competition_id);
-
-                // Fallback: try joint_scoreboard_key
-                if (!heat) {
-                    const jg = await db.get('SELECT * FROM joint_group WHERE joint_scoreboard_key = ?', parsed.header.scoreboardKey);
-                    if (jg) {
-                        const members = await db.all('SELECT event_id FROM joint_group_member WHERE joint_group_id = ?', jg.id);
-                        for (const m of members) {
-                            const mh = await db.get(`SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
-                                FROM heat h JOIN event e ON e.id=h.event_id WHERE h.event_id=? AND e.competition_id=? ORDER BY h.heat_number LIMIT 1`, m.event_id, competition_id);
-                            if (mh) { heat = mh; break; }
-                        }
-                        // If not in this competition, use any
-                        if (!heat) {
-                            for (const m of members) {
-                                const mh = await db.get(`SELECT h.*, e.name as event_name, e.gender, e.round_type, e.competition_id as comp_id
-                                    FROM heat h JOIN event e ON e.id=h.event_id WHERE h.event_id=? ORDER BY h.heat_number LIMIT 1`, m.event_id);
-                                if (mh) { heat = mh; break; }
-                            }
-                        }
-                    }
-                }
-
-                let matchStatus = 'not_found';
-                let heatInfo = null;
-                let athleteMatches = [];
-
-                if (heat) {
-                    matchStatus = 'matched';
-                    heatInfo = {
-                        heat_id: heat.id,
-                        event_name: heat.event_name,
-                        gender: heat.gender,
-                        round_type: heat.round_type,
-                        heat_number: heat.heat_number,
-                        scoreboard_key: heat.scoreboard_key,
-                    };
-
-                    // Check athlete matches for each result row
-                    const heatEntries = await db.all(`
-                        SELECT he.*, ee.athlete_id, ee.id as event_entry_id,
-                               a.name, a.bib_number, a.team
-                        FROM heat_entry he
-                        JOIN event_entry ee ON ee.id = he.event_entry_id
-                        JOIN athlete a ON a.id = ee.athlete_id
-                        WHERE he.heat_id = ?
-                    `, heat.id);
-
-                    for (const row of parsed.rows) {
-                        if (row.type === 'empty') continue;
-
-                        let matchedEntry = null;
-                        let matchMethod = 'none';
-
-                        // 1. Match by BIB number
-                        if (row.bib) {
-                            matchedEntry = heatEntries.find(e => e.bib_number === row.bib);
-                            if (matchedEntry) matchMethod = 'bib';
-                        }
-
-                        // 2. Fallback: match by lane number
-                        if (!matchedEntry && row.lane) {
-                            matchedEntry = heatEntries.find(e => e.lane_number === row.lane);
-                            if (matchedEntry) matchMethod = 'lane';
-                        }
-
-                        // 3. Fallback: match by name
-                        if (!matchedEntry && row.name) {
-                            matchedEntry = heatEntries.find(e => e.name === row.name);
-                            if (matchedEntry) matchMethod = 'name';
-                        }
-
-                        athleteMatches.push({
-                            lif_rank: row.rank || row.type,
-                            lif_bib: row.bib,
-                            lif_lane: row.lane,
-                            lif_name: row.name,
-                            lif_team: row.team,
-                            lif_time: row.time,
-                            lif_type: row.type,
-                            db_name: matchedEntry?.name || null,
-                            db_bib: matchedEntry?.bib_number || null,
-                            db_team: matchedEntry?.team || null,
-                            db_lane: matchedEntry?.lane_number || null,
-                            event_entry_id: matchedEntry?.event_entry_id || null,
-                            heat_entry_id: matchedEntry?.id || null,
-                            match_method: matchMethod,
-                        });
-                    }
-                }
-
-                results.push({
-                    filename: file.originalname,
-                    header: parsed.header,
-                    rows: parsed.rows,
-                    matchStatus,
-                    heatInfo,
-                    athleteMatches,
-                });
-            } catch (parseErr) {
-                results.push({
-                    filename: file.originalname,
-                    error: parseErr.message,
-                    matchStatus: 'error',
-                });
-            } finally {
-                // Cleanup temp file
-                try { fs.unlinkSync(file.path); } catch(e) {}
-            }
-        }
-
-        res.json({ success: true, results });
-    } catch (err) {
-        console.error('[Scoreboard Preview]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-/**
- * POST /api/scoreboard/import
- * Apply .lif results to DB — upsert results for matched athletes
- */
-app.post('/api/scoreboard/import', upload.array('files', 50), async (req, res) => {
-    try {
-        const { competition_id } = req.body;
-        if (!competition_id) return res.status(400).json({ error: 'competition_id 필수' });
-
-        const files = req.files;
-        if (!files || files.length === 0) return res.status(400).json({ error: '.lif 파일을 선택해 주세요.' });
-
-        const importResults = [];
-        const importTx = db.transaction(async () => {
-            for (const file of files) {
-                let buf, parsed;
-                try {
-                    buf = fs.readFileSync(file.path);
-                    parsed = parseLifBuffer(buf);
-                } catch (parseErr) {
-                    importResults.push({ filename: file.originalname, error: parseErr.message, imported: 0, skipped: 0 });
-                    try { fs.unlinkSync(file.path); } catch(e) {}
-                    continue;
-                }
-
-                // Find heat — first try direct scoreboard_key match
-                let heat = await db.get(`
-                    SELECT h.*, e.name as event_name, e.gender, e.round_type, e.category,
-                           e.competition_id as comp_id, e.id as event_id
-                    FROM heat h
-                    JOIN event e ON e.id = h.event_id
-                    WHERE h.scoreboard_key = ? AND e.competition_id = ?
-                `, parsed.header.scoreboardKey, competition_id);
-
-                // If no direct match, try joint_scoreboard_key — find all heats in this joint group
-                let jointHeats = [];
-                if (!heat) {
-                    const jointGroup = await db.get(`SELECT jg.* FROM joint_group jg WHERE jg.joint_scoreboard_key = ?`, parsed.header.scoreboardKey);
-                    if (jointGroup) {
-                        const members = await db.all(`SELECT jgm.event_id FROM joint_group_member jgm WHERE jgm.joint_group_id = ?`, jointGroup.id);
-                        for (const m of members) {
-                            const mHeat = await db.get(`
-                                SELECT h.*, e.name as event_name, e.gender, e.round_type, e.category,
-                                       e.competition_id as comp_id, e.id as event_id
-                                FROM heat h JOIN event e ON e.id = h.event_id
-                                WHERE h.event_id = ? ORDER BY h.heat_number LIMIT 1
-                            `, m.event_id);
-                            if (mHeat) jointHeats.push(mHeat);
-                        }
-                        // Use the first heat that belongs to this competition as primary
-                        heat = jointHeats.find(h => String(h.comp_id) === String(competition_id));
-                        if (!heat && jointHeats.length > 0) heat = jointHeats[0];
-                    }
-                }
-
-                if (!heat) {
-                    importResults.push({
-                        filename: file.originalname,
-                        scoreboardKey: parsed.header.scoreboardKey,
-                        error: `매칭되는 조를 찾을 수 없습니다: "${parsed.header.scoreboardKey}"`,
-                        imported: 0, skipped: 0,
-                    });
-                    try { fs.unlinkSync(file.path); } catch(e) {}
-                    continue;
-                }
-
-                // Get heat entries — include all joint heat entries for athlete matching
-                let heatEntries = await db.all(`
-                    SELECT he.*, ee.athlete_id, ee.id as event_entry_id,
-                           a.name, a.bib_number, a.team, ? as source_heat_id
-                    FROM heat_entry he
-                    JOIN event_entry ee ON ee.id = he.event_entry_id
-                    JOIN athlete a ON a.id = ee.athlete_id
-                    WHERE he.heat_id = ?
-                `, heat.id, heat.id);
-
-                // If joint import, also gather entries from other joint heats
-                if (jointHeats.length > 1) {
-                    for (const jh of jointHeats) {
-                        if (jh.id === heat.id) continue;
-                        const jhEntries = await db.all(`
-                            SELECT he.*, ee.athlete_id, ee.id as event_entry_id,
-                                   a.name, a.bib_number, a.team, ? as source_heat_id
-                            FROM heat_entry he
-                            JOIN event_entry ee ON ee.id = he.event_entry_id
-                            JOIN athlete a ON a.id = ee.athlete_id
-                            WHERE he.heat_id = ?
-                        `, jh.id, jh.id);
-                        heatEntries = heatEntries.concat(jhEntries);
-                    }
-                }
-
-                let imported = 0, skipped = 0;
-                const details = [];
-
-                for (const row of parsed.rows) {
-                    if (row.type === 'empty') continue;
-
-                    // Match athlete
-                    let matchedEntry = null;
-
-                    // 1. BIB match
-                    if (row.bib) {
-                        matchedEntry = heatEntries.find(e => e.bib_number === row.bib);
-                    }
-                    // 2. Lane match
-                    if (!matchedEntry && row.lane) {
-                        matchedEntry = heatEntries.find(e => e.lane_number === row.lane);
-                    }
-                    // 3. Name match
-                    if (!matchedEntry && row.name) {
-                        matchedEntry = heatEntries.find(e => e.name === row.name);
-                    }
-
-                    if (!matchedEntry) {
-                        skipped++;
-                        details.push({ name: row.name, bib: row.bib, reason: '매칭 실패' });
-                        continue;
-                    }
-
-                    const heat_id = matchedEntry.source_heat_id || heat.id;
-                    const event_entry_id = matchedEntry.event_entry_id;
-
-                    // Determine status_code and time
-                    let time_seconds = null;
-                    let status_code = '';
-
-                    if (row.type === 'DNS') {
-                        status_code = 'DNS';
-                    } else if (row.type === 'DNF') {
-                        status_code = 'DNF';
-                    } else if (row.type === 'DQ') {
-                        status_code = 'DQ';
-                    } else if (row.type === 'result') {
-                        time_seconds = row.time;
-                    }
-
-                    // Upsert result
-                    const existing = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND attempt_number IS NULL ORDER BY id DESC LIMIT 1', heat_id, event_entry_id);
-
-                    if (existing) {
-                        const _nowFR2 = db.isAsync ? 'NOW()' : "datetime('now')";
-                        await db.run(`UPDATE result SET time_seconds=?,status_code=?,remark=?,updated_at=${_nowFR2} WHERE id=?`, time_seconds, status_code, '', existing.id);
-                        const upd = await db.get('SELECT * FROM result WHERE id=?', existing.id);
-                        audit('result', existing.id, 'UPDATE', existing, upd, 'scoreboard', null, req);
-                    } else {
-                        const info = await db.run('INSERT INTO result (heat_id,event_entry_id,time_seconds,status_code,remark) VALUES (?,?,?,?,?)', heat_id, event_entry_id, time_seconds, status_code, '');
-                        const ins = await db.get('SELECT * FROM result WHERE id=?', info.lastInsertRowid);
-                        audit('result', ins.id, 'INSERT', null, ins, 'scoreboard', null, req);
-                    }
-
-                    imported++;
-                    details.push({ name: row.name, bib: row.bib, time: time_seconds, status: status_code || 'OK' });
-                }
-
-                // Auto-save wind from .lif to heat (if wind data present)
-                let windImported = null;
-                if (parsed.header.wind != null) {
-                    const windStr = parsed.header.wind.toFixed(1) + ' m/s';
-                    // Apply wind to all joint heats
-                    const windHeats = jointHeats.length > 0 ? jointHeats : [heat];
-                    for (const wh of windHeats) {
-                        await db.run('UPDATE heat SET wind=? WHERE id=?', windStr, wh.id);
-                        broadcastSSE('wind_update', { heat_id: wh.id, wind: windStr });
-                    }
-                    windImported = windStr;
-                }
-
-                // Auto-update event round_status to in_progress (all joint events)
-                const statusHeats = jointHeats.length > 0 ? jointHeats : [heat];
-                for (const sh of statusHeats) {
-                    const event = await db.get('SELECT * FROM event WHERE id=?', sh.event_id);
-                    if (event && (event.round_status === 'heats_generated' || event.round_status === 'created') && imported > 0) {
-                        await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", event.id);
-                        broadcastSSE('event_status_changed', { event_id: event.id, round_status: 'in_progress' });
-                    }
-                }
-
-                // Broadcast result updates (all joint heats)
-                if (imported > 0) {
-                    for (const rh of (jointHeats.length > 0 ? jointHeats : [heat])) {
-                        broadcastSSE('result_update', { heat_id: rh.id, bulk: true });
-                    }
-                }
-
-                const gL = heat.gender === 'M' ? '남자' : heat.gender === 'F' ? '여자' : '혼성';
-                const rL = { preliminary: '예선', semifinal: '준결승', final: '결승' }[heat.round_type] || heat.round_type;
-                const windLog = windImported != null ? ` / 풍속 ${windImported}` : '';
-                opLog(`전광판 연동: ${heat.event_name} ${rL} ${gL} ${heat.heat_number}조 — ${imported}건 입력${windLog}`, 'record', 'scoreboard', competition_id);
-
-                importResults.push({
-                    filename: file.originalname,
-                    scoreboardKey: parsed.header.scoreboardKey,
-                    heatInfo: {
-                        heat_id: heat.id,
-                        event_name: heat.event_name,
-                        heat_number: heat.heat_number,
-                    },
-                    wind: windImported,
-                    imported,
-                    skipped,
-                    details,
-                });
-
-                try { fs.unlinkSync(file.path); } catch(e) {}
-            }
-        });
-
-        await importTx();
-        res.json({ success: true, results: importResults });
-    } catch (err) {
-        console.error('[Scoreboard Import]', err);
-        res.status(500).json({ error: err.message });
-    }
+// ============================================================
+// 필드 수기 기록카드 가져오기 — lib/routes/field_card_import.js
+// (투척·수평도약·수직도약 카드 → AI 전사 xlsx → 시기별 저장. 정규화 헬퍼는 기록 엑셀 가져오기와 공유)
+// ============================================================
+require('./lib/routes/field_card_import')(app, {
+    db, isAdminKey, isOperationKey, opLog, broadcastSSE, audit, upload, requireAdminAfterCompEnd,
+    recx: { normBib: _recxNormBib, divToken: _recxDivToken, genderOf: _recxGenderOf, round: _recxRound },
+    runRecordCompareHook: _resultsRoutes && _resultsRoutes.runRecordCompareHook,
 });
 
 /**
@@ -6914,256 +4389,8 @@ require('./lib/routes/event_links')(app, { db, isOperationKey, opLog, generateJo
 // ============================================================
 // JOINT GROUP 라우트들은 lib/routes/joint_groups.js 로 추출됨
 require('./lib/routes/joint_groups')(app, { db, isOperationKey, opLog });
-app.get('/api/admin/event-duplicates', async (req, res) => {
-    if (!isAdminKey(req.query.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const competition_id = parseInt(req.query.competition_id);
-    if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
-    try {
-        const events = await db.all(
-            'SELECT id, name, category, gender, round_type, round_status FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY id',
-            competition_id
-        );
-        const _norm = s => String(s || '').replace(/[,\s]+/g, '').toLowerCase();
-        const groups = new Map();
-        for (const e of events) {
-            const k = `${_norm(e.name)}|${e.gender}|${e.round_type || ''}`;
-            if (!groups.has(k)) groups.set(k, []);
-            groups.get(k).push(e);
-        }
-        const result = [];
-        for (const [key, list] of groups) {
-            if (list.length < 2) continue;
-            // For each event in the group, count attached data
-            const enriched = [];
-            for (const e of list) {
-                const heatCnt = (await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', e.id))?.c || 0;
-                const entryCnt = (await db.get('SELECT COUNT(*) AS c FROM event_entry WHERE event_id=?', e.id))?.c || 0;
-                const resultCnt = (await db.get('SELECT COUNT(*) AS c FROM result r JOIN heat h ON h.id=r.heat_id WHERE h.event_id=?', e.id))?.c || 0;
-                const inJointCnt = (await db.get('SELECT COUNT(*) AS c FROM joint_group_member WHERE event_id=?', e.id))?.c || 0;
-                enriched.push({ ...e, heat_count: heatCnt, entry_count: entryCnt, result_count: resultCnt, joint_member_count: inJointCnt });
-            }
-            // Sort: prefer the one with most data (results > entries > heats > lowest id)
-            enriched.sort((a, b) =>
-                (b.result_count - a.result_count) ||
-                (b.entry_count - a.entry_count) ||
-                (b.heat_count - a.heat_count) ||
-                (a.id - b.id)
-            );
-            result.push({
-                key,
-                name: list[0].name,
-                gender: list[0].gender,
-                round_type: list[0].round_type,
-                keep: enriched[0],         // 보존 대상
-                duplicates: enriched.slice(1),  // 삭제 대상 (사용자 확인 필요)
-            });
-        }
-        res.json({ competition_id, duplicate_groups: result, total_dup_events: result.reduce((s,g) => s + g.duplicates.length, 0) });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-/**
- * POST /api/admin/event-duplicates/cleanup
- * Body: { admin_key, competition_id, dry_run?: bool, only_empty?: bool }
- * 중복 종목 중 데이터가 비어있는 것(empty) 또는 명시적으로 안전한 것만 삭제.
- * dry_run=true 이면 삭제는 안 하고 어떤 것들이 삭제될지 목록만 반환.
- * only_empty=true (default) 이면 entry/result/heat이 전부 0인 중복만 삭제 (가장 안전).
- */
-app.post('/api/admin/event-duplicates/cleanup', async (req, res) => {
-    if (!isAdminKey(req.body.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const competition_id = parseInt(req.body.competition_id);
-    if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
-    const dryRun = req.body.dry_run === true || req.body.dry_run === 'true';
-    const onlyEmpty = req.body.only_empty !== false && req.body.only_empty !== 'false';  // default true
-
-    try {
-        // Reuse diagnostic
-        const events = await db.all(
-            'SELECT id, name, category, gender, round_type FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY id',
-            competition_id
-        );
-        const _norm = s => String(s || '').replace(/[,\s]+/g, '').toLowerCase();
-        const groups = new Map();
-        for (const e of events) {
-            const k = `${_norm(e.name)}|${e.gender}|${e.round_type || ''}`;
-            if (!groups.has(k)) groups.set(k, []);
-            groups.get(k).push(e);
-        }
-
-        const candidates = [];   // events that will/would be deleted
-        const skipped = [];      // events skipped (had data, not safe to delete)
-
-        for (const [key, list] of groups) {
-            if (list.length < 2) continue;
-            const enriched = [];
-            for (const e of list) {
-                const heatCnt = (await db.get('SELECT COUNT(*) AS c FROM heat WHERE event_id=?', e.id))?.c || 0;
-                const entryCnt = (await db.get('SELECT COUNT(*) AS c FROM event_entry WHERE event_id=?', e.id))?.c || 0;
-                const resultCnt = (await db.get('SELECT COUNT(*) AS c FROM result r JOIN heat h ON h.id=r.heat_id WHERE h.event_id=?', e.id))?.c || 0;
-                enriched.push({ ...e, heat_count: heatCnt, entry_count: entryCnt, result_count: resultCnt });
-            }
-            // keep best (most data); delete others IF empty
-            enriched.sort((a, b) =>
-                (b.result_count - a.result_count) ||
-                (b.entry_count - a.entry_count) ||
-                (b.heat_count - a.heat_count) ||
-                (a.id - b.id)
-            );
-            const keep = enriched[0];
-            for (const dup of enriched.slice(1)) {
-                const isEmpty = dup.heat_count === 0 && dup.entry_count === 0 && dup.result_count === 0;
-                if (onlyEmpty && !isEmpty) {
-                    skipped.push({ ...dup, reason: 'has data (heat/entry/result)' });
-                    continue;
-                }
-                candidates.push({ ...dup, keep_id: keep.id });
-            }
-        }
-
-        if (dryRun) {
-            return res.json({ dry_run: true, would_delete: candidates, skipped, total: candidates.length });
-        }
-
-        // Actually delete
-        let deleted = 0;
-        await db.transaction(async () => {
-            for (const c of candidates) {
-                // Re-point joint_group_member rows to the kept event (de-dupe later if same group)
-                await db.run('UPDATE OR IGNORE joint_group_member SET event_id=? WHERE event_id=?', c.keep_id, c.id);
-                // Remove the joint_group_member rows that conflicted (same group already had keep_id)
-                await db.run('DELETE FROM joint_group_member WHERE event_id=?', c.id);
-                // Clean up child rows (these should all be 0 if onlyEmpty=true, defensive otherwise)
-                const heats = await db.all('SELECT id FROM heat WHERE event_id=?', c.id);
-                for (const h of heats) {
-                    await db.run('DELETE FROM result WHERE heat_id=?', h.id);
-                    await db.run('DELETE FROM height_attempt WHERE heat_id=?', h.id);
-                    await db.run('DELETE FROM heat_entry WHERE heat_id=?', h.id);
-                }
-                await db.run('DELETE FROM heat WHERE event_id=?', c.id);
-                await db.run('DELETE FROM event_entry WHERE event_id=?', c.id);
-                await db.run('DELETE FROM event_link WHERE event_id_a=? OR event_id_b=?', c.id, c.id);
-                await db.run('DELETE FROM event WHERE id=?', c.id);
-                deleted++;
-            }
-        })();
-        opLog(`중복 종목 정리: ${deleted}개 종목 삭제 (대회 ${competition_id})`, 'admin', 'admin');
-        res.json({ dry_run: false, deleted, skipped, total: candidates.length });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-/**
- * POST /api/admin/event-duplicates/merge
- * Body: { admin_key, keep_id, dup_id, dry_run? }
- *
- * 두 중복 종목을 안전하게 병합. dup 의 모든 데이터를 keep 으로 이전한 뒤 dup 삭제.
- *
- * 처리 순서 (트랜잭션):
- *  1. dup 의 entry 중, 같은 athlete 가 keep 에도 있는지 검사 — 있으면 dup 측만 삭제 (keep 우선)
- *  2. dup 의 남은 entry 를 keep 으로 event_id 이전 (UPDATE event_entry SET event_id=keep_id)
- *  3. dup 의 heat 을 keep 으로 이전. heat_number 충돌하면 keep 의 max+1 로 재번호
- *  4. dup 의 joint_group_member 를 keep 으로 이전, UNIQUE 충돌 시 dup 측 삭제
- *  5. dup 의 event_link / event_video 등 메타 정리
- *  6. dup 삭제
- *
- * dry_run=true 면 어떤 일이 일어날지 카운트만 반환 (실제 변경 X).
- */
-app.post('/api/admin/event-duplicates/merge', async (req, res) => {
-    if (!isAdminKey(req.body.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-    const keep_id = parseInt(req.body.keep_id);
-    const dup_id = parseInt(req.body.dup_id);
-    const dryRun = req.body.dry_run === true || req.body.dry_run === 'true';
-    if (!keep_id || !dup_id) return res.status(400).json({ error: 'keep_id, dup_id 필요' });
-    if (keep_id === dup_id) return res.status(400).json({ error: 'keep_id 와 dup_id 가 동일' });
-
-    try {
-        const keep = await db.get('SELECT * FROM event WHERE id=?', keep_id);
-        const dup = await db.get('SELECT * FROM event WHERE id=?', dup_id);
-        if (!keep || !dup) return res.status(404).json({ error: '종목을 찾을 수 없음' });
-        if (keep.competition_id !== dup.competition_id) return res.status(400).json({ error: '두 종목이 다른 대회에 속함 — 머지 불가' });
-
-        // 1. dup 의 entry 분석
-        const keepAthIds = new Set((await db.all('SELECT athlete_id FROM event_entry WHERE event_id=?', keep_id)).map(r => r.athlete_id));
-        const dupEntries = await db.all('SELECT id, athlete_id FROM event_entry WHERE event_id=?', dup_id);
-        const conflictEntries = dupEntries.filter(e => keepAthIds.has(e.athlete_id));
-        const moveEntries = dupEntries.filter(e => !keepAthIds.has(e.athlete_id));
-
-        // 2. heat 분석
-        const dupHeats = await db.all('SELECT id, heat_number FROM heat WHERE event_id=?', dup_id);
-        const keepMaxHeat = (await db.get('SELECT COALESCE(MAX(heat_number), 0) AS m FROM heat WHERE event_id=?', keep_id))?.m || 0;
-
-        // 3. joint_group_member 분석
-        const dupJgm = await db.all('SELECT id, joint_group_id FROM joint_group_member WHERE event_id=?', dup_id);
-        const keepJgmGroups = new Set((await db.all('SELECT joint_group_id FROM joint_group_member WHERE event_id=?', keep_id)).map(r => r.joint_group_id));
-        const conflictJgm = dupJgm.filter(j => keepJgmGroups.has(j.joint_group_id));
-        const moveJgm = dupJgm.filter(j => !keepJgmGroups.has(j.joint_group_id));
-
-        const summary = {
-            keep_id, dup_id,
-            keep_event: { name: keep.name, gender: keep.gender, round_type: keep.round_type },
-            dup_event:  { name: dup.name,  gender: dup.gender,  round_type: dup.round_type },
-            entries: {
-                will_move:   moveEntries.length,
-                will_delete: conflictEntries.length,
-                reason: conflictEntries.length > 0 ? '같은 선수가 양쪽에 있으면 keep 측을 유지하고 dup 측 삭제' : ''
-            },
-            heats: {
-                will_move: dupHeats.length,
-                renumber_from: keepMaxHeat + 1,
-                detail: dupHeats.map(h => ({ old_heat_number: h.heat_number, new_heat_number: keepMaxHeat + h.heat_number }))
-            },
-            joint_members: {
-                will_move:   moveJgm.length,
-                will_delete: conflictJgm.length,
-            }
-        };
-
-        if (dryRun) return res.json({ dry_run: true, summary });
-
-        await db.transaction(async () => {
-            // 1) 충돌 entry → 삭제 (keep 측 유지)
-            for (const e of conflictEntries) {
-                // heat_entry 도 함께 정리
-                await db.run('DELETE FROM heat_entry WHERE event_entry_id=?', e.id);
-                await db.run('DELETE FROM event_entry WHERE id=?', e.id);
-            }
-            // 2) 남은 entry → keep 으로 이전
-            for (const e of moveEntries) {
-                await db.run('UPDATE event_entry SET event_id=? WHERE id=?', keep_id, e.id);
-            }
-            // 3) heat → 재번호 후 keep 으로 이전. heat_entry 는 heat_id 만 따라가므로 자동 OK.
-            for (const h of dupHeats) {
-                const newNum = keepMaxHeat + h.heat_number;
-                await db.run('UPDATE heat SET event_id=?, heat_number=? WHERE id=?', keep_id, newNum, h.id);
-            }
-            // 4) joint_group_member → 이전 / 충돌 시 삭제
-            for (const j of moveJgm) {
-                await db.run('UPDATE joint_group_member SET event_id=? WHERE id=?', keep_id, j.id);
-            }
-            for (const j of conflictJgm) {
-                await db.run('DELETE FROM joint_group_member WHERE id=?', j.id);
-            }
-            // 5) event_link 의 dup 측 참조를 keep 으로 (있으면)
-            await db.run('UPDATE OR IGNORE event_link SET event_id_a=? WHERE event_id_a=?', keep_id, dup_id);
-            await db.run('UPDATE OR IGNORE event_link SET event_id_b=? WHERE event_id_b=?', keep_id, dup_id);
-            await db.run('DELETE FROM event_link WHERE event_id_a=? OR event_id_b=?', dup_id, dup_id);
-            // 6) timetable 의 dup 참조도 keep 으로 (모두 끊지 말고 이전)
-            await db.run('UPDATE timetable SET event_id=? WHERE event_id=?', keep_id, dup_id);
-            // 7) dup 본체 삭제
-            await db.run('DELETE FROM event WHERE id=?', dup_id);
-        })();
-
-        opLog(`중복 종목 병합: dup=${dup_id} → keep=${keep_id} (${keep.name} ${keep.gender})`, 'admin', 'admin', keep.competition_id);
-        res.json({ dry_run: false, merged: true, summary });
-    } catch (e) {
-        console.error('[event-duplicates/merge] failed:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
+// ── 종목 중복 진단·정리·병합 → lib/routes/event_duplicates.js (2026-09-22) ──
+const _event_duplicatesRoutes = require('./lib/routes/event_duplicates')(app, { db, isAdminKey, opLog });
 /**
  * GET /api/scoreboard/joint?event_id=N
  * 합동 종목 전광판 데이터 — 연결된 모든 대회의 선수를 합쳐서 반환
@@ -7345,22 +4572,18 @@ app.get('/api/result-image/:eventId', async (req, res) => {
                     time: r?.time_seconds || r?.distance_meters || null,
                     status_code: r?.status_code || null,
                 };
-            }).sort((a, b) => {
-                const aS = a.status_code === 'DNS' || a.status_code === 'DNF' || a.status_code === 'DQ';
-                const bS = b.status_code === 'DNS' || b.status_code === 'DNF' || b.status_code === 'DQ';
-                if (aS && !bS) return 1;
-                if (!aS && bS) return -1;
+            }).sort(PaceRanking.withStatusLast((a, b) => {
                 if (a.time == null && b.time == null) return (a.lane_number || 0) - (b.lane_number || 0);
                 if (a.time == null) return 1;
                 if (b.time == null) return -1;
                 return isTrack ? a.time - b.time : b.time - a.time;
-            });
+            }));
 
             let rank = 0;
             for (const e of sortedEntries) {
                 if (y + ROW_H > H - 80) break; // Leave room for footer
 
-                const special = e.status_code === 'DNS' || e.status_code === 'DNF' || e.status_code === 'DQ';
+                const special = PaceRanking.isStatus(e.status_code);
                 if (!special && e.time != null) rank++;
 
                 // Alternating row bg
@@ -7470,7 +4693,7 @@ app.use((err, req, res, next) => {
     //   42P01 undefined_table, 42703 undefined_column (스키마 버그 — 운영 중에 발생하면 안 됨)
     const pgCode = err && err.code;
     if (pgCode === '22P02' || pgCode === '22003' || pgCode === '22001') {
-        console.warn('[PG input invalid]', req.method, req.originalUrl, err.message);
+        console.warn('[PG input invalid]', req.method, String(req.originalUrl || '').split('?')[0], err.message);   // 쿼리(키)는 로그에 남기지 않는다
         return res.status(400).json({ error: '잘못된 입력 형식입니다.', detail: err.message });
     }
     if (pgCode === '23505') {
@@ -7521,9 +4744,16 @@ if (!db.isAsync) {
         event_id INTEGER PRIMARY KEY,
         records TEXT DEFAULT '{}'
     )`); } catch(e) {}
+    // 종합기록지 설정(심판장·기록원·표시 항목) — 예전엔 화면에서 보내도 저장 열이 없어 버려졌다 (2026-09)
+    try { db.exec(`ALTER TABLE doc_template ADD COLUMN comprehensive TEXT DEFAULT '{}'`); } catch(e) {}
 }
 
 const DOC_DEFAULTS = {
+    comprehensive: {
+        chief_judge: '', chief_recorder: '', logo_left: '', logo_right: '',
+        show_name: true, show_team: true, show_record: true, show_wind: true, show_bib: true, show_remark: true,
+        cat_track: true, cat_field: true, cat_relay: true, cat_road: true, cat_combined: true,
+    },
     ad_card: {
         cards_per_page: 4, bib_font_size: 48, name_font_size: 16,
         band_color_mode: 'gender_auto', custom_band_color: '#2d9d78', logo_url: '',
@@ -7556,7 +4786,8 @@ async function getDocTemplate(compId) {
             result = {
                 ad_card: { ...DOC_DEFAULTS.ad_card, ...JSON.parse(row.ad_card || '{}') },
                 start_list: { ...DOC_DEFAULTS.start_list, ...JSON.parse(row.start_list || '{}') },
-                result_sheet: { ...DOC_DEFAULTS.result_sheet, ...JSON.parse(row.result_sheet || '{}') }
+                result_sheet: { ...DOC_DEFAULTS.result_sheet, ...JSON.parse(row.result_sheet || '{}') },
+                comprehensive: { ...DOC_DEFAULTS.comprehensive, ...JSON.parse(row.comprehensive || '{}') }
             };
         } catch(e) { result = JSON.parse(JSON.stringify(DOC_DEFAULTS)); }
     }
@@ -7589,7 +4820,8 @@ app.post('/api/doc-templates', async (req, res) => {
     const ad = JSON.stringify(templates.ad_card || {});
     const sl = JSON.stringify(templates.start_list || {});
     const rs = JSON.stringify(templates.result_sheet || {});
-    await db.run('INSERT INTO doc_template (competition_id, ad_card, start_list, result_sheet) VALUES (?, ?, ?, ?) ON CONFLICT(competition_id) DO UPDATE SET ad_card=excluded.ad_card, start_list=excluded.start_list, result_sheet=excluded.result_sheet', competition_id, ad, sl, rs);
+    const cp = JSON.stringify(templates.comprehensive || {});
+    await db.run('INSERT INTO doc_template (competition_id, ad_card, start_list, result_sheet, comprehensive) VALUES (?, ?, ?, ?, ?) ON CONFLICT(competition_id) DO UPDATE SET ad_card=excluded.ad_card, start_list=excluded.start_list, result_sheet=excluded.result_sheet, comprehensive=excluded.comprehensive', competition_id, ad, sl, rs, cp);
     opLog('문서 양식 설정 업데이트', 'admin', 'admin', competition_id);
     res.json({ success: true });
 });
@@ -7751,8 +4983,20 @@ app.get('/api/event-records/lookup', async (req, res) => {
             return null;
         }
 
-        const out = { national: null, division: null, competition: null };
+        const out = { national: null, division: null, competition: null, world: null, area: null, games: null };
+        // 종목별 기록(event_records JSON) — 국제대회 동기화가 넣는 WR/AR/GR (event_id 가 오면)
+        if (req.query.event_id) {
+            try { const row = await db.get('SELECT records FROM event_records WHERE event_id=?', parseInt(req.query.event_id, 10)); const j = row ? JSON.parse(row.records || '{}') : {}; for (const k of ['world', 'area', 'games']) if (j && j[k] && j[k].record_value) out[k] = j[k]; } catch (e) {}
+        }
         out.national = await _findOne('national', `AND division_code IS NULL AND series_id IS NULL`, []);
+        // 이 대회에서 세운 한국기록이면(국제대회 동기화 자동 승인) 종전 기록을 함께 — 칩은 채워서, 탭하면 '종전 3:22.87 · 2025'
+        if (out.national && req.query.event_id) {
+            try {
+                const ev = await db.get('SELECT competition_id FROM event WHERE id=?', parseInt(req.query.event_id, 10));
+                const lg = ev ? await db.get("SELECT previous_value, review_note FROM record_breaking_log WHERE record_type='national' AND status='approved' AND previous_record_id=? AND competition_id=? ORDER BY id DESC LIMIT 1", out.national.id, ev.competition_id) : null;
+                if (lg) { const m = String(lg.review_note || '').match(/종전 (.+)$/); out.national = { ...out.national, new_here: true, prev: m ? m[1] : (lg.previous_value || '') }; }
+            } catch (e) {}
+        }
         if (divCode) {
             out.division = await _findOne('division', `AND division_code=? AND series_id IS NULL`, [divCode]);
         }
@@ -7770,285 +5014,8 @@ app.get('/api/event-records/lookup', async (req, res) => {
 app.get('/api/event-records/:eventId', _bundleGet);
 app.post('/api/event-records', _bundlePost);
 
-// ============================================================
-// [Admin] 시리즈 ↔ 대회 종목 매칭 진단 / 일괄 정규화
-// ============================================================
-// GET /api/admin/event-record-matching?competition_id=123
-//   → 해당 대회의 모든 종목에 대해 NR/DR/CR 매칭 상태를 진단하여 반환.
-//      각 종목별로 { event_name, gender, division_code, series_id,
-//                  national: 'exact'|'normalized'|'none',
-//                  division: ...,
-//                  competition: ...,
-//                  hints: [{ type, db_event_name, suggestion }] }
-//      운영자가 어떤 종목에 NR/CR 매칭이 안 되는지 한눈에 보고 정규화 버튼으로 일괄 정리.
-app.get('/api/admin/event-record-matching', async (req, res) => {
-    try {
-        const compId = parseInt(req.query.competition_id, 10);
-        if (!compId) return res.status(400).json({ error: 'competition_id 필수' });
-        const comp = await db.get('SELECT * FROM competition WHERE id=?', compId);
-        if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
-
-        const seriesId = comp.series_id || null;
-        // 대회의 모든 종목 (부모 합동/혼성 포함, 세부종목 제외)
-        // ⚠️ event 테이블에는 division_code 컬럼이 없다 (division 만 존재).
-        //    DR 매칭은 event 의 division_code 가 아닌 competition 의 division_type 으로 처리하거나
-        //    종목별 부 구분이 없으면 n/a 처리. 현재는 모든 event 의 division_code 를 null 로 본다.
-        const events = await db.all(
-            `SELECT id, name, gender FROM event WHERE competition_id=? AND parent_event_id IS NULL ORDER BY id`,
-            compId
-        );
-        // division_code 필드를 가상으로 추가 (현재 event 테이블에 컬럼 없으므로 항상 null)
-        for (const e of events) e.division_code = null;
-        // 모든 event_record (approved=1) 를 한 번에 가져와 매칭 (DB hit 최소화)
-        const allRecords = await db.all(
-            `SELECT id, record_type, event_name, gender, division_code, series_id, record_value, holder_name FROM event_record WHERE approved=1`
-        );
-
-        // 헬퍼: 동일 (record_type, gender, divCode, seriesId) 묶음에서 매칭 찾기
-        function findMatch(records, type, gender, divCode, seriesIdArg, eventName) {
-            const targetNorm = normalizeEventNameServer(eventName);
-            // 1) 동일 type/gender/divCode/seriesId 인 후보 좁히기
-            const cands = records.filter(r =>
-                r.record_type === type && r.gender === gender &&
-                ((divCode == null && !r.division_code) || r.division_code === divCode) &&
-                ((seriesIdArg == null && !r.series_id) || r.series_id === seriesIdArg)
-            );
-            if (cands.length === 0) return { status: 'none', record: null };
-            // 2) 정확 매칭
-            const exact = cands.find(r => r.event_name === eventName);
-            if (exact) return { status: 'exact', record: exact };
-            // 3) 정규화 fallback
-            const normMatch = cands.find(r => normalizeEventNameServer(r.event_name || '') === targetNorm);
-            if (normMatch) return { status: 'normalized', record: normMatch };
-            // 매칭 안 됨 → 종목명 유사도로 후보 좁히기 (전체 cands 가 아닌 관련 후보만)
-            //   1) 정규형이 동일하거나
-            //   2) 한쪽이 다른 쪽의 부분문자열이거나
-            //   3) 정규형 기준 substring 관계
-            const targetLower = String(eventName || '').toLowerCase();
-            function _isRelated(c) {
-                const cn = String(c.event_name || '');
-                const cnNorm = normalizeEventNameServer(cn);
-                if (cnNorm === targetNorm) return true;
-                const cnLower = cn.toLowerCase();
-                if (cnLower.includes(targetLower) || targetLower.includes(cnLower)) return true;
-                if (cnNorm && (cnNorm.includes(targetNorm) || targetNorm.includes(cnNorm))) return true;
-                return false;
-            }
-            const related = cands.filter(_isRelated);
-            // 유사 후보만 표시 (관련 없는 전체 후보 노출 X). 관련 후보 0 이면 빈 배열.
-            const finalCands = related.slice(0, 5);
-            return {
-                status: 'none',
-                record: null,
-                candidates: finalCands.map(c => c.event_name),
-                candidate_records: finalCands.map(c => ({ id: c.id, event_name: c.event_name, record_value: c.record_value, holder_name: c.holder_name }))
-            };
-        }
-
-        const results = events.map(evt => {
-            const nr = findMatch(allRecords, 'national', evt.gender, null, null, evt.name);
-            const dr = evt.division_code
-                ? findMatch(allRecords, 'division', evt.gender, evt.division_code, null, evt.name)
-                : { status: 'n/a', record: null };
-            const cr = seriesId
-                ? findMatch(allRecords, 'competition', evt.gender, null, seriesId, evt.name)
-                : { status: 'n/a', record: null };
-            return {
-                event_id: evt.id,
-                event_name: evt.name,
-                event_name_normalized: normalizeEventNameServer(evt.name),
-                gender: evt.gender,
-                division_code: evt.division_code,
-                national:    { status: nr.status, db_event_name: nr.record ? nr.record.event_name : null, record_id: nr.record ? nr.record.id : null, record_value: nr.record ? nr.record.record_value : null, holder_name: nr.record ? nr.record.holder_name : null, candidates: nr.candidates || [], candidate_records: nr.candidate_records || [] },
-                division:    { status: dr.status, db_event_name: dr.record ? dr.record.event_name : null, record_id: dr.record ? dr.record.id : null, record_value: dr.record ? dr.record.record_value : null, holder_name: dr.record ? dr.record.holder_name : null, candidates: dr.candidates || [], candidate_records: dr.candidate_records || [] },
-                competition: { status: cr.status, db_event_name: cr.record ? cr.record.event_name : null, record_id: cr.record ? cr.record.id : null, record_value: cr.record ? cr.record.record_value : null, holder_name: cr.record ? cr.record.holder_name : null, candidates: cr.candidates || [], candidate_records: cr.candidate_records || [] }
-            };
-        });
-
-        // 요약 통계
-        const summary = {
-            total_events: events.length,
-            nr: { exact: 0, normalized: 0, none: 0 },
-            dr: { exact: 0, normalized: 0, none: 0, na: 0 },
-            cr: { exact: 0, normalized: 0, none: 0, na: 0 }
-        };
-        for (const r of results) {
-            if (r.national.status === 'exact') summary.nr.exact++;
-            else if (r.national.status === 'normalized') summary.nr.normalized++;
-            else summary.nr.none++;
-            if (r.division.status === 'exact') summary.dr.exact++;
-            else if (r.division.status === 'normalized') summary.dr.normalized++;
-            else if (r.division.status === 'n/a') summary.dr.na++;
-            else summary.dr.none++;
-            if (r.competition.status === 'exact') summary.cr.exact++;
-            else if (r.competition.status === 'normalized') summary.cr.normalized++;
-            else if (r.competition.status === 'n/a') summary.cr.na++;
-            else summary.cr.none++;
-        }
-
-        res.json({
-            competition: { id: comp.id, name: comp.name, series_id: seriesId },
-            summary,
-            events: results
-        });
-    } catch (err) {
-        console.error('[event-record-matching]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// POST /api/admin/event-records/normalize-all
-// Body: { admin_key, dry_run?: boolean, only_record_ids?: number[] }
-// → event_record.event_name 을 normalizeEventName() 결과로 일괄 업데이트.
-//   dry_run=true 이면 실제 update 는 안 하고 변경 예상만 반환.
-//   only_record_ids 지정 시 그 id 들만 처리.
-//   UNIQUE(record_type, event_name, gender, division_code, series_id) 충돌 시 해당 행은 skip.
-app.post('/api/admin/event-records/normalize-all', async (req, res) => {
-    try {
-        const { admin_key, dry_run, only_record_ids } = req.body || {};
-        if (!isAdminKey(admin_key) && !isOperationKey(admin_key)) {
-            return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-        }
-        const isDry = !!dry_run;
-        const idsFilter = Array.isArray(only_record_ids) && only_record_ids.length > 0
-            ? only_record_ids.map(x => parseInt(x, 10)).filter(Number.isFinite)
-            : null;
-
-        // 후보 가져오기
-        let rows;
-        if (idsFilter && idsFilter.length > 0) {
-            const ph = idsFilter.map(() => '?').join(',');
-            rows = await db.all(`SELECT id, record_type, event_name, gender, division_code, series_id FROM event_record WHERE id IN (${ph})`, ...idsFilter);
-        } else {
-            rows = await db.all(`SELECT id, record_type, event_name, gender, division_code, series_id FROM event_record`);
-        }
-
-        const plan = [];
-        const skipped = [];
-        const updated = [];
-        for (const r of rows) {
-            const norm = normalizeEventNameServer(r.event_name || '');
-            if (!norm || norm === r.event_name) continue;
-            // UNIQUE 충돌 검사: 같은 (record_type, gender, division_code, series_id) 안에 이미 norm 이름이 있는지
-            const conflict = await db.get(
-                `SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=?
-                   AND COALESCE(division_code,'')=COALESCE(?,'')
-                   AND COALESCE(series_id,-1)=COALESCE(?,-1)
-                   AND id<>?`,
-                r.record_type, norm, r.gender, r.division_code || null, r.series_id || null, r.id
-            );
-            if (conflict) {
-                skipped.push({ id: r.id, before: r.event_name, after: norm, reason: 'UNIQUE conflict with id=' + conflict.id });
-                continue;
-            }
-            plan.push({ id: r.id, before: r.event_name, after: norm, record_type: r.record_type, gender: r.gender });
-            if (!isDry) {
-                const _nowFER = db.isAsync ? 'NOW()' : "datetime('now')";
-                await db.run(`UPDATE event_record SET event_name=?, updated_at=${_nowFER} WHERE id=?`, norm, r.id);
-                updated.push(r.id);
-            }
-        }
-
-        if (!isDry) {
-            try { opLog(`[기록정규화] event_record 일괄 정규화: 총 ${plan.length}건 업데이트 / ${skipped.length}건 skip`, 'admin', 'admin', null); } catch(e) {}
-        }
-
-        res.json({
-            dry_run: isDry,
-            total_scanned: rows.length,
-            planned_updates: plan.length,
-            updated_count: updated.length,
-            skipped_count: skipped.length,
-            planned: plan,
-            skipped
-        });
-    } catch (err) {
-        console.error('[event-records/normalize-all]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ──────────────────────────────────────────────────────────────
-// PUT /api/admin/event-records/:id/relink
-// Body: { admin_key, target_event_name }
-// → 시간표↔종목 매칭과 동일한 패턴의 인라인 1:1 매칭.
-//   기존 event_record 의 event_name 을 target_event_name 으로 변경하여
-//   특정 대회 종목(event.name)과 매칭되도록 함.
-//   UNIQUE(record_type, event_name, gender, division_code, series_id) 충돌 시 거부.
-// ──────────────────────────────────────────────────────────────
-app.put('/api/admin/event-records/:id/relink', async (req, res) => {
-    try {
-        const { admin_key, target_event_name } = req.body || {};
-        if (!isAdminKey(admin_key) && !isOperationKey(admin_key)) {
-            return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-        }
-        const id = parseInt(req.params.id, 10);
-        if (!id) return res.status(400).json({ error: 'id 필수' });
-        const target = String(target_event_name || '').trim();
-        if (!target) return res.status(400).json({ error: 'target_event_name 필수' });
-
-        const r = await db.get(`SELECT id, record_type, event_name, gender, division_code, series_id FROM event_record WHERE id=?`, id);
-        if (!r) return res.status(404).json({ error: '기록을 찾을 수 없습니다.' });
-        if (r.event_name === target) {
-            return res.json({ success: true, no_change: true });
-        }
-        // UNIQUE 충돌 검사 (같은 type/gender/divCode/seriesId 안에서)
-        const conflict = await db.get(
-            `SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=?
-               AND COALESCE(division_code,'')=COALESCE(?,'')
-               AND COALESCE(series_id,-1)=COALESCE(?,-1)
-               AND id<>?`,
-            r.record_type, target, r.gender, r.division_code || null, r.series_id || null, r.id
-        );
-        if (conflict) {
-            return res.status(409).json({ error: `이미 같은 슬롯에 '${target}' 기록이 존재합니다 (id=${conflict.id}).` });
-        }
-        const _nowER = db.isAsync ? 'NOW()' : "datetime('now')";
-        await db.run(`UPDATE event_record SET event_name=?, updated_at=${_nowER} WHERE id=?`, target, id);
-        try { opLog(`[기록재연결] event_record id=${id} '${r.event_name}' → '${target}'`, 'admin', 'admin', null); } catch(e) {}
-        res.json({ success: true, before: r.event_name, after: target });
-    } catch (err) {
-        console.error('[event-records/relink]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ──────────────────────────────────────────────────────────────
-// GET /api/admin/event-records/all-candidates
-// Query: ?record_type=national|division|competition&gender=M|F|X&series_id=N(optional)
-// → 같은 슬롯(type+gender+series) 에 등록된 모든 event_record 반환.
-//   사용자가 정규화로도 매칭 안 되는 종목을 강제로 연결할 때 사용.
-//   "있는데 못 불러오는" 케이스 (콤마/공백/표기 차이 등 정규화기가 못 잡는 경우).
-// ──────────────────────────────────────────────────────────────
-app.get('/api/admin/event-records/all-candidates', async (req, res) => {
-    try {
-        const recordType = String(req.query.record_type || '').trim();
-        const gender = String(req.query.gender || '').trim();
-        if (!['national', 'division', 'competition'].includes(recordType)) {
-            return res.status(400).json({ error: 'record_type 은 national/division/competition' });
-        }
-        if (!gender) return res.status(400).json({ error: 'gender 필수' });
-        const seriesId = req.query.series_id ? parseInt(req.query.series_id, 10) : null;
-
-        let sql = `SELECT id, record_type, event_name, gender, division_code, series_id,
-                          record_value, holder_name, holder_team, record_year
-                   FROM event_record
-                   WHERE record_type=? AND gender=? AND approved=1`;
-        const args = [recordType, gender];
-        if (recordType === 'competition' && seriesId) {
-            sql += ` AND series_id=?`;
-            args.push(seriesId);
-        } else if (recordType === 'national') {
-            sql += ` AND series_id IS NULL AND division_code IS NULL`;
-        }
-        sql += ` ORDER BY event_name`;
-        const rows = await db.all(sql, ...args);
-        res.json({ candidates: rows || [] });
-    } catch (err) {
-        console.error('[event-records/all-candidates]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
+// ── 기록표 관리자 진단(매칭 현황·일괄 정규화·재연결·후보) → lib/routes/event_record_admin.js (2026-09-22) ──
+const _event_record_adminRoutes = require('./lib/routes/event_record_admin')(app, { _divisionCodeFor, db, isAdminKey, isOperationKey, normalizeEventNameServer, opLog });
 
 // ============================================================
 // TIMETABLE (시간표) — Excel upload, parse, store, serve
@@ -8130,1838 +5097,25 @@ if (!db.isAsync) try {
 // TIMETABLE — 대회 일정 관리 (Excel 업로드, 자동 매칭, 일별 조회)
 // ============================================================
 // TIMETABLE 라우트들은 lib/routes/timetable.js 로 추출됨
-require('./lib/routes/timetable')(app, { db, isAdminKey, isOperationKey, opLog, upload, XLSX });
+const _timetableRoutes = require('./lib/routes/timetable')(app, { db, isAdminKey, isOperationKey, opLog, upload, XLSX, excelTimeToHHMM, cleanTimetableEventName });
 
 // ============================================================
-// PDF DOCUMENT GENERATION — WA-Style Professional Layout
+// PDF 문서 (스타트리스트·결과지·ID카드) — lib/routes/pdf_documents.js 로 추출 (2026-09)
 // ============================================================
-// Bundled fonts — always available regardless of server OS
-const FONT_PATH_REGULAR = path.join(__dirname, 'public', 'fonts', 'NanumSquare_acR.ttf');
-const FONT_PATH_BOLD = path.join(__dirname, 'public', 'fonts', 'NanumSquare_acB.ttf');
-const FONT_PATH_AUDIOWIDE = path.join(__dirname, 'public', 'fonts', 'Audiowide-Regular.ttf');
-const FONT_AVAILABLE = fs.existsSync(FONT_PATH_REGULAR);
-const AUDIOWIDE_AVAILABLE = fs.existsSync(FONT_PATH_AUDIOWIDE);
-if (!FONT_AVAILABLE) console.warn('[WARN] Korean fonts not found at', FONT_PATH_REGULAR);
-if (!AUDIOWIDE_AVAILABLE) console.warn('[WARN] Audiowide font not found at', FONT_PATH_AUDIOWIDE);
-
-function pdfFont(doc, bold) {
-    if (FONT_AVAILABLE) {
-        doc.font(bold ? FONT_PATH_BOLD : FONT_PATH_REGULAR);
-    }
-    return doc;
-}
-
-// PACE RISE theme colors
-const PR_GREEN = '#2d9d78';
-const PR_GREEN_DARK = '#1e7a5c';
-const PR_GREEN_LIGHT = '#e8f5f0';
-const PR_HEADER_BG = '#2d9d78';
-const PR_TABLE_HEADER_BG = '#2d9d78';
-const PR_TABLE_BORDER = '#d0d0d0';
-
-// Helper: Draw page header with logos, competition name, and venue/dates
-function drawPdfHeader(doc, comp, tpl, pageW, margin) {
-    // querystring(?v=...) 을 제거해 실제 파일 경로만 사용 (DB 에 캐시버스터 URL 이 저장돼 있을 수 있음)
-    const stripQs = (u) => (u || '').split('?')[0];
-    const logoLeft = stripQs(tpl.logo_left);
-    const logoRight = stripQs(tpl.logo_right);
-    const headerTop = margin;
-    const logoMaxH = 50;
-    const logoMaxW = 65;
-    const centerX = pageW / 2;
-
-    // Left logo
-    if (logoLeft) {
-        try {
-            const lPath = path.join(__dirname, 'public', logoLeft);
-            if (fs.existsSync(lPath)) {
-                doc.image(lPath, margin, headerTop, { fit: [logoMaxW, logoMaxH], align: 'center', valign: 'center' });
-            }
-        } catch(e) { console.error('[PDF] Logo error:', e.message); }
-    }
-
-    // Right logo
-    if (logoRight) {
-        try {
-            const rPath = path.join(__dirname, 'public', logoRight);
-            if (fs.existsSync(rPath)) {
-                doc.image(rPath, pageW - margin - logoMaxW, headerTop, { fit: [logoMaxW, logoMaxH], align: 'center', valign: 'center' });
-            }
-        } catch(e) {}
-    }
-
-    // Competition name (center)
-    const textLeft = margin + (logoLeft ? logoMaxW + 10 : 0);
-    const textRight = pageW - margin - (logoRight ? logoMaxW + 10 : 0);
-    const textW = textRight - textLeft;
-
-    pdfFont(doc, true).fontSize(14).fillColor('#000');
-    doc.text(comp ? comp.name : 'PACE RISE Competition', textLeft, headerTop + 4, { width: textW, align: 'center' });
-
-    // Venue
-    if (comp && comp.venue) {
-        pdfFont(doc, false).fontSize(9).fillColor('#333');
-        doc.text(comp.venue, textLeft, headerTop + 24, { width: textW, align: 'center' });
-    }
-
-    // Dates
-    if (comp) {
-        pdfFont(doc, false).fontSize(9).fillColor('#333');
-        const dateStr = comp.end_date && comp.end_date !== comp.start_date
-            ? `${comp.start_date} ~ ${comp.end_date}` : (comp.start_date || '');
-        doc.text(dateStr, textLeft, headerTop + 38, { width: textW, align: 'center' });
-    }
-
-    return headerTop + Math.max(logoMaxH, 52) + 8; // return Y after header
-}
-
-// Helper: Draw WA-style table with green header
-function drawTableHeader(doc, cols, y, tableLeft, tableRight, fontSize) {
-    const rowH = Math.max(22, fontSize + 12);
-    // Green header background
-    doc.save();
-    doc.rect(tableLeft, y, tableRight - tableLeft, rowH).fill(PR_TABLE_HEADER_BG);
-    // Header text
-    pdfFont(doc, true).fontSize(fontSize).fillColor('#fff');
-    for (const col of cols) {
-        doc.text(col.label, col.x, y + (rowH - fontSize) / 2, { width: col.w, align: 'center' });
-    }
-    // Header borders
-    doc.rect(tableLeft, y, tableRight - tableLeft, rowH).stroke(PR_GREEN_DARK);
-    doc.restore();
-    return y + rowH;
-}
-
-// Helper: Draw a table data row with borders
-function drawTableRow(doc, cols, values, y, tableLeft, tableRight, fontSize, opts = {}) {
-    const {
-        boldCols = [],
-        highlight = false,
-        // wrapCols: 자동 줄바꿈을 허용하고 행높이를 콘텐츠에 맞춰 늘릴 컬럼 key 배열.
-        //           기본값 빈 배열 → 기존 동작(고정 높이) 그대로 유지 (하위 호환).
-        wrapCols = [],
-        // alignByCol: 컬럼별 정렬 override. { remark: 'left', ... } 형식.
-        alignByCol = {},
-        // minRowH: 최소 행 높이 (override). 기본 = Math.max(20, fontSize + 10)
-        minRowH = null,
-        // smallFontCols: 특정 컬럼을 더 작은 폰트로 그리고 싶을 때 (예: 단체전 멤버 리스트)
-        //                { remark: 7 } 형식 — 값이 폰트 크기. 미지정 컬럼은 fontSize 사용.
-        smallFontCols = {}
-    } = opts;
-
-    const baseRowH = minRowH != null ? minRowH : Math.max(20, fontSize + 10);
-
-    // ─── 1) wrapCols 가 지정된 경우 콘텐츠에 따라 행 높이 계산 ───
-    // ⚠️ 중요: heightOfString 측정 옵션과 doc.text 그리기 옵션을 100% 동일하게 맞춰야
-    //         마지막 줄이 잘리지 않음 (lineGap 등 누락 주의).
-    let rowH = baseRowH;
-    if (wrapCols.length > 0) {
-        for (let i = 0; i < cols.length; i++) {
-            const col = cols[i];
-            if (!wrapCols.includes(col.key)) continue;
-            const val = String(values[i] || '');
-            if (!val) continue;
-            const colFontSize = smallFontCols[col.key] || fontSize;
-            const isBold = boldCols.includes(col.key);
-            pdfFont(doc, isBold).fontSize(colFontSize);
-            try {
-                // measure 옵션 = draw 옵션 (lineGap 포함, ellipsis 등은 측정에 영향 없음)
-                const measured = doc.heightOfString(val, {
-                    width: col.w - 4,
-                    align: alignByCol[col.key] || 'center',
-                    lineGap: 0.5
-                });
-                // 위/아래 6pt 패딩 + 안전 마진 4pt = 16pt (마지막 줄 descender 보호)
-                const needed = Math.ceil(measured) + 16;
-                if (needed > rowH) rowH = needed;
-            } catch (_) { /* heightOfString 실패시 기본 높이 유지 */ }
-        }
-    }
-
-    if (highlight) {
-        doc.save();
-        doc.rect(tableLeft, y, tableRight - tableLeft, rowH).fill(PR_GREEN_LIGHT);
-        doc.restore();
-    }
-
-    // Row bottom border
-    doc.save();
-    doc.moveTo(tableLeft, y + rowH).lineTo(tableRight, y + rowH).lineWidth(0.5).stroke(PR_TABLE_BORDER);
-    // Left/right borders
-    doc.moveTo(tableLeft, y).lineTo(tableLeft, y + rowH).stroke(PR_TABLE_BORDER);
-    doc.moveTo(tableRight, y).lineTo(tableRight, y + rowH).stroke(PR_TABLE_BORDER);
-    doc.restore();
-
-    // Cell text
-    for (let i = 0; i < cols.length; i++) {
-        const col = cols[i];
-        const val = values[i] || '';
-        const isBold = boldCols.includes(col.key);
-        const colFontSize = smallFontCols[col.key] || fontSize;
-        const align = alignByCol[col.key] || 'center';
-        pdfFont(doc, isBold).fontSize(colFontSize).fillColor('#000');
-
-        let textY;
-        if (wrapCols.includes(col.key)) {
-            // 줄바꿈 셀: 위쪽 6pt 패딩에서 시작.
-            // ⚠️ height 옵션을 지정하지 않음 — rowH는 heightOfString 측정값+16pt 안전마진으로
-            //   이미 충분하므로 height 제약을 주면 오히려 마지막 줄이 잘릴 수 있음.
-            //   (열 너비 부족으로 PDFKit 이 자동 줄바꿈한 라인까지 모두 그려져야 함)
-            textY = y + 6;
-            doc.text(String(val), col.x + 2, textY, {
-                width: col.w - 4,
-                align: align,
-                ellipsis: false,
-                lineGap: 0.5
-            });
-        } else {
-            // 단일 라인 셀: 기존처럼 세로 중앙 정렬 (단, 행높이가 늘어났을 수 있으므로 rowH 기준)
-            textY = y + (rowH - colFontSize) / 2;
-            doc.text(String(val), col.x + 2, textY, {
-                width: col.w - 4,
-                align: align,
-                lineBreak: false   // 단일 라인 — 줄바꿈 차단해서 다음 행과 겹침 방지
-            });
-        }
-    }
-
-    return y + rowH;
-}
-
-// Helper: Draw bottom branding footer (Audiowide font, 3 lines centered)
-function drawBrandingFooter(doc, pageW, pageH, margin) {
-    const contentW = pageW - margin * 2;
-    const lineGap = 2;
-    const line1Size = 10;  // P-R : Node
-    const line2Size = 7;   // PACE RISE | Competition Operating System |
-    const line3Size = 7.5; // pace-rise-node.com
-    const totalH = line1Size + line2Size + line3Size + lineGap * 2 + 6;
-    const footerY = pageH - margin - totalH;
-
-    // Line 1: "P-R : Node" (Audiowide)
-    if (AUDIOWIDE_AVAILABLE) doc.font(FONT_PATH_AUDIOWIDE); else pdfFont(doc, true);
-    doc.fontSize(line1Size).fillColor('#2d9d78');
-    doc.text('P-R : Node', margin, footerY, { width: contentW, align: 'center' });
-
-    // Line 2: "PACE RISE | Competition Operating System |" (Audiowide)
-    const y2 = footerY + line1Size + lineGap;
-    if (AUDIOWIDE_AVAILABLE) doc.font(FONT_PATH_AUDIOWIDE); else pdfFont(doc, false);
-    doc.fontSize(line2Size).fillColor('#777');
-    doc.text('PACE RISE  |  Competition Operating System  |', margin, y2, { width: contentW, align: 'center' });
-
-    // Line 3: "pace-rise-node.com" (Audiowide)
-    const y3 = y2 + line2Size + lineGap;
-    if (AUDIOWIDE_AVAILABLE) doc.font(FONT_PATH_AUDIOWIDE); else pdfFont(doc, false);
-    doc.fontSize(line3Size).fillColor('#2d9d78');
-    doc.text('pace-rise-node.com', margin, y3, { width: contentW, align: 'center' });
-}
-
-// ==================== START LIST PDF ====================
-app.get('/api/documents/start-list/:eventId', async (req, res) => {
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.eventId);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    const comp = await db.get('SELECT * FROM competition WHERE id=?', event.competition_id);
-    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    const tpl = (await getDocTemplate(event.competition_id)).start_list;
-
-    const pageW = 595.28; const pageH = 841.89; const margin = 40;
-    const doc = new PDFDocument({ size: 'A4', margin, bufferPages: true });
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Content-Disposition', `inline; filename="startlist_${event.id}_${event.gender}.pdf"`);
-    doc.pipe(res);
-
-    const gL = event.gender === 'M' ? 'Men' : event.gender === 'F' ? 'Women' : 'Mixed';
-    const gK = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
-    const roundL = { preliminary: 'Preliminary', semifinal: 'Semi-Final', final: 'Final' }[event.round_type] || event.round_type;
-    const roundK = { preliminary: '예선', semifinal: '준결승', final: '결승' }[event.round_type] || event.round_type;
-    const fontSize = tpl.font_size || 9;
-    const teamLabel = tpl.team_label || 'Team';
-    const teamLabelK = { Team: '소 속', School: '학 교', Club: '클 럽', Affiliation: '소 속' }[teamLabel] || '소 속';
-
-    let curY = margin;
-
-    // Header with logos
-    if (tpl.show_header !== false) {
-        curY = drawPdfHeader(doc, comp, tpl, pageW, margin);
-    }
-
-    // "START LIST" label (green)
-    pdfFont(doc, true).fontSize(11).fillColor(PR_GREEN);
-    doc.text('START LIST', margin, curY, { width: pageW - margin * 2 });
-    curY += 16;
-
-    // Event title
-    pdfFont(doc, true).fontSize(12).fillColor('#000');
-    doc.text(`${gK}  ${event.name}`, margin, curY);
-    curY += 18;
-
-    // Round bar
-    const barH = 20;
-    doc.save();
-    doc.rect(margin, curY, 80, barH).fill('#1a1a1a');
-    pdfFont(doc, true).fontSize(9).fillColor('#fff');
-    doc.text(roundL, margin + 4, curY + 5, { width: 72, align: 'center' });
-    doc.restore();
-    pdfFont(doc, false).fontSize(9).fillColor('#333');
-    doc.text(`${roundK}`, margin + 88, curY + 5);
-    curY += barH + 10;
-
-    // Build dynamic columns
-    const tableLeft = margin;
-    const tableRight = pageW - margin;
-    const totalW = tableRight - tableLeft;
-    const slCols = [];
-    let xOff = tableLeft;
-    if (tpl.show_lane !== false) { slCols.push({ key: 'lane', label: '레 인', x: xOff, w: totalW * 0.08 }); xOff += totalW * 0.08; }
-    if (tpl.show_bib !== false) { slCols.push({ key: 'bib', label: '배 번', x: xOff, w: totalW * 0.10 }); xOff += totalW * 0.10; }
-    if (tpl.show_name !== false) {
-        const remainW = totalW - (xOff - tableLeft) - (tpl.show_team !== false ? totalW * 0.25 : 0) - (tpl.show_status !== false ? totalW * 0.12 : 0) - (tpl.show_pb ? totalW * 0.12 : 0) - (tpl.show_dob ? totalW * 0.12 : 0);
-        slCols.push({ key: 'name', label: '선 수 명', x: xOff, w: Math.max(remainW, totalW * 0.15) }); xOff += Math.max(remainW, totalW * 0.15);
-    }
-    if (tpl.show_team !== false) { slCols.push({ key: 'team', label: teamLabelK, x: xOff, w: totalW * 0.25 }); xOff += totalW * 0.25; }
-    if (tpl.show_pb) { slCols.push({ key: 'pb', label: 'PB', x: xOff, w: totalW * 0.12 }); xOff += totalW * 0.12; }
-    if (tpl.show_dob) { slCols.push({ key: 'dob', label: '생년월일', x: xOff, w: totalW * 0.12 }); xOff += totalW * 0.12; }
-    if (tpl.show_status !== false) { slCols.push({ key: 'status', label: '출 석', x: xOff, w: totalW * 0.12 }); xOff += totalW * 0.12; }
-
-    for (const heat of heats) {
-        const entries = await db.all(`
-            SELECT he.lane_number, he.sub_group, ee.status, a.name, a.bib_number, a.team, a.date_of_birth, a.personal_best
-            FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-            JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-            ORDER BY he.lane_number ASC, ${orderByBibSql('a.bib_number')}
-        `, heat.id);
-
-        // Check page break (use dynamic row height based on fontSize)
-        const headerRowH = Math.max(22, fontSize + 12);
-        const dataRowH = Math.max(20, fontSize + 10);
-        const neededH = 30 + headerRowH + entries.length * dataRowH + 10;
-        if (curY + neededH > pageH - margin - 30) {
-            doc.addPage();
-            curY = margin;
-        }
-
-        // Heat label
-        const hLabel = heat.heat_name || `Heat ${heat.heat_number}`;
-        pdfFont(doc, true).fontSize(10).fillColor('#000');
-        doc.text(hLabel, margin, curY);
-        if (heat.scoreboard_key) { pdfFont(doc, false).fontSize(7).fillColor('#888'); doc.text(heat.scoreboard_key, margin + 100, curY + 2); }
-        curY += 16;
-
-        // Table header
-        curY = drawTableHeader(doc, slCols, curY, tableLeft, tableRight, fontSize);
-
-        // Data rows
-        for (const e of entries) {
-            if (curY + dataRowH > pageH - margin - 30) {
-                doc.addPage(); curY = margin;
-                curY = drawTableHeader(doc, slCols, curY, tableLeft, tableRight, fontSize);
-            }
-            const vals = slCols.map(col => {
-                switch (col.key) {
-                    case 'lane': return String(e.lane_number || '-');
-                    case 'bib': return e.bib_number || '-';
-                    case 'name': return e.name || '';
-                    case 'team': return e.team || '';
-                    case 'status': return { registered: 'Reg', checked_in: 'In', no_show: 'DNS' }[e.status] || e.status || '';
-                    case 'pb': return e.personal_best || '';
-                    case 'dob': return e.date_of_birth || '';
-                    default: return '';
-                }
-            });
-            curY = drawTableRow(doc, slCols, vals, curY, tableLeft, tableRight, fontSize, { boldCols: ['name'] });
-        }
-        curY += 12;
-    }
-
-    // Branding footer
-    drawBrandingFooter(doc, pageW, pageH, margin);
-    doc.end();
-});
-
-// ==================== RESULT SHEET PDF ====================
-app.get('/api/documents/result-sheet/:eventId', async (req, res) => {
-  try {
-    const event = await db.get('SELECT * FROM event WHERE id=?', req.params.eventId);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    const comp = await db.get('SELECT * FROM competition WHERE id=?', event.competition_id);
-    const heats = await db.all('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number', event.id);
-    const tpl = (await getDocTemplate(event.competition_id)).result_sheet;
-
-    // ─── 종목별 실제 진행 날짜 조회 ─────────────────────────────────────
-    // timetable.scheduled_date / day 에서 이 event 의 실제 날짜를 가져온다.
-    // 우선순위:
-    //   1) timetable.event_id 가 event.id 와 일치하는 row 의 scheduled_date
-    //   2) timetable.event_ids JSON 배열에 event.id 가 포함된 row 의 scheduled_date
-    //   3) timetable.day 와 comp.start_date 를 더해서 계산 (day 는 1-based)
-    //   4) 매칭 없으면 fallback 으로 comp.start_date 사용
-    // round_type 이 일치하는 row 를 우선 고른다 (예선/결승 같은 종목이 다른 날일 수 있음).
-    let eventDateStr = '';
-    try {
-        const roundMap = { preliminary: '예선', semifinal: '준결승', final: '결승', heats: '예선' };
-        const ttRound = roundMap[event.round_type] || event.round_type;
-        // (1) event_id 직접 매칭 + round 일치 우선
-        // 참고: SQLite 백엔드는 db.get 이 동기, PG 는 async. 두 케이스 모두에서 await 가 안전하게 동작.
-        //       try-catch 만으로 에러 처리 (db.get(...).catch 패턴은 SQLite 에서 TypeError 발생).
-        let ttRow = null;
-        try {
-            ttRow = await db.get(
-                `SELECT scheduled_date, day FROM timetable
-                 WHERE competition_id=? AND event_id=? AND (round=? OR round IS NULL OR round='')
-                 ORDER BY (round=?) DESC, day ASC, time ASC LIMIT 1`,
-                event.competition_id, event.id, ttRound, ttRound
-            );
-        } catch(_) { ttRow = null; }
-        // (1b) round 무시하고 event_id 만 매칭
-        if (!ttRow) {
-            try {
-                ttRow = await db.get(
-                    `SELECT scheduled_date, day FROM timetable
-                     WHERE competition_id=? AND event_id=? ORDER BY day ASC, time ASC LIMIT 1`,
-                    event.competition_id, event.id
-                );
-            } catch(_) { ttRow = null; }
-        }
-        // (2) event_ids JSON 매칭 (혼성/공동 종목 대비)
-        if (!ttRow) {
-            let candidates = [];
-            try {
-                candidates = await db.all(
-                    `SELECT scheduled_date, day, event_ids FROM timetable
-                     WHERE competition_id=? AND event_ids IS NOT NULL AND event_ids <> ''`,
-                    event.competition_id
-                );
-            } catch(_) { candidates = []; }
-            for (const c of candidates) {
-                try {
-                    const ids = JSON.parse(c.event_ids);
-                    if (Array.isArray(ids) && ids.map(Number).includes(Number(event.id))) {
-                        ttRow = c; break;
-                    }
-                } catch(_) {}
-            }
-        }
-        if (ttRow) {
-            if (ttRow.scheduled_date) {
-                eventDateStr = ttRow.scheduled_date;
-            } else if (ttRow.day && comp && comp.start_date) {
-                // day 가 1-based 라고 가정하고 comp.start_date 에 (day-1) 일 더하기
-                const d = new Date(comp.start_date + 'T00:00:00');
-                d.setDate(d.getDate() + (Number(ttRow.day) - 1));
-                eventDateStr = d.toISOString().slice(0, 10);
-            }
-        }
-    } catch (e) {
-        console.warn('[result-sheet PDF] event date lookup failed:', e.message);
-    }
-    // Fallback: 종목별 날짜 못 찾으면 comp.start_date 사용 (기존 동작 유지)
-    if (!eventDateStr && comp) eventDateStr = comp.start_date || '';
-
-    const pageW = 595.28; const pageH = 841.89; const margin = 40;
-    const doc = new PDFDocument({ size: 'A4', margin, bufferPages: true });
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Content-Disposition', `inline; filename="results_${event.id}_${event.gender}.pdf"`);
-    doc.pipe(res);
-
-    const gK = event.gender === 'M' ? '남자' : event.gender === 'F' ? '여자' : '혼성';
-    const roundL = { preliminary: 'Preliminary', semifinal: 'Semi-Final', final: 'Final' }[event.round_type] || event.round_type;
-    const fontSize = tpl.font_size || 9;
-    const teamLabel = tpl.team_label || 'Team';
-    const teamLabelK = { Team: '소 속 명', School: '학 교', Club: '클 럽', Affiliation: '소 속 명' }[teamLabel] || '소 속 명';
-
-    const isFieldDist = event.category === 'field_distance';
-    const isFieldHeight = event.category === 'field_height';
-    const isField = isFieldDist || isFieldHeight;
-    const isCombined = event.category === 'combined';
-    const isTrack = event.category === 'track' || event.category === 'relay' || event.category === 'road';
-    const tableLeft = margin;
-    const tableRight = pageW - margin;
-    const totalW = tableRight - tableLeft;
-
-    // ============================================================
-    // [PAGE-REPEAT] 종목 상단 헤더 + 하단 NR/DR/CR 박스를 매 페이지마다 반복
-    //   - drawEventTopHeader: 대회 로고/제목 + OFFICIAL RESULT + 종목명 + Round/Date bar
-    //   - drawEventBottomBox: legend + 서명 + NR/DR/CR 표
-    //   - body 영역(heats) 그리는 동안 addPage 직후 curY 를 헤더 아래로 리셋
-    //   - body 영역 끝 한계는 pageH - margin - BOTTOM_RESERVED 로 강제
-    //   - PDF 종료 직전 bufferPages 로 전체 페이지 순회하며 헤더/하단 재그리기
-    // ============================================================
-    const drawEventTopHeader = (d) => {
-        let y = margin;
-        if (tpl.show_header !== false) {
-            y = drawPdfHeader(d, comp, tpl, pageW, margin);
-        }
-        // "OFFICIAL RESULT" label
-        pdfFont(d, true).fontSize(11).fillColor(PR_GREEN);
-        d.text('OFFICIAL RESULT', margin, y, { width: pageW - margin * 2 });
-        y += 16;
-        // Event title
-        pdfFont(d, true).fontSize(12).fillColor('#000');
-        d.text(`${gK}  ${event.name}`, margin, y);
-        y += 18;
-        // Round / Date bar
-        const barH = 22;
-        d.save();
-        d.rect(margin, y, 80, barH).fill('#1a1a1a');
-        pdfFont(d, true).fontSize(9).fillColor('#fff');
-        d.text(roundL, margin + 4, y + 6, { width: 72, align: 'center' });
-        d.restore();
-        pdfFont(d, false).fontSize(9).fillColor('#333');
-        // 종목별 실제 진행 날짜 사용 (timetable.scheduled_date) — 대회 시작일이 아닌 종목 당일 표시
-        d.text(eventDateStr || '', margin + 88, y + 6);
-        d.save();
-        d.moveTo(margin, y).lineTo(pageW - margin, y).lineWidth(0.5).stroke('#333');
-        d.moveTo(margin, y + barH).lineTo(pageW - margin, y + barH).lineWidth(0.5).stroke('#333');
-        d.restore();
-        y += barH + 8;
-        return y;
-    };
-
-    // 하단 NR/DR/CR + 서명 + legend 박스 데이터 (페이지 마다 반복 그리기 위해 미리 준비)
-    // event_records 와 global event_record 에서 NR/DR/CR 로드
-    const _loadRecordsData = async () => {
-        const evtRecRow = await db.get('SELECT records FROM event_records WHERE event_id=?', event.id);
-        let evtRec = {};
-        if (evtRecRow) { try { evtRec = JSON.parse(evtRecRow.records || '{}'); } catch(e) {} }
-        let normName = event.name.replace(/\s+/g, '').replace(/,/g, '').replace(/(\d)[×Xx](\d)/g, '$1x$2');
-        const nameMap = { '110m허들':'110mH','100m허들':'100mH','400m허들':'400mH','3000m장애물':'3000mSC','10000m경보':'10000mW','십종경기':'10종경기','칠종경기':'7종경기','오종경기':'5종경기','펜타슬론':'5종경기','Pentathlon':'5종경기','4x100m릴레이':'4x100mR','4x400m릴레이':'4x400mR','혼성4x400mR':'MIXED 4x400mR','MIXED4x400mR':'MIXED 4x400mR','4x800m릴레이':'4x800mR','4x1500m릴레이':'4x1500mR' };
-        normName = nameMap[normName] || normName;
-        try {
-            const globalRecs = await db.all('SELECT * FROM event_record WHERE gender=? AND event_name=?', event.gender, normName);
-            for (const gr of globalRecs) {
-                const keyMap = { national: 'nr', division: 'dr', competition: 'cr' };
-                const shortKey = keyMap[gr.record_type];
-                if (shortKey && (!evtRec[shortKey] || !evtRec[shortKey].record)) {
-                    evtRec[shortKey] = { label: gr.record_type === 'national' ? '한국기록(NR)' : gr.record_type === 'division' ? '부별기록(DR)' : '대회기록(CR)', record: gr.record_value || '', athlete: gr.holder_name || '', team: gr.holder_team || '', year: gr.record_year || '' };
-                }
-            }
-        } catch(e) {}
-        const recTpl = tpl.records || {};
-        return [
-            { ...(recTpl.nr || { label: '한국기록(NR)' }), ...(evtRec.nr || {}) },
-            { ...(recTpl.dr || { label: '부별기록(DR)' }), ...(evtRec.dr || {}) },
-            { ...(recTpl.cr || { label: '대회기록(CR)' }), ...(evtRec.cr || {}) }
-        ];
-    };
-    const recRowsForFooter = (tpl.show_records_table !== false) ? await _loadRecordsData() : null;
-
-    // 하단 박스 그리기: legend + 서명선 + NR/DR/CR 3행 표
-    // 페이지 하단 영역 레이아웃 (위→아래):
-    //   [legend 12]  +  [signature 24]  +  [표 header 22 + data row 20 x 3 = 82]  =  118pt
-    //   브랜딩 푸터 ≈ 34.5pt, footerY = pageH - margin - 34.5 ≈ 767.4
-    //   박스 ↔ 푸터 간격 12pt 확보
-    // 박스를 푸터 바로 위로 "anchor down" 방식으로 배치 (정확한 위치 보장)
-    const BRANDING_FOOTER_H = 34.5;
-    const BOX_FOOTER_GAP = 12;
-    // 박스 실제 높이 = legend 12 + (signature 24 if shown) + table header 22 + data rows 20 * N
-    const _recCount = recRowsForFooter ? recRowsForFooter.length : 0;
-    const _sigH = (tpl.show_signature !== false) ? 24 : 0;
-    const _tableH = recRowsForFooter ? (22 + 20 * _recCount) : 0;
-    const BOX_H = 12 + _sigH + _tableH; // legend + sig + table
-    // 본문 영역 하단 한계: 박스 시작 y - 8pt 여백
-    const BOX_TOP_Y = pageH - margin - BRANDING_FOOTER_H - BOX_FOOTER_GAP - BOX_H;
-    const BOTTOM_RESERVED = pageH - margin - BOX_TOP_Y + 8; // 본문 ↔ 박스 사이 8pt 여백
-    const drawEventBottomBox = (d) => {
-        d.save(); // bufferPages + switchToPage 안전성 위한 그래픽 상태 격리
-        const totalH = pageH - margin * 2;
-        // 박스 시작 Y: 푸터 위로 정확히 anchor 됨 → 어떤 BOTTOM_RESERVED 값과도 무관하게 항상 푸터 위에 위치
-        let y = BOX_TOP_Y;
-        // Legend line
-        pdfFont(d, false).fontSize(7).fillColor('#555');
-        d.text('DQ=실격  DNS=경기불참  DNF=중도기권  NM=기록없음  Q=순위통과  q=기록통과', margin, y);
-        y += 12;
-        // Signature (작게)
-        if (tpl.show_signature !== false) {
-            pdfFont(d, false).fontSize(8.5).fillColor('#333');
-            const recName = tpl.recorder_name || '';
-            const chiefName = tpl.chief_recorder_name || '';
-            const sigLineW = 150;
-            d.text(`기록자 :    ${recName}`, tableLeft, y);
-            const chiefX = tableRight - sigLineW;
-            d.text(`기록주임 :    ${chiefName}`, chiefX, y);
-            y += 14;
-            d.save();
-            d.moveTo(tableLeft, y).lineTo(tableLeft + sigLineW, y).lineWidth(0.5).stroke('#999');
-            d.moveTo(chiefX, y).lineTo(tableRight, y).lineWidth(0.5).stroke('#999');
-            d.restore();
-            y += 10;
-        }
-        // NR/DR/CR 표
-        if (recRowsForFooter) {
-            const recCols = [
-                { key: 'label', label: '구 분', x: tableLeft, w: totalW * 0.22 },
-                { key: 'record', label: '기 록', x: tableLeft + totalW * 0.22, w: totalW * 0.18 },
-                { key: 'athlete', label: '선 수 명', x: tableLeft + totalW * 0.40, w: totalW * 0.20 },
-                { key: 'team', label: '소 속 명', x: tableLeft + totalW * 0.60, w: totalW * 0.22 },
-                { key: 'year', label: '수립년도', x: tableLeft + totalW * 0.82, w: totalW * 0.18 }
-            ];
-            y = drawTableHeader(d, recCols, y, tableLeft, tableRight, fontSize);
-            for (const row of recRowsForFooter) {
-                const vals = recCols.map(c => row[c.key] || '');
-                y = drawTableRow(d, recCols, vals, y, tableLeft, tableRight, fontSize);
-            }
-        }
-        d.restore();
-    };
-
-    let curY = drawEventTopHeader(doc);
-    // body 영역 하단 한계: 기존 코드들의 `pageH - margin - 80` 대신
-    // 하단 박스 자리를 비워두기 위해 BOTTOM_RESERVED 사용
-    const BODY_BOTTOM = pageH - margin - BOTTOM_RESERVED;
-
-    // ============================================================
-    // COMBINED EVENT (10종/7종) — completely different layout
-    // ============================================================
-    if (isCombined) {
-        const subEvents = await db.all('SELECT * FROM event WHERE parent_event_id=? ORDER BY sort_order, id', event.id);
-        const heat = heats[0]; // optional — 혼성 부모는 heat 가 없을 수 있음
-        // 부모 종목의 entries 조회: heat 가 있으면 lane 순, 없으면 event_entry 직접 조회
-        let entries;
-        if (heat) {
-            entries = await db.all(`
-                SELECT he.lane_number, ee.id AS event_entry_id, ee.status, ee.athlete_id,
-                       a.name, a.bib_number, a.team
-                FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-                JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-                ORDER BY he.lane_number ASC
-            `, heat.id);
-        } else {
-            // heat 없는 혼성 부모: event_entry 만으로 본문 생성 (lane 정보는 null)
-            entries = await db.all(`
-                SELECT NULL AS lane_number, ee.id AS event_entry_id, ee.status, ee.athlete_id,
-                       a.name, a.bib_number, a.team
-                FROM event_entry ee JOIN athlete a ON a.id=ee.athlete_id
-                WHERE ee.event_id=?
-                ORDER BY a.bib_number ASC, ee.id ASC
-            `, event.id);
-        }
-        // 그래도 entries 가 비어있으면 안내 텍스트만 출력하고 종료 (빈 페이지 방지)
-        if (!entries || entries.length === 0) {
-            pdfFont(doc, false).fontSize(11).fillColor('#888');
-            doc.text('— 등록된 선수가 없습니다 —', margin, curY + 20, { width: pageW - margin * 2, align: 'center' });
-            // bufferPages 루프에서 헤더/푸터/박스 그려지도록 본문은 비워두고 정상 종료
-        }
-
-        // Build sub-event short names for columns
-        const subLabels = subEvents.map(se => {
-            let n = se.name.replace(/\[.*?\]\s*/, '');
-            if (n.length > 5) n = n.substring(0, 5);
-            return n;
-        });
-
-        // Helper: parse wind value — handles both numeric (real) and text ("0.5 m/s") storage
-        const parseWindValue = (w) => {
-            if (w == null) return null;
-            if (typeof w === 'number') return isFinite(w) ? w : null;
-            const m = String(w).match(/-?\d+(?:\.\d+)?/);
-            return m ? parseFloat(m[0]) : null;
-        };
-
-        // Gather all combined_scores and sub-event results for each athlete
-        const athleteData = await Promise.all(entries.map(async e => {
-            const scores = await db.all('SELECT * FROM combined_score WHERE event_entry_id=? ORDER BY sub_event_order', e.event_entry_id);
-            let totalPoints = 0;
-            const subScores = [];
-            for (let i = 0; i < subEvents.length; i++) {
-                const se = subEvents[i];
-                const sc = scores.find(s => s.sub_event_order === i + 1) || null;
-                let rawRecord = null; let wind = null; let points = 0;
-                const isWindAffected = se.category === 'track' || se.category === 'field_distance';
-                if (sc) {
-                    rawRecord = sc.raw_record;
-                    points = sc.wa_points || 0;
-                    totalPoints += points;
-                }
-                // Always try to load sub-event heat/result data (for wind retrieval and as fallback for missing combined_score)
-                const subHeat = await db.get('SELECT id, wind FROM heat WHERE event_id=?', se.id);
-                if (subHeat) {
-                    const subEE = await db.get('SELECT id FROM event_entry WHERE event_id=? AND athlete_id=?', se.id, e.athlete_id);
-                    if (subEE) {
-                        // Find best result (track: lowest time; field_distance: highest distance)
-                        let subRes = null;
-                        if (se.category === 'track' || se.category === 'road' || se.category === 'relay') {
-                            subRes = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND time_seconds IS NOT NULL ORDER BY time_seconds ASC LIMIT 1', subHeat.id, subEE.id);
-                        } else if (se.category === 'field_distance') {
-                            subRes = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters IS NOT NULL ORDER BY distance_meters DESC LIMIT 1', subHeat.id, subEE.id);
-                        } else {
-                            subRes = await db.get('SELECT * FROM result WHERE heat_id=? AND event_entry_id=? ORDER BY attempt_number LIMIT 1', subHeat.id, subEE.id);
-                        }
-
-                        if (!sc && subRes) {
-                            // Fallback record only if no combined_score
-                            const isST = se.category === 'track' || se.category === 'road' || se.category === 'relay';
-                            rawRecord = isST ? subRes.time_seconds : subRes.distance_meters;
-                        }
-                        // Always pull wind for wind-affected sub-events
-                        if (isWindAffected) {
-                            // Prefer result.wind (per-attempt accuracy), then fall back to heat.wind
-                            wind = parseWindValue(subRes?.wind);
-                            if (wind == null) wind = parseWindValue(subHeat.wind);
-                        }
-                        // For field_height fallback
-                        if (!sc && se.category === 'field_height') {
-                            const best = await db.get("SELECT MAX(bar_height) AS best FROM height_attempt WHERE heat_id=? AND event_entry_id=? AND result_mark='O'", subHeat.id, subEE.id);
-                            if (best && best.best) rawRecord = best.best;
-                        }
-                        // For field_distance no-result fallback
-                        if (!sc && se.category === 'field_distance' && !rawRecord) {
-                            const bestD = await db.get('SELECT MAX(distance_meters) AS best FROM result WHERE heat_id=? AND event_entry_id=? AND distance_meters IS NOT NULL', subHeat.id, subEE.id);
-                            if (bestD && bestD.best) rawRecord = bestD.best;
-                        }
-                    } else if (isWindAffected) {
-                        // No event_entry for sub event → use heat-level wind as best-effort
-                        wind = parseWindValue(subHeat.wind);
-                    }
-                }
-                subScores.push({ rawRecord, wind, points, subEvent: se });
-            }
-            // Check for DNF status — heat 가 없으면 heat_id 조건 없이 entry 만으로 조회
-            const status = heat
-                ? await db.get("SELECT status_code FROM result WHERE heat_id=? AND event_entry_id=? AND status_code IN ('DNF','DNS','DQ') LIMIT 1", heat.id, e.event_entry_id)
-                : await db.get("SELECT status_code FROM result WHERE event_entry_id=? AND status_code IN ('DNF','DNS','DQ') LIMIT 1", e.event_entry_id);
-            let statusCode = status?.status_code || '';
-            // Fallback: if entry status is no_show and no explicit DNS result, treat as DNS
-            if (!statusCode && e.status === 'no_show') statusCode = 'DNS';
-            // 0 points with no explicit status → DNF
-            if (!statusCode && totalPoints === 0) statusCode = 'DNF';
-            return { ...e, subScores, totalPoints, status_code: statusCode };
-        }));
-
-        // Sort by total points descending; DNF at bottom
-        athleteData.sort((a, b) => {
-            const aS = ['DNS','DNF','DQ'].includes(a.status_code);
-            const bS = ['DNS','DNF','DQ'].includes(b.status_code);
-            if (aS && !bS) return 1;
-            if (!aS && bS) return -1;
-            if (aS && bS) return 0;
-            return b.totalPoints - a.totalPoints;
-        });
-
-        // Build combined columns: 순위, 배번, 선수명, 소속명, [sub-events...], 결과
-        const comCols = [];
-        let cx = tableLeft;
-        comCols.push({ key: 'rank', label: '순위', x: cx, w: totalW * 0.05 }); cx += totalW * 0.05;
-        comCols.push({ key: 'bib', label: '배번', x: cx, w: totalW * 0.05 }); cx += totalW * 0.05;
-        comCols.push({ key: 'name', label: '선수명', x: cx, w: totalW * 0.10 }); cx += totalW * 0.10;
-        comCols.push({ key: 'team', label: '소속명', x: cx, w: totalW * 0.12 }); cx += totalW * 0.12;
-        const subW = Math.max(0.04, (totalW * 0.58) / Math.max(subEvents.length, 1)) / totalW;
-        for (let i = 0; i < subEvents.length; i++) {
-            comCols.push({ key: `sub_${i}`, label: subLabels[i], x: cx, w: totalW * subW }); cx += totalW * subW;
-        }
-        comCols.push({ key: 'total', label: '결과', x: cx, w: (tableRight - cx) * 0.6 }); cx += (tableRight - cx) * 0.6;
-        comCols.push({ key: 'remark', label: '비고', x: cx, w: tableRight - cx }); // remaining
-
-        // Draw header (smaller font for combined)
-        const comFS = Math.min(fontSize, 7);
-        curY = drawTableHeader(doc, comCols, curY, tableLeft, tableRight, comFS);
-
-        // Sub-header: WIND row (for wind-affected events)
-        const windRowH = 14;
-        doc.save();
-        doc.rect(tableLeft, curY, totalW, windRowH).fill('#f5f5f5').stroke(PR_TABLE_BORDER);
-        // "WIND (m/s)" label placed in the team column area (left of sub-events) for clarity
-        pdfFont(doc, true).fontSize(6).fillColor('#555');
-        const teamColEnd = comCols[3] ? comCols[3].x + comCols[3].w : tableLeft + totalW * 0.32;
-        doc.text('WIND (m/s)', tableLeft, curY + 3, { width: teamColEnd - tableLeft, align: 'right' });
-        // Mark each wind-affected sub-event column with a small wind indicator above
-        pdfFont(doc, false).fontSize(5.5).fillColor('#888');
-        for (let i = 0; i < subEvents.length; i++) {
-            const se = subEvents[i];
-            if (se.category === 'track' || se.category === 'field_distance') {
-                const col = comCols[4 + i];
-                if (col) doc.text('↓', col.x + 1, curY + 3, { width: col.w - 2, align: 'center' });
-            }
-        }
-        doc.restore();
-        curY += windRowH;
-
-        // Render each athlete (3 rows: record, points, wind)
-        let rank = 0;
-        for (const ath of athleteData) {
-            const rowH3 = 42; // 3 sub-rows * 14px each
-            if (curY + rowH3 > BODY_BOTTOM) {
-                doc.addPage(); curY = drawEventTopHeader(doc);
-                curY = drawTableHeader(doc, comCols, curY, tableLeft, tableRight, comFS);
-                curY += windRowH; // skip wind header space
-            }
-            const special = ['DNS','DNF','DQ'].includes(ath.status_code);
-            if (!special) rank++;
-
-            // Row background
-            doc.save();
-            doc.rect(tableLeft, curY, totalW, rowH3).stroke(PR_TABLE_BORDER);
-            doc.restore();
-
-            const subRowH = 14;
-            // Row 1: record values
-            pdfFont(doc, false).fontSize(comFS).fillColor('#000');
-            const y1 = curY + 2;
-            doc.text(special ? '' : String(rank), comCols[0].x + 2, y1, { width: comCols[0].w - 4, align: 'center' });
-            doc.text(ath.bib_number || '-', comCols[1].x + 2, y1, { width: comCols[1].w - 4, align: 'center' });
-            pdfFont(doc, true).fontSize(comFS);
-            doc.text(ath.name || '', comCols[2].x + 2, y1, { width: comCols[2].w - 4, align: 'center' });
-            pdfFont(doc, false).fontSize(comFS);
-            doc.text(ath.team || '', comCols[3].x + 2, y1, { width: comCols[3].w - 4, align: 'center' });
-            // Sub-event records
-            for (let i = 0; i < ath.subScores.length; i++) {
-                const sc = ath.subScores[i];
-                let recStr = '';
-                if (sc.rawRecord != null) {
-                    const se = sc.subEvent;
-                    if (se.category === 'track' || se.category === 'road' || se.category === 'relay') {
-                        recStr = formatTimeForPDF(sc.rawRecord);
-                    } else {
-                        recStr = sc.rawRecord.toFixed(2);
-                    }
-                }
-                const col = comCols[4 + i];
-                if (col) doc.text(recStr, col.x + 1, y1, { width: col.w - 2, align: 'center' });
-            }
-            // Total — DNF/DQ → 공백
-            const totalCol = comCols.find(c => c.key === 'total');
-            pdfFont(doc, true).fontSize(comFS + 1).fillColor('#000');
-            doc.text(special ? '' : String(ath.totalPoints), totalCol.x + 2, y1, { width: totalCol.w - 4, align: 'center' });
-            // Remark — DNF/DQ status
-            const remkCol = comCols.find(c => c.key === 'remark');
-            if (remkCol) {
-                pdfFont(doc, false).fontSize(comFS).fillColor('#000');
-                doc.text(special ? ath.status_code : '', remkCol.x + 2, y1, { width: remkCol.w - 4, align: 'center' });
-            }
-
-            // Row 2: points
-            const y2 = curY + subRowH + 1;
-            pdfFont(doc, false).fontSize(5.5).fillColor('#666');
-            for (let i = 0; i < ath.subScores.length; i++) {
-                const sc = ath.subScores[i];
-                const col = comCols[4 + i];
-                if (col && sc.points) doc.text(String(sc.points), col.x + 1, y2, { width: col.w - 2, align: 'center' });
-            }
-
-            // Row 3: wind (per sub-event, for track/field_distance only)
-            const y3 = curY + subRowH * 2;
-            pdfFont(doc, false).fontSize(6).fillColor('#0066aa');
-            for (let i = 0; i < ath.subScores.length; i++) {
-                const sc = ath.subScores[i];
-                const col = comCols[4 + i];
-                if (col && typeof sc.wind === 'number' && isFinite(sc.wind)) {
-                    const wStr = (sc.wind >= 0 ? '+' : '') + sc.wind.toFixed(1);
-                    doc.text(wStr, col.x + 1, y3, { width: col.w - 2, align: 'center' });
-                }
-            }
-
-            curY += rowH3;
-        }
-        curY += 8;
-
-    // ============================================================
-    // FIELD HEIGHT EVENT (높이뛰기/장대높이뛰기) — O/X/XXO format
-    // ============================================================
-    } else if (isFieldHeight) {
-        const heat = heats[0]; // field height typically has one heat
-        if (!heat) { doc.end(); return; }
-        const entries = await db.all(`
-            SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
-                   a.name, a.bib_number, a.team
-            FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-            JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-            ORDER BY he.lane_number ASC
-        `, heat.id);
-
-        // Get all height attempts for this heat
-        const allAttempts = await db.all('SELECT * FROM height_attempt WHERE heat_id=? ORDER BY bar_height, event_entry_id, attempt_number', heat.id);
-        // Get unique bar heights
-        const barHeights = [...new Set(allAttempts.map(a => a.bar_height))].sort((a, b) => a - b);
-
-        // Build athlete data
-        const athleteData = await Promise.all(entries.map(async e => {
-            const myAttempts = allAttempts.filter(a => a.event_entry_id === e.event_entry_id);
-            let bestCleared = null;
-            let totalMisses = 0; let missesAtBest = 0;
-            const heightResults = {};
-            for (const h of barHeights) {
-                const attemptsAtH = myAttempts.filter(a => a.bar_height === h).sort((a, b) => a.attempt_number - b.attempt_number);
-                if (attemptsAtH.length === 0) {
-                    heightResults[h] = ''; // did not attempt
-                } else {
-                    let str = attemptsAtH.map(a => a.result_mark).join('');
-                    heightResults[h] = str;
-                    const misses = attemptsAtH.filter(a => a.result_mark === 'X').length;
-                    totalMisses += misses;
-                    if (attemptsAtH.some(a => a.result_mark === 'O')) {
-                        bestCleared = h;
-                        missesAtBest = misses;
-                    }
-                }
-            }
-            // Also check result table for status
-            const results = await db.all('SELECT * FROM result WHERE heat_id=? AND event_entry_id=?', heat.id, e.event_entry_id);
-            let status = results.find(r => r.status_code && r.status_code !== '')?.status_code || '';
-            // Fallback: if entry status is no_show and no explicit DNS result, treat as DNS
-            if (!status && e.status === 'no_show') status = 'DNS';
-            // If no height_attempt data, check result table for best distance_meters (used as height)
-            // [FIX] distance_meters===0 은 파울, -1 은 패스 이므로 양수만 유효
-            if (bestCleared === null && !status) {
-                const bestR = results.find(r => r.distance_meters != null && r.distance_meters > 0);
-                if (bestR) bestCleared = bestR.distance_meters;
-            }
-            return { ...e, bestCleared, totalMisses, missesAtBest, heightResults, status_code: status };
-        }));
-
-        // Sort: highest cleared → fewest misses at best → fewest total misses
-        athleteData.sort((a, b) => {
-            const aS = ['DNS','DNF','DQ','NM'].includes(a.status_code);
-            const bS = ['DNS','DNF','DQ','NM'].includes(b.status_code);
-            if (aS && !bS) return 1;
-            if (!aS && bS) return -1;
-            if (a.bestCleared == null && b.bestCleared == null) return 0;
-            if (a.bestCleared == null) return 1;
-            if (b.bestCleared == null) return -1;
-            if (b.bestCleared !== a.bestCleared) return b.bestCleared - a.bestCleared;
-            if (a.missesAtBest !== b.missesAtBest) return a.missesAtBest - b.missesAtBest;
-            return a.totalMisses - b.totalMisses;
-        });
-
-        // Build columns: 순위, 배번, 선수명, 소속명, [bar heights...], 결과
-        const hCols = [];
-        let hx = tableLeft;
-        hCols.push({ key: 'rank', label: '순위', x: hx, w: totalW * 0.06 }); hx += totalW * 0.06;
-        hCols.push({ key: 'bib', label: '배번', x: hx, w: totalW * 0.06 }); hx += totalW * 0.06;
-        hCols.push({ key: 'name', label: '선수명', x: hx, w: totalW * 0.12 }); hx += totalW * 0.12;
-        hCols.push({ key: 'team', label: teamLabelK, x: hx, w: totalW * 0.14 }); hx += totalW * 0.14;
-        const remainForBars = totalW * 0.52;
-        const barW = barHeights.length > 0 ? Math.min(remainForBars / barHeights.length, totalW * 0.08) : totalW * 0.06;
-        for (const bh of barHeights) {
-            hCols.push({ key: `h_${bh}`, label: bh.toFixed(2), x: hx, w: barW }); hx += barW;
-        }
-        hCols.push({ key: 'result', label: '결 과', x: hx, w: (tableRight - hx) * 0.6 }); hx += (tableRight - hx) * 0.6;
-        hCols.push({ key: 'remark', label: '비 고', x: hx, w: tableRight - hx });
-
-        const hFS = Math.min(fontSize, barHeights.length > 6 ? 7 : 8);
-        curY = drawTableHeader(doc, hCols, curY, tableLeft, tableRight, hFS);
-
-        let rank = 0; let prevAth = null; let athIdx = 0;
-        for (const ath of athleteData) {
-            if (curY + Math.max(20, hFS + 10) > BODY_BOTTOM) {
-                doc.addPage(); curY = drawEventTopHeader(doc);
-                curY = drawTableHeader(doc, hCols, curY, tableLeft, tableRight, hFS);
-            }
-            const special = ['DNS','DNF','DQ','NM'].includes(ath.status_code) || ath.bestCleared == null;
-            if (!special) {
-                athIdx++;
-                // WA tie-break: same bestCleared + missesAtBest + totalMisses = same rank
-                const isTied = prevAth && prevAth.bestCleared === ath.bestCleared
-                    && prevAth.missesAtBest === ath.missesAtBest
-                    && prevAth.totalMisses === ath.totalMisses;
-                if (!isTied) rank = athIdx;
-                prevAth = ath;
-            }
-            const vals = hCols.map(col => {
-                if (col.key === 'rank') return special ? '' : String(rank);
-                if (col.key === 'bib') return ath.bib_number || '-';
-                if (col.key === 'name') return ath.name || '';
-                if (col.key === 'team') return ath.team || '';
-                if (col.key === 'result') return special ? '' : (ath.bestCleared != null ? ath.bestCleared.toFixed(2) : '');
-                if (col.key === 'remark') return special ? (ath.status_code || 'NM') : '';
-                if (col.key.startsWith('h_')) {
-                    const bh = parseFloat(col.key.substring(2));
-                    return ath.heightResults[bh] || '';
-                }
-                return '';
-            });
-            curY = drawTableRow(doc, hCols, vals, curY, tableLeft, tableRight, hFS, { boldCols: ['name', 'result'] });
-        }
-
-        // Draw empty rows up to 12 (like the reference image)
-        const minRows = 12;
-        const drawn = athleteData.length;
-        for (let i = drawn + 1; i <= minRows; i++) {
-            if (curY + Math.max(20, hFS + 10) > BODY_BOTTOM) break;
-            const emptyVals = hCols.map(col => col.key === 'rank' ? String(i) : '');
-            curY = drawTableRow(doc, hCols, emptyVals, curY, tableLeft, tableRight, hFS);
-        }
-        curY += 8;
-
-    // ============================================================
-    // FIELD DISTANCE EVENT (멀리뛰기/세단뛰기/포환/원반/해머/창) — 6 attempts with wind
-    // ============================================================
-    } else if (isFieldDist) {
-        for (const heat of heats) {
-            const entries = await db.all(`
-                SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
-                       a.name, a.bib_number, a.team
-                FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-                JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-                ORDER BY he.lane_number ASC
-            `, heat.id);
-
-            const results = await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', heat.id);
-
-            // Determine max attempts (usually 6 for final, 3 for qualifying)
-            const maxAttempt = results.reduce((max, r) => Math.max(max, r.attempt_number || 0), 0) || 6;
-            const numAttempts = Math.max(maxAttempt, 3);
-
-            // Determine if this event has wind (멀리뛰기, 세단뛰기 = yes; 투척 = no)
-            const hasWind = /멀리|세단|long|triple/i.test(event.name);
-
-            // Build athlete data
-            const resMap = {};
-            for (const r of results) {
-                if (!resMap[r.event_entry_id]) resMap[r.event_entry_id] = [];
-                resMap[r.event_entry_id].push(r);
-            }
-
-            const athleteData = entries.map(e => {
-                const recs = resMap[e.event_entry_id] || [];
-                let best = null; let bestWind = null; let bestAttempt = -1;
-                const attempts = [];
-                for (let i = 1; i <= numAttempts; i++) {
-                    const r = recs.find(r => r.attempt_number === i);
-                    if (r) {
-                        // [FIX] 수기입력 record.js 는 파울=distance_meters:0, 패스=distance_meters:-1 로 저장하므로
-                        //       status_code 뿐 아니라 distance_meters 값으로도 판정해야 한다.
-                        const isFoulByDist = (r.distance_meters === 0);
-                        const isPassByDist = (r.distance_meters === -1);
-                        if (r.status_code === 'X' || r.status_code === 'FOUL' || isFoulByDist) {
-                            attempts.push({ dist: null, wind: r.wind, foul: true, pass: false });
-                        } else if (r.status_code === '-' || r.status_code === 'PASS' || isPassByDist) {
-                            attempts.push({ dist: null, wind: null, foul: false, pass: true });
-                        } else if (r.distance_meters != null && r.distance_meters > 0) {
-                            attempts.push({ dist: r.distance_meters, wind: r.wind, foul: false, pass: false });
-                            if (best === null || r.distance_meters > best) {
-                                best = r.distance_meters;
-                                bestWind = r.wind;
-                                bestAttempt = i;
-                            }
-                        } else {
-                            attempts.push({ dist: null, wind: null, foul: false, pass: false });
-                        }
-                    } else {
-                        attempts.push({ dist: null, wind: null, foul: false, pass: false });
-                    }
-                }
-                let status = recs.find(r => r.status_code && ['DNS','DNF','NM','DQ'].includes(r.status_code))?.status_code || '';
-                // Fallback: if entry status is no_show and no explicit DNS result, treat as DNS
-                if (!status && e.status === 'no_show') status = 'DNS';
-                // [FIX] NM 판정도 distance_meters===0 (파울) 포함
-                const allFoulOrEmpty = recs.length > 0 && recs.every(r =>
-                    r.status_code === 'X' || r.status_code === 'FOUL' || r.distance_meters === 0
-                );
-                if (!status && best === null && allFoulOrEmpty) {
-                    return { ...e, attempts, best, bestWind, status_code: 'NM' };
-                }
-                return { ...e, attempts, best, bestWind, status_code: status };
-            });
-
-            // Sort by best distance descending
-            athleteData.sort((a, b) => {
-                const aS = ['DNS','DNF','DQ','NM'].includes(a.status_code);
-                const bS = ['DNS','DNF','DQ','NM'].includes(b.status_code);
-                if (aS && !bS) return 1;
-                if (!aS && bS) return -1;
-                if (a.best == null && b.best == null) return 0;
-                if (a.best == null) return 1;
-                if (b.best == null) return -1;
-                return b.best - a.best;
-            });
-
-            // Heat label
-            if (heats.length > 1) {
-                if (curY + 80 > BODY_BOTTOM) { doc.addPage(); curY = drawEventTopHeader(doc); }
-                pdfFont(doc, true).fontSize(10).fillColor('#000');
-                doc.text(heat.heat_name || `Heat ${heat.heat_number}`, margin, curY);
-                curY += 16;
-            }
-
-            // Build columns: 순위, 배번, 선수명, 소속명, [1..N], 결과, 비고(wind of best)
-            const fdCols = [];
-            let fx = tableLeft;
-            fdCols.push({ key: 'rank', label: '순위', x: fx, w: totalW * 0.05 }); fx += totalW * 0.05;
-            fdCols.push({ key: 'bib', label: '배번', x: fx, w: totalW * 0.06 }); fx += totalW * 0.06;
-            fdCols.push({ key: 'name', label: '선수명', x: fx, w: totalW * 0.12 }); fx += totalW * 0.12;
-            fdCols.push({ key: 'team', label: teamLabelK, x: fx, w: totalW * 0.14 }); fx += totalW * 0.14;
-            const attW = Math.min(totalW * 0.08, (totalW * 0.48) / numAttempts);
-            for (let i = 1; i <= numAttempts; i++) {
-                fdCols.push({ key: `att_${i}`, label: String(i), x: fx, w: attW }); fx += attW;
-            }
-            fdCols.push({ key: 'result', label: '결 과', x: fx, w: totalW * 0.09 }); fx += totalW * 0.09;
-            fdCols.push({ key: 'remark', label: '비 고', x: fx, w: tableRight - fx });
-
-            // Draw header with 2 sub-rows (attempt numbers + WIND)
-            const fdFS = Math.min(fontSize, 7.5);
-            curY = drawTableHeader(doc, fdCols, curY, tableLeft, tableRight, fdFS);
-
-            if (hasWind) {
-                // WIND sub-header row
-                const windH = 12;
-                doc.save();
-                doc.rect(tableLeft, curY, totalW, windH).fill('#f8f8f8').stroke(PR_TABLE_BORDER);
-                pdfFont(doc, false).fontSize(5.5).fillColor('#888');
-                doc.text('WIND', tableLeft + totalW * 0.37 / 2, curY + 2, { width: totalW * 0.37, align: 'center' });
-                doc.restore();
-                curY += windH;
-            }
-
-            // Render athletes (2 rows each: distance + wind)
-            let rank = 0;
-            for (const ath of athleteData) {
-                const rowH = hasWind ? 30 : 18; // 2 sub-rows if wind, 1 if not
-                if (curY + rowH > BODY_BOTTOM) {
-                    doc.addPage(); curY = drawEventTopHeader(doc);
-                    curY = drawTableHeader(doc, fdCols, curY, tableLeft, tableRight, fdFS);
-                    if (hasWind) curY += 12;
-                }
-                const special = ['DNS','DNF','DQ','NM'].includes(ath.status_code);
-                if (!special && ath.best != null) rank++;
-
-                // Row border
-                doc.save();
-                doc.rect(tableLeft, curY, totalW, rowH).stroke(PR_TABLE_BORDER);
-                doc.restore();
-
-                const y1 = curY + 2;
-                pdfFont(doc, false).fontSize(fdFS).fillColor('#000');
-                doc.text(special ? '' : (ath.best != null ? String(rank) : ''), fdCols[0].x + 1, y1, { width: fdCols[0].w - 2, align: 'center' });
-                doc.text(ath.bib_number || '-', fdCols[1].x + 1, y1, { width: fdCols[1].w - 2, align: 'center' });
-                pdfFont(doc, true).fontSize(fdFS);
-                doc.text(ath.name || '', fdCols[2].x + 1, y1, { width: fdCols[2].w - 2, align: 'center' });
-                pdfFont(doc, false).fontSize(fdFS);
-                doc.text(ath.team || '', fdCols[3].x + 1, y1, { width: fdCols[3].w - 2, align: 'center' });
-
-                // Attempt distances (row 1)
-                for (let i = 0; i < numAttempts; i++) {
-                    const att = ath.attempts[i];
-                    const col = fdCols[4 + i];
-                    let val = '';
-                    if (att.foul) val = 'X';
-                    else if (att.pass) val = '-';
-                    else if (att.dist != null) val = att.dist.toFixed(2);
-                    doc.text(val, col.x + 1, y1, { width: col.w - 2, align: 'center' });
-                }
-
-                // Result (best) — DNF/DQ/NM → 기록란 공백, 비고란에만
-                const resCol = fdCols[4 + numAttempts];
-                pdfFont(doc, true).fontSize(fdFS + 0.5).fillColor('#000');
-                doc.text(special ? '' : (ath.best != null ? ath.best.toFixed(2) : ''), resCol.x + 1, y1, { width: resCol.w - 2, align: 'center' });
-
-                // Remark: status_code or wind of best
-                const remCol = fdCols[fdCols.length - 1];
-                pdfFont(doc, false).fontSize(fdFS).fillColor('#000');
-                if (special) {
-                    doc.text(ath.status_code, remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
-                } else if (hasWind && ath.bestWind != null) {
-                    doc.text((ath.bestWind >= 0 ? '+' : '') + ath.bestWind.toFixed(1), remCol.x + 1, y1, { width: remCol.w - 2, align: 'center' });
-                }
-
-                // Wind per attempt (row 2) — only if hasWind
-                if (hasWind) {
-                    const y2 = curY + 15;
-                    pdfFont(doc, false).fontSize(5.5).fillColor('#888');
-                    for (let i = 0; i < numAttempts; i++) {
-                        const att = ath.attempts[i];
-                        const col = fdCols[4 + i];
-                        if (att.wind != null) {
-                            doc.text((att.wind >= 0 ? '+' : '') + att.wind.toFixed(1), col.x + 1, y2, { width: col.w - 2, align: 'center' });
-                        }
-                    }
-                }
-
-                curY += rowH;
-            }
-            curY += 8;
-        }
-
-    // ============================================================
-    // TRACK / ROAD / RELAY — best time only (existing logic, fixed)
-    // ============================================================
-    } else {
-        const dataRowH2 = Math.max(20, fontSize + 10);
-        const rsCols = [];
-        let xOff = tableLeft;
-        if (tpl.show_rank !== false) { rsCols.push({ key: 'rank', label: '순 위', x: xOff, w: totalW * 0.07 }); xOff += totalW * 0.07; }
-        if (tpl.show_lane !== false) { rsCols.push({ key: 'lane', label: '레 인', x: xOff, w: totalW * 0.07 }); xOff += totalW * 0.07; }
-        if (tpl.show_bib !== false) { rsCols.push({ key: 'bib', label: '배 번', x: xOff, w: totalW * 0.08 }); xOff += totalW * 0.08; }
-        if (tpl.show_name !== false) {
-            const usedFrac = (xOff - tableLeft) / totalW + (tpl.show_team !== false ? 0.22 : 0) + (tpl.show_record !== false ? 0.14 : 0) + (tpl.show_remark !== false ? 0.12 : 0) + (tpl.show_wind ? 0.10 : 0);
-            const nameFrac = Math.max(0.12, 1 - usedFrac);
-            rsCols.push({ key: 'name', label: '선 수 명', x: xOff, w: totalW * nameFrac }); xOff += totalW * nameFrac;
-        }
-        if (tpl.show_team !== false) { rsCols.push({ key: 'team', label: teamLabelK, x: xOff, w: totalW * 0.22 }); xOff += totalW * 0.22; }
-        if (tpl.show_record !== false) { rsCols.push({ key: 'record', label: '기 록', x: xOff, w: totalW * 0.14 }); xOff += totalW * 0.14; }
-        if (tpl.show_wind) { rsCols.push({ key: 'wind', label: '풍 속', x: xOff, w: totalW * 0.10 }); xOff += totalW * 0.10; }
-        if (tpl.show_remark !== false) { rsCols.push({ key: 'remark', label: '비 고', x: xOff, w: totalW * 0.12 }); xOff += totalW * 0.12; }
-
-        // Load Q/q qualifications for non-final rounds
-        let qualMap = {};
-        if (event.round_type !== 'final') {
-            const quals = await db.all('SELECT event_entry_id, qualification_type FROM qualification_selection WHERE event_id=? AND selected=1', event.id);
-            for (const q of quals) { qualMap[q.event_entry_id] = q.qualification_type || 'Q'; }
-        }
-
-        for (const heat of heats) {
-            const entries = await db.all(`
-                SELECT he.lane_number, ee.id AS event_entry_id, ee.status,
-                       a.name, a.bib_number, a.team
-                FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-                JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-                ORDER BY he.lane_number ASC
-            `, heat.id);
-
-            const results = await db.all('SELECT * FROM result WHERE heat_id=? ORDER BY event_entry_id, attempt_number', heat.id);
-
-            if (heats.length > 1) {
-                const headerRowH2 = Math.max(22, fontSize + 12);
-                const neededH = 30 + headerRowH2 + entries.length * dataRowH2 + 20;
-                if (curY + neededH > BODY_BOTTOM) { doc.addPage(); curY = drawEventTopHeader(doc); }
-                const hLabel = heat.heat_name || `Heat ${heat.heat_number}`;
-                pdfFont(doc, true).fontSize(10).fillColor('#000');
-                doc.text(hLabel, margin, curY);
-                if (heat.wind != null && tpl.show_wind) { pdfFont(doc, false).fontSize(8).fillColor('#666'); doc.text(`Wind: ${heat.wind}`, margin + 100, curY + 2); }
-                curY += 16;
-            }
-
-            curY = drawTableHeader(doc, rsCols, curY, tableLeft, tableRight, fontSize);
-
-            const resMap = {};
-            for (const r of results) {
-                if (!resMap[r.event_entry_id]) resMap[r.event_entry_id] = [];
-                resMap[r.event_entry_id].push(r);
-            }
-
-            const ranked = entries.map(e => {
-                const recs = resMap[e.event_entry_id] || [];
-                const r = recs.find(r => r.time_seconds != null);
-                const best = r ? r.time_seconds : null;
-                const bestWind = r ? r.wind : null;
-                let status = recs.find(r => r.status_code && r.status_code !== '' && ['DNS','DNF','NM','DQ'].includes(r.status_code))?.status_code || '';
-                // Fallback: if entry status is no_show and no explicit DNS result, treat as DNS
-                if (!status && e.status === 'no_show') status = 'DNS';
-                return { ...e, best, bestWind, status_code: status, allResults: recs };
-            });
-
-            ranked.sort((a, b) => {
-                const aS = ['DNS','DNF','NM','DQ'].includes(a.status_code);
-                const bS = ['DNS','DNF','NM','DQ'].includes(b.status_code);
-                if (aS && !bS) return 1;
-                if (!aS && bS) return -1;
-                if (a.best == null && b.best == null) return 0;
-                if (a.best == null) return 1;
-                if (b.best == null) return -1;
-                return a.best - b.best;
-            });
-
-            let rank = 0;
-            for (const e of ranked) {
-                if (curY + dataRowH2 > BODY_BOTTOM) {
-                    doc.addPage(); curY = drawEventTopHeader(doc);
-                    curY = drawTableHeader(doc, rsCols, curY, tableLeft, tableRight, fontSize);
-                }
-                const special = ['DNS','DNF','NM','DQ'].includes(e.status_code);
-                rank++;
-                let recStr = '';
-                if (special) { recStr = e.status_code; rank--; }
-                else if (e.best != null) { recStr = formatTimeForPDF(e.best); }
-
-                // 비고: DNF/DQ/DNS/NM → 비고란에만, Q/q도 비고란
-                let remarkStr = '';
-                if (special) remarkStr = e.status_code;
-                else if (qualMap[e.event_entry_id]) remarkStr = qualMap[e.event_entry_id];
-                else remarkStr = e.allResults?.[0]?.remark || '';
-
-                // ─── 비고 멤버 리스트 정규화 (긴 텍스트 줄바꿈) ───
-                // 사용자가 비고에 멤버 이름을 ", " 로 구분해 직접 입력하는 케이스 대비:
-                //   "이동욱(14:48.74), 이정윤(15:09.42), 김현우(15:20.06)"
-                //   → 콤마마다 개행으로 분리해 비고 컬럼 안에 세로로 적층
-                // 짧은 텍스트(PB/SB/Q/NR 같은 코드 또는 콤마 없는 단순 텍스트)는 그대로 유지.
-                // 임계: 25자 이상 + 콤마 포함 → 멤버 리스트로 간주 (어느 종목이든 안전)
-                if (remarkStr && remarkStr.length > 25 && remarkStr.includes(',')) {
-                    remarkStr = remarkStr
-                        .replace(/\s*,\s*/g, '\n')   // ", " → 개행
-                        .trim();
-                }
-
-                const vals = rsCols.map(col => {
-                    switch (col.key) {
-                        case 'rank': return special ? '' : String(rank);
-                        case 'lane': return String(e.lane_number || '-');
-                        case 'bib': return e.bib_number || '-';
-                        case 'name': return e.name || '';
-                        case 'team': return e.team || '';
-                        case 'record': return special ? '' : (e.best != null ? formatTimeForPDF(e.best) : '');
-                        case 'wind': return e.bestWind != null ? String(e.bestWind) : (heat.wind != null ? String(heat.wind) : '');
-                        case 'remark': return remarkStr;
-                        default: return '';
-                    }
-                });
-
-                // ─── 비고 자동 줄바꿈 + 행높이 자동 확장 (긴 텍스트 대비) ───
-                // wrapCols 에 'remark' 포함 → drawTableRow 가 heightOfString 으로 측정하여 rowH 자동 확장.
-                // alignByCol: 비고는 좌측 정렬(이름 리스트가 길 때 가독성 향상)
-                // smallFontCols: 비고만 작은 폰트(7pt)로 줄여 좁은 컬럼 안에 더 잘 들어가게 함
-                const drawOpts = {
-                    boldCols: ['name', 'record'],
-                    wrapCols: ['remark'],
-                    alignByCol: { remark: 'left' },
-                    smallFontCols: { remark: Math.max(7, fontSize - 1) }
-                };
-                // 페이지 break 안전성: drawTableRow 가 행 높이를 늘릴 수 있으므로
-                // 실제 그리기 전에 heightOfString 으로 정확히 측정하고, 자리 부족하면 페이지 추가.
-                // ⚠️ 단순 \n 개수 기반 추정은 부정확함 — 비고 컬럼 너비가 좁아서 PDFKit이
-                //   자동 줄바꿈으로 추가 라인을 만들 수 있기 때문 (예: "김현우(15:20.06)"이
-                //   한 줄에 안 들어가서 2줄이 됨). 반드시 heightOfString 으로 실측해야 함.
-                let estRowH = dataRowH2;
-                if (remarkStr) {
-                    const remarkCol = rsCols.find(c => c.key === 'remark');
-                    if (remarkCol) {
-                        const remarkFs = drawOpts.smallFontCols.remark;
-                        pdfFont(doc, false).fontSize(remarkFs);
-                        try {
-                            const measured = doc.heightOfString(remarkStr, {
-                                width: remarkCol.w - 4,
-                                align: 'left',
-                                lineGap: 0.5
-                            });
-                            estRowH = Math.max(estRowH, Math.ceil(measured) + 16);
-                        } catch (_) {
-                            // 실측 실패시 폴백 — \n 기반 추정에 안전 마진 추가
-                            const lineCount = (remarkStr.match(/\n/g) || []).length + 1;
-                            estRowH = Math.max(estRowH, lineCount * 2 * (remarkFs + 2) + 16);
-                        }
-                    }
-                }
-                if (curY + estRowH > BODY_BOTTOM) {
-                    doc.addPage(); curY = drawEventTopHeader(doc);
-                    curY = drawTableHeader(doc, rsCols, curY, tableLeft, tableRight, fontSize);
-                }
-                curY = drawTableRow(doc, rsCols, vals, curY, tableLeft, tableRight, fontSize, drawOpts);
-            }
-            curY += 8;
-        }
-    }
-
-    // [PAGE-REPEAT] 모든 페이지에 상단 헤더(이미 본문 그릴 때 그렸음) + 하단 박스 보장
-    // bufferPages: true 옵션 덕에 doc.bufferedPageRange() 로 전체 페이지 순회 가능.
-    // 본문은 이미 BODY_BOTTOM 위까지만 그렸으므로 하단은 비어 있음 → 박스 안전하게 추가.
-    // 단, 마지막 페이지에서 본문이 너무 짧게 끝났더라도 박스는 페이지 하단 고정 위치에 그려야 함.
-    try {
-        const range = doc.bufferedPageRange(); // { start, count }
-        for (let i = range.start; i < range.start + range.count; i++) {
-            doc.switchToPage(i);
-            // 페이지 마다 상단 헤더는 본문 그릴 때 이미 그렸지만, 첫 페이지 외에 누락 가능성 방어
-            // → 본문 그리는 곳 모두에서 drawEventTopHeader 를 호출하므로 여기서는 하단 박스만 그림
-            drawEventBottomBox(doc);
-        }
-    } catch (e) { console.warn('[result-sheet] page-repeat error:', e.message); }
-
-    // Branding footer (마지막 페이지에만 그릴 수도 있고 모든 페이지에 그릴 수도 있음.
-    // 기존 동작 유지: 마지막 페이지에만 푸터 — drawBrandingFooter 가 현재 페이지에 그리므로
-    // 위 루프 종료 후 마지막 페이지가 활성 상태 → 그대로 호출하면 마지막 페이지에 그려짐.)
-    // [개선] 모든 페이지에 푸터도 같이 그리도록 변경
-    try {
-        const range = doc.bufferedPageRange();
-        for (let i = range.start; i < range.start + range.count; i++) {
-            doc.switchToPage(i);
-            drawBrandingFooter(doc, pageW, pageH, margin);
-        }
-    } catch (e) { drawBrandingFooter(doc, pageW, pageH, margin); }
-    doc.end();
-  } catch (err) {
-    console.error('[Result Sheet Error]', err);
-    if (!res.headersSent) {
-        res.status(500).json({ error: '기록지 생성 오류: ' + err.message });
-    }
-  }
-});
-
-/**
- * GET /api/documents/result-sheet/:eventId/png
- * PDF 결과지와 동일한 레이아웃을 PNG 이미지로 변환하여 반환
- * 내부적으로 result-sheet PDF를 생성한 후 pdftoppm으로 PNG 변환
- */
-app.get('/api/documents/result-sheet/:eventId/png', async (req, res) => {
-    const eventId = req.params.eventId;
-    const tmpDir = '/tmp/pacerise_png_' + Date.now() + '_' + eventId;
-    try {
-        // Step 1: Generate PDF internally by calling our own endpoint
-        const pdfUrl = `http://localhost:${PORT}/api/documents/result-sheet/${eventId}`;
-        const pdfResp = await fetch(pdfUrl);
-        if (!pdfResp.ok) {
-            return res.status(pdfResp.status).json({ error: 'PDF generation failed' });
-        }
-        const pdfBuffer = Buffer.from(await pdfResp.arrayBuffer());
-
-        // Step 2: Write PDF to temp file
-        fs.mkdirSync(tmpDir, { recursive: true });
-        const pdfPath = path.join(tmpDir, 'result.pdf');
-        fs.writeFileSync(pdfPath, pdfBuffer);
-
-        // Step 3: Convert PDF pages to PNG using pdftoppm (300 DPI)
-        const pngPrefix = path.join(tmpDir, 'page');
-        execSync(`pdftoppm -png -r 300 "${pdfPath}" "${pngPrefix}"`, { timeout: 15000 });
-
-        // Step 4: Read all generated PNG files
-        const pngFiles = fs.readdirSync(tmpDir)
-            .filter(f => f.startsWith('page') && f.endsWith('.png'))
-            .sort();
-
-        if (pngFiles.length === 0) {
-            throw new Error('PNG conversion produced no files');
-        }
-
-        if (pngFiles.length === 1) {
-            // Single page — return directly
-            const pngData = fs.readFileSync(path.join(tmpDir, pngFiles[0]));
-            res.setHeader('Content-Type', 'image/png');
-            res.setHeader('Content-Disposition', `attachment; filename="result_${eventId}.png"`);
-            res.send(pngData);
-        } else {
-            // Multiple pages — stitch vertically using node-canvas
-            const images = pngFiles.map(f => {
-                const data = fs.readFileSync(path.join(tmpDir, f));
-                const img = new (require('canvas').Image)();
-                img.src = data;
-                return img;
-            });
-            const totalW = images[0].width;
-            const totalH = images.reduce((sum, img) => sum + img.height, 0);
-            const stitched = createCanvas(totalW, totalH);
-            const sctx = stitched.getContext('2d');
-            let offsetY = 0;
-            for (const img of images) {
-                sctx.drawImage(img, 0, offsetY);
-                offsetY += img.height;
-            }
-            const pngBuf = stitched.toBuffer('image/png');
-            res.setHeader('Content-Type', 'image/png');
-            res.setHeader('Content-Disposition', `attachment; filename="result_${eventId}.png"`);
-            res.send(pngBuf);
-        }
-    } catch (err) {
-        console.error('[Result Sheet PNG Error]', err);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'PNG 생성 오류: ' + err.message });
-        }
-    } finally {
-        // Cleanup temp files
-        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch(e) {}
-    }
-});
-
-function formatTimeForPDF(s) {
-    if (s == null) return '';
-    if (s >= 3600) {
-        const h = Math.floor(s / 3600);
-        const m = Math.floor((s - h * 3600) / 60);
-        const r = s - h * 3600 - m * 60;
-        return `${h}:${m < 10 ? '0' : ''}${m}:${r < 10 ? '0' : ''}${r.toFixed(2)}`;
-    }
-    if (s >= 60) {
-        const m = Math.floor(s / 60);
-        const r = s - m * 60;
-        return `${m}:${r < 10 ? '0' : ''}${r.toFixed(2)}`;
-    }
-    return s.toFixed(2);
-}
-
-// AD Card PDF — 선수 인가증 (Template-aware)
-app.get('/api/documents/ad-card/:compId', async (req, res) => {
-    const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
-    if (!comp) return res.status(404).json({ error: 'Competition not found' });
-    const athletes = await db.all(`SELECT * FROM athlete WHERE competition_id=? ORDER BY ${orderByBibSql()}`, comp.id);
-    if (athletes.length === 0) return res.status(404).json({ error: 'No athletes found' });
-    const tpl = (await getDocTemplate(comp.id)).ad_card;
-
-    const cardsPerPage = tpl.cards_per_page || 4;
-    const bibSize = tpl.bib_font_size || 48;
-    const nameSize = tpl.name_font_size || 16;
-    const bandMode = tpl.band_color_mode || 'gender_auto';
-    const customColor = tpl.custom_band_color || '#2d9d78';
-
-    const doc = new PDFDocument({ size: 'A4', margin: 20, bufferPages: true });
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Content-Disposition', `inline; filename="ad-cards_${comp.id}.pdf"`);
-    doc.pipe(res);
-
-    // Layout calculation based on cards_per_page
-    let CARD_W, CARD_H, COLS, ROWS, GAP_X, GAP_Y, START_X, START_Y;
-    if (cardsPerPage === 1) {
-        CARD_W = 515; CARD_H = 760; COLS = 1; ROWS = 1; GAP_X = 0; GAP_Y = 0; START_X = 40; START_Y = 30;
-    } else if (cardsPerPage === 2) {
-        CARD_W = 400; CARD_H = 360; COLS = 1; ROWS = 2; GAP_X = 0; GAP_Y = 20; START_X = 98; START_Y = 25;
-    } else {
-        CARD_W = 260; CARD_H = 360; COLS = 2; ROWS = 2; GAP_X = 15; GAP_Y = 15; START_X = 25; START_Y = 25;
-    }
-
-    for (let idx = 0; idx < athletes.length; idx++) {
-        const athlete = athletes[idx];
-        if (idx > 0 && idx % cardsPerPage === 0) doc.addPage();
-        const posInPage = idx % cardsPerPage;
-        const col = posInPage % COLS;
-        const row = Math.floor(posInPage / COLS) % ROWS;
-        const x = START_X + col * (CARD_W + GAP_X);
-        const y = START_Y + row * (CARD_H + GAP_Y);
-
-        // Card border
-        doc.save();
-        doc.roundedRect(x, y, CARD_W, CARD_H, 8).stroke('#333');
-
-        // Header band color
-        let bandColor;
-        if (bandMode === 'custom') {
-            bandColor = customColor;
-        } else {
-            bandColor = athlete.gender === 'M' ? '#2196F3' : athlete.gender === 'F' ? '#E91E63' : '#FFC107';
-        }
-        doc.rect(x, y, CARD_W, 40).fill(bandColor);
-
-        // Competition name on band
-        pdfFont(doc, true).fontSize(cardsPerPage === 1 ? 12 : 8).fillColor('#fff');
-        doc.text(comp.name, x + 10, y + 6, { width: CARD_W - 20, align: 'center' });
-        pdfFont(doc, false).fontSize(cardsPerPage === 1 ? 8 : 6).fillColor('#fff');
-        doc.text('ACCREDITATION / AD CARD', x + 10, y + (cardsPerPage === 1 ? 26 : 22), { width: CARD_W - 20, align: 'center' });
-
-        let contentY = y + 55;
-        const centerX = x + 10;
-        const contentW = CARD_W - 20;
-
-        // Bib number (conditional)
-        if (tpl.show_bib !== false) {
-            pdfFont(doc, true).fontSize(bibSize).fillColor('#1a1a1a');
-            doc.text(athlete.bib_number || '-', centerX, contentY, { width: contentW, align: 'center' });
-            contentY += bibSize + (cardsPerPage === 1 ? 20 : 12);
-        }
-
-        // Name (conditional)
-        if (tpl.show_name !== false) {
-            pdfFont(doc, true).fontSize(nameSize).fillColor('#333');
-            doc.text(athlete.name || '', centerX, contentY, { width: contentW, align: 'center' });
-            contentY += nameSize + 10;
-        }
-
-        // Team (conditional)
-        if (tpl.show_team !== false) {
-            pdfFont(doc, false).fontSize(cardsPerPage === 1 ? 14 : 11).fillColor('#666');
-            doc.text(athlete.team || '', centerX, contentY, { width: contentW, align: 'center' });
-            contentY += (cardsPerPage === 1 ? 24 : 18);
-        }
-
-        // Gender label (conditional)
-        if (tpl.show_gender !== false) {
-            const gLabel = athlete.gender === 'M' ? 'MALE' : athlete.gender === 'F' ? 'FEMALE' : 'MIXED';
-            pdfFont(doc, true).fontSize(9).fillColor(bandColor);
-            doc.text(gLabel, centerX, contentY, { width: contentW, align: 'center' });
-            contentY += 18;
-        }
-
-        // Events enrolled (conditional)
-        if (tpl.show_events !== false) {
-            const events = await db.all(`
-                SELECT e.name, e.gender, e.round_type FROM event_entry ee
-                JOIN event e ON e.id = ee.event_id
-                WHERE ee.athlete_id = ? AND e.competition_id = ? AND e.parent_event_id IS NULL
-                ORDER BY e.sort_order
-            `, athlete.id, comp.id);
-
-            contentY += 5;
-            pdfFont(doc, true).fontSize(7).fillColor('#999');
-            doc.text('EVENTS', centerX, contentY, { width: contentW, align: 'center' });
-            contentY += 12;
-            pdfFont(doc, false).fontSize(8).fillColor('#333');
-            const maxEvents = cardsPerPage === 1 ? 12 : 6;
-            for (const ev of events.slice(0, maxEvents)) {
-                doc.text(ev.name, centerX, contentY, { width: contentW, align: 'center' });
-                contentY += 11;
-            }
-            if (events.length > maxEvents) {
-                doc.text(`+${events.length - maxEvents} more`, centerX, contentY, { width: contentW, align: 'center' });
-            }
-        }
-
-        // Barcode placeholder (conditional)
-        if (tpl.show_barcode) {
-            const barcodeY = y + CARD_H - 55;
-            pdfFont(doc, false).fontSize(7).fillColor('#666');
-            doc.text('|||||||||||||||||||||||', centerX, barcodeY, { width: contentW, align: 'center', characterSpacing: 2 });
-            pdfFont(doc, false).fontSize(6).fillColor('#888');
-            doc.text(athlete.barcode || athlete.bib_number || '', centerX, barcodeY + 12, { width: contentW, align: 'center' });
-        }
-
-        // Footer with comp venue & dates
-        pdfFont(doc, false).fontSize(6).fillColor('#aaa');
-        doc.text(`${comp.venue || ''} | ${comp.start_date} ~ ${comp.end_date}`, centerX, y + CARD_H - 30, { width: contentW, align: 'center' });
-        pdfFont(doc, false).fontSize(5).fillColor('#ccc');
-        doc.text('PACE RISE Competition OS', centerX, y + CARD_H - 18, { width: contentW, align: 'center' });
-
-        doc.restore();
-    }
-
-    doc.end();
-});
+require('./lib/routes/pdf_documents')(app, { db, getDocTemplate, orderByBibSql, PORT });
 
 // ============================================================
-// EVENT RECORDS MANAGEMENT — 종목별 기록 관리 API
+// 종목별 기록표(event_records) · 부 마스터(divisions) — lib/routes/event_records.js 로 추출 (2026-09)
 // ============================================================
-
-// GET all event records (optionally filter by gender)
-app.get('/api/event-records', async (req, res) => {
-    try {
-        const gender = req.query.gender; // M or F
-        let rows;
-        if (gender) {
-            rows = await db.all('SELECT * FROM event_record WHERE gender=? ORDER BY event_name, record_type', gender);
-        } else {
-            rows = await db.all('SELECT * FROM event_record ORDER BY gender, event_name, record_type');
-        }
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// GET records for a specific event
-app.get('/api/event-records/:gender/:eventName', async (req, res) => {
-    try {
-        const { gender, eventName } = req.params;
-        const rows = await db.all('SELECT * FROM event_record WHERE gender=? AND event_name=? ORDER BY record_type', gender, decodeURIComponent(eventName));
-        // Return as object: { national: {...}, division: {...}, competition: {...} }
-        const result = {};
-        for (const r of rows) result[r.record_type] = r;
-        res.json(result);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// PUT (upsert) event record — 백워드 호환 (구 UI 호출용)
-// v4 스키마: UNIQUE(record_type, event_name, gender, division_code, series_id)
-// 구 UI는 division_code/series_id 없이 호출하므로 NULL로 처리 → NR(national)만 의미 있음.
-// DR/CR도 division_code/series_id NULL인 슬롯 하나만 차지하게 됨 (구 호환).
-// 새 UI는 /api/records (신 API) 를 사용해야 함.
-app.put('/api/event-records', async (req, res) => {
-    try {
-        const { admin_key, gender, event_name, record_type, record_value, holder_name, holder_team, record_year } = req.body;
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-        if (!gender || !event_name || !record_type) return res.status(400).json({ error: 'gender, event_name, record_type 필수' });
-        if (!['M','F','X'].includes(gender)) return res.status(400).json({ error: 'gender는 M/F/X' });
-        if (!['national','division','competition'].includes(record_type)) return res.status(400).json({ error: 'record_type는 national/division/competition' });
-
-        // v4 UNIQUE: (record_type, event_name, gender, division_code, series_id)
-        // SQLite/PG 모두 NULL은 distinct로 취급하므로 ON CONFLICT 사용 불가 → 수동 UPSERT
-        const existing = await db.get(
-            `SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=? AND division_code IS NULL AND series_id IS NULL`,
-            record_type, event_name, gender
-        );
-        if (existing) {
-            await db.run(
-                `UPDATE event_record SET record_value=?, holder_name=?, holder_team=?, record_year=?, updated_at=` + (db.isAsync ? 'NOW()' : `datetime('now')`) + ` WHERE id=?`,
-                record_value || '', holder_name || '', holder_team || '', record_year || '', existing.id
-            );
-        } else {
-            await db.run(
-                `INSERT INTO event_record (record_type, event_name, gender, division_code, series_id, record_value, holder_name, holder_team, record_year, approved) VALUES (?,?,?,NULL,NULL,?,?,?,?,1)`,
-                record_type, event_name, gender, record_value || '', holder_name || '', holder_team || '', record_year || ''
-            );
-        }
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// PUT batch upsert for a single event (all 3 record types at once) — 백워드 호환
-app.put('/api/event-records/batch', async (req, res) => {
-    try {
-        const { admin_key, gender, event_name, records } = req.body;
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-        if (!gender || !event_name || !records) return res.status(400).json({ error: 'gender, event_name, records 필수' });
-
-        const nowExpr = db.isAsync ? 'NOW()' : `datetime('now')`;
-        await db.transaction(async () => {
-            for (const rt of ['national', 'division', 'competition']) {
-                const r = records[rt];
-                if (!r) continue;
-                const existing = await db.get(
-                    `SELECT id FROM event_record WHERE record_type=? AND event_name=? AND gender=? AND division_code IS NULL AND series_id IS NULL`,
-                    rt, event_name, gender
-                );
-                if (existing) {
-                    await db.run(
-                        `UPDATE event_record SET record_value=?, holder_name=?, holder_team=?, record_year=?, updated_at=${nowExpr} WHERE id=?`,
-                        r.record_value || '', r.holder_name || '', r.holder_team || '', r.record_year || '', existing.id
-                    );
-                } else {
-                    await db.run(
-                        `INSERT INTO event_record (record_type, event_name, gender, division_code, series_id, record_value, holder_name, holder_team, record_year, approved) VALUES (?,?,?,NULL,NULL,?,?,?,?,1)`,
-                        rt, event_name, gender, r.record_value || '', r.holder_name || '', r.holder_team || '', r.record_year || ''
-                    );
-                }
-            }
-        })();
-
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ============================================================
-// RECORDS MANAGEMENT v4 — NR/DR/CR 통합 신 API (Phase B-2)
-// ============================================================
-
-// GET divisions master
-app.get('/api/divisions', async (req, res) => {
-    try {
-        const rows = await db.all('SELECT code, label_ko, gender, school_level, sort_order FROM division_master WHERE active=1 ORDER BY sort_order, code');
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ─── Division Master CRUD (관리자 전용) ───
-// 기본 13부 시드(시스템 부)는 code 변경/삭제 차단, label_ko/sort_order만 편집 허용.
-const BASE_DIVISION_CODES = new Set([
-    'M_ELEM','M_MID','M_HIGH','M_UNIV','M_GEN','M_OPEN',
-    'F_ELEM','F_MID','F_HIGH','F_UNIV','F_GEN','F_OPEN',
-    'MIXED'
-]);
-
-// GET all divisions (active+inactive, admin/operator view)
-app.get('/api/admin/divisions', async (req, res) => {
-    try {
-        const rows = await db.all('SELECT code, label_ko, gender, school_level, sort_order, active, created_at FROM division_master ORDER BY sort_order, code');
-        // is_base 플래그 부여 (UI 보호용)
-        const result = rows.map(r => ({ ...r, is_base: BASE_DIVISION_CODES.has(r.code) }));
-        res.json(result);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// POST create division (admin only)
-app.post('/api/admin/divisions', async (req, res) => {
-    try {
-        const { admin_key, code, label_ko, gender, school_level, sort_order } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-        if (!code || !code.trim()) return res.status(400).json({ error: 'code 필수' });
-        if (!label_ko || !label_ko.trim()) return res.status(400).json({ error: 'label_ko 필수' });
-        if (!['M','F','X'].includes(gender)) return res.status(400).json({ error: 'gender는 M/F/X 중 하나' });
-        const validLevels = ['OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED'];
-        if (!validLevels.includes(school_level)) return res.status(400).json({ error: 'school_level은 ' + validLevels.join('/') + ' 중 하나' });
-        const codeTrim = code.trim().toUpperCase();
-        // code 형식 검증 (영숫자/언더스코어만)
-        if (!/^[A-Z0-9_]+$/.test(codeTrim)) return res.status(400).json({ error: 'code는 영문 대문자/숫자/언더스코어만 사용 가능' });
-        const so = Number.isFinite(parseInt(sort_order, 10)) ? parseInt(sort_order, 10) : 500;
-        try {
-            await db.run(
-                'INSERT INTO division_master (code, label_ko, gender, school_level, sort_order, active) VALUES (?, ?, ?, ?, ?, 1)',
-                codeTrim, label_ko.trim(), gender, school_level, so
-            );
-            const row = await db.get('SELECT code, label_ko, gender, school_level, sort_order, active, created_at FROM division_master WHERE code=?', codeTrim);
-            opLog(`부 생성: ${codeTrim} (${label_ko.trim()})`, 'admin', 'admin');
-            res.json({ ...row, is_base: false });
-        } catch (e) {
-            if (/UNIQUE|duplicate|PRIMARY/i.test(e.message)) return res.status(400).json({ error: '같은 code의 부가 이미 존재합니다.' });
-            throw e;
-        }
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// PUT update division (admin only). 기본 13부는 label_ko / sort_order 만 변경 가능.
-app.put('/api/admin/divisions/:code', async (req, res) => {
-    try {
-        const { admin_key, label_ko, gender, school_level, sort_order, active } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-        const code = req.params.code;
-        const old = await db.get('SELECT * FROM division_master WHERE code=?', code);
-        if (!old) return res.status(404).json({ error: 'Not found' });
-        const isBase = BASE_DIVISION_CODES.has(code);
-
-        // 변경 가능 필드 결정
-        const newLabel = (label_ko !== undefined && label_ko !== null && String(label_ko).trim()) ? String(label_ko).trim() : old.label_ko;
-        const newSort = (sort_order !== undefined && Number.isFinite(parseInt(sort_order, 10))) ? parseInt(sort_order, 10) : old.sort_order;
-        let newGender = old.gender;
-        let newLevel = old.school_level;
-        let newActive = old.active;
-
-        if (!isBase) {
-            if (gender !== undefined) {
-                if (!['M','F','X'].includes(gender)) return res.status(400).json({ error: 'gender는 M/F/X 중 하나' });
-                newGender = gender;
-            }
-            if (school_level !== undefined) {
-                const validLevels = ['OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED'];
-                if (!validLevels.includes(school_level)) return res.status(400).json({ error: 'school_level은 ' + validLevels.join('/') + ' 중 하나' });
-                newLevel = school_level;
-            }
-            if (active !== undefined) newActive = active ? 1 : 0;
-        }
-
-        await db.run(
-            'UPDATE division_master SET label_ko=?, gender=?, school_level=?, sort_order=?, active=? WHERE code=?',
-            newLabel, newGender, newLevel, newSort, newActive, code
-        );
-        const row = await db.get('SELECT code, label_ko, gender, school_level, sort_order, active, created_at FROM division_master WHERE code=?', code);
-        opLog(`부 수정: ${code} (${newLabel})`, 'admin', 'admin');
-        res.json({ ...row, is_base: isBase });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// DELETE division (admin only). 기본 13부는 삭제 차단. 커스텀 부는 사용 중이면 force 필요.
-app.delete('/api/admin/divisions/:code', async (req, res) => {
-    try {
-        const { admin_key, force, hard } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
-        const code = req.params.code;
-        if (BASE_DIVISION_CODES.has(code)) return res.status(400).json({ error: '기본 13부는 삭제할 수 없습니다.' });
-        const old = await db.get('SELECT * FROM division_master WHERE code=?', code);
-        if (!old) return res.status(404).json({ error: 'Not found' });
-
-        // 사용 중인 종목/기록 카운트 (SQLite/PG 양쪽 호환)
-        let eventCnt = null, recCnt = null;
-        try { eventCnt = await db.get('SELECT COUNT(*) AS c FROM event WHERE division=?', code); } catch(_) {}
-        try { recCnt = await db.get('SELECT COUNT(*) AS c FROM event_record WHERE division_code=?', code); } catch(_) {}
-        const usedEvents = eventCnt?.c || 0;
-        const usedRecords = recCnt?.c || 0;
-
-        if ((usedEvents > 0 || usedRecords > 0) && !force) {
-            return res.status(409).json({
-                error: '사용 중인 부입니다.',
-                needs_force: true,
-                used_events: usedEvents,
-                used_records: usedRecords,
-                message: `종목 ${usedEvents}개, 기록 ${usedRecords}개에서 사용 중입니다. 강제 삭제하려면 force=true로 다시 요청하세요.`
-            });
-        }
-
-        if (hard && usedEvents === 0 && usedRecords === 0) {
-            await db.run('DELETE FROM division_master WHERE code=?', code);
-            opLog(`부 완전 삭제: ${code} (${old.label_ko})`, 'admin', 'admin');
-            res.json({ success: true, deleted: 'hard', code });
-        } else {
-            // 기본 동작: soft delete (active=0). 종목/기록의 division 값은 그대로 유지 (보존).
-            await db.run('UPDATE division_master SET active=0 WHERE code=?', code);
-            opLog(`부 비활성화: ${code} (${old.label_ko}) — 사용 종목 ${usedEvents}, 기록 ${usedRecords}건`, 'admin', 'admin');
-            res.json({ success: true, deleted: 'soft', code, used_events: usedEvents, used_records: usedRecords });
-        }
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+require('./lib/routes/event_records')(app, { db, isAdminKey, opLog, upload, guessEventCategory });
 
 // ─── Competition Series CRUD ─── (lib/routes/competition_series.js 로 추출)
 require('./lib/routes/competition_series')(app, { db, isAdminKey, opLog });
 
 // ─── Records v4 (NR/DR/CR 통합) ─── (lib/routes/records.js 로 추출)
 require('./lib/routes/records')(app, { db, isAdminKey, opLog });
+// 기록표 엑셀 일괄 업로드 (NR/DR/CR) — /api/records/bulk-preview, /api/records/bulk-import
+require('./lib/routes/records_bulk')(app, { db, isAdminKey, opLog, upload, XLSX, guessEventCategory });
 
 // ============================================================
 // RECORD BREAKS (신기록 승인 큐) — lib/routes/record_breaks.js 로 추출
@@ -10178,20 +5332,15 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           return { ...e, totalPoints, status_code: statusCode };
         }));
 
-        athleteData.sort((a, b) => {
-          const aS = ['DNS','DNF','DQ'].includes(a.status_code);
-          const bS = ['DNS','DNF','DQ'].includes(b.status_code);
-          if (aS && !bS) return 1;
-          if (!aS && bS) return -1;
-          return b.totalPoints - a.totalPoints;
-        });
+        athleteData.sort(PaceRanking.withStatusLast((a, b) => b.totalPoints - a.totalPoints));
 
-        rankings = athleteData.filter(a => a.status_code !== 'DNS').slice(0, 8).map(a => ({
+        rankings = athleteData.slice(0, 8).map(a => ({
           name: a.name || '',
           team: a.team || '',
-          record: ['DNS','DNF','DQ'].includes(a.status_code) ? a.status_code : String(a.totalPoints),
+          record: PaceRanking.isStatus(a.status_code) ? a.status_code : String(a.totalPoints),
           wind: null,
-          wa_score: null
+          wa_score: null,
+          _metric: PaceRanking.isStatus(a.status_code) ? null : a.totalPoints
         }));
 
       // ===== FIELD HEIGHT =====
@@ -10216,6 +5365,8 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
             totalMisses += misses;
             if (attH.some(a => a.result_mark === 'O')) { bestCleared = h; missesAtBest = misses; }
           }
+          // 카운트백은 공용 규칙(public/lib/ranking.js · WA TR 26.8): '마지막으로 넘은 높이까지'의 실패 수 — 예전엔 경기 전체 실패 수로 계산했다
+          { const _hs = require('./public/lib/ranking').heightStatsFromAttempts(myAttempts); totalMisses = _hs.totalFails; missesAtBest = _hs.failsAtBest; }
           const results = await db.all('SELECT * FROM result WHERE heat_id=? AND event_entry_id=?', heat.id, e.event_entry_id);
           let status = results.find(r => r.status_code && ['DNS','DNF','DQ','NM'].includes(r.status_code))?.status_code || '';
           if (!status && e.status === 'no_show') status = 'DNS';
@@ -10228,29 +5379,27 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           return { ...e, bestCleared, totalMisses, missesAtBest, status_code: status };
         }));
 
-        athleteData.sort((a, b) => {
-          const aS = ['DNS','DNF','DQ','NM'].includes(a.status_code);
-          const bS = ['DNS','DNF','DQ','NM'].includes(b.status_code);
-          if (aS && !bS) return 1; if (!aS && bS) return -1;
+        athleteData.sort(PaceRanking.withStatusLast((a, b) => {
           if (a.bestCleared == null && b.bestCleared == null) return 0;
           if (a.bestCleared == null) return 1; if (b.bestCleared == null) return -1;
           if (b.bestCleared !== a.bestCleared) return b.bestCleared - a.bestCleared;
           if (a.missesAtBest !== b.missesAtBest) return a.missesAtBest - b.missesAtBest;
           return a.totalMisses - b.totalMisses;
-        });
+        }));
 
-        rankings = athleteData.filter(a => !['DNS','DNF','DQ','NM'].includes(a.status_code) && a.bestCleared != null).slice(0, 8).map(a => ({
+        rankings = athleteData.filter(a => !PaceRanking.isStatus(a.status_code) && a.bestCleared != null).slice(0, 8).map(a => ({
           name: a.name || '',
           team: a.team || '',
           record: fmtHeightCm(a.bestCleared),
           wind: null,
-          wa_score: null
+          wa_score: null,
+          _metric: `${a.bestCleared}|${a.missesAtBest}|${a.totalMisses}` // 같은 높이+실패수 = 공동
         }));
-        // Add NM/DNS/DNF at end
-        const specials = athleteData.filter(a => ['DNS','DNF','DQ','NM'].includes(a.status_code) || a.bestCleared == null);
+        // Add NM/DNS/DNF/DQ at end (up to 8)
+        const specials = athleteData.filter(a => PaceRanking.isStatus(a.status_code) || a.bestCleared == null);
         for (const s of specials) {
           if (rankings.length >= 8) break;
-          rankings.push({ name: s.name || '', team: s.team || '', record: s.status_code || 'NM', wind: null, wa_score: null });
+          rankings.push({ name: s.name || '', team: s.team || '', record: s.status_code || 'NM', wind: null, wa_score: null, _metric: null });
         }
 
       // ===== FIELD DISTANCE (jumps + throws) =====
@@ -10284,28 +5433,27 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
               r.status_code === 'X' || r.status_code === 'FOUL' || r.distance_meters === 0
             );
             if (!status && best === null && allFoulRecs) status = 'NM';
-            allEntries.push({ ...e, best, bestWind, status_code: status });
+            allEntries.push({ ...e, best, bestWind, status_code: status, sortedValid: recs.filter(r => r.distance_meters != null && r.distance_meters > 0 && r.status_code !== 'X' && r.status_code !== 'FOUL').map(r => r.distance_meters).sort((x, y) => y - x) });
           }
         }
 
-        allEntries.sort((a, b) => {
-          const aS = ['DNS','DNF','DQ','NM'].includes(a.status_code);
-          const bS = ['DNS','DNF','DQ','NM'].includes(b.status_code);
-          if (aS && !bS) return 1; if (!aS && bS) return -1;
+        allEntries.sort(PaceRanking.withStatusLast((a, b) => {
           if (a.best == null && b.best == null) return 0;
           if (a.best == null) return 1; if (b.best == null) return -1;
-          return b.best - a.best;
-        });
+          // 최고 기록이 같으면 2·3번째 기록으로 (WA TR 25.22 · public/lib/ranking.js) — 예전엔 최고 기록만 비교해 동률 순서가 임의였다
+          return PaceRanking.compareDistance(a, b);
+        }));
 
         // 투척+도약 모두 "15m09" 형식 사용 (fmtJumpCm은 cm정수 "1509"로 변환되어 오류)
         const fmtFn = (isThrow || isJump) ? fmtFieldDist : (m => m != null ? m.toFixed(2) : '');
 
-        rankings = allEntries.filter(a => a.status_code !== 'DNS').slice(0, 8).map(a => ({
+        rankings = allEntries.slice(0, 8).map(a => ({
           name: a.name || '',
           team: a.team || '',
-          record: ['DNS','DNF','DQ','NM'].includes(a.status_code) ? a.status_code : fmtFn(a.best),
+          record: PaceRanking.isStatus(a.status_code) ? a.status_code : fmtFn(a.best),
           wind: (hasWind && a.bestWind != null) ? fmtWind(a.bestWind) : null,
-          wa_score: null
+          wa_score: null,
+          _metric: PaceRanking.isStatus(a.status_code) ? null : a.best
         }));
 
       // ===== TRACK / ROAD / RELAY =====
@@ -10333,23 +5481,21 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
           }
         }
 
-        allEntries.sort((a, b) => {
-          const aS = ['DNS','DNF','NM','DQ'].includes(a.status_code);
-          const bS = ['DNS','DNF','NM','DQ'].includes(b.status_code);
-          if (aS && !bS) return 1; if (!aS && bS) return -1;
+        allEntries.sort(PaceRanking.withStatusLast((a, b) => {
           if (a.best == null && b.best == null) return 0;
           if (a.best == null) return 1; if (b.best == null) return -1;
           return a.best - b.best;
-        });
+        }));
 
-        for (const a of allEntries.filter(e => e.status_code !== 'DNS').slice(0, 8)) {
-          const isSpecial = ['DNF','NM','DQ'].includes(a.status_code);
+        for (const a of allEntries.slice(0, 8)) {
+          const isSpecial = PaceRanking.isStatus(a.status_code);
           const entry = {
             name: a.name || '',
             team: a.team || '',
             record: isSpecial ? a.status_code : fmtTrackTime(a.best),
             wind: null,
-            wa_score: null
+            wa_score: null,
+            _metric: isSpecial ? null : a.best
           };
 
           // Wind: per-result or per-heat
@@ -10440,12 +5586,68 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
     queueCell('H3', dateStr);
     queueCell('X3', chiefJudge);
 
+    // ── 신기록(NR/DR/CR) 기준기록 로드 (이 대회 시리즈 기준) ──
+    const _compSeriesId = (comp && comp.series_id != null) ? comp.series_id : null;
+    const _baseByTpl = {}; // template_name -> { national, division, competition }
+    try {
+      const _recRows = await db.all('SELECT * FROM event_record WHERE gender IN (?, ?)', gender, 'X');
+      for (const rr of _recRows) {
+        if (rr.record_type === 'national') { if (rr.series_id != null || rr.division_code != null) continue; }
+        else if (rr.record_type === 'division') { if (rr.series_id != null) continue; }
+        else if (rr.record_type === 'competition') { if (_compSeriesId == null || rr.series_id !== _compSeriesId) continue; }
+        const tplName = eventMap[rr.event_name] || rr.event_name; // DB 종목명 → 템플릿 종목명
+        if (!_baseByTpl[tplName]) _baseByTpl[tplName] = {};
+        _baseByTpl[tplName][rr.record_type] = rr;
+      }
+    } catch (e) { console.warn('[comprehensive] 기준기록 로드 실패:', e.message); }
+    const _parseRec = (s) => {
+      if (s == null) return null;
+      const t = String(s).trim();
+      if (!t || ['DNS','DNF','DQ','DSQ','NM'].includes(t)) return null;
+      const mm = t.match(/^(\d+)m(\d+)$/);                 // 12m45 / 3m60 → 12.45 / 3.60
+      if (mm) return parseFloat(`${mm[1]}.${mm[2]}`);
+      if (t.includes(':')) { const p = t.split(':').map(x => parseFloat(x)); if (p.some(isNaN)) return null; return p.reduce((a, v) => a * 60 + v, 0); }
+      const v = parseFloat(t.replace(/[^\d.]/g, ''));
+      return isNaN(v) ? null : v;
+    };
+    const _dirForTpl = (tplName) => {
+      if (HEIGHT_EVENTS.has(tplName) || THROW_EVENTS.has(tplName) || JUMP_EVENTS.has(tplName)) return 'higher';
+      if (COMBINED_NAMES.has(tplName)) return null; // 점수 기반 → 매트릭스 라벨 제외
+      return 'lower'; // track/road/relay
+    };
+    const _recLabelFor = (tplName, recStr, windStr) => {
+      const dir = _dirForTpl(tplName); if (!dir) return '';
+      const base = _baseByTpl[tplName]; if (!base) return '';
+      const num = _parseRec(recStr); if (num == null) return '';
+      if (WIND_EVENTS.has(tplName) && windStr) { const w = parseFloat(String(windStr).replace('+', '')); if (!isNaN(w) && w > 2.0) return ''; } // 참고기록
+      const out = [];
+      for (const [k, lbl] of [['national', 'NR'], ['division', 'DR'], ['competition', 'CR']]) {
+        const rec = base[k]; if (!rec) continue;
+        const ov = _parseRec(rec.record_value); if (ov == null) continue;
+        if (dir === 'lower' && num < ov) out.push(lbl);
+        else if (dir === 'higher' && num > ov) out.push(lbl);
+      }
+      return out.join(' ');
+    };
+
     // Fill events
     for (const evt of resultEvents) {
       const row = rowMap[evt.template_name];
       if (!row) continue;
-      for (let i = 0; i < Math.min(evt.rankings.length, 8); i++) {
-        const r = evt.rankings[i];
+      const rks = evt.rankings.slice(0, 8);
+      // 순위 + 공동순위 계산 (유효기록만 순위 부여, 표준: 1,2,2,4)
+      for (let i = 0; i < rks.length; i++) {
+        const r = rks[i];
+        if (r._metric == null) { r._rank = null; continue; }
+        if (i > 0 && rks[i - 1]._metric != null && rks[i - 1]._metric === r._metric) {
+          r._rank = rks[i - 1]._rank;
+          r._tied = true; rks[i - 1]._tied = true;
+        } else {
+          r._rank = i + 1;
+        }
+      }
+      for (let i = 0; i < rks.length; i++) {
+        const r = rks[i];
         const [nameCol, recCol] = PLACE_COLS[i];
         if (evt.is_relay && r.members && r.members.length >= 2) {
           queueCell(`${nameCol}${row}`, r.members.slice(0, 2).join(' '));
@@ -10453,7 +5655,15 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
         } else {
           queueCell(`${nameCol}${row}`, r.name);
         }
-        queueCell(`${recCol}${row}`, r.record);
+        // 기록 옆 괄호: 공동순위 + 신기록(NR/DR/CR) — 예: "12m45 (2위, CR)"
+        const parts = [];
+        if (r._tied && r._rank != null) parts.push(`${r._rank}위`);
+        if (!r.wa_score) {
+          const _lbl = _recLabelFor(evt.template_name, r.record, r.wind);
+          if (_lbl) parts.push(_lbl);
+        }
+        const recDisplay = (r.record != null ? String(r.record) : '') + (parts.length ? ` (${parts.join(', ')})` : '');
+        queueCell(`${recCol}${row}`, recDisplay);
         queueCell(`${nameCol}${row + 1}`, r.team);
         if (r.wind) queueCell(`${recCol}${row + 1}`, r.wind);
         if (r.wa_score) queueCell(`${recCol}${row + 2}`, r.wa_score);
@@ -10535,726 +5745,111 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
   }
 });
 
-// ========== 상장(Certificate) System ==========
-//
-// 양식 종류: award(시상장) | finisher(완주증) | team(단체상)
-// 순위 표기: ordinal(우승/준우승/3위) | numeric(1위/2위/3위) | mixed
-//
-
-// 종목 결과 가져오기 (랭킹·기록 포함) — 상장 발급용 헬퍼
-async function getEventResultsForCert(eventId) {
-    const event = await db.get('SELECT * FROM event WHERE id=?', eventId);
-    if (!event) return { event: null, rows: [] };
-
-    // 트랙(time_seconds) / 필드(distance_meters) 자동 판별
-    const rows = await db.all(`
-        SELECT
-            ee.id AS entry_id,
-            ee.athlete_id,
-            a.name AS athlete_name,
-            a.team,
-            a.bib_number,
-            r.time_seconds,
-            r.distance_meters,
-            r.status_code,
-            r.wind,
-            r.attempt_number
-        FROM event_entry ee
-        JOIN athlete a ON a.id = ee.athlete_id
-        LEFT JOIN heat h ON h.event_id = ee.event_id
-        LEFT JOIN result r ON r.event_entry_id = ee.id AND r.heat_id = h.id
-        WHERE ee.event_id = ?
-    `, eventId);
-
-    // 같은 선수에 여러 시도가 있을 수 있어 best 기록만 추림
-    const byAthlete = new Map();
-    for (const row of rows) {
-        const cur = byAthlete.get(row.athlete_id);
-        const valid = (row.status_code == null || row.status_code === '' || row.status_code === 'OK');
-        const t = (row.time_seconds != null && row.time_seconds > 0) ? row.time_seconds : null;
-        const d = (row.distance_meters != null && row.distance_meters > 0) ? row.distance_meters : null;
-        if (!cur) { byAthlete.set(row.athlete_id, row); continue; }
-        // 더 좋은 기록 갱신
-        if (t && (cur.time_seconds == null || t < cur.time_seconds)) byAthlete.set(row.athlete_id, row);
-        else if (d && (cur.distance_meters == null || d > cur.distance_meters)) byAthlete.set(row.athlete_id, row);
-    }
-    const list = Array.from(byAthlete.values());
-
-    // 시간(track) → 오름차순, 거리(field) → 내림차순
-    const hasTime = list.some(x => x.time_seconds != null && x.time_seconds > 0);
-    const hasDist = list.some(x => x.distance_meters != null && x.distance_meters > 0);
-    list.sort((a, b) => {
-        const aStatus = a.status_code && a.status_code !== 'OK';
-        const bStatus = b.status_code && b.status_code !== 'OK';
-        if (aStatus && !bStatus) return 1;
-        if (!aStatus && bStatus) return -1;
-        if (hasTime) {
-            const at = a.time_seconds || 999999, bt = b.time_seconds || 999999;
-            return at - bt;
-        }
-        if (hasDist) {
-            const ad = a.distance_meters || -1, bd = b.distance_meters || -1;
-            return bd - ad;
-        }
-        return 0;
-    });
-
-    // 순위 부여 및 기록 포맷
-    const ranked = list.map((row, idx) => {
-        const hasResult = (row.time_seconds && row.time_seconds > 0) ||
-                         (row.distance_meters && row.distance_meters > 0) ||
-                         (row.status_code === 'DNS' || row.status_code === 'DNF' || row.status_code === 'DQ');
-        const rank = (row.status_code && row.status_code !== 'OK') ? null : (idx + 1);
-        let recordValue = '';
-        if (row.time_seconds && row.time_seconds > 0) {
-            const t = row.time_seconds;
-            if (t >= 60) {
-                const m = Math.floor(t / 60);
-                const s = (t - m * 60).toFixed(2);
-                recordValue = `${m}:${s.padStart(5, '0')}`;
-            } else {
-                recordValue = t.toFixed(2);
-            }
-            if (row.wind) recordValue += ` (${row.wind})`;
-        } else if (row.distance_meters && row.distance_meters > 0) {
-            recordValue = row.distance_meters.toFixed(2) + 'm';
-        } else if (row.status_code) {
-            recordValue = row.status_code;
-        }
-        return {
-            athlete_id: row.athlete_id,
-            athlete_name: row.athlete_name,
-            team: row.team || '',
-            bib_number: row.bib_number,
-            rank,
-            record_value: recordValue,
-            finished: hasResult && (!row.status_code || row.status_code === 'OK'),
-            status_code: row.status_code,
-        };
-    });
-    return { event, rows: ranked };
-}
-
-// 템플릿 목록 (관리자) — 대회 ID 옵션
-app.get('/api/admin/certificate-templates', async (req, res) => {
-    try {
-        const adminKey = req.query.admin_key;
-        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const compId = req.query.competition_id;
-        let rows;
-        if (compId) {
-            rows = await db.all(
-                `SELECT * FROM certificate_template
-                 WHERE competition_id IS NULL OR competition_id = ?
-                 ORDER BY sort_order, id`, compId);
-        } else {
-            rows = await db.all('SELECT * FROM certificate_template ORDER BY sort_order, id');
-        }
-        res.json({ templates: rows });
-    } catch (err) {
-        console.error('[CERT][list] error:', err);
-        res.status(500).json({ error: err.message });
-    }
+// ========== Certificate System API (lib/routes/certificate.js) ==========
+//   추출 2026-05-31 (A-11): 11 routes + getEventResultsForCert 헬퍼
+//     GET    /api/admin/certificate-templates
+//     GET    /api/admin/certificate-templates/:id
+//     POST   /api/admin/certificate-templates
+//     PUT    /api/admin/certificate-templates/:id
+//     DELETE /api/admin/certificate-templates/:id
+//     POST   /api/admin/certificates/preview
+//     POST   /api/admin/certificates/generate
+//     POST   /api/admin/certificates/single
+//     POST   /api/admin/certificate-images/upload
+//     POST   /api/admin/certificate-images/delete
+//     GET    /api/admin/certificates/log
+//   헬퍼 getEventResultsForCert 는 모듈에서 반환받아 SMS 라우트 마운트 시 주입.
+// 대회 운영 체크리스트 (대회 전·당일·후 점검)
+require('./lib/routes/undo')(app, { db, isAdminKey, isOperationKey, getJudgeName, isCompetitionEnded, broadcastSSE, opLog });
+// 국제대회 동기화 (공식 결과 API → 우리 대회) — lib/intl, 60초 스케줄러 포함
+const _intlSync = require('./lib/routes/intl')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, upload, notifyEventInterest: (...a) => notifyEventInterest(...a) /* push 모듈이 뒤에서 마운트 */ });
+require('./lib/routes/readiness')(app, {
+    db, isAdminKey, kstNow, lastBackupAgeMs: _lastBackupAgeMs, backupS3,
+    listFinalSnapshots: compId => { try { return fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith(`backup_final${compId}_`) && f.endsWith('.db')).sort(); } catch (e) { return []; } },
 });
-
-// 템플릿 단건 조회
-app.get('/api/admin/certificate-templates/:id', async (req, res) => {
-    try {
-        const adminKey = req.query.admin_key;
-        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const row = await db.get('SELECT * FROM certificate_template WHERE id=?', req.params.id);
-        if (!row) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
-        res.json({ template: row });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+const _certMod = require('./lib/routes/certificate')(app, {
+    db, isAdminKey, isOperationKey,
+    generateCertificatePdf, generateCertificateBatch,
+    upload,
+    publicDir: path.join(__dirname, 'public'),
 });
-
-// 템플릿 생성
-app.post('/api/admin/certificate-templates', async (req, res) => {
-    try {
-        const { admin_key } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const t = req.body || {};
-        const now = new Date().toISOString();
-        const result = await db.run(`INSERT INTO certificate_template (
-            competition_id, name, kind, title_text, body_template, rank_label_style,
-            signer_org, signer_title, signer_name,
-            logo_left_path, logo_right_path, seal_image_path,
-            paper_orientation, show_record_value, show_athlete_team, show_date,
-            background_color, border_style, font_family, is_default, sort_order,
-            created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            t.competition_id || null,
-            t.name || '새 양식',
-            t.kind || 'award',
-            t.title_text || '상  장',
-            t.body_template || '',
-            t.rank_label_style || 'ordinal',
-            t.signer_org || '',
-            t.signer_title || '회장',
-            t.signer_name || '',
-            t.logo_left_path || '',
-            t.logo_right_path || '',
-            t.seal_image_path || '',
-            t.paper_orientation || 'portrait',
-            t.show_record_value == null ? 1 : (t.show_record_value ? 1 : 0),
-            t.show_athlete_team == null ? 1 : (t.show_athlete_team ? 1 : 0),
-            t.show_date == null ? 1 : (t.show_date ? 1 : 0),
-            t.background_color || '#fffdf6',
-            t.border_style || 'double-gold',
-            t.font_family || 'NanumSquare',
-            t.is_default ? 1 : 0,
-            t.sort_order || 0,
-            now, now
-        );
-        const row = await db.get('SELECT * FROM certificate_template WHERE id=?', result.lastInsertRowid);
-        res.json({ success: true, template: row });
-    } catch (err) {
-        console.error('[CERT][create]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 템플릿 수정
-app.put('/api/admin/certificate-templates/:id', async (req, res) => {
-    try {
-        const { admin_key } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const t = req.body || {};
-        const id = req.params.id;
-        const cur = await db.get('SELECT * FROM certificate_template WHERE id=?', id);
-        if (!cur) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
-        const now = new Date().toISOString();
-        await db.run(`UPDATE certificate_template SET
-            competition_id=?, name=?, kind=?, title_text=?, body_template=?, rank_label_style=?,
-            signer_org=?, signer_title=?, signer_name=?,
-            logo_left_path=?, logo_right_path=?, seal_image_path=?,
-            paper_orientation=?, show_record_value=?, show_athlete_team=?, show_date=?,
-            background_color=?, border_style=?, font_family=?, is_default=?, sort_order=?,
-            updated_at=?
-            WHERE id=?`,
-            t.competition_id !== undefined ? t.competition_id : cur.competition_id,
-            t.name ?? cur.name,
-            t.kind ?? cur.kind,
-            t.title_text ?? cur.title_text,
-            t.body_template ?? cur.body_template,
-            t.rank_label_style ?? cur.rank_label_style,
-            t.signer_org ?? cur.signer_org,
-            t.signer_title ?? cur.signer_title,
-            t.signer_name ?? cur.signer_name,
-            t.logo_left_path ?? cur.logo_left_path,
-            t.logo_right_path ?? cur.logo_right_path,
-            t.seal_image_path ?? cur.seal_image_path,
-            t.paper_orientation ?? cur.paper_orientation,
-            t.show_record_value == null ? cur.show_record_value : (t.show_record_value ? 1 : 0),
-            t.show_athlete_team == null ? cur.show_athlete_team : (t.show_athlete_team ? 1 : 0),
-            t.show_date == null ? cur.show_date : (t.show_date ? 1 : 0),
-            t.background_color ?? cur.background_color,
-            t.border_style ?? cur.border_style,
-            t.font_family ?? cur.font_family,
-            t.is_default == null ? cur.is_default : (t.is_default ? 1 : 0),
-            t.sort_order ?? cur.sort_order,
-            now, id
-        );
-        const row = await db.get('SELECT * FROM certificate_template WHERE id=?', id);
-        res.json({ success: true, template: row });
-    } catch (err) {
-        console.error('[CERT][update]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 템플릿 삭제
-app.delete('/api/admin/certificate-templates/:id', async (req, res) => {
-    try {
-        const adminKey = (req.body && req.body.admin_key) || req.query.admin_key;
-        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        await db.run('DELETE FROM certificate_template WHERE id=?', req.params.id);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 미리보기 PDF — 가짜 데이터로 한 페이지
-app.post('/api/admin/certificates/preview', async (req, res) => {
-    try {
-        const { admin_key, template, sample } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const tpl = template || {};
-        const data = Object.assign({
-            athlete_name: '홍길동',
-            team: '소속명',
-            event_name: '남자 100m',
-            rank: 1,
-            record_value: '10.32 (NR)',
-            competition_name: '제00회 대회',
-        }, sample || {});
-        const buf = await generateCertificatePdf(tpl, data);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'inline; filename="cert_preview.pdf"');
-        res.end(buf);
-    } catch (err) {
-        console.error('[CERT][preview]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 일괄 발급 — 대회/종목/순위범위 선택해서 PDF
-app.post('/api/admin/certificates/generate', async (req, res) => {
-    try {
-        const { admin_key, template_id, competition_id, event_ids,
-                rank_from, rank_to, include_finishers, mode } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-
-        const tpl = await db.get('SELECT * FROM certificate_template WHERE id=?', template_id);
-        if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
-
-        const comp = competition_id ? await db.get('SELECT * FROM competition WHERE id=?', competition_id) : null;
-
-        let targetEventIds = Array.isArray(event_ids) ? event_ids.slice() : [];
-        if (targetEventIds.length === 0 && competition_id) {
-            // 대회 전체 이벤트
-            const all = await db.all(`SELECT id FROM event WHERE competition_id=? AND round_type='final' ORDER BY sort_order, id`, competition_id);
-            targetEventIds = all.map(e => e.id);
-        }
-        if (targetEventIds.length === 0) {
-            return res.status(400).json({ error: '발급할 종목이 없습니다.' });
-        }
-
-        const rankFrom = Math.max(1, parseInt(rank_from || 1, 10));
-        const rankTo = Math.max(rankFrom, parseInt(rank_to || 3, 10));
-        const wantFinishers = !!include_finishers;
-        const certMode = mode || tpl.kind || 'award';
-
-        const items = [];
-        for (const eid of targetEventIds) {
-            const { event, rows } = await getEventResultsForCert(eid);
-            if (!event) continue;
-            for (const row of rows) {
-                let shouldInclude = false;
-                if (certMode === 'finisher') {
-                    // 완주증 모드 — 완주한 모든 선수
-                    if (row.finished) shouldInclude = true;
-                } else {
-                    // 시상장 모드 — 순위 범위 내
-                    if (row.rank != null && row.rank >= rankFrom && row.rank <= rankTo) shouldInclude = true;
-                    // 옵션: 동시 완주증도 포함
-                    if (!shouldInclude && wantFinishers && row.finished && (row.rank == null || row.rank > rankTo)) {
-                        shouldInclude = true;
-                    }
-                }
-                if (!shouldInclude) continue;
-                items.push({
-                    athlete_id: row.athlete_id,
-                    athlete_name: row.athlete_name,
-                    team: row.team,
-                    event_name: event.name,
-                    rank: certMode === 'finisher' ? null : row.rank,
-                    record_value: row.record_value,
-                    competition_name: comp ? comp.name : '',
-                });
-            }
-        }
-
-        if (items.length === 0) {
-            return res.status(400).json({ error: '조건에 해당하는 발급 대상이 없습니다.' });
-        }
-
-        const buf = await generateCertificateBatch(tpl, items);
-
-        // 발급 로그 기록
-        const now = new Date().toISOString();
-        const INSERT_LOG_SQL = `INSERT INTO certificate_issue_log
-            (competition_id, template_id, event_id, athlete_id, rank_value, record_value, issued_at, issued_by, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-        try {
-            const txn = db.transaction(async () => {
-                for (const it of items) {
-                    await db.run(INSERT_LOG_SQL,
-                        competition_id || null,
-                        tpl.id,
-                        null,
-                        it.athlete_id,
-                        it.rank == null ? null : it.rank,
-                        it.record_value || '',
-                        now,
-                        '관리자',
-                        certMode
-                    );
-                }
-            });
-            await txn();
-        } catch (_) { /* log failure should not block PDF */ }
-
-        const fileName = encodeURIComponent(`상장_${(comp?.name||'대회')}_${items.length}건.pdf`);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${fileName}`);
-        res.end(buf);
-    } catch (err) {
-        console.error('[CERT][generate]', err);
-        if (!res.headersSent) res.status(500).json({ error: err.message });
-    }
-});
-
-// 개별 발급 — 특정 선수 1명에 대해 PDF (재발급용)
-app.post('/api/admin/certificates/single', async (req, res) => {
-    try {
-        const { admin_key, template_id, data } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const tpl = await db.get('SELECT * FROM certificate_template WHERE id=?', template_id);
-        if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
-        const buf = await generateCertificatePdf(tpl, data || {});
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="cert.pdf"`);
-        res.end(buf);
-    } catch (err) {
-        console.error('[CERT][single]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 상장 이미지 업로드 (로고/인장)
-// position: 'logo_left' | 'logo_right' | 'seal'
-app.post('/api/admin/certificate-images/upload', upload.single('image'), async (req, res) => {
-    try {
-        if (!isAdminKey(req.body.admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        if (!req.file) return res.status(400).json({ error: '파일이 업로드되지 않았습니다.' });
-        const templateId = parseInt(req.body.template_id, 10);
-        const position = req.body.position;
-        if (!templateId || !['logo_left', 'logo_right', 'seal'].includes(position)) {
-            return res.status(400).json({ error: 'template_id, position(logo_left|logo_right|seal) 필요' });
-        }
-
-        const tpl = await db.get('SELECT * FROM certificate_template WHERE id=?', templateId);
-        if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
-
-        // 저장 디렉토리
-        const destDir = path.join(__dirname, 'public', 'uploads', 'cert_images');
-        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-
-        // 기존 파일 제거 (확장자 다를 수 있음)
-        const oldExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
-        for (const oe of oldExts) {
-            const oldPath = path.join(destDir, `cert_${position}_${templateId}${oe}`);
-            try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); } catch(e) {}
-        }
-
-        // 새 파일 저장
-        const ext = (path.extname(req.file.originalname) || '.png').toLowerCase();
-        const filename = `cert_${position}_${templateId}${ext}`;
-        const destPath = path.join(destDir, filename);
-        fs.copyFileSync(req.file.path, destPath);
-        try { fs.unlinkSync(req.file.path); } catch(_) {}
-
-        const publicUrl = `/uploads/cert_images/${filename}`;
-
-        // 템플릿 DB 업데이트
-        const fieldMap = {
-            'logo_left': 'logo_left_path',
-            'logo_right': 'logo_right_path',
-            'seal': 'seal_image_path',
-        };
-        const dbField = fieldMap[position];
-        const now = new Date().toISOString();
-        await db.run(`UPDATE certificate_template SET ${dbField}=?, updated_at=? WHERE id=?`, publicUrl, now, templateId);
-
-        const cacheBust = `${publicUrl}?v=${Date.now()}`;
-        res.json({ success: true, url: cacheBust, path: publicUrl });
-    } catch (err) {
-        console.error('[CERT][image-upload]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 상장 이미지 삭제
-app.post('/api/admin/certificate-images/delete', async (req, res) => {
-    try {
-        const { admin_key, template_id, position } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        if (!template_id || !['logo_left', 'logo_right', 'seal'].includes(position)) {
-            return res.status(400).json({ error: 'template_id, position 필요' });
-        }
-        const fieldMap = {
-            'logo_left': 'logo_left_path',
-            'logo_right': 'logo_right_path',
-            'seal': 'seal_image_path',
-        };
-        const tpl = await db.get('SELECT * FROM certificate_template WHERE id=?', template_id);
-        if (!tpl) return res.status(404).json({ error: '템플릿을 찾을 수 없습니다.' });
-        const oldPath = tpl[fieldMap[position]];
-        if (oldPath) {
-            const absPath = path.join(__dirname, 'public', oldPath.replace(/^\/+/, ''));
-            try { if (fs.existsSync(absPath)) fs.unlinkSync(absPath); } catch(e) {}
-        }
-        await db.run(`UPDATE certificate_template SET ${fieldMap[position]}='', updated_at=? WHERE id=?`, new Date().toISOString(), template_id);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 발급 로그
-app.get('/api/admin/certificates/log', async (req, res) => {
-    try {
-        const adminKey = req.query.admin_key;
-        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const compId = req.query.competition_id;
-        const limit = Math.min(parseInt(req.query.limit || 200, 10), 1000);
-        const where = compId ? 'WHERE l.competition_id=?' : '';
-        const params = compId ? [compId, limit] : [limit];
-        const rows = await db.all(`
-            SELECT l.*, t.name AS template_name, a.name AS athlete_name, a.team
-            FROM certificate_issue_log l
-            LEFT JOIN certificate_template t ON t.id = l.template_id
-            LEFT JOIN athlete a ON a.id = l.athlete_id
-            ${where}
-            ORDER BY l.issued_at DESC
-            LIMIT ?
-        `, ...params);
-        res.json({ logs: rows });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+const getEventResultsForCert = _certMod.getEventResultsForCert;
 // ========== END Certificate System ==========
 
-// ========== SMS System API ==========
-
-// 월 카운터 리셋 헬퍼 (async)
-async function _resetSmsCounterIfNeeded(cfg) {
-    const now = new Date();
-    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    if (cfg.last_reset_month !== ym) {
-        await db.run('UPDATE sms_config SET sent_this_month=0, last_reset_month=? WHERE id=1', ym);
-        cfg.sent_this_month = 0;
-        cfg.last_reset_month = ym;
-    }
-    return cfg;
-}
-
-// SMS 설정 조회
-app.get('/api/admin/sms/config', async (req, res) => {
+// ============================================================
+// 한국중·고육상연맹(KJAF) 종합기록지 — Excel (Phase 7-①, 2026-09)
+//   시트 묶음(남중/여중, 학년부, 믹스릴레이, 신기록현황)은 종목의 부(division)·학년으로 자동 결정 → lib/kjafRecordSheet.js
+// ============================================================
+app.get('/api/documents/kjaf-record/:compId/excel', async (req, res) => {
     try {
-        const adminKey = req.query.admin_key;
-        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const cfg = await db.get('SELECT * FROM sms_config WHERE id=1');
-        if (!cfg) return res.status(500).json({ error: 'sms_config가 초기화되지 않았습니다.' });
-        await _resetSmsCounterIfNeeded(cfg);
-        // api_key는 마스킹
-        const masked = Object.assign({}, cfg, {
-            api_key: cfg.api_key ? '***' + cfg.api_key.slice(-4) : '',
-            api_key_set: !!cfg.api_key,
-        });
-        res.json({ config: masked });
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
+        if (!comp) return res.status(404).json({ error: 'Competition not found' });
+        const { generateKjafRecordSheet } = require('./lib/kjafRecordSheet');
+        const wb = await generateKjafRecordSheet(db, comp, { getEventResultsForCert });
+        const buf = await wb.xlsx.writeBuffer();
+        const fileName = encodeURIComponent(`중고연맹_종합기록지_${comp.name || 'result'}.xlsx`);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${fileName}`);
+        res.end(Buffer.from(buf));
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('[KJAF Record Excel Error]', err);
+        if (!res.headersSent) res.status(500).json({ error: '중고연맹 종합기록지 생성 오류: ' + err.message });
     }
 });
 
-// SMS 설정 저장
-app.post('/api/admin/sms/config', async (req, res) => {
-    try {
-        const { admin_key, provider, api_key, user_id, sender_number, sender_name, sim_mode, default_template, monthly_quota } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const cur = await db.get('SELECT * FROM sms_config WHERE id=1');
-        const now = new Date().toISOString();
-        // api_key가 빈 문자열이면 기존 유지 (편의)
-        const finalApiKey = (api_key === undefined || api_key === '***UNCHANGED***') ? (cur ? cur.api_key : '') : (api_key || '');
-        await db.run(`UPDATE sms_config SET
-            provider=?, api_key=?, user_id=?, sender_number=?, sender_name=?,
-            sim_mode=?, default_template=?, monthly_quota=?, updated_at=?
-            WHERE id=1`,
-            provider || (cur && cur.provider) || 'aligo',
-            finalApiKey,
-            user_id || '',
-            SMS.normalizePhone(sender_number || ''),
-            sender_name || '',
-            sim_mode ? 1 : 0,
-            default_template || (cur && cur.default_template) || '',
-            parseInt(monthly_quota || 0, 10),
-            now
-        );
-        res.json({ success: true });
-    } catch (err) {
-        console.error('[SMS][config]', err);
-        res.status(500).json({ error: err.message });
-    }
+// ========== SMS System API (lib/routes/sms.js) ==========
+//   추출 2026-05-31 (A-11): 6 routes
+//     GET/POST /api/admin/sms/config
+//     POST /api/admin/sms/preview
+//     POST /api/admin/sms/send
+//     POST /api/admin/sms/batch-send
+//     GET /api/admin/sms/log
+//   _resetSmsCounterIfNeeded 헬퍼는 모듈 내부로 이동.
+//   getEventResultsForCert 는 server.js 의 함수를 그대로 주입 (certificate 추출 시 함께 이동).
+require('./lib/routes/sms')(app, { db, isAdminKey, SMS, getEventResultsForCert });
+
+// ========== 행사(event) 간편 기록입력 ==========
+require('./lib/routes/eventRecord')(app, { db, isAdminKey, isOperationKey, SMS });
+
+// ========== Push(FCM 웹푸시) System ==========
+const Push = require('./lib/pushSender');
+const _pushMod = require('./lib/routes/push')(app, { db, isAdminKey, Push });
+const notifyEventInterest = (_pushMod && _pushMod.notifyEventInterest) || (async () => {});
+// FCM 백그라운드 서비스워커 — 설정값을 주입해 동적 서빙(루트 스코프)
+app.get('/firebase-messaging-sw.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Service-Worker-Allowed', '/');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // 항상 최신 SW
+    const { configured, config } = Push.webConfig();
+    if (!configured) { res.send('// firebase 미설정 — 푸시 비활성\nself.addEventListener("install",()=>self.skipWaiting());\n'); return; }
+    res.send(`self.addEventListener('install', function(){ self.skipWaiting(); });
+self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()); });
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
+firebase.initializeApp(${JSON.stringify(config)});
+// firebase-messaging 로드(토큰/구독용). 표시는 아래 raw push 리스너 하나로만 처리.
+try { firebase.messaging(); } catch(e) {}
+// 모든 푸시를 직접 표시 — 페이로드 구조가 무엇이든 title/body 를 최대한 찾아 항상 표시
+self.addEventListener('push', function(event){
+  let p = {};
+  try { p = event.data ? event.data.json() : {}; } catch(e) { try { p = { body: event.data && event.data.text() }; } catch(_) {} }
+  var d = p.data || p.notification || p || {};
+  var title = d.title || (p.notification && p.notification.title) || '알림';
+  var body = d.body || (p.notification && p.notification.body) || '';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: d
+  }));
 });
-
-// 메시지 길이/종류 미리보기
-app.post('/api/admin/sms/preview', (req, res) => {
-    try {
-        const { admin_key, message } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const bytes = SMS.getMessageBytes(message || '');
-        const msgType = SMS.detectMessageType(message || '');
-        const cost = msgType === 'LMS' ? 35 : 13;
-        res.json({ bytes, msg_type: msgType, est_cost_per_msg: cost });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+// 알림 클릭 시 사이트 열기/포커스
+self.addEventListener('notificationclick', function(event){
+  event.notification.close();
+  event.waitUntil(self.clients.matchAll({ type:'window', includeUncontrolled:true }).then(function(cl){
+    for (const c of cl) { if ('focus' in c) return c.focus(); }
+    if (self.clients.openWindow) return self.clients.openWindow('/');
+  }));
+});`);
 });
-
-// 단건 발송
-app.post('/api/admin/sms/send', async (req, res) => {
-    try {
-        const { admin_key, phone, message, title, competition_id, athlete_id, triggered_by } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const cfg = await db.get('SELECT * FROM sms_config WHERE id=1');
-        if (!cfg) return res.status(500).json({ error: 'sms_config가 초기화되지 않았습니다.' });
-        await _resetSmsCounterIfNeeded(cfg);
-
-        const result = await SMS.sendOne(cfg, { phone, message, title });
-
-        // 로그 기록
-        await db.run(`INSERT INTO sms_log
-            (competition_id, athlete_id, phone_number, message, status, provider, provider_msg_id, error_message, cost, sent_at, triggered_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            competition_id || null,
-            athlete_id || null,
-            SMS.normalizePhone(phone),
-            message,
-            result.status,
-            cfg.provider,
-            result.provider_msg_id,
-            result.error_message,
-            result.cost,
-            new Date().toISOString(),
-            triggered_by || 'manual'
-        );
-
-        if (result.status === 'sent' || result.status === 'simulated') {
-            await db.run('UPDATE sms_config SET sent_this_month = sent_this_month + 1 WHERE id=1');
-        }
-
-        res.json({ success: true, ...result });
-    } catch (err) {
-        console.error('[SMS][send]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 일괄 발송 (대회+종목+상장 모드 등 → 자동 메시지 생성)
-app.post('/api/admin/sms/batch-send', async (req, res) => {
-    try {
-        const { admin_key, competition_id, event_ids, rank_from, rank_to, include_finishers,
-                template, triggered_by, cert_url_base } = req.body || {};
-        if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        if (!competition_id) return res.status(400).json({ error: 'competition_id 필요' });
-
-        const cfg = await db.get('SELECT * FROM sms_config WHERE id=1');
-        if (!cfg) return res.status(500).json({ error: 'sms_config가 초기화되지 않았습니다.' });
-        await _resetSmsCounterIfNeeded(cfg);
-
-        const comp = await db.get('SELECT * FROM competition WHERE id=?', competition_id);
-        if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
-
-        let targetEventIds = Array.isArray(event_ids) ? event_ids.slice() : [];
-        if (targetEventIds.length === 0) {
-            const all = await db.all(`SELECT id FROM event WHERE competition_id=? AND round_type='final' ORDER BY sort_order, id`, competition_id);
-            targetEventIds = all.map(e => e.id);
-        }
-
-        const rankFrom = Math.max(1, parseInt(rank_from || 1, 10));
-        const rankTo = Math.max(rankFrom, parseInt(rank_to || 3, 10));
-        const wantFinishers = !!include_finishers;
-        const tplMsg = template || cfg.default_template;
-
-        const recipients = [];
-        for (const eid of targetEventIds) {
-            const { event, rows } = await getEventResultsForCert(eid);
-            if (!event) continue;
-            for (const row of rows) {
-                // 선수 폰번호 조회 (athlete table에 phone 컬럼이 있어야 함 — 없으면 빈 칸으로 시뮬레이션)
-                let include = false;
-                if (row.rank != null && row.rank >= rankFrom && row.rank <= rankTo) include = true;
-                if (!include && wantFinishers && row.finished) include = true;
-                if (!include) continue;
-
-                const ath = await db.get('SELECT * FROM athlete WHERE id=?', row.athlete_id);
-                const phone = ath && (ath.phone || ath.phone_number || '') || '';
-                const message = SMS.fillMessageTemplate(tplMsg, {
-                    athlete_name: row.athlete_name,
-                    team: row.team,
-                    event_name: event.name,
-                    rank: row.rank == null ? '' : row.rank,
-                    rank_label: row.rank == null ? '완주' : (row.rank === 1 ? '우승' : row.rank === 2 ? '준우승' : `${row.rank}위`),
-                    record_value: row.record_value,
-                    competition_name: comp.name,
-                    cert_url: cert_url_base ? `${cert_url_base}/${row.athlete_id}` : '',
-                });
-                recipients.push({ athlete_id: row.athlete_id, athlete_name: row.athlete_name, phone, message });
-            }
-        }
-
-        // 발송 (순차 — 알리고 동시연결 제한 회피)
-        const results = [];
-        for (const r of recipients) {
-            const sendResult = await SMS.sendOne(cfg, { phone: r.phone, message: r.message });
-            await db.run(`INSERT INTO sms_log
-                (competition_id, athlete_id, phone_number, message, status, provider, provider_msg_id, error_message, cost, sent_at, triggered_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                competition_id,
-                r.athlete_id,
-                SMS.normalizePhone(r.phone),
-                r.message,
-                sendResult.status,
-                cfg.provider,
-                sendResult.provider_msg_id,
-                sendResult.error_message,
-                sendResult.cost,
-                new Date().toISOString(),
-                triggered_by || 'cert_batch'
-            );
-            if (sendResult.status === 'sent' || sendResult.status === 'simulated') {
-                await db.run('UPDATE sms_config SET sent_this_month = sent_this_month + 1 WHERE id=1');
-            }
-            results.push({
-                athlete_id: r.athlete_id,
-                athlete_name: r.athlete_name,
-                phone: r.phone,
-                status: sendResult.status,
-                error: sendResult.error_message,
-            });
-        }
-
-        const summary = results.reduce((acc, r) => {
-            acc[r.status] = (acc[r.status] || 0) + 1;
-            return acc;
-        }, {});
-
-        res.json({ success: true, sim_mode: !!cfg.sim_mode, total: results.length, summary, results });
-    } catch (err) {
-        console.error('[SMS][batch-send]', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// 발송 이력
-app.get('/api/admin/sms/log', async (req, res) => {
-    try {
-        const adminKey = req.query.admin_key;
-        if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-        const compId = req.query.competition_id;
-        const limit = Math.min(parseInt(req.query.limit || 200, 10), 1000);
-        const where = compId ? 'WHERE l.competition_id=?' : '';
-        const params = compId ? [compId, limit] : [limit];
-        const rows = await db.all(`
-            SELECT l.*, a.name AS athlete_name, a.team
-            FROM sms_log l
-            LEFT JOIN athlete a ON a.id = l.athlete_id
-            ${where}
-            ORDER BY l.sent_at DESC
-            LIMIT ?
-        `, ...params);
-        res.json({ logs: rows });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-// ========== END SMS System ==========
+// ========== END Push System ==========
 
 // Document listing — available documents for a competition
 app.get('/api/documents/:compId', async (req, res) => {
@@ -11368,6 +5963,13 @@ function _logExternalCall(opts) {
 
 // 메모리 기반 레이트 리미터 (분 단위 슬라이딩 윈도우, 키 ID 기준)
 const _extRateMap = new Map(); // key: api_key_id, value: { windowStart: ms, count: n }
+function _extExpired(expiresAt) {
+    const str = String(expiresAt).trim();
+    let t;
+    if (/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$/.test(str)) t = Date.parse(str.replace(' ', 'T') + (str.length === 10 ? 'T23:59:59' : '') + '+09:00');
+    else t = Date.parse(str);
+    return Number.isFinite(t) ? t < Date.now() : false;
+}
 function _checkRateLimit(apiKeyId, limitPerMin) {
     const now = Date.now();
     const winSize = 60 * 1000;
@@ -11405,7 +6007,7 @@ function externalApiAuth(req, res, next) {
                 key_prefix: req.extApiKey ? req.extApiKey.key_prefix : (req._extKeyPrefix || ''),
                 endpoint: req.originalUrl.split('?')[0],
                 method: req.method,
-                request_ip: (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim(),
+                request_ip: (req.ip || '').toString(),
                 user_agent: req.headers['user-agent'] || '',
                 competition_id: (req.body && req.body.competition_id) || (req.query && req.query.competition_id) || null,
                 event_id: (req.body && req.body.event_id) || (req.params && req.params.id) || null,
@@ -11433,10 +6035,13 @@ function externalApiAuth(req, res, next) {
     (async () => {
         try {
             const prefix = _keyPrefix(plainKey);
+            // 비교(bcrypt) 전에 IP+접두로 먼저 제한한다 — 예전엔 비교가 먼저라 접두(관리 화면에 보임)만 알면 서버를 붙잡아 둘 수 있었다
+            const pre = _checkRateLimit('pre:' + prefix + ':' + (req.ip || ''), 120);
+            if (!pre.allowed) return res.status(429).json({ success: false, error_code: 'RATE_LIMITED', message: '호출이 너무 잦습니다.', reset_in_ms: pre.resetIn });
             const candidates = await db.all('SELECT * FROM external_api_key WHERE key_prefix=?', prefix);
             let matched = null;
             for (const c of candidates) {
-                if (bcrypt.compareSync(plainKey, c.key_hash)) { matched = c; break; }
+                if (await bcrypt.compare(plainKey, c.key_hash)) { matched = c; break; }     // 비동기 — 기록 입력 요청을 막지 않게
             }
             if (!matched) {
                 return res.status(403).json({ success: false, error_code: 'INVALID_API_KEY', message: '유효하지 않은 API 키입니다.' });
@@ -11444,7 +6049,8 @@ function externalApiAuth(req, res, next) {
             if (matched.revoked_at) {
                 return res.status(403).json({ success: false, error_code: 'KEY_REVOKED', message: '회수된 API 키입니다.' });
             }
-            if (matched.expires_at && matched.expires_at < new Date().toISOString()) {
+            // 만료: 'YYYY-MM-DD HH:MM:SS'(KST 의도) 를 시각으로 바꿔 비교 (예전엔 문자열 비교라 그날 09:00 KST 에 만료됐다)
+            if (matched.expires_at && _extExpired(matched.expires_at)) {
                 return res.status(403).json({ success: false, error_code: 'KEY_EXPIRED', message: '만료된 API 키입니다.' });
             }
 
@@ -11985,118 +6591,8 @@ app.post('/api/external/event-result-link/batch', externalApiAuth, async (req, r
     });
 });
 
-// ── 외부 API 키 관리(관리자 전용) ──
-//   POST   /api/admin/external-keys           발급
-//   GET    /api/admin/external-keys           목록
-//   POST   /api/admin/external-keys/:id/revoke 회수
-//   GET    /api/admin/external-keys/logs      로그 조회
-app.post('/api/admin/external-keys', async (req, res) => {
-    const { admin_key, label, allowed_competition_id, rate_limit_per_min, expires_at } = req.body || {};
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한 필요' });
-
-    const lbl = (label || '').toString().trim().slice(0, 200);
-    if (!lbl) return res.status(400).json({ error: 'label은 필수입니다.' });
-
-    let allowedComp = null;
-    if (allowed_competition_id) {
-        const cid = parseInt(allowed_competition_id);
-        if (!Number.isFinite(cid) || cid <= 0) return res.status(400).json({ error: 'allowed_competition_id가 올바르지 않습니다.' });
-        const c = await db.get('SELECT id, mode FROM competition WHERE id=?', cid);
-        if (!c) return res.status(400).json({ error: '해당 대회가 존재하지 않습니다.' });
-        allowedComp = cid;
-    }
-
-    let rate = parseInt(rate_limit_per_min);
-    if (!Number.isFinite(rate) || rate <= 0) rate = 60;
-    if (rate > 600) rate = 600;
-
-    let expiresAt = null;
-    if (expires_at) {
-        const s = String(expires_at).trim();
-        if (s) {
-            // 간단 검증(YYYY-MM-DD 또는 YYYY-MM-DD HH:MM:SS)
-            if (!/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$/.test(s)) {
-                return res.status(400).json({ error: 'expires_at 형식 오류 (YYYY-MM-DD 또는 YYYY-MM-DD HH:MM:SS).' });
-            }
-            expiresAt = s.length === 10 ? (s + ' 23:59:59') : s;
-        }
-    }
-
-    const plain = _generateApiKey();
-    const hash = _hashApiKey(plain);
-    const prefix = _keyPrefix(plain);
-
-    const info = await db.run(`
-        INSERT INTO external_api_key (key_hash, key_prefix, label, allowed_competition_id, rate_limit_per_min, expires_at, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, hash, prefix, lbl, allowedComp, rate, expiresAt, 'admin');
-
-    return res.json({
-        ok: true,
-        message: 'API 키가 발급되었습니다. 이 키는 다시 표시되지 않으니 안전한 곳에 보관하세요.',
-        id: info.lastInsertRowid,
-        api_key: plain,             // ← 발급 시 1회만 반환
-        key_prefix: prefix,
-        label: lbl,
-        allowed_competition_id: allowedComp,
-        rate_limit_per_min: rate,
-        expires_at: expiresAt
-    });
-});
-
-app.get('/api/admin/external-keys', async (req, res) => {
-    const adminKey = req.query.admin_key || req.headers['x-admin-key'];
-    if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한 필요' });
-
-    const rows = await db.all(`
-        SELECT k.id, k.key_prefix, k.label, k.allowed_competition_id, k.rate_limit_per_min,
-               k.expires_at, k.revoked_at, k.last_used_at, k.total_calls, k.created_at,
-               c.name AS competition_name
-        FROM external_api_key k
-        LEFT JOIN competition c ON c.id = k.allowed_competition_id
-        ORDER BY k.id DESC
-    `);
-
-    return res.json({ ok: true, items: rows });
-});
-
-app.post('/api/admin/external-keys/:id/revoke', async (req, res) => {
-    const { admin_key } = req.body || {};
-    if (!isAdminKey(admin_key)) return res.status(403).json({ error: '관리자 권한 필요' });
-    const id = parseInt(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'id 오류' });
-
-    const _nowFEA = db.isAsync ? 'NOW()' : "datetime('now')";
-    const r = await db.run(`UPDATE external_api_key SET revoked_at = ${_nowFEA} WHERE id = ? AND revoked_at IS NULL`, id);
-    if (r.changes === 0) return res.status(404).json({ error: '해당 키 없음 또는 이미 회수됨' });
-    return res.json({ ok: true, id, revoked_at: new Date().toISOString() });
-});
-
-app.get('/api/admin/external-keys/logs', async (req, res) => {
-    const adminKey = req.query.admin_key || req.headers['x-admin-key'];
-    if (!isAdminKey(adminKey)) return res.status(403).json({ error: '관리자 권한 필요' });
-
-    let limit = parseInt(req.query.limit || '100', 10);
-    if (!Number.isFinite(limit) || limit <= 0) limit = 100;
-    if (limit > 500) limit = 500;
-    const apiKeyId = req.query.api_key_id ? parseInt(req.query.api_key_id) : null;
-
-    let sql = `
-        SELECT l.id, l.api_key_id, l.key_prefix, l.endpoint, l.method,
-               l.request_ip, l.user_agent, l.competition_id, l.event_id,
-               l.response_status, l.response_code, l.duration_ms, l.created_at,
-               k.label AS key_label
-        FROM external_api_log l
-        LEFT JOIN external_api_key k ON k.id = l.api_key_id
-    `;
-    const params = [];
-    if (apiKeyId) { sql += ' WHERE l.api_key_id = ?'; params.push(apiKeyId); }
-    sql += ' ORDER BY l.id DESC LIMIT ?';
-    params.push(limit);
-
-    const rows = await db.all(sql, ...params);
-    return res.json({ ok: true, count: rows.length, items: rows });
-});
+// ── 외부 API 키 관리(발급·목록·폐기·호출 로그) → lib/routes/external_keys.js (2026-09-22) ──
+const _external_keysRoutes = require('./lib/routes/external_keys')(app, { _generateApiKey, _hashApiKey, _keyPrefix, db, isAdminKey, parseDbTimestampMs });
 
 
 // ============================================================
@@ -12199,6 +6695,12 @@ function parseJongbyul(jb) {
     if (/남자일반/.test(s)) return { gender: 'M', division: '일반부' };
     if (/여자일반/.test(s)) return { gender: 'F', division: '일반부' };
 
+    // ── 5.5) 마스터즈/생활체육 연령부 코드: M35 / M40~M50 / W40 / W55~W65 ──
+    //    M=남자, W=여자. 영문 대문자 + 숫자(범위 '~' 포함). division 은 원본 보존(예: "M35~M40").
+    //    ※ 콤마 구분("W40,W55~W65")은 호출부(upload)에서 이미 분리되어 단일 성별 토큰으로 들어옴.
+    if (/^M\d/.test(s) && !/W\d/.test(s)) return { gender: 'M', division: raw };
+    if (/^W\d/.test(s) && !/M\d/.test(s)) return { gender: 'F', division: raw };
+
     // ── 6) 마지막 fallback: 절대 임의 division 부여 금지 ──
     //    원본 라벨을 그대로 division 으로 보존하여 신규 라벨도 표시되도록 함.
     if (s.startsWith('남')) return { gender: 'M', division: raw };
@@ -12281,36 +6783,7 @@ function parseDisplayRound(roundStr) {
 //   · "U18 여자부" / "U18(여)" → "U18(여)"
 //   · "중학교부" / "중등부" / "남자중학교부" → "중등부"
 //   · "" 빈 문자열은 그대로 유지 (시간표 종별이 비어있는 경우 대비)
-function normalizeDivisionLabel(div) {
-    if (!div) return '';
-    const s = div.toString().trim().replace(/\s+/g, '');
-    if (!s) return '';
-
-    // 선수권 변형 통합
-    if (/^선수권\(?남자?\)?부?$/.test(s) || s === '선수권남' || s === '남자선수권') return '선수권(남)';
-    if (/^선수권\(?여자?\)?부?$/.test(s) || s === '선수권여' || s === '여자선수권') return '선수권(여)';
-    if (/^선수권\(?혼성?\)?부?$/.test(s) || /^선수권\(?mix/i.test(s)) return '선수권(혼)';
-    if (s === '선수권') return '선수권';
-
-    // U18/U20 변형 통합
-    let m = s.match(/^U(18|20)\(?(남자?|여자?|혼성?)\)?부?$/i);
-    if (m) {
-        const g = /^남/.test(m[2]) ? '남' : (/^여/.test(m[2]) ? '여' : '혼');
-        return `U${m[1]}(${g})`;
-    }
-    if (/^U18$/i.test(s)) return 'U18';
-    if (/^U20$/i.test(s)) return 'U20';
-
-    // 학교부 변형 통합
-    if (/^(남자|여자)?(중학교부|중학부|중등부)$/.test(s)) return '중등부';
-    if (/^(남자|여자)?(고등학교부|고등부)$/.test(s)) return '고등부';
-    if (/^(남자|여자)?(대학교부|대학부)$/.test(s)) return '대학부';
-    if (/^(남자|여자)?(초등학교부|초등부)$/.test(s)) return '초등부';
-    if (/^(남자|여자)?(일반부|실업부)$/.test(s)) return '일반부';
-
-    // 기타 알 수 없는 라벨은 원본 보존
-    return div.toString().trim();
-}
+// normalizeDivisionLabel → lib/division.js 로 이동 (2026-09 Phase 7-②). 파일 위쪽 require 참조
 
 // --- Helper: Excel time fraction → HH:MM string ---
 function excelTimeToHHMM(val) {
@@ -12368,1854 +6841,24 @@ function guessEventCategory(eventName) {
     return 'track';
 }
 
-// Upload timetable for display-mode competition → auto-create events
-app.post('/api/display/timetable/upload', upload.single('file'), async (req, res) => {
-    try {
-        const { competition_id, admin_key } = req.body;
-        if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        if (!req.file) return res.status(400).json({ error: '파일이 없습니다.' });
-
-        const comp = await db.get('SELECT * FROM competition WHERE id=?', parseInt(competition_id));
-        if (!comp) { try { fs.unlinkSync(req.file.path); } catch(e) {} return res.status(404).json({ error: '대회를 찾을 수 없습니다.' }); }
-
-        const wb = XLSX.readFile(req.file.path);
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-        // Find header row
-        let headerIdx = -1;
-        for (let i = 0; i < Math.min(data.length, 10); i++) {
-            const row = (data[i] || []).map(c => String(c || '').trim());
-            if (row.some(c => c === '날짜' || c === '시간' || c === '종목')) { headerIdx = i; break; }
-        }
-        if (headerIdx < 0) { try { fs.unlinkSync(req.file.path); } catch(e) {} return res.status(400).json({ error: '시간표 헤더를 찾을 수 없습니다. (날짜/시간/종목 컬럼 필요)' }); }
-
-        const headers = data[headerIdx].map(c => String(c || '').trim());
-        const colIdx = {
-            date: headers.findIndex(h => h === '날짜'),
-            section: headers.findIndex(h => h === '구분'),
-            time: headers.findIndex(h => h === '시간'),
-            event: headers.findIndex(h => h === '종목'),
-            jongbyul: headers.findIndex(h => h === '종별'),
-            round: headers.findIndex(h => h === '라운드'),
-        };
-
-        if (colIdx.time < 0 || colIdx.event < 0) {
-            try { fs.unlinkSync(req.file.path); } catch(e) {}
-            return res.status(400).json({ error: '시간/종목 컬럼이 필요합니다.' });
-        }
-
-        // Parse all dates to compute day numbers
-        const dateSet = new Set();
-        for (let i = headerIdx + 1; i < data.length; i++) {
-            const row = data[i] || [];
-            if (colIdx.date >= 0 && row[colIdx.date]) {
-                const ds = String(row[colIdx.date]).trim();
-                if (ds) dateSet.add(ds);
-            }
-        }
-        const sortedDates = [...dateSet].sort();
-        const dateToDay = {};
-        sortedDates.forEach((d, idx) => { dateToDay[d] = idx + 1; });
-
-        // Also use competition start_date for day offset
-        const compStart = comp.start_date ? new Date(comp.start_date + 'T00:00:00') : null;
-
-        const timetableEntries = [];
-        const eventMap = {}; // key: eventName|gender|division → event definition
-
-        let prevDate = sortedDates[0] || '';
-
-        for (let i = headerIdx + 1; i < data.length; i++) {
-            const row = data[i] || [];
-            const rawDate = colIdx.date >= 0 ? String(row[colIdx.date] || '').trim() : '';
-            const rawSection = colIdx.section >= 0 ? String(row[colIdx.section] || '').trim() : '';
-            const rawTime = row[colIdx.time];
-            const rawEvent = cleanTimetableEventName(row[colIdx.event] || '');
-            const rawJongbyul = colIdx.jongbyul >= 0 ? String(row[colIdx.jongbyul] || '').replace(/[\u00A0\s]+/g, ' ').trim() : '';
-            const rawRound = colIdx.round >= 0 ? String(row[colIdx.round] || '').replace(/[\u00A0\s]+/g, ' ').trim() : '';
-
-            if (!rawEvent && !rawTime) continue;
-
-            // Fix: sometimes 종목 column has the event name in jongbyul position (row shift)
-            let eventName = rawEvent;
-            let jongbyul = rawJongbyul;
-            if (!eventName && rawJongbyul) { eventName = rawJongbyul; jongbyul = ''; }
-
-            const currentDate = rawDate || prevDate;
-            if (rawDate) prevDate = rawDate;
-
-            const dayNum = dateToDay[currentDate] || 1;
-            // '구분' column mapping: track/field/road (Korean & English)
-            let section = 'track';
-            const secLower = (rawSection || '').toLowerCase();
-            if (secLower.includes('필드') || secLower.includes('field') || secLower.includes('투척') || secLower.includes('도약')) {
-                section = 'field';
-            } else if (secLower.includes('도로') || secLower.includes('road') || secLower.includes('경보') || secLower.includes('마라톤')) {
-                section = 'road';
-            }
-            const timeStr = excelTimeToHHMM(rawTime);
-
-            // Compute scheduled_date
-            let scheduledDate = null;
-            if (compStart && dayNum) {
-                const dd = new Date(compStart);
-                dd.setDate(dd.getDate() + dayNum - 1);
-                scheduledDate = dd.toISOString().split('T')[0];
-            }
-
-            // FIX: jongbyul을 "/" 또는 "," 로 분리 (엑셀에 "남자 대학부, 남자 일반부, 여자 일반부" 같은 콤마 구분 입력 처리)
-            const jbParts = jongbyul ? jongbyul.split(/[\/,]/).map(s => s.trim()).filter(Boolean) : [''];
-            const parsedRound = parseDisplayRound(rawRound);
-
-            for (const jbPart of jbParts) {
-                const parsed = parseJongbyulNormalized(jbPart);
-                const gender = parsed.gender;
-                const division = parsed.division;
-
-                // Determine event category from '구분' column (section) + event name
-                let category = guessEventCategory(eventName);
-                if (section === 'road' && category === 'track') {
-                    category = 'road';
-                } else if (section === 'field') {
-                    if (category === 'track') {
-                        // Use event name to distinguish height vs distance
-                        if (/높이뛰기|장대높이/.test(eventName)) {
-                            category = 'field_height';
-                        } else {
-                            category = 'field_distance';
-                        }
-                    }
-                }
-
-                // Build unique event key (eventName + gender + division)
-                // Combined sub-events (10종, 7종, 5종) should map to parent combined event
-                let parentEventName = eventName;
-                let isCombinedSub = false;
-                if (/^\d+종\(\d+\)/.test(rawRound)) {
-                    isCombinedSub = true;
-                    const combMatch = rawRound.match(/^(\d+)종/);
-                    if (combMatch) parentEventName = combMatch[1] + '종경기';
-                    category = 'combined';
-                }
-
-                const eventKey = `${isCombinedSub ? parentEventName : eventName}|${gender}|${division}`;
-                if (!eventMap[eventKey]) {
-                    eventMap[eventKey] = {
-                        name: isCombinedSub ? parentEventName : eventName,
-                        gender, division, category,
-                        rounds: new Set(),
-                    };
-                }
-                if (!isCombinedSub) {
-                    eventMap[eventKey].rounds.add(parsedRound.round_type);
-                }
-
-                // Add timetable entry
-                timetableEntries.push({
-                    competition_id: parseInt(competition_id),
-                    day: dayNum,
-                    section,
-                    time: timeStr,
-                    event_name: eventName,
-                    category: jbPart || '',
-                    round: rawRound,
-                    note: parsedRound.note || '',
-                    sort_order: timetableEntries.length,
-                    scheduled_date: scheduledDate,
-                    gender, division,
-                });
-            }
-        }
-
-        if (timetableEntries.length === 0) {
-            try { fs.unlinkSync(req.file.path); } catch(e) {}
-            return res.status(400).json({ error: '시간표 데이터가 없습니다.' });
-        }
-
-        const uploadedDays = [...new Set(timetableEntries.map(e => e.day))].sort((a, b) => a - b);
-
-        // ─── OPTION C: PRESERVE PAST + DIFF MERGE FOR FUTURE/TODAY ───
-        // 1) Determine "today" in local server timezone (YYYY-MM-DD)
-        const todayStr = new Date().toISOString().split('T')[0];
-        const overwriteMode = req.body.overwrite_mode || 'smart'; // 'smart' (default) | 'force' (legacy: full delete)
-
-        // 2) Filter out entries for past days (scheduled_date < today) UNLESS force mode
-        let filteredEntries = timetableEntries;
-        let skippedPastDays = [];
-        if (overwriteMode !== 'force') {
-            const pastDaysSet = new Set();
-            filteredEntries = timetableEntries.filter(e => {
-                if (e.scheduled_date && e.scheduled_date < todayStr) {
-                    pastDaysSet.add(e.day);
-                    return false;
-                }
-                return true;
-            });
-            skippedPastDays = [...pastDaysSet].sort((a, b) => a - b);
-        }
-
-        const effectiveDays = [...new Set(filteredEntries.map(e => e.day))].sort((a, b) => a - b);
-
-        // Transaction: smart-merge timetable + create events
-        const tx = db.transaction(async () => {
-            let addedCount = 0;
-            let updatedCount = 0;
-            let deletedCount = 0;
-            let preservedCount = 0;
-
-            const INS_TT_SQL = `INSERT INTO timetable
-                (competition_id, day, section, time, event_name, category, round, note, sort_order, scheduled_date)
-                VALUES (?,?,?,?,?,?,?,?,?,?)`;
-
-            if (overwriteMode === 'force') {
-                // LEGACY: full delete for uploaded days
-                for (const d of uploadedDays) {
-                    await db.run('DELETE FROM timetable WHERE competition_id=? AND day=?', parseInt(competition_id), d);
-                }
-                for (const e of timetableEntries) {
-                    await db.run(INS_TT_SQL, e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order, e.scheduled_date);
-                    addedCount++;
-                }
-            } else {
-                // SMART MERGE (옵션 C):
-                //   - 과거 일차(scheduled_date < today): 절대 건드리지 않음
-                //   - 오늘/미래 일차: 행 단위 diff 머지
-                //     * 매칭 키: (day, time, event_name, category, round)
-                //     * 매칭 시 → UPDATE (event_id, callroom_time, note 등 보존)
-                //     * 신규 → INSERT
-                //     * 엑셀에 없는 기존 미래 행 → DELETE
-                // FIX: event_id를 NULL로 리셋해서 autoLinkDisplayTimetable이 새 division/gender로 재링크하도록 함
-                //       (예전 잘못된 라벨로 만들어진 event에 링크된 채 남아있는 문제 방지)
-                const UPD_TT_SQL = `UPDATE timetable SET
-                    section=?, note=?, sort_order=?, scheduled_date=?, event_id=NULL
-                    WHERE id=?`;
-                const DEL_ONE_SQL = 'DELETE FROM timetable WHERE id=?';
-
-                for (const day of effectiveDays) {
-                    // Existing rows for this day (only future/today, since past days are filtered upstream)
-                    const existingRows = await db.all('SELECT * FROM timetable WHERE competition_id=? AND day=?', parseInt(competition_id), day);
-
-                    // Skip if this day is in the past (safety)
-                    const sampleRow = existingRows[0];
-                    if (sampleRow && sampleRow.scheduled_date && sampleRow.scheduled_date < todayStr) {
-                        preservedCount += existingRows.length;
-                        continue;
-                    }
-
-                    // Build match key for existing rows
-                    const buildKey = (r) => `${r.time||''}|${(r.event_name||'').trim()}|${(r.category||'').trim()}|${(r.round||'').trim()}`;
-                    const existingByKey = new Map();
-                    existingRows.forEach(r => {
-                        const k = buildKey(r);
-                        if (!existingByKey.has(k)) existingByKey.set(k, []);
-                        existingByKey.get(k).push(r);
-                    });
-
-                    // New entries for this day
-                    const newEntries = filteredEntries.filter(e => e.day === day);
-                    const matchedExistingIds = new Set();
-
-                    for (const e of newEntries) {
-                        const k = buildKey(e);
-                        const candidates = existingByKey.get(k);
-                        if (candidates && candidates.length > 0) {
-                            // UPDATE: take first unmatched candidate
-                            const target = candidates.shift();
-                            matchedExistingIds.add(target.id);
-                            await db.run(UPD_TT_SQL, e.section, e.note || target.note, e.sort_order, e.scheduled_date, target.id);
-                            updatedCount++;
-                        } else {
-                            // INSERT new row
-                            await db.run(INS_TT_SQL, e.competition_id, e.day, e.section, e.time, e.event_name, e.category, e.round, e.note, e.sort_order, e.scheduled_date);
-                            addedCount++;
-                        }
-                    }
-
-                    // DELETE existing rows that are not in the new upload
-                    for (const r of existingRows) {
-                        if (!matchedExistingIds.has(r.id)) {
-                            await db.run(DEL_ONE_SQL, r.id);
-                            deletedCount++;
-                        }
-                    }
-                }
-
-                // Count preserved (past) days
-                if (skippedPastDays.length > 0) {
-                    const cnt = await db.get(`SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND day IN (${skippedPastDays.map(()=>'?').join(',')})`, parseInt(competition_id), ...skippedPastDays);
-                    preservedCount += (cnt && cnt.c) || 0;
-                }
-            }
-
-            // Create events (skip if already exists for this competition)
-            const existingEvents = await db.all('SELECT id, name, gender, division, round_type FROM event WHERE competition_id=?', parseInt(competition_id));
-            const existingSet = new Set(existingEvents.map(e => `${e.name}|${e.gender}|${e.division || ''}|${e.round_type}`));
-
-            const INS_EVENT_SQL = 'INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)';
-            let eventCount = 0;
-            let sortIdx = existingEvents.length;
-
-            for (const ev of Object.values(eventMap)) {
-                const rounds = ev.rounds.size > 0 ? [...ev.rounds] : ['final'];
-                const hasP = rounds.includes('preliminary');
-                const hasS = rounds.includes('semifinal');
-                const roundsToCreate = [];
-                if (hasP) roundsToCreate.push('preliminary');
-                if (hasS) roundsToCreate.push('semifinal');
-                roundsToCreate.push('final');
-                const uniqueRounds = [...new Set(roundsToCreate)];
-
-                for (const rt of uniqueRounds) {
-                    const key = `${ev.name}|${ev.gender}|${ev.division || ''}|${rt}`;
-                    if (!existingSet.has(key)) {
-                        await db.run(INS_EVENT_SQL, parseInt(competition_id), ev.name, ev.category, ev.gender, rt, ev.division || '', sortIdx++);
-                        existingSet.add(key);
-                        eventCount++;
-                    }
-                }
-            }
-
-            return {
-                ttCount: filteredEntries.length,
-                eventCount,
-                days: effectiveDays,
-                skippedPastDays,
-                addedCount, updatedCount, deletedCount, preservedCount,
-                mode: overwriteMode
-            };
-        });
-
-        const result = await tx();
-
-        // Auto-link timetable to events
-        try { await autoLinkDisplayTimetable(parseInt(competition_id)); } catch(e) { console.warn('Display auto-link warning:', e.message); }
-
-        // Compute callroom times
-        try {
-            const needCR = await db.all('SELECT id, time, section FROM timetable WHERE competition_id=? AND callroom_time IS NULL', parseInt(competition_id));
-            for (const tt of needCR) {
-                const m = (tt.time || '').match(/^(\d{1,2}):(\d{2})/);
-                if (!m) continue;
-                let h = parseInt(m[1]), min = parseInt(m[2]);
-                const offset = (tt.section === 'field') ? 45 : 30;
-                min -= offset; while (min < 0) { min += 60; h -= 1; }
-                if (h >= 0) {
-                    await db.run('UPDATE timetable SET callroom_time=? WHERE id=? AND callroom_time IS NULL', String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0'), tt.id);
-                }
-            }
-        } catch(e) {}
-
-        try { fs.unlinkSync(req.file.path); } catch(e) {}
-
-        // Build human-readable message
-        let msg;
-        if (result.mode === 'force') {
-            msg = `[강제덮어쓰기] 시간표 ${result.ttCount}건 등록, 종목 ${result.eventCount}개 생성됨`;
-        } else {
-            const parts = [];
-            if (result.addedCount) parts.push(`추가 ${result.addedCount}`);
-            if (result.updatedCount) parts.push(`수정 ${result.updatedCount}`);
-            if (result.deletedCount) parts.push(`삭제 ${result.deletedCount}`);
-            if (result.skippedPastDays.length > 0) parts.push(`과거 ${result.skippedPastDays.map(d=>d+'일차').join('·')} 보존`);
-            if (result.eventCount) parts.push(`종목 ${result.eventCount}개 신규`);
-            msg = `[스마트머지] ${parts.join(' · ') || '변경 없음'}`;
-        }
-
-        opLog(`노출용 시간표 업로드 (${result.days.map(d=>d+'일차').join(', ') || '없음'}, ${msg})`, 'admin', 'admin', parseInt(competition_id));
-        res.json({ success: true, ...result, message: msg });
-    } catch(e) {
-        console.error('Display timetable upload error:', e);
-        try { if (req.file) fs.unlinkSync(req.file.path); } catch(ex) {}
-        res.status(500).json({ error: '시간표 업로드 실패: ' + e.message });
-    }
-});
-
-// 수동 재링크 API: 시간표의 모든 event_id를 NULL로 리셋한 뒤 autoLink 재실행
-//   사용 케이스: 잘못된 라벨로 매칭됐던 행을 일괄 재매칭 (필요 시 누락된 event 자동 생성)
-app.post('/api/display/timetable/relink/:compId', async (req, res) => {
-    try {
-        const { admin_key } = req.body;
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        const compId = parseInt(req.params.compId);
-        if (!compId) return res.status(400).json({ error: 'competition_id required' });
-
-        const beforeRow = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=? AND event_id IS NOT NULL', compId);
-        const before = beforeRow ? beforeRow.c : 0;
-        await db.run('UPDATE timetable SET event_id=NULL WHERE competition_id=?', compId);
-        const linked = await autoLinkDisplayTimetable(compId);
-        const totalRow = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE competition_id=?', compId);
-        const total = totalRow ? totalRow.c : 0;
-        const stillUnlinked = total - linked;
-        opLog(`시간표 재링크 (이전 ${before} → 현재 ${linked}, 미매칭 ${stillUnlinked})`, 'admin', 'admin', compId);
-        res.json({ success: true, total, linked, unlinked: stillUnlinked, before });
-    } catch (e) {
-        console.error('relink error:', e);
-        res.status(500).json({ error: '재링크 실패: ' + e.message });
-    }
-});
-
-// ─────────────────────────────────────────────────────────────────────
-// 명단 재매칭 API: 노출용 대회의 모든 명단 row event_id를 NULL로 리셋한 뒤
-// autoMatchDisplayRoster 재실행. 명단 PDF 재업로드 없이 매칭 로직만 갱신할 때 사용.
-// ─────────────────────────────────────────────────────────────────────
-app.post('/api/display/roster/relink/:compId', async (req, res) => {
-    try {
-        const { admin_key } = req.body;
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        const compId = parseInt(req.params.compId);
-        if (!compId) return res.status(400).json({ error: 'competition_id required' });
-
-        const beforeRow = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NOT NULL', compId);
-        const before = beforeRow ? beforeRow.c : 0;
-        await db.run('UPDATE display_roster SET event_id=NULL WHERE competition_id=?', compId);
-        const matched = await autoMatchDisplayRoster(compId);
-        const totalRow = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=?', compId);
-        const total = totalRow ? totalRow.c : 0;
-        const stillUnmatched = total - matched;
-        opLog(`명단 재매칭 (이전 ${before} → 현재 ${matched}, 미매칭 ${stillUnmatched})`, 'admin', 'admin', compId);
-        res.json({ success: true, total, matched, unmatched: stillUnmatched, before });
-    } catch (e) {
-        console.error('roster relink error:', e);
-        res.status(500).json({ error: '명단 재매칭 실패: ' + e.message });
-    }
-});
-
-// ─────────────────────────────────────────────────────────────────────
-// 미매칭 리포트 API: event_id가 NULL인 명단 row를 (event_name, round, division, gender) 별로 그룹화해서 반환.
-// 어떤 종목이 시간표에 없거나 표기가 다른지 한눈에 확인 가능.
-// ─────────────────────────────────────────────────────────────────────
-app.get('/api/display/roster/unmatched/:compId', async (req, res) => {
-    try {
-        const compId = parseInt(req.params.compId);
-        if (!compId) return res.status(400).json({ error: 'competition_id required' });
-        const rows = await db.all(`
-            SELECT event_name, round, division, gender, COUNT(*) AS cnt
-            FROM display_roster
-            WHERE competition_id=? AND event_id IS NULL
-            GROUP BY event_name, round, division, gender
-            ORDER BY event_name, round, division, gender
-        `, compId);
-        const totalRow = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE competition_id=? AND event_id IS NULL', compId);
-        const total = totalRow ? totalRow.c : 0;
-        res.json({ success: true, total_unmatched: total, groups: rows });
-    } catch (e) {
-        console.error('unmatched report error:', e);
-        res.status(500).json({ error: '미매칭 리포트 조회 실패: ' + e.message });
-    }
-});
-
-// ─────────────────────────────────────────────────────────────────────
-// 고아 event 정리 API (노출용 대회 한정)
-//   사용 케이스: 옛날 코드(라벨 자유화 이전)로 시간표를 올렸을 때 잘못된
-//                division/gender 로 만들어진 event 들이 DB에 남아있음.
-//                재배포·재업로드 후, 시간표에 한 번도 링크되지 않고
-//                선수 엔트리/조/결과 링크도 없는 "고아 event" 만 안전 삭제.
-//
-//   안전 정책 (다음 조건 모두 만족해야 삭제 후보):
-//     - competition_id 일치
-//     - timetable.event_id 참조 0건 (재링크 후 미사용)
-//     - event_entry 0건 (선수 엔트리 없음)
-//     - heat 0건 (조 편성 없음)
-//     - result_url, video_url 모두 비어있음 (수동 입력 보호)
-//     - 다른 event 의 parent_event_id 로 참조되지 않음 (10종/7종 보호)
-//
-//   2단계 분리:
-//     GET  /api/display/cleanup-orphan-events/:compId  → 미리보기(삭제 안 함)
-//     POST /api/display/cleanup-orphan-events/:compId  → 실제 삭제
-// ─────────────────────────────────────────────────────────────────────
-async function _findOrphanEvents(compId) {
-    return await db.all(`
-        SELECT e.id, e.name, e.gender, e.division, e.round_type, e.category,
-               COALESCE(e.result_url,'') AS result_url,
-               COALESCE(e.video_url,'')  AS video_url
-        FROM event e
-        WHERE e.competition_id = ?
-          AND COALESCE(e.result_url,'') = ''
-          AND COALESCE(e.video_url,'')  = ''
-          AND e.parent_event_id IS NULL
-          AND NOT EXISTS (SELECT 1 FROM timetable    t  WHERE t.event_id        = e.id)
-          AND NOT EXISTS (SELECT 1 FROM event_entry  ee WHERE ee.event_id       = e.id)
-          AND NOT EXISTS (SELECT 1 FROM heat         h  WHERE h.event_id        = e.id)
-          AND NOT EXISTS (SELECT 1 FROM event        e2 WHERE e2.parent_event_id = e.id)
-        ORDER BY e.id
-    `, compId);
-}
-
-// 미리보기
-app.get('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
-    try {
-        const admin_key = req.query.admin_key || req.headers['x-admin-key'] || '';
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        const compId = parseInt(req.params.compId);
-        if (!compId) return res.status(400).json({ error: 'competition_id required' });
-
-        const comp = await db.get('SELECT id, name, mode FROM competition WHERE id=?', compId);
-        if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
-        if (comp.mode !== 'display') return res.status(400).json({ error: '노출용(display) 대회에서만 사용 가능합니다.' });
-
-        const orphans = await _findOrphanEvents(compId);
-        const totalEventsRow = await db.get('SELECT COUNT(*) AS c FROM event WHERE competition_id=?', compId);
-        const totalEvents = totalEventsRow ? totalEventsRow.c : 0;
-
-        // 그룹 요약
-        const byBucket = {};
-        orphans.forEach(o => {
-            const k = `${o.division || '(EMPTY)'} | ${o.gender}`;
-            byBucket[k] = (byBucket[k] || 0) + 1;
-        });
-
-        res.json({
-            success: true,
-            competition: { id: comp.id, name: comp.name },
-            total_events: totalEvents,
-            orphan_count: orphans.length,
-            by_bucket: byBucket,
-            orphans: orphans.map(o => ({
-                id: o.id, name: o.name, gender: o.gender,
-                division: o.division, round_type: o.round_type, category: o.category
-            }))
-        });
-    } catch (e) {
-        console.error('cleanup preview error:', e);
-        res.status(500).json({ error: '미리보기 실패: ' + e.message });
-    }
-});
-
-// 실제 삭제
-app.post('/api/display/cleanup-orphan-events/:compId', async (req, res) => {
-    try {
-        const { admin_key, dry_run } = req.body || {};
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        const compId = parseInt(req.params.compId);
-        if (!compId) return res.status(400).json({ error: 'competition_id required' });
-
-        const comp = await db.get('SELECT id, name, mode FROM competition WHERE id=?', compId);
-        if (!comp) return res.status(404).json({ error: '대회를 찾을 수 없습니다.' });
-        if (comp.mode !== 'display') return res.status(400).json({ error: '노출용(display) 대회에서만 사용 가능합니다.' });
-
-        const orphans = await _findOrphanEvents(compId);
-        if (dry_run) {
-            return res.json({
-                success: true, dry_run: true,
-                would_delete: orphans.length,
-                orphans: orphans.map(o => ({ id: o.id, name: o.name, gender: o.gender, division: o.division, round_type: o.round_type }))
-            });
-        }
-
-        const deleted = await db.transaction(async () => {
-            let n = 0;
-            for (const o of orphans) {
-                await db.run('DELETE FROM event WHERE id=?', o.id);
-                n++;
-            }
-            return n;
-        })();
-
-        opLog(`고아 event 정리 (${deleted}개 삭제)`, 'admin', 'admin', compId);
-        res.json({
-            success: true,
-            deleted,
-            sample: orphans.slice(0, 20).map(o => ({ id: o.id, name: o.name, gender: o.gender, division: o.division, round_type: o.round_type }))
-        });
-    } catch (e) {
-        console.error('cleanup orphan error:', e);
-        res.status(500).json({ error: '정리 실패: ' + e.message });
-    }
-});
-
-// Auto-link timetable to display-mode events
-async function autoLinkDisplayTimetable(compId) {
-    let events = await db.all('SELECT id, name, gender, division, round_type, category FROM event WHERE competition_id=?', compId);
-    const ttRows = await db.all('SELECT id, event_name, category AS jongbyul, round, event_id FROM timetable WHERE competition_id=?', compId);
-
-    function norm(s) { return (s || '').replace(/\s+/g, '').toLowerCase().replace(/[×xX]/g, 'x'); }
-
-    // Best-effort 카테고리 추정 (기존 동일 종목명에서 가져오거나 guessEventCategory)
-    function guessCat(name) {
-        const sameName = events.find(e => norm(e.name) === norm(name) && e.category);
-        if (sameName) return sameName.category;
-        return guessEventCategory(name);
-    }
-
-    let linked = 0;
-    let createdEvents = 0;
-    let nextSort = events.length;
-
-    // 시간표 측에서도 동일한 정규화 기준 사용 (매칭 표기 차이 제거)
-    function divNorm(d) { return normalizeDivisionLabel(d || ''); }
-
-    for (const tt of ttRows) {
-        if (tt.event_id) continue; // already linked
-        const parsed = parseDisplayRound(tt.round);
-        const jbParsed = parseJongbyulNormalized(tt.jongbyul);
-
-        // 종합 sub-event는 부모 이벤트(N종경기)에 연결
-        let targetName = tt.event_name;
-        const isCombinedSub = parsed.is_combined && parsed.combined_n;
-        if (isCombinedSub) {
-            targetName = parsed.combined_n + '종경기';
-        }
-        const targetRound = isCombinedSub ? 'final' : parsed.round_type;
-        const targetDivNorm = divNorm(jbParsed.division);
-
-        // 1) Strict match: name + gender + division + round_type 모두 일치
-        let match = events.find(ev => {
-            if (norm(ev.name) !== norm(targetName)) return false;
-            if (jbParsed.gender && ev.gender && ev.gender !== jbParsed.gender) return false;
-            if (targetDivNorm && divNorm(ev.division) !== targetDivNorm) return false;
-            return ev.round_type === targetRound;
-        });
-
-        // 2) Auto-create: 매칭 실패 시, parseJongbyul이 division을 추출했다면 누락된 event를 자동 생성
-        if (!match && targetDivNorm) {
-            const cat = guessCat(targetName);
-            const info = await db.run('INSERT INTO event (competition_id, name, category, gender, round_type, division, sort_order) VALUES (?,?,?,?,?,?,?)',
-                compId, targetName, cat, jbParsed.gender || 'X', targetRound, targetDivNorm, nextSort++);
-            match = {
-                id: info.lastInsertRowid,
-                name: targetName,
-                gender: jbParsed.gender || 'X',
-                division: targetDivNorm,
-                round_type: targetRound,
-                category: cat,
-            };
-            events.push(match);
-            createdEvents++;
-        }
-
-        if (match) {
-            await db.run('UPDATE timetable SET event_id=? WHERE id=?', match.id, tt.id);
-            linked++;
-        }
-    }
-
-    if (createdEvents > 0) {
-        console.log(`[autoLink] competition_id=${compId}: ${linked} linked, ${createdEvents} events auto-created from timetable`);
-    }
-    return linked;
-}
-
-// Upload roster PDF for display-mode competition
-app.post('/api/display/roster/upload', upload.single('file'), async (req, res) => {
-    try {
-        const { competition_id, admin_key, day, division_hint } = req.body;
-        if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        if (!req.file) return res.status(400).json({ error: '파일이 없습니다.' });
-
-        const dayNum = parseInt(day) || 1;
-        // 파일명/사용자 입력에서 추출한 division_hint (PDF 파싱이 부 라벨을 못 찾을 때 fallback)
-        // 예: "꿈나무" / "선수권" / "U18" / "U20"  (성별 정보가 같이 들어오면 "선수권 남자" 처럼)
-        const divisionHint = (division_hint || '').toString().trim();
-        const pdfParse = require('pdf-parse');
-        const pdfBuffer = fs.readFileSync(req.file.path);
-
-        pdfParse(pdfBuffer).then(async pdfData => {
-            const text = pdfData.text;
-            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-            // --- Team database for parsing concatenated athlete lines ---
-            // School suffixes (중학교, 고등학교, 대학교, etc.)
-            const SCHOOL_SUFFIXES = [
-                '체육중학교', '여자중학교', '중학교',
-                '체육고등학교', '여자고등학교', '고등학교',
-                '대학교', '대학'
-            ];
-            // Pro team suffixes
-            const TEAM_SUFFIXES = [
-                '특별자치도체육회', '특별자치도청', '광역시청', '특별시청',
-                '시체육회', '도체육회', '시청', '군청', '도청', '체육회', '은행',
-                '도시개발공사', '개발공사', '스포츠클럽_중', '스포츠클럽_고',
-                '스포츠클럽', '국군체육부대', '남동구청'
-            ];
-            const ALL_SUFFIXES = [...SCHOOL_SUFFIXES, ...TEAM_SUFFIXES].sort((a, b) => b.length - a.length);
-
-            // Known team/school prefixes for better matching
-            const KNOWN_TEAMS = [
-                '한국체육대학교', '국립경국대학교', '서울대학교', '성균관대학교', '성결대학교',
-                '동아대학교', '조선대학교', '군산대학교', '원광대학교', '목포대학교',
-                '경운대학교', '영남대학교', '경남대학교', '강원대학교', '인하대학교',
-                '부산대학교', '문경대학교', 'SH서울주택도시개발공사',
-                '전북개발공사', '무소속'
-            ];
-
-            const LOCATIONS = [
-                '서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
-                '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주',
-                '수원', '성남', '안양', '안산', '용인', '부천', '광명', '평택', '과천',
-                '오산', '시흥', '군포', '의왕', '하남', '이천', '안성', '김포', '화성',
-                '양주', '포천', '여주', '파주', '고양', '구리', '남양주', '동두천', '의정부',
-                '춘천', '원주', '강릉', '동해', '태백', '속초', '삼척',
-                '충주', '제천', '청주', '천안', '공주', '보령', '아산', '서산', '논산', '계룡', '당진',
-                '전주', '군산', '익산', '정읍', '남원', '김제',
-                '목포', '여수', '순천', '나주', '광양',
-                '포항', '경주', '김천', '안동', '구미', '영주', '영천', '상주', '문경', '경산',
-                '창원', '진주', '통영', '사천', '김해', '밀양', '거제', '양산',
-                '서귀포', '영암', '진천', '음성', '영동', '정선', '단양', '보은',
-                '가평', '양평', '연천', '영월', '철원', '화천', '양구', '인제', '고성', '양양',
-                '옥천', '증평', '괴산',
-                '금산', '부여', '서천', '청양', '홍성', '예산', '태안',
-                '완주', '진안', '무주', '장수', '임실', '순창', '고창', '부안',
-                '담양', '곡성', '구례', '고흥', '보성', '화순', '장흥', '강진', '해남',
-                '무안', '함평', '영광', '장성', '완도', '진도', '신안', '진도',
-                '군위', '의성', '청송', '영양', '영덕', '청도', '고령', '성주', '칠곡', '예천',
-                '봉화', '울진', '울릉',
-                '의령', '함안', '창녕', '남해', '하동', '산청', '함양', '거창', '합천',
-                '강원특별자치', '경상북', '인천남동', '범어', '경기경안', '진주대곡',
-                '진주문산', '진해냉천', '철산', '경수', '여선', '성서', '금파', '석우',
-                '서생', '대청', '문산', '단원', '인천동방', '구월여자', '인화여자', '와동',
-                '계남', '내동', '배문', '전곡', '문산수억', '심원', '덕계', '원곡', '유신',
-                '충남', '충현', '순심', '남녕', '인일여자', '포항이동',
-                '울산스포츠과학', '경기모바일과학', '김포과학기술', '과천중앙', '광주중앙',
-                '대전송촌'
-            ];
-            const LOCATIONS_SORTED = [...LOCATIONS].sort((a, b) => b.length - a.length);
-
-            function parseNameTeam(koreanPart) {
-                if (!koreanPart || koreanPart.length < 4) return { name: koreanPart || '', team: '' };
-                
-                // Handle special cases: "무소속(경기)", "무소속(서울)" etc.
-                const musoMatch = koreanPart.match(/^(.{2,4})(무소속\(.+\))$/);
-                if (musoMatch) return { name: musoMatch[1], team: musoMatch[2] };
-                
-                // Handle (주) prefix teams
-                const specialIdx = koreanPart.indexOf('(주)');
-                if (specialIdx > 0 && specialIdx >= 2) {
-                    return { name: koreanPart.substring(0, specialIdx), team: koreanPart.substring(specialIdx) };
-                }
-
-                // Try known full team names first
-                for (const kt of KNOWN_TEAMS) {
-                    if (koreanPart.endsWith(kt) && koreanPart.length > kt.length + 1) {
-                        const nameEnd = koreanPart.length - kt.length;
-                        if (nameEnd >= 2 && nameEnd <= 5) {
-                            return { name: koreanPart.substring(0, nameEnd), team: kt };
-                        }
-                    }
-                }
-
-                // Strategy: find the longest valid team suffix from the end
-                // Korean names are 2-4 chars (most commonly 3)
-                // Teams end with: 중학교, 고등학교, 대학교, 시청, 군청, 도청, 체육회, etc.
-                // Try name lengths 3, 2, 4 (prefer 3 as most common Korean name length)
-                const teamIndicators = [
-                    '중학교', '고등학교', '대학교', '대학', '시청', '군청', '도청',
-                    '체육회', '도시개발공사', '개발공사', '국군체육부대',
-                    '구청', '스포츠클럽', '공사', '클럽_중', '클럽_고'
-                ];
-                
-                // Prefer 3-char name (most common), then 2, then 4
-                for (const nameLen of [3, 2, 4]) {
-                    if (nameLen >= koreanPart.length) continue;
-                    const possibleTeam = koreanPart.substring(nameLen);
-                    // Check if possibleTeam contains a team indicator
-                    if (teamIndicators.some(ind => possibleTeam.includes(ind))) {
-                        return { name: koreanPart.substring(0, nameLen), team: possibleTeam };
-                    }
-                }
-
-                // Try suffix-based matching with location for pro teams (시청, 군청, etc.)
-                for (const suffix of TEAM_SUFFIXES) {
-                    if (!koreanPart.endsWith(suffix)) continue;
-                    const beforeSuffix = koreanPart.substring(0, koreanPart.length - suffix.length);
-                    for (const loc of LOCATIONS_SORTED) {
-                        if (beforeSuffix.endsWith(loc)) {
-                            const teamStart = beforeSuffix.length - loc.length;
-                            if (teamStart >= 2 && teamStart <= 4) {
-                                return { name: koreanPart.substring(0, teamStart), team: koreanPart.substring(teamStart) };
-                            }
-                        }
-                    }
-                }
-
-                // Fallback: assume Korean name is 3 chars (most common)
-                if (koreanPart.length >= 5) {
-                    return { name: koreanPart.substring(0, 3), team: koreanPart.substring(3) };
-                }
-                return { name: koreanPart, team: '' };
-            }
-
-            // --- Division/Gender mapping (명단 PDF용) ---
-            // 출력 division은 항상 normalizeDivisionLabel을 통과시켜 시간표 측 표기와 결정적으로 일치하게 함.
-            function parseDivisionMarker(line) {
-                let gender = '', division = '';
-                const orig = line;
-
-                // ── 신형 라벨 우선 처리 ─────────────────────────────────────
-                // 1) "남초 4학년부", "여초 5학년부" 등 → 초등부
-                let m = orig.match(/^(남|여)초\s*(\d+학년부)?$/);
-                if (m) {
-                    return { gender: m[1] === '남' ? 'M' : 'F', division: normalizeDivisionLabel('초등부') };
-                }
-                // 1.5) ★ 추가: "남중 1/2학년부", "여중 3학년부", "남고", "여고", "남대", "여대"
-                //      꿈나무 PDF에 "남중 1/2학년부" 같은 라벨이 등장 — 기존엔 인식 못해 초등부 hint로 잘못 흘러감(Bug C 잔여).
-                m = orig.match(/^(남|여)중(\s*[\d/]+학년부)?$/);
-                if (m) {
-                    return { gender: m[1] === '남' ? 'M' : 'F', division: normalizeDivisionLabel('중등부') };
-                }
-                m = orig.match(/^(남|여)고(\s*\d+학년부)?$/);
-                if (m) {
-                    return { gender: m[1] === '남' ? 'M' : 'F', division: normalizeDivisionLabel('고등부') };
-                }
-                m = orig.match(/^(남|여)대(\s*\d+학년부)?$/);
-                if (m) {
-                    return { gender: m[1] === '남' ? 'M' : 'F', division: normalizeDivisionLabel('대학부') };
-                }
-                // 2) "선수권 남자부" / "선수권 여자부" / "선수권 혼성부"
-                m = orig.match(/^선수권\s*(남자|여자|혼성)부?$/);
-                if (m) {
-                    const g = m[1] === '남자' ? 'M' : (m[1] === '여자' ? 'F' : 'X');
-                    const dv = m[1] === '남자' ? '선수권(남)' : (m[1] === '여자' ? '선수권(여)' : '선수권(혼)');
-                    return { gender: g, division: normalizeDivisionLabel(dv) };
-                }
-                // 3) "U18 남자부" / "U20 여자부" / "U18 혼성부"
-                m = orig.match(/^U(18|20)\s*(남자|여자|혼성)부?$/i);
-                if (m) {
-                    const g = m[2] === '남자' ? 'M' : (m[2] === '여자' ? 'F' : 'X');
-                    const dv = `U${m[1]}(${m[2] === '남자' ? '남' : (m[2] === '여자' ? '여' : '혼')})`;
-                    return { gender: g, division: normalizeDivisionLabel(dv) };
-                }
-                // 4) "꿈나무 남자부" / "꿈나무 여자부" (혹시 등장 시)
-                m = orig.match(/^꿈나무\s*(남자|여자)부?$/);
-                if (m) {
-                    return { gender: m[1] === '남자' ? 'M' : 'F', division: normalizeDivisionLabel('초등부') };
-                }
-
-                // ── 구형 라벨: "남자/여자" + 중학교부/고등학교부/... ──
-                if (line.startsWith('남자')) { gender = 'M'; line = line.substring(2); }
-                else if (line.startsWith('여자')) { gender = 'F'; line = line.substring(2); }
-                const divMap = {
-                    '실업부': '일반부', '일반부': '일반부',
-                    '대학부': '대학부', '대학교부': '대학부',
-                    '고등부': '고등부', '고등학교부': '고등부',
-                    '중등부': '중등부', '중학교부': '중등부',
-                    '초등부': '초등부', '초등학교부': '초등부',
-                };
-                for (const [key, val] of Object.entries(divMap)) {
-                    if (line.startsWith(key)) { division = val; break; }
-                }
-                if (!division && line) division = line;
-                return { gender, division: normalizeDivisionLabel(division) };
-            }
-
-            // ============================================================
-            // v4 PARSING: 라벨 기반 섹션 분할 + 릴레이 팀단위 + 혼성경기 통합 + noSeq 헤더
-            //   - tmp/pdf_to_excel.js 의 v4 로직과 동일한 알고리즘
-            //   - 부 라벨은 "라벨 등장 라인까지의 모든 라인 = 그 라벨" 로 묶음 (페이지 경계 무시)
-            //   - 릴레이(4xNNNm[R] / 릴레이)는 첫 행만 = 레인+팀 한 행 (성명/배번 비움)
-            //   - 혼성경기(round나 event_name에 (N종))는 dedup 통합해 "N종경기" 1행 per 선수
-            //   - noSeqMode: 조헤더가 "N조레인번호성명소속"(공백 없음)이면 첫자리=레인, 나머지=배번
-            // ============================================================
-            const divMarkerRegex = new RegExp(
-                '^(?:' +
-                    '(?:남자|여자)?(?:초등학교부|중학교부|고등학교부|대학교부|일반부|초등부|중등부|고등부|대학부|실업부)' +
-                    '|(?:남|여)초(?:\\s*[\\d/]+학년부)?' +
-                    '|(?:남|여)중(?:\\s*[\\d/]+학년부)?' +
-                    '|(?:남|여)고(?:\\s*[\\d/]+학년부)?' +
-                    '|(?:남|여)대(?:\\s*[\\d/]+학년부)?' +
-                    '|선수권\\s*(?:남자|여자|혼성)부?' +
-                    '|U(?:18|20)\\s*(?:남자|여자|혼성)부?' +
-                    '|꿈나무\\s*(?:남자|여자)부?' +
-                ')$',
-                'i'
-            );
-
-            // ── 파일명 힌트 fallback ──
-            const hintParsed = divisionHint ? parseDivisionMarker(divisionHint) : null;
-            const hintFallback = (hintParsed && hintParsed.division) ? hintParsed : null;
-            if (hintFallback) {
-                console.log(`[roster/upload v4] divisionHint="${divisionHint}" → ${JSON.stringify(hintFallback)}`);
-            }
-
-            // ── 라벨 기반 섹션 분할 ──
-            //   페이지 마커(-NN-)는 제거. 부 라벨 라인 만나면 그 라벨까지의 모든 라인을 섹션으로 묶음.
-            //   라벨 없이 끝난 마지막 섹션은 직전 라벨 또는 hintFallback 상속.
-            const flatLines = lines.filter(l => !/^-\d+-$/.test(l));
-            const sections = [];
-            let curSec = [];
-            let lastDivSeen = hintFallback
-                ? { gender: hintFallback.gender, division: hintFallback.division }
-                : { gender: '', division: '' };
-            for (const l of flatLines) {
-                if (divMarkerRegex.test(l)) {
-                    const parsed = parseDivisionMarker(l);
-                    if (parsed && parsed.division) {
-                        sections.push({ lines: curSec, div: parsed });
-                        lastDivSeen = parsed;
-                        curSec = [];
-                        continue;
-                    }
-                }
-                curSec.push(l);
-            }
-            if (curSec.length) sections.push({ lines: curSec, div: lastDivSeen });
-
-            // ── splitSeqAndBib (lastSeq 추적용) ──
-            function splitSeqAndBib(digits, expectedSeq) {
-                if (!digits) return { seq: null, bib: '' };
-                if (digits.length >= 3 && expectedSeq >= 10) {
-                    const twoDigit = parseInt(digits.substring(0, 2));
-                    if (twoDigit === expectedSeq) return { seq: twoDigit, bib: digits.substring(2) };
-                }
-                if (digits.length >= 2) {
-                    const oneDigit = parseInt(digits[0]);
-                    if (oneDigit === expectedSeq && expectedSeq >= 1 && expectedSeq <= 9) {
-                        return { seq: oneDigit, bib: digits.substring(1) };
-                    }
-                }
-                if (digits.length >= 3) {
-                    const twoDigit = parseInt(digits.substring(0, 2));
-                    if (twoDigit >= 10 && twoDigit <= 99) return { seq: twoDigit, bib: digits.substring(2) };
-                }
-                if (digits.length >= 2) return { seq: parseInt(digits[0]), bib: digits.substring(1) };
-                return { seq: null, bib: digits };
-            }
-
-            // ── 릴레이 종목 판별 ──
-            function isRelayEvent(eventName) {
-                if (!eventName) return false;
-                return /\d\s*[x×Xx]\s*\d{2,4}\s*m?\s*R?/i.test(eventName)
-                    || /릴레이/.test(eventName)
-                    || /relay/i.test(eventName);
-            }
-
-            // ── 팀명(학교/시청/구청 등) 키워드 포함 여부 ──
-            const TEAM_KEYWORDS = [
-                '초등학교','중학교','고등학교','대학교','대학','시청','군청','도청','체육회',
-                '도시개발공사','개발공사','국군체육부대','구청','스포츠클럽','공사',
-                '클럽_중','클럽_고','클럽_초','체육부대',
-            ];
-            function hasTeamKeyword(s) {
-                if (!s) return false;
-                return TEAM_KEYWORDS.some(k => s.includes(k));
-            }
-
-            // ── 한 섹션 파싱 ──
-            const rosterEntries = [];
-            let sortOrder = 0;
-
-            function parseSection(secLines, pageDiv) {
-                let currentEvent = '', currentRound = '';
-                let currentHeat = null;
-                let laneHeaderSeen = false;
-                let lastEntryIdx = -1;
-                let lastSeq = 0;
-                let noSeqMode = false;
-                let relayMode = false;
-                let relayCurrentLane = null;
-
-                for (let i = 0; i < secLines.length; i++) {
-                    const line = secLines[i];
-                    if (!line) continue;
-                    if (divMarkerRegex.test(line)) continue;
-                    if (/^(KTFL|KOREA|TRACK|FIELD|LEAGUE|&|한국실업육상연맹|한국중고육상연맹|한국대학육상연맹|한국육상연맹|대한육상연맹)$/.test(line)) continue;
-
-                    // 종목 헤더 (이중괄호 케이스 우선): ▣ 4x400mR(Mixed) (결승)
-                    const evMatchDouble = line.match(/^[▣■□●○]\s*(.+?)\s*[\(（](.+?)[\)）]\s*[\(（](.+?)[\)）]\s*$/);
-                    if (evMatchDouble) {
-                        currentEvent = (evMatchDouble[1] + '(' + evMatchDouble[2] + ')').trim();
-                        currentRound = evMatchDouble[3].trim();
-                        currentHeat = null;
-                        laneHeaderSeen = false;
-                        lastEntryIdx = -1;
-                        lastSeq = 0;
-                        noSeqMode = false;
-                        relayMode = isRelayEvent(currentEvent);
-                        relayCurrentLane = null;
-                        continue;
-                    }
-                    // 종목 헤더 (단일 괄호): ▣ 100m (5-2+6) | ▣ 100m(10종)
-                    const evMatch = line.match(/^[▣■□●○]\s*(.+?)\s*[\(（](.+?)[\)）]\s*$/);
-                    if (evMatch) {
-                        currentEvent = evMatch[1].trim();
-                        currentRound = evMatch[2].trim();
-                        currentHeat = null;
-                        laneHeaderSeen = false;
-                        lastEntryIdx = -1;
-                        lastSeq = 0;
-                        noSeqMode = false;
-                        relayMode = isRelayEvent(currentEvent);
-                        relayCurrentLane = null;
-                        continue;
-                    }
-
-                    // 조 헤더: "1조레인번호성명소속" (붙음→noSeq) | "1조   레인  번호성명소속" (공백→일반)
-                    const heatMatch = line.match(/^(\d+)조\s*((?:레인|순)?\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?)?\s*$/);
-                    if (heatMatch) {
-                        currentHeat = parseInt(heatMatch[1]);
-                        laneHeaderSeen = true;
-                        lastEntryIdx = -1;
-                        lastSeq = 0;
-                        const afterHeat = line.replace(/^\d+조/, '');
-                        // 핵심 규칙:
-                        //  · '순' 키워드가 들어가면 → 무조건 lastSeq 추적 모드 (noSeqMode=false)
-                        //    (1500m 1조처럼 출전 인원이 10명을 넘어 두자리 순번이 나올 수 있음)
-                        //  · '레인' 키워드만 있거나 키워드가 없을 때만 → 공백 유무로 noSeqMode 결정
-                        //    (레인은 1~9 한자리이므로 noSeqMode 적용 안전)
-                        if (/순/.test(afterHeat)) {
-                            noSeqMode = false;
-                        } else if (afterHeat && /\S/.test(afterHeat) && !/\s/.test(afterHeat)) {
-                            noSeqMode = true;
-                        } else {
-                            noSeqMode = false;
-                        }
-                        relayCurrentLane = null;
-                        continue;
-                    }
-                    // 비-조 헤더 "레인번호성명소속" / "레인  번호성명소속" (릴레이/필드)
-                    // 주의: '순'은 여기서 매칭하지 않음 — 순은 lastSeq 추적이 필요하므로 아래 별도 분기
-                    if (/^레인\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?$/.test(line)) {
-                        laneHeaderSeen = true;
-                        lastSeq = 0;
-                        noSeqMode = true; // 레인은 1~9 한자리 → noSeqMode 안전
-                        relayCurrentLane = null;
-                        continue;
-                    }
-                    // 필드 종목 "순번호성명소속" — 순 사용 (10명+ 가능 → lastSeq 추적 필수)
-                    if (/^순\s*(?:번호)?\s*(?:성명)?\s*(?:소속)?$/.test(line)) {
-                        laneHeaderSeen = true;
-                        lastSeq = 0;
-                        noSeqMode = false;
-                        relayCurrentLane = null;
-                        continue;
-                    }
-                    if (/^번호\s*성명/.test(line)) continue;
-
-                    if (!currentEvent) continue;
-
-                    // ──────── 릴레이 모드 ────────
-                    if (relayMode) {
-                        // R-A: "4   129김이겸    전곡고등학교" (공백 분리)
-                        const rA = line.match(/^([1-9])\s+\d{1,3}\s*[가-힣]{2,4}\s+(.+)$/);
-                        if (rA) {
-                            relayCurrentLane = parseInt(rA[1]);
-                            const team = rA[2].trim();
-                            rosterEntries.push({
-                                competition_id: parseInt(competition_id), day: dayNum,
-                                event_name: currentEvent, round: currentRound,
-                                division: pageDiv.division, gender: pageDiv.gender,
-                                bib_number: '', athlete_name: '', team,
-                                sort_order: sortOrder++, heat: null, lane: relayCurrentLane,
-                            });
-                            lastEntryIdx = rosterEntries.length - 1;
-                            continue;
-                        }
-                        // R-B: "4614민지현화성시청" (붙음, 첫 행)
-                        const rB = line.match(/^(\d+)([가-힣].+)$/);
-                        if (rB) {
-                            const digits = rB[1];
-                            const rest = rB[2];
-                            const nt = parseNameTeam(rest);
-                            if (nt.team && hasTeamKeyword(nt.team)) {
-                                relayCurrentLane = parseInt(digits[0]);
-                                rosterEntries.push({
-                                    competition_id: parseInt(competition_id), day: dayNum,
-                                    event_name: currentEvent, round: currentRound,
-                                    division: pageDiv.division, gender: pageDiv.gender,
-                                    bib_number: '', athlete_name: '', team: nt.team,
-                                    sort_order: sortOrder++, heat: null, lane: relayCurrentLane,
-                                });
-                                lastEntryIdx = rosterEntries.length - 1;
-                                continue;
-                            }
-                            // 후속 멤버 행 (이름만, 팀 키워드 없음) → 스킵
-                            continue;
-                        }
-                        // 한글만 있는 라인 — 직전 entry 의 team 보강
-                        if (/^[가-힣A-Za-z_()（）\s]+$/.test(line) && lastEntryIdx >= 0
-                            && rosterEntries[lastEntryIdx] && !rosterEntries[lastEntryIdx].team
-                            && hasTeamKeyword(line)) {
-                            rosterEntries[lastEntryIdx].team = line.trim();
-                            continue;
-                        }
-                        continue;
-                    }
-                    // ──────── 일반 모드 ────────
-
-                    let lane = null, bib = '', namePart = '', teamPart = '';
-
-                    // 패턴 A: "5   31양지은    학교" (공백 분리, 한자리 순)
-                    const aMatch = line.match(/^([1-9])\s+(\d{1,3})\s*([가-힣]{2,4})(?:\s{2,}(.+))?\s*$/);
-                    if (aMatch) {
-                        lane = parseInt(aMatch[1]);
-                        bib = aMatch[2];
-                        namePart = aMatch[3];
-                        teamPart = (aMatch[4] || '').trim();
-                    } else {
-                        // 패턴 A2: "10  149김인혜    학교" (공백 분리, 두자리 순)
-                        const aMatch2 = line.match(/^(\d{1,2})\s{2,}(\d{1,3})\s*([가-힣]{2,4})(?:\s{2,}(.+))?\s*$/);
-                        if (aMatch2) {
-                            lane = parseInt(aMatch2[1]);
-                            bib = aMatch2[2];
-                            namePart = aMatch2[3];
-                            teamPart = (aMatch2[4] || '').trim();
-                        } else {
-                            // 패턴 C/D (붙음)
-                            const m = line.match(/^(\d+)([가-힣].+)$/);
-                            if (m) {
-                                const digits = m[1];
-                                const rest = m[2];
-                                if (noSeqMode) {
-                                    // 순 없는 페이지: 첫 한자리=레인, 나머지=배번
-                                    lane = parseInt(digits[0]);
-                                    bib = digits.substring(1);
-                                } else {
-                                    const expectedSeq = lastSeq + 1;
-                                    const split = splitSeqAndBib(digits, expectedSeq);
-                                    lane = split.seq;
-                                    bib = split.bib;
-                                }
-                                const nt = parseNameTeam(rest);
-                                namePart = nt.name;
-                                teamPart = nt.team;
-                            }
-                        }
-                    }
-
-                    // 유효성 검증
-                    const bibNum = parseInt(bib);
-                    if (!namePart || namePart.length < 2 || !bibNum || bibNum <= 0 || bibNum >= 10000) {
-                        // 직전 entry 의 소속 보강
-                        if (/^[가-힣A-Za-z_()（）]/.test(line) && lastEntryIdx >= 0
-                            && rosterEntries[lastEntryIdx] && !rosterEntries[lastEntryIdx].team
-                            && !line.startsWith('▣')
-                            && !/^(순|레인|번호|성명|소속)/.test(line)) {
-                            rosterEntries[lastEntryIdx].team = line;
-                        }
-                        continue;
-                    }
-
-                    // 레인 저장 조건: heat 또는 laneHeader 가 보였을 때만
-                    const laneToStore = (currentHeat || laneHeaderSeen) ? lane : null;
-
-                    rosterEntries.push({
-                        competition_id: parseInt(competition_id), day: dayNum,
-                        event_name: currentEvent, round: currentRound,
-                        division: pageDiv.division, gender: pageDiv.gender,
-                        bib_number: bib, athlete_name: namePart, team: teamPart,
-                        sort_order: sortOrder++, heat: currentHeat, lane: laneToStore,
-                    });
-                    lastEntryIdx = rosterEntries.length - 1;
-
-                    if (typeof lane === 'number' && lane > 0 && lane === lastSeq + 1) {
-                        lastSeq = lane;
-                    } else if (typeof lane === 'number' && lane > lastSeq && !noSeqMode) {
-                        lastSeq = lane;
-                    }
-                }
-            }
-
-            // ── 모든 섹션 파싱 ──
-            for (const sec of sections) {
-                const effDiv = (sec.div && sec.div.division)
-                    ? sec.div
-                    : (hintFallback || { gender: '', division: '' });
-                parseSection(sec.lines, effDiv);
-            }
-
-            // ── 혼성경기(10종/7종) 통합 dedup ──
-            //   event_name 또는 round 에 "(N종)"이 들어가면 → "N종경기" 단일 종목으로 통합
-            //   같은 (division, gender, athlete_name, team, N) 키로 첫 등장만 유지
-            function combinedEventName(eventName, round) {
-                const text = `${eventName || ''} ${round || ''}`;
-                const m = text.match(/(\d+)\s*종/);
-                if (m) return `${m[1]}종경기`;
-                return null;
-            }
-            const dedupedEntries = [];
-            const combinedSeen = new Set();
-            for (const e of rosterEntries) {
-                const cn = combinedEventName(e.event_name, e.round);
-                if (cn) {
-                    const key = `${e.division}|${e.gender}|${e.athlete_name}|${e.team}|${cn}`;
-                    if (combinedSeen.has(key)) continue;
-                    combinedSeen.add(key);
-                    dedupedEntries.push({
-                        ...e,
-                        event_name: cn,
-                        round: '결승',
-                        heat: null,
-                        lane: null,
-                    });
-                } else {
-                    dedupedEntries.push(e);
-                }
-            }
-            rosterEntries.length = 0;
-            for (const e of dedupedEntries) rosterEntries.push(e);
-
-            // Delete existing roster for this day
-            await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=?', parseInt(competition_id), dayNum);
-
-            // Insert parsed roster
-            await db.transaction(async () => {
-                for (const e of rosterEntries) {
-                    await db.run('INSERT INTO display_roster (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, heat, lane) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-                        e.competition_id, e.day, e.event_name, e.round, e.division, e.gender, e.bib_number, e.athlete_name, e.team, e.sort_order, e.heat || null, e.lane || null);
-                }
-            })();
-
-            // Auto-match roster to events
-            try { await autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) { console.warn('Roster auto-match warning:', e.message); }
-
-            try { fs.unlinkSync(req.file.path); } catch(e) {}
-            opLog(`노출용 명단 업로드 (${dayNum}일차, ${rosterEntries.length}명)`, 'admin', 'admin', parseInt(competition_id));
-            res.json({ success: true, count: rosterEntries.length, day: dayNum, message: `${dayNum}일차 명단 ${rosterEntries.length}명 등록됨` });
-        }).catch(err => {
-            try { fs.unlinkSync(req.file.path); } catch(e) {}
-            res.status(500).json({ error: 'PDF 파싱 실패: ' + err.message });
-        });
-    } catch(e) {
-        console.error('Roster upload error:', e);
-        try { if (req.file) fs.unlinkSync(req.file.path); } catch(ex) {}
-        res.status(500).json({ error: '명단 업로드 실패: ' + e.message });
-    }
-});
-
-// ============================================================
-// Excel 명단 업로드 (결정적 컬럼 매핑 — PDF 추측 매칭 대안)
-// ============================================================
-// PDF 추측 파싱이 엣지 케이스에서 계속 실패하므로, 사용자가 PDF→Excel 변환본을
-// 직접 검수/수정한 후 업로드하는 워크플로를 지원한다.
-//
-// 기대 컬럼(헤더 한글 또는 영문 모두 허용):
-//   일차/day, 종목/event_name, 라운드/round, 라운드타입/round_type,
-//   조/heat, 레인/lane, 배번/bib_number, 성명/athlete_name,
-//   소속/team, 부/division, 성별/gender
-//
-// 동작:
-//   ① day 별로 기존 display_roster를 삭제 후 새로 INSERT
-//   ② 업로드 직후 autoMatchDisplayRoster 호출 (시간표 events와 매칭)
-//   ③ 매칭이 안 된 행은 관리 페이지에서 "수동 매칭"으로 직접 지정 가능
-app.post('/api/display/roster/upload-excel', upload.single('file'), async (req, res) => {
-    try {
-        const { competition_id, admin_key } = req.body;
-        if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        if (!req.file) return res.status(400).json({ error: '파일이 없습니다.' });
-
-        const comp = await db.get('SELECT * FROM competition WHERE id=?', parseInt(competition_id));
-        if (!comp) { try { fs.unlinkSync(req.file.path); } catch(e) {} return res.status(404).json({ error: '대회를 찾을 수 없습니다.' }); }
-
-        const wb = XLSX.readFile(req.file.path);
-        // 우선순위: '명단' 시트 > 첫번째 시트
-        const sheetName = wb.SheetNames.find(s => s === '명단' || s === 'roster') || wb.SheetNames[0];
-        const ws = wb.Sheets[sheetName];
-        if (!ws) { try { fs.unlinkSync(req.file.path); } catch(e) {} return res.status(400).json({ error: '시트가 비어있습니다.' }); }
-
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-        if (data.length < 2) { try { fs.unlinkSync(req.file.path); } catch(e) {} return res.status(400).json({ error: '데이터 행이 없습니다.' }); }
-
-        // 헤더 매핑 (한/영 모두 지원)
-        const headerRow = data[0].map(c => String(c || '').trim());
-        function findCol(...names) {
-            for (const n of names) {
-                const idx = headerRow.findIndex(h => h === n);
-                if (idx >= 0) return idx;
-            }
-            return -1;
-        }
-        const colIdx = {
-            day: findCol('일차', 'day'),
-            event_name: findCol('종목', 'event_name', 'event'),
-            round: findCol('라운드', 'round'),
-            round_type: findCol('라운드타입', 'round_type'),
-            heat: findCol('조', 'heat'),
-            lane: findCol('레인', 'lane'),
-            bib_number: findCol('배번', 'bib_number', 'bib'),
-            athlete_name: findCol('성명', 'athlete_name', 'name'),
-            team: findCol('소속', 'team'),
-            division: findCol('부', 'division'),
-            gender: findCol('성별', 'gender'),
-        };
-
-        if (colIdx.event_name < 0 || colIdx.athlete_name < 0) {
-            try { fs.unlinkSync(req.file.path); } catch(e) {}
-            return res.status(400).json({ error: '필수 컬럼(종목/성명)이 없습니다. README 시트의 양식을 참고하세요.' });
-        }
-
-        // 행 파싱 (정규화는 normalizeDivisionLabel 한 번만 거침)
-        function gNorm(g) {
-            const s = String(g || '').trim().toUpperCase();
-            if (s === 'M' || s === '남' || s === '남자') return 'M';
-            if (s === 'F' || s === '여' || s === '여자') return 'F';
-            if (s === 'X' || s === '혼' || s === '혼성' || s === 'MIX') return 'X';
-            return '';
-        }
-
-        const entries = [];
-        const daysSeen = new Set();
-        for (let i = 1; i < data.length; i++) {
-            const row = data[i] || [];
-            const evName = String(row[colIdx.event_name] || '').trim();
-            const athName = String(row[colIdx.athlete_name] || '').trim();
-            if (!evName || !athName) continue; // skip empty rows
-
-            const dayRaw = colIdx.day >= 0 ? row[colIdx.day] : 1;
-            const dayNum = parseInt(dayRaw) || 1;
-            daysSeen.add(dayNum);
-
-            const round = colIdx.round >= 0 ? String(row[colIdx.round] || '').trim() : '';
-            const heatRaw = colIdx.heat >= 0 ? row[colIdx.heat] : '';
-            const laneRaw = colIdx.lane >= 0 ? row[colIdx.lane] : '';
-            const bib = colIdx.bib_number >= 0 ? String(row[colIdx.bib_number] || '').trim() : '';
-            const team = colIdx.team >= 0 ? String(row[colIdx.team] || '').trim() : '';
-            const divRaw = colIdx.division >= 0 ? String(row[colIdx.division] || '').trim() : '';
-            const genderRaw = colIdx.gender >= 0 ? row[colIdx.gender] : '';
-
-            entries.push({
-                competition_id: parseInt(competition_id),
-                day: dayNum,
-                event_name: evName,
-                round: round,
-                division: normalizeDivisionLabel(divRaw),
-                gender: gNorm(genderRaw),
-                bib_number: bib,
-                athlete_name: athName,
-                team: team,
-                sort_order: entries.length,
-                heat: heatRaw === '' || heatRaw === null ? null : (parseInt(heatRaw) || null),
-                lane: laneRaw === '' || laneRaw === null ? null : (parseInt(laneRaw) || null),
-            });
-        }
-
-        if (entries.length === 0) {
-            try { fs.unlinkSync(req.file.path); } catch(e) {}
-            return res.status(400).json({ error: '유효한 명단 행이 없습니다.' });
-        }
-
-        // 트랜잭션: day별 삭제 후 INSERT
-        await db.transaction(async () => {
-            for (const d of [...daysSeen]) {
-                await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=?', parseInt(competition_id), d);
-            }
-            for (const e of entries) {
-                await db.run('INSERT INTO display_roster (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, heat, lane) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-                    e.competition_id, e.day, e.event_name, e.round, e.division, e.gender, e.bib_number, e.athlete_name, e.team, e.sort_order, e.heat, e.lane);
-            }
-        })();
-
-        // Auto-match
-        try { await autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) { console.warn('Roster auto-match warning:', e.message); }
-
-        try { fs.unlinkSync(req.file.path); } catch(e) {}
-        opLog(`노출용 명단 Excel 업로드 (일차 ${[...daysSeen].sort().join(',')}, ${entries.length}명)`, 'admin', 'admin', parseInt(competition_id));
-        res.json({ success: true, count: entries.length, days: [...daysSeen].sort(), message: `Excel 명단 ${entries.length}명 등록됨` });
-    } catch(e) {
-        console.error('Roster Excel upload error:', e);
-        try { if (req.file) fs.unlinkSync(req.file.path); } catch(ex) {}
-        res.status(500).json({ error: 'Excel 명단 업로드 실패: ' + e.message });
-    }
-});
-
-// ============================================================
-// 명단 매칭 수동 수정 API
-// ============================================================
-//   ① GET  /api/display/roster/list/:compId          — 명단 행 목록 (필터 가능)
-//   ② GET  /api/display/roster/events/:compId        — 매칭 후보 event 목록
-//   ③ POST /api/display/roster/assign                — 단건 event_id 변경
-//   ④ POST /api/display/roster/assign-bulk           — 다건 동시 변경 (그룹 단위)
-//   ⑤ POST /api/display/roster/clear-event/:rosterId — event_id를 NULL로 (미매칭으로 되돌림)
-app.get('/api/display/roster/list/:compId', async (req, res) => {
-    try {
-        const compId = parseInt(req.params.compId);
-        const { day, only_unmatched, event_id } = req.query;
-        let sql = `SELECT r.id, r.day, r.event_name, r.round, r.division, r.gender, r.bib_number,
-                          r.athlete_name, r.team, r.heat, r.lane, r.event_id,
-                          e.name AS matched_event_name, e.gender AS matched_event_gender,
-                          e.division AS matched_event_division, e.round_type AS matched_event_round
-                   FROM display_roster r
-                   LEFT JOIN event e ON e.id = r.event_id
-                   WHERE r.competition_id=?`;
-        const args = [compId];
-        if (day) { sql += ' AND r.day=?'; args.push(parseInt(day)); }
-        if (only_unmatched === '1' || only_unmatched === 'true') sql += ' AND r.event_id IS NULL';
-        if (event_id) { sql += ' AND r.event_id=?'; args.push(parseInt(event_id)); }
-        sql += ' ORDER BY r.day, r.event_name, r.round, r.heat, r.lane, r.sort_order';
-        const rows = await db.all(sql, ...args);
-        res.json({ success: true, rows, total: rows.length });
-    } catch(e) {
-        console.error('roster/list error:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.get('/api/display/roster/events/:compId', async (req, res) => {
-    try {
-        const compId = parseInt(req.params.compId);
-        const events = await db.all(`SELECT id, name, gender, division, round_type, category
-             FROM event WHERE competition_id=?
-             ORDER BY name, division, gender, round_type`, compId);
-        res.json({ success: true, events });
-    } catch(e) {
-        console.error('roster/events error:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.post('/api/display/roster/assign', async (req, res) => {
-    try {
-        const { admin_key, roster_id, event_id } = req.body;
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        if (!roster_id) return res.status(400).json({ error: 'roster_id required' });
-        const evId = event_id ? parseInt(event_id) : null;
-        if (evId) {
-            const ev = await db.get('SELECT id FROM event WHERE id=?', evId);
-            if (!ev) return res.status(404).json({ error: '해당 종목이 존재하지 않습니다.' });
-        }
-        await db.run('UPDATE display_roster SET event_id=? WHERE id=?', evId, parseInt(roster_id));
-        res.json({ success: true });
-    } catch(e) {
-        console.error('roster/assign error:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.post('/api/display/roster/assign-bulk', async (req, res) => {
-    try {
-        const { admin_key, competition_id, filter, event_id } = req.body;
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        if (!competition_id) return res.status(400).json({ error: 'competition_id required' });
-        const evId = event_id ? parseInt(event_id) : null;
-        if (evId) {
-            const ev = await db.get('SELECT id FROM event WHERE id=?', evId);
-            if (!ev) return res.status(404).json({ error: '해당 종목이 존재하지 않습니다.' });
-        }
-        // filter: { event_name, division, gender, round, day }
-        const f = filter || {};
-        let sql = 'UPDATE display_roster SET event_id=? WHERE competition_id=?';
-        const args = [evId, parseInt(competition_id)];
-        if (f.event_name) { sql += ' AND event_name=?'; args.push(f.event_name); }
-        if (f.division !== undefined) { sql += ' AND division=?'; args.push(f.division || ''); }
-        if (f.gender !== undefined) { sql += ' AND gender=?'; args.push(f.gender || ''); }
-        if (f.round !== undefined) { sql += ' AND round=?'; args.push(f.round || ''); }
-        if (f.day) { sql += ' AND day=?'; args.push(parseInt(f.day)); }
-        const info = await db.run(sql, ...args);
-        res.json({ success: true, updated: info.changes });
-    } catch(e) {
-        console.error('roster/assign-bulk error:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.post('/api/display/roster/clear-event/:rosterId', async (req, res) => {
-    try {
-        const { admin_key } = req.body;
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        await db.run('UPDATE display_roster SET event_id=NULL WHERE id=?', parseInt(req.params.rosterId));
-        res.json({ success: true });
-    } catch(e) {
-        console.error('roster/clear-event error:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// Auto-match roster entries to events
-//
-// 매칭 정책 (2026-05 재작성):
-//   ① division/gender/round_type 정규화는 시간표·명단 양쪽이 동일 헬퍼를 사용 → 표기 차이로 인한
-//      어긋남을 사전 차단 (parseDisplayRound + normalizeDivisionLabel)
-//   ② 종합 sub-event(10종/7종)는 부모 이벤트(10종경기/7종경기)에만 연결.
-//      · 부모 매칭 실패 시: division 표기 fallback만 시도, 절대 일반 종목으로 흘러가지 않음.
-//      · 후보 부모 이름: "10종경기", "10종경기(남)", "남자10종경기", "육상10종경기" 등 다양한 표기 허용.
-//   ③ 일반 종목: name + gender + division + round_type 4개 모두 일치할 때만 strict 매칭.
-//      · Strict 실패 시 fallback은 "division/gender 표기를 normalize한 다음에 비교" 만 허용.
-//        절대로 division 또는 gender 자체를 무시하지 않음 (이전 버그의 직접 원인).
-//      · round_type 표기 차이가 있으면 양쪽 다시 parseDisplayRound로 정규화한 후 비교.
-//   ④ gender가 비어있는 명단(혼성) → ev.gender ∈ {X, ''} 중 하나와 매칭.
-//   ⑤ 매칭이 안 되면 그냥 둠. 잘못된 매칭보다 미매칭이 안전.
-async function autoMatchDisplayRoster(compId) {
-    const events = await db.all('SELECT id, name, gender, division, round_type FROM event WHERE competition_id=?', compId);
-    const unmatched = await db.all('SELECT id, event_name, round, division, gender FROM display_roster WHERE competition_id=? AND event_id IS NULL', compId);
-    const UPD_RM_SQL = 'UPDATE display_roster SET event_id=? WHERE id=?';
-
-    // ── 정규화 헬퍼 ──
-    function nameNorm(s) {
-        if (!s) return '';
-        let n = s.replace(/\s+/g, '');
-        // 종합경기 접미사 정규화: "10종경기", "100m(10종)" 등에서 (10종)/(7종) 제거
-        n = n.replace(/\((\d+종)\)$/, '');
-        // 성별 접미사 제거: "10종경기(남)" / "10종경기 남자" 등의 변형
-        n = n.replace(/\((남|여|혼|남자|여자|혼성)\)$/, '');
-        n = n.replace(/(남자|여자|혼성)$/, '');
-        // 앞 접두어 제거: "남자10종경기", "여자7종경기"
-        n = n.replace(/^(남자|여자|혼성)/, '');
-        // "육상" prefix 제거
-        n = n.replace(/^육상/, '');
-        return n.toLowerCase();
-    }
-
-    function divNorm(d) { return normalizeDivisionLabel(d || ''); }
-
-    function genderEq(a, b) {
-        const A = (a || '').trim();
-        const B = (b || '').trim();
-        if (A === B) return true;
-        // 혼성: '' / 'X' / undefined 모두 동일 취급
-        const isWild = (g) => !g || g === 'X' || g === '혼' || g === '혼성';
-        if (isWild(A) && isWild(B)) return true;
-        return false;
-    }
-
-    function roundEq(rosterRoundRaw, eventRoundType) {
-        // event.round_type은 시간표 import 시 이미 parseDisplayRound로 만든 값(preliminary/semifinal/final)
-        // 명단의 round 원문(rosterRoundRaw)은 매칭 시점에 한 번 더 parseDisplayRound로 정규화
-        const r = parseDisplayRound(rosterRoundRaw);
-        return r.round_type === (eventRoundType || 'final');
-    }
-
-    // 종합경기 부모 이벤트 후보 매칭: ev.name의 nameNorm 결과가 "Nx종경기"와 일치하면 OK
-    function isCombinedParent(evName, n) {
-        const norm = nameNorm(evName);
-        return norm === `${n}종경기`;
-    }
-
-    let matched = 0;
-    let combinedMatched = 0;
-    let strictMatched = 0;
-    let fallbackMatched = 0;
-    let stillUnmatched = 0;
-
-    for (const re of unmatched) {
-        const parsed = parseDisplayRound(re.round || '');
-        const isCombined = parsed.is_combined;
-        const rosterDiv = divNorm(re.division);
-        const rosterEvName = nameNorm(re.event_name);
-
-        let match = null;
-
-        // ── (A) 종합 sub-event: 부모 이벤트 매칭 ──
-        if (isCombined && parsed.combined_n) {
-            const n = parsed.combined_n;
-            // (A-1) strict: 부모 + 동일 division + 동일 gender
-            match = events.find(ev =>
-                isCombinedParent(ev.name, n) &&
-                divNorm(ev.division) === rosterDiv &&
-                genderEq(ev.gender, re.gender)
-            );
-            // (A-2) fallback: division 표기가 살짝 다를 가능성 — gender만으로
-            //        단, division 둘 다 비어있지 않은 경우엔 division 일치 강제 (잘못 붙는 것 방지)
-            if (!match && !rosterDiv) {
-                match = events.find(ev =>
-                    isCombinedParent(ev.name, n) &&
-                    genderEq(ev.gender, re.gender)
-                );
-            }
-            // 종합 sub-event는 일반 종목으로 절대 흘러가지 않음 — 여기서 종료
-            if (match) { await db.run(UPD_RM_SQL, match.id, re.id); matched++; combinedMatched++; }
-            else stillUnmatched++;
-            continue;
-        }
-
-        // ── (B) 일반 종목 strict 매칭: name + gender + division + round_type 모두 일치 ──
-        match = events.find(ev =>
-            nameNorm(ev.name) === rosterEvName &&
-            divNorm(ev.division) === rosterDiv &&
-            genderEq(ev.gender, re.gender) &&
-            roundEq(re.round, ev.round_type)
-        );
-        if (match) { await db.run(UPD_RM_SQL, match.id, re.id); matched++; strictMatched++; continue; }
-
-        // ── (C) Fallback 1: division 표기 차이 흡수 (양쪽 모두 normalize 후 비교)
-        //        ※ rosterDiv가 빈 문자열일 때만 division 비교를 생략. 그렇지 않으면 division mismatch는 절대 매칭 X.
-        if (rosterDiv === '') {
-            match = events.find(ev =>
-                nameNorm(ev.name) === rosterEvName &&
-                genderEq(ev.gender, re.gender) &&
-                roundEq(re.round, ev.round_type)
-            );
-            if (match) { await db.run(UPD_RM_SQL, match.id, re.id); matched++; fallbackMatched++; continue; }
-        }
-
-        // ── (D) Fallback 2: round_type만 'final' 가정한 매칭 (예선만 있고 결승 event가 없는 케이스 대비)
-        //        예: 1500m 결승만 시간표에 있고 명단도 결승 → strict에서 잡혀야 하지만, round_type이
-        //            엉뚱하게 들어간 레거시 데이터를 위해 round_type 비교를 한 번 더 느슨하게.
-        //        단, 반드시 division + gender는 일치해야 함.
-        match = events.find(ev =>
-            nameNorm(ev.name) === rosterEvName &&
-            divNorm(ev.division) === rosterDiv &&
-            genderEq(ev.gender, re.gender)
-        );
-        if (match) { await db.run(UPD_RM_SQL, match.id, re.id); matched++; fallbackMatched++; continue; }
-
-        stillUnmatched++;
-    }
-
-    if (matched > 0 || stillUnmatched > 0) {
-        console.log(`[autoMatchDisplayRoster] comp=${compId}: matched=${matched} (strict=${strictMatched}, combined=${combinedMatched}, fallback=${fallbackMatched}), unmatched=${stillUnmatched}`);
-    }
-    return matched;
-}
-
-// Get display roster for a competition
-app.get('/api/display/roster/:compId', async (req, res) => {
-    const { event_id, day } = req.query;
-    let sql = 'SELECT * FROM display_roster WHERE competition_id=?';
-    const params = [req.params.compId];
-    if (event_id) { sql += ' AND event_id=?'; params.push(event_id); }
-    if (day) { sql += ' AND day=?'; params.push(parseInt(day)); }
-    sql += ' ORDER BY event_name, sort_order';
-    res.json(await db.all(sql, ...params));
-});
-
-// Get display events for a competition (with roster counts)
-app.get('/api/display/events/:compId', async (req, res) => {
-    const events = await db.all(`
-        SELECT e.*, 
-            (SELECT COUNT(*) FROM display_roster dr WHERE dr.event_id = e.id) as roster_count
-        FROM event e 
-        WHERE e.competition_id=? AND e.parent_event_id IS NULL
-        ORDER BY e.division, e.sort_order, e.name
-    `, req.params.compId);
-    res.json(events);
-});
-
-// Update event result_url
-app.put('/api/display/events/:id/result-url', async (req, res) => {
-    const { admin_key, result_url } = req.body;
-    if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    await db.run('UPDATE event SET result_url=? WHERE id=?', result_url || '', req.params.id);
-    res.json({ success: true });
-});
-
-// /api/display/events/bulk-result-url removed — was never called from any client.
-// Use single PUT /api/display/events/:id/result-url instead.
-
-// Get matching status overview
-app.get('/api/display/match-status/:compId', async (req, res) => {
-    const events = await db.all(`
-        SELECT e.id, e.name, e.gender, e.division, e.round_type, e.result_url,
-            (SELECT COUNT(*) FROM display_roster dr WHERE dr.event_id = e.id) as roster_count,
-            (SELECT COUNT(*) FROM timetable tt WHERE tt.event_id = e.id AND tt.competition_id = e.competition_id) as timetable_count
-        FROM event e
-        WHERE e.competition_id=? AND e.parent_event_id IS NULL
-        ORDER BY e.division, e.name, e.round_type
-    `, req.params.compId);
-    res.json(events);
-});
-
-// Manual match roster to event
-app.post('/api/display/roster/match', async (req, res) => {
-    const { admin_key, roster_ids, event_id } = req.body;
-    if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    if (!Array.isArray(roster_ids) || !event_id) return res.status(400).json({ error: 'roster_ids and event_id required' });
-    await db.transaction(async () => {
-        for (const rid of roster_ids) {
-            await db.run('UPDATE display_roster SET event_id=? WHERE id=?', event_id, rid);
-        }
-    })();
-    res.json({ success: true, count: roster_ids.length });
-});
-
-// Re-run auto-matching for roster
-app.post('/api/display/roster/:compId/rematch', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    await db.run('UPDATE display_roster SET event_id=NULL WHERE competition_id=?', req.params.compId);
-    const matched = await autoMatchDisplayRoster(parseInt(req.params.compId));
-    res.json({ success: true, matched });
-});
-
-// Delete display roster for a specific day
-app.delete('/api/display/roster/:compId/:day', async (req, res) => {
-    const { admin_key } = req.body;
-    if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    await db.run('DELETE FROM display_roster WHERE competition_id=? AND day=?', req.params.compId, parseInt(req.params.day));
-    res.json({ success: true });
-});
-
-// ─── 미지정(division 빈 값) 종목 일괄 정리 API ───
-// GET  /api/display/cleanup-undefined/:compId  — 미리보기 (dry-run)
-// POST /api/display/cleanup-undefined/:compId  — 실제 정리 실행
-//
-// 동작:
-//   1) division이 비어있고 gender='X'가 아닌 종목들을 찾는다 (= "미지정" 종목)
-//   2) 각각에 대해 같은 (name, gender, round_type)을 가지면서 division이 채워진 동일 종목이 있는지 확인
-//   3) 흡수 가능: 미지정 종목에 연결된 timetable.event_id, display_roster.event_id를 흡수 대상에 재연결 후 미지정 종목 삭제
-//   4) 흡수 불가능 (동일 종목 없음): 단순 삭제 (timetable.event_id NULL로 끊고 display_roster도 NULL로 끊음)
-async function _findUndefinedEvents(compId) {
-    return await db.all(`
-        SELECT id, name, gender, division, round_type, category, sort_order
-        FROM event
-        WHERE competition_id=?
-          AND (division IS NULL OR division='')
-          AND gender != 'X'
-          AND parent_event_id IS NULL
-    `, compId);
-}
-async function _planCleanupUndefined(compId) {
-    const undefinedEvents = await _findUndefinedEvents(compId);
-    const allEvents = await db.all(`
-        SELECT id, name, gender, division, round_type
-        FROM event
-        WHERE competition_id=? AND parent_event_id IS NULL
-    `, compId);
-    const plan = [];
-    for (const u of undefinedEvents) {
-        // 같은 name + gender + round_type, division이 채워진 후보 찾기
-        const candidates = allEvents.filter(e =>
-            e.id !== u.id &&
-            e.name === u.name &&
-            e.gender === u.gender &&
-            e.round_type === u.round_type &&
-            e.division && e.division.trim()
-        );
-        // 가장 우선순위 높은 후보(초등→중등→고등→U18→U20→대학→일반→선수권→국제 순) 선택
-        const order = ['초등부','중등부','고등부','U18','U20','대학부','일반부','선수권','국제'];
-        candidates.sort((a, b) => {
-            const ai = order.indexOf(a.division);
-            const bi = order.indexOf(b.division);
-            return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
-        });
-        const ttRow = await db.get('SELECT COUNT(*) AS c FROM timetable WHERE event_id=?', u.id);
-        const rosterRow = await db.get('SELECT COUNT(*) AS c FROM display_roster WHERE event_id=?', u.id);
-        const ttCnt = ttRow ? ttRow.c : 0;
-        const rosterCnt = rosterRow ? rosterRow.c : 0;
-        if (candidates.length === 1) {
-            // 후보가 1개뿐이면 자동 흡수
-            plan.push({
-                action: 'merge',
-                undefined_event: u,
-                target_event: candidates[0],
-                timetable_count: ttCnt,
-                roster_count: rosterCnt,
-                note: `1개 후보 → 자동 흡수`
-            });
-        } else if (candidates.length > 1) {
-            // 후보가 여러 개면 사용자 결정 필요 → 일단 삭제 후보로 보고 (timetable/roster 끊기)
-            plan.push({
-                action: 'orphan',
-                undefined_event: u,
-                candidates,
-                timetable_count: ttCnt,
-                roster_count: rosterCnt,
-                note: `${candidates.length}개 후보 존재 → 수동 선택 필요`
-            });
-        } else {
-            // 후보가 없으면 단순 삭제
-            plan.push({
-                action: 'delete',
-                undefined_event: u,
-                timetable_count: ttCnt,
-                roster_count: rosterCnt,
-                note: `흡수 대상 없음 → 단순 삭제`
-            });
-        }
-    }
-    return plan;
-}
-app.get('/api/display/cleanup-undefined/:compId', async (req, res) => {
-    const { admin_key } = req.query;
-    if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    const plan = await _planCleanupUndefined(parseInt(req.params.compId));
-    res.json({
-        success: true,
-        total: plan.length,
-        merge_count: plan.filter(p => p.action === 'merge').length,
-        delete_count: plan.filter(p => p.action === 'delete').length,
-        orphan_count: plan.filter(p => p.action === 'orphan').length,
-        plan
-    });
-});
-app.post('/api/display/cleanup-undefined/:compId', async (req, res) => {
-    const { admin_key, mode } = req.body;
-    // mode: 'auto' (merge+delete만 자동 처리, orphan 제외) | 'force_delete' (orphan도 삭제)
-    if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-    const compId = parseInt(req.params.compId);
-    const plan = await _planCleanupUndefined(compId);
-    let merged = 0, deleted = 0, skipped = 0;
-    await db.transaction(async () => {
-        for (const p of plan) {
-            if (p.action === 'merge') {
-                // timetable / display_roster 의 event_id 재연결
-                await db.run('UPDATE timetable SET event_id=? WHERE event_id=?', p.target_event.id, p.undefined_event.id);
-                await db.run('UPDATE display_roster SET event_id=? WHERE event_id=?', p.target_event.id, p.undefined_event.id);
-                await db.run('DELETE FROM event WHERE id=?', p.undefined_event.id);
-                merged++;
-            } else if (p.action === 'delete') {
-                await db.run('UPDATE timetable SET event_id=NULL WHERE event_id=?', p.undefined_event.id);
-                await db.run('UPDATE display_roster SET event_id=NULL WHERE event_id=?', p.undefined_event.id);
-                await db.run('DELETE FROM event WHERE id=?', p.undefined_event.id);
-                deleted++;
-            } else if (p.action === 'orphan') {
-                if (mode === 'force_delete') {
-                    await db.run('UPDATE timetable SET event_id=NULL WHERE event_id=?', p.undefined_event.id);
-                    await db.run('UPDATE display_roster SET event_id=NULL WHERE event_id=?', p.undefined_event.id);
-                    await db.run('DELETE FROM event WHERE id=?', p.undefined_event.id);
-                    deleted++;
-                } else {
-                    skipped++;
-                }
-            }
-        }
-    })();
-    opLog(`미지정 종목 정리 (병합 ${merged}, 삭제 ${deleted}, 스킵 ${skipped})`, 'admin', 'admin', compId);
-    res.json({ success: true, merged, deleted, skipped, total: plan.length });
-});
-
-// ─── Display roster: 단일 행 CRUD (인라인 편집 / 릴레이 팀 편집) ───
-// PUT  /api/display/roster/entry/:id  — 개별 행 수정
-app.put('/api/display/roster/entry/:id', async (req, res) => {
-    try {
-        const { admin_key, day, event_name, round, division, gender, bib_number, athlete_name, team, heat, lane, sort_order, event_id } = req.body;
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        const old = await db.get('SELECT * FROM display_roster WHERE id=?', req.params.id);
-        if (!old) return res.status(404).json({ error: '명단 행을 찾을 수 없습니다.' });
-        await db.run(`UPDATE display_roster SET
-            day=?, event_name=?, round=?, division=?, gender=?,
-            bib_number=?, athlete_name=?, team=?,
-            heat=?, lane=?, sort_order=?, event_id=?
-            WHERE id=?`, day != null ? parseInt(day) : old.day, event_name != null ? event_name : old.event_name, round != null ? round : old.round, division != null ? division : old.division, gender != null ? gender : old.gender, bib_number != null ? String(bib_number) : old.bib_number, athlete_name != null ? athlete_name : old.athlete_name, team != null ? team : old.team, heat != null && heat !== '' ? parseInt(heat) : null, lane != null && lane !== '' ? parseInt(lane) : null, sort_order != null ? parseInt(sort_order) : old.sort_order, event_id != null ? (event_id || null) : old.event_id, old.id);
-        res.json({ success: true, id: old.id });
-    } catch (e) {
-        res.status(500).json({ error: '수정 실패: ' + e.message });
-    }
-});
-
-// POST /api/display/roster/entry — 새 행 추가
-app.post('/api/display/roster/entry', async (req, res) => {
-    try {
-        const { admin_key, competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, heat, lane, sort_order, event_id } = req.body;
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        if (!competition_id || !athlete_name) return res.status(400).json({ error: 'competition_id, athlete_name 필수' });
-        const info = await db.run(`INSERT INTO display_roster
-            (competition_id, day, event_name, round, division, gender, bib_number, athlete_name, team, sort_order, event_id, heat, lane)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, parseInt(competition_id), parseInt(day) || 1, event_name || '', round || '', division || '', gender || '', bib_number != null ? String(bib_number) : '', athlete_name, team || '', sort_order != null ? parseInt(sort_order) : 0, event_id || null, heat != null && heat !== '' ? parseInt(heat) : null, lane != null && lane !== '' ? parseInt(lane) : null);
-        // 자동 매칭 시도
-        try { await autoMatchDisplayRoster(parseInt(competition_id)); } catch(e) {}
-        res.json({ success: true, id: info.lastInsertRowid });
-    } catch (e) {
-        res.status(500).json({ error: '추가 실패: ' + e.message });
-    }
-});
-
-// DELETE /api/display/roster/entry/:id — 개별 행 삭제
-app.delete('/api/display/roster/entry/:id', async (req, res) => {
-    try {
-        const { admin_key } = req.body;
-        if (!isOperationKey(admin_key) && !isAdminKey(admin_key)) return res.status(403).json({ error: '권한 없음' });
-        const info = await db.run('DELETE FROM display_roster WHERE id=?', req.params.id);
-        res.json({ success: true, deleted: info.changes });
-    } catch (e) {
-        res.status(500).json({ error: '삭제 실패: ' + e.message });
-    }
-});
+// ── 노출용(display) 대회 라우트 → lib/routes/display.js (2026-09-22). autoLinkDisplayTimetable 은 종목 생성·수정·라운드 완료 뒤 위쪽 라우트가 호출한다 ──
+const _displayRoutes = require('./lib/routes/display')(app, { db, upload, XLSX, fs, isAdminKey, isOperationKey, opLog, normalizeDivisionLabel,
+    parseJongbyul, parseJongbyulNormalized, parseDisplayRound, excelTimeToHHMM, cleanTimetableEventName, guessEventCategory, timetableRoutes: _timetableRoutes });
+const autoLinkDisplayTimetable = _displayRoutes.autoLinkDisplayTimetable;
 
 // Serve display-manage page
 app.get('/display-manage', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'display-manage.html'));
+    sendStampedHtml(res, 'display-manage.html');
 });
 
 // ============================================================
 // BROADCAST OVERLAY — OBS/vMix HTML Overlay pages
 // ============================================================
 app.get('/overlay/scoreboard', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'overlay-scoreboard.html'));
+    sendStampedHtml(res, 'overlay-scoreboard.html');
 });
 app.get('/overlay/lower-third', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'overlay-lower-third.html'));
+    sendStampedHtml(res, 'overlay-lower-third.html');
 });
 
 // Overlay data API — current live event data for overlay consumption
@@ -14270,8 +6913,18 @@ server.on('upgrade', (request, socket, head) => {
     }
 });
 
+// 죽은 연결 정리 — 30초마다 ping, 응답 없으면 끊는다 (예전엔 끊긴 태블릿·PC 의 소켓이 TCP 시간 초과까지 남아 전송 버퍼가 쌓였다)
+if (require.main === module) setInterval(() => {
+    wsClients.forEach(ws => {
+        if (ws._alive === false) { try { ws.terminate(); } catch (e) {} wsClients.delete(ws); return; }
+        ws._alive = false; try { ws.ping(); } catch (e) {}
+    });
+}, 30000).unref();
+
 wss.on('connection', (ws) => {
     wsClients.add(ws);
+    ws._alive = true;
+    ws.on('pong', () => { ws._alive = true; });
     console.log(`[WS] Scoreboard client connected (total: ${wsClients.size})`);
 
     // Send initial state
@@ -14311,6 +6964,53 @@ function broadcastToScoreboard(eventType, data) {
     });
 }
 
+// 전광판·방송 오버레이 현재 상태 (2026-09 점검으로 재작성)
+//   예전엔 ① 마지막 조(heat_number DESC)를 보여줘 1조 경기 중에 빈 5조가 떴고 ② 거리 종목은 1차 시기 값으로 순위를 매겼으며
+//   ③ 높이 종목(height_attempt)은 기록이 아예 안 나왔고 ④ 순위를 화면(오버레이)이 따로 계산해 동률·DQ 처리가 대시보드와 달랐다.
+//   → 기록이 가장 최근에 들어온 조를 고르고, 종목별 기록 집계·순위를 서버가 공용 규칙(public/lib/ranking.js)으로 계산해 보낸다.
+function _sbFormatTime(sec) {
+    if (sec == null) return '';
+    const r3 = Math.round(sec * 1000) / 1000, r2 = Math.round(sec * 100) / 100;
+    const dp = Math.abs(r3 - r2) < 0.0001 ? 2 : 3;
+    const pad = (v, d) => (v < 10 ? '0' : '') + v.toFixed(d);
+    if (sec >= 3600) { const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), r = sec - h * 3600 - m * 60; return `${h}:${String(m).padStart(2, '0')}:${pad(r, dp)}`; }
+    if (sec >= 60) { const m = Math.floor(sec / 60), r = sec - m * 60; return `${m}:${pad(r, dp)}`; }
+    return sec.toFixed(dp);
+}
+async function _sbHeatEntries(heat, category, federation) {
+    const R = require('./public/lib/ranking');
+    const entries = await db.all(`
+        SELECT he.lane_number, ee.id as event_entry_id, ee.status, ee.manual_rank, a.name, a.bib_number, a.team
+        FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
+        JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
+        ORDER BY he.lane_number ASC`, heat.id);
+    const results = await db.all('SELECT * FROM result WHERE heat_id=?', heat.id);
+    const attempts = category === 'field_height' ? await db.all('SELECT * FROM height_attempt WHERE heat_id=?', heat.id) : [];
+    const out = entries.map(e => {
+        const mine = results.filter(r => r.event_entry_id === e.event_entry_id);
+        const st = (mine.find(r => r.attempt_number == null && r.status_code) || mine.find(r => r.status_code) || {}).status_code || (e.status === 'no_show' ? 'DNS' : '');
+        const row = { ...e, federation, status_code: st, record: null, record_text: '', rank: null, best: null, sortedValid: [] };
+        if (category === 'field_height') {
+            const hs = R.heightStatsFromAttempts(attempts.filter(x => x.event_entry_id === e.event_entry_id));
+            row.best = hs.best; row.failsAtBest = hs.failsAtBest; row.totalFails = hs.totalFails;
+            if (hs.best != null) { row.record = hs.best; const m = Math.floor(hs.best); row.record_text = `${m}m${String(Math.round((hs.best - m) * 100)).padStart(2, '0')}`; }
+            else if (!st && hs.isNM) row.status_code = 'NM';
+        } else if (category === 'field_distance') {
+            const ds = R.distanceStats(mine.filter(r => r.attempt_number != null).map(r => r.distance_meters));
+            row.best = ds.best; row.sortedValid = ds.sortedValid;
+            if (ds.best != null) { row.record = ds.best; row.record_text = ds.best.toFixed(2) + 'm'; }
+        } else {
+            const t = mine.map(r => r.time_seconds).filter(v => v != null && v > 0);
+            if (t.length) { row.best = -Math.min(...t); row.record = Math.min(...t); row.record_text = _sbFormatTime(row.record); }
+        }
+        if (row.status_code) { row.best = null; }        // 실격·기권·결장은 기록이 있어도 순위 없음
+        return row;
+    });
+    const cmp = category === 'field_height' ? R.compareHeight : category === 'field_distance' ? R.compareDistance : (x, y) => (y.best === x.best ? 0 : y.best - x.best);
+    R.assignRanks(out, cmp);
+    if (category === 'field_height') out.forEach(r => { if (r.best != null && r.manual_rank != null && r.manual_rank !== '') r.rank = Number(r.manual_rank); });
+    return out.map(({ best, sortedValid, failsAtBest, totalFails, manual_rank, ...rest }) => rest);
+}
 async function sendCurrentScoreboard(ws, compId) {
     if (!compId) return;
     const activeEvent = await db.get("SELECT * FROM event WHERE competition_id=? AND round_status='in_progress' AND parent_event_id IS NULL ORDER BY sort_order LIMIT 1", compId);
@@ -14318,64 +7018,37 @@ async function sendCurrentScoreboard(ws, compId) {
         ws.send(JSON.stringify({ type: 'scoreboard_state', data: { event: null } }));
         return;
     }
-    const heat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1', activeEvent.id);
+    // 진행 중인 조 = 기록이 가장 최근에 들어온 조. 아직 기록이 없으면 1조
+    const pickHeat = eventId => db.get(`SELECT h.* FROM heat h LEFT JOIN result r ON r.heat_id = h.id LEFT JOIN height_attempt ha ON ha.heat_id = h.id
+        WHERE h.event_id = ? GROUP BY h.id ORDER BY (MAX(r.id) IS NULL AND MAX(ha.id) IS NULL) ASC, MAX(r.id) DESC, MAX(ha.id) DESC, h.heat_number ASC LIMIT 1`, eventId);
+    const heat = await pickHeat(activeEvent.id);
     const totalHeatsRow = await db.get('SELECT COUNT(*) as cnt FROM heat WHERE event_id=?', activeEvent.id);
     const totalHeats = (totalHeatsRow && totalHeatsRow.cnt) || 0;
-    
-    // Get entries for this event's heat
-    let entries = heat ? await db.all(`
-        SELECT he.lane_number, ee.id as event_entry_id, ee.status, a.name, a.bib_number, a.team
-        FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-        JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-        ORDER BY he.lane_number ASC
-    `, heat.id) : [];
-    let results = heat ? await db.all('SELECT * FROM result WHERE heat_id=?', heat.id) : [];
-    
-    // Check for linked (joint) events — 합동 종목 전광판
-    const linkedEvents = await db.all(`
-        SELECT CASE WHEN event_id_a = ? THEN event_id_b ELSE event_id_a END as linked_id
-        FROM event_link WHERE event_id_a = ? OR event_id_b = ?
-    `, activeEvent.id, activeEvent.id, activeEvent.id);
-    
     const comp = await db.get('SELECT federation, name FROM competition WHERE id=?', compId);
     const primaryFed = (comp && (comp.federation || comp.name)) || '';
-    
-    // Tag primary entries with federation
-    entries = entries.map(e => ({ ...e, federation: primaryFed }));
-    
-    // Merge linked event entries
+    let entries = heat ? await _sbHeatEntries(heat, activeEvent.category, primaryFed) : [];
+
+    // 합동 종목 — 연결된 다른 대회 종목의 조를 합쳐 순위를 다시 매긴다
+    const linkedEvents = await db.all(`
+        SELECT CASE WHEN event_id_a = ? THEN event_id_b ELSE event_id_a END as linked_id
+        FROM event_link WHERE event_id_a = ? OR event_id_b = ?`, activeEvent.id, activeEvent.id, activeEvent.id);
     for (const link of linkedEvents) {
         const linkedEvt = await db.get('SELECT e.*, c.federation, c.name as comp_name FROM event e JOIN competition c ON c.id=e.competition_id WHERE e.id=?', link.linked_id);
         if (!linkedEvt) continue;
-        const linkedHeat = await db.get('SELECT * FROM heat WHERE event_id=? ORDER BY heat_number DESC LIMIT 1', link.linked_id);
+        const linkedHeat = await pickHeat(link.linked_id);
         if (!linkedHeat) continue;
-        
-        const linkedEntries = await db.all(`
-            SELECT he.lane_number, ee.id as event_entry_id, ee.status, a.name, a.bib_number, a.team
-            FROM heat_entry he JOIN event_entry ee ON ee.id=he.event_entry_id
-            JOIN athlete a ON a.id=ee.athlete_id WHERE he.heat_id=?
-            ORDER BY he.lane_number ASC
-        `, linkedHeat.id);
-        const linkedResults = await db.all('SELECT * FROM result WHERE heat_id=?', linkedHeat.id);
-        
-        const linkedFed = linkedEvt.federation || linkedEvt.comp_name || '';
-        entries = entries.concat(linkedEntries.map(e => ({ ...e, federation: linkedFed })));
-        results = results.concat(linkedResults);
+        entries = entries.concat(await _sbHeatEntries(linkedHeat, activeEvent.category, linkedEvt.federation || linkedEvt.comp_name || ''));
+    }
+    if (linkedEvents.length && entries.length) {
+        // 합동: 두 조의 순위를 함께 — 기록(record) 기준으로 다시 매긴다 (동률은 같은 순위)
+        const isTrack = !String(activeEvent.category || '').startsWith('field');
+        const ranked = entries.filter(e => e.record != null && !e.status_code).sort((x, y) => isTrack ? x.record - y.record : y.record - x.record);
+        ranked.forEach((e, i) => { e.rank = (i > 0 && ranked[i - 1].record === e.record) ? ranked[i - 1].rank : i + 1; });
     }
 
     ws.send(JSON.stringify({
         type: 'scoreboard_state',
-        data: {
-            event: activeEvent,
-            heat,
-            total_heats: totalHeats,
-            is_joint: linkedEvents.length > 0,
-            entries: entries.map(e => {
-                const r = results.find(r => r.event_entry_id === e.event_entry_id);
-                const record = r ? (r.time_seconds ?? r.distance_meters ?? null) : null;
-                return { ...e, record, status_code: r?.status_code || '' };
-            })
-        },
+        data: { competition_id: compId, event: activeEvent, heat, total_heats: totalHeats, is_joint: linkedEvents.length > 0, entries },
         timestamp: Date.now()
     }));
 }
@@ -14442,38 +7115,39 @@ function migrateNormalizeDivisionAndRound() {
     }
 }
 
+// PG 모드 부팅(비동기): 설정·운영키 캐시 로드 + 초기 admin/운영키 시드.
+//   예전엔 server.listen 콜백 안에서만 돌아서 ① 테스트(require)에서는 아예 돌지 않았고 ② 운영에서도 listen 직후 첫 요청이 빈 캐시를 볼 수 있었다.
+//   → 요청 처리 전에 반드시 끝나도록 _bootReady 로 묶고, 미들웨어가 기다린다.
+async function _pgBootAsync() {
+    await Promise.allSettled(_bootTasks);          // 인증 테이블·PG 열 마이그레이션·상장 양식 시드
+    if (!db.isAsync) return;
+    try {
+        await _loadConfigCacheAsync();
+        await _reloadOpKeyCacheAsync();
+        if (!_configCache.has('admin_id')) setConfigKey('admin_id', process.env.ADMIN_ID || 'admin');
+        if (!_configCache.has('admin_pw')) setConfigKey('admin_pw', bcrypt.hashSync(process.env.ADMIN_PW || 'changeme', 10));
+        else {
+            const existingPw = _configCache.get('admin_pw') || '';
+            if (existingPw && !existingPw.startsWith('$2a$') && !existingPw.startsWith('$2b$') && !existingPw.startsWith('$2y$')) {
+                console.log('  [PG migration] admin_pw 가 평문 형태 → bcrypt 해시로 자동 변환');
+                setConfigKey('admin_pw', bcrypt.hashSync(existingPw, 10));
+            }
+        }
+        if (!_configCache.has('operation_key')) setConfigKey('operation_key', process.env.OPERATION_KEY || '1234');
+        if (!_opKeyIsHash(ACCESS_KEYS.operation)) setDefaultOperationKey(ACCESS_KEYS.operation);
+        if (!_configCache.has('record_officer_key')) setConfigKey('record_officer_key', process.env.RECORD_OFFICER_KEY || '');
+        console.log(`  [PG cache] config: ${_configCache.size} keys, opkey: ${_opKeyCache.size} keys`);
+    } catch (e) { console.error('[PG cache load] failed:', e.message); }
+}
+const _bootReady = _pgBootAsync();
+
 // Export app/server for tests; only auto-listen when run directly (node server.js)
+// db 도 노출 — 테스트에서 격리 DB에 픽스처를 직접 삽입하기 위함 (운영에선 미사용)
 if (require.main !== module) {
-    module.exports = { app, server };
+    module.exports = { app, server, db, calcWAPoints, WA_TABLES, DECATHLON_KEYS, HEPTATHLON_KEYS, ready: _bootReady };
 } else
 server.listen(PORT, '0.0.0.0', async () => {
-    // PG 모드: boot 시 1회 async 캐시 로드 (SQLite는 boot 직후 sync 로드 완료됨)
-    if (db.isAsync) {
-        try {
-            await _loadConfigCacheAsync();
-            await _reloadOpKeyCacheAsync();
-            // PG 모드 초기 admin 자동 시드: admin_pw 가 없으면 env 값으로 bcrypt 해시 저장
-            if (!_configCache.has('admin_id')) {
-                setConfigKey('admin_id', process.env.ADMIN_ID || 'admin');
-            }
-            if (!_configCache.has('admin_pw')) {
-                setConfigKey('admin_pw', bcrypt.hashSync(process.env.ADMIN_PW || 'changeme', 10));
-            } else {
-                // 평문 → bcrypt 자동 마이그레이션 (SQLite L581 와 동일 로직, PG 누락 보완)
-                const existingPw = _configCache.get('admin_pw') || '';
-                if (existingPw && !existingPw.startsWith('$2a$') && !existingPw.startsWith('$2b$') && !existingPw.startsWith('$2y$')) {
-                    console.log('  [PG migration] admin_pw 가 평문 형태 → bcrypt 해시로 자동 변환');
-                    setConfigKey('admin_pw', bcrypt.hashSync(existingPw, 10));
-                }
-            }
-            if (!_configCache.has('operation_key')) {
-                setConfigKey('operation_key', process.env.OPERATION_KEY || '1234');
-            }
-            console.log(`  [PG cache] config: ${_configCache.size} keys, opkey: ${_opKeyCache.size} keys`);
-        } catch (e) {
-            console.error('[PG cache load] failed:', e.message);
-        }
-    }
+    await _bootReady;
     try {
         const compRow = await db.get('SELECT COUNT(*) as c FROM competition');
         const evtRow = await db.get('SELECT COUNT(*) as c FROM event');
@@ -14485,7 +7159,17 @@ server.listen(PORT, '0.0.0.0', async () => {
         console.log(`  http://localhost:${PORT}/`);
         console.log(`  WebSocket Scoreboard: ws://localhost:${PORT}/ws/scoreboard`);
         console.log(`  DB backend: ${db.isAsync ? 'PostgreSQL' : 'SQLite'}`);
-        console.log(`  DB: ${compCount} competitions, ${evtCount} events, ${athCount} athletes\n`);
+        console.log(`  DB: ${compCount} competitions, ${evtCount} events, ${athCount} athletes`);
+        // Auth Phase 1 마이그레이션 상태 (부팅 IIFE 결과)
+        if (global.__authMigOk) {
+            console.log(`  Auth: app_user/session_refresh/login_audit ready ✓`);
+        } else if (global.__authMigError) {
+            console.log(`  Auth: ⚠ MIGRATION FAILED — ${global.__authMigError}`);
+            console.log(`  Auth: JWT 로그인이 동작하지 않을 수 있음. /api/_diag/auth-init 로 재시도 가능`);
+        } else {
+            console.log(`  Auth: (마이그레이션 결과 대기 중 — 비동기 진행 중일 수 있음)`);
+        }
+        console.log('');
     } catch(e) {
         console.log(`\n  Pace Rise Competition OS v5 — port ${PORT}\n  http://localhost:${PORT}/\n  (DB count failed: ${e.message})\n`);
     }

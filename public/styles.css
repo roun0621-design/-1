@@ -21,8 +21,8 @@
     --gray-mid: #bfc5cd;
     --gray-dark: #6b7280;
     --text: #1a1f2b;
-    --text-light: #9ca3af;
-    --text-muted: #b0b6c0;
+    --text-light: #7a8190;   /* 대비 3.9:1 (보조 글자) — 2026-09 접근성: 전 #9ca3af 2.5:1 */
+    --text-muted: #6d7380;   /* 대비 4.7:1 (본문 보조) — 전 #b0b6c0 1.9:1, 회색 위 회색 */
     --danger: #dc3545;
     --danger-light: #fde8ea;
     --warning: #e5a100;
@@ -73,7 +73,7 @@
 .font-size-ctrl { display: inline-flex; align-items: center; gap: 2px; background: var(--gray-light); border-radius: 6px; padding: 2px; }
 .font-size-ctrl button { background: none; border: none; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text); width: 30px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background .15s; }
 .font-size-ctrl button:hover { background: var(--gray); }
-.font-size-ctrl .font-size-label { font-size: 10px; color: var(--text-muted); min-width: 32px; text-align: center; }
+.font-size-ctrl .font-size-label { font-size: 11px; color: var(--text-muted); min-width: 32px; text-align: center; }
 
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
@@ -127,7 +127,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .header-colon { color: #b79f58; }
 .header-scope { color: #b79f58; }
 .header-subtitle {
-    font-size: 10px; color: var(--text-muted);
+    font-size: 11px; color: var(--text-muted);
     font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase;
     font-family: var(--font-brand);
 }
@@ -215,24 +215,122 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .data-table tbody tr:hover { background: var(--gray-light); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 
-/* Result panel — tables fill modal width, scroll if wider */
+/* ─── Result panel tables (모달 내부 결과 표) ─────────────────────────
+   원칙 (UX): "스크롤 없이 한 화면" 우선 — 모바일에서는 패딩/폰트를 줄여
+   최대한 한 화면에 들어오게 하고, 그래도 넘치면 가로 스크롤로 폴백.
+
+   ⚠️ ★ 진짜 근본 원인 (2026-06 재수정):
+       `.data-table { width:100%; overflow:hidden }` 가 table 자체를 클립.
+       width 는 max-content 로 덮어써도 overflow:hidden 은 .data-table 의
+       0,1,0 specificity 가 살아남아 셀이 table 박스 밖으로 못 나가고,
+       그 결과 .result-panel-body 의 scrollWidth === clientWidth 되어
+       가로 스크롤이 트리거되지 않음.
+       → table.overflow 도 visible 로 명시적 복원 필요. */
 .result-panel .data-table,
 .result-panel .field-table {
-    width: 100%;
+    width: max-content;       /* 내용에 맞춰 자연스럽게 확장 */
+    min-width: 100%;          /* 좁은 표는 모달 폭을 채워 빈공간 방지 */
     table-layout: auto;
+    overflow: visible !important;  /* ★ .data-table 의 overflow:hidden 무력화 */
+    box-shadow: none;         /* 잘림 방지 — 둥근 모서리 효과는 모달이 담당 */
+    border-radius: 0;
 }
-/* Prevent text overflow in result panels */
+/* 결과 모달 본문: 양축 스크롤 컨테이너 */
 .result-panel-body,
 .result-detail-content {
     overflow-x: auto;
     overflow-y: auto;
     max-width: 100%;
+    -webkit-overflow-scrolling: touch;
 }
-.result-panel .data-table td,
+
+/* ─── 컬럼별 너비 전략 (자연스러움 + 한 화면 우선) ──────────────────────
+   원칙:
+   1. 이름/팀 같은 한글 단어는 한 줄로 유지 — 글자 단위 줄바꿈 절대 금지
+   2. 길면 차라리 table 이 넓어져 가로 스크롤이 일어나도록 (셀이 짤리는 것보다 자연스러움)
+   3. 비고(remark) 는 어절 단위로 줄바꿈 허용 (긴 문구가 보이도록)
+   4. .data-table 기본은 white-space:nowrap — 이를 유지하되 비고만 normal */
+
+/* 비고/remark 컬럼: 어절 단위 자연스러운 줄바꿈 — 잘려서 안 보이는 문제 해결 */
+.result-panel .data-table tbody td:last-child,
+.result-panel .field-table tbody td:last-child {
+    white-space: normal;
+    word-break: keep-all;       /* 한글: 어절(공백/구두점) 단위로만 줄바꿈 */
+    line-height: 1.3;
+    max-width: 110px;
+    min-width: 50px;
+}
+
+/* ─── 모바일 (≤480px) — 가독성 최우선 (3차 피드백 반영) ─────────────────
+   사용자 요구: "글씨 너무 작음, 우측으로 스크롤 해서 보더라도 가독성 떨어지면 안됨"
+   → 폰트 13px, 패딩 8px 로 키움. 한 화면에 안 들어오면 자연스럽게 가로 스크롤. */
+@media (max-width: 480px) {
+    .result-panel .data-table th,
+    .result-panel .field-table th {
+        padding: 8px 6px;
+        font-size: 12px;
+        letter-spacing: 0;
+        line-height: 1.3;
+        white-space: nowrap;        /* 헤더는 무조건 한 줄 — "선/수/명" 같은 글자 분리 방지 */
+    }
+    .result-panel .data-table td,
+    .result-panel .field-table td {
+        padding: 8px 6px;
+        font-size: 13px;            /* ★ 11 → 13 (가독성 우선) */
+        line-height: 1.35;
+    }
+    /* 이름/소속: 한글은 한 줄 유지 — 글자 단위 줄바꿈 차단.
+       긴 팀명(예: "대전광역시청") 은 표가 넓어져 가로 스크롤로 폴백. */
+    .result-panel .data-table td[style*="text-align:left"],
+    .result-panel .field-table td[style*="text-align:left"] {
+        font-size: 13px;
+        white-space: nowrap;       /* ★ 한글 글자 분리 방지 */
+        max-width: none;           /* 폭 제한 제거 — nowrap 으로 자연 폭 사용 */
+    }
+    .result-panel .data-table th[style*="text-align:left"],
+    .result-panel .field-table th[style*="text-align:left"] {
+        white-space: nowrap;
+    }
+    /* 시도 기록 셀: 가독성 우선 — 17m95 같은 기록이 한 줄에 들어가도록 */
+    .result-panel .field-table td.attempt-cell,
+    .result-panel .field-table .att-col-first,
+    .result-panel .field-table .att-col-odd,
+    .result-panel .field-table .att-col-even,
+    .result-panel .field-table .att-col-best {
+        min-width: 50px;
+        padding: 8px 5px;
+        font-size: 13px;            /* ★ 11 → 13 */
+        white-space: nowrap;
+    }
+    /* 비고 컬럼: 모바일에서도 어절 단위 줄바꿈 허용 — 긴 비고가 다 보이도록 */
+    .result-panel .data-table tbody td:last-child,
+    .result-panel .field-table tbody td:last-child {
+        max-width: 110px;
+        white-space: normal;
+        word-break: keep-all;
+        font-size: 12px;
+        line-height: 1.35;
+    }
+}
+
+/* ─── 결과 모달 내 필드 테이블: 검은 세로선 제거 ────────────────────────
+   .field-table 의 .att-col-first / .att-col-best 는 기록입력 페이지에서
+   "시도 시작" / "기록 컬럼" 을 강조하려고 border-left: 2px solid #000 임.
+   → 결과 모달에서는 시각적으로 거슬리고 가독성 해침. 가벼운 회색선으로 대체. */
+.result-panel .field-table th.att-col-first,
+.result-panel .field-table td.att-col-first,
+.result-panel .field-table th.att-col-best,
+.result-panel .field-table td.att-col-best {
+    border-left: 1px solid #e0e0e0 !important;  /* 검정 2px → 옅은 회색 1px */
+}
+/* 결과 모달 셀 경계: 기록입력 페이지의 1px solid #333 도 결과보기에선 옅게 */
+.result-panel .field-table th,
 .result-panel .field-table td {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 200px;
+    border: 1px solid #e8e8e8 !important;
+}
+/* 단, 선수와 선수 사이 가로 구분선은 살짝 진하게 (구분 명확하게) */
+.result-panel .field-table.field-2row-table .field-row2 td {
+    border-bottom: 2px solid #bbb !important;
 }
 
 /* ============================================================
@@ -271,7 +369,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .btn-ghost { background: transparent; color: var(--gray-dark); }
 .btn-ghost:hover:not(:disabled) { background: var(--gray-light); }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
-.btn-xs { padding: 2px 8px; font-size: 10px; border-radius: 4px; }
+.btn-xs { padding: 2px 8px; font-size: 11px; border-radius: 4px; }
 /* Document export buttons — semantic color coding */
 .btn-excel { background: #2d5016; color: #fff; }
 .btn-excel:hover:not(:disabled) { background: #1f3a0f; }
@@ -284,7 +382,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 /* ============================================================
    TYPOGRAPHY UTILITIES — replaces repeated inline font-size:11px/12px patterns
    ============================================================ */
-.t-xs    { font-size: 10px; }
+.t-xs    { font-size: 11px; }
 .t-sm    { font-size: 11px; }
 .t-md    { font-size: 12px; }
 .t-lg    { font-size: 13px; }
@@ -350,16 +448,20 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    ============================================================ */
 .matrix-section {
     margin-bottom: 20px;
-    overflow: hidden;
+    /* overflow:hidden 을 제거 — 자식 .matrix-scroll-wrap 의 가로 스크롤이
+       부모에 의해 잘리는 문제를 막는다. (mobile right-cut 픽스) */
     max-width: 100%;
 }
 .matrix-scroll-wrap {
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     /* Always show scrollbar on PC */
     scrollbar-width: thin;
     scrollbar-color: #b0b0b0 #f0f0f0;
     max-width: 100%;
+    /* iOS 관성 스크롤 활성화를 위한 보조 */
+    touch-action: pan-x pan-y;
 }
 .matrix-scroll-wrap::-webkit-scrollbar { height: 10px; }
 .matrix-scroll-wrap::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 5px; }
@@ -377,10 +479,15 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     border-bottom: 2px solid var(--gray);
 }
 .matrix-table {
-    width: 100%; border-collapse: collapse;
+    /* width:100% 가 강제되면 모바일에서 마지막 컬럼이 잘리고 가로 스크롤이
+       활성화되지 않음. min-width:100% 로 풀어주면 데스크톱에서는 전체 폭을
+       채우고, 컬럼 합계가 화면을 넘는 모바일에서는 자연스럽게 스크롤됨. */
+    min-width: 100%;
+    width: max-content;
+    border-collapse: collapse;
     background: var(--white); box-shadow: var(--shadow);
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    overflow: hidden; margin-bottom: 0;
+    margin-bottom: 0;
 }
 .matrix-table th {
     background: var(--gray-light); color: var(--gray-dark);
@@ -390,6 +497,9 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     white-space: nowrap;
 }
 .matrix-table th:first-child { text-align: left; }
+/* 모바일에서 마지막 컬럼이 화면 가장자리에 닿지 않도록 우측 안전 여백 확보 */
+.matrix-table th:last-child,
+.matrix-table td:last-child { padding-right: 16px; }
 .matrix-table .event-name {
     white-space: normal;
     word-break: keep-all;
@@ -463,7 +573,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     text-align: center; min-width: 88px; border-top: 3px solid var(--gray);
 }
 .stat-card .stat-number { font-size: 22px; font-weight: 800; }
-.stat-card .stat-label { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+.stat-card .stat-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
 
 /* ============================================================
    RECORD TABS (within record page)
@@ -540,7 +650,20 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    ============================================================ */
 .field-two-panel { display: grid; grid-template-columns: 1fr 260px; gap: 14px; }
 @media (max-width: 1000px) { .field-two-panel { grid-template-columns: 1fr; } }
-.field-input-panel { overflow-x: auto; }
+.field-input-panel {
+    overflow-x: auto;
+    min-width: 0;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    scrollbar-width: thin;
+    scrollbar-color: #b0b0b0 #f0f0f0;
+}
+.field-input-panel::-webkit-scrollbar { height: 10px; }
+.field-input-panel::-webkit-scrollbar-track { background: #f0f0f0; border-radius: 5px; }
+.field-input-panel::-webkit-scrollbar-thumb { background: #b0b0b0; border-radius: 5px; min-width: 40px; }
+/* 마우스 드래그 스크롤 중 (common.js) — 텍스트 선택 방지 */
+.is-drag-scrolling, .is-drag-scrolling * { user-select: none !important; cursor: grabbing !important; }
 .field-ranking-panel {
     background: var(--white); border-radius: var(--radius-lg);
     padding: 14px; box-shadow: var(--shadow);
@@ -611,7 +734,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .field-table tbody tr.field-row-odd td.att-col-odd:not(.attempt-cell-editing),
 .field-table tbody tr.field-row-odd td.att-col-even:not(.attempt-cell-editing) { background: transparent; }
 /* Wind row header */
-.field-table thead th.wind-header { background: #1a2a5e; font-size: 10px; padding: 4px 6px; }
+.field-table thead th.wind-header { background: #1a2a5e; font-size: 11px; padding: 4px 6px; }
 .nm-mark { color: var(--danger); font-weight: 800; font-size: 12px; }
 .pass-mark { color: #6b6b6b; font-weight: 700; }
 
@@ -658,7 +781,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .combined-sub-btn .sub-order {
     display: inline-block; background: var(--gray-dark); color: #fff;
     border-radius: 50%; width: 18px; height: 18px; line-height: 18px;
-    text-align: center; font-size: 10px; margin-right: 4px;
+    text-align: center; font-size: 11px; margin-right: 4px;
 }
 .combined-sub-btn.completed .sub-order { background: var(--green); }
 .combined-total-points { font-weight: 800; font-size: 15px; color: var(--green); font-family: var(--font-mono); }
@@ -698,7 +821,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .combined-tab-order {
     display: inline-block; background: var(--gray-dark); color: #fff;
     border-radius: 50%; width: 18px; height: 18px; line-height: 18px;
-    text-align: center; font-size: 10px;
+    text-align: center; font-size: 11px;
 }
 .combined-tab-btn.tab-completed .combined-tab-order { background: var(--green); }
 .combined-tab-btn.active .combined-tab-order { background: var(--green); }
@@ -706,7 +829,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 /* Combined Day Label */
 .combined-day-label {
     display: inline-flex; align-items: center;
-    padding: 4px 8px; font-size: 9px; font-weight: 800;
+    padding: 4px 8px; font-size: 11px; font-weight: 800;
     color: var(--accent); letter-spacing: 1px;
     text-transform: uppercase; white-space: nowrap;
     border-right: 2px solid var(--blue-soft);
@@ -720,7 +843,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 /* Combined Overview Table */
 .combined-overview-wrap { padding: 4px 0; }
 .combined-overview-table .combined-overview-th {
-    font-size: 9px !important; padding: 3px 2px !important;
+    font-size: 11px !important; padding: 3px 2px !important;
     writing-mode: vertical-lr; max-width: 26px;
     cursor: pointer; transition: background 0.12s;
 }
@@ -731,8 +854,8 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     transition: background 0.1s;
 }
 .combined-cell:hover { background: var(--blue-light) !important; }
-.combined-cell-record { font-size: 10px; font-family: var(--font-mono); }
-.combined-cell-points { font-size: 10px; color: var(--green); font-weight: 700; }
+.combined-cell-record { font-size: 11px; font-family: var(--font-mono); }
+.combined-cell-points { font-size: 11px; color: var(--green); font-weight: 700; }
 .combined-cell-empty { color: var(--text-muted); }
 .combined-rank-cell { width: 50px; }
 
@@ -789,7 +912,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     color: var(--white);
     padding: 2px 8px;
     border-radius: 10px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.5px;
     vertical-align: middle;
@@ -895,7 +1018,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 }
 .sub-event-tag {
     display: inline-block; background: var(--blue); color: #fff;
-    padding: 2px 10px; border-radius: 99px; font-size: 10px; font-weight: 700;
+    padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 700;
 }
 
 /* ============================================================
@@ -908,7 +1031,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 }
 .footer summary { cursor: pointer; font-weight: 600; font-size: 11px; color: var(--text-muted); }
 .audit-entry {
-    font-size: 10px; padding: 3px 0; border-bottom: 1px solid #f0f2f5;
+    font-size: 11px; padding: 3px 0; border-bottom: 1px solid #f0f2f5;
     color: var(--gray-dark); font-family: var(--font-mono);
 }
 
@@ -916,6 +1039,18 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    MISC
    ============================================================ */
 .empty-state { text-align: center; padding: 36px; color: var(--text-muted); font-size: 13px; }
+/* 접근성 (2026-09, 규칙집 §12): 키보드 포커스는 항상 보이게, 글자 최소 11px(배지·라벨)·13px(본문) */
+:focus-visible { outline: 2px solid #b79f58; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(183,159,88,.25); }
+button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
+/* 세 상태(비어 있음 · 불러오는 중 · 실패) 공통 — common.js uiStateHtml() (규칙집 §10) */
+.ui-state { text-align: center; padding: 36px 16px; color: var(--text-muted); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ui-state .ui-state-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.ui-state .ui-state-hint { font-size: 12px; max-width: 46ch; line-height: 1.5; }
+.ui-state .ui-state-action { margin-top: 8px; }
+.ui-state.is-error .ui-state-title { color: var(--danger, #b3261e); }
+.ui-state .ui-state-spinner { width: 22px; height: 22px; border: 3px solid rgba(0,0,0,.12); border-top-color: var(--accent, #b79f58); border-radius: 50%; animation: ui-state-spin .8s linear infinite; margin-bottom: 4px; }
+@keyframes ui-state-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ui-state .ui-state-spinner { animation: none; } }
 
 /* ============================================================
    LOADING SPINNER
@@ -1053,6 +1188,13 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .record-dashboard { grid-template-columns: 1fr; }
 }
 
+/* 종목 목록(왼쪽 패널) 접기 — 필드 종목처럼 입력 화면이 넓어야 할 때. 상태는 기기에 저장(rec_sidebar_collapsed) */
+.record-dashboard.sb-collapsed { grid-template-columns: minmax(0, 1fr); }
+.record-dashboard.sb-collapsed .record-matrix-panel { display: none; }
+.sb-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+.sb-toggle[aria-expanded="false"] { background: var(--primary, #b79f58); color: #fff; border-color: var(--primary, #b79f58); }
+@media (max-width: 600px) { .sb-toggle .sb-toggle-label { display: none; } }
+
 /* Matrix Panel (Left) */
 .callroom-matrix-panel,
 .record-matrix-panel {
@@ -1072,6 +1214,11 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .callroom-detail-panel,
 .record-detail-panel {
     min-height: 400px;
+    /* grid 1fr 자식은 기본 min-width:auto 라 내용(넓은 표)만큼 커져 페이지 전체가 넘치고,
+       html/body overflow-x:hidden 에 잘려 "화면이 갇힘". min-width:0 으로 패널 폭을 고정해야
+       안쪽 .field-input-panel / .matrix-scroll-wrap 이 진짜 스크롤 상자가 된다. */
+    min-width: 0;
+    max-width: 100%;
 }
 
 /* Matrix Section */
@@ -1102,7 +1249,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .cr-event-btn.cr-active-status { border-color: var(--blue-soft); background: var(--blue-light); }
 .cr-event-btn.cr-done { border-color: var(--green-soft); background: var(--green-light); }
 .cr-evt-name { font-weight: 800; font-size: 11px; line-height: 1.2; }
-.cr-evt-round { font-size: 9px; color: var(--text-muted); font-weight: 500; }
+.cr-evt-round { font-size: 11px; color: var(--text-muted); font-weight: 500; }
 
 /* Detail Header */
 .cr-detail-header {
@@ -1169,11 +1316,19 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    RECORD — Compact Matrix (left panel)
    ============================================================ */
 .matrix-section-compact { margin-bottom: 10px; }
-.matrix-section-compact .matrix-section-title { font-size: 10px; padding: 4px 8px; }
-.matrix-table-compact th { font-size: 9px; padding: 5px 4px; }
+.matrix-section-compact .matrix-section-title { font-size: 11px; padding: 4px 8px; }
+.matrix-table-compact th { font-size: 11px; padding: 5px 4px; }
 .matrix-table-compact td { padding: 5px 4px; font-size: 12px; }
-.rec-matrix-event { font-weight: 600; font-size: 12px !important; text-align: left !important; white-space: nowrap; }
-.rec-round-btn { font-size: 10px !important; padding: 3px 8px !important; white-space: nowrap; }
+/* 소집실/기록실/관리 매트릭스: 종목 셀이 시간·Call Room 배지로 넓어지면
+   준결승·결승 라운드 버튼이 320px 패널 밖으로 밀려 잘리던 문제 →
+   고정 레이아웃으로 라운드 열 폭을 확보하고 종목명은 줄바꿈시켜 항상 표시. */
+.matrix-table-compact { table-layout: fixed; width: 100%; min-width: 0; }
+.matrix-table-compact th:first-child,
+.matrix-table-compact td:first-child { width: auto; }
+.matrix-table-compact th:not(:first-child),
+.matrix-table-compact td:not(:first-child) { width: 58px; }
+.rec-matrix-event { font-weight: 600; font-size: 12px !important; text-align: left !important; white-space: normal; word-break: keep-all; line-height: 1.25; }
+.rec-round-btn { font-size: 11px !important; padding: 3px 8px !important; white-space: nowrap; }
 .rec-round-btn.rec-btn-active {
     background: var(--green) !important; color: #fff !important;
     box-shadow: 0 0 0 2px var(--green-soft);
@@ -1333,7 +1488,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     border-right: 2px solid var(--gray);
 }
 .results-unified-table .results-round-header th {
-    font-size: 10px;
+    font-size: 11px;
     padding: 5px 6px;
 }
 .results-unified-table .round-col-male {
@@ -1395,13 +1550,13 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 /* ============================================================
    ICON BADGES (Emoji-free CSS replacements)
    ============================================================ */
-.ico { display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;border-radius:4px;padding:1px 5px;line-height:1.3;letter-spacing:0.3px;vertical-align:middle; }
+.ico { display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;border-radius:4px;padding:1px 5px;line-height:1.3;letter-spacing:0.3px;vertical-align:middle; }
 .ico-track { background:#eef1f7;color:#1a2a5e;border:1px solid #c0c8d8; }
 .ico-field { background:#f8f4ea;color:#b79f58;border:1px solid #e8dfc0; }
-.ico-link { font-size:9px;color:#b79f58;margin-left:3px;font-weight:700;opacity:0.7; }
-.ico-wind { background:#eef4fa;color:#0369a1;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #bae6fd; }
-.ico-doc { font-size:10px;font-weight:700;color:#6b7280; }
-.ico-callroom { background:#1a2a5e;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px;letter-spacing:0.5px;animation:cr-pulse 2s ease-in-out infinite; }
+.ico-link { font-size:11px;color:#b79f58;margin-left:3px;font-weight:700;opacity:0.7; }
+.ico-wind { background:#eef4fa;color:#0369a1;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #bae6fd; }
+.ico-doc { font-size:11px;font-weight:700;color:#6b7280; }
+.ico-callroom { background:#1a2a5e;color:#fff;font-size:11px;font-weight:800;padding:2px 7px;border-radius:8px;letter-spacing:0.5px;animation:cr-pulse 2s ease-in-out infinite; }
 @keyframes cr-pulse { 0%,100%{opacity:1;} 50%{opacity:0.7;} }
 .ico-dot { display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle; }
 .ico-dot-m { background:#1a2a5e; }
@@ -1433,12 +1588,17 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .main-content { padding: 12px 14px; }
     .field-two-panel { grid-template-columns: 1fr; }
     .combined-overview-table .combined-overview-th { font-size: 8px !important; }
-    .combined-tab-btn { padding: 4px 8px; font-size: 10px; }
+    .combined-tab-btn { padding: 4px 8px; font-size: 11px; }
 }
 
 /* ============================================================
    MOBILE HAMBURGER MENU
    ============================================================ */
+/* 닫기(X) 버튼 — 모든 창·시트·팝업 공통: 연한 원 + 선 X (2026-09-26, 제각각이던 ×·빨간 원·회색 글자 통일) */
+.pr-close { flex: none; width: 34px; height: 34px; min-height: 0; border-radius: 50%; border: none; background: #f0ede6; color: #555; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; line-height: 1; transition: background .12s; }
+.pr-close:hover { background: #e6e1d6; } .pr-close:active { background: #ddd7c9; transform: scale(.94); }
+.pr-close .ui-icon { width: 16px; height: 16px; display: block; }
+.pr-close.pr-close-dark { background: rgba(255,255,255,.14); color: #fff; } .pr-close.pr-close-dark:hover { background: rgba(255,255,255,.24); }
 .hamburger-btn {
     display: none; /* shown only on mobile */
     background: none; border: 1.5px solid var(--gray-mid); color: var(--text);
@@ -1447,6 +1607,13 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     transition: all .2s; padding: 0; line-height: 1; margin-left: auto;
 }
 .hamburger-btn:active { transform: scale(0.9); }
+/* 폰 머리글 오른쪽 버튼 묶음(새로고침·메뉴) — 둘 다 같은 모양, 선 아이콘 */
+.header-phone-actions { display: none; margin-left: auto; align-items: center; gap: 8px; }
+.header-phone-actions .hamburger-btn { margin-left: 0; width: 38px !important; height: 38px !important; min-height: 0 !important; padding: 0; border-radius: 11px; border: 1.5px solid #e2ddd2; background: #fff; color: #1a2a5e; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.header-phone-actions .hamburger-btn .ui-icon { display: block; }
+.header-phone-actions .refresh-btn.spinning .ui-icon { animation: prSpin .6s linear infinite; }
+.header-phone-actions .refresh-btn.done { color: #1b7f4d; border-color: #bfe3cc; background: #e6f4ec; }
+@keyframes prSpin { to { transform: rotate(360deg); } }
 
 .mobile-menu-overlay {
     display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -1471,10 +1638,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 }
 .mobile-menu-header .mm-brand .mm-colon { color: #b79f58; }
 .mobile-menu-header .mm-brand .mm-scope { color: #b79f58; }
-.mobile-menu-close {
-    background: none; border: none; font-size: 22px; cursor: pointer;
-    color: var(--text-muted); padding: 4px; line-height: 1;
-}
+.mobile-menu-close { }   /* 공통 .pr-close */
 
 .mobile-menu-nav { padding: 8px 0; flex: 1; }
 .mobile-menu-nav a {
@@ -1499,6 +1663,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 @media (max-width: 768px) {
     /* Show hamburger, hide desktop buttons and nav */
     .hamburger-btn { display: flex; }
+    .header-phone-actions { display: flex; }
     .header-btn-group { display: none !important; }
     .page-nav { display: none !important; }
     .header-inner { padding: 8px 14px; gap: 8px; }
@@ -1540,7 +1705,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .matrix-table th { font-size: 11px; padding: 8px 10px; }
     .matrix-table td { padding: 8px 10px; font-size: 13px; }
     .rec-matrix-event { font-size: 12px !important; }
-    .rec-round-btn { font-size: 10px !important; padding: 3px 8px !important; }
+    .rec-round-btn { font-size: 11px !important; padding: 3px 8px !important; }
     .round-btn { font-size: 11px; padding: 5px 10px; }
 
     /* Data tables — keep readable */
@@ -1549,7 +1714,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 
     /* Track input */
     .track-time-input { width: 80px; font-size: 12px; padding: 4px 6px; }
-    .track-hint { font-size: 10px; padding: 4px 10px; }
+    .track-hint { font-size: 11px; padding: 4px 10px; }
     .track-actions { flex-wrap: wrap; }
 
     /* Field */
@@ -1559,7 +1724,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 
     /* Combined */
     .combined-tab-bar { gap: 1px; }
-    .combined-tab-btn { padding: 4px 6px; font-size: 9px; }
+    .combined-tab-btn { padding: 4px 6px; font-size: 11px; }
     .combined-tab-order { width: 14px; height: 14px; line-height: 14px; font-size: 8px; }
     .combined-day-label { font-size: 8px; padding: 2px 4px; }
     .combined-sub-nav { flex-wrap: wrap; }
@@ -1575,7 +1740,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 
     /* Buttons */
     .btn { padding: 5px 12px; font-size: 12px; }
-    .btn-sm { padding: 3px 8px; font-size: 10px; }
+    .btn-sm { padding: 3px 8px; font-size: 11px; }
 
     /* Modals */
     .modal { width: 95vw; }
@@ -1589,10 +1754,10 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .height-controls input { width: 65px; font-size: 12px; }
 
     /* Results side-by-side table */
-    .results-unified-table { font-size: 10px; }
+    .results-unified-table { font-size: 11px; }
     .results-unified-table .event-name-cell { font-size: 11px !important; padding-left: 6px !important; }
     .results-unified-table .results-gender-header th { font-size: 11px; padding: 6px 4px; }
-    .results-unified-table .results-round-header th { font-size: 9px; padding: 3px 3px; }
+    .results-unified-table .results-round-header th { font-size: 11px; padding: 3px 3px; }
 
     /* Qualification panel */
     .qual-checkbox-item { padding: 5px 8px; }
@@ -1618,19 +1783,19 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     .gender-tab { padding: 5px 12px; font-size: 11px; }
 
     /* Round buttons — keep readable */
-    .round-btn { font-size: 10px; padding: 4px 8px; }
+    .round-btn { font-size: 11px; padding: 4px 8px; }
 
     /* Track */
     .track-time-input { width: 70px; font-size: 11px; }
 
     /* Field */
-    .field-dist-input { width: 48px; font-size: 10px; }
-    .field-table td.attempt-cell { min-width: 34px; font-size: 10px; }
+    .field-dist-input { width: 48px; font-size: 11px; }
+    .field-table td.attempt-cell { min-width: 34px; font-size: 11px; }
     .field-ranking-panel { display: none; }
 
     /* Combined */
     .combined-tab-btn { padding: 3px 4px; font-size: 8px; }
-    .combined-overview-table { font-size: 10px; }
+    .combined-overview-table { font-size: 11px; }
     .combined-overview-table .combined-overview-th { font-size: 7px !important; max-width: 20px; }
 
     /* Callroom */
@@ -1767,7 +1932,7 @@ body.viewer-mode .footer { display: none; }
     /* Tighter mobile spacing (Phase 8) */
     .matrix-table-compact td { padding: 3px 2px; }
     .rec-round-btn { font-size: 8px !important; padding: 2px 4px !important; }
-    .matrix-section-compact .matrix-section-title { font-size: 9px; padding: 3px 6px; }
+    .matrix-section-compact .matrix-section-title { font-size: 11px; padding: 3px 6px; }
     /* Prevent auto keyboard on callroom (Phase 8) */
     .callroom-detail-panel .barcode-input-area input { font-size: 16px; }
 }
@@ -1780,16 +1945,21 @@ body.viewer-mode .footer { display: none; }
    MISSING CLASS FIXES (v7.1)
    ============================================================ */
 .comp-info-line {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; flex-direction: row; align-items: center; gap: 8px;
     padding: 8px 16px; background: var(--bg-dark);
     border-radius: var(--radius); font-size: 13px;
-    margin-bottom: 16px; flex-wrap: wrap;
+    margin-bottom: 16px; flex-wrap: nowrap;
 }
+/* 대회 정보(이름·날짜·장소): 한 줄 유지, 자리 부족하면 … 로 줄임 */
+.comp-info-main { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 액션 버튼(기록지·시간표·영상·공지): 오른쪽에 고정, 절대 줄이거나 줄바꿈 안 함 */
+.comp-info-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.comp-info-actions:empty { display: none; }
 .comp-info-name { font-weight: 700; }
 .comp-info-sep { color: var(--text-muted); }
 .comp-info-dates, .comp-info-venue { color: var(--text-muted); }
 
-.height-col-header { font-size: 10px; min-width: 46px; }
+.height-col-header { font-size: 11px; min-width: 46px; }
 .height-mark-btn {
     border: none; cursor: pointer; border-radius: var(--radius);
     font-size: 14px; font-weight: 700; padding: 6px 16px;
@@ -1810,7 +1980,7 @@ body.viewer-mode .footer { display: none; }
 }
 .qual-badge.qual-Q { background: #6b6b6b; color: #fff; }
 .qual-badge.qual-q { background: #ff8f00; color: #fff; }
-.qual-badge.qual-none { background: var(--gray-light); color: var(--text-muted); font-size: 10px; }
+.qual-badge.qual-none { background: var(--gray-light); color: var(--text-muted); font-size: 11px; }
 .qual-badge:hover { transform: scale(1.2); box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 .row-qual-selected { background: #f5f0e0 !important; }
 .qual-panel { background: var(--card); border: 1.5px solid var(--primary); border-radius: var(--radius); padding: 16px; margin-top: 12px; }
@@ -1820,7 +1990,7 @@ body.viewer-mode .footer { display: none; }
 /* ============================================================
    STATUS CODE BADGES & SELECT
    ============================================================ */
-.sc-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+.sc-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
 .sc-DQ { background: #fde8ea; color: #991b1b; }
 .sc-DNS { background: #fff3cd; color: #7a6400; }
 .sc-DNF { background: #f0f0f0; color: #6b6b6b; }
@@ -1929,7 +2099,7 @@ body.viewer-mode .footer { display: none; }
     padding: 6px 8px; text-align: center; border: 1px solid #2a3a6e;
 }
 .field-2row-table thead th.wind-header {
-    background: #243470; font-size: 10px; font-weight: 400; color: #c8d6f0;
+    background: #243470; font-size: 11px; font-weight: 400; color: #c8d6f0;
 }
 /* Row 1: name + distance records  — thin bottom border (same athlete) */
 .field-2row-table .field-row1 td {
@@ -1940,7 +2110,7 @@ body.viewer-mode .footer { display: none; }
     text-align: left; font-family: var(--font); font-size: 13px;
 }
 .field-2row-table .field-row1 td .bib-tag {
-    font-size: 10px; color: #888; font-weight: 400;
+    font-size: 11px; color: #888; font-weight: 400;
 }
 /* Row 2: team + wind  — thick bottom border (between athletes) */
 .field-2row-table .field-row2 td {
@@ -2008,7 +2178,7 @@ body.viewer-mode .footer { display: none; }
 /* Q/q result badges in results views */
 .result-qual-badge {
     display: inline-block; padding: 1px 6px; border-radius: 8px;
-    font-weight: 700; font-size: 10px; margin-left: 4px; vertical-align: middle;
+    font-weight: 700; font-size: 11px; margin-left: 4px; vertical-align: middle;
 }
 .result-qual-Q { background: #6b6b6b; color: #fff; }
 .result-qual-q { background: #b79f58; color: #fff; }
@@ -2060,7 +2230,7 @@ body.viewer-mode .footer { display: none; }
     padding: 1px 6px;
     background: #f0f0f0;
     color: #6b6b6b;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     border-radius: 3px;
     white-space: nowrap;
@@ -2109,7 +2279,7 @@ body.viewer-mode .footer { display: none; }
     display: inline-block;
     background: var(--accent, #6b6b6b);
     color: #fff;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     padding: 2px 8px;
     border-radius: 10px;
@@ -2132,3 +2302,113 @@ body.viewer-mode .footer { display: none; }
 .admin-tabs-content.pacing-zoom-active {
     overflow: visible;
 }
+
+/* ============================================================
+   대시보드 행(row)별 성별 표시 — 좌측 컬러 막대 + 배지
+   - 안쪽 매트릭스 박스는 흰색 그대로 유지
+   - 각 <tr data-row-gender="M|F|X"> 에 좌측 4px 막대 + 종목명 앞 배지로
+     성별을 표시 → "전체" 탭에서도, 개별 성별 탭에서도 동일하게 적용
+   - 남자(M): 네이비 #1a2a5e
+   - 여자(F): 버건디 #8b1a2a
+   - 혼성(X): 골드   #b79f58
+   ============================================================ */
+.matrix-table tbody tr[data-row-gender] td:first-child {
+    position: relative;
+    padding-left: 16px; /* 4px 막대 + 8px 여백 + 기존 padding 보정 */
+}
+.matrix-table tbody tr[data-row-gender] td:first-child::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--row-gender-color, transparent);
+}
+.matrix-table tbody tr[data-row-gender="M"] { --row-gender-color: #1a2a5e; }
+.matrix-table tbody tr[data-row-gender="F"] { --row-gender-color: #8b1a2a; }
+.matrix-table tbody tr[data-row-gender="X"] { --row-gender-color: #b79f58; }
+
+/* 종목명 앞 성별 배지 (남/여/혼) */
+.gender-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 6px;
+    vertical-align: middle;
+    line-height: 1.4;
+    letter-spacing: 0.5px;
+    color: #fff;
+}
+.gender-badge[data-g="M"] { background: #1a2a5e; }
+.gender-badge[data-g="F"] { background: #8b1a2a; }
+.gender-badge[data-g="X"] { background: #b79f58; }
+
+/* 결과 버튼 성별색 (행의 data-row-gender 를 상속받아 결정) */
+.matrix-table tbody tr[data-row-gender="M"] .round-btn.round-btn-result {
+    background: #1a2a5e !important;
+    border-color: #1a2a5e !important;
+}
+.matrix-table tbody tr[data-row-gender="F"] .round-btn.round-btn-result {
+    background: #8b1a2a !important;
+    border-color: #8b1a2a !important;
+}
+.matrix-table tbody tr[data-row-gender="X"] .round-btn.round-btn-result {
+    background: #b79f58 !important;
+    border-color: #b79f58 !important;
+}
+
+
+/* ============================================================
+   시간·기록 전용 등폭 폰트 (D2Coding, self-host · 숫자/기호 서브셋 ~4KB)
+   원칙: 이름·문장은 Noto Sans KR, 시간·기록 값만 전광판체
+   ============================================================ */
+@font-face {
+    font-family: 'D2Coding';
+    font-style: normal; font-weight: 400; font-display: swap;
+    src: url('/fonts/d2coding-subset.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'D2Coding';
+    font-style: normal; font-weight: 700; font-display: swap;
+    src: url('/fonts/d2coding-bold-subset.woff2') format('woff2');
+}
+/* 시간·기록 값에 붙이는 유틸 클래스 (렌더러에서 이 클래스를 부여) */
+.num-display { font-family: 'D2Coding', monospace; letter-spacing: 0.02em; }
+/* 여러 줄 기록표(공백 정렬) — 고정폭 오버레이용. 반응형 화면엔 table 권장 */
+.pace-table { font-family: 'D2Coding', monospace; white-space: pre; line-height: 1.8; }
+/* 일반 폰트로 남는 숫자도 폭 고정 → 표 자릿수 세로 정렬 */
+body { font-variant-numeric: tabular-nums; }
+
+/* ── 터치 기기(태블릿·폰) 조작 크기 — 2026-09 사용성 규칙 ──
+   손가락으로 누르는 버튼은 최소 40px, 작은 버튼도 36px. 입력칸 글자는 16px 이상(iOS 는 그보다 작으면 포커스 때 화면을 확대한다).
+   표 안의 촘촘한 칸(.track-time-input 등)은 행 높이가 깨지지 않게 글자 크기만 맞춘다. */
+@media (pointer: coarse) {
+    .btn { min-height: 40px; }
+    .btn-sm, .btn-xs { min-height: 36px; padding-left: 12px; padding-right: 12px; }
+    .admin-card select, .admin-card input[type="text"], .admin-card input[type="number"], .admin-card input[type="date"], .admin-card input[type="password"], .admin-card textarea { min-height: 40px; font-size: 16px; }
+    input[type="text"], input[type="number"], input[type="password"], input[type="search"], input[type="tel"], select, textarea { font-size: max(16px, 1em); }
+    .track-time-input { font-size: 16px; }
+}
+@media (pointer: coarse) {
+    #comp-doc-btn, #comp-tt-btn { min-height: 36px !important; padding-top: 6px !important; padding-bottom: 6px !important; }
+    .header-login-btn { min-height: 36px; }
+    .font-size-ctrl button { width: 36px; height: 36px; }
+    .mobile-menu-close { }
+}
+
+/* ── 인라인 SVG 아이콘 (lib/icons.js · 이모지 대체) ── */
+.ui-icon { display: inline-block; vertical-align: -0.15em; flex: none; }
+.ui-icon.ui-icon-top { vertical-align: middle; }
+
+/* ── 더블탭 확대 끄기 (핀치 줌은 그대로) — 빈 곳을 두 번 눌러도 화면이 튀지 않게. 스크롤 상자마다 판정이 끊기므로 전 요소에 건다 ── */
+* { touch-action: manipulation; }
+
+/* ── 메달 원 — common.js medalHtml/medalTallyHtml ── */
+.medal { display:inline-flex; align-items:center; justify-content:center; border-radius:50%; color:#fff; font-weight:800; line-height:1; font-family:var(--font-mono, monospace); font-variant-numeric:tabular-nums; flex:none; box-shadow:inset 0 -1px 0 rgba(0,0,0,.18), 0 1px 1px rgba(0,0,0,.08); vertical-align:middle; }
+.medal.m1 { background:linear-gradient(135deg,#f1d36a,#c7a12a); }
+.medal.m2 { background:linear-gradient(135deg,#e3e6ea,#9ba2ac); }
+.medal.m3 { background:linear-gradient(135deg,#d69b5f,#a1632c); }
+.medal-tally { display:inline-flex; align-items:center; gap:4px; vertical-align:middle; }

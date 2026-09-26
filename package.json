@@ -1,49 +1,55 @@
 {
-  "name": "pacerise-competition-os",
-  "version": "0.1.0",
-  "description": "Pace Rise Competition Operation OS — Demo Prototype",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
-  },
-  "keywords": [
-    "athletics",
-    "competition",
-    "operation"
-  ],
-  "author": "Pace Rise",
-  "license": "ISC",
-  "dependencies": {
-    "adm-zip": "^0.5.16",
-    "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.6.2",
-    "compression": "^1.8.1",
-    "cookie-parser": "^1.4.7",
-    "dotenv": "^17.3.1",
-    "exceljs": "^4.4.0",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.2.1",
-    "helmet": "^8.1.0",
-    "html2canvas-pro": "^1.6.7",
-    "jsonwebtoken": "^9.0.3",
-    "multer": "^2.0.2",
-    "node-cron": "^4.2.1",
-    "pdf-parse": "^1.1.1",
-    "pdfkit": "^0.18.0",
-    "pg": "^8.20.0",
-    "playwright": "^1.58.2",
-    "puppeteer": "^24.37.5",
-    "ws": "^8.20.0",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.7",
-    "canvas": "^3.2.1",
-    "supertest": "^7.2.2",
-    "vitest": "^4.1.7"
-  }
+    "name": "pacerise-competition-os",
+    "version": "0.1.0",
+    "description": "Pace Rise Competition Operation OS — Demo Prototype",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node server.js",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "test:pg": "TEST_DB_BACKEND=postgres TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres@127.0.0.1:55432/pacerise_test} vitest run",
+        "test:browser": "BROWSER_TESTS=1 vitest run tests/browser"
+    },
+    "keywords": [
+        "athletics",
+        "competition",
+        "operation"
+    ],
+    "author": "Pace Rise",
+    "license": "ISC",
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.125.0",
+        "@aws-sdk/client-s3": "^3.1061.0",
+        "adm-zip": "^0.5.16",
+        "bcryptjs": "^3.0.3",
+        "better-sqlite3": "^12.6.2",
+        "compression": "^1.8.1",
+        "cookie-parser": "^1.4.7",
+        "dotenv": "^17.3.1",
+        "exceljs": "^4.4.0",
+        "express": "^5.2.1",
+        "express-rate-limit": "^8.2.1",
+        "firebase-admin": "^13.10.0",
+        "helmet": "^8.1.0",
+        "html2canvas-pro": "^1.6.7",
+        "jsonwebtoken": "^9.0.3",
+        "jszip": "^3.10.1",
+        "multer": "^2.0.2",
+        "node-cron": "^4.2.1",
+        "pdf-parse": "^1.1.1",
+        "pdfkit": "^0.18.0",
+        "pg": "^8.20.0",
+        "playwright": "^1.58.2",
+        "puppeteer": "^24.37.5",
+        "ws": "^8.20.0",
+        "xlsx": "^0.18.5"
+    },
+    "devDependencies": {
+        "@vitest/coverage-v8": "^4.1.7",
+        "canvas": "^3.2.1",
+        "supertest": "^7.2.2",
+        "vitest": "^4.1.7"
+    }
 }

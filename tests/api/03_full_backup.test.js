@@ -25,7 +25,8 @@ beforeAll(async () => {
     app = require('../../server.js').app;
 });
 
-describe('Full Backup API — 회귀', () => {
+// 통백업(.db 파일 zip)은 SQLite 전용 — PG 는 RDS 스냅샷이 담당
+describe.skipIf((process.env.TEST_DB_BACKEND || '').toLowerCase() === 'postgres')('Full Backup API — 회귀', () => {
 
     it('인증 없이 다운로드 시도 → 403', async () => {
         const res = await request(app).get('/api/admin/full-backup/download');

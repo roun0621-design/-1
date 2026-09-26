@@ -4,6 +4,49 @@
  * v11: Offline sync awareness, document download links, WebSocket scoreboard client, security headers
  */
 
+// ── 메달 원 (금·은·동, 안에 순위 또는 개수) — 대시보드 카드·결과 창·대표팀 명단이 같은 모양 (2026-09-23) ──
+function medalHtml(place, size, text) {
+    const p = Number(place); if (!(p >= 1 && p <= 3)) return '';
+    const s = size || 20;
+    return `<span class="medal m${p}" style="width:${s}px;height:${s}px;font-size:${Math.round(s * 0.55)}px" title="${['금', '은', '동'][p - 1]}메달">${text == null ? p : text}</span>`;
+}
+function medalTallyHtml(m, size) {
+    if (!m) return '';
+    return `<span class="medal-tally">${medalHtml(1, size, m.gold || 0)}${medalHtml(2, size, m.silver || 0)}${medalHtml(3, size, m.bronze || 0)}</span>`;
+}
+
+// ============================================================
+// 폰 글자 크기 (2026-09-22)
+//   폰(720px 미만)에서는 페이지를 기본 1.125배로 보여주고, 여기에 폰의 텍스트 크기 설정(iOS 동적 글꼴)을 곱한다.
+//   방법: CSS zoom 대신 viewport 를 (device-width ÷ 배율, initial-scale=배율) 로 바꾼다 — vh·fixed 요소가 그대로 맞고, 핀치 줌도 살아 있다.
+//   iOS: -apple-system-body 의 글꼴 크기(기본 17px)로 사용자의 텍스트 크기 단계를 읽는다. 안드로이드 크롬은 시스템 글꼴 배율을 스스로 적용하므로 기본 배율만.
+//   전광판·모니터(고정 viewport 페이지)는 건드리지 않는다. 상한 1.4 · 하한 1.0.
+// ============================================================
+(function applyPhoneTextScale() {
+    try {
+        const meta = document.querySelector('meta[name="viewport"]');
+        if (!meta || /user-scalable\s*=\s*no/i.test(meta.content || '')) return;
+        if ((Math.min(window.screen.width || 0, window.screen.height || 0) || window.innerWidth) >= 720) return;   // 폰만 (짧은 변 기준)
+        const BASE = 1.125;
+        let sys = 1;
+        if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+            const probe = document.createElement('div');
+            // 부모 글꼴을 13px 로 두고 시스템 글꼴을 적용 — 지원하지 않는 브라우저(안드로이드·데스크톱)는 13px 그대로라 배율을 곱하지 않는다
+            probe.style.cssText = 'position:absolute;left:-9999px;visibility:hidden;font-size:13px;';
+            const inner = document.createElement('span'); inner.style.font = '-apple-system-body'; inner.textContent = 'A'; probe.appendChild(inner);
+            (document.body || document.documentElement).appendChild(probe);
+            const px = parseFloat(getComputedStyle(inner).fontSize); probe.remove();
+            if (px >= 14 && px <= 60 && Math.abs(px - 13) > 0.5) sys = px / 17;   // 17px = iOS 기본(Large)
+        }
+        const scale = Math.round(Math.min(1.4, Math.max(1.0, BASE * sys)) * 1000) / 1000;
+        window.__textScale = scale;
+        // 가로/세로가 바뀌면 그 방향의 화면 폭으로 다시 계산
+        const apply = () => { const w = window.screen.width || window.innerWidth; meta.content = `width=${Math.round(w / scale)}, initial-scale=${scale}, viewport-fit=cover`; };
+        apply();
+        window.addEventListener('orientationchange', () => setTimeout(apply, 250));
+    } catch (e) { /* 실패해도 페이지는 그대로 */ }
+})();
+
 // ============================================================
 // Shared formatting helpers
 // (deduplicated from record.js / dashboard.js / results.js / callroom.js)
@@ -211,7 +254,7 @@ function isShortTrackEvent(eventName) {
     return false;
 }
 
-function fmtCat(c) { return { track: 'Track', field_distance: 'Field', field_height: 'Field', combined: '혼성', relay: '릴레이', road: 'Road' }[c] || c; }
+function fmtCat(c) { return { track: 'Track', field_distance: 'Field', field_height: 'Field', combined: '종합', relay: '릴레이', road: 'Road' }[c] || c; }
 function fmtRound(r) { return { preliminary: '예선', semifinal: '준결승', final: '결승' }[r] || r; }
 function fmtRoundShort(r) { return { preliminary: '예선', semifinal: '준결', final: '결승' }[r] || r; }
 function fmtSt(s) { return { registered: '미확인', checked_in: '출석', no_show: '결석' }[s] || s; }
@@ -258,13 +301,15 @@ function parseRecordValueClient(v) {
 function detectBrokenRecordsClient(newVal, records, direction) {
     const broken = [];
     if (newVal == null || !isFinite(newVal)) return broken;
-    const keys = [['national','NR'], ['division','DR'], ['competition','CR']];
+    const keys = [['world','WR'], ['area','AR'], ['games','GR'], ['national','NR'], ['division','DR'], ['competition','CR']];
     for (const [k, label] of keys) {
         const rec = records ? records[k] : null;
         if (!rec) continue;
         const oldVal = parseRecordValueClient(rec.record_value);
         if (oldVal == null) continue;
-        if (direction === 'lower' && newVal < oldVal) broken.push(label);
+        // 공식 기록은 1/100초로 올림(WA TR 19.24) — 10.213 은 10.22 와 동률이지 경신이 아니다 (서버 recordCompare.officialTime 과 동일)
+        const cmpVal = direction === 'lower' ? Math.ceil(Math.round(newVal * 1000) / 10 - 1e-9) / 100 : newVal;
+        if (direction === 'lower' && cmpVal < oldVal) broken.push(label);
         else if (direction === 'higher' && newVal > oldVal) broken.push(label);
     }
     return broken;
@@ -369,12 +414,12 @@ function _updateOfflineBanner() {
         banner.style.display = 'block';
         banner.style.background = '#e74c3c';
         banner.style.color = '#fff';
-        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 오프라인 — 기록은 로컬에 저장됩니다${_offlineState.pendingCount > 0 ? ` (대기 ${_offlineState.pendingCount}건)` : ''}`;
+        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 오프라인 — 기록은 로컬에 저장됩니다${_offlineState.pendingCount > 0 ? ` (대기 ${_offlineState.pendingCount}건)` : ''}`;
     } else if (_offlineState.pendingCount > 0) {
         banner.style.display = 'block';
         banner.style.background = '#f39c12';
         banner.style.color = '#fff';
-        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 동기화 중... (${_offlineState.pendingCount}건 대기)`;
+        banner.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#eab308;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg> 동기화 중... (${_offlineState.pendingCount}건 대기)`;
     } else {
         banner.style.display = 'none';
     }
@@ -384,16 +429,17 @@ function _updateOfflineBanner() {
 window.addEventListener('online', () => {
     _offlineState.online = true;
     _updateOfflineBanner();
-    // 온라인 복귀 시 SW에 동기화 요청
-    if (navigator.serviceWorker?.controller) {
-        const ch = new MessageChannel();
-        ch.port1.onmessage = () => {
-            _checkPendingQueue();
-            setTimeout(() => { _offlineState.pendingCount = 0; _updateOfflineBanner(); }, 2000);
-        };
-        navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC' }, [ch.port2]);
-    }
+    _triggerOfflineSync();
 });
+// 대기 중인 오프라인 입력을 서버로 보낸다. 'online' 이벤트만 믿으면 안 된다 — 경기장 Wi-Fi 는 AP 에 붙은 채로 끊겨
+// navigator.onLine 이 바뀌지 않는다. 그래서 페이지를 열 때, 대기 건이 있는 동안 15초마다, 그리고 저장이 한 번 성공할 때마다 시도한다.
+function _triggerOfflineSync() {
+    if (!navigator.serviceWorker?.controller) return;
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => _checkPendingQueue();      // 남은 건수를 실제 큐에서 다시 읽는다 (예전엔 2초 뒤 무조건 0 으로 표시했다)
+    navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC' }, [ch.port2]);
+}
+setInterval(() => { if (_offlineState.pendingCount > 0) _triggerOfflineSync(); }, 15000);
 window.addEventListener('offline', () => {
     _offlineState.online = false;
     _updateOfflineBanner();
@@ -432,21 +478,109 @@ document.addEventListener('DOMContentLoaded', () => {
     _createOfflineBanner();
     _updateOfflineBanner();
     _checkPendingQueue();
+    setTimeout(() => { if (_offlineState.pendingCount > 0) _triggerOfflineSync(); }, 1500);
 });
 
 // ============================================================
 // API + Response Cache (loading optimisation)
 // ============================================================
-async function api(method, path, body) {
+// ── 쓰기 요청에 저장된 키 자동 첨부 (2026-09 서버 쓰기 가드 대응) ─────────────
+//   서버는 /api 의 모든 POST/PUT/PATCH/DELETE 에 유효한 키를 요구한다. api() 는 원래 키를 실어 보내지만,
+//   화면 곳곳의 직접 fetch(업로드 FormData 등)가 빠뜨려도 막히지 않도록 같은 출처의 쓰기 요청에 x-admin-key 를 붙인다.
+(function _attachKeyToWrites() {
+    if (typeof window === 'undefined' || !window.fetch || window.__paceFetchPatched) return;
+    window.__paceFetchPatched = true;
+    const _fetch = window.fetch;
+    window.fetch = function (input, init) {
+        try {
+            const isReq = (typeof Request !== 'undefined') && (input instanceof Request);
+            const method = String((init && init.method) || (isReq ? input.method : 'GET')).toUpperCase();
+            if (method !== 'GET' && method !== 'HEAD') {
+                const u = new URL(isReq ? input.url : String(input), location.href);
+                if (u.origin === location.origin && u.pathname.startsWith('/api/') && !u.pathname.startsWith('/api/auth/')) {
+                    const k = localStorage.getItem('pace_admin_key') || '';
+                    if (k) {
+                        const h = new Headers((init && init.headers) || (isReq ? input.headers : undefined));
+                        if (!h.has('x-admin-key')) { h.set('x-admin-key', k); init = Object.assign({}, init, { headers: h }); }
+                    }
+                }
+            }
+        } catch (e) { /* 헤더에 못 넣는 문자(한글 키 등)면 본문 키에 맡긴다 */ }
+        return _fetch.call(this, input, init);
+    };
+})();
+
+// ── JWT 세션 유지 (관리자·매니저 로그인) ─────────────────────────────────
+//   login.html 은 비밀번호 대신 표식 'jwt-session' 만 pace_admin_key 에 둔다. 실제 인증은 HttpOnly 쿠키(pr_access, 1시간)이고
+//   서버의 JWT 브리지가 레거시 키 검사를 통과시킨다. 쿠키가 만료되기 전에 주기적으로 갱신한다.
+function _isJwtSession() { try { return localStorage.getItem('pace_admin_key') === 'jwt-session'; } catch (e) { return false; } }
+let _jwtRefreshing = null;
+function _jwtRefresh() {
+    if (_jwtRefreshing) return _jwtRefreshing;
+    _jwtRefreshing = (async () => {
+        try {
+            let rt = null; try { rt = localStorage.getItem('pr_refresh_token'); } catch (e) {}
+            const r = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: rt ? JSON.stringify({ refresh_token: rt }) : '{}' });
+            if (!r.ok) return false;
+            const d = await r.json().catch(() => ({}));
+            try {
+                if (d.access_token && localStorage.getItem('pr_access_token') != null) localStorage.setItem('pr_access_token', d.access_token);
+                if (d.refresh_token && localStorage.getItem('pr_refresh_token') != null) localStorage.setItem('pr_refresh_token', d.refresh_token);
+                localStorage.setItem('pr_refresh_at', String(Date.now()));
+            } catch (e) {}
+            return true;
+        } catch (e) { return false; } finally { setTimeout(() => { _jwtRefreshing = null; }, 0); }
+    })();
+    return _jwtRefreshing;
+}
+(function _jwtKeepAlive() {
+    if (typeof window === 'undefined') return;
+    // 이전 버전은 JWT 로그인 때 관리자 비밀번호 평문을 pace_admin_key 에 저장했다 → JWT 세션이 있으면 표식으로 교체해 지운다
+    try {
+        const u = JSON.parse(localStorage.getItem('pr_auth_user') || 'null');
+        const k = localStorage.getItem('pace_admin_key');
+        if (u && u.role && u.role !== 'viewer' && k && k !== 'jwt-session' && localStorage.getItem('pr_refresh_token')) localStorage.setItem('pace_admin_key', 'jwt-session');
+    } catch (e) {}
+    if (!_isJwtSession()) return;
+    // 관리자·매니저(JWT) 세션은 8시간 무활동이면 자동 로그아웃 (공용 PC·태블릿 방치 대비). 심판 운영키 세션은 대회 중 끊기면 안 되므로 제외.
+    const IDLE_MS = 8 * 60 * 60 * 1000;
+    const touch = () => { try { localStorage.setItem('pace_last_active', String(Date.now())); } catch (e) {} };
+    const idleOut = async () => {
+        try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch (e) {}
+        try { ['pace_admin_key', 'pace_role', 'pace_judge_name', 'pr_auth_user', 'pr_access_token', 'pr_refresh_token', 'pr_refresh_at', 'pace_last_active'].forEach(k => localStorage.removeItem(k)); } catch (e) {}
+        location.href = '/login.html?reason=idle';
+    };
+    let last = 0; try { last = +localStorage.getItem('pace_last_active') || 0; } catch (e) {}
+    if (last && Date.now() - last > IDLE_MS) { idleOut(); return; }
+    touch();
+    let _t = 0; ['click', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => { const n = Date.now(); if (n - _t > 60000) { _t = n; touch(); } }, { passive: true }));
+    setInterval(() => { let l = 0; try { l = +localStorage.getItem('pace_last_active') || 0; } catch (e) {} if (l && Date.now() - l > IDLE_MS) idleOut(); }, 5 * 60 * 1000);
+    const due = () => { let at = 0; try { at = +localStorage.getItem('pr_refresh_at') || 0; } catch (e) {} return Date.now() - at > 40 * 60 * 1000; };
+    if (due()) _jwtRefresh();
+    setInterval(() => { if (_isJwtSession() && due()) _jwtRefresh(); }, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && _isJwtSession() && due()) _jwtRefresh(); });
+})();
+
+async function api(method, path, body, explicitKey) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
-    // Auto-inject admin_key for write operations to result/height endpoints
-    if (body && (method === 'POST' || method === 'PUT' || method === 'DELETE') &&
-        (path.includes('/api/results') || path.includes('/api/height-attempts'))) {
+    if (explicitKey) opts.headers['x-admin-key'] = String(explicitKey);
+    // Auto-inject admin_key for all write operations (body + x-admin-key header —
+    // header covers body-less POSTs like /api/wa-correct/:id)
+    {
         const storedKey = localStorage.getItem('pace_admin_key') || '';
-        if (storedKey && !body.admin_key) body.admin_key = storedKey;
+        if (storedKey) {
+            opts.headers['x-admin-key'] = storedKey;      // GET 도 헤더로 — 키를 URL 에 싣지 않는다 (서버가 헤더를 쿼리 대신 받는다)
+            if (method !== 'GET' && body && !body.admin_key) body.admin_key = storedKey;
+        }
     }
     if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(path, opts);
+    let res = await fetch(path, opts);
+    // JWT 세션(관리자 로그인): 액세스 토큰(1시간) 만료로 401/403 이면 한 번 갱신 후 재시도
+    //   (403 은 정당한 권한 거부일 수도 있으므로, 마지막 갱신이 5분 넘었을 때만 시도 → 토큰 회전 남발 방지)
+    if ((res.status === 401 || res.status === 403) && _isJwtSession() && !path.startsWith('/api/auth/')) {
+        let at = 0; try { at = +localStorage.getItem('pr_refresh_at') || 0; } catch (e) {}
+        if (Date.now() - at > 5 * 60 * 1000 && await _jwtRefresh()) res = await fetch(path, opts);
+    }
     // SW가 오프라인 큐잉한 응답 감지
     if (res.headers.get('X-Offline') === 'true') {
         const data = await res.json();
@@ -460,6 +594,7 @@ async function api(method, path, body) {
     }
     const data = await res.json();
     if (!res.ok) throw { status: res.status, ...data };
+    if (method !== 'GET' && _offlineState.pendingCount > 0) _triggerOfflineSync();   // 방금 서버에 닿았다 → 밀린 입력도 보낸다
     return data;
 }
 
@@ -479,7 +614,13 @@ function invalidateCache(key) { if (key) delete _apiCache[key]; else Object.keys
 const API = {
     // Competitions (cached — called by renderCompSelector, renderCompInfoBar, requireCompetition)
     getCompetitions: () => cachedApi('competitions', () => api('GET', '/api/competitions')),
-    invalidateCompetitions: () => invalidateCache('competitions'),
+    // 숨긴 대회·숨긴 연맹 대회까지 전부 (관리자 페이지, 이름 조회용)
+    getAllCompetitionsAdmin: () => cachedApi('competitions_all', () => api('GET', '/api/competitions?include_hidden=1')),
+    invalidateCompetitions: () => { invalidateCache('competitions'); invalidateCache('competitions_all'); },
+    // 홈 노출 빠른 전환 (auto | pinned | hidden) — 관리자 키
+    setCompetitionHomeVisibility: (id, home_visibility, key) => api('PUT', `/api/competitions/${id}/home-visibility`, { admin_key: key, home_visibility }),
+    // 연맹 숨김 토글 — 관리자 키
+    setFederationHidden: (id, hidden, key) => api('PUT', `/api/federations/${id}/hidden`, { admin_key: key, hidden: hidden ? 1 : 0 }),
     getCompetition: id => api('GET', `/api/competitions/${id}`),
     createCompetition: (data, adminKey) => api('POST', '/api/competitions', { ...data, admin_key: adminKey }),
     updateCompetition: (id, data, adminKey) => api('PUT', `/api/competitions/${id}`, { ...data, admin_key: adminKey }),
@@ -494,8 +635,8 @@ const API = {
     deleteFederation: (id, adminKey) => api('DELETE', `/api/federations/${id}`, { admin_key: adminKey }),
     reorderFederations: (order, adminKey) => api('PUT', '/api/federations/reorder', { order, admin_key: adminKey }),
 
-    // Home Popups
-    getHomePopups: () => api('GET', '/api/home-popups'),
+    // Home Popups (compId 지정 시 그 대회 전용, 'common' 이면 공통만, 없으면 전체)
+    getHomePopups: (compId) => api('GET', '/api/home-popups' + (compId != null && compId !== '' ? '?competition_id=' + encodeURIComponent(compId) : '')),
     createHomePopup: (data, adminKey) => api('POST', '/api/home-popups', { ...data, admin_key: adminKey }),
     updateHomePopup: (id, data, adminKey) => api('PUT', `/api/home-popups/${id}`, { ...data, admin_key: adminKey }),
     deleteHomePopup: (id, adminKey) => api('DELETE', `/api/home-popups/${id}`, { admin_key: adminKey }),
@@ -510,14 +651,16 @@ const API = {
     getResults: hid => api('GET', `/api/results?heat_id=${hid}`),
     upsertResult: body => api('POST', '/api/results/upsert', body),
     // Phase C: 신기록 lookup (NR/DR/CR 정확 매칭, approved만)
-    lookupEventRecords: (eventName, gender, divisionCode, seriesId) => {
+    lookupEventRecords: (eventName, gender, divisionCode, seriesId, eventId) => {
         const p = new URLSearchParams({ event_name: eventName, gender });
         if (divisionCode) p.set('division_code', divisionCode);
         if (seriesId) p.set('series_id', String(seriesId));
+        if (eventId) p.set('event_id', String(eventId));   // 종목별 WR/AR/GR (국제대회)
         return api('GET', '/api/event-records/lookup?' + p.toString());
     },
+    setManualRank: (entryId, rank) => api('PATCH', `/api/event-entries/${entryId}/manual-rank`, { manual_rank: rank }),
     deleteResult: body => api('DELETE', '/api/results', body),
-    resetSubEvent: eventId => api('POST', '/api/results/reset-sub-event', { event_id: eventId }),
+    resetSubEvent: (eventId, includeJoint) => api('POST', '/api/results/reset-sub-event', { event_id: eventId, include_joint: !!includeJoint }),
     updateEntryStatus: (id, st) => api('PATCH', `/api/event-entries/${id}/status`, { status: st }),
     checkinBarcode: (bc, eid) => api('POST', '/api/callroom/checkin', { barcode: bc, event_id: eid }),
     cancelCheckin: (id) => api('PATCH', `/api/event-entries/${id}/status`, { status: 'registered' }),
@@ -547,14 +690,14 @@ const API = {
     deleteTimetableDay: (compId, day, adminKey) => api('DELETE', `/api/timetable/${compId}/${day}`, { admin_key: adminKey }),
     // Admin CRUD
     changeKeys: (admin_key, new_operation_key, new_admin_key) => api('POST', '/api/admin/change-keys', { admin_key, new_operation_key, new_admin_key }),
-    getAthletes: (adminKey, compId) => api('GET', `/api/admin/athletes?key=${encodeURIComponent(adminKey)}${compId ? '&competition_id=' + compId : ''}`),
+    getAthletes: (adminKey, compId) => api('GET', `/api/admin/athletes?${compId ? 'competition_id=' + compId : ''}`, null, adminKey),
     updateAthlete: (id, data, adminKey) => api('PUT', `/api/admin/athletes/${id}`, { ...data, admin_key: adminKey }),
     deleteAthlete: (id, adminKey) => api('DELETE', `/api/admin/athletes/${id}`, { admin_key: adminKey }),
-    getAthleteEvents: (id, adminKey) => api('GET', `/api/admin/athletes/${id}/events?key=${encodeURIComponent(adminKey)}`),
+    getAthleteEvents: (id, adminKey) => api('GET', `/api/admin/athletes/${id}/events`, null, adminKey),
     addAthleteEvent: (athleteId, eventId, adminKey) => api('POST', `/api/admin/athletes/${athleteId}/events`, { admin_key: adminKey, event_id: eventId }),
     removeAthleteEvent: (athleteId, entryId, adminKey) => api('DELETE', `/api/admin/athletes/${athleteId}/events/${entryId}`, { admin_key: adminKey }),
     createAthlete: (data, adminKey) => api('POST', '/api/admin/athletes', { ...data, admin_key: adminKey }),
-    adminGetEvents: (adminKey, compId) => api('GET', `/api/admin/events?key=${encodeURIComponent(adminKey)}${compId ? '&competition_id=' + compId : ''}`),
+    adminGetEvents: (adminKey, compId) => api('GET', `/api/admin/events?${compId ? 'competition_id=' + compId : ''}`, null, adminKey),
     adminUpdateEvent: (id, data, adminKey) => api('PUT', `/api/admin/events/${id}`, { ...data, admin_key: adminKey }),
     adminDeleteEvent: (id, adminKey) => api('DELETE', `/api/admin/events/${id}`, { admin_key: adminKey }),
     adminCreateEvent: (data, adminKey) => api('POST', '/api/admin/events', { ...data, admin_key: adminKey }),
@@ -564,18 +707,21 @@ const API = {
     completeCallroom: (eid, judge_name, heat_id) => api('POST', `/api/events/${eid}/callroom-complete`, { judge_name, heat_id }),
     createSemifinal: (eid, group_count, selections) => api('POST', `/api/events/${eid}/create-semifinal`, { group_count, selections }),
     deleteEvent: (eid, admin_key) => api('DELETE', `/api/events/${eid}`, { admin_key }),
+    listUndo: (competitionId, key) => api('GET', `/api/undo?competition_id=${competitionId}`, null, key),
+    restoreUndo: (id) => api('POST', `/api/undo/${id}/restore`, {}),
     getFullResults: eid => api('GET', `/api/events/${eid}/full-results`),
     // Video URL
     getEventVideoUrl: eid => api('GET', `/api/events/${eid}/video-url`),
     setEventVideoUrl: (eid, url, key) => api('PUT', `/api/events/${eid}/video-url`, { video_url: url, key }),
-    getPublicEvents: (compId) => compId ? api('GET', `/api/public/events?competition_id=${compId}`) : api('GET', '/api/public/events'),
+    getPublicEvents: (compId) => api('GET', `/api/public/events?competition_id=${compId || getCompetitionId()}`),
     getCallroomStatus: () => api('GET', '/api/public/callroom-status'),
     getCompetitionInfo: (compId) => compId ? api('GET', `/api/competition-info?competition_id=${compId}`) : api('GET', '/api/competition-info'),
     // Multi-key management
-    getOperationKeys: (adminKey) => api('GET', `/api/admin/operation-keys?key=${encodeURIComponent(adminKey)}`),
+    getOperationKeys: (adminKey) => api('GET', `/api/admin/operation-keys`, null, adminKey),
     createOperationKey: (adminKey, judge_name, key_value, can_manage) => api('POST', '/api/admin/operation-keys', { admin_key: adminKey, judge_name, key_value, can_manage: can_manage || false }),
     deleteOperationKey: (id, adminKey) => api('DELETE', `/api/admin/operation-keys/${id}`, { admin_key: adminKey }),
     toggleOperationKey: (id, active, adminKey) => api('PATCH', `/api/admin/operation-keys/${id}`, { admin_key: adminKey, active }),
+    reissueOperationKey: (id, adminKey) => api('POST', `/api/admin/operation-keys/${id}/reissue`, { admin_key: adminKey }),
     toggleOperationKeyManage: (id, can_manage, adminKey) => api('PATCH', `/api/admin/operation-keys/${id}`, { admin_key: adminKey, can_manage }),
     // Heat management
     addHeat: (eventId, adminKey) => api('POST', `/api/admin/events/${eventId}/add-heat`, { admin_key: adminKey }),
@@ -654,7 +800,7 @@ function connectSSE() {
             // Fire reconnect callbacks (refresh stale data)
             _sseReconnectCallbacks.forEach(cb => { try { cb(); } catch(e) {} });
         });
-        ['result_update','entry_status','event_completed','callroom_complete','height_update','combined_update','event_reverted','operation_log','event_status_changed','wind_update','pacing_update'].forEach(evt => {
+        ['result_update','entry_status','event_completed','callroom_complete','height_update','combined_update','event_reverted','operation_log','event_status_changed','wind_update','pacing_update','record_break_detected','record_break_resolved','record_break_wind_skipped','competition_status','heat_update'].forEach(evt => {
             _sseConnection.addEventListener(evt, (e) => { notifySSE(evt, JSON.parse(e.data)); });
         });
         _sseConnection.onerror = () => {
@@ -705,7 +851,8 @@ onSSE('record_break_detected', (data) => {
 
 function _showRecordBreakToast(data) {
     const labels = { national: 'NR · 한국기록', division: 'DR · 부별기록', competition: 'CR · 대회기록' };
-    const detected = (data.detected || []).map(d => labels[d.record_type] || d.record_type).join(' · ');
+    const tieLabels = { national: 'KT · 한국타이기록', division: 'DT · 부별타이기록', competition: 'CT · 대회타이기록' };
+    const detected = (data.detected || []).map(d => (d.is_tie ? tieLabels : labels)[d.record_type] || d.record_type).join(' · ');
     const valStr = (typeof data.value === 'number')
         ? (data.value < 60 ? data.value.toFixed(2) : (() => {
             const m = Math.floor(data.value / 60), s = (data.value - m * 60).toFixed(2);
@@ -717,7 +864,7 @@ function _showRecordBreakToast(data) {
     overlay.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10000;max-width:420px;background:linear-gradient(135deg,#fff6dd,#fffbea);border:2px solid #d4a017;border-radius:12px;padding:14px 18px;box-shadow:0 8px 32px rgba(212,160,23,.35);cursor:pointer;animation:slideInRight .35s ease;font-family:var(--font-base,system-ui);';
     overlay.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:24px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg></span>
+            <span style="font-size:24px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3h2"/><path d="M17 6h3a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-2"/><path d="M10 17h4v4h-4z"/><path d="M8 21h8"/></svg></span>
             <strong style="color:#7a4f00;font-size:14px;letter-spacing:.3px;">${detected} 갱신 감지</strong>
         </div>
         <div style="color:#5a3a00;font-size:13px;line-height:1.45;">
@@ -783,51 +930,196 @@ async function renderCompInfoBar(containerId) {
         }
         const role = localStorage.getItem('pace_role') || 'viewer';
         // Shared button style for comp-info-bar action buttons
-        const _cibBtnBase = 'white-space:nowrap;font-size:13px;font-weight:700;padding:7px 16px;border:none;border-radius:8px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;';
+        // (간격은 .comp-info-actions 의 gap 이 담당 — 버튼 자체엔 margin 없음)
+        const _cibBtnBase = 'white-space:nowrap;font-size:12px;font-weight:600;padding:3px 13px;border:none;border-radius:999px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.2px;';
         const docBtnHtml = role !== 'viewer'
-            ? `<button id="comp-doc-btn" style="${_cibBtnBase}margin-left:auto;background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
+            ? `<button id="comp-doc-btn" style="${_cibBtnBase}background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
             : '';
         // 대시보드 모드에서는 히어로 카드가 시간표 진입점을 대체하므로 상단 버튼 숨김
         const isDashboardMode = document.body.classList.contains('dashboard-mode');
-        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}${role === 'viewer' ? 'margin-left:auto;' : 'margin-left:6px;'}background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
-        el.innerHTML = `<span class="comp-info-name">${info.name || ''}</span>
-            ${fedBadge}
-            <span class="comp-info-sep">|</span>
-            <span class="comp-info-dates">${info.dates || ''}</span>
-            <span class="comp-info-sep">|</span>
-            <span class="comp-info-venue">${info.venue || ''}</span>
-            ${docBtnHtml}${ttBtnHtml}`;
+        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
+        // 정보(줄1) 와 액션 버튼(줄2) 을 분리 → 대회명이 길어도 버튼이 항상 한 줄에 나란히
+        el.innerHTML = `<div class="comp-info-main">
+                <span class="comp-info-name">${info.name || ''}</span>
+                <span id="comp-switch-slot"></span>
+                ${fedBadge}
+                <span class="comp-info-sep">|</span>
+                <span class="comp-info-dates">${info.dates || ''}</span>
+                <span class="comp-info-sep">|</span>
+                <span class="comp-info-venue">${info.venue || ''}</span>
+            </div>
+            <div class="comp-info-actions" id="comp-info-actions">${docBtnHtml}${ttBtnHtml}</div>`;
+        // 대회 바꾸기 — 볼 만한 대회가 둘 이상이면 어느 페이지에서나 같은 자리(대회명 옆)에서 (규칙집 §13)
+        try {
+            const comps = await _relevantCompetitions();
+            const slot = document.getElementById('comp-switch-slot');
+            if (slot && comps.length > 1) {
+                const cur = getCompetitionId(), page = _currentPageName();
+                const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                slot.innerHTML = `<select aria-label="대회 바꾸기" title="다른 대회 보기" style="margin-left:6px;padding:2px 22px 2px 8px;border:1px solid var(--gray);border-radius:999px;background:#fff;font-size:11px;font-weight:700;color:#555;cursor:pointer;max-width:200px;">
+                    ${comps.map(c => `<option value="${c.id}" ${String(c.id) === String(cur) ? 'selected' : ''}>${c.status === 'active' ? '● ' : '○ '}${esc(c.name)}</option>`).join('')}</select>`;
+                slot.querySelector('select').addEventListener('change', function () { setCompetitionId(this.value); location.href = '/' + page + '.html?comp=' + this.value; });
+            }
+        } catch (e) {}
     } catch (e) {}
+}
+
+// ============================================================
+// Competition Notice Popup (대회별 공지 팝업)
+//   - 대시보드 대회명 줄의 [공지] 버튼 + 진입 시 자동 노출("오늘 하루 보지 않음" 지원)
+//   - 홈(index.html)의 공통 팝업과 분리: 여기선 competition_id 가 그 대회인 팝업만 다룸
+// ============================================================
+let _cnPopupQueue = [];
+let _cnPopupIndex = 0;
+let _cnAllPopups = [];
+
+function _cnApplicable(p, ignoreDismiss) {
+    const role = localStorage.getItem('pace_role') || 'viewer';
+    const isAdmin = role === 'admin' || role === 'operation';
+    const today = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
+    if (!p.is_active) return false;
+    if (p.popup_type === 'admin' && !isAdmin) return false;
+    if (p.show_from && today < p.show_from) return false;
+    if (p.show_until && today > p.show_until) return false;
+    if (!ignoreDismiss) {
+        const d = localStorage.getItem(`popup_dismiss_${p.id}`);
+        if (d && (now - parseInt(d)) < 24 * 60 * 60 * 1000) return false;
+    }
+    return true;
+}
+
+function _cnBuildHtml(p, idx, total) {
+    const hasNext = idx < total - 1;
+    const counter = total > 1 ? `<span style="font-size:10px;color:var(--text-muted);margin-left:8px;">(${idx + 1}/${total})</span>` : '';
+    let html = `<div style="text-align:center;margin-bottom:16px;">
+        <div style="font-family:'Audiowide',sans-serif;font-size:18px;letter-spacing:2px;">${p.title || '공지'} ${counter}</div>
+        ${p.subtitle ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${(p.subtitle || '').replace(/\n/g, '<br>')}</div>` : ''}
+    </div>`;
+    // 소개 문구: 줄바꿈(\n)을 <br>로 변환 (기존 홈 팝업 버그와 동일하게 여기서도 처리)
+    if (p.intro_text) html += `<div style="font-size:13px;line-height:1.6;margin-bottom:16px;">${(p.intro_text || '').replace(/\n/g, '<br>')}</div>`;
+    (p.sections || []).filter(s => s.is_active !== 0).forEach(s => {
+        html += `<details style="margin-bottom:8px;border:1px solid var(--gray);border-radius:8px;overflow:hidden;">
+            <summary style="padding:10px 14px;font-weight:600;font-size:13px;cursor:pointer;background:#f9fafb;">${s.title || ''}</summary>
+            <div style="padding:10px 14px;font-size:12px;line-height:1.7;">${(s.content || '').replace(/\n/g, '<br>')}</div>
+            ${s.link_btn_text ? `<div style="padding:0 14px 10px;"><a href="${s.link_btn_url || '#'}" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="font-size:12px;color:var(--primary);font-weight:600;text-decoration:none;">${s.link_btn_text} →</a></div>` : ''}
+        </details>`;
+    });
+    if (p.bottom_btn_active && p.bottom_btn_text) {
+        html += `<div style="margin-top:16px;padding:16px;background:#f0f9ff;border-radius:8px;text-align:center;border:1px solid #c0c0c0;">
+            <div style="font-size:14px;font-weight:600;">${p.bottom_btn_text}</div>
+            ${p.bottom_btn_desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${p.bottom_btn_desc}</div>` : ''}
+            ${p.bottom_btn_link ? `<div style="margin-top:8px;"><a href="${p.bottom_btn_link}" onclick="event.stopPropagation();_cnClose();" style="display:inline-block;padding:8px 20px;background:var(--green);color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;">이동 →</a></div>` : ''}
+        </div>`;
+    }
+    html += `<div style="display:flex;gap:8px;justify-content:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--gray);">
+        <button class="btn btn-ghost" onclick="dismissCompNoticeToday(${p.id})" style="font-size:12px;">오늘 하루 보지 않음</button>
+        ${hasNext
+            ? `<button class="btn btn-primary" onclick="showCompNoticeNext()" style="font-size:12px;">다음 →</button>`
+            : `<button class="btn btn-primary" onclick="_cnClose()" style="font-size:12px;">닫기</button>`}
+    </div>`;
+    return html;
+}
+
+function _cnClose() {
+    const ov = document.getElementById('comp-notice-overlay');
+    if (ov) ov.remove();
+}
+
+function _cnRender(p) {
+    _cnClose();
+    const overlay = document.createElement('div');
+    overlay.id = 'comp-notice-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.onclick = (e) => { if (e.target === overlay) _cnClose(); };
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+    box.innerHTML = _cnBuildHtml(p, _cnPopupIndex, _cnPopupQueue.length);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+}
+
+function showCompNoticeNext() {
+    _cnPopupIndex++;
+    if (_cnPopupIndex < _cnPopupQueue.length) _cnRender(_cnPopupQueue[_cnPopupIndex]);
+    else _cnClose();
+}
+
+function dismissCompNoticeToday(id) {
+    localStorage.setItem(`popup_dismiss_${id}`, Date.now().toString());
+    showCompNoticeNext();
+}
+
+// 버튼 클릭 → dismiss 무시하고 이 대회의 모든(노출가능) 공지 표시
+function openCompNoticePopup() {
+    const list = _cnAllPopups.filter(p => _cnApplicable(p, true));
+    if (!list.length) { if (typeof toast === 'function') toast('등록된 공지가 없습니다.'); return; }
+    _cnPopupQueue = list; _cnPopupIndex = 0; _cnRender(list[0]);
+}
+
+function renderCompNoticeButton() {
+    const bar = document.getElementById('comp-info-actions') || document.getElementById('comp-info-bar');
+    if (!bar) return;
+    let btn = document.getElementById('comp-notice-btn');
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'comp-notice-btn';
+        btn.style.cssText = 'white-space:nowrap;font-size:12px;font-weight:600;padding:3px 13px;border:none;border-radius:999px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.2px;background:linear-gradient(135deg,#e0574f,#b23b34);box-shadow:0 2px 6px rgba(178,59,52,0.3);';
+        btn.textContent = '공지';
+        btn.onmouseover = () => { btn.style.transform = 'translateY(-1px)'; };
+        btn.onmouseout = () => { btn.style.transform = ''; };
+        btn.onclick = openCompNoticePopup;
+        bar.appendChild(btn);
+    }
+}
+
+// 대시보드 등에서 호출: 이 대회의 공지 로드 → 버튼 표시 + 진입 자동노출
+async function initCompNoticePopup() {
+    try {
+        const compId = getCompetitionId();
+        if (!compId) return;
+        const popups = await API.getHomePopups(compId);
+        if (!Array.isArray(popups)) return;
+        _cnAllPopups = popups;
+        // 노출 가능한 공지가 하나라도 있으면 버튼 표시
+        if (popups.some(p => _cnApplicable(p, true))) renderCompNoticeButton();
+        // 자동 노출 (오늘 하루 보지 않음 반영)
+        const auto = popups.filter(p => _cnApplicable(p, false));
+        if (auto.length) { _cnPopupQueue = auto; _cnPopupIndex = 0; _cnRender(auto[0]); }
+    } catch (e) { /* noop */ }
 }
 
 // ============================================================
 // Competition Selector (date-aware: active now or starting within 14 days)
 // ============================================================
+// 지금 볼 만한 대회 목록: 진행 중 + 14일 안에 시작하는 예정 + 보고 있는 대회 (사이드바 선택·대회 정보줄의 '대회 바꾸기' 공용)
+let _relevantCompsCache = null;
+async function _relevantCompetitions() {
+    if (_relevantCompsCache) return _relevantCompsCache;
+    const all = await API.getCompetitions();
+    // 숨긴 대회를 직접 링크로 보고 있으면 목록에는 없으므로 이름 표시용으로만 보충
+    const currentId = getCompetitionId();
+    if (currentId && !all.some(c => String(c.id) === String(currentId))) {
+        try { const cur = await API.getCompetition(currentId); if (cur && cur.id) all.push(cur); } catch (e) {}
+    }
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() + 14);
+    _relevantCompsCache = all.filter(c => {
+        if (String(c.id) === currentId) return true;
+        if (c.status === 'active') return true;
+        if (c.status === 'upcoming' && c.start_date) return new Date(c.start_date + 'T00:00:00') <= cutoff;
+        return false;
+    });
+    return _relevantCompsCache;
+}
+function _currentPageName() { const m = location.pathname.match(/\/([a-z0-9_-]+)\.html$/i); return m ? m[1] : 'dashboard'; }
+
 async function renderCompSelector(currentPage) {
     const container = document.getElementById('comp-selector');
     if (!container) return;
     try {
-        const all = await API.getCompetitions();
-        // Date-based filter: show competitions that are currently relevant
-        // 1. status 'active' (running right now)
-        // 2. status 'upcoming' AND start_date within 14 days from today
-        // 3. Always include the currently selected competition
-        const today = new Date(); today.setHours(0,0,0,0);
-        const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() + 14);
         const currentId = getCompetitionId();
-
-        const comps = all.filter(c => {
-            // Always show the competition the user is currently viewing
-            if (String(c.id) === currentId) return true;
-            // Active competitions (in progress)
-            if (c.status === 'active') return true;
-            // Upcoming within 14 days
-            if (c.status === 'upcoming' && c.start_date) {
-                const start = new Date(c.start_date + 'T00:00:00');
-                return start <= cutoff;
-            }
-            return false;
-        });
+        const comps = await _relevantCompetitions();
         if (comps.length <= 1) {
             container.style.display = 'none';
             return;
@@ -944,17 +1236,34 @@ function renderPageNav(currentPage) {
         btnGroup.appendChild(backBtn);
         btnGroup.appendChild(fwdBtn);
         btnGroup.appendChild(refreshBtn);
+        // 단축키 도움말 (?) — 페이지가 registerShortcuts 로 표를 등록한 경우에만 (키보드가 있는 화면)
+        if (_shortcutSections.length || currentPage === 'record' || currentPage === 'callroom') {
+            const helpBtn = document.createElement('button');
+            helpBtn.className = 'header-refresh-btn'; helpBtn.id = 'header-shortcut-btn'; helpBtn.title = '단축키 (?)'; helpBtn.setAttribute('aria-label', '단축키 도움말');
+            helpBtn.textContent = '?'; helpBtn.style.fontWeight = '800';
+            helpBtn.onclick = function () { showShortcutHelp(); };
+            btnGroup.appendChild(helpBtn);
+        }
+        // ── i18n 언어 스위처를 헤더 버튼그룹에 끼워넣음 (PaceI18n 로드된 페이지만) ──
+        try { if (window.PaceI18n) window.PaceI18n.mountSwitcher(btnGroup); } catch (e) {}
         btnGroup.appendChild(loginBtn);
         headerInner.appendChild(btnGroup);
 
-        // ── Mobile hamburger button ──
+        // ── 폰 머리글 오른쪽: 새로고침 + 메뉴 (선 아이콘, 같은 크기·같은 테두리) ──
         if (!document.getElementById('hamburger-btn')) {
+            const acts = document.createElement('div'); acts.className = 'header-phone-actions';
+            const refresh = document.createElement('button');
+            refresh.className = 'hamburger-btn refresh-btn'; refresh.id = 'refresh-btn'; refresh.type = 'button';
+            refresh.setAttribute('aria-label', '새로고침'); refresh.title = '새로고침';
+            refresh.innerHTML = (window.PaceIcons ? PaceIcons.svg('refresh', { size: 20 }) : '↻');
+            refresh.onclick = function () { refreshPage(refresh); };
             const hamburger = document.createElement('button');
-            hamburger.className = 'hamburger-btn';
-            hamburger.id = 'hamburger-btn';
-            hamburger.innerHTML = '&#9776;';
+            hamburger.className = 'hamburger-btn'; hamburger.id = 'hamburger-btn'; hamburger.type = 'button';
+            hamburger.setAttribute('aria-label', '메뉴');
+            hamburger.innerHTML = (window.PaceIcons ? PaceIcons.svg('menu', { size: 22 }) : '&#9776;');
             hamburger.onclick = function() { openMobileMenu(); };
-            headerInner.appendChild(hamburger);
+            acts.appendChild(refresh); acts.appendChild(hamburger);
+            headerInner.appendChild(acts);
         }
     }
 
@@ -964,6 +1273,21 @@ function renderPageNav(currentPage) {
         headerTitle.style.cursor = 'pointer';
         headerTitle.addEventListener('click', () => { window.location.href = '/'; });
         headerTitle.dataset.linked = '1';
+    }
+
+    // ── 행사(event) 모드: 화이트라벨 전용 최소 네비 ──
+    //   일반 운영 메뉴(노출관리/모니터/소집실/관리)는 숨겨 전문 운영과 분리 유지.
+    //   viewer = 대시보드만, 운영진(operation/admin) = 대시보드 + 기록입력.
+    if (window.__EVENT_MODE) {
+        const slug = encodeURIComponent(window.__EVENT_SLUG || '');
+        const evPages = [{ key: 'dashboard', label: '대시보드', href: '/e/' + slug }];
+        if (role === 'admin' || role === 'operation') {
+            evPages.push({ key: 'record', label: '기록입력', href: '/e/' + slug + '/record' });
+        }
+        nav.innerHTML = evPages.map(p =>
+            `<a href="${p.href}" class="nav-link ${p.key === currentPage ? 'active' : ''}" data-page-key="${p.key}">${p.label}</a>`
+        ).join('');
+        return;
     }
 
     let pages;
@@ -989,8 +1313,18 @@ function renderPageNav(currentPage) {
         ];
     }
     nav.innerHTML = pages.map(p =>
-        `<a href="${p.href}" class="nav-link ${p.key === currentPage ? 'active' : ''}" data-page-key="${p.key}">${p.label}</a>`
+        `<a href="${p.href}" class="nav-link ${p.key === currentPage ? 'active' : ''}" data-page-key="${p.key}" data-i18n="nav.${p.key}">${p.label}</a>`
     ).join('');
+
+    // ── i18n: 동적 메뉴 번역 + 헤더 로그인 버튼 앞에 언어 스위처 마운트 ──
+    // (index 처럼 로그인 버튼이 정적 HTML 이라 header 빌드 블록을 건너뛰는 페이지 대응)
+    try {
+        if (window.PaceI18n) {
+            window.PaceI18n.apply();
+            var _lb = document.getElementById('header-login-btn');
+            if (_lb) window.PaceI18n.mountSwitcherBefore(_lb);
+        }
+    } catch (e) {}
 
     // ── Build mobile menu (once) ──
     _buildMobileMenu(pages, currentPage, role);
@@ -1124,11 +1458,14 @@ function _buildMobileMenu(pages, currentPage, role) {
     menu.innerHTML = `
         <div class="mobile-menu-header">
             <span class="mm-brand">PACE RISE <span class="mm-colon">:</span> <span class="mm-scope">Node</span></span>
-            <button class="mobile-menu-close" onclick="closeMobileMenu()">&times;</button>
+            ${prCloseBtn('closeMobileMenu()', { cls: 'mobile-menu-close' })}
         </div>
         <div class="mobile-menu-nav">${navLinks}</div>
         <div class="mobile-menu-footer">
             <div class="mobile-menu-divider"></div>
+            <button class="mm-action" onclick="mobileMenuPush()">
+                <span>${PaceIcons.svg('bell', { style: 'margin-right:6px' })}경기 알림 받기</span>
+            </button>
             <button class="mm-action" style="${loginColor}" onclick="mobileMenuLogin()">
                 <span>${loginLabel}</span>
             </button>
@@ -1139,6 +1476,48 @@ function _buildMobileMenu(pages, currentPage, role) {
     document.body.appendChild(menu);
 }
 
+// 창(시트)이 떠 있는 동안 뒤 페이지가 스크롤되지 않게 — iOS 는 overflow:hidden 만으로는 스크롤이 새어 나가서 body 를 고정한다
+//   창이 겹칠 때(명단 → 종목 창 → 이미지)를 위해 횟수를 센다 — 먼저 닫히는 창이 잠금을 풀어 버리지 않게 (2026-09-26)
+let _bodyLockY = null, _bodyLockN = 0;
+function lockBodyScroll() {
+    _bodyLockN++;
+    if (_bodyLockY != null) return;
+    _bodyLockY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.top = `-${_bodyLockY}px`; document.body.style.position = 'fixed'; document.body.style.left = '0'; document.body.style.right = '0'; document.body.style.width = '100%'; document.body.style.overflow = 'hidden';
+}
+function unlockBodyScroll(force) {
+    _bodyLockN = force ? 0 : Math.max(0, _bodyLockN - 1);
+    if (_bodyLockN > 0 || _bodyLockY == null) return;
+    const y = _bodyLockY; _bodyLockY = null;
+    document.body.style.position = ''; document.body.style.top = ''; document.body.style.left = ''; document.body.style.right = ''; document.body.style.width = ''; document.body.style.overflow = '';
+    window.scrollTo(0, y);
+}
+
+// remove() 로 닫는 창(시간표 등): 열 때 잠그고, DOM 에서 빠지면 자동으로 푼다
+function lockBodyScrollUntilRemoved(el) {
+    lockBodyScroll();
+    const mo = new MutationObserver(() => { if (!el.isConnected) { mo.disconnect(); unlockBodyScroll(); } });
+    mo.observe(document.body, { childList: true, subtree: false });
+}
+// 새로고침: 대시보드처럼 데이터 로더(loadData)가 있으면 페이지를 다시 그리지 않고 데이터만 다시 받고, 없으면 페이지 새로고침
+async function refreshPage(btn) {
+    if (btn) btn.classList.add('spinning');
+    try {
+        if (typeof window.loadData === 'function') await window.loadData();
+        else { location.reload(); return; }
+    } catch (e) { location.reload(); return; }
+    // 글자 토스트 없이 버튼 안에서만: 돌던 아이콘이 잠깐 ✓ 로 바뀌었다가 돌아온다
+    setTimeout(() => {
+        if (!btn) return;
+        btn.classList.remove('spinning');
+        const orig = btn.innerHTML;
+        btn.innerHTML = (window.PaceIcons ? PaceIcons.svg('check', { size: 20 }) : '✓'); btn.classList.add('done');
+        setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('done'); }, 800);
+    }, 500);
+}
+// 닫기(X) 버튼 HTML — 모든 창이 같은 모양을 쓴다 (styles.css .pr-close)
+function prCloseBtn(onclick, extra) { return `<button type="button" class="pr-close${extra && extra.dark ? ' pr-close-dark' : ''}${extra && extra.cls ? ' ' + extra.cls : ''}" aria-label="닫기" onclick="${onclick}"${extra && extra.style ? ` style="${extra.style}"` : ''}><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button>`; }
+window.prCloseBtn = prCloseBtn;
 function openMobileMenu() {
     const overlay = document.getElementById('mobile-menu-overlay');
     const menu = document.getElementById('mobile-menu');
@@ -1153,6 +1532,16 @@ function closeMobileMenu() {
     if (menu) menu.classList.remove('open');
     if (overlay) { overlay.classList.remove('open'); setTimeout(() => { overlay.style.display = ''; }, 250); }
     document.body.style.overflow = '';
+}
+
+function mobileMenuPush() {
+    closeMobileMenu();
+    if (window.PaceRisePush && window.PaceRisePush.enable) {
+        window.PaceRisePush.enable();
+    } else {
+        // 푸시 모듈이 없는 페이지 → 대시보드(홈)로 이동해서 알림 받기
+        location.href = '/dashboard.html';
+    }
 }
 
 async function mobileMenuLogin() {
@@ -1261,7 +1650,7 @@ function openVideoModal(url, title) {
     if (title) {
         const hdr = document.createElement('div');
         hdr.style.cssText = 'padding:10px 16px;background:#111;color:#fff;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center;';
-        hdr.innerHTML = `<span>${title}</span><button onclick="this.closest('#video-modal-overlay').remove()" style="background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;line-height:1;">&times;</button>`;
+        hdr.innerHTML = `<span>${title}</span>${prCloseBtn("this.closest('#video-modal-overlay').remove()")}`;
         modal.appendChild(hdr);
     }
     const body = document.createElement('div');
@@ -1301,7 +1690,7 @@ function openVideoModal(url, title) {
                 <span class="pr-footer-sep">|</span>
                 <a href="https://instagram.com/pace.rise" target="_blank" rel="noopener">@pace.rise</a>
                 <span class="pr-footer-sep">|</span>
-                <a href="mailto:pacerise.run@gmail.com">pacerise.run@gmail.com</a>
+                <a href="mailto:info@pace-rise.com">info@pace-rise.com</a>
             </div>
             <div class="pr-footer-privacy">
                 <details>
@@ -1313,7 +1702,7 @@ function openVideoModal(url, title) {
                         <p><strong>4. 보관 기간</strong><br>수집된 정보는 <strong>영구 보관</strong>됩니다.<br>대회 기록의 역사적 가치 및 통계 활용을 위해 별도 삭제하지 않습니다.<br>삭제를 원하시는 경우 아래 연락처로 요청해 주세요.</p>
                         <p><strong>5. 제3자 제공</strong><br>대회 주최·주관 단체 및 소속 연맹에 대회 운영 목적으로 제공됩니다.<br>경기 결과는 누구나 열람 가능한 형태로 공개될 수 있습니다.</p>
                         <p><strong>6. 정보주체의 권리</strong><br>본인 정보의 열람, 정정, 삭제를 요청할 수 있습니다.<br>대회 주최측 또는 PACE RISE에 연락하여 요청해 주세요.</p>
-                        <p><strong>7. 문의</strong><br>PACE RISE: pacerise.run@gmail.com<br>각 대회별 주최·주관 단체 연락처는 해당 대회 정보를 참고해 주세요.</p>
+                        <p><strong>7. 문의</strong><br>PACE RISE: info@pace-rise.com<br>각 대회별 주최·주관 단체 연락처는 해당 대회 정보를 참고해 주세요.</p>
                     </div>
                 </details>
             </div>
@@ -1356,7 +1745,13 @@ function showToast(message, type = 'success', duration = 2000) {
     const toast = document.createElement('div');
     const bg = type === 'success' ? 'var(--green)' : type === 'error' ? '#8b1a2a' : '#b79f58';
     toast.style.cssText = `background:${bg};color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.15);opacity:0;transform:translateY(10px);transition:all 0.25s ease;pointer-events:auto;`;
-    toast.textContent = message;
+    // 코드에서 박아 넣는 아이콘(<svg …>) 으로 시작하는 메시지만 HTML 로 렌더 — 그 외(서버 에러 문자열 등)는 텍스트
+    if (/^\s*<svg\b/i.test(String(message))) {
+        toast.innerHTML = message;
+        toast.style.display = 'flex'; toast.style.alignItems = 'center'; toast.style.gap = '6px';
+    } else {
+        toast.textContent = message;
+    }
     container.appendChild(toast);
     requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
     setTimeout(() => {
@@ -1365,31 +1760,121 @@ function showToast(message, type = 'success', duration = 2000) {
     }, duration);
 }
 
+// 단축키 도움말 (2026-09 Phase 6, 규칙집 §11): 페이지가 registerShortcuts('제목', [['Enter','저장'], …]) 로 표를 등록하면
+//   입력칸 밖에서 ? 를 누를 때 표가 뜬다(Esc 로 닫힘). 공통 키: ? 도움말 · Esc 창 닫기/취소
+const _shortcutSections = [];
+function registerShortcuts(title, rows) { _shortcutSections.push({ title, rows: rows || [] }); }
+function showShortcutHelp() {
+    if (document.getElementById('shortcut-help')) return;
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const kbd = k => k.split('/').map(x => `<kbd style="display:inline-block;min-width:22px;padding:2px 6px;border:1px solid #c9c4b8;border-bottom-width:2px;border-radius:5px;background:#faf8f3;font-family:ui-monospace,monospace;font-size:11px;color:#333;text-align:center;">${esc(x.trim())}</kbd>`).join('<span style="color:#999;margin:0 3px;">/</span>');
+    const sections = [{ title: '공통', rows: [['?', '이 도움말'], ['Esc', '창 닫기 · 입력 취소']] }, ..._shortcutSections];
+    const wrap = document.createElement('div');
+    wrap.id = 'shortcut-help';
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(20,18,15,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
+    wrap.innerHTML = `<div role="dialog" aria-modal="true" aria-label="단축키" style="background:#fff;color:#1f1d1a;border-radius:12px;max-width:560px;width:100%;max-height:85vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.3);padding:18px 20px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><h3 style="margin:0;font-size:16px;">단축키</h3><span style="font-size:12px;color:#777;">입력칸 밖에서 <kbd>?</kbd></span><button type="button" class="btn btn-sm btn-ghost" style="margin-left:auto;" onclick="document.getElementById('shortcut-help').remove()">닫기</button></div>
+        ${sections.map(sec => `<div style="margin:10px 0 4px;font-size:12px;font-weight:800;color:#8a7640;letter-spacing:.04em;">${esc(sec.title)}</div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">${sec.rows.map(([k, d]) => `<tr><td style="padding:5px 8px 5px 0;white-space:nowrap;width:1%;">${kbd(k)}</td><td style="padding:5px 0;color:#333;">${esc(d)}</td></tr>`).join('')}</table>`).join('')}
+    </div>`;
+    wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+    document.body.appendChild(wrap);
+}
+document.addEventListener('keydown', e => {
+    const t = e.target;
+    const inField = t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
+    if (e.key === '?' && !inField && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); showShortcutHelp(); }
+    else if (e.key === 'Escape') { const h = document.getElementById('shortcut-help'); if (h) { h.remove(); e.stopPropagation(); } }
+}, true);
+
+// 세 상태 화면 (2026-09 Phase 6, 규칙집 §10): 비어 있음 / 불러오는 중 / 실패 — 문구 + 다음 행동 버튼을 같은 모양으로.
+//   uiStateHtml('empty'|'loading'|'error', { title, hint, action: { label, onclick } }) → HTML
+//   uiState(el, kind, opts) → el.innerHTML 에 넣는다
+function uiStateHtml(kind, opts = {}) {
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const defaults = { empty: { title: '아직 없습니다' }, loading: { title: '불러오는 중…' }, error: { title: '불러오지 못했습니다', hint: '네트워크나 서버 상태를 확인하고 다시 시도하세요.', action: { label: '다시 시도', onclick: 'location.reload()' } } };
+    const o = { ...(defaults[kind] || {}), ...opts };
+    const action = o.action ? `<div class="ui-state-action"><button type="button" class="btn btn-sm ${kind === 'error' ? 'btn-primary' : 'btn-outline'}" onclick="${esc(o.action.onclick || '')}">${esc(o.action.label)}</button></div>` : '';
+    return `<div class="ui-state is-${kind}" role="${kind === 'error' ? 'alert' : 'status'}">${kind === 'loading' ? '<div class="ui-state-spinner" aria-hidden="true"></div>' : ''}<div class="ui-state-title">${esc(o.title)}</div>${o.hint ? `<div class="ui-state-hint">${esc(o.hint)}</div>` : ''}${action}</div>`;
+}
+function uiState(el, kind, opts) { if (typeof el === 'string') el = document.getElementById(el); if (el) el.innerHTML = uiStateHtml(kind, opts); }
+
+// 되돌리기 토스트 (2026-09 Phase 6): 삭제·초기화 응답의 undo_id 로 10초 동안 '되돌리기' 버튼을 보여준다.
+//   서버(lib/undo.js)가 지운 행을 24시간 보관하므로, 토스트가 사라진 뒤에도 관리자 → 대회 설정 → 최근 되돌리기에서 할 수 있다.
+//   onRestored(result) 는 되살린 뒤 화면을 다시 읽는 콜백.
+function showUndoToast(message, undoId, onRestored, duration = 10000) {
+    if (!undoId) { showToast(message, 'success'); return; }
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+        document.body.appendChild(container);
+    }
+    const t = document.createElement('div');
+    t.style.cssText = 'background:#262324;color:#fff;padding:10px 12px 10px 16px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.25);display:flex;align-items:center;gap:12px;pointer-events:auto;opacity:0;transform:translateY(10px);transition:all .25s ease;';
+    const msg = document.createElement('span'); msg.textContent = message;
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.textContent = '되돌리기';
+    btn.style.cssText = 'background:#b79f58;color:#1f1d1a;border:0;border-radius:6px;padding:6px 12px;font-weight:800;font-size:12px;cursor:pointer;min-height:32px;';
+    t.appendChild(msg); t.appendChild(btn); container.appendChild(t);
+    requestAnimationFrame(() => { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; });
+    const close = () => { t.style.opacity = '0'; t.style.transform = 'translateY(10px)'; setTimeout(() => t.remove(), 300); };
+    const timer = setTimeout(close, duration);
+    btn.onclick = async () => {
+        clearTimeout(timer); btn.disabled = true; btn.textContent = '되돌리는 중…';
+        try {
+            const r = await api('POST', `/api/undo/${undoId}/restore`, {});
+            close(); showToast('되돌렸습니다', 'success');
+            if (typeof onRestored === 'function') { try { await onRestored(r); } catch (e) {} }
+        } catch (e) { btn.disabled = false; btn.textContent = '되돌리기'; showToast('되돌리기 실패: ' + (e.error || e.message || e), 'error', 4000); }
+    };
+}
+
 // ============================================================
 // BACK BUTTON & SWIPE MODAL CLOSE
 // Android hardware back / iPhone swipe-back should close modal, not exit app
 // ============================================================
 (function() {
     let _modalStack = [];
+    // 🐛 BUGFIX (2026-06): popstate 와 popModalState 가 서로를 트리거하면서
+    // history.back() 이 한 번 더 호출되어 페이지 자체를 떠나거나
+    // iframe navigation 과 충돌해 about:blank 새 창이 뜨는 문제 발생.
+    // → "프로그램에 의해 호출된 history.back()" 인지 "사용자의 뒤로가기" 인지 구분 필요.
+    let _suppressNextPopstate = false;
 
     // Push a modal state: call this when opening any overlay/modal
     window.pushModalState = function(closeCallback) {
         _modalStack.push(closeCallback);
-        history.pushState({ modal: true, depth: _modalStack.length }, '');
+        try { history.pushState({ modal: true, depth: _modalStack.length }, ''); } catch(e) {}
     };
-    // Pop a modal state: call this when closing a modal normally
+    // Pop a modal state: call this when closing a modal normally (X 버튼 등)
     window.popModalState = function() {
         if (_modalStack.length > 0) {
             _modalStack.pop();
-            // Silently go back to remove the history entry we pushed
-            try { history.back(); } catch(e) {}
+            // 우리가 history.back() 을 호출하면 popstate 가 자동 발생.
+            // 그 popstate 는 "닫기 콜백을 다시 호출하지 말아야" 한다 (이미 닫는 중).
+            _suppressNextPopstate = true;
+            try { history.back(); } catch(e) { _suppressNextPopstate = false; }
         }
     };
 
     window.addEventListener('popstate', function(e) {
+        // 우리가 직접 history.back() 호출해서 발생한 popstate 는 무시
+        // (modal 은 이미 닫혀 있음, 또 닫으면 한 단계 더 뒤로 가서 페이지 이탈)
+        if (_suppressNextPopstate) {
+            _suppressNextPopstate = false;
+            return;
+        }
+        // 사용자가 직접 뒤로가기 (Android 하드웨어 / iOS 스와이프) — modal 닫기
         if (_modalStack.length > 0) {
             const closeFn = _modalStack.pop();
-            if (closeFn) closeFn();
+            if (closeFn) {
+                // closeFn 안에서 또 popModalState 가 호출될 수 있으므로 가드
+                _suppressNextPopstate = true;  // 이번 pop 으로 인한 추가 history.back 차단
+                try { closeFn(); } catch(err) { console.error('[modal] close error:', err); }
+                _suppressNextPopstate = false;
+            }
         }
     });
 })();
@@ -1397,20 +1882,10 @@ function showToast(message, type = 'success', duration = 2000) {
 // ============================================================
 // PWA Service Worker Registration + Offline Sync
 // ============================================================
-const _EXPECTED_SW_VERSION = 'pacerise-v46';
+// (2026-09) 여기 있던 '_EXPECTED_SW_VERSION 과 다른 캐시 삭제' 블록은 상수가 v131 에 멈춰 있어, 페이지를 열 때마다
+//   현재 캐시(sw.js 의 CACHE_NAME)를 지우고 있었다 → 오프라인에서 새로고침하면 화면이 뜨지 않는다. 오래된 캐시 정리는 sw.js 의 activate 가 한다.
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        // Force update: clear old caches that don't match current version
-        if (window.caches) {
-            caches.keys().then(keys => {
-                keys.forEach(k => {
-                    if (k.startsWith('pacerise-') && k !== _EXPECTED_SW_VERSION) {
-                        caches.delete(k);
-                        console.log('[SW] Deleted stale cache:', k);
-                    }
-                });
-            });
-        }
         navigator.serviceWorker.register('/sw.js').then(reg => {
             // Force SW update check
             reg.update().catch(() => {});
@@ -1429,16 +1904,22 @@ if ('serviceWorker' in navigator) {
             // Listen for offline queue messages from SW
             navigator.serviceWorker.addEventListener('message', (event) => {
                 if (event.data.type === 'OFFLINE_QUEUED') {
-                    showToast('Offline: queued for sync', 'warning', 3000);
+                    showToast('연결이 끊겨 기기에 임시 저장했습니다 — 연결되면 자동 전송됩니다', 'warning', 3500);
+                    _checkPendingQueue();
                     _updateOfflineBadge();
                 }
                 if (event.data.type === 'SYNC_COMPLETE') {
                     const { synced, failed, conflicts } = event.data;
                     if (synced > 0) showToast(`동기화 완료: ${synced}건`, 'success', 3000);
-                    if (failed > 0) showToast(`${failed}건 동기화 실패`, 'error', 3000);
+                    if (failed > 0 && !(event.data.dropped || []).length) showToast(`${failed}건은 아직 전송되지 않았습니다 — 자동으로 다시 시도합니다`, 'warning', 4000);
+                    _checkPendingQueue();
                     // ─── 운영진 기록과 충돌해서 거부된 항목 알림 ───
                     if (Array.isArray(conflicts) && conflicts.length > 0) {
                         _showConflictModal(conflicts);
+                    }
+                    // ─── 서버가 거부해 반영되지 않은 오프라인 입력 (종료된 대회, 소집 미완료 등) — 조용히 사라지지 않게 목록으로 보여준다
+                    if (Array.isArray(event.data.dropped) && event.data.dropped.length > 0) {
+                        _showDroppedModal(event.data.dropped);
                     }
                     _updateOfflineBadge();
                     // 페이지에 있는 record/results 데이터 갱신 트리거 (있을 때만)
@@ -1456,7 +1937,7 @@ let _isOffline = !navigator.onLine;
 window.addEventListener('online', () => {
     _isOffline = false;
     _updateOfflineBadge();
-    showToast('Online', 'success', 2000);
+    showToast('연결되었습니다', 'success', 2000);
     // Trigger manual sync via SW
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
         const mc = new MessageChannel();
@@ -1470,7 +1951,7 @@ window.addEventListener('online', () => {
 window.addEventListener('offline', () => {
     _isOffline = true;
     _updateOfflineBadge();
-    showToast('Offline mode', 'warning', 3000);
+    showToast('연결이 끊겼습니다 — 기록 입력은 기기에 임시 저장됩니다', 'warning', 3500);
 });
 
 function _updateOfflineBadge() {
@@ -1528,9 +2009,11 @@ async function openTimetable(compId) {
         overlay.id = 'timetable-overlay';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);';
         overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+        lockBodyScrollUntilRemoved(overlay);   // 시간표가 떠 있는 동안 뒤 화면 스크롤 잠금 (X·배경 탭·날짜 이동 어디서 remove 되든 풀린다)
 
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:#fff;border-radius:16px;max-width:720px;width:94%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,0.3);overflow:hidden;';
+        // 높이를 고정(88vh)해서 경기 수가 적든 많든 머리글·닫기·날짜 이동이 늘 같은 자리에 있게 한다 (내용은 안에서 스크롤)
+        modal.style.cssText = 'background:#fff;border-radius:16px;max-width:720px;width:94%;height:88vh;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,0.3);overflow:hidden;';
 
         // Count total items
         let totalItems = 0;
@@ -1546,13 +2029,28 @@ async function openTimetable(compId) {
                     <h3 style="font-size:18px;font-weight:800;margin:0;color:#4a4a4a;">경기 시간표</h3>
                     <p style="font-size:11px;color:#8a8a8a;margin:3px 0 0;font-weight:500;">Competition Timetable · 총 ${totalItems}개 경기</p>
                 </div>
-                <button onclick="document.getElementById('timetable-overlay').remove()" style="background:rgba(255,255,255,0.8);border:1px solid #c0c0c0;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;transition:all 0.15s;font-weight:300;" onmouseover="this.style.background='#fff';this.style.borderColor='#8a8a8a'" onmouseout="this.style.background='rgba(255,255,255,0.8)';this.style.borderColor='#c0c0c0'">&times;</button>
+                ${prCloseBtn("document.getElementById('timetable-overlay').remove()")}
             </div>
-            <div id="tt-day-tabs" style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap;"></div>
+            <div id="tt-day-tabs" style="display:flex;gap:2px;margin-top:10px;align-items:center;justify-content:center;position:relative;"></div>
         </div>`;
 
-        const contentHtml = `<div id="tt-content" style="overflow-y:auto;padding:16px 22px 22px;flex:1;"></div>`;
-        modal.innerHTML = headerHtml + contentHtml;
+        const contentHtml = `<div id="tt-content" style="overflow-y:auto;overscroll-behavior:contain;padding:16px 22px 22px;flex:1;"></div>`;
+        // 시간표 행 반응형 레이아웃 — 데스크톱 1줄 정렬 / 모바일(≤600px) 2줄 스택(종목명 잘림 방지)
+        const styleHtml = `<style>
+            .tt-row{display:grid;align-items:center;gap:4px 8px;padding:9px 12px;
+                grid-template-columns:44px 170px minmax(0,1fr) auto;
+                grid-template-areas:"time front name tail";}
+            .tt-time{grid-area:time;font-weight:700;color:#333;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+            .tt-front{grid-area:front;display:flex;flex-wrap:wrap;gap:3px;align-items:center;overflow:hidden;}
+            .tt-name{grid-area:name;font-weight:600;font-size:13px;color:#222;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+            .tt-tail{grid-area:tail;display:flex;gap:3px;align-items:center;justify-self:end;flex-shrink:0;}
+            @media (max-width:600px){
+                .tt-row{grid-template-columns:44px minmax(0,1fr) auto;row-gap:5px;
+                    grid-template-areas:"time name tail" "gut front front";}
+                .tt-name{font-size:14px;}
+            }
+        </style>`;
+        modal.innerHTML = styleHtml + headerHtml + contentHtml;
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
 
@@ -1623,14 +2121,45 @@ async function openTimetable(compId) {
         const _nowForHighlight = new Date();
         const _currentHHMM = String(_nowForHighlight.getHours()).padStart(2,'0') + ':' + String(_nowForHighlight.getMinutes()).padStart(2,'0');
 
-        function renderDayTabs() {
-            tabContainer.innerHTML = dayKeys.map(d => {
-                const dd = data.days[d];
-                const cnt = (dd.track || []).length + (dd.field || []).length;
-                const isActive = d === activeDay;
-                return `<button onclick="window._ttShowDay(${d})" style="padding:6px 16px;border-radius:20px;border:1.5px solid ${isActive ? '#6b6b6b' : '#c0c0c0'};background:${isActive ? '#6b6b6b' : '#fff'};color:${isActive ? '#fff' : '#6b6b6b'};font-size:12px;font-weight:${isActive ? '700' : '500'};cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:4px;">${d}일차 <span style="font-size:10px;opacity:.7;">(${cnt})</span></button>`;
-            }).join('');
+        // 날짜 탭 라벨: 관람객은 '2일차'보다 '9/24(목)'가 빠르다 — 날짜를 앞에, 일차는 작게 (날짜를 모르면 일차만)
+        function _ttDayLabel(d, dd, data) {
+            const first = [...(dd.track || []), ...(dd.field || [])].find(x => x.scheduled_date);
+            let date = first ? first.scheduled_date : null;
+            if (!date && data.start_date) { const b = new Date(data.start_date + 'T00:00:00'); b.setDate(b.getDate() + (Number(d) - 1)); date = isFinite(b) ? `${b.getFullYear()}-${String(b.getMonth() + 1).padStart(2, '0')}-${String(b.getDate()).padStart(2, '0')}` : null; }
+            if (!date) return `${d}일차`;
+            const dt = new Date(date + 'T00:00:00'); const wd = '일월화수목금토'[dt.getDay()];
+            return `${dt.getMonth() + 1}/${dt.getDate()}(${wd})<span style="font-size:10px;opacity:.7;margin-left:3px;">${d}일차</span>`;
         }
+        // 날짜 이동: ◀ [9/24(목) · 2일차 (13) ▾] ▶ — 날짜를 누르면 전체 날짜 목록이 아래로 펼쳐진다 (일주일짜리 대회도 한 줄)
+        function renderDayTabs() {
+            // PC(폭 720px 이상): 날짜 탭을 한 줄로 늘어놓고 눌러 이동. 모바일: 화살표 + 날짜 드롭다운 (사용자 결정 2026-09-22)
+            if (window.innerWidth >= 720) {
+                tabContainer.style.justifyContent = 'flex-start'; tabContainer.style.flexWrap = 'wrap'; tabContainer.style.gap = '6px';
+                tabContainer.innerHTML = dayKeys.map(d => {
+                    const dd = data.days[d] || {};
+                    const cnt = (dd.track || []).length + (dd.field || []).length;
+                    const isActive = d === activeDay;
+                    return `<button type="button" onclick="window._ttShowDay(${d})" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${isActive ? '#6b6b6b' : '#d0d0d0'};background:${isActive ? '#6b6b6b' : '#fff'};color:${isActive ? '#fff' : '#555'};font-size:12px;font-weight:${isActive ? '700' : '500'};cursor:pointer;display:inline-flex;align-items:center;gap:4px;">${_ttDayLabel(d, dd, data)} <span style="font-size:10px;opacity:.7;">(${cnt})</span></button>`;
+                }).join('');
+                return;
+            }
+            tabContainer.style.justifyContent = 'center'; tabContainer.style.flexWrap = 'nowrap'; tabContainer.style.gap = '2px';
+            const idx = dayKeys.indexOf(activeDay);
+            const cntOf = d => { const dd = data.days[d] || {}; return (dd.track || []).length + (dd.field || []).length; };
+            // 애플식으로 담백하게: 테두리 없는 쉐브론(터치 영역 40px, 글리프 20px), 가운데는 글자만(날짜 굵게 · 일차 연하게), 아래로 작은 목록
+            const chev = dir => `<svg class="ui-icon" width="20" height="20" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${dir < 0 ? 'M30 12L18 24l12 12' : 'M18 12l12 12-12 12'}"/></svg>`;   // 공통 아이콘 체계(48 viewBox, 선 ≈1.2px)
+            const btn = (dis, dir) => `<button type="button" ${dis ? 'disabled' : ''} onclick="window._ttShowDay(${dis ? activeDay : dayKeys[idx + dir]})" aria-label="${dir < 0 ? '이전 날' : '다음 날'}" style="width:40px;height:40px;border-radius:50%;border:0;background:transparent;color:${dis ? '#d0d0d0' : '#333'};cursor:${dis ? 'default' : 'pointer'};display:inline-flex;align-items:center;justify-content:center;">${chev(dir)}</button>`;
+            tabContainer.innerHTML = `${btn(idx <= 0, -1)}
+                <button type="button" id="tt-day-current" onclick="window._ttToggleDayList()" aria-haspopup="listbox" aria-expanded="false" style="height:40px;padding:0 10px;border:0;background:transparent;color:#1f1d1a;font-size:16px;font-weight:700;letter-spacing:-.01em;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">${_ttDayLabel(activeDay, data.days[activeDay] || {}, data)}<span style="font-size:12px;font-weight:500;color:#888;">${cntOf(activeDay)}경기</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+                ${btn(idx >= dayKeys.length - 1, 1)}
+                <div id="tt-day-list" role="listbox" hidden style="position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:5;background:#fff;border:1px solid #e5e5e5;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.14);min-width:230px;padding:4px;">
+                    ${dayKeys.map(d => `<button type="button" role="option" aria-selected="${d === activeDay}" onclick="window._ttShowDay(${d})" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:0;border-radius:8px;background:${d === activeDay ? '#f5f0e0' : 'transparent'};color:#333;font-size:13px;font-weight:${d === activeDay ? 700 : 500};cursor:pointer;text-align:left;">${_ttDayLabel(d, data.days[d] || {}, data)}<span style="font-size:11px;color:#888;">${cntOf(d)}경기</span></button>`).join('')}
+                </div>`;
+        }
+        window._ttToggleDayList = function () {
+            const list = document.getElementById('tt-day-list'), cur = document.getElementById('tt-day-current');
+            if (!list) return; list.hidden = !list.hidden; if (cur) cur.setAttribute('aria-expanded', String(!list.hidden));
+        };
 
         function renderDay(dayNum) {
             activeDay = dayNum;
@@ -1664,6 +2193,53 @@ async function openTimetable(compId) {
                 });
             }
 
+            // ── 타임테이블 뱃지 헬퍼: 부별/성별/라운드를 앞쪽 뱃지로 분해 ──
+            const _ttBadge = (txt, fg, bg) => txt ? `<span style="display:inline-block;font-size:10px;font-weight:700;color:${fg};background:${bg};padding:1px 6px;border-radius:8px;white-space:nowrap;line-height:1.6;">${txt}</span>` : '';
+            // 부별/성별 분리: "실업(남)"→{div:'실업',gender:'남'}, "남고"→{고등부,남}, "남자 일반부"→{일반부,남}
+            const _ttSplitCategory = (cat) => {
+                const s = (cat || '').trim();
+                if (!s) return { div: '', gender: '' };
+                const G = t => /^남/.test(t) ? '남' : /^여/.test(t) ? '여' : '혼';
+                let m = s.match(/^(.*?)\s*\(\s*(남자?|여자?|혼성?)\s*\)\s*$/);   // "실업(남)" / "선수권(남)"
+                if (m) return { div: m[1].trim(), gender: G(m[2]) };
+                m = s.match(/^([남여])\s*([초중고대일])$/);                       // "남고" "여중"
+                if (m) { const mp = { '초':'초등부','중':'중등부','고':'고등부','대':'대학부','일':'일반부' }; return { div: mp[m[2]], gender: m[1] }; }
+                m = s.match(/(남자|여자|혼성|남|여|혼)/);                          // "남자 일반부"
+                if (m) { const div = s.replace(/(남자|여자|혼성|남|여|혼)/g, '').replace(/\s+/g, ' ').trim(); return { div: div || s, gender: G(m[1]) }; }
+                return { div: s, gender: '' };
+            };
+            // 라운드 정규화(앞쪽 뱃지): 5-1+3→예선, 결승(+조), 7/10/5종은 예선결승 없음 → 그대로 앞에
+            const _ttRoundFront = (round) => {
+                const r = (round || '').trim();
+                const cb = r.match(/(10종|7종|5종)/);
+                if (cb) return { label: cb[1], fg: '#4a148c', bg: '#f3e5f5' };
+                if (/종경기|기록경기/.test(r)) return { label: '기록경기', fg: '#4a148c', bg: '#f3e5f5' };
+                if (/준결승|^준/.test(r)) return { label: '준결승', fg: '#e65100', bg: '#fff3e0' };      // '준결승'이 /결승/ 에도 걸리므로 먼저
+                if (/결승/.test(r)) { const j = r.match(/(\d+)\s*조/); return { label: j ? `결승 ${j[1]}조` : '결승', fg: '#b71c1c', bg: '#ffebee' }; }
+                if (/예선/.test(r) || /^\d+-\d+\+\d+$/.test(r)) return { label: '예선', fg: '#1565c0', bg: '#e3f2fd' };
+                return { label: r, fg: '#555', bg: '#f0f0f0' };
+            };
+            // 부(division)→색: admin.html divBadgeColor 와 동일 팔레트(앱 전체 색 일관)
+            const _ttDivColor = (d) => {
+                const exact = {
+                    '중등부':{fg:'#1565c0',bg:'#e3f2fd'}, '고등부':{fg:'#e65100',bg:'#fff3e0'},
+                    '대학부':{fg:'#6a1b9a',bg:'#f3e5f5'}, '일반부':{fg:'#2e7d32',bg:'#e8f5e9'},
+                    '국제':{fg:'#00695c',bg:'#e0f7fa'},
+                };
+                const raw = (d||'').trim();
+                if (exact[raw]) return exact[raw];
+                const s = raw.replace(/\s/g,'');
+                if (!s) return { fg:'#555', bg:'#eef0f3' };
+                if (/초/.test(s))             return { fg:'#00695c', bg:'#e0f2f1' };
+                if (/중/.test(s))             return { fg:'#1565c0', bg:'#e3f2fd' };
+                if (/고/.test(s))             return { fg:'#e65100', bg:'#fff3e0' };
+                if (/대학|대$/.test(s))       return { fg:'#4a148c', bg:'#f3e5f5' };
+                if (/일반|실업/.test(s))      return { fg:'#1b5e20', bg:'#e8f5e9' };
+                if (/선수권/.test(s))         return { fg:'#5d4037', bg:'#efebe9' };
+                if (/마스터|master/i.test(s)) return { fg:'#37474f', bg:'#eceff1' };
+                if (/국제|inter/i.test(s))    return { fg:'#006064', bg:'#e0f7fa' };
+                return { fg:'#6a1b9a', bg:'#f3e5f5' };
+            };
             let html = '';
             const sections = [
                 { key: 'track', label: '트랙 경기', badgeCls: 'ico ico-track', badgeText: 'TRACK', color: '#6b6b6b', bg: '#f0f0f0', border: '#c0c0c0' },
@@ -1685,39 +2261,44 @@ async function openTimetable(compId) {
                 items.forEach((item, idx) => {
                     const borderBottom = idx < items.length - 1 ? 'border-bottom:1px solid #f5f5f5;' : '';
                     const isHighlighted = closestEventId === ('tt-item-' + item.id);
-                    const highlightStyle = isHighlighted ? 'background:#f5f0e0 !important;border-left:3px solid #b79f58;' : '';
-                    const nowBadge = isHighlighted ? '<span style="background:#b79f58;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;">NOW</span>' : '';
+                    const nowBadge = isHighlighted ? '<span style="background:#b79f58;color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;">NOW</span>' : '';
                     // Call Room badge: show only within callroom_time -10min ~ +5min (KST)
                     const crBadge = isCallRoomWindow(item.callroom_time, item.scheduled_date) ? '<span class="ico-callroom" style="margin-left:4px;">Call Room</span>' : '';
                     const hasLink = !!item.event_id;
-                    const defaultBg = idx % 2 && !isHighlighted ? '#fafbfc' : '';
-                    const hoverBg = hasLink ? '#f8f4ea' : '';
-                    const restoreBg = isHighlighted ? '#f5f0e0' : defaultBg;
-                    // Build combined event name: "종별 종목명 라운드명" (e.g., "남고 100m 예선")
+                    // 앞쪽 3뱃지: [부별][성별][라운드/복합] — 부는 부별 색, 성별/라운드도 색 구분
+                    const _cat = _ttSplitCategory(item.category);
+                    const _dcol = _ttDivColor(_cat.div);
+                    const _gst = _cat.gender === '남' ? { fg: '#1565c0', bg: '#e3f2fd' } : _cat.gender === '여' ? { fg: '#c2185b', bg: '#fde7ef' } : { fg: '#6a1b9a', bg: '#f3e5f5' };
+                    const _rd = _ttRoundFront(item.round);
+                    const _frontBadges = _ttBadge(_cat.div, _dcol.fg, _dcol.bg) + _ttBadge(_cat.gender, _gst.fg, _gst.bg) + _ttBadge(_rd.label, _rd.fg, _rd.bg);
+                    // 성별 → 행 배경 은은한 틴트(남=남색 / 여=버건디 / 혼=보라) + 좌측 보더. NOW 하이라이트가 최우선.
+                    const _grow = _cat.gender === '남' ? { bg:'#f3f6fc', bar:'#1a2a5e' } : _cat.gender === '여' ? { bg:'#fbf4f6', bar:'#8a1f3d' } : { bg:'#f8f5fb', bar:'#6a1b9a' };
+                    const rowBg = isHighlighted ? '#f5f0e0' : _grow.bg;
+                    const rowBar = isHighlighted ? '#b79f58' : _grow.bar;
+                    const hoverBg = hasLink ? '#f1ead7' : rowBg;
+                    // 뒤쪽 가변 뱃지: 상태(명단/LIVE/결과보기) + 괄호(A,B) + 결과링크
                     const _roundFull = (item.round || '').trim();
                     const _bracketMatch = _roundFull.match(/\(([^)]+)\)/);
-                    const _roundBase = _roundFull.replace(/\([^)]*\)/g, '').trim();
-                    const _eventFullName = `${item.category || ''} ${item.event_name}${_roundBase ? ' ' + _roundBase : ''}`.trim();
-                    // Right-aligned tags: result link badge + status badge + round badge + bracket info (color-coded)
-                    const _resultTag = item.result_url ? `<span style="color:#fff;font-size:9px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window.open('${(item.result_url||'').replace(/'/g,"\\'")}','_blank')">결과</span>` : '';
+                    const _resultTag = item.result_url ? `<span style="color:#fff;font-size:11px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window.open('${(item.result_url||'').replace(/'/g,"\\'")}','_blank')">결과</span>` : '';
                     const _bracketTag = _bracketMatch ? `<span style="color:#8a7640;font-size:10px;font-weight:600;background:#f8f4ea;padding:1px 6px;border-radius:8px;white-space:nowrap;">(${_bracketMatch[1]})</span>` : '';
-                    const _roundColorMap = { '예선': { color: '#1565c0', bg: '#e3f2fd' }, '준결승': { color: '#e65100', bg: '#fff3e0' }, '결승': { color: '#b71c1c', bg: '#ffebee' }, '기록경기': { color: '#4a148c', bg: '#f3e5f5' } };
-                    const _rbc = _roundColorMap[_roundBase] || { color: '#555', bg: '#f0f0f0' };
-                    const _roundBadge = _roundBase ? `<span style="color:${_rbc.color};font-size:10px;font-weight:600;background:${_rbc.bg};padding:1px 6px;border-radius:8px;white-space:nowrap;">${_roundBase}</span>` : '';
                     // Status badge based on round_status (so operators can see at a glance whether records are entered)
                     let _statusTag = '';
                     if (item.event_id && item.round_status) {
                         if (item.round_status === 'completed') {
                             // 결과보기 — 진한 녹색, 클릭 시 결과 패널 또는 결과지 PDF
-                            _statusTag = `<span style="color:#fff;font-size:9px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="결과 보기">결과보기</span>`;
+                            _statusTag = `<span style="color:#fff;font-size:11px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="결과 보기">결과보기</span>`;
                         } else if (item.round_status === 'in_progress') {
                             // 진행중 — 골드 LIVE
-                            _statusTag = `<span style="color:#b79f58;font-size:9px;font-weight:700;background:#f8f4ea;border:1px solid #e8dfc0;padding:1px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="실시간 기록">LIVE</span>`;
-                        } else if (item.round_status === 'heats_generated') {
-                            // 명단 — 연한 회색
-                            _statusTag = `<span style="color:#666;font-size:9px;font-weight:600;background:#f5f5f5;border:1px dashed #bbb;padding:1px 6px;border-radius:8px;white-space:nowrap;">명단</span>`;
+                            _statusTag = `<span style="color:#b79f58;font-size:11px;font-weight:700;background:#f8f4ea;border:1px solid #e8dfc0;padding:1px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="실시간 기록">LIVE</span>`;
+                        } else if (item.round_status === 'heats_generated' || (item.round_status === 'created' && item.lane_count > 0)) {
+                            // 스타트 리스트 — 조·레인 확정 (초록 채움; 엔트리 점선과 구분). 국제대회는 상태가 created 여도 레인이 들어오면 스타트 리스트
+                            _statusTag = `<span style="color:#fff;font-size:11px;font-weight:700;background:#1b7f4d;border:1px solid #1b7f4d;padding:1px 7px;border-radius:8px;white-space:nowrap;">스타트 리스트</span>`;
                         }
                         // 'created' (대기) → no badge (시간표가 너무 복잡해지지 않도록)
+                        // 조편성 전이지만 출전 명단은 있는 종목(국제대회) → 엔트리 (클릭하면 출전 선수 창)
+                        if (!_statusTag && (item.round_status === 'created' || item.round_status === 'heats_generated') && item.entry_count > 0 && !(item.lane_count > 0)) {
+                            _statusTag = `<span style="color:#1a2a5e;font-size:11px;font-weight:600;background:#eef2f9;border:1px dashed #9fb0d8;padding:1px 6px;border-radius:8px;white-space:nowrap;">엔트리 ${item.entry_count}</span>`;
+                        }
                     }
                     // Click behavior: display mode → open result_url if exists, else do nothing
                     // Non-display mode → navigate to event
@@ -1729,10 +2310,11 @@ async function openTimetable(compId) {
                             clickAction = `onclick="window._ttGoToEvent(${item.event_id})"`;
                         }
                     }
-                    html += `<div id="tt-item-${item.id}" ${clickAction} style="display:flex;align-items:center;gap:8px;padding:9px 12px;${borderBottom}${defaultBg ? 'background:' + defaultBg + ';' : ''}${highlightStyle}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${restoreBg}'"` : ''}>
-                        <span style="font-weight:700;color:#333;font-size:13px;font-variant-numeric:tabular-nums;min-width:48px;white-space:nowrap;">${item.time}${nowBadge}</span>
-                        <span style="flex:1;font-weight:600;font-size:13px;color:#222;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_eventFullName}${crBadge}</span>
-                        <div style="display:flex;gap:3px;flex-shrink:0;align-items:center;">${_resultTag}${_statusTag}${_roundBadge}${_bracketTag}</div>
+                    html += `<div id="tt-item-${item.id}" class="tt-row" ${clickAction} style="background:${rowBg};border-left:3px solid ${rowBar};${borderBottom}${hasLink ? 'cursor:pointer;transition:background .1s;' : ''}" ${hasLink ? `onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${rowBg}'"` : ''}>
+                        <span class="tt-time">${item.time}</span>
+                        <div class="tt-front">${_frontBadges}</div>
+                        <span class="tt-name">${item.event_name}${item.spotlight === 'KOR' ? ' <span title="한국 선수 출전" style="display:inline-block;vertical-align:-3px;">' + PaceIcons.svg('flagKR', { size: 20 }) + '</span>' : item.spotlight ? ` <span style="font-size:10px;font-weight:700;">${item.spotlight}</span>` : ''}${crBadge}</span>
+                        <div class="tt-tail">${nowBadge}${_statusTag}${_bracketTag}${_resultTag}</div>
                     </div>`;
                 });
 
@@ -1766,32 +2348,49 @@ async function openTimetable(compId) {
         // - results page: openResultDetail
         // - other pages: navigate to dashboard with event hash
         window._ttOpenResult = function(eventId) {
-            const overlay = document.getElementById('timetable-overlay');
-            if (overlay) overlay.remove();
+            // 시간표는 닫지 않는다 — 결과 창만 위에 띄우고, 닫으면 스크롤 위치 그대로인 시간표로 돌아온다.
+            // 결과 오버레이(z-index 500)가 시간표 오버레이(100000) 아래 깔리지 않도록 위로 올린다.
+            const lift = () => {
+                const ro = document.getElementById('result-overlay') || document.querySelector('.result-detail-overlay');
+                if (ro) ro.style.zIndex = '100001';
+            };
             if (typeof openResult === 'function') {
-                openResult(eventId);
+                openResult(eventId); lift(); setTimeout(lift, 50);
             } else if (typeof openLiveResult === 'function') {
-                openLiveResult(eventId);
+                openLiveResult(eventId); lift(); setTimeout(lift, 50);
             } else if (typeof openResultDetail === 'function') {
-                openResultDetail(eventId);
+                openResultDetail(eventId); lift(); setTimeout(lift, 50);
             } else {
+                const overlay = document.getElementById('timetable-overlay');
+                if (overlay) overlay.remove();
                 window.location.href = '/dashboard.html?event=' + eventId;
             }
         };
         window._ttGoToEvent = function(eventId) {
-            // Close timetable overlay and navigate to event
+            // 대시보드/결과 페이지: 시간표는 그대로 두고 명단·결과 창만 위에 띄운다 (닫으면 시간표로 복귀, 스크롤 유지)
+            // 소집실/기록입력: 페이지 안에서 종목을 바꾸는 것이므로 시간표를 닫는다
+            const page = location.pathname;
+            const lift = () => {
+                const ro = document.getElementById('result-overlay') || document.querySelector('.result-detail-overlay');
+                if (ro) ro.style.zIndex = '100001';
+            };
+            if (page.includes('dashboard') && typeof openLiveResult === 'function') {
+                // 아직 경기 전이면 결과 대신 명단(레인) 또는 엔트리(출전 선수) 창 — 국제대회는 조편성 전이 길다
+                const ev = (typeof allEvents !== 'undefined' && Array.isArray(allEvents)) ? allEvents.find(e => e.id === eventId) : null;
+                const liftRoster = () => { const ro = document.getElementById('roster-modal-overlay'); if (ro) ro.style.zIndex = '100001'; };
+                if (ev && ev.round_status !== 'in_progress' && ev.round_status !== 'completed') {
+                    if (ev.heat_count > 0 && (ev.heat_entry_count == null || ev.heat_entry_count > 0) && typeof openRosterModal === 'function') { openRosterModal(eventId, ev.name); liftRoster(); setTimeout(liftRoster, 50); return; }
+                    if (ev.entry_count > 0 && typeof openEntriesModal === 'function') { openEntriesModal(eventId, ev.name); liftRoster(); setTimeout(liftRoster, 50); return; }
+                }
+                openLiveResult(eventId); lift(); setTimeout(lift, 50); return;
+            }
+            if (page.includes('results') && typeof openResultDetail === 'function') {
+                openResultDetail(eventId); lift(); setTimeout(lift, 50); return;
+            }
             const overlay = document.getElementById('timetable-overlay');
             if (overlay) overlay.remove();
-            // Determine current page and trigger event selection
-            const page = location.pathname;
-            if (page.includes('dashboard')) {
-                if (typeof openLiveResult === 'function') openLiveResult(eventId);
-            } else if (page.includes('callroom')) {
+            if (page.includes('callroom') || page.includes('record')) {
                 if (typeof selectEvent === 'function') selectEvent(eventId);
-            } else if (page.includes('record')) {
-                if (typeof selectEvent === 'function') selectEvent(eventId);
-            } else if (page.includes('results')) {
-                if (typeof openResultDetail === 'function') openResultDetail(eventId);
             } else {
                 // Fallback: go to dashboard with event
                 window.location.href = '/dashboard.html?event=' + eventId;
@@ -1854,7 +2453,7 @@ async function openDocumentList() {
         const sortedGenders = Object.keys(genderGroups).sort((a, b) => (genderOrder[a] ?? 9) - (genderOrder[b] ?? 9));
 
         const roundMap = { preliminary: '예선', semifinal: '준결승', final: '결승' };
-        const catMap = { track: '트랙', field_distance: '필드(투척/도약)', field_height: '필드(높이)', combined: '혼성경기', relay: '릴레이', road: '도로' };
+        const catMap = { track: '트랙', field_distance: '필드(투척/도약)', field_height: '필드(높이)', combined: '종합경기', relay: '릴레이', road: '도로' };
         const filterId = 'doc-filter-' + Date.now();
 
         // Build general docs (comprehensive, ad-card)
@@ -1939,7 +2538,7 @@ async function openDocumentList() {
                         <h3 style="font-size:18px;font-weight:800;margin:0;color:#6b5520;">기록지 / 문서</h3>
                         <p style="font-size:11px;color:#c4b070;margin:3px 0 0;font-weight:500;">총 ${totalDocs}개 문서</p>
                     </div>
-                    <button onclick="this.closest('#doc-list-overlay').remove()" style="background:rgba(255,255,255,0.8);border:1px solid #e8dfc0;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;transition:all 0.15s;font-weight:300;" onmouseover="this.style.background='#fff';this.style.borderColor='#c4b070'" onmouseout="this.style.background='rgba(255,255,255,0.8)';this.style.borderColor='#e8dfc0'">&times;</button>
+                    ${prCloseBtn("this.closest('#doc-list-overlay').remove()")}
                 </div>
             </div>
             <div style="padding:10px 22px;border-bottom:1px solid #f0f0f0;flex-shrink:0;background:#fafafa;">
@@ -2005,7 +2604,7 @@ async function openDocumentList() {
 async function docDownloadResultPNG(eventId, btn) {
     if (!eventId) return;
     const origText = btn.innerHTML;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 생성중...';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2v4a6 6 0 0 0 12 0V2"/><path d="M6 22v-4a6 6 0 0 1 12 0v4"/></svg> 생성중...';
     btn.disabled = true;
     try {
         const resp = await fetch('/api/documents/result-sheet/' + eventId + '/png');
@@ -2128,6 +2727,43 @@ window.prInitFontSize = function(targetSelector) {
 // ============================================================
 // OFFLINE SYNC CONFLICT MODAL — 운영진 기록과 충돌해서 거부된 항목 표시
 // ============================================================
+// 서버가 거부한 오프라인 입력 목록. 심판이 '무엇이' 반영되지 않았는지 알아야 다시 입력할 수 있다.
+function _showDroppedModal(dropped) {
+    const existing = document.getElementById('pr-dropped-modal'); if (existing) existing.remove();
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const valueOf = b => {
+        if (!b || typeof b !== 'object') return '-';
+        if (b.result_mark != null) return `높이 ${b.bar_height}m ${b.attempt_number || '?'}차 → ${b.result_mark || '(지움)'}`;
+        if (b.distance_meters != null) return `거리 ${b.distance_meters}m${b.attempt_number ? ` (${b.attempt_number}차)` : ''}`;
+        if (b.time_seconds != null) return `시간 ${b.time_seconds}초`;
+        if (b.status_code != null) return `상태 ${b.status_code || '(해제)'}`;
+        if (b.wind != null) return `풍속 ${b.wind}`;
+        if (b.status != null) return `소집 상태 ${b.status}`;
+        if (b.barcode != null) return `소집 출석 ${b.barcode}`;
+        if (b.memo != null) return `메모 "${b.memo}"`;
+        if (b.manual_rank !== undefined) return `수동 순위 ${b.manual_rank}`;
+        return '-';
+    };
+    const when = t => { try { return new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch (e) { return ''; } };
+    const rows = dropped.map(d => `<div style="border:1px solid #f0d4d4;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fff;">
+        <div style="font-weight:700;color:#333;font-size:14px;">${esc(valueOf(d.body))}</div>
+        <div style="font-size:12px;color:#888;margin-top:3px;">입력 ${esc(when(d.offline_input_at))}${d.body && d.body.event_entry_id ? ` · 선수 항목 #${esc(d.body.event_entry_id)}` : ''}</div>
+        <div style="font-size:12px;color:#c62828;margin-top:3px;">사유: ${esc(d.error || ('서버 응답 ' + d.status))}</div></div>`).join('');
+    const overlay = document.createElement('div');
+    overlay.id = 'pr-dropped-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML = `<div style="background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.3);">
+        <div style="padding:18px 20px;background:#fdecea;border-bottom:1px solid #f5c6c0;">
+            <div style="font-size:18px;font-weight:700;color:#b71c1c;">반영되지 않은 입력 ${dropped.length}건</div>
+            <div style="font-size:13px;color:#7f1d1d;margin-top:6px;line-height:1.5;">연결이 끊긴 동안 입력한 아래 값은 서버가 받아들이지 않아 <b>저장되지 않았습니다.</b> 화면의 값을 확인하고 필요하면 다시 입력하세요.</div>
+        </div>
+        <div style="padding:14px 20px;overflow-y:auto;flex:1;background:#fafafa;">${rows}</div>
+        <div style="padding:14px 20px;border-top:1px solid #eee;text-align:right;"><button type="button" id="pr-dropped-modal-close" style="padding:10px 24px;background:#2d9d78;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;">확인</button></div>
+    </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('pr-dropped-modal-close').addEventListener('click', () => overlay.remove());
+}
+
 function _showConflictModal(conflicts) {
     if (!Array.isArray(conflicts) || conflicts.length === 0) return;
 
@@ -2150,12 +2786,14 @@ function _showConflictModal(conflicts) {
         if (v.distance_meters != null) return `거리 ${v.distance_meters}m${v.attempt_number ? ` (${v.attempt_number}차)` : ''}`;
         if (v.time_seconds != null) return `시간 ${v.time_seconds}초`;
         if (v.status_code) return `상태 ${v.status_code}`;
+        if (v.wind !== undefined) return `풍속 ${v.wind == null || v.wind === '' ? '(없음)' : v.wind}`;
+        if (v.status) return `소집 상태 ${{ registered: '미확인', checked_in: '출석', no_show: '결석' }[v.status] || v.status}`;
         return JSON.stringify(v);
     };
 
     const items = conflicts.map((c, i) => `
         <div style="border:1px solid #e5e5e5; border-radius:8px; padding:12px; margin-bottom:10px; background:#fff;">
-            <div style="font-weight:600; color:#c62828; margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 항목 ${i+1}</div>
+            <div style="font-weight:600; color:#c62828; margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 항목 ${i+1}</div>
             <div style="font-size:13px; color:#555; margin-bottom:4px;"><b>경로:</b> ${c.url || '-'}</div>
             <div style="font-size:13px; color:#888; margin-bottom:4px;"><b>오프라인 입력값 (거부됨):</b> ${formatValue(c.rejected_offline_value)}</div>
             <div style="font-size:13px; color:#2e7d32;"><b>운영진 기록 (유지됨):</b> ${formatValue(c.server_value)}</div>
@@ -2165,7 +2803,7 @@ function _showConflictModal(conflicts) {
     overlay.innerHTML = `
         <div style="background:#fff; border-radius:12px; max-width:560px; width:100%; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
             <div style="padding:18px 20px; background:#fff3cd; border-bottom:1px solid #ffe082;">
-                <div style="font-size:18px; font-weight:700; color:#856404;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 오프라인 동기화 — 충돌 알림</div>
+                <div style="font-size:18px; font-weight:700; color:#856404;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 오프라인 동기화 — 충돌 알림</div>
                 <div style="font-size:13px; color:#856404; margin-top:6px; line-height:1.5;">
                     아래 ${conflicts.length}건의 오프라인 입력값은 <b>운영진이 그 사이에 입력한 기록</b>이 우선되어 <b>적용되지 않았습니다.</b><br>
                     필요시 운영진 기록을 확인하고 수동으로 다시 입력해주세요.
@@ -2184,3 +2822,277 @@ function _showConflictModal(conflicts) {
     document.getElementById('pr-conflict-modal-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
+
+// ============================================================
+// 앱 설치 유도 배너 (홈·대시보드) — 링크로 들어온 모바일 브라우저 사용자에게만
+//   · 앱(standalone/TWA)에서 열었으면 표시 안 함
+//   · iOS Safari 는 <meta name="apple-itunes-app"> 의 시스템 Smart App Banner 가 뜨므로 중복 표시 안 함
+//   · 닫으면 7일간 숨김 (localStorage). 데스크톱은 표시 안 함.
+// ============================================================
+(function () {
+    const STORE = {
+        android: 'https://play.google.com/store/apps/details?id=com.pacerise.node',
+        ios: 'https://apps.apple.com/kr/app/pace-rise-node/id6784736644',
+    };
+    const DISMISS_KEY = 'pr_app_banner_dismissed_at';
+    const DISMISS_DAYS = 7;
+
+    function shouldShow() {
+        const p = location.pathname;
+        const onHome = p === '/' || p === '/index.html';
+        const onDash = p === '/dashboard.html' || p.startsWith('/e/');
+        if (!onHome && !onDash) return false;
+        const ua = navigator.userAgent || '';
+        const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const isAndroid = /Android/.test(ua);
+        if (!isIOS && !isAndroid) return false;
+        // 이미 앱으로 보는 중
+        try { if (window.matchMedia('(display-mode: standalone)').matches) return false; } catch (e) {}
+        if (navigator.standalone === true) return false;
+        if ((document.referrer || '').startsWith('android-app://')) return false;
+        // iOS Safari 본체 → 시스템 Smart App Banner 에 맡김 (인앱 브라우저·Chrome 등은 자체 배너)
+        if (isIOS && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|KAKAOTALK|NAVER|Instagram|Line\/|whale|DaumApps|FBAN|FBAV/i.test(ua)) return false;
+        try {
+            const t = parseInt(localStorage.getItem(DISMISS_KEY) || '0', 10);
+            if (t && Date.now() - t < DISMISS_DAYS * 86400000) return false;
+        } catch (e) {}
+        return true;
+    }
+
+    function render() {
+        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const href = isIOS ? STORE.ios : STORE.android;
+        const css = document.createElement('style');
+        css.textContent = `
+            .pr-app-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9500; display: flex; align-items: center; gap: 10px;
+                padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+                background: #fff; border-top: 1px solid #e8dfc0; box-shadow: 0 -6px 20px rgba(38,35,36,.10);
+                font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+            .pr-app-banner img { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; }
+            .pr-app-banner .t { flex: 1 1 auto; min-width: 0; line-height: 1.3; }
+            .pr-app-banner .t b { display: block; font-size: 13px; color: #262324; letter-spacing: -0.01em; }
+            .pr-app-banner .t span { display: block; font-size: 11px; color: #7a746e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .pr-app-banner .get { flex: 0 0 auto; background: #b79f58; color: #fff; font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 999px; text-decoration: none; letter-spacing: .02em; }
+            .pr-app-banner .x { flex: 0 0 auto; width: 30px; height: 30px; border: none; background: none; color: #9a938d; font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }
+            body.pr-app-banner-on { padding-bottom: 64px; }
+            body.pr-app-banner-on .events-scroll { padding-bottom: 72px; }
+        `;
+        document.head.appendChild(css);
+        const el = document.createElement('div');
+        el.className = 'pr-app-banner';
+        el.setAttribute('role', 'complementary');
+        el.innerHTML = `<img src="/icons/icon-192.png" alt="">
+            <div class="t"><b>PACE RISE : Node 앱</b><span>실시간 기록 알림 · 더 빠른 결과 확인</span></div>
+            <a class="get" href="${href}" target="_blank" rel="noopener">앱 받기</a>
+            <button type="button" class="x pr-close" aria-label="닫기"><svg class="ui-icon" viewBox="0 0 48 48" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" aria-hidden="true"><path d="M12 12l24 24M36 12L12 36"/></svg></button>`;
+        el.querySelector('.x').addEventListener('click', () => {
+            try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {}
+            el.remove();
+            document.body.classList.remove('pr-app-banner-on');
+        });
+        el.querySelector('.get').addEventListener('click', () => {
+            try { if (typeof gtag === 'function') gtag('event', 'app_banner_click', { platform: isIOS ? 'ios' : 'android', page: location.pathname }); } catch (e) {}
+        });
+        document.body.appendChild(el);
+        document.body.classList.add('pr-app-banner-on');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => { try { if (shouldShow()) render(); } catch (e) { /* 배너는 실패해도 페이지에 영향 없음 */ } });
+})();
+
+// ============================================================
+// 마우스 드래그 스크롤 (전 페이지 공통)
+//   손가락으로 끄는 것처럼, 마우스로 눌러 끌어도 가로/세로로 넘치는 상자가 따라온다.
+//   대상: 눌린 지점에서 위로 올라가며 처음 만나는 overflow auto/scroll 이고 실제로 넘치는 요소.
+//   입력창·링크·select 위에서 시작한 드래그는 무시(기존 동작 유지). 버튼 위 시작은 허용(드래그면 click 삼킴). 4px 이상 움직였을 때만 드래그로 간주,
+//   드래그 뒤 따라오는 click 은 한 번 삼킨다(셀 클릭 오작동 방지).
+// ============================================================
+(function () {
+    if (typeof document === 'undefined') return;
+    // 버튼 위에서 시작한 드래그도 허용 (버튼은 click 으로만 동작하고, 드래그면 click 을 삼키므로 안전) — 표가 버튼으로 가득한 높이뛰기 표 대응
+    const SKIP = /^(INPUT|TEXTAREA|SELECT|A|LABEL)$/;
+    function scrollBoxFrom(el) {
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+            if (n.nodeType !== 1) continue;
+            const cs = getComputedStyle(n);
+            const ox = /(auto|scroll)/.test(cs.overflowX), oy = /(auto|scroll)/.test(cs.overflowY);
+            if ((ox && n.scrollWidth > n.clientWidth + 1) || (oy && n.scrollHeight > n.clientHeight + 1)) return n;
+        }
+        return null;
+    }
+    let box = null, sx = 0, sy = 0, sl = 0, st = 0, dragged = false;
+    document.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        const t = e.target;
+        if (!t || SKIP.test(t.tagName) || t.closest('input,textarea,select,a,label,[contenteditable="true"]')) return;
+        box = scrollBoxFrom(t); if (!box) return;
+        sx = e.clientX; sy = e.clientY; sl = box.scrollLeft; st = box.scrollTop; dragged = false;
+    });
+    document.addEventListener('mousemove', function (e) {
+        if (!box) return;
+        const dx = e.clientX - sx, dy = e.clientY - sy;
+        if (!dragged && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+        if (!dragged) { dragged = true; document.documentElement.classList.add('is-drag-scrolling'); }
+        box.scrollLeft = sl - dx; box.scrollTop = st - dy;
+        e.preventDefault();
+    });
+    function end() {
+        if (!box) return;
+        box = null;
+        document.documentElement.classList.remove('is-drag-scrolling');
+        if (dragged) {
+            // 드래그로 끝난 mouseup 뒤의 click 한 번 삼키기
+            const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); document.removeEventListener('click', swallow, true); };
+            document.addEventListener('click', swallow, true);
+            setTimeout(() => document.removeEventListener('click', swallow, true), 300);
+        }
+    }
+    document.addEventListener('mouseup', end);
+    document.addEventListener('mouseleave', end);
+})();
+
+// ============================================================
+// 파일 끌어다 놓기 — 모든 파일 선택 칸 공통 (2026-09 사용성 점검)
+//   업로드 칸 31곳 중 끌어다 놓기가 되는 곳은 3곳뿐이었다. 칸마다 따로 만들지 않고 여기서 한 번에 처리한다:
+//   파일을 끌고 들어오면 마우스 아래에서 위로 올라가며 '파일 선택 칸이 정확히 하나 들어 있는 영역'을 찾고, 놓으면 그 칸에 파일을 넣은 뒤
+//   change 이벤트를 낸다 → 기존 업로드 코드(버튼·미리보기)는 그대로 동작한다. 자체 드롭 영역(.txt/.lif/기록카드)은 이벤트 전파를 막으므로 영향 없음.
+//   영역 밖에 놓으면 브라우저가 그 파일을 열어 작업 중인 화면이 날아가는데, 그것도 막는다.
+// ============================================================
+(function () {
+    if (typeof document === 'undefined' || window.__prFileDrop) return;
+    window.__prFileDrop = true;
+    const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    function findInput(target) {
+        for (let el = target; el && el !== document.documentElement; el = el.parentElement) {
+            if (el.matches && el.matches('input[type=file]')) return el.disabled ? null : el;
+            const list = el.querySelectorAll ? el.querySelectorAll('input[type=file]:not([disabled])') : [];
+            if (list.length === 1) return list[0];
+            if (list.length > 1) return null;          // 여러 칸이 든 큰 영역 — 어느 칸인지 알 수 없다
+        }
+        return null;
+    }
+    const accepts = (input, file) => {
+        const acc = (input.getAttribute('accept') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        if (!acc.length) return true;
+        const name = file.name.toLowerCase(), type = (file.type || '').toLowerCase();
+        return acc.some(a => a.startsWith('.') ? name.endsWith(a) : a.endsWith('/*') ? type.startsWith(a.slice(0, -1)) : type === a);
+    };
+    let marked = null;
+    const zoneOf = input => { let z = input.parentElement; if (z && z.tagName === 'LABEL' && z.parentElement) z = z.parentElement; return z || input; };
+    const unmark = () => { if (marked) { marked.style.outline = marked._prOutline || ''; marked.style.outlineOffset = ''; marked = null; } };
+    const mark = z => { if (marked === z) return; unmark(); marked = z; z._prOutline = z.style.outline; z.style.outline = '2px dashed #0e7c66'; z.style.outlineOffset = '3px'; };
+
+    document.addEventListener('dragover', e => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        const input = findInput(e.target);
+        if (input) { e.dataTransfer.dropEffect = 'copy'; mark(zoneOf(input)); } else { e.dataTransfer.dropEffect = 'none'; unmark(); }
+    });
+    document.addEventListener('dragleave', e => { if (!e.relatedTarget) unmark(); });
+    document.addEventListener('drop', e => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        unmark();
+        const input = findInput(e.target);
+        if (!input) return;
+        let files = Array.from(e.dataTransfer.files || []);
+        const bad = files.filter(f => !accepts(input, f));
+        files = files.filter(f => accepts(input, f));
+        if (!files.length) { showToast(`이 칸에는 ${input.getAttribute('accept') || '해당 형식의'} 파일만 올릴 수 있습니다`, 'error', 4000); return; }
+        if (!input.multiple) files = files.slice(0, 1);
+        try {
+            const dt = new DataTransfer();
+            files.forEach(f => dt.items.add(f));
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            if (bad.length) showToast(`형식이 맞지 않는 ${bad.length}개 파일은 제외했습니다`, 'warning', 3500);
+        } catch (err) { showToast('이 브라우저에서는 끌어다 놓기를 쓸 수 없습니다 — 파일 선택 버튼을 이용하세요', 'warning', 4000); }
+    });
+})();
+
+// ============================================================
+// 안내창 (uiAlert) — 브라우저 기본 alert() 대체 (2026-09 사용성 점검)
+//   기본 alert 은 브라우저마다 모양이 다르고 주소(도메인)가 제목으로 뜨며, 태블릿 전체화면(PWA)에서는 화면이 멈춘 것처럼 보인다.
+//   같은 모양의 안내창으로 통일한다. 내용에 '실패·오류·없습니다' 등이 있으면 경고색. Enter/Esc/바깥 클릭으로 닫힌다.
+//   ※ 화면을 멈추지 않는다(비차단). 알림 직후 페이지를 옮기는 곳은 기본 alert 을 그대로 쓴다.
+// ============================================================
+function uiAlert(message, opts) {
+    opts = opts || {};
+    const text = String(message == null ? '' : message);
+    const isErr = opts.type ? opts.type === 'error' : /실패|오류|없습니다|않습니다|않았습니다|할 수 없|차단|필수|하세요|해주세요/.test(text);
+    return new Promise(resolve => {
+        const prev = document.getElementById('pr-ui-alert'); if (prev) prev.remove();
+        const ov = document.createElement('div');
+        ov.id = 'pr-ui-alert';
+        ov.setAttribute('role', 'alertdialog'); ov.setAttribute('aria-modal', 'true');
+        ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#fff;border-radius:12px;max-width:420px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3);overflow:hidden;';
+        const body = document.createElement('div');
+        body.style.cssText = `padding:22px 22px 16px;font-size:15px;line-height:1.6;color:#222;white-space:pre-wrap;word-break:keep-all;border-top:4px solid ${isErr ? '#c0392b' : '#2d9d78'};`;
+        body.textContent = text;
+        const foot = document.createElement('div');
+        foot.style.cssText = 'padding:0 16px 16px;display:flex;justify-content:flex-end;';
+        const ok = document.createElement('button');
+        ok.type = 'button'; ok.textContent = '확인';
+        ok.style.cssText = 'padding:10px 28px;background:#2d9d78;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;';
+        foot.appendChild(ok); box.appendChild(body); box.appendChild(foot); ov.appendChild(box);
+        const close = () => { document.removeEventListener('keydown', onKey, true); ov.remove(); resolve(); };
+        const onKey = e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+        ok.addEventListener('click', close);
+        ov.addEventListener('click', e => { if (e.target === ov) close(); });
+        document.addEventListener('keydown', onKey, true);
+        (document.body || document.documentElement).appendChild(ov);
+        try { ok.focus(); } catch (e) {}
+    });
+}
+
+// ============================================================
+// 확인창 · 입력창 (uiConfirm / uiPrompt) — 브라우저 기본 confirm()/prompt() 대체 (2026-09 사용성 점검)
+//   규칙: 버튼은 오른쪽 정렬 '취소 · 확인'. 삭제·초기화처럼 되돌리기 어려운 작업은 확인 버튼이 빨강이고 처음 초점이 '취소'에 있다(Enter 를 연타해도 실행되지 않게).
+//   Esc = 취소. 반환: uiConfirm → true/false, uiPrompt → 문자열 / 취소 시 null (기본 prompt 와 동일)
+//   ※ await 로 쓴다. 동기 함수 안(예: confirmCompletedEdit)에서는 기본 confirm 을 그대로 쓴다.
+// ============================================================
+function _uiDialog(kind, message, opts) {
+    opts = opts || {};
+    const text = String(message == null ? '' : message);
+    const danger = opts.danger != null ? !!opts.danger : /삭제|초기화|되돌릴 수 없|복구할 수 없|덮어|제거|지웁|지워|폐기|강제/.test(text);
+    return new Promise(resolve => {
+        const prev = document.getElementById('pr-ui-dialog'); if (prev) prev.remove();
+        const ov = document.createElement('div');
+        ov.id = 'pr-ui-dialog'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+        ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#fff;border-radius:12px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3);overflow:hidden;';
+        const body = document.createElement('div');
+        body.style.cssText = `padding:22px 22px 14px;font-size:15px;line-height:1.6;color:#222;white-space:pre-wrap;word-break:keep-all;border-top:4px solid ${danger ? '#c0392b' : '#b79f58'};`;
+        body.textContent = text;
+        box.appendChild(body);
+        let input = null;
+        if (kind === 'prompt') {
+            input = document.createElement('input');
+            input.type = opts.inputType || (/키를 입력|비밀번호|암호/.test(text) ? 'password' : 'text');      // 키·비밀번호는 화면에 드러나지 않게 input.value = opts.defaultValue == null ? '' : String(opts.defaultValue);
+            input.style.cssText = 'display:block;width:calc(100% - 44px);margin:0 22px 14px;padding:10px 12px;font-size:16px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;';
+            box.appendChild(input);
+        }
+        const foot = document.createElement('div');
+        foot.style.cssText = 'padding:0 16px 16px;display:flex;justify-content:flex-end;gap:8px;';
+        const mk = (label, primary) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+            b.style.cssText = `padding:10px 22px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;` + (primary ? `background:${danger ? '#c0392b' : '#2d9d78'};color:#fff;border:none;` : 'background:#fff;color:#444;border:1px solid #ccc;'); return b; };
+        const cancel = mk(opts.cancelText || '취소', false), ok = mk(opts.okText || '확인', true);
+        foot.appendChild(cancel); foot.appendChild(ok); box.appendChild(foot); ov.appendChild(box);
+        const done = v => { document.removeEventListener('keydown', onKey, true); ov.remove(); resolve(v); };
+        const accept = () => done(kind === 'prompt' ? input.value : true);
+        const reject = () => done(kind === 'prompt' ? null : false);
+        const onKey = e => {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); reject(); }
+            else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); (document.activeElement === cancel) ? reject() : accept(); }
+        };
+        ok.addEventListener('click', accept); cancel.addEventListener('click', reject);
+        document.addEventListener('keydown', onKey, true);
+        (document.body || document.documentElement).appendChild(ov);
+        try { if (input) { input.focus(); input.select(); } else (danger ? cancel : ok).focus(); } catch (e) {}
+    });
+}
+function uiConfirm(message, opts) { return _uiDialog('confirm', message, opts); }
+function uiPrompt(message, defaultValue, opts) { return _uiDialog('prompt', message, Object.assign({ defaultValue }, opts || {})); }
