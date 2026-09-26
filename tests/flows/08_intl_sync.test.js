@@ -223,6 +223,11 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         expect(st.find(x => x.id === sub.ev_id).round_status).toBe('in_progress');   // 세부종목: 조가 여러 개라 1조만 공식이면 아직
         const scores = await request(app).get('/api/combined-scores').query({ event_id: hep.id });
         expect(scores.body.some(x => x.wa_points === 980)).toBe(true);
+        // 세부종목 조 1·2·3위는 메달이 아니다 (10종 100m 조 2위가 은메달로 잡히던 것)
+        const ro = await request(app).get(`/api/competitions/${fx.comp}/roster`);
+        expect(ro.body.medals.events.every(m => m.event_name !== '100mH')).toBe(true);
+        const subEv = await db.get("SELECT id FROM event WHERE competition_id=? AND parent_event_id IS NOT NULL AND name='100mH'", fx.comp);
+        if (subEv) { const sp = await request(app).get(`/api/events/${subEv.id}/spotlight`); expect(sp.body.round_type).toBe('sub'); expect(sp.body.status ? sp.body.status.label : '').toBe(''); }
     });
     it('선수 보조 정보(한글 이름·PB·SB): 영문 이름으로 찾아 넣고, 다음 동기화가 한글 이름을 덮지 않는다', async () => {
         const r = await request(app).post(`/api/admin/intl/${fx.comp}/athlete-info`).send({ admin_key: ADMIN, rows: [

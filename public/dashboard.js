@@ -178,7 +178,7 @@ ${prCloseBtn('closeRosterModal()')}
         const mark = ev => {
             const r = ev.result; if (!r) return '';
             if (r.status_code) return `<span style="color:#b3261e;font-weight:700;">${esc(PaceRanking.statusText(r.status_code))}</span>`;
-            const isFinal = ev.round_type === 'final';
+            const isFinal = ev.round_type === 'final' && !ev.parent_event_id;   // 7종·10종 세부종목은 결승이 아니다
             const place = r.place
                 ? (isFinal && r.place <= 3 ? medalHtml(r.place, 20) + ' '
                     : `<span style="display:inline-block;min-width:22px;padding:0 5px;border-radius:9px;background:#e9edf6;color:#1a2a5e;font-weight:800;text-align:center;margin-right:5px;">${!isFinal && r.heat_count > 1 && ev.heat_number ? ev.heat_number + '조 ' : ''}${r.place}위</span>`)
@@ -406,8 +406,8 @@ async function _spotBlocksHtml(evt) {
         });
         const pend = (d.pending || []).map(p => `<div style="padding:4px 0;font-size:13px">${PaceIcons.svg('flagKR', { size: 18, style: 'vertical-align:-4px;margin-right:4px' })}<b>${nm(p)}</b> <span style="color:#666">${p.heat_number ? p.heat_number + '조 ' : ''}${p.lane ? p.lane + '레인' : ''}${p.scheduled_at ? ' · ' + p.scheduled_at.slice(11, 16) + ' 출발' : ''} · 예정</span></div>`);
         if (rows.length || pend.length) {
-            const head = d.status ? `<span class="spot-chip ${d.status.kind === 'out' ? 'out' : 'q'}" style="margin-left:auto">${esc(d.status.label)}</span>` : '';
-            top = `<div class="spot-block"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:11px;font-weight:800;color:#8b1a2a;letter-spacing:.05em">한국 선수 · ${roundKo}</span>${head}</div>${rows.join('')}${pend.join('')}</div>`;
+            const head = d.status && d.status.label ? `<span class="spot-chip ${d.status.kind === 'out' ? 'out' : 'q'}" style="margin-left:auto">${esc(d.status.label)}</span>` : '';
+            top = `<div class="spot-block"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:11px;font-weight:800;color:#8b1a2a;letter-spacing:.05em">한국 선수${roundKo ? ' · ' + roundKo : ''}</span>${head}</div>${rows.join('')}${pend.join('')}</div>`;
         }
         let bottom = '';
         if (d.rule || (d.qualified && d.qualified.length)) {
