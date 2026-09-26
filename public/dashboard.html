@@ -174,6 +174,9 @@
         .result-panel { background:var(--white); border-radius:var(--radius-lg); width:90vw; max-width:800px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,.18); }
         .result-panel-header { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:var(--white); border-bottom:2px solid var(--gray); flex-shrink:0; position:sticky; top:0; z-index:10; }
         .result-panel-header h3 { margin:0; font-size:16px; font-weight:800; letter-spacing:0.3px; }
+        /* 진행 중 창: 제목 뒤 작은 빨간 점 + LIVE (금색 박스 대신) */
+        .live-dot-chip { display:inline-flex; align-items:center; gap:5px; margin-left:8px; font-size:10.5px; font-weight:800; color:#c0392b; letter-spacing:.06em; vertical-align:2px; }
+        .live-dot-chip::before { content:''; width:7px; height:7px; border-radius:50%; background:#c0392b; }
         .result-panel-close { margin-left:6px; }   /* 모양은 공통 .pr-close */
         .result-panel-body { flex:1; overflow-y:auto; overflow-x:auto; padding:14px 16px; -webkit-overflow-scrolling:touch; scrollbar-width:thin; max-width:100%; overscroll-behavior:contain; }
         #roster-modal-body, #ri-modal { overscroll-behavior:contain; }   /* 창 끝에서 튕겨도 뒤 화면으로 스크롤이 새지 않게 */

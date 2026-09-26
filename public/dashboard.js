@@ -36,7 +36,7 @@ function _recTagOf(remark) { const t = String(remark || '').split(/\s+/); for (c
 function _recTagHtml(tag) { return tag ? `<span class="rec-tag rec-tag-${tag}">${tag}</span>` : ''; }
 function _remarkRest(remark) { return String(remark || '').split(/\s+/).filter(x => x && !_REC_TAG_ORDER.includes(x)).join(' '); }   // 진출(Q·q) 등 나머지
 // 창 제목: 7종·10종 세부종목이면 '부모 · 세부종목'(라운드 없이) — '높이뛰기 결승'로 보여 개별 종목과 헷갈렸다 (2026-09-24)
-function _evtTitle(evt, roundL) { if (evt && evt.parent_event_id) { const p = allEvents.find(e => e.id === evt.parent_event_id); return (p ? p.name + ' · ' : '') + String(evt.name || '').replace(/^\[.*?\]\s*/, ''); } return `${evt.name} ${roundL}`; }
+function _evtTitle(evt, roundL) { if (evt && evt.parent_event_id) { const p = allEvents.find(e => e.id === evt.parent_event_id); return (p ? p.name + ' · ' : '') + String(evt.name || '').replace(/^\[.*?\]\s*/, ''); } return evt.category === 'combined' ? String(evt.name || '') : `${evt.name} ${roundL}`; }   // 7종·10종은 '결승'이 의미 없다
 function _pbSb(r) { const p = []; if (r && r.personal_best) p.push('PB ' + r.personal_best); if (r && r.season_best) p.push('SB ' + r.season_best); return p.length ? `<span class="rr-pbsb">${p.join(' · ')}</span>` : ''; }
 function toggleSpotlight() {
     _spotlightOnly = !_spotlightOnly;
@@ -199,7 +199,7 @@ ${prCloseBtn('closeRosterModal()')}
             const done = ev.round_status === 'completed', live = ev.round_status === 'in_progress';
             const phone = window.innerWidth < 640;
             const right = stOf(ev) || pbsb(ev).replace('<br>', ' · ');
-            const label = showName ? esc(showName) : `${ev.relay ? '<span style="font-size:10px;color:#7c3aed;margin-right:3px;">계주</span>' : ''}${esc(ev.event_name)} <span style="color:#888;font-weight:500;">${genderL[ev.gender] || ''} ${roundL[ev.round_type] || ''}</span>`;
+            const label = showName ? esc(showName) : `${ev.relay ? '<span style="font-size:10px;color:#7c3aed;margin-right:3px;">계주</span>' : ''}<span style="color:#888;font-weight:500;">${genderL[ev.gender] || ''}</span> ${esc(ev.event_name)} <span style="color:#888;font-weight:500;">${roundL[ev.round_type] || ''}</span>`;
             // 폰: 첫 줄 시각·종목, 둘째 줄 결과 또는 PB · SB (오른쪽 칸에 넣으면 잘린다)
             if (phone) return `<div onclick="openEventDetail(${ev.event_id})" style="padding:7px 0;min-height:36px;cursor:pointer;${done ? 'opacity:.75;' : ''}">
                 <div style="display:flex;align-items:center;gap:8px;"><span style="flex:none;font-family:var(--font-mono);font-size:11px;color:${live ? '#16a34a' : done ? '#999' : '#1a2a5e'};min-width:92px;">${esc(when(ev))}</span><span style="flex:1;min-width:0;font-size:12px;font-weight:600;">${label}</span></div>
@@ -1816,7 +1816,7 @@ async function openResult(eventId) {
 
         bodyHtml += _spot.bottom;
         panel.innerHTML = `<div class="result-panel-header">
-            <h3>${_evtTitle(evt, roundL)} ${gL}</h3>
+            <h3>${gL} ${_evtTitle(evt, roundL)}</h3>
             ${_imgBtnHtml(evt)}${_favBtnHtml(evt)}
             ${prCloseBtn('closeResult()', { cls: 'result-panel-close' })}
         </div><div class="result-panel-body">${bodyHtml}</div>`;
@@ -1913,7 +1913,7 @@ async function openLiveResult(eventId) {
     _liveEventId = eventId;
     const overlay = document.getElementById('result-overlay');
     const panel = document.getElementById('result-panel');
-    panel.innerHTML = `<div class="result-panel-header"><h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>로딩 중…</h3>${prCloseBtn('closeLiveResult()', { cls: 'result-panel-close' })}</div>
+    panel.innerHTML = `<div class="result-panel-header"><h3>불러오는 중…</h3>${prCloseBtn('closeLiveResult()', { cls: 'result-panel-close' })}</div>
         <div class="result-panel-body" style="padding:20px;">
             <div class="skeleton-block" style="box-shadow:none;padding:0;">
                 <div class="skeleton skeleton-title"></div>
@@ -1987,7 +1987,7 @@ async function refreshLiveResult() {
         bodyHtml += `<div style="margin-top:12px;font-size:11px;color:var(--text-muted);text-align:center;">자동 새로고침 | ${new Date().toLocaleTimeString('ko-KR')}</div>`;
 
         panel.innerHTML = `<div class="result-panel-header">
-            <h3><span style="background:#f8f4ea;color:#b79f58;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">● LIVE</span>${_evtTitle(evt, roundL)} ${gL}</h3>
+            <h3>${gL} ${_evtTitle(evt, roundL)}<span class="live-dot-chip">LIVE</span></h3>
             ${_imgBtnHtml(evt)}${_favBtnHtml(evt)}
             ${prCloseBtn('closeLiveResult()', { cls: 'result-panel-close' })}
         </div><div class="result-panel-body">${bodyHtml}</div>`;
