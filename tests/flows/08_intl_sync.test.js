@@ -426,6 +426,18 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         const sp = await request(app).get(`/api/events/${pre.id}/spotlight`);
         expect(sp.body.status).toMatchObject({ kind: 'qualified', next: '준결승' });
     });
+    it('빈 조(명단 0명, 공식 일정에만 있는 조)는 라운드 완료 판정에서 뺀다 — 열린 조가 다 공식이면 완료', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const ev = await db.get("SELECT id FROM event WHERE competition_id=? AND external_key='M.200M--------------#RND1'", fx.comp);
+        const heats = await db.all('SELECT id, external_key FROM heat WHERE event_id=? ORDER BY heat_number', ev.id);
+        expect(heats.length).toBeGreaterThanOrEqual(2);
+        const kor = F('entries_org_KOR.json').Events.find(e => e.EvKey === 'M.200M--------------').Partics;
+        // 1조만 실제로 열림(공식 결과), 나머지 조는 Scheduled 로 명단 0명
+        fakeResults[heats[0].external_key] = { Info: { Status: 'OFFICIAL', StatusDesc: 'Official' }, Competitors: [{ Reg: kor[0].Reg, Bib: '1', Org: 'KOR', Name: kor[0].Name, Lane: '4', Rk: '1', Result: '20.80', IRM: 'OK', Qualified: 'Q', Extensions: [] }] };
+        for (const h of heats.slice(1)) fakeResults[h.external_key] = { Info: { Status: 'SCHEDULED', StatusDesc: 'Scheduled' }, Competitors: [] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: heats.map(h => h.external_key) });
+        expect((await db.get('SELECT round_status FROM event WHERE id=?', ev.id)).round_status).toBe('completed');
+    });
     it('일정 다시: 공식 일정에서 사라진 조·라운드(남자 세단뛰기 예선 → 직결)는 명단·기록이 없으면 지우고 출전은 결승으로 옮긴다', async () => {
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
         const before = await db.all("SELECT e.id, e.round_type, (SELECT COUNT(*) FROM heat WHERE event_id=e.id) hc, (SELECT COUNT(*) FROM event_entry WHERE event_id=e.id) ec FROM event e WHERE e.competition_id=? AND e.external_key LIKE 'M.TRPLJUMP%' ORDER BY e.id", fx.comp);
