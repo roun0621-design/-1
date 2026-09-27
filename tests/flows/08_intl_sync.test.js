@@ -479,6 +479,26 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         const back = await sync.setupStructure(db, comp, { fetch: fakeFetch });
         expect(back.stats.heats).toBeGreaterThanOrEqual(2);
     });
+    it('취소된 예선(여자 멀리뛰기): 스타트 리스트까지 나왔다가 일정에서 사라지고 결승이 진행됐으면 예선 라운드·조·레인을 지우고 출전은 결승으로', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const qual = await db.get("SELECT e.id, h.id AS heat_id, h.external_key FROM event e JOIN heat h ON h.event_id=e.id WHERE e.competition_id=? AND e.external_key='W.LONGJUMP----------#QUAL' ORDER BY h.id LIMIT 1", fx.comp);
+        const fin = await db.get("SELECT e.id, h.id AS heat_id, h.external_key FROM event e JOIN heat h ON h.event_id=e.id WHERE e.competition_id=? AND e.external_key='W.LONGJUMP----------#FNL-' ORDER BY h.id LIMIT 1", fx.comp);
+        expect(qual && fin).toBeTruthy();
+        const A = { Reg: '99000077', Bib: '777', Org: 'JPN', Name: 'TEST Jumper', Lane: '1', IRM: 'OK', RecordInd: '', Extensions: [] };
+        // 예선: 스타트 리스트(레인)만 → heat_entry 생김
+        fakeResults[qual.external_key] = { Info: { Status: 'START_LIST' }, Competitors: [{ ...A, Result: '' }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [qual.external_key] });
+        expect((await db.get('SELECT COUNT(*) c FROM heat_entry WHERE heat_id=?', qual.heat_id)).c).toBe(1);
+        // 결승: 공식 결과
+        fakeResults[fin.external_key] = { Info: { Status: 'OFFICIAL', StatusDesc: 'Official' }, Competitors: [{ ...A, Rk: '1', Result: '6.70', Splits: [] }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [fin.external_key] });
+        // 일정에서 예선 유닛이 사라짐
+        const noQual = async (source, tail) => { const r = await fakeFetch(source, tail); return /^schedule\/daily\//.test(tail) && Array.isArray(r) ? r.filter(u => !/^W\.LONGJUMP.*\.QUAL\./.test(u.Key || '')) : r; };
+        const st = await sync.setupStructure(db, comp, { fetch: noQual });
+        expect((await db.all("SELECT round_type FROM event WHERE competition_id=? AND external_key LIKE 'W.LONGJUMP%'", fx.comp)).map(e => e.round_type)).toEqual(['final']);
+        expect(st.stats.removed_rounds).toBeGreaterThanOrEqual(1);
+        expect((await db.get('SELECT COUNT(*) c FROM event_entry WHERE event_id=?', fin.id)).c).toBeGreaterThanOrEqual(1);
+    });
     it('상태 API 와 권한', async () => {
         const s = await request(app).get(`/api/admin/intl/${fx.comp}/status`).set('x-admin-key', OP);
         expect(s.status).toBe(200); expect(s.body.counts.events).toBeGreaterThan(48); expect(s.body.source.champ).toBe('AG2026'); expect(s.body.state.structure_at).toBeTruthy();
