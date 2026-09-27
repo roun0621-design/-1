@@ -16,7 +16,7 @@
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const TAGS = ['WR', 'AR', 'GR', 'NR', 'PB', 'SB'];
     const tagOf = remark => { const t = String(remark || '').split(/\s+/); for (const k of TAGS) if (t.includes(k)) return k; return null; };
-    const qualOf = remark => (String(remark || '').match(/\b(Q|q)\b/) || [null])[0];
+    const qualOf = remark => { const m = String(remark || '').match(/(?:^|\s)([Qq])([A-Z])?(?=\s|$)/); return m ? m[1] : null; };   // qJ(심판 판정)·qR 도 진출
     const pad = n => String(n).padStart(2, '0');
     const fmtMark = (v, isTime, category) => v == null ? '' : isTime ? formatTime(v, { noDecimal: category === 'road' }) : (category === 'field_height' ? formatHeight(v) : Number(v).toFixed(2));
     const TAG_COLOR = { WR: '#6a1b9a', AR: '#0d47a1', GR: '#b8860b', NR: '#c0392b' };

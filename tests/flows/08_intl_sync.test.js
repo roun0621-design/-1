@@ -499,6 +499,29 @@ describe('서버: 구조 → 엔트리 → 결과', () => {
         expect(st.stats.removed_rounds).toBeGreaterThanOrEqual(1);
         expect((await db.get('SELECT COUNT(*) c FROM event_entry WHERE event_id=?', fin.id)).c).toBeGreaterThanOrEqual(1);
     });
+    it('이의 제기로 진출(qJ): 예선 DQ 였다가 정정돼 Qualified=qJ 로 오면 결과가 바뀌고 결승 진출로 (남자 4x100m 계주)', async () => {
+        const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        const pre = await db.get("SELECT e.id, h.id AS heat_id, h.external_key FROM event e JOIN heat h ON h.event_id=e.id WHERE e.competition_id=? AND e.external_key='M.4X100M------------#RND1' ORDER BY h.id LIMIT 1", fx.comp);
+        expect(pre).toBeTruthy();
+        const kor = F('entries_event_M4X100M.json').Partics.find(p => p.Org === 'KOR');
+        const team = { Reg: kor.Reg, Org: 'KOR', Name: kor.Name, Lane: '5', Extensions: [] };
+        // 다른 조들은 공식 결과(외국 팀) 로 끝내 둔다 → 라운드 완료
+        const others = F('entries_event_M4X100M.json').Partics.filter(p => p.Org !== 'KOR');
+        const allHeats = await db.all('SELECT external_key FROM heat WHERE event_id=? ORDER BY id', pre.id);
+        allHeats.slice(1).forEach((h, i) => { fakeResults[h.external_key] = { Info: { Status: 'OFFICIAL', StatusDesc: 'Official' }, Competitors: [{ Reg: others[i].Reg, Org: others[i].Org, Name: others[i].Name, Lane: '4', Rk: '1', Result: '38.5' + i, IRM: 'OK', Qualified: 'Q', Extensions: [] }] }; });
+        fakeResults[pre.external_key] = { Info: { Status: 'OFFICIAL', StatusDesc: 'Official' }, Competitors: [{ ...team, Rk: '', Result: '', IRM: 'DQ', Qualified: '' }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: allHeats.map(h => h.external_key) });
+        let evs = (await request(app).get('/api/events').query({ competition_id: fx.comp })).body;
+        expect((evs.find(e => e.id === pre.id).spot_status || {}).kind).toBe('out');
+        // 이의 제기 인용: 기록 복구 + qJ
+        fakeResults[pre.external_key] = { Info: { Status: 'OFFICIAL', StatusDesc: 'Official' }, Competitors: [{ ...team, Rk: '4', Result: '39.33', IRM: 'OK', Qualified: 'qJ' }] };
+        await sync.syncResults(db, comp, { fetch: fakeFetch, onlyKeys: [pre.external_key] });
+        evs = (await request(app).get('/api/events').query({ competition_id: fx.comp })).body;
+        expect((evs.find(e => e.id === pre.id).spot_status || {}).kind).toBe('qualified');
+        const sp = await request(app).get(`/api/events/${pre.id}/spotlight`);
+        expect(sp.body.rows[0]).toMatchObject({ qual: 'q', status_code: null });
+        expect(sp.body.qualified.some(q => q.team === 'KOR' && q.qual === 'q')).toBe(true);
+    });
     it('상태 API 와 권한', async () => {
         const s = await request(app).get(`/api/admin/intl/${fx.comp}/status`).set('x-admin-key', OP);
         expect(s.status).toBe(200); expect(s.body.counts.events).toBeGreaterThan(48); expect(s.body.source.champ).toBe('AG2026'); expect(s.body.state.structure_at).toBeTruthy();
