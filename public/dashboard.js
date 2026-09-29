@@ -15,6 +15,7 @@ const _GENDER_LABEL = { M: '남자', F: '여자', X: '혼성' };
 let callroomCompletedIds = new Set();
 let currentRole = localStorage.getItem('pace_role') || 'viewer';
 let _compVideoUrl = ''; // Competition-level video URL
+let _compEnded = false;  // 끝난 대회(status completed 또는 end_date 지남) — NEXT 칩·'지금' 스크롤 없음
 let _pacingMap = {}; // event_name → pacing config (for W/L Target buttons)
 let _scheduleMap = {}; // event_id → { time, callroom_time, is_today } from timetable
 let _timetableFull = { days: {}, start_date: null }; // 전체 시간표 (히어로 카드 표시용; 모달은 common.js openTimetable 사용)
@@ -699,6 +700,7 @@ async function loadData() {
         const comp = await API.getCompetition(compId);
         _compVideoUrl = comp.video_url || '';
         _compMode = comp.mode || 'operation';
+        _compEnded = comp.status === 'completed' || (!!comp.end_date && comp.end_date < _todayKey());
         _isDisplayMode = comp.mode === 'display';
     } catch(e) { _compVideoUrl = ''; _isDisplayMode = false; }
     // Load display roster if display mode
@@ -1154,6 +1156,7 @@ function _evSortIdx(name) {
 // 시간별 보기로 처음 열 때: 지금 시각에 가장 가까운(아직 안 끝난) 종목 카드로 부드럽게 스크롤(화면 중앙) — 표시는 NEXT 칩·LIVE 깜빡임(_markNext)
 let _scrolledToNow = false;     // 세션당 한 번 (실제로 움직인 뒤에 true)
 let _nowFlashUntil = 0, _nowFlashKey = null;   // 다시 그려져도(데이터가 뒤늦게 더 오면 카드가 통째로 교체된다) 같은 카드를 다시 찾아 위치를 유지
+function _todayKey() { const d = new Date(), pad = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function _nowRows() { return [...document.querySelectorAll('#events-container tr[data-sched]:not([data-combined])')]; }   // 7종·10종은 며칠 내내 LIVE 라 제외
 function _nowKeyOf(r) { const n = r.querySelector('.event-name'); return r.getAttribute('data-sched') + '|' + (n ? n.textContent.trim().slice(0, 30) : ''); }
 function _pickNowRow(rows) {
@@ -1188,7 +1191,10 @@ function _markNext() {
     document.querySelectorAll('.chip-next').forEach(el => el.remove());
     document.querySelectorAll('.status-live').forEach(el => el.classList.add('blinker'));
     const target = _pickNowRow(_nowRows());
-    if (target && !target.querySelector('.status-live')) {
+    // NEXT 는 '앞으로 열릴' 종목에만: 끝난 대회, 지난 날짜 종목(시간만 보고 날짜를 안 보던 것 — 2026-09-29), 이미 끝난 종목엔 안 붙인다
+    const sk = target ? target.getAttribute('data-sched') || '' : '';
+    const upcoming = target && !target.hasAttribute('data-done') && !_compEnded && !(/^\d{4}-/.test(sk) && sk.slice(0, 10) < _todayKey());
+    if (target && upcoming && !target.querySelector('.status-live')) {
         const chip = document.createElement('span'); chip.className = 'card-chip chip-next blinker'; chip.textContent = 'NEXT';
         const t = target.querySelector('.chip-time'); const wrap = target.querySelector('.card-chips');
         if (t) t.insertAdjacentElement('afterend', chip); else if (wrap) wrap.appendChild(chip);
@@ -1197,7 +1203,7 @@ function _markNext() {
 }
 function _scrollToNow() {
     if (_scrolledToNow) return;
-    if (!_nowRows().length) return;
+    if (_compEnded || !_nowRows().length) return;
     _scrolledToNow = true;
     setTimeout(() => {
         const target = _pickNowRow(_nowRows());    // 그 사이 다시 그려졌을 수 있으니 지금 DOM 에서 다시 고른다
