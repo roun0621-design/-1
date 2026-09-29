@@ -2,7 +2,7 @@
  * 로그 기간 조회 — 외부 API 호출 로그·운영 로그의 from/to(한국 날짜)·category·CSV (lib/logRange.js)
  */
 const request = require('supertest');
-let app, db, comp; const ADMIN = 'testadmin1234';
+let app, db, comp; const ADMIN = 'testadmin1234', OP = 'testopkey';
 
 describe('로그 기간 조회', () => {
     beforeAll(async () => {
@@ -27,12 +27,14 @@ describe('로그 기간 조회', () => {
         expect(csv.headers['content-type']).toMatch(/text\/csv/); expect(csv.text.startsWith('﻿시각(UTC),키,')).toBe(true); expect(csv.text).toContain('/api/external/events/search');
         expect((await request(app).get('/api/admin/external-keys/logs').query({ from: '2026-09-13' })).status).toBe(403);
     });
-    it('운영 로그: 기간 + 분류(record) + CSV', async () => {
-        const r = await request(app).get('/api/operation-log').query({ competition_id: comp, from: '2026-09-13', to: '2026-09-16', category: 'record', limit: 5000 });
+    it('운영 로그: 기간 + 분류(record) + CSV — 키 없으면 403', async () => {
+        expect((await request(app).get('/api/operation-log').query({ competition_id: comp })).status).toBe(403);
+        expect((await request(app).get('/api/audit-log')).status).toBe(403);
+        const r = await request(app).get('/api/operation-log').set('x-admin-key', OP).query({ competition_id: comp, from: '2026-09-13', to: '2026-09-16', category: 'record', limit: 5000 });
         expect(r.status).toBe(200); expect(r.body.map(x => x.message)).toEqual(['기록 저장 100m']);
-        const none = await request(app).get('/api/operation-log').query({ competition_id: comp, from: '2026-09-13', to: '2026-09-16', category: 'callroom' });
+        const none = await request(app).get('/api/operation-log').set('x-admin-key', OP).query({ competition_id: comp, from: '2026-09-13', to: '2026-09-16', category: 'callroom' });
         expect(none.body).toEqual([]);
-        const csv = await request(app).get('/api/operation-log').query({ competition_id: comp, from: '2026-09-14', to: '2026-09-14', format: 'csv' });
+        const csv = await request(app).get('/api/operation-log').set('x-admin-key', OP).query({ competition_id: comp, from: '2026-09-14', to: '2026-09-14', format: 'csv' });
         expect(csv.headers['content-type']).toMatch(/text\/csv/); expect(csv.text).toContain('기록 저장 100m');
     });
 });

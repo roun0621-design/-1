@@ -2222,7 +2222,8 @@ function opLog(message, category = 'general', performedBy = 'system', compId = n
         db.run(OPLOG_INSERT_SQL, compId, message, category, performedBy, ts)
             .catch(e => console.error('[opLog] async write failed:', e.message));
     }
-    broadcastSSE('operation_log', { message, category, performed_by: performedBy, created_at: ts });
+    // SSE 는 무인증 채널이라 내용·수행자는 싣지 않는다 — 화면(oplog.html)은 이 신호를 받고 키로 다시 읽는다 (2026-09-30)
+    broadcastSSE('operation_log', { category, created_at: ts, competition_id: compId });
 }
 
 // Federation event mapping
@@ -2959,12 +2960,20 @@ const _undoSnapshotEvent = _roundsRoutes._undoSnapshotEvent;
 // ============================================================
 // LOGS
 // ============================================================
+// 로그 조회는 운영키 이상 (2026-09-30) — 수행자명·변경 전후값이 들어 있어 무인증 열람 대상이 아니다
+function _requireLogReader(req, res) {
+    if (_hasValidWriteKey(req)) return true;
+    res.status(403).json({ error: '운영키 또는 관리자 로그인이 필요합니다.' });
+    return false;
+}
 app.get('/api/audit-log', async (req, res) => {
+    if (!_requireLogReader(req, res)) return;
     const compId = req.query.competition_id;
     if (compId) return res.json(await db.all('SELECT * FROM audit_log WHERE competition_id=? ORDER BY created_at DESC LIMIT 30', compId));
     res.json(await db.all('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 30'));
 });
 app.get('/api/operation-log', async (req, res) => {
+    if (!_requireLogReader(req, res)) return;
     // ?limit= · competition_id= · category=record|callroom|… · from=YYYY-MM-DD&to=YYYY-MM-DD(한국 날짜) · format=csv  (lib/logRange.js)
     let limit = parseInt(req.query.limit) || 100; if (limit > 5000) limit = 5000;
     const compId = req.query.competition_id;

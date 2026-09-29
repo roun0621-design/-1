@@ -137,7 +137,17 @@
                 renderLogs();
             } catch (e) { console.error(e); }
         }
-        function downloadCsv() { window.open(_logQuery(true), '_blank'); }
+        // CSV 는 키를 헤더로 보내야 하므로 fetch 로 받아 저장한다 (URL 에 키를 싣지 않는다)
+        async function downloadCsv() {
+            try {
+                const k = localStorage.getItem('pace_admin_key') || '';
+                const r = await fetch(_logQuery(true), { headers: k ? { 'x-admin-key': k } : {} });
+                if (!r.ok) { alert('운영키 또는 관리자 로그인이 필요합니다.'); return; }
+                const blob = await r.blob(); const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob); a.download = (r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'operation_log.csv';
+                document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+            } catch (e) { console.error(e); }
+        }
 
         function setFilter(filter, btn) {
             currentFilter = filter;
@@ -172,10 +182,9 @@
         loadLogs();
 
         // SSE real-time
-        onSSE('operation_log', (data) => {
-            allLogs.unshift(data);
-            renderLogs();
-        });
+        // SSE 는 내용 없이 신호만 온다 → 키로 다시 읽는다 (연달아 오면 한 번만)
+        let _sseReload = null;
+        onSSE('operation_log', () => { clearTimeout(_sseReload); _sseReload = setTimeout(loadLogs, 400); });
 
         // Fallback refresh
         setInterval(loadLogs, 30000);

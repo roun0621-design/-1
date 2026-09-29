@@ -899,7 +899,10 @@ async function renderAuditLog() {
             const catBadge = l.category === 'callroom' ? '소집' : l.category === 'completion' ? '완료' : l.category === 'round' ? '라운드' : l.category === 'import' ? '업로드' : l.category === 'admin' ? '관리' : l.category || '';
             return `<div class="audit-entry"><strong>[${catBadge}]</strong> ${l.message} — ${time}</div>`;
         }).join('') || '<div class="audit-entry">기록 없음</div>';
-    } catch (e) { }
+    } catch (e) {
+        // 운영키 없는 관중에겐 로그가 열리지 않는다(403) → 접이식 자체를 숨긴다
+        const d = el.closest('details'); if (d) d.hidden = true; else el.hidden = true;
+    }
 }
 
 function showBanner(el, cls, text) {
