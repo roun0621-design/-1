@@ -221,7 +221,8 @@ CREATE TABLE IF NOT EXISTS division_master (
     sort_order INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    grade INTEGER DEFAULT NULL                      -- 학년 단위 부(초3~6·중1~3·고1~3)만 값 있음 (Phase 7-②)
+    grade INTEGER DEFAULT NULL,                     -- 학년 단위 부(초3~6·중1~3·고1~3)만 값 있음 (Phase 7-②)
+    label_en TEXT DEFAULT NULL                      -- 영문 라벨 (비우면 lib/labels.js divisionLabelEn 이 성별·학교급·학년으로 만든다, 2026-09-30)
 );
 
 -- Competition Series (대회 시리즈 = 회차 묶음)

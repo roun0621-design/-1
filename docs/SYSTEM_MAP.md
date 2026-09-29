@@ -447,3 +447,4 @@ await db.transaction(async () => {
 - 채우는 곳: 관리자 종목 생성·종목 xlsx 업로드·연맹 통합 업로드·국제 동기화·준결승/결승 생성(부모 코드 복사)·혼성 세부종목 생성. 그 밖의 경로(노출용 대회·조편성 업로드·복제)는 부팅 `backfillEventCodes()` 와 `GET /api/events` 의 lazy 채움이 잡는다. 사전에 없는 이름은 NULL.
 - 이름 → 코드 매핑 `codeOf()`: `recordKey` 정규화(라운드·성별·부 접미·콤마·단위) → 사전(한글·영문·약어·연맹·Bornan 표기 별칭) → 낱말 단위 부분 일치(글자 단위 아님 — '4x400m' 안의 '400m' 오인 방지).
 - 쓰는 곳: `GET /api/events` 의 `code`·`name_en`(영문 표시명, B3 영문 UI 의 기준), 풍속 규제 판정(`recordCompare.isWindAffectedEvent` 가 코드도 본다). 정렬(`sortIndex`)·문서·오버레이는 아직 이름 기준 — B3/B5 에서 코드로 옮긴다.
+- 라벨 사전 `lib/labels.js`(라운드·라운드 상태·대회 상태·성별·종목군·엔트리 상태·상태코드·진출 표기·기록 종류·학교급, ko/en) + `division_master.label_en`(비우면 성별·학교급·학년으로 자동). `GET /api/labels?lang=en|ko` 가 사전 + 종목 사전(`events`) + 부(`divisions`, `division_by_ko`)를 한 번에 준다(5분 캐시) — B3 영문 UI 가 여기서 표기를 고른다.

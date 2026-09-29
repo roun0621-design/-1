@@ -175,6 +175,7 @@ CREATE TABLE IF NOT EXISTS "division_master" (
     "active" BIGINT NOT NULL DEFAULT 1,
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "grade" INTEGER,                      -- 학년 단위 부(초3~6·중1~3·고1~3)만 값 있음 (Phase 7-②, 20행은 부팅 시 시드)
+    "label_en" TEXT DEFAULT NULL,         -- 영문 라벨 (lib/labels.js)
     CHECK (gender IN ('M','F','X')),
     CHECK (school_level IN ('OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED'))
 );

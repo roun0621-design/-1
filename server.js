@@ -1472,6 +1472,7 @@ try {
 } catch(e) { console.error('[DB Migration v4] division_master seed error:', e.message); }
 // 학년 단위 부 (Phase 7-②, 2026-09): division_master.grade + 초3~6·중1~3·고1~3 × 남녀 = 20행 (멱등). 학년별 대회의 부별 기록(DR)·연맹 기록지 시트에 쓴다
 try { db.exec(`ALTER TABLE division_master ADD COLUMN grade INTEGER DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE division_master ADD COLUMN label_en TEXT DEFAULT NULL`); } catch(e) {}   // 영문 라벨 (lib/labels.js, 2026-09-30)
 try {
     const ins = db.raw.prepare(`INSERT OR IGNORE INTO division_master (code,label_ko,gender,school_level,sort_order,grade) VALUES (?,?,?,?,?,?)`);
     db.raw.transaction(() => { for (const r of _gradeDivisionSeed()) ins.run(...r); })();
@@ -1639,6 +1640,7 @@ if (db.isAsync) {
             console.log(`[DB Migration v4 PG] division_master seed: ${seedOk} ok, ${seedFail} fail, total rows=${dmCnt.c}` + (firstErr ? ` (first error: ${firstErr})` : ''));
             // 학년 단위 부 + 선수 학년 (Phase 7-②, 멱등)
             try { await db.run(`ALTER TABLE division_master ADD COLUMN IF NOT EXISTS grade INTEGER`); } catch(e) {}
+            try { await db.run(`ALTER TABLE division_master ADD COLUMN IF NOT EXISTS label_en TEXT`); } catch(e) {}
             try { await db.run(`ALTER TABLE athlete ADD COLUMN IF NOT EXISTS grade INTEGER`); } catch(e) {}
             // 국제대회 동기화 (lib/intl)
             for (const [t, c, d] of [['competition', 'sync_source', 'TEXT'], ['competition', 'sync_state', 'TEXT'], ['event', 'external_key', 'TEXT'], ['heat', 'external_key', 'TEXT'], ['heat', 'scheduled_at', 'TEXT'], ['athlete', 'name_alt', "TEXT DEFAULT ''"], ['athlete', 'season_best', "TEXT DEFAULT ''"], ['event_entry', 'personal_best', "TEXT DEFAULT ''"], ['event_entry', 'season_best', "TEXT DEFAULT ''"]]) {
