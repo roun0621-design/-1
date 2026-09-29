@@ -60,6 +60,7 @@ const WebSocket = require('ws');
 const PDFDocument = require('pdfkit');
 const code128 = require('./lib/code128');
 const timingParse = require('./lib/timingParse');   // .lif/.txt/xlsx 공통: 시간·상태·라운드·성별 해석
+const EventCatalog = require('./lib/eventCatalog');   // 종목 코드·영문 표기 (2026-09-30)
 const { createCanvas, registerFont } = require('canvas');
 const http = require('http');
 const crypto = require('crypto');
@@ -1481,6 +1482,9 @@ try { db.exec(`ALTER TABLE athlete ADD COLUMN grade INTEGER DEFAULT NULL`); } ca
 try { db.exec(`ALTER TABLE competition ADD COLUMN sync_source TEXT DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE competition ADD COLUMN sync_state TEXT DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE event ADD COLUMN external_key TEXT DEFAULT NULL`); } catch(e) {}
+// event.code: 종목 코드 (lib/eventCatalog.js) — 부팅 뒤 backfillEventCodes 가 이름으로 채운다 (2026-09-30)
+try { db.exec(`ALTER TABLE event ADD COLUMN code TEXT DEFAULT NULL`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_code ON event(code)`); } catch(e) {}
 try { db.exec(`ALTER TABLE heat ADD COLUMN external_key TEXT DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE heat ADD COLUMN scheduled_at TEXT DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE athlete ADD COLUMN name_alt TEXT DEFAULT ''`); } catch(e) {}
@@ -1806,6 +1810,8 @@ if (db.isAsync) {
             // event: callroom_event_memo, video_url
             await pgIdempotentAddCol('event', 'callroom_event_memo', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('event', 'video_url', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('event', 'code', `TEXT DEFAULT NULL`);
+            try { await db.run('CREATE INDEX IF NOT EXISTS idx_event_code ON event(code)'); } catch (e) {}
             // competition: federation, division_type, video_url
             await pgIdempotentAddCol('competition', 'federation', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'division_type', `TEXT DEFAULT ''`);
@@ -3323,7 +3329,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                     const isFinalOnly = ALWAYS_FINAL_CATEGORIES.includes(info.category) || ALWAYS_FINAL_EVENTS.some(e => info.name === e || info.name.startsWith(e + ' '));
                     const rt = (!isFinalOnly && info.athletes.length > heatSize) ? 'preliminary' : 'final';
                     try {
-                        const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)', competition_id, info.name, info.category, info.gender, rt, 'heats_generated');
+                        const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,code) VALUES (?,?,?,?,?,?,?)', competition_id, info.name, info.category, info.gender, rt, 'heats_generated', EventCatalog.codeOf(info.name));
                         eventCache.set(ck, r.lastInsertRowid);
                         eventNormCache.set(normKey, r.lastInsertRowid);
                         eventByNameGender.set(normKey, r.lastInsertRowid);
@@ -3360,7 +3366,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                         continue;
                     }
                     try {
-                        const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status) VALUES (?,?,?,?,?,?)', competition_id, relayName, 'relay', gender, 'final', 'heats_generated');
+                        const r = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,code) VALUES (?,?,?,?,?,?,?)', competition_id, relayName, 'relay', gender, 'final', 'heats_generated', EventCatalog.codeOf(relayName));
                         eventCache.set(ck, r.lastInsertRowid);
                         eventNormCache.set(normKey, r.lastInsertRowid);
                         eventByNameGender.set(normKey, r.lastInsertRowid);
@@ -3539,7 +3545,7 @@ app.post('/api/federation/import', upload.single('file'), async (req, res) => {
                 for (const sub of subs) {
                     if (existingOrders.has(Number(sub.order))) continue; // 이미 있는 차수는 건너뛰고 누락분만 생성 (중복 방지)
                     const subName = `${prefix} ${sub.name}`;
-                    const subR = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order) VALUES (?,?,?,?,?,?,?,?)', competition_id, subName, sub.category, info.gender, 'final', 'heats_generated', parentId, sub.order);
+                    const subR = await db.run('INSERT INTO event (competition_id,name,category,gender,round_type,round_status,parent_event_id,sort_order,code) VALUES (?,?,?,?,?,?,?,?,?)', competition_id, subName, sub.category, info.gender, 'final', 'heats_generated', parentId, sub.order, EventCatalog.codeOf(subName));
                     const subEventId = subR.lastInsertRowid;
                     const parentEntries = await db.all('SELECT ee.id, ee.athlete_id FROM event_entry ee WHERE ee.event_id=?', parentId);
                     for (const pe of parentEntries) {
@@ -4084,7 +4090,7 @@ app.post('/api/events/upload', upload.single('file'), async (req, res) => {
                 existingCache.set(`${e.name}|${e.category}|${e.gender}|${e.round_type}`, e.id);
             }
 
-            const INSERT_EVT_SQL = 'INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order) VALUES (?,?,?,?,?,?,?)';
+            const INSERT_EVT_SQL = 'INSERT INTO event (competition_id,name,category,gender,round_type,round_status,sort_order,code) VALUES (?,?,?,?,?,?,?,?)';
             const INSERT_HEAT_SQL = 'INSERT INTO heat (event_id,heat_number) VALUES (?,?)';
             const mxRow = await db.get('SELECT MAX(sort_order) AS mx FROM event WHERE competition_id=?', competition_id);
             let sortOrder = ((mxRow && mxRow.mx) || 0) + 1;
@@ -4103,7 +4109,7 @@ app.post('/api/events/upload', upload.single('file'), async (req, res) => {
                 const key = `${name}|${category}|${gender}|${roundType}`;
                 if (existingCache.has(key)) { stats.skipped++; continue; }
 
-                const r = await db.run(INSERT_EVT_SQL, competition_id, name, category, gender, roundType, 'created', sortOrder++);
+                const r = await db.run(INSERT_EVT_SQL, competition_id, name, category, gender, roundType, 'created', sortOrder++, EventCatalog.codeOf(name));
                 // Auto-create first heat
                 await db.run(INSERT_HEAT_SQL, r.lastInsertRowid, 1);
                 existingCache.set(key, r.lastInsertRowid);
@@ -4117,7 +4123,7 @@ app.post('/api/events/upload', upload.single('file'), async (req, res) => {
                         '원반던지기':'field_distance','장대높이뛰기':'field_height','창던지기':'field_distance' };
                     for (const sn of subDefs) {
                         const sc = subCats[sn] || 'track';
-                        const sr = await db.run(INSERT_EVT_SQL, competition_id, sn, sc, gender, 'final', 'created', sortOrder++);
+                        const sr = await db.run(INSERT_EVT_SQL, competition_id, sn, sc, gender, 'final', 'created', sortOrder++, EventCatalog.codeOf(sn));
                         await db.run('UPDATE event SET parent_event_id=? WHERE id=?', r.lastInsertRowid, sr.lastInsertRowid);
                         await db.run(INSERT_HEAT_SQL, sr.lastInsertRowid, 1);
                     }
@@ -7127,8 +7133,19 @@ function migrateNormalizeDivisionAndRound() {
 // PG 모드 부팅(비동기): 설정·운영키 캐시 로드 + 초기 admin/운영키 시드.
 //   예전엔 server.listen 콜백 안에서만 돌아서 ① 테스트(require)에서는 아예 돌지 않았고 ② 운영에서도 listen 직후 첫 요청이 빈 캐시를 볼 수 있었다.
 //   → 요청 처리 전에 반드시 끝나도록 _bootReady 로 묶고, 미들웨어가 기다린다.
+// 종목 코드 채우기 — code 가 없는 종목을 이름으로 매핑 (부팅 1회 + 조회 시 lazy). 매핑 안 되는 이름은 NULL 로 남긴다
+async function backfillEventCodes(compId) {
+    try {
+        const rows = compId ? await db.all('SELECT id, name FROM event WHERE code IS NULL AND competition_id=?', compId) : await db.all('SELECT id, name FROM event WHERE code IS NULL');
+        let n = 0;
+        for (const r of rows) { const c = EventCatalog.codeOf(r.name); if (c) { await db.run('UPDATE event SET code=? WHERE id=?', c, r.id); n++; } }
+        if (n && !compId) console.log(`[event-code] ${n}개 종목에 코드 채움 (${rows.length - n}개는 사전에 없음)`);
+        return n;
+    } catch (e) { console.error('[event-code] backfill 실패:', e.message); return 0; }
+}
 async function _pgBootAsync() {
     await Promise.allSettled(_bootTasks);          // 인증 테이블·PG 열 마이그레이션·상장 양식 시드
+    await backfillEventCodes();
     if (!db.isAsync) return;
     try {
         await _loadConfigCacheAsync();

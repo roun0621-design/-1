@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS event (
     callroom_event_memo TEXT DEFAULT '',
     division TEXT NOT NULL DEFAULT '',
     result_url TEXT DEFAULT '',
-    external_key TEXT DEFAULT NULL                  -- 국제대회 동기화: 공식 결과 API 의 종목 키 (lib/intl)
+    external_key TEXT DEFAULT NULL,                 -- 국제대회 동기화: 공식 결과 API 의 종목 키 (lib/intl)
+    code TEXT DEFAULT NULL                          -- 종목 코드(lib/eventCatalog.js: 100·110H·LJ·DEC·4X100…) — 이름과 별개로 종목을 식별, 영문 표기·정렬·풍속 규제의 기준 (2026-09-30)
 );
 
 -- Athletes (선수) — linked to competition

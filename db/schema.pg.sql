@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS "event" (
     "division" TEXT NOT NULL DEFAULT '',
     "result_url" TEXT DEFAULT '',
     "external_key" TEXT DEFAULT NULL,    -- 국제대회 동기화: 공식 결과 API 의 종목 키 (lib/intl)
+    "code" TEXT DEFAULT NULL,            -- 종목 코드 (lib/eventCatalog.js)
     CHECK (category IN ('track','field_distance','field_height','combined','relay','road')),
     CHECK (gender IN ('M','F','X')),
     CHECK (round_type IN ('preliminary','semifinal','final'))

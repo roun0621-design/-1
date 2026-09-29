@@ -441,3 +441,9 @@ await db.transaction(async () => {
 - 서버: '오늘' 판정은 전부 `TZ.todayIn(TZ.compTz(comp))` — 자동 상태 전환(`competitions.js autoUpdateCompetitionStatus`, 대회마다 따로), 종료 잠금(`isCompetitionEnded`), 대회 재개, 운영 체크리스트, 시간표 `is_today`·`/today`·업로드의 '지난 날' 보존, 국제대회 동기화 기간 판정. 날짜 더하기는 `TZ.shiftYmd`(서버 시간대 무관).
 - 로그·백업 파일명의 `kstNow()` 는 서버 기본 시간대(`APP_TZ`, 기본 Asia/Seoul) — 대회와 무관.
 - 화면: `API.getCompetition` 이 `window.PACE_TZ` 를 채우고, `paceNow()`(common.js)가 대회 시간대의 오늘·현재 분을 준다 — 소집 시간창(−10/+5분), 대시보드 '지금'·NEXT·히어로 일차 전환, 시간표 창 일차 자동 선택, 종료 대회 진입 차단.
+
+## 종목 코드 (2026-09-30, 해외 대회 대비 B2)
+- `event.code`(NULL 허용) — `lib/eventCatalog.js` 사전의 코드(`100`·`110H`·`3000SC`·`5000W`·`LJ`·`SP`·`DEC`·`4X100`·`4X400X`(혼성 계주)·`HM`·`MAR`·`20KW` …). `event.name`(한글 정식명 + 부 접미)은 그대로 두고 코드를 옆에 채운다.
+- 채우는 곳: 관리자 종목 생성·종목 xlsx 업로드·연맹 통합 업로드·국제 동기화·준결승/결승 생성(부모 코드 복사)·혼성 세부종목 생성. 그 밖의 경로(노출용 대회·조편성 업로드·복제)는 부팅 `backfillEventCodes()` 와 `GET /api/events` 의 lazy 채움이 잡는다. 사전에 없는 이름은 NULL.
+- 이름 → 코드 매핑 `codeOf()`: `recordKey` 정규화(라운드·성별·부 접미·콤마·단위) → 사전(한글·영문·약어·연맹·Bornan 표기 별칭) → 낱말 단위 부분 일치(글자 단위 아님 — '4x400m' 안의 '400m' 오인 방지).
+- 쓰는 곳: `GET /api/events` 의 `code`·`name_en`(영문 표시명, B3 영문 UI 의 기준), 풍속 규제 판정(`recordCompare.isWindAffectedEvent` 가 코드도 본다). 정렬(`sortIndex`)·문서·오버레이는 아직 이름 기준 — B3/B5 에서 코드로 옮긴다.
