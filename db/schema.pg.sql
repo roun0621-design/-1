@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS "competition" (
     "event_show_rounds" TEXT NOT NULL DEFAULT 'auto',
     "home_visibility" TEXT NOT NULL DEFAULT 'auto',
     "manual_status_lock" INTEGER NOT NULL DEFAULT 0,
+    "timezone" TEXT NOT NULL DEFAULT 'Asia/Seoul',   -- 대회 시간대(IANA, lib/tz.js)
     "sync_source" TEXT DEFAULT NULL,      -- 국제대회 동기화 출처 JSON {provider, base, champ, disc, lang}
     "sync_state" TEXT DEFAULT NULL,       -- 마지막 동기화 상태 JSON
     CHECK (status IN ('upcoming','active','completed'))

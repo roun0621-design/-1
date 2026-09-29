@@ -91,12 +91,9 @@ for (const m of ['single', 'array', 'fields', 'any', 'none']) {
     }); };
 }
 
-// ---- KST (한국표준시, UTC+9) Helper ----
-function kstNow() {
-    const d = new Date();
-    d.setHours(d.getHours() + 9);
-    return d.toISOString().replace('T', ' ').substring(0, 19);
-}
+// ---- 서버 기본 시간대(APP_TZ, 기본 Asia/Seoul) 현재 시각 — 로그·백업 파일명용. 대회별 '오늘' 판정은 lib/tz.js todayIn(compTz(comp)) (2026-09-30)
+const TZ = require('./lib/tz');
+function kstNow() { return TZ.nowStrIn(TZ.DEFAULT_TZ); }
 
 // ─── DB 타임스탬프 → ms epoch 파서 ───────────────────────────────
 // SQLite datetime('now')         → "2026-05-27 09:01:00"           (UTC, 공백, TZ 없음)
@@ -1287,6 +1284,8 @@ try { db.exec(`ALTER TABLE competition ADD COLUMN event_show_rounds TEXT NOT NUL
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
 // competition.home_visibility: 홈 노출 강제 설정 — 'auto'(±3일 윈도우) | 'pinned'(항상 상단 고정) | 'hidden'(홈에서 숨김)
 try { db.exec(`ALTER TABLE competition ADD COLUMN home_visibility TEXT NOT NULL DEFAULT 'auto'`); } catch(e) {}
+// competition.timezone: 대회 시간대(IANA) — 해외 대회 대비 (lib/tz.js)
+try { db.exec(`ALTER TABLE competition ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Asia/Seoul'`); } catch(e) {}
 // competition.manual_status_lock: 관리자가 '대회 재개'로 수동 상태변경한 경우 1 — 날짜 기반 자동 상태갱신(active→completed)을 막아 재잠금을 방지
 try { db.exec(`ALTER TABLE competition ADD COLUMN manual_status_lock INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 // event.division: 중등부/고등부/대학부/일반부/국제/U20
@@ -1822,6 +1821,7 @@ if (db.isAsync) {
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competition(event_slug)`); } catch(e) {}
             // competition: 홈 노출 강제 설정 (auto | pinned | hidden)
             await pgIdempotentAddCol('competition', 'home_visibility', `TEXT NOT NULL DEFAULT 'auto'`);
+            await pgIdempotentAddCol('competition', 'timezone', `TEXT NOT NULL DEFAULT 'Asia/Seoul'`);
             // federation_list: 연맹 숨김 (홈·운영 화면 목록에서 소속 대회 전체 제외)
             await pgIdempotentAddCol('federation_list', 'hidden', `BIGINT NOT NULL DEFAULT 0`);
             // 연맹 기본값 (PG 는 빈 테이블 시드가 없었음) + 한국중·고육상연맹 (Phase 7)
@@ -2086,11 +2086,11 @@ function getKeyRole(key) {
 //   4) end_date < today        → 자동 만료 (status 미지정 시의 폴백)
 async function isCompetitionEnded(competitionId) {
     if (!competitionId) return false;
-    const comp = await db.get('SELECT status, end_date FROM competition WHERE id=?', competitionId);
+    const comp = await db.get('SELECT status, end_date, timezone FROM competition WHERE id=?', competitionId);
     if (!comp) return false;
     if (comp.status === 'completed') return true;
     if (comp.status === 'active' || comp.status === 'upcoming') return false;
-    const today = kstNow().slice(0, 10);
+    const today = TZ.todayIn(TZ.compTz(comp));
     if (comp.end_date && comp.end_date < today) return true;
     return false;
 }

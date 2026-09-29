@@ -435,3 +435,9 @@ await db.transaction(async () => {
 - 단위 테스트 28/28 ✅
 - 동시쓰기 250/250 ✅
 - 에러 로그 0건 ✅
+
+## 대회 시간대 (2026-09-30)
+- `competition.timezone`(IANA, 기본 `Asia/Seoul`) — 관리자 대회 설정·홈 '대회 추가'에서 지정. 검증 `lib/tz.js isValidTz`.
+- 서버: '오늘' 판정은 전부 `TZ.todayIn(TZ.compTz(comp))` — 자동 상태 전환(`competitions.js autoUpdateCompetitionStatus`, 대회마다 따로), 종료 잠금(`isCompetitionEnded`), 대회 재개, 운영 체크리스트, 시간표 `is_today`·`/today`·업로드의 '지난 날' 보존, 국제대회 동기화 기간 판정. 날짜 더하기는 `TZ.shiftYmd`(서버 시간대 무관).
+- 로그·백업 파일명의 `kstNow()` 는 서버 기본 시간대(`APP_TZ`, 기본 Asia/Seoul) — 대회와 무관.
+- 화면: `API.getCompetition` 이 `window.PACE_TZ` 를 채우고, `paceNow()`(common.js)가 대회 시간대의 오늘·현재 분을 준다 — 소집 시간창(−10/+5분), 대시보드 '지금'·NEXT·히어로 일차 전환, 시간표 창 일차 자동 선택, 종료 대회 진입 차단.

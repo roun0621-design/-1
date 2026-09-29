@@ -297,6 +297,10 @@
                 <label>장소</label>
                 <input id="new-comp-venue" placeholder="예: 잠실 올림픽주경기장">
             </div>
+            <div class="form-group">
+                <label>시간대 <span style="font-size:12px;color:var(--text-muted);">(개최지, 기본 Asia/Seoul)</span></label>
+                <input id="new-comp-timezone" list="pace-tz-list-new" placeholder="Asia/Seoul"><datalist id="pace-tz-list-new"></datalist>
+            </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>연맹</label>
@@ -880,14 +884,16 @@
             const mode = document.getElementById('new-comp-mode').value;
             const division_type = document.getElementById('new-comp-division').value;
             const video_url = document.getElementById('new-comp-video').value.trim();
+            const timezone = (document.getElementById('new-comp-timezone')?.value || '').trim() || 'Asia/Seoul';
             if (!name || !start || !end) { uiAlert('대회명, 시작일, 종료일은 필수입니다.'); return; }
             try {
-                await API.createCompetition({ name, start_date: start, end_date: end, venue, federation, mode, division_type, video_url }, currentKey);
+                await API.createCompetition({ name, start_date: start, end_date: end, venue, federation, mode, division_type, video_url, timezone }, currentKey);
                 closeAddComp();
                 await loadCompetitions();
             } catch (e) { uiAlert(e.error || '생성 실패'); }
         }
         document.getElementById('add-comp-modal').addEventListener('click', e => { if (e.target === document.getElementById('add-comp-modal')) closeAddComp(); });
+        { const dl = document.getElementById('pace-tz-list-new'); if (dl && typeof PACE_COMMON_TZ !== 'undefined') dl.innerHTML = PACE_COMMON_TZ.map(z => `<option value="${z}">`).join(''); }
 
         // ---- Dynamic Site Config ----
         async function loadSiteConfig() {

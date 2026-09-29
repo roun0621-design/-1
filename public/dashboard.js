@@ -767,10 +767,7 @@ function _ttToMin(t) {
 function _ttGetTodayDay() {
     const sd = _timetableFull.start_date;
     if (!sd) return null;
-    const start = new Date(sd + 'T00:00:00');
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const diff = Math.floor((today - start) / 86400000);
+    const diff = paceDayDiff(paceNow().ymd, String(sd).slice(0, 10));   // 대회 시간대 기준
     return diff >= 0 ? diff + 1 : null;
 }
 
@@ -825,8 +822,7 @@ function _ttGetTargetDay() {
 
     // 오늘이 대회 일차 범위 안에 있는 경우
     if (days[todayDay]) {
-        const now = new Date();
-        const nowMin = now.getHours()*60 + now.getMinutes();
+        const nowMin = paceNow().minutes;   // 대회 시간대 기준
         const lastMin = _ttLastEventMin(todayDay);
         // 마지막 경기 시작 + 30분이 지나면 다음 일차로
         if (lastMin >= 0 && nowMin >= lastMin + _HERO_NEXT_DAY_OFFSET_MIN) {
@@ -869,9 +865,8 @@ function renderHeroSchedule() {
 
     const dayItems = _ttFlattenDay(targetDay);
 
-    // 현재 시각 기준 진행중/다음 종목 찾기
-    const now = new Date();
-    const nowMin = now.getHours()*60 + now.getMinutes();
+    // 현재 시각(대회 시간대) 기준 진행중/다음 종목 찾기
+    const nowMin = paceNow().minutes;
     const todayDay = _ttGetTodayDay();
     const isToday = (todayDay === targetDay);
 
@@ -1156,12 +1151,12 @@ function _evSortIdx(name) {
 // 시간별 보기로 처음 열 때: 지금 시각에 가장 가까운(아직 안 끝난) 종목 카드로 부드럽게 스크롤(화면 중앙) — 표시는 NEXT 칩·LIVE 깜빡임(_markNext)
 let _scrolledToNow = false;     // 세션당 한 번 (실제로 움직인 뒤에 true)
 let _nowFlashUntil = 0, _nowFlashKey = null;   // 다시 그려져도(데이터가 뒤늦게 더 오면 카드가 통째로 교체된다) 같은 카드를 다시 찾아 위치를 유지
-function _todayKey() { const d = new Date(), pad = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+function _todayKey() { return paceNow().ymd; }   // 대회 시간대 기준 오늘 (common.js paceNow)
 function _nowRows() { return [...document.querySelectorAll('#events-container tr[data-sched]:not([data-combined])')]; }   // 7종·10종은 며칠 내내 LIVE 라 제외
 function _nowKeyOf(r) { const n = r.querySelector('.event-name'); return r.getAttribute('data-sched') + '|' + (n ? n.textContent.trim().slice(0, 30) : ''); }
 function _pickNowRow(rows) {
-    const now = new Date(); const pad = n => String(n).padStart(2, '0');
-    const nowKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const now = paceNow();   // 대회 시간대 기준
+    const nowKey = `${now.ymd}T${now.hm}`;
     // 진행 중 > 지금 이후 첫 종목 > (다 지났으면) 마지막 종목
     return rows.find(r => r.querySelector('.status-live'))
         || rows.find(r => !r.hasAttribute('data-done') && r.getAttribute('data-sched') >= nowKey)

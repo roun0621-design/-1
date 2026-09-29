@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS competition (
     series_id INTEGER REFERENCES competition_series(id),
     home_visibility TEXT NOT NULL DEFAULT 'auto',    -- 'auto' | 'pinned'(홈 고정) | 'hidden'(홈 숨김)
     manual_status_lock INTEGER NOT NULL DEFAULT 0,   -- 1=관리자 '대회 재개'로 수동 상태고정 → 날짜 자동갱신(active→completed) 제외
+    timezone TEXT NOT NULL DEFAULT 'Asia/Seoul',     -- 대회 시간대(IANA) — '오늘'·소집 시간창·자동 상태 전환 기준 (lib/tz.js)
     sync_source TEXT DEFAULT NULL,                   -- 국제대회 동기화 출처 JSON {provider, base, champ, disc, lang} (lib/intl)
     sync_state TEXT DEFAULT NULL                     -- 마지막 동기화 상태 JSON
 );

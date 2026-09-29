@@ -207,21 +207,38 @@ function formatHeight(meters) {
  * @param {string} scheduledDate "YYYY-MM-DD" format (optional, defaults to today)
  * @returns {boolean}
  */
+// ── 대회 시간대 (2026-09-30) ─────────────────────────────────────────
+//   예전엔 KST(UTC+9) 고정이었다. 이제 API.getCompetition 이 competition.timezone 을 window.PACE_TZ 에 두고,
+//   '오늘'·'지금 몇 분' 판정은 전부 paceNow() 로 — 폰이 어느 나라에 있든 대회 개최지 시각으로 본다.
+const PACE_COMMON_TZ = ['Asia/Seoul', 'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Taipei', 'Asia/Manila', 'Asia/Singapore', 'Asia/Kuala_Lumpur', 'Asia/Jakarta', 'Asia/Bangkok', 'Asia/Ho_Chi_Minh', 'Asia/Kolkata', 'Asia/Dubai', 'Asia/Doha', 'Asia/Tashkent', 'Asia/Almaty', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Rome', 'Europe/Madrid', 'Europe/Warsaw', 'Europe/Istanbul', 'Africa/Nairobi', 'Africa/Johannesburg', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Sao_Paulo', 'America/Mexico_City', 'Australia/Sydney', 'Australia/Brisbane', 'Pacific/Auckland', 'UTC'];
+function paceTz() { return window.PACE_TZ || 'Asia/Seoul'; }
+const _paceFmtCache = {};
+// { ymd:'YYYY-MM-DD', hm:'HH:MM', minutes: 0시부터 지난 분, hours, mins } — tz 를 모르는 브라우저면 기기 시각으로 폴백
+function paceNow(tz, date) {
+    tz = tz || paceTz(); const d = date || new Date();
+    try {
+        let f = _paceFmtCache[tz];
+        if (!f) f = _paceFmtCache[tz] = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const p = {}; for (const x of f.formatToParts(d)) if (x.type !== 'literal') p[x.type] = x.value;
+        const h = p.hour === '24' ? 0 : Number(p.hour), mi = Number(p.minute);
+        return { ymd: `${p.year}-${p.month}-${p.day}`, hm: `${String(h).padStart(2, '0')}:${p.minute}`, minutes: h * 60 + mi, hours: h, mins: mi };
+    } catch (e) {
+        const pad = n => String(n).padStart(2, '0');
+        return { ymd: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, hm: `${pad(d.getHours())}:${pad(d.getMinutes())}`, minutes: d.getHours() * 60 + d.getMinutes(), hours: d.getHours(), mins: d.getMinutes() };
+    }
+}
+// 'YYYY-MM-DD' 두 날짜의 차이(일) — 기기 시간대와 무관
+function paceDayDiff(a, b) { const t = s => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)); return Math.round((t(a) - t(b)) / 86400000); }
+
 function isCallRoomWindow(callroomTime, scheduledDate) {
     if (!callroomTime) return false;
     const [h, m] = callroomTime.split(':').map(Number);
     if (isNaN(h) || isNaN(m)) return false;
-    // KST = UTC+9
-    const now = new Date();
-    const kstNow = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60000);
-    // If scheduledDate provided, check it's today in KST
-    if (scheduledDate) {
-        const todayKST = kstNow.toISOString().split('T')[0];
-        if (scheduledDate !== todayKST) return false;
-    }
-    const nowMins = kstNow.getHours() * 60 + kstNow.getMinutes();
+    const now = paceNow();   // 대회 시간대 기준
+    // If scheduledDate provided, check it's today (대회 시간대)
+    if (scheduledDate && scheduledDate !== now.ymd) return false;
     const crMins = h * 60 + m;
-    return nowMins >= (crMins - 10) && nowMins <= (crMins + 5);
+    return now.minutes >= (crMins - 10) && now.minutes <= (crMins + 5);
 }
 
 // ============================================================
@@ -621,7 +638,7 @@ const API = {
     setCompetitionHomeVisibility: (id, home_visibility, key) => api('PUT', `/api/competitions/${id}/home-visibility`, { admin_key: key, home_visibility }),
     // 연맹 숨김 토글 — 관리자 키
     setFederationHidden: (id, hidden, key) => api('PUT', `/api/federations/${id}/hidden`, { admin_key: key, hidden: hidden ? 1 : 0 }),
-    getCompetition: id => api('GET', `/api/competitions/${id}`),
+    getCompetition: id => api('GET', `/api/competitions/${id}`).then(c => { if (c && c.timezone) window.PACE_TZ = c.timezone; return c; }),   // 대회 시간대를 기억 → paceNow() 가 쓴다
     createCompetition: (data, adminKey) => api('POST', '/api/competitions', { ...data, admin_key: adminKey }),
     updateCompetition: (id, data, adminKey) => api('PUT', `/api/competitions/${id}`, { ...data, admin_key: adminKey }),
     deleteCompetition: (id, adminKey) => api('DELETE', `/api/competitions/${id}`, { admin_key: adminKey }),
@@ -1407,7 +1424,7 @@ async function guardEndedCompForOperation(currentPage) {
         if (!compId) return;
         const comp = await API.getCompetition(compId);
         if (!comp) return;
-        const today = new Date().toISOString().slice(0, 10);
+        const today = paceNow(comp.timezone).ymd;   // 대회 시간대 기준
         const isEnded = comp.status === 'completed' || (comp.end_date && comp.end_date < today);
         if (!isEnded) return;
         // 종료된 대회 + 운영진 → 진입 차단
@@ -2084,12 +2101,9 @@ async function openTimetable(compId) {
         let activeDay = dayKeys[0]; // fallback: first day
         let _allEnded = false; // 대회 전부 종료 여부 (정보용)
         if (data.start_date) {
-            const now = new Date(); // browser local time (KST)
-            const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-            const start = new Date(data.start_date + 'T00:00:00');
-            const today = new Date(todayStr + 'T00:00:00');
-            const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24)) + 1;
-            const nowMin = now.getHours()*60 + now.getMinutes();
+            const now = paceNow(); // 대회 시간대 기준
+            const diffDays = paceDayDiff(now.ymd, String(data.start_date).slice(0, 10)) + 1;
+            const nowMin = now.minutes;
 
             if (diffDays < dayKeys[0]) {
                 // 대회 시작 전
