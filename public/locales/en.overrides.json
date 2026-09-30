@@ -8,5 +8,16 @@
   "_filterDivision('전체')": "_filterDivision('전체')",
   "setGender('전체')": "setGender('전체')",
   "setDiv('전체')": "setDiv('전체')",
-  "setCat('전체')": "setCat('전체')"
+  "setCat('전체')": "setCat('전체')",
+  "한국실업육상연맹": "Korea Track & Field League",
+  "한국대학육상연맹": "Korea University Athletics Federation",
+  "한국중고육상연맹": "Korea Junior Athletics Federation",
+  "대한육상연맹": "Korea Association of Athletics Federations",
+  "한국실업육상연맹 (KTFL)": "Korea Track & Field League (KTFL)",
+  "한국대학육상연맹 (KUAF)": "Korea University Athletics Federation (KUAF)",
+  "한국중고육상연맹 (KJAF)": "Korea Junior Athletics Federation (KJAF)",
+  "대한육상연맹 (KAAF)": "Korea Association of Athletics Federations (KAAF)",
+  "실업": "Club",
+  "대학": "University",
+  "중고": "Junior"
 }
