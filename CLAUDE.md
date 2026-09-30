@@ -80,3 +80,6 @@ Static pages in `public/` (no framework, no bundler) — `record.html`+`record.j
 
 ## 대회 기간 인계 (2026-09 아시안게임)
 다른 맥에서 이어서 작업할 때는 먼저 `docs/HANDOFF_AG2026.md` 를 읽는다 — 운영 대회 id, 지금까지 결과, 매일 만드는 인스타 데일리 카드 절차(`scripts/intl-daily-cards/`), 진행 중인 iOS 푸시 작업이 정리돼 있다.
+
+## 디자인 틀 (반드시 따를 것)
+화면·문구·아이콘·글자 크기·색·버튼·레이아웃을 새로 만들거나 고칠 때는 먼저 `docs/DESIGN_SYSTEM.md` 를 읽고 그 규칙대로 한다. 사용자가 디자인 수정을 요청하면 코드와 함께 그 문서(§0 요청 이력 + 해당 절)를 갱신한다. 동작 규칙은 `docs/UX_RULES.md`.
