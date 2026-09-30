@@ -64,7 +64,7 @@
 
 ## 8. 다국어
 - 시스템 언어 KO/EN/JA, **영어 우선**. 원문(한국어)이 키, 사전 `public/locales/*.json`, 도구 `scripts/i18n/`(extract → parts → build). 새 한국어 문장을 넣으면 같은 커밋에서 EN/JA 도 추가(`extract.js --missing`).
-- 긴 언어 대비: 칩·탭·표 머리글·버튼은 **짧은 라벨 세트**(Res./List·Event/Time·H/SF/F)를 우선, 버튼은 한 줄(nowrap), 일본어는 글자 단위 줄바꿈 금지. 넘침은 스크린샷 검수로 0건까지.
+- 긴 언어 대비: 칩·탭·표 머리글·버튼은 **짧은 라벨 세트**(Res./List·Event/Time·H/SF/F)를 우선, 버튼은 한 줄(nowrap), 일본어는 글자 단위 줄바꿈 금지. 넘침은 `node scripts/i18n/overflow_check.js both`(BASE·ADMIN_PW 환경변수) 로 **0건**을 확인하고 나서 커밋한다(2026-10-01 기준 0건).
 - 대회명은 `competition.name_en/name_ja`, 종목·라운드·부 라벨은 `lib/eventCatalog.js`·`lib/labels.js`.
 
 ## 9. 이름 짓기·문구
