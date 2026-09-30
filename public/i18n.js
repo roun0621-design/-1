@@ -14,7 +14,7 @@
     'use strict';
 
     var STORAGE_KEY = 'pace_lang';
-    var DICT_VERSION = (window.PACE_I18N_VERSION || '3');
+    var DICT_VERSION = (window.PACE_I18N_VERSION || '4');
     var LANGS = [
         { code: 'ko', label: '한국어', short: 'KO' },
         { code: 'en', label: 'English', short: 'EN' },
@@ -119,15 +119,15 @@
         // 낱말 조합: "남자 100m 결승", "멀리뛰기 일반부" — 한글이 든 낱말이 모두 사전에 있어야 한다
         var parts = s.split(/(\s+|·|\/|\(|\)|,)/);
         if (parts.length > 1) {
-            var ok = false, res = [];
+            var ok = false, fail = false, res = [];
             for (var j = 0; j < parts.length; j++) {
                 var p = parts[j];
                 if (!HANGUL.test(p)) { res.push(p); continue; }
                 var tv = d[p];
-                if (tv == null) { return null; }
+                if (tv == null) { fail = true; break; }     // 모르는 낱말 → 아래 긴 원문 치환으로
                 ok = true; res.push(tv);
             }
-            if (ok) return res.join('');
+            if (ok && !fail) return res.join('');
         }
         // 서버가 준 긴 원문(대회명)이 문장 안에 있으면 그 부분만 바꾼다: '2026 아이치 … 육상 (2026-09-23)' → '2026 Aichi … (2026-09-23)'
         var ph = PHRASES[lang]; if (ph && ph.length) {

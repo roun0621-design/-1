@@ -23,5 +23,13 @@
   "기록지": "Results sheets",
   "풍속 미입력": "Wind not entered",
   "영상": "Video",
-  "명단": "Start list"
+  "명단": "Start list",
+  "{0} 기록": "{0} Res.",
+  "{0} 명단": "{0} List",
+  "종목별": "Event",
+  "시간별": "Time",
+  "운영 모드": "Operations",
+  "미배정 정리": "Clean up",
+  "종목 순서 변경": "Reorder",
+  "+ 종목 추가": "+ Event"
 }
