@@ -313,6 +313,12 @@
 </head>
 <body>
 
+    <div id="adm-preview-modal" class="modal-overlay" style="display:none;z-index:10050;" onclick="if(event.target===this)admClosePreview()">
+        <div class="adm-preview-box"><div class="adm-preview-head"><span id="adm-preview-title">미리보기</span><a id="adm-preview-open" class="btn btn-sm btn-outline" target="_blank" rel="noopener">새 창</a><button class="btn btn-sm btn-ghost" onclick="admClosePreview()">닫기</button></div><iframe id="adm-preview-frame" title="preview"></iframe></div>
+    </div>
+    <div id="adm-help-modal" class="modal-overlay" style="display:none;z-index:10040;" onclick="if(event.target===this)admCloseHelp()">
+        <div class="adm-preview-box adm-help-box"><div class="adm-preview-head"><span>도움말</span><button class="btn btn-sm btn-ghost" onclick="admCloseHelp()">닫기</button></div><div id="adm-help-body"></div></div>
+    </div>
     <header class="header">
         <div class="header-inner">
             <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">Node</span></h1>
@@ -351,7 +357,7 @@
                     <label style="font-weight:600;font-size:13px;white-space:nowrap;">대회:</label>
                     <select id="admin-comp-select" onchange="onCompChange()" style="flex:1;"></select>
                     <!-- 대회 종료/재개 컨트롤 — 관리자만 작동 -->
-                    <span id="comp-status-badge" style="display:none;font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fee2e2;color:#991b1b;white-space:nowrap;" title="이 대회는 종료되었습니다. 운영자는 뷰어 모드로 동작합니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> 종료됨</span>
+                    <button class="btn btn-sm btn-ghost" onclick="admOpenHelp()" title="도움말" style="margin-left:auto;">도움말</button> <span id="comp-status-badge" style="display:none;font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fee2e2;color:#991b1b;white-space:nowrap;" title="이 대회는 종료되었습니다. 운영자는 뷰어 모드로 동작합니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> 종료됨</span>
                     <button id="comp-close-btn" class="btn btn-sm btn-outline" onclick="toggleCompetitionClose()" style="white-space:nowrap;font-size:12px;display:none;" title="대회 종료/재개 (관리자 전용)">대회 종료</button>
                 </div>
                 <!-- 종료된 대회일 때 운영자에게 보이는 안내 배너 -->
@@ -503,7 +509,7 @@
                 <div class="admin-card" style="scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;">
                         <span class="css-icon" style="background:#b79f58;color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">U</span>
-                        사용자 계정 관리 (JWT)
+                        사용자 계정
                     </h4>
                     <p class="t-help-lg">
                         새로운 로그인 시스템 계정을 관리합니다.<br>
@@ -582,210 +588,134 @@
                 </div>
             </div>
 
-            <!-- TAB: Upload -->
+            <!-- TAB: Upload → 가져오기 (재설계 3단계: 5단계 스텝, 한 번에 한 단계) -->
             <div id="tab-upload" class="admin-tab-panel">
-                <!-- Template Download -->
-                <div class="admin-card" style="margin-bottom:12px;">
-                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-                        <div>
-                            <h4 style="color:#6b6b6b;margin:0;">엑셀 양식 다운로드</h4>
-                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">선수명단 + 조편성 + 당일조편성 + 작성가이드 포함</p>
+                <div class="adm-steps" id="imp-steps">
+                    <button type="button" class="active" onclick="impGoStep(1)"><b>1</b>명단</button>
+                    <button type="button" onclick="impGoStep(2)"><b>2</b>종목</button>
+                    <button type="button" onclick="impGoStep(3)"><b>3</b>조편성</button>
+                    <button type="button" onclick="impGoStep(4)"><b>4</b>시간표</button>
+                    <button type="button" onclick="impGoStep(5)"><b>5</b>배번 · 연락처</button>
+                    <a class="adm-steps-link" href="/PACERISE_upload_template.xlsx" download>엑셀 양식 내려받기</a>
+                </div>
+
+                <section class="adm-step" data-step="1">
+                <div class="admin-card" id="card-imp-roster">
+                    <h4>명단 가져오기</h4>
+                    <div class="adm-seg" id="imp-roster-seg"><button type="button" class="active" onclick="impRosterMode('fed',this)">연맹 통합 명단 (선수 + 종목 + 출전)</button><button type="button" onclick="impRosterMode('ath',this)">선수 명단만</button></div>
+                    <div id="imp-roster-fed">
+                        <p class="adm-lead">연맹 엑셀 한 장으로 선수·종목·출전 배정이 한 번에 등록됩니다.</p>
+                        <details class="adm-help"><summary>형식 안내</summary><div>
+                            A열 <code>팀명 *</code> · B열 <code>선수명 *</code> · C열 <code>성별(남/여) *</code> · D열 <code>생년월일</code> · <code>종목1</code>/<code>종목2</code> 열은 머리글 이름으로 인식 · G~K열 <code>릴레이(4x100mR, 4x400mR, Mixed 등)</code> 참가 시 <code>O</code> · L열 <code>바코드</code> · <code>학년</code> 열(선택)<br>
+                            배번(BIB)은 이 단계에서 등록하지 않습니다(조편성에서 배정). 바코드는 자동 생성하지 않습니다. 1행은 머리글, 2행부터 데이터. 종목 열이 비면 선수만 등록됩니다.
+                        </div></details>
+                        <label class="adm-drop" for="fed-file"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>xlsx</small></span><span class="adm-drop-name" data-for="fed-file"></span></label>
+                        <input type="file" id="fed-file" accept=".xlsx,.xls" hidden>
+                        <div class="adm-opts">
+                            <label><input type="checkbox" id="fed-clear"> 기존 데이터 초기화 후 가져오기</label>
+                            <label>조 크기 <input type="number" id="fed-heat-size" value="8" min="4" max="16" style="width:64px;"></label>
                         </div>
-                        <a href="/PACERISE_upload_template.xlsx" download class="btn btn-sm btn-primary" style="text-decoration:none;">양식 다운로드 (.xlsx)</a>
+                        <div class="adm-actions"><button class="btn btn-outline" onclick="previewFederation()">미리보기</button><button class="btn btn-primary" onclick="importFederation()" id="fed-import-btn" disabled>가져오기 실행</button></div>
+                        <div id="fed-preview" style="display:none;background:var(--adm-surface-2);border-radius:6px;padding:12px;font-size:12px;margin-top:12px;"></div>
+                        <div id="fed-result" style="display:none;padding:12px;border-radius:6px;font-size:13px;font-weight:600;margin-top:12px;"></div>
+                    </div>
+                    <div id="imp-roster-ath" style="display:none;">
+                        <p class="adm-lead">종목 배정 없이 선수만 등록합니다. 종목 배정은 소집실이나 종목 화면에서 합니다.</p>
+                        <details class="adm-help"><summary>형식 안내</summary><div>A열 <code>배번(BIB)</code>(비워도 됨) · B열 <code>선수명 *</code> · C열 <code>소속</code> · D열 <code>성별(남/여) *</code> · E열 <code>바코드</code>(선택). 배번·바코드를 비우면 비운 채로 저장됩니다. 1행은 머리글.</div></details>
+                        <label class="adm-drop" for="ath-upload-file"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>xlsx</small></span><span class="adm-drop-name" data-for="ath-upload-file"></span></label>
+                        <input type="file" id="ath-upload-file" accept=".xlsx,.xls" hidden>
+                        <div class="adm-opts"><label><input type="checkbox" id="ath-upload-clear"> 기존 선수 초기화</label></div>
+                        <div class="adm-actions"><button class="btn btn-primary" onclick="uploadAthletes()">가져오기 실행</button></div>
+                        <div id="ath-upload-result" style="display:none;padding:10px;border-radius:6px;font-size:13px;font-weight:600;margin-top:12px;"></div>
                     </div>
                 </div>
+                <div class="adm-step-nav"><span></span><button class="btn btn-outline" onclick="impGoStep(2)">다음: 종목 →</button></div>
+                </section>
 
-                <!-- Step 1: Federation Roster -->
-                <div class="admin-card">
-                    <h4>1단계: 연맹 명단 업로드</h4>
-                    <p class="t-help">연맹 엑셀 파일을 업로드하면 <strong>선수 + 종목 + 출전배정</strong>이 한번에 자동 등록됩니다.</p>
-                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
-                        <strong>엑셀 양식 (열 순서 고정):</strong><br>
-                        A열: <code>팀명 *</code> | B열: <code>선수명 *</code> | C열: <code>성별(남/여) *</code> | D열: <code>생년월일</code> | <code>종목1</code> / <code>종목2</code> 열은 헤더명으로 자동 인식 (양식처럼 E열 휴대폰 뒤에 있어도 됨, 헤더 없으면 E·F열)<br>
-                        G열~K열: <code>릴레이(4x100mR, 4x400mR, Mixed 등)</code> — 참가 시 <code>O</code> 입력<br>
-                        L열: <code>바코드</code> — 사용자가 직접 등록한 바코드 번호 | <code>학년</code> 열(헤더명으로 인식, 선택) — 학년별 대회<br>
-                        <span style="color:#ef4444;font-weight:600;">* 배번(BIB)은 이 단계에서 등록하지 않음 (조편성에서 배번 배정)</span><br>
-                        <span style="color:#ef4444;font-weight:600;">* 바코드는 시스템이 자동 생성하지 않음 (사용자 직접 입력)</span><br>
-                        <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터. 종목 열 비워두면 선수만 등록됩니다.</span>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:12px;">
-                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                            <input type="file" id="fed-file" accept=".xlsx,.xls" class="t-lg">
-                            <button class="btn btn-outline" onclick="previewFederation()">미리보기</button>
-                            <button class="btn btn-primary" onclick="importFederation()" id="fed-import-btn" disabled>가져오기 실행</button>
-                        </div>
-                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                            <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
-                                <input type="checkbox" id="fed-clear"> 기존 데이터 초기화 후 가져오기
-                            </label>
-                            <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
-                                조 크기: <input type="number" id="fed-heat-size" value="8" min="4" max="16" style="width:50px;padding:4px;border:1px solid var(--gray);border-radius:4px;font-size:12px;">
-                            </label>
-                        </div>
-                        <div id="fed-preview" style="display:none;background:var(--bg);border-radius:var(--radius);padding:12px;font-size:12px;"></div>
-                        <div id="fed-result" style="display:none;padding:12px;border-radius:var(--radius);font-size:13px;font-weight:600;"></div>
-                    </div>
+                <section class="adm-step" data-step="2" style="display:none;">
+                <div class="admin-card" id="card-imp-events">
+                    <h4>종목 가져오기</h4>
+                    <p class="adm-lead">종목만 일괄 등록합니다. 10종·7종·5종은 세부 종목이 자동으로 만들어집니다. 연맹 통합 명단으로 이미 들어왔다면 건너뛰어도 됩니다.</p>
+                    <details class="adm-help"><summary>형식 안내</summary><div>A열 <code>종목명 *</code> · B열 <code>카테고리</code>(track/트랙, field_distance/필드(거리), field_height/필드(높이), relay/릴레이, combined/종합, road/도로) · C열 <code>성별</code>(남/M, 여/F, 혼성/X) · D열 <code>라운드</code>(결승 기본, 예선, 준결승). 비우면 track/남/결승.</div></details>
+                    <label class="adm-drop" for="evt-upload-file"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>xlsx</small></span><span class="adm-drop-name" data-for="evt-upload-file"></span></label>
+                        <input type="file" id="evt-upload-file" accept=".xlsx,.xls" hidden>
+                    <div class="adm-opts"><label><input type="checkbox" id="evt-upload-clear"> 기존 종목 초기화</label></div>
+                    <div class="adm-actions"><button class="btn btn-primary" onclick="uploadEvents()">가져오기 실행</button></div>
+                    <div id="evt-upload-result" style="display:none;padding:10px;border-radius:6px;font-size:13px;font-weight:600;margin-top:12px;"></div>
                 </div>
+                <div class="adm-step-nav"><button class="btn btn-ghost" onclick="impGoStep(1)">← 명단</button><button class="btn btn-outline" onclick="impGoStep(3)">다음: 조편성 →</button></div>
+                </section>
 
-                <!-- Step 2: Heat Assignment Upload (조편성) -->
-                <div class="admin-card" style="">
-                    <h4 style="color:#ef4444;">2단계: 조편성 업로드</h4>
-                    <p class="t-help">
-                        조편성 엑셀 파일을 업로드하면 <strong>해당 종목의 조/레인/배번</strong>이 배정됩니다.<br>
-                        <span style="color:#ef4444;">파일에 포함된 종목만 변경되며, 포함되지 않은 종목은 영향 없습니다.</span>
-                    </p>
-                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
-                        <strong>엑셀 양식:</strong><br>
-                        A열: <code>성별(남/여/혼성)</code> | B열: <code>종목</code> | C열: <code>라운드(예선/결승)</code><br>
-                        D열: <code>조</code> | E열: <code>그룹(A/B)</code> — 5000m/10000m만 해당<br>
-                        F열: <code>순서(레인)</code> | G열: <code>배번</code> | H열: <code>성명</code> | I열: <code>소속</code><br>
-                        <span style="color:#6b7280;">릴레이: 배번 비우고 성명에 팀명 입력 | 배번을 비워 두면 비운 채로 저장됩니다 (자동 배정 없음)</span><br>
-                        <span style="color:#0e7c66;font-weight:600;">연맹에서 받은 '데일리 조편성' 원본(▣ 종목 머리글이 있는 엑셀)은 고치지 않고 그대로 올려도 됩니다 — 자동으로 이 양식으로 바꿔 미리보기를 보여줍니다. <b>PDF 로만 받은 경우 PDF 도 됩니다</b>(글자가 들어 있는 PDF 만, 스캔본 제외).</span>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:12px;">
-                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                            <input type="file" id="ha-file" accept=".xlsx,.xls,.pdf" class="t-lg">
-                            <button class="btn btn-outline" onclick="previewHeatAssignment()">미리보기</button>
-                        </div>
-                        <div id="ha-preview" style="display:none;"></div>
-                        <div id="ha-result" style="display:none;padding:12px;border-radius:var(--radius);font-size:13px;font-weight:600;"></div>
-                    </div>
+                <section class="adm-step" data-step="3" style="display:none;">
+                <div class="admin-card" id="card-imp-heats">
+                    <h4>조편성 가져오기</h4>
+                    <p class="adm-lead">파일에 든 종목의 조·레인·배번이 배정됩니다. 파일에 없는 종목은 바뀌지 않습니다. 연맹 '데일리 조편성' 원본(xlsx·텍스트 PDF)은 고치지 않고 그대로 올려도 됩니다.</p>
+                    <details class="adm-help"><summary>형식 안내</summary><div>A열 <code>성별</code> · B열 <code>종목</code> · C열 <code>라운드</code> · D열 <code>조</code> · E열 <code>그룹(A/B)</code>(5000m/10000m) · F열 <code>순서(레인)</code> · G열 <code>배번</code> · H열 <code>성명</code> · I열 <code>소속</code>. 릴레이는 배번을 비우고 성명에 팀명. 배번을 비우면 비운 채로 저장(자동 배정 없음). 스캔 PDF는 안 됩니다.</div></details>
+                    <label class="adm-drop" for="ha-file"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>xlsx · pdf</small></span><span class="adm-drop-name" data-for="ha-file"></span></label>
+                        <input type="file" id="ha-file" accept=".xlsx,.xls,.pdf" hidden>
+                    <div class="adm-actions"><button class="btn btn-primary" onclick="previewHeatAssignment()">미리보기</button></div>
+                    <div id="ha-preview" style="display:none;margin-top:12px;"></div>
+                    <div id="ha-result" style="display:none;padding:12px;border-radius:6px;font-size:13px;font-weight:600;margin-top:12px;"></div>
                 </div>
+                <div class="adm-step-nav"><button class="btn btn-ghost" onclick="impGoStep(2)">← 종목</button><button class="btn btn-outline" onclick="impGoStep(4)">다음: 시간표 →</button></div>
+                </section>
 
-                <!-- Athlete Upload -->
-                <div class="admin-card">
-                    <h4>선수 명단 엑셀 업로드 (별도)</h4>
-                    <p class="t-help">종목 배정 없이 선수만 등록합니다. <strong style="color:#f59e0b;">종목 배정은 소집실 → 선수 추가 또는 관리탭에서 별도 진행하세요.</strong></p>
-                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
-                        <strong>엑셀 양식 (열 순서 고정):</strong><br>
-                        A열: <code>배번(BIB)</code> — 비워둘 수 있음 | B열: <code>선수명 *</code> | C열: <code>소속</code> | D열: <code>성별(남/여) *</code> | E열: <code>바코드</code>(선택)<br>
-                        <span style="color:#ef4444;font-weight:600;">* 배번·바코드를 비워 두면 비운 채로 저장됩니다 (자동 생성하지 않음)</span><br>
-                        <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터</span>
-                    </div>
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-                        <input type="file" id="ath-upload-file" accept=".xlsx,.xls" class="t-lg">
-                        <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
-                            <input type="checkbox" id="ath-upload-clear"> 기존 선수 초기화
-                        </label>
-                        <button class="btn btn-sm btn-primary" onclick="uploadAthletes()">업로드</button>
-                    </div>
-                    <div id="ath-upload-result" style="display:none;padding:10px;border-radius:var(--radius);font-size:13px;font-weight:600;"></div>
-                </div>
-
-                <!-- BIB Number Bulk Update -->
-                <div class="admin-card" style="">
-                    <h4 style="color:#b79f58;">3단계: BIB 번호 일괄 수정</h4>
-                    <p class="t-help">
-                        엑셀 파일에서 배번을 읽어 기존 선수와 <b>이름+소속+성별</b>로 매칭하여 <b>BIB만</b> 업데이트합니다.<br>
-                        <span style="color:#22c55e;">기존 기록(결과, 조편성 등)에 영향 없음 — BIB은 표시용 필드입니다.</span>
-                    </p>
-                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
-                        <strong>엑셀 양식 (머리글 이름으로 열을 찾습니다 · 순서 무관):</strong><br>
-                        A열: <code>배번(BIB) *</code> — 새로 부여할 배번 | B열: <code>선수명 *</code> | C열: <code>소속 *</code> | D열: <code>성별(남/여)</code> 선택<br>
-                        <span style="color:#d97706;font-weight:600;">* 매칭 키: 선수명 + 소속 (성별 열이 있으면 + 성별도 비교)</span><br>
-                        <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터 | 성별 열 없어도 이름+소속으로 매칭 가능</span><br>
-                        <span style="color:#0e7c66;font-weight:600;">연맹에서 받은 '배번 명단' 원본(소속명·성명·생년월일·성별·배번 열)은 고치지 않고 그대로 올려도 됩니다 — 머리글 이름으로 열을 찾고, 00012 는 12 로, 동명이인은 생년월일로 구분합니다.</span>
-                    </div>
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-                        <input type="file" id="bib-update-file" accept=".xlsx,.xls,.csv" class="t-lg">
-                        <button class="btn btn-outline" onclick="previewBibUpdate()">미리보기</button>
-                        <button class="btn" onclick="applyBibUpdate()" style="background:#b79f58;color:#262324;">적용</button>
-                    </div>
-                    <div id="bib-update-result" class="t-md"></div>
-                </div>
-
-                <!-- Phone Number Bulk Update -->
-                <div class="admin-card" style="">
-                    <h4 style="">휴대폰 번호 일괄 업로드 (SMS 발송용)</h4>
-                    <p class="t-help">
-                        엑셀에서 휴대폰 번호를 읽어 기존 선수와 <b>이름+소속(+성별)</b>으로 매칭하여 <b>휴대폰만</b> 업데이트합니다.<br>
-                        <span style="color:#16a085;">선수 업로드 양식(PACERISE_upload_template.xlsx)을 그대로 사용 가능 — 휴대폰 칸이 비어있으면 건너뜁니다.</span>
-                    </p>
-                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
-                        <strong>엑셀 인식 컬럼 (헤더명 기준 자동 매칭):</strong><br>
-                        <code>선수명</code> 또는 <code>성명</code>/<code>이름</code>/<code>name</code> *<br>
-                        <code>팀명</code> 또는 <code>소속</code>/<code>team</code><br>
-                        <code>성별</code>(선택, 남/여 또는 M/F)<br>
-                        <code>휴대폰</code> 또는 <code>핸드폰</code>/<code>전화</code>/<code>연락처</code>/<code>phone</code> *<br>
-                        <span style="color:#16a085;font-weight:600;">자동 정규화: 010-1234-5678 / +82 10... / 1012345678 → 01012345678</span>
-                    </div>
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-                        <input type="file" id="phone-update-file" accept=".xlsx,.xls,.csv" class="t-lg">
-                        <button class="btn btn-outline" onclick="previewPhoneUpdate()">미리보기</button>
-                        <button class="btn" onclick="applyPhoneUpdate()" style="background:#16a085;color:#fff;">적용</button>
-                    </div>
-                    <div id="phone-update-result" class="t-md"></div>
-                </div>
-
-                <!-- Event Upload -->
-                <div class="admin-card">
-                    <h4>종목 리스트 엑셀 업로드</h4>
-                    <p class="t-help">종목만 일괄 등록합니다. (종합경기 10종·7종·5종은 세부 종목 자동 생성)</p>
-                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
-                        <strong>엑셀 양식 (열 순서 고정):</strong><br>
-                        A열: <code>종목명 *</code> | B열: <code>카테고리</code> | C열: <code>성별</code> | D열: <code>라운드</code><br>
-                        <span style="color:#6b7280;">카테고리: track, 트랙, field_distance, 필드(거리), field_height, 필드(높이), relay, 릴레이, combined, 종합(10종·7종·5종), road, 도로</span><br>
-                        <span style="color:#6b7280;">성별: 남/M, 여/F, 혼성/X &nbsp;|&nbsp; 라운드: 결승/final(기본), 예선/preliminary, 준결승/semifinal</span><br>
-                        <span style="color:#9ca3af;">* 1행은 헤더(무시됨), 2행부터 데이터. 카테고리/성별/라운드 미입력 시 기본값: track/남/결승</span>
-                    </div>
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-                        <input type="file" id="evt-upload-file" accept=".xlsx,.xls" class="t-lg">
-                        <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
-                            <input type="checkbox" id="evt-upload-clear"> 기존 종목 초기화
-                        </label>
-                        <button class="btn btn-sm btn-primary" onclick="uploadEvents()">업로드</button>
-                    </div>
-                    <div id="evt-upload-result" style="display:none;padding:10px;border-radius:var(--radius);font-size:13px;font-weight:600;"></div>
-                </div>
-
-                <!-- Timetable Upload (moved from Competition Settings) -->
-                <div class="admin-card" style="">
-                    <h4 style="color:#6b6b6b;">시간표 업로드</h4>
-                    <p class="t-help-lg">
-                        엑셀 파일로 경기 시간표를 업로드합니다. 시트별로 일차가 구분됩니다.<br>
-                        <strong>필수 열(A~F):</strong> 구분, 시간, 종목, 부별, 라운드, 비고 &nbsp;|&nbsp;
-                        <strong>시트명:</strong> 1일차, 2일차, 3일차...<br>
-                        <span style="color:#6b6b6b;">업로드 시 해당 일차만 교체됩니다. 다른 일차는 유지됩니다.</span>
-                    </p>
+                <section class="adm-step" data-step="4" style="display:none;">
+                <div class="admin-card" id="card-imp-timetable">
+                    <h4>시간표 가져오기</h4>
+                    <p class="adm-lead">시트마다 일차가 나뉜 엑셀을 올립니다. 올린 일차만 바뀌고 다른 일차는 그대로입니다.</p>
+                    <details class="adm-help"><summary>형식 안내</summary><div>필수 열 A~F: <code>구분</code> <code>시간</code> <code>종목</code> <code>부별</code> <code>라운드</code> <code>비고</code> · 시트 이름 <code>1일차</code> <code>2일차</code> … <button class="btn btn-sm btn-ghost" onclick="downloadTimetableTemplate()">시간표 양식 내려받기</button></div></details>
                     <div id="tt-upload-status" style="margin-bottom:10px;"></div>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                        <input type="file" id="tt-file-input" accept=".xlsx,.xls,.csv" style="font-size:12px;max-width:250px;">
-                        <button class="btn btn-primary" onclick="uploadTimetable()">시간표 업로드</button>
-                        <button class="btn btn-outline" onclick="downloadTimetableTemplate()">양식 다운로드</button>
-                    </div>
-                    <div id="tt-current-info" style="margin-top:12px;font-size:12px;color:var(--text-muted);"></div>
+                    <label class="adm-drop" for="tt-file-input"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>xlsx · csv</small></span><span class="adm-drop-name" data-for="tt-file-input"></span></label>
+                        <input type="file" id="tt-file-input" accept=".xlsx,.xls,.csv" hidden>
+                    <div class="adm-actions"><button class="btn btn-primary" onclick="uploadTimetable()">가져오기 실행</button></div>
+                    <div id="tt-current-info" style="margin-top:12px;font-size:12px;color:var(--adm-muted);"></div>
                 </div>
-
-                <!-- Timetable Matching Panel -->
-                <div class="admin-card" style="">
+                <div class="admin-card" id="card-imp-matching">
                     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-                        <h4 style="color:#b79f58;margin:0;">시간표 ↔ 종목 매칭 현황</h4>
-                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                            <button class="btn btn-outline btn-sm" onclick="ttRematch()">자동 재매칭</button>
-                            <button class="btn btn-outline btn-sm" onclick="ttLoadMatching()">새로고침</button>
-                        </div>
+                        <h4 style="margin:0;">시간표 ↔ 종목 매칭</h4>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" onclick="ttRematch()">자동 재매칭</button><button class="btn btn-outline btn-sm" onclick="ttLoadMatching()">새로고침</button></div>
                     </div>
-                    <div id="tt-match-summary" style="margin-top:10px;font-size:12px;color:var(--text-muted);"></div>
-                    <div id="tt-match-list" style="margin-top:12px;font-size:12px;"></div>
+                    <div id="tt-match-summary" style="margin-top:10px;font-size:13px;color:var(--adm-muted);"></div>
+                    <details class="adm-help" id="tt-match-details" style="margin-top:8px;"><summary>매칭 목록 보기</summary><div id="tt-match-list" style="font-size:12px;"></div></details>
                 </div>
+                <div class="adm-step-nav"><button class="btn btn-ghost" onclick="impGoStep(3)">← 조편성</button><button class="btn btn-outline" onclick="impGoStep(5)">다음: 배번 · 연락처 →</button></div>
+                </section>
 
+                <section class="adm-step" data-step="5" style="display:none;">
+                <div class="admin-card" id="card-imp-bib">
+                    <h4>배번 · 연락처 일괄 수정</h4>
+                    <div class="adm-seg" id="imp-contact-seg"><button type="button" class="active" onclick="impContactMode('bib',this)">배번(BIB)</button><button type="button" onclick="impContactMode('phone',this)">휴대폰 번호 (문자 발송용)</button></div>
+                    <div id="imp-contact-bib">
+                        <p class="adm-lead">이름 + 소속(+성별)으로 기존 선수를 찾아 배번만 바꿉니다. 기록·조편성에는 영향이 없습니다.</p>
+                        <details class="adm-help"><summary>형식 안내</summary><div>머리글 이름으로 열을 찾습니다(순서 무관): <code>배번(BIB) *</code> <code>선수명 *</code> <code>소속 *</code> <code>성별</code>(선택). 연맹 '배번 명단' 원본(소속명·성명·생년월일·성별·배번)도 그대로 됩니다. 00012 는 12 로, 동명이인은 생년월일로 구분.</div></details>
+                        <label class="adm-drop" for="bib-update-file"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>xlsx · csv</small></span><span class="adm-drop-name" data-for="bib-update-file"></span></label>
+                        <input type="file" id="bib-update-file" accept=".xlsx,.xls,.csv" hidden>
+                        <div class="adm-actions"><button class="btn btn-outline" onclick="previewBibUpdate()">미리보기</button><button class="btn btn-primary" onclick="applyBibUpdate()">적용</button></div>
+                        <div id="bib-update-result" class="t-md" style="margin-top:12px;"></div>
+                    </div>
+                    <div id="imp-contact-phone" style="display:none;">
+                        <p class="adm-lead">이름 + 소속(+성별)으로 기존 선수를 찾아 휴대폰 번호만 바꿉니다. 선수 업로드 양식을 그대로 써도 됩니다(휴대폰 칸이 비면 건너뜀).</p>
+                        <details class="adm-help"><summary>형식 안내</summary><div>머리글 이름으로 인식: <code>선수명/성명/이름 *</code> · <code>팀명/소속</code> · <code>성별</code>(선택) · <code>휴대폰/핸드폰/전화/연락처 *</code>. 010-1234-5678 · +82 10… · 1012345678 → 01012345678 로 정리됩니다.</div></details>
+                        <label class="adm-drop" for="phone-update-file"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>xlsx · csv</small></span><span class="adm-drop-name" data-for="phone-update-file"></span></label>
+                        <input type="file" id="phone-update-file" accept=".xlsx,.xls,.csv" hidden>
+                        <div class="adm-actions"><button class="btn btn-outline" onclick="previewPhoneUpdate()">미리보기</button><button class="btn btn-primary" onclick="applyPhoneUpdate()">적용</button></div>
+                        <div id="phone-update-result" class="t-md" style="margin-top:12px;"></div>
+                    </div>
+                </div>
+                <div class="adm-step-nav"><button class="btn btn-ghost" onclick="impGoStep(4)">← 시간표</button><span></span></div>
+                </section>
             </div>
 
             <!-- TAB: Scoreboard (전광판) -->
             <div id="tab-scoreboard" class="admin-tab-panel">
                 <div class="admin-card" id="card-sb-lif" style="">
-                    <h4 style="">스코어보드 연동 (.lif 파일 가져오기) <span class="t-sm t-muted">Scoreboard Import</span></h4>
-                    <p class="t-help-lg">
-                        스코어보드 시스템에서 내보낸 .lif 결과 파일을 업로드하면 자동으로 종목/조를 매칭하고 기록을 입력합니다.
-                        <br>조편성 업로드 시 자동 생성된 <strong>스코어보드 키</strong>와 .lif 파일의 종목명을 대조합니다.
-                    </p>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-                        <label class="btn btn-sm btn-primary" style="cursor:pointer;">
-                            .lif 파일 선택 (복수 가능)
-                            <input type="file" id="sb-lif-files" multiple accept=".lif" style="display:none;" onchange="sbPreviewFiles()">
-                        </label>
-                        <button class="btn btn-sm btn-outline" onclick="sbShowKeys()">스코어보드 키 확인</button>
-                    </div>
+                    <h4>.lif 파일 (FinishLynx 사진판독)</h4>
+                    <p class="adm-lead">전광판·사진판독 시스템이 내보낸 .lif 파일의 종목명을 조편성 때 만들어진 <b>스코어보드 키</b>와 대조해 조·선수를 찾고 기록을 넣습니다.</p>
+                    <details class="adm-help"><summary>형식 안내</summary><div>FinishLynx .lif(UTF-16). 머리글의 종목명(예: <code>남자실업부 100m 예선 2조</code>)이 스코어보드 키와 같아야 하고, 선수는 배번 → 레인 → 성명 순으로 찾습니다. 풍속이 있으면 조에 함께 저장됩니다.</div></details>
+                    <label class="adm-drop" for="sb-lif-files"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>lif · 여러 파일 가능</small></span><span class="adm-drop-name" data-for="sb-lif-files"></span></label>
+                        <input type="file" id="sb-lif-files" accept=".lif" multiple onchange="sbPreviewFiles()" hidden>
+                    <div class="adm-actions"><span></span><button class="btn btn-outline btn-sm" onclick="sbShowKeys()">스코어보드 키 확인</button></div>
 
                     <div id="sb-preview-area" style="display:none;">
                         <h4 style="font-size:14px;margin-bottom:8px;">미리보기</h4>
@@ -804,20 +734,11 @@
 
                 <!-- 기록 엑셀 가져오기 (.lif 대안) -->
                 <div class="admin-card" id="card-sb-xlsx" style="">
-                    <h4 style="">기록 엑셀 가져오기 <span class="t-sm t-muted">Record Excel Import (.lif 대안)</span></h4>
-                    <p class="t-help-lg">
-                        헤더형 기록 엑셀(.xlsx)을 업로드하면 <strong>배번(BIB) 기준</strong>으로 종목·조·선수를 매칭하고 기록을 입력합니다.
-                    </p>
-                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
-                        <strong>엑셀 컬럼:</strong> 종별 · 세부종목 · 라운드 · 조 · 순위 · 레인 · <strong>배번</strong> · 성명 · 기록 · 풍속 · 팀명 · 기록구분<br>
-                        <span style="color:#8a7640;">배번 앞자리 0 자동 정규화 · 기록 <code>4:15.21</code>→초/필드 미터 자동변환 · 순위칸의 <code>DNS/DNF/DQ</code> 인식</span>
-                    </div>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-                        <label class="btn btn-sm btn-primary" style="cursor:pointer;">
-                            기록 엑셀 선택 (.xlsx)
-                            <input type="file" id="recx-file" accept=".xlsx,.xls" style="display:none;" onchange="recxPreview()">
-                        </label>
-                    </div>
+                    <h4>기록 엑셀</h4>
+                    <p class="adm-lead">머리글이 있는 기록 엑셀을 배번 기준으로 종목·조·선수에 맞춰 넣습니다.</p>
+                    <details class="adm-help"><summary>형식 안내</summary><div>열: <code>종별</code> <code>세부종목</code> <code>라운드</code> <code>조</code> <code>순위</code> <code>레인</code> <b><code>배번</code></b> <code>성명</code> <code>기록</code> <code>풍속</code> <code>팀명</code> <code>기록구분</code>. 배번 앞 0 은 무시, 기록 <code>4:15.21</code> 은 초로, 필드는 미터로 바뀌고 순위 칸의 DNS/DNF/DQ 를 인식합니다.</div></details>
+                    <label class="adm-drop" for="recx-file"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>xlsx</small></span><span class="adm-drop-name" data-for="recx-file"></span></label>
+                        <input type="file" id="recx-file" accept=".xlsx,.xls" onchange="recxPreview()" hidden>
                     <div id="recx-preview-area" style="display:none;">
                         <h4 style="font-size:14px;margin-bottom:8px;">미리보기</h4>
                         <div id="recx-preview-list"></div>
@@ -831,16 +752,11 @@
 
                 <!-- 계측 결과 .txt 가져오기 (드래그 업로드) -->
                 <div class="admin-card" id="card-sb-txt" style="">
-                    <h4 style="">계측 결과 가져오기 (.txt) <span class="t-sm t-muted">Timing Result Import — 드래그 업로드</span></h4>
-                    <p class="t-help-lg">계측업체 결과프로그램이 저장한 <strong>.txt 결과파일</strong>을 끌어다 놓으면 종목·조·선수를 자동 매칭해 기록을 입력합니다. (여러 파일 동시 가능)</p>
-                    <div style="background:#f0fbf8;border:1px solid #cdeee5;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;color:#0e7c66;">
-                        <strong>인식 형식:</strong> 1행 <code>성별 부 종목 라운드 [조]</code> + 풍속 · 2행 <code>순위 번호 레인 이름 소속 기록</code> · 배번→레인→성명 순 매칭 · 기록 <code>1:05.3</code>→초/필드 미터 자동변환 · <code>DNS/DNF/DQ</code> 인식
-                    </div>
-                    <div id="tt-drop" style="border:1px solid #e5e7eb;border-radius:10px;padding:26px 16px;text-align:center;color:#0e7c66;background:#f0fbf8;cursor:pointer;transition:all .15s;">
-                        <div style="font-size:26px;color:#8a7640;"><svg class="ui-icon" width="30px" height="30px" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4h18l10 10v30H12z"/><path d="M30 4v10h10M18 26h12M18 34h12"/></svg></div>
-                        <div style="font-weight:700;margin-top:6px;">여기로 .txt 결과파일을 끌어다 놓으세요</div>
-                        <div style="font-size:12px;color:#5b8f82;margin-top:4px;">또는 클릭해서 선택 (복수 가능)</div>
-                        <input type="file" id="tt-files" multiple accept=".txt" style="display:none;" onchange="ttPreview(this.files)">
+                    <h4>계측 결과 .txt</h4>
+                    <p class="adm-lead">계측 프로그램이 저장한 탭 구분 .txt 결과 파일. 여러 파일을 한 번에 올릴 수 있습니다.</p>
+                    <details class="adm-help"><summary>형식 안내</summary><div>1행 <code>성별 부 종목 라운드 [조]</code> + 풍속 · 2행 <code>순위 번호 레인 이름 소속 기록</code> · 3행부터 데이터. 선수는 배번 → 레인 → 성명 순, 기록 <code>1:05.3</code> 은 초로, DNS/DNF/DQ 를 인식합니다.</div></details>
+                    <div id="tt-drop" class="adm-drop" data-own-drop="1"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>txt · 여러 파일 가능</small></span><span class="adm-drop-name" data-for="tt-files"></span>
+                        <input type="file" id="tt-files" multiple accept=".txt" hidden onchange="ttPreview(this.files)">
                     </div>
                     <div id="tt-preview-area" style="display:none;margin-top:14px;">
                         <h4 style="font-size:14px;margin-bottom:8px;">미리보기</h4>
@@ -855,29 +771,14 @@
 
                 <!-- 필드 수기 기록카드 가져오기 (사진 → AI 전사 xlsx → 시기별 저장) -->
                 <div class="admin-card" id="card-sb-fieldcard" style="">
-                    <h4 style="">필드 기록카드 가져오기 <span class="t-sm t-muted">Field Record Card Import (수기 기록지 → AI 전사 xlsx)</span></h4>
-                    <p class="t-help-lg">
-                        심판 수기 기록카드 <strong>사진을 그대로 드롭하면 서버가 AI 로 전사</strong>하고, <strong>배번 기준</strong>으로 종목·조·선수를 매칭해
-                        시기별 기록·풍속·높이 O/X 를 저장합니다. ChatGPT/Claude 로 직접 만든 <strong>xlsx</strong> 를 올려도 됩니다.
-                        카드의 <strong>최고기록·순위는 저장하지 않고 계산값과 대조(검산)</strong>해 다르면 경고로 표시합니다.
-                    </p>
-                    <div style="background:#eef3fa;border:1px solid #cfdcee;border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
-                        <strong>표기:</strong> 기록 <code>36.20</code> · 파울 <code>X</code> · 패스 <code>-</code> · 시도 없음 빈칸 · 풍속 <code>+0.8</code> (유효 시기만, 파울·패스는 빈칸) · 높이 <code>O / XO / XXO / XXX / -</code> · 기록구분 <code>DNS / DNF / DQ / NM</code><br>
-                        <span style="color:#3d5a8a;">저장 규칙: 파일에 기록이 있는 선수만 그 선수의 시기 전체를 파일대로 교체 · 빈 행과 파일에 없는 선수는 그대로 · 오류 행(인식 불가·매칭 실패)은 건너뜀 · 관리자 키 필요</span><br>
-                        <span style="color:#6b7280;">사진 전사: 서버 .env 의 <code>ANTHROPIC_API_KEY</code> 필요 · 카드 1장에 약 100원 · 사진은 브라우저에서 긴 변 2,576px JPEG 로 줄여 전송 · 판독이 불확실한 셀은 경고로 표시</span>
-                    </div>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
-                        <span class="t-sm t-muted">양식 다운로드:</span>
-                        <a class="btn btn-sm btn-outline" href="/api/field-card/template?kind=throw">투척</a>
-                        <a class="btn btn-sm btn-outline" href="/api/field-card/template?kind=horizontal">수평도약 (기록+풍속)</a>
-                        <a class="btn btn-sm btn-outline" href="/api/field-card/template?kind=vertical">수직도약</a>
-                        <button class="btn btn-sm btn-outline" onclick="fcCopyPrompt()">AI 전사 프롬프트 복사</button>
-                    </div>
-                    <div id="fc-drop" class="fc-drop" onclick="document.getElementById('fc-file').click()">
-                        <div style="font-size:22px;color:#8a7640;"><svg class="ui-icon" width="28px" height="28px" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="13" width="38" height="28" rx="5"/><path d="M17 13l3-5h8l3 5"/><circle cx="24" cy="27" r="7"/></svg></div>
-                        <div style="font-weight:600;">여기에 카드 사진 또는 xlsx 파일을 끌어다 놓거나 클릭해서 선택</div>
-                        <div class="t-sm t-muted">사진은 한 번에 4장까지 (멀리뛰기·세단뛰기는 기록표와 풍속표를 함께) · xlsx 는 투척 · 수평도약 · 수직도약 양식 모두 가능</div>
-                        <input type="file" id="fc-file" accept=".xlsx,.xls,image/*" multiple style="display:none;" onchange="fcHandleFiles(this.files)">
+                    <h4>필드 기록카드 (사진 · xlsx)</h4>
+                    <p class="adm-lead">심판 수기 기록카드 사진을 올리면 AI 가 읽어 배번 기준으로 시기별 기록·풍속·높이 O/X 를 저장합니다. 직접 만든 xlsx 도 됩니다. 카드의 최고기록·순위는 저장하지 않고 검산에만 씁니다.</p>
+                    <details class="adm-help"><summary>형식 안내 · 양식</summary><div>
+                        표기: 기록 <code>36.20</code> · 파울 <code>X</code> · 패스 <code>-</code> · 풍속 <code>+0.8</code>(유효 시기만) · 높이 <code>O / XO / XXO / XXX / -</code> · 기록구분 <code>DNS / DNF / DQ / NM</code>. 파일에 기록이 있는 선수만 그 선수의 시기 전체를 파일대로 바꾸고, 빈 행과 파일에 없는 선수는 그대로 둡니다. 사진은 한 번에 4장까지(멀리·세단은 기록표와 풍속표 함께).<br>
+                        <span style="display:inline-flex;gap:6px;flex-wrap:wrap;margin-top:8px;"><a class="btn btn-sm btn-outline" href="/api/field-card/template?kind=throw">투척 양식</a><a class="btn btn-sm btn-outline" href="/api/field-card/template?kind=horizontal">수평도약 양식</a><a class="btn btn-sm btn-outline" href="/api/field-card/template?kind=vertical">수직도약 양식</a><button class="btn btn-sm btn-outline" onclick="fcCopyPrompt()">AI 전사 프롬프트 복사</button></span>
+                    </div></details>
+                    <div id="fc-drop" class="fc-drop adm-drop" data-own-drop="1" onclick="document.getElementById('fc-file').click()"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>카드 사진 또는 xlsx 를 끌어다 놓거나 클릭해서 선택</b><small>jpg · png · xlsx</small></span><span class="adm-drop-name" data-for="fc-file"></span>
+                        <input type="file" id="fc-file" accept=".xlsx,.xls,image/*" multiple hidden onchange="fcHandleFiles(this.files)">
                     </div>
                     <div id="fc-preview-area" style="display:none;margin-top:12px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
@@ -1145,69 +1046,23 @@
                     </div>
                 </div>
 
-                <div class="admin-card" id="card-data-backup" style="scroll-margin-top:20px;">
-                    <h4>데이터 백업</h4>
-
-                    <!-- 1) 대회별 부분 백업 (기존) -->
-                    <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;margin-bottom:14px;background:#f8f9fa;">
-                        <h5 style="margin:0 0 8px;font-size:13px;color:var(--text);">대회별 데이터 백업</h5>
-                        <p class="t-help-lg" style="margin:0 0 10px;">선택한 대회의 데이터(선수·종목·기록·조편성)만 JSON/Excel로 다운로드합니다.</p>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                            <button class="btn btn-outline" onclick="downloadBackup('json')">JSON 백업</button>
-                            <button class="btn btn-outline" onclick="downloadBackup('xlsx')">Excel (XLSX) 백업</button>
-                            <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;margin-left:8px;">
-                                <input type="checkbox" id="backup-comp-only" checked> 현재 대회만
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- 2) 통백업 / 통복원 (Full Snapshot) -->
-                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fffdf5;">
-                        <h5 style="margin:0 0 8px;font-size:13px;color:#7a5d1e;display:flex;align-items:center;gap:8px;">
-                            <span style="background:#b79f58;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;white-space:nowrap;">FULL</span>
-                            시스템 통백업 / 복원
-                        </h5>
-                        <p class="t-help-lg" style="margin:0 0 12px;">
-                            <strong>전체 시스템 상태를 ZIP 파일 1개</strong>로 묶거나, 그 파일을 다시 올려 <strong>시스템 전체를 복원</strong>합니다.<br>
-                            포함: 모든 대회·선수·기록·조편성·운영로그·심판키·연맹·상장양식·SMS설정·홈팝업·홈콘텐츠 + 업로드된 로고/이미지/PDF 파일.
-                        </p>
-
-                        <!-- STEP 1: 통백업 다운로드 -->
-                        <div style="margin-bottom:14px;padding:12px;background:#fff;border:1px solid #e8d9a8;border-radius:6px;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                                <span style="background:#16a085;color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">1</span>
-                                <strong style="font-size:13px;color:#0e6a52;">통백업 다운로드</strong>
-                            </div>
-                            <p style="margin:0 0 8px;font-size:12px;color:var(--text-muted);line-height:1.5;">
-                                지금 이 순간의 시스템 전체 상태를 ZIP 한 개로 받아 보관하세요.<br>
-                                (별도로 매일/매시간 자동 백업도 backups/ 폴더에 저장됩니다)
-                            </p>
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                                <button class="btn btn-primary" onclick="downloadFullBackup()">통백업 ZIP 다운로드</button>
-                                <span style="font-size:12px;color:var(--text-muted);">관리자 키 필요</span>
-                            </div>
-                        </div>
-
-                        <!-- STEP 2: 통복원 업로드 -->
-                        <div style="padding:12px;background:#fff;border:1px solid #f3c4c4;border-radius:6px;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                                <span style="background:#c0392b;color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">2</span>
-                                <strong style="font-size:13px;color:#922b21;">통복원 (ZIP 붙여넣기)</strong>
-                            </div>
-                            <div style="background:#f8f9fa;border:1px solid #e74c3c;padding:8px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;color:#c0392b;line-height:1.6;">
-                                <strong>[경고] 복원 시 현재 모든 데이터가 백업 파일의 내용으로 교체됩니다.</strong><br>
-                                · 복원 직전 현재 상태를 자동으로 안전 백업합니다 (backups/backup_prerestore_*.db)<br>
-                                · 복원 후 서버가 자동 재시작되고 약 10초 후 페이지가 새로고침됩니다<br>
-                                · PostgreSQL 환경에서는 작동하지 않습니다 (SQLite 전용)
-                            </div>
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                                <input type="file" id="full-restore-file" accept=".zip" style="font-size:12px;flex:1;min-width:220px;">
-                                <button class="btn btn-outline" onclick="previewFullRestore()">1.  파일 검증</button>
-                                <button class="btn btn-danger" onclick="applyFullRestore()" id="btn-full-restore" disabled>2.  복원 실행</button>
-                            </div>
-                            <div id="full-restore-status" style="margin-top:10px;font-size:12px;"></div>
-                        </div>
-                    </div>
+                <div class="admin-card" id="card-data-backup">
+                    <h4>대회별 백업</h4>
+                    <p class="adm-lead">선택한 대회의 선수·종목·기록·조편성을 파일로 내려받습니다.</p>
+                    <div class="adm-actions" style="justify-content:flex-start;"><button class="btn btn-outline" onclick="downloadBackup('json')">JSON 내려받기</button><button class="btn btn-outline" onclick="downloadBackup('xlsx')">Excel 내려받기</button><label style="margin-left:8px;"><input type="checkbox" id="backup-comp-only" checked> 현재 대회만</label></div>
+                </div>
+                <div class="admin-card" id="card-backup-full">
+                    <h4>시스템 전체 백업 · 복원</h4>
+                    <p class="adm-lead">모든 대회·선수·기록·설정과 업로드 파일을 ZIP 하나로 내려받고, 그 파일로 시스템 전체를 되돌립니다. 매일·매시간 자동 백업은 서버의 backups/ 폴더에 따로 쌓입니다.</p>
+                    <div class="adm-actions" style="justify-content:flex-start;margin-bottom:18px;"><button class="btn btn-primary" onclick="downloadFullBackup()">전체 백업 ZIP 내려받기</button></div>
+                    <div class="adm-subhead">복원</div>
+                    <p class="adm-lead">복원하면 현재 데이터가 백업 파일 내용으로 바뀝니다. 복원 직전 상태는 자동으로 안전 백업되고, 복원 뒤 서버가 다시 시작되며 약 10초 후 화면이 새로고침됩니다.</p>
+                    <div class="adm-actions" style="justify-content:flex-start;"><input type="file" id="full-restore-file" accept=".zip" style="font-size:12px;flex:1;min-width:220px;"><button class="btn btn-outline" onclick="previewFullRestore()">파일 검증</button><button class="btn btn-danger" onclick="applyFullRestore()" id="btn-full-restore" disabled>복원 실행</button></div>
+                    <div id="full-restore-status" style="margin-top:10px;font-size:12px;"></div>
+                </div>
+                <div class="admin-card" id="card-backup-pg" style="display:none;">
+                    <h4>시스템 백업</h4>
+                    <p class="adm-lead">이 서버는 PostgreSQL 을 씁니다. 데이터베이스 전체 백업은 클라우드(RDS) 자동 백업과 서버의 일일 pg_backup(S3 보관)이 맡고, 복원은 서버 관리자가 합니다. 대회 단위 파일은 위의 대회별 백업을 쓰세요.</p>
                 </div>
                 <!-- Federation Management (moved from settings) -->
                 <div class="admin-card" id="card-federations" style="scroll-margin-top:20px;">
@@ -1516,7 +1371,7 @@
                 </div>
 
                 <!-- Quick Reference -->
-                <div class="admin-card" style="background:#f8f9fa;">
+                <div class="admin-card" id="card-api-quickref" style="background:#f8f9fa;">
                     <h4>빠른 참조 - API 사용법</h4>
                     <div style="font-family:monospace;font-size:12px;background:#fff;border:1px solid var(--gray);border-radius:6px;padding:10px;line-height:1.6;overflow-x:auto;">
 <b>인증:</b> 헤더 <code>X-API-Key: pkr_...</code> (또는 <code>Authorization: Bearer pkr_...</code>)<br><br>
@@ -2046,22 +1901,8 @@ POST /api/external/event-result-link/batch<br>
                                 <button class="btn btn-sm btn-pdf" style="margin-left:auto;" onclick="openIdCards()">PDF 열기</button>
                             </div>
                         </div>
-                        <div style="flex:1;min-width:200px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
-                            <h5 style="font-size:13px;margin-bottom:8px;">데이터 백업</h5>
-                            <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">선수, 종목, 기록, 조편성 전체 백업</p>
-                            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-                                <button class="btn btn-sm btn-outline" onclick="downloadBackup('json')">JSON</button>
-                                <button class="btn btn-sm btn-outline" onclick="downloadBackup('xlsx')">Excel</button>
-                                <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
-                                    <input type="checkbox" id="backup-comp-only2" checked> 현재 대회만
-                                </label>
-                            </div>
-                        </div>
-                        <div style="flex:1;min-width:200px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
-                            <h5 style="font-size:13px;margin-bottom:8px;">엑셀 양식</h5>
-                            <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">선수명단 + 조편성 + 작성가이드 포함</p>
-                            <a href="/PACERISE_upload_template.xlsx" download class="btn btn-sm btn-outline" style="text-decoration:none;">양식 다운로드 (.xlsx)</a>
-                        </div>
+                        
+                        
                     </div>
                 </div>
 
@@ -2414,8 +2255,8 @@ POST /api/external/event-result-link/batch<br>
             <div id="tab-certificates" class="admin-tab-panel">
 
                 <!-- A. 일괄 발급 -->
-                <div class="admin-card" style="">
-                    <h4 style="color:#7a5a20;margin-bottom:8px;">상장 일괄 발급 · 인쇄</h4>
+                <div class="admin-card" id="card-cert-issue" style="">
+                    <h4 style="color:#7a5a20;margin-bottom:8px;">발급 · 인쇄</h4>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
                         대회·종목·순위 범위를 선택하면 A4 세로 PDF로 일괄 생성됩니다. 한 페이지에 한 명씩 인쇄용으로 출력됩니다.
                     </p>
@@ -2540,15 +2381,15 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- B. 양식 관리 -->
-                <div class="admin-card">
-                    <h4>양식 관리 <span style="font-size:12px;font-weight:600;color:#7a5a20;background:#f5ecd6;border-radius:4px;padding:2px 6px;vertical-align:middle;">PDF · 문자 발송용</span></h4>
+                <div class="admin-card" id="card-cert-pdf-templates">
+                    <h4>PDF 상장 양식 <span style="font-size:12px;font-weight:600;color:#7a5a20;background:#f5ecd6;border-radius:4px;padding:2px 6px;vertical-align:middle;">PDF · 문자 발송용</span></h4>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">시상장·완주증·단체상 등 여러 양식을 저장해두고 발급 시 선택할 수 있습니다.</p>
                     <div id="cert-template-list" style="margin-bottom:12px;"></div>
                     <button class="btn btn-sm btn-primary" onclick="openCertTemplateEditor(null)">+ 새 양식 추가</button>
                 </div>
 
                 <!-- C. 발급 이력 -->
-                <div class="admin-card">
+                <div class="admin-card" id="card-cert-log">
                     <h4>발급 이력</h4>
                     <div style="margin-bottom:8px;">
                         <button class="btn btn-xs btn-outline" onclick="loadCertLog()">새로고침</button>
@@ -2729,7 +2570,7 @@ POST /api/external/event-result-link/batch<br>
             <!-- ========== tab-sms : 문자 발송 ========== -->
             <div id="tab-sms" class="admin-tab-panel">
                 <!-- 푸시(앱 알림) 공지 -->
-                <div class="admin-card" style="">
+                <div class="admin-card" id="card-notify-push" style="">
                     <h4 style="margin-bottom:8px;"><svg class="ui-icon" width="1em" height="1em" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;"><rect x="13" y="4" width="22" height="40" rx="5"/><path d="M21 38h6"/></svg> 앱 푸시 알림 (공지 보내기)</h4>
                     <div id="push-status-box" style="font-size:12px;color:#666;margin-bottom:10px;">상태 확인 중…</div>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
@@ -2765,8 +2606,8 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- A. 발송 설정 -->
-                <div class="admin-card" style="">
-                    <h4 style="margin-bottom:8px;">알리고(Aligo) SMS 설정</h4>
+                <div class="admin-card" id="card-sms-config" style="">
+                    <h4 style="margin-bottom:8px;">문자 발송 설정 (알리고)</h4>
                     <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px;font-size:12px;margin-bottom:12px;">
                         <strong>알리고 가입 안내:</strong> <a href="https://smartsms.aligo.in/" target="_blank" rel="noopener">smartsms.aligo.in</a> 가입 → 발신번호 등록 → API 키 발급 → 아래에 입력하세요.<br>
                         <strong>시뮬레이션 모드</strong>가 켜져 있으면 실제 발송 없이 로그만 기록됩니다 (가입 전 테스트용).
@@ -2823,8 +2664,8 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- B. 단건 발송 -->
-                <div class="admin-card">
-                    <h4>단건 발송 (테스트)</h4>
+                <div class="admin-card" id="card-sms-test">
+                    <h4>단건 발송 · 테스트</h4>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                         <div>
                             <label class="t-xs">수신 번호</label>
@@ -2849,8 +2690,8 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- C. 일괄 발송 -->
-                <div class="admin-card" style="">
-                    <h4 style="color:#7a5a20;">일괄 발송 — 결과 + 상장 링크</h4>
+                <div class="admin-card" id="card-sms-batch" style="">
+                    <h4 style="color:#7a5a20;">일괄 발송 (결과 · 상장 링크)</h4>
                     <p class="t-xs t-muted" style="margin-bottom:10px;">대회·종목·순위 범위를 선택해 선수에게 결과 안내 + 상장 다운로드 링크 SMS를 보냅니다.</p>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px;">
                         <div>
@@ -2919,7 +2760,7 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- D. 발송 이력 -->
-                <div class="admin-card">
+                <div class="admin-card" id="card-sms-log">
                     <h4>발송 이력</h4>
                     <div style="margin-bottom:8px;">
                         <button class="btn btn-xs btn-outline" onclick="loadSmsLog()">새로고침</button>
@@ -3568,26 +3409,29 @@ POST /api/external/event-result-link/batch<br>
         const ADMIN_SCREENS = [
             { id:'overview',     group:'현황',      label:'현황',                icon:'chart',    tab:'overview',    loads:['overview'], roleTab:'overview' },
             { id:'comp',         group:'대회',      label:'대회 설정',           icon:'building', loads:['competition'], roleTab:'competition',
-              subtabs:[ { label:'기본 정보', items:['card-comp-edit'] }, { label:'서명 · 로고', items:['card-chief-judge'] }, { label:'위험 구역', items:['card-comp-reset','card-comp-delete'] } ] },
+              subtabs:[ { label:'기본 정보', items:['card-comp-edit'] }, { label:'위험 구역', items:['card-comp-reset','card-comp-delete'] } ] },
             { id:'intl',         group:'대회',      label:'국제대회 동기화',     icon:'plug',     items:['card-intl'], loads:['competition'], roleTab:'competition', when: c => !!(c && c.sync_source) },
             { id:'readiness',    group:'대회',      label:'운영 체크리스트',     icon:'check',    items:['card-readiness'], loads:['competition'], roleTab:'competition' },
             { id:'import',       group:'준비',      label:'가져오기',            icon:'upload',   tab:'upload',      loads:['upload'], roleTab:'upload' },
             { id:'athletes',     group:'준비',      label:'선수',                icon:'user',     tab:'athletes',    loads:['athletes'], roleTab:'athletes' },
             { id:'events',       group:'준비',      label:'종목 · 조편성',       icon:'list',     tab:'events',      loads:['events'], roleTab:'events' },
             { id:'records',      group:'진행',      label:'기록 관리',           icon:'trophy',   tab:'records',     loads:['records'], roleTab:'records' },
-            { id:'timing',       group:'진행',      label:'계측 가져오기',       icon:'timer',    items:['card-sb-lif','sb-keys-area','card-sb-xlsx','card-sb-txt','card-sb-fieldcard'], loads:['scoreboard'], roleTab:'scoreboard' },
+            { id:'timing',       group:'진행',      label:'계측 가져오기',       icon:'timer',    loads:['scoreboard'], roleTab:'scoreboard',
+              subtabs:[ { label:'.lif (사진판독)', items:['card-sb-lif','sb-keys-area'] }, { label:'기록 엑셀', items:['card-sb-xlsx'] }, { label:'계측 .txt', items:['card-sb-txt'] }, { label:'기록카드 사진', items:['card-sb-fieldcard'] } ] },
             { id:'joint',        group:'진행',      label:'합동 종목',           icon:'folder',   items:['card-joint'], loads:['scoreboard'], roleTab:'scoreboard' },
             { id:'activity',     group:'진행',      label:'되돌리기 · 활동 로그', icon:'undo',     items:['card-undo','card-audit-log'], loads:['competition','overview'], roleTab:'competition' },
-            { id:'documents',    group:'결과 · 문서', label:'문서 · 다운로드',   icon:'file',     tab:'documents',   loads:['documents'], roleTab:'documents' },
-            { id:'certificates', group:'결과 · 문서', label:'상장',              icon:'award',    tab:'certificates', loads:[], roleTab:'certificates' },
-            { id:'notify',       group:'결과 · 문서', label:'알림 (푸시 · 문자)', icon:'message',  tab:'sms',         loads:[], roleTab:'sms' },
+            { id:'docs',         group:'결과 · 문서', label:'문서 · 다운로드',   icon:'file',     loads:['documents','competition'], roleTab:'documents', rest:'documents',
+              subtabs:[ { label:'다운로드', items:['card-download-center'] }, { label:'양식 설정', items:['card-doc-templates'] }, { label:'서명 · 로고', items:['card-chief-judge'] } ] },
+            { id:'certs',        group:'결과 · 문서', label:'상장 · 기록증',      icon:'award',    loads:[], roleTab:'certificates', rest:'certificates',
+              subtabs:[ { label:'발급', items:['card-cert-issue'] }, { label:'양식', items:['card-cert-pdf-templates','card-award-docx'] }, { label:'이력', items:['card-cert-log'] } ] },
+            { id:'notify',       group:'결과 · 문서', label:'알림 (푸시 · 문자)', icon:'message',  loads:[], roleTab:'sms', rest:'sms',
+              subtabs:[ { label:'푸시 공지', items:['card-notify-push'] }, { label:'문자 설정', items:['card-sms-config'] }, { label:'문자 발송', items:['card-sms-test','card-sms-batch'] }, { label:'이력', items:['card-sms-log'] } ] },
             { id:'access',       group:'시스템',    label:'사용자 · 키',         icon:'key',      loads:['users','judges','settings','extapi'], roleTab:'judges',
               subtabs:[ { label:'계정', tab:'users' }, { label:'심판 운영키', tab:'judges' }, { label:'기본 키 · 기록위원 키', items:['card-default-keys','card-record-officer-key'] }, { label:'외부 API', tab:'extapi' } ] },
             { id:'pacing',       group:'시스템',    label:'페이싱 라이트',       icon:'traffic',  tab:'pacing',      loads:['pacing'], roleTab:'pacing' },
             { id:'brand',        group:'시스템',    label:'브랜드 · 홈',         icon:'home',     items:['card-site-content','card-home-popup','popup-editor-wrap'], loads:['settings'], roleTab:'settings' },
             { id:'masters',      group:'시스템',    label:'마스터 (연맹 · 부)',  icon:'book',     items:['card-federations'], loads:['competition'], roleTab:'competition', extraHtml:'<div class="admin-card" id="card-division-entry"><h4>부(Division) 마스터</h4><p class="t-muted" style="margin:0 0 12px;">실업·대학·고등·중등·일반·학년 단위 부를 추가·수정합니다. 종목 화면의 부별 필터와 부별 기록(DR)이 이 목록을 씁니다.</p><button class="btn btn-outline" onclick="openDivisionManagerModal()">부 관리 열기</button></div>' },
-            { id:'backup',       group:'시스템',    label:'백업 · 복원',         icon:'shield',   items:['card-data-backup'], loads:['competition'], roleTab:'competition' },
-            { id:'guide',        group:'시스템',    label:'도움말',              icon:'book',     items:['card-record-guide','card-quick-links'], loads:[], roleTab:'overview' },
+            { id:'backup',       group:'시스템',    label:'백업 · 복원',         icon:'shield',   items:['card-data-backup','card-backup-full','card-backup-pg'], loads:['competition'], roleTab:'competition' },
         ];
         function _screenFor(name) {
             if (!name) return null;
@@ -3596,7 +3440,7 @@ POST /api/external/event-result-link/batch<br>
             sc = ADMIN_SCREENS.find(x => x.tab === name) || ADMIN_SCREENS.find(x => (x.subtabs || []).some(st => st.tab === name));
             if (sc) return sc;
             // 옛 탭 이름 → 그 탭의 카드가 주로 사는 화면
-            const legacy = { competition:'comp', scoreboard:'timing', settings:'brand', judges:'access', users:'access', extapi:'access', sms:'notify', upload:'import' };
+            const legacy = { competition:'comp', scoreboard:'timing', settings:'brand', judges:'access', users:'access', extapi:'access', sms:'notify', upload:'import', documents:'docs', certificates:'certs' };
             return ADMIN_SCREENS.find(x => x.id === legacy[name]) || null;
         }
         function _screenVisible(sc) {
@@ -3627,7 +3471,48 @@ POST /api/external/event-result-link/batch<br>
                     sc.subtabs.forEach((st, i) => { const box = document.createElement('div'); box.className = 'adm-subpanel'; box.dataset.sub = String(i); moveInto(box, st); panel.appendChild(box); });
                 } else if (sc.items) { moveInto(panel, sc); }
                 if (sc.extraHtml) panel.insertAdjacentHTML('beforeend', sc.extraHtml);
+                if (sc.rest) { const src = document.getElementById('tab-' + sc.rest); if (src && src !== panel) { while (src.firstChild) panel.appendChild(src.firstChild); } }   // 모달 등 나머지도 같이 (숨은 패널 안에 남으면 안 뜬다)
             });
+            // 문서 양식 설정 안의 이름·로고 칸은 '서명 · 로고' 한 벌로 대체 — 값은 유지(숨김), 저장 로직 불변
+            ['doc-comp-logo-left-file','doc-comp-logo-right-file','doc-sl-logo-left-file','doc-sl-logo-right-file','doc-rs-logo-left-file','doc-rs-logo-right-file','doc-comp-chief-judge','doc-comp-chief-recorder','doc-rs-chief-judge','doc-rs-recorder-name','doc-rs-chief-recorder-name'].forEach(id => {
+                const el = document.getElementById(id); if (!el) return; const row = el.closest('.admin-form-group') || el.parentElement; if (row) row.style.display = 'none';
+            });
+            // 도움말·빠른 이동 카드는 헤더 도움말 모달로
+            const hb = document.getElementById('adm-help-body');
+            if (hb) ['card-record-guide','card-api-quickref','card-quick-links'].forEach(id => { const el = document.getElementById(id); if (el) hb.appendChild(el); });
+        }
+        function admOpenHelp() { const m = document.getElementById('adm-help-modal'); if (m) m.style.display = 'flex'; }
+        function admCloseHelp() { const m = document.getElementById('adm-help-modal'); if (m) m.style.display = 'none'; }
+        function admShowPreview(url, title) {
+            const m = document.getElementById('adm-preview-modal'); if (!m) { window.open(url, '_blank'); return; }
+            document.getElementById('adm-preview-title').textContent = title || '미리보기';
+            document.getElementById('adm-preview-frame').src = url; document.getElementById('adm-preview-open').href = url;
+            m.style.display = 'flex';
+        }
+        function admClosePreview() { const m = document.getElementById('adm-preview-modal'); if (m) { m.style.display = 'none'; document.getElementById('adm-preview-frame').src = 'about:blank'; } }
+        function impGoStep(n) {
+            document.querySelectorAll('#tab-upload .adm-step, #tab-import .adm-step').forEach(sec => { sec.style.display = String(n) === sec.dataset.step ? '' : 'none'; });
+            document.querySelectorAll('#imp-steps button').forEach((b, i) => b.classList.toggle('active', i + 1 === n));
+            const bar = document.getElementById('imp-steps'); if (bar) window.scrollTo({ top: Math.max(0, bar.getBoundingClientRect().top + window.scrollY - 80), behavior: 'smooth' });
+        }
+        function impRosterMode(mode, btn) { document.getElementById('imp-roster-fed').style.display = mode === 'fed' ? '' : 'none'; document.getElementById('imp-roster-ath').style.display = mode === 'ath' ? '' : 'none'; btn.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn)); }
+        function impContactMode(mode, btn) { document.getElementById('imp-contact-bib').style.display = mode === 'bib' ? '' : 'none'; document.getElementById('imp-contact-phone').style.display = mode === 'phone' ? '' : 'none'; btn.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn)); }
+        // 드롭존 컴포넌트: .adm-drop[for=inputId] — 드래그·클릭·파일명 표시. 기존 input 의 onchange 는 그대로 동작
+        function initAdmDrops() {
+            document.querySelectorAll('.adm-drop').forEach(z => {
+                if (z.dataset.ready) return; z.dataset.ready = '1';
+                const inputId = z.getAttribute('for') || (z.querySelector('input[type="file"]') || {}).id; const input = inputId && document.getElementById(inputId); if (!input) return;
+                const nameEl = z.querySelector('.adm-drop-name');
+                const show = () => { if (nameEl) nameEl.textContent = input.files && input.files.length ? [...input.files].map(f => f.name).join(', ') : ''; };
+                input.addEventListener('change', show);
+                ['dragenter', 'dragover'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add('over'); }));
+                ['dragleave', 'drop'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove('over'); }));
+                if (!z.dataset.ownDrop) z.addEventListener('drop', e => { if (!e.dataTransfer || !e.dataTransfer.files.length) return; try { input.files = e.dataTransfer.files; } catch (err) {} show(); input.dispatchEvent(new Event('change', { bubbles: true })); });
+            });
+        }
+        // 서버 백엔드에 맞는 백업 카드만 (PostgreSQL 이면 ZIP 통백업은 없다)
+        async function admApplyBackendUI() {
+            try { const h = await fetch('/api/health').then(r => r.json()); const pg = h && h.backend === 'postgres'; const f = document.getElementById('card-backup-full'), g = document.getElementById('card-backup-pg'); if (f) f.style.display = pg ? 'none' : ''; if (g) g.style.display = pg ? '' : 'none'; } catch (e) {}
         }
         function _activateSubtab(sc, i) {
             sc._sub = i;
@@ -3679,7 +3564,13 @@ POST /api/external/event-result-link/batch<br>
             const kjaf = document.getElementById('card-kjaf-record'); if (kjaf) kjaf.style.display = (c.federation === 'KJAF') ? '' : 'none';
         }
 
-        document.addEventListener('DOMContentLoaded', () => { renderSidebar(); });
+        document.addEventListener('DOMContentLoaded', () => { renderSidebar(); initAdmDrops(); admApplyBackendUI(); });
+        // 시간표 ↔ 종목 매칭: 요약만 보이고, 미매칭이 있을 때만 목록을 편다
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof ttLoadMatching !== 'function') return;
+            const orig = ttLoadMatching;
+            ttLoadMatching = async function () { const r = await orig.apply(this, arguments); try { const sum = document.getElementById('tt-match-summary'), det = document.getElementById('tt-match-details'); if (sum && det) det.open = !/100%/.test(sum.textContent || ''); } catch (e) {} return r; };
+        });
 
         function toast(msg, type = 'success') {
             const t = document.createElement('div'); t.className = 'toast ' + type; t.textContent = msg;
@@ -5123,7 +5014,7 @@ POST /api/external/event-result-link/batch<br>
         // ---- UPLOAD ----
         function downloadBackup(format = 'json') {
             let url = '/api/admin/backup?key=' + encodeURIComponent(AK()) + '&format=' + format;
-            const compOnly = document.getElementById('backup-comp-only')?.checked || document.getElementById('backup-comp-only2')?.checked;
+            const compOnly = document.getElementById('backup-comp-only')?.checked;
             if (compOnly) {
                 const compId = getCompetitionId();
                 if (compId) url += '&competition_id=' + compId;
@@ -11623,7 +11514,7 @@ POST /api/external/event-result-link/batch<br>
                 });
                 if (!res.ok) throw new Error('미리보기 실패');
                 const blob = await res.blob();
-                window.open(URL.createObjectURL(blob), '_blank');
+                admShowPreview(URL.createObjectURL(blob), '상장 미리보기');
             } catch (e) {
                 toast('미리보기 실패: ' + e.message, 'error');
             }
@@ -11808,7 +11699,7 @@ POST /api/external/event-result-link/batch<br>
                 });
                 if (!res.ok) throw new Error('미리보기 실패');
                 const blob = await res.blob();
-                window.open(URL.createObjectURL(blob), '_blank');
+                admShowPreview(URL.createObjectURL(blob), '상장 미리보기');
             } catch (e) {
                 toast('미리보기 실패: ' + e.message, 'error');
             }

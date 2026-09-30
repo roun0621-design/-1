@@ -113,3 +113,43 @@
 .admin-main .fc-drop, .admin-main #tt-drop { border: 1px dashed var(--adm-line-strong); background: var(--adm-surface-2); }
 .admin-main .fc-drop:hover, .admin-main .fc-drop.over, .admin-main #tt-drop:hover, .admin-main #tt-drop.over { background: #f6f1e4; border-color: var(--adm-primary); }
 .admin-main #ath-tree, .admin-main .matrix-scroll-area { font-size: 12px; }
+
+/* ── 3단계 컴포넌트: 스텝 바 · 세그먼트 · 드롭존 · 형식 안내 · 액션 줄 · 미리보기 모달 ── */
+.admin-main .adm-steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 16px; }
+.admin-main .adm-steps button { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px 0 6px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); font-size: 13px; font-weight: 600; color: var(--adm-muted); cursor: pointer; }
+.admin-main .adm-steps button b { width: 24px; height: 24px; border-radius: 50%; background: var(--adm-line); color: #374151; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.admin-main .adm-steps button.active { border-color: var(--adm-primary); color: var(--adm-primary-ink); background: #fbf8f0; }
+.admin-main .adm-steps button.active b { background: var(--adm-primary); color: #fff; }
+.admin-main .adm-steps-link { margin-left: auto; font-size: 13px; color: var(--adm-muted); text-decoration: underline; }
+.admin-main .adm-step-nav { display: flex; justify-content: space-between; align-items: center; margin: -4px 0 16px; }
+.admin-main .adm-seg { display: inline-flex; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); padding: 2px; margin-bottom: 14px; background: var(--adm-surface-2); }
+.admin-main .adm-seg button { min-height: 30px; padding: 0 14px; border: none; border-radius: 4px; background: transparent; font-size: 13px; font-weight: 600; color: var(--adm-muted); cursor: pointer; }
+.admin-main .adm-seg button.active { background: var(--adm-surface); color: var(--adm-text); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.admin-main .adm-lead { font-size: 13px; color: #374151; line-height: 1.55; margin: 0 0 12px; }
+.admin-main .adm-subhead { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--adm-muted); text-transform: uppercase; margin: 0 0 8px; }
+.admin-main details.adm-help { border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); background: var(--adm-surface-2); margin: 0 0 12px; font-size: 12.5px; line-height: 1.6; color: #374151; }
+.admin-main details.adm-help summary { cursor: pointer; padding: 8px 12px; font-weight: 600; color: var(--adm-muted); list-style: none; display: flex; align-items: center; gap: 6px; }
+.admin-main details.adm-help summary::before { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s; margin-left: 2px; }
+.admin-main details.adm-help[open] summary::before { transform: rotate(45deg); }
+.admin-main details.adm-help > div { padding: 0 12px 10px; }
+.admin-main details.adm-help code { background: #fff; border: 1px solid var(--adm-line); border-radius: 3px; padding: 0 4px; font-size: 12px; }
+.admin-main .adm-drop { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border: 1px dashed var(--adm-line-strong); border-radius: var(--adm-radius); background: var(--adm-surface-2); cursor: pointer; margin: 0 0 12px; color: var(--adm-text); transition: background .12s, border-color .12s; text-align: left; }
+.admin-main .adm-drop:hover, .admin-main .adm-drop.over { background: #fbf8f0; border-color: var(--adm-primary); }
+.admin-main .adm-drop .adm-drop-ic { color: var(--adm-muted); display: inline-flex; flex-shrink: 0; }
+.admin-main .adm-drop .adm-drop-txt { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.admin-main .adm-drop .adm-drop-txt small { color: var(--adm-muted); font-size: 12px; }
+.admin-main .adm-drop .adm-drop-name { margin-left: auto; font-size: 12.5px; color: var(--adm-primary-ink); font-weight: 600; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-main .adm-drop .adm-drop-name:empty { display: none; }
+.admin-main .fc-drop.adm-drop { text-align: left; }
+.admin-main .adm-opts { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 13px; color: #374151; margin: 0 0 12px; }
+.admin-main .adm-opts label { display: inline-flex; align-items: center; gap: 6px; }
+.admin-main .adm-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.admin-main .adm-actions > span:first-child { flex: 1; }
+.adm-preview-box { width: min(960px, 96vw); height: min(88vh, 900px); background: #fff; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.25); margin: auto; }
+.adm-preview-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--adm-line); font-weight: 700; font-size: 14px; }
+.adm-preview-head span { flex: 1; }
+.adm-preview-box iframe { flex: 1; border: none; width: 100%; background: #f3f4f6; }
+.adm-help-box { height: min(84vh, 820px); }
+#adm-help-body { overflow-y: auto; padding: 16px 18px; flex: 1; }
+#adm-help-body .admin-card { margin-bottom: 14px; }
+#adm-preview-modal, #adm-help-modal { position: fixed; inset: 0; background: rgba(17, 24, 39, .45); display: flex; align-items: center; justify-content: center; }
