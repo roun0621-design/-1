@@ -1869,7 +1869,7 @@ POST /api/external/event-result-link/batch<br>
             <div id="tab-documents" class="admin-tab-panel">
                 <!-- Download Center -->
                 <div class="admin-card" id="card-download-center">
-                    <h4>다운로드</h4>
+                    <h4>문서 내려받기</h4>
                     <div class="adm-doc-row"><div class="adm-doc-info"><b>종합기록지</b><small>종합기록 + 종목별 기록 시트(트랙 · 필드 · 계주)</small></div><div class="adm-doc-actions"><button class="btn btn-sm btn-outline" onclick="downloadFullRecord('M')">남자 Excel</button><button class="btn btn-sm btn-outline" onclick="downloadFullRecord('F')">여자 Excel</button><button class="btn btn-sm btn-outline" onclick="downloadFullRecordPdf('M')">남자 PDF</button><button class="btn btn-sm btn-outline" onclick="downloadFullRecordPdf('F')">여자 PDF</button></div></div>
                     <div class="adm-doc-row" id="card-kjaf-record"><div class="adm-doc-info"><b>중·고연맹 종합기록지</b><small>한국중·고육상연맹 양식 — 남중 · 여중 · 학년부 · 믹스릴레이 · 신기록현황 시트. 종목의 부 설정을 따릅니다.</small></div><div class="adm-doc-actions"><button class="btn btn-sm btn-outline" onclick="downloadKjafRecord()">Excel</button></div></div>
                     <div class="adm-doc-row" id="card-idcard"><div class="adm-doc-info"><b>ID카드 (AD카드)</b><small>배번 · 성명 · 소속 · 참가 종목 + 소집실 스캔용 바코드. 계주 팀은 제외.</small>
@@ -2124,7 +2124,7 @@ POST /api/external/event-result-link/batch<br>
                             <label style="font-size:12px;display:flex;align-items:center;gap:4px;margin-top:4px;"><input type="checkbox" id="doc-rs-show-header" checked> 대회명/종목 헤더 표시</label>
                         </div>
                         <!-- NR/DR/CR Records Table Toggle + Input (Per-Event) -->
-                        <div style="margin-top:12px;border:1px solid var(--gray);border-radius:6px;padding:12px;background:var(--bg);">
+                        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gray);">
                             <label style="font-size:12px;display:flex;align-items:center;gap:4px;font-weight:600;">
                                 <input type="checkbox" id="doc-rs-show-records-table" checked> 하단 기록 테이블 (NR/DR/CR) 포함
                             </label>
@@ -2881,6 +2881,7 @@ POST /api/external/event-result-link/batch<br>
         function updateCompModeBadge() {
             const badges = document.querySelectorAll('.comp-mode-badge');
             badges.forEach(b => {
+                b.style.display = _selectedCompMode === 'display' ? '' : 'none';   // 운영 모드는 기본값이라 표시하지 않는다
                 if (_selectedCompMode === 'display') {
                     b.textContent = '노출 모드';
                     b.style.background = '#fef3c7';
@@ -3461,10 +3462,11 @@ POST /api/external/event-result-link/batch<br>
         // 선수·종목 상세 드로어 (목록은 전폭 표, 상세는 오른쪽에서)
         function admOpenDrawer(which) {
             const el = which === 'ath' ? document.querySelector('#tab-athletes .adm-drawer') : document.querySelector('#tab-events .adm-drawer');
-            if (!el) return; el.classList.add('open'); document.body.classList.add('adm-drawer-open');
-            if (!el.querySelector('.adm-drawer-close')) { const c = document.createElement('button'); c.className = 'btn btn-sm btn-ghost adm-drawer-close'; c.textContent = '닫기'; c.onclick = () => admCloseDrawer(); el.insertBefore(c, el.firstChild); }
+            if (!el) return; el.classList.add('open'); el.classList.toggle('adm-drawer-wide', which === 'evt'); document.body.classList.add('adm-drawer-open');
+            let bd = document.getElementById('adm-drawer-backdrop'); if (!bd) { bd = document.createElement('div'); bd.id = 'adm-drawer-backdrop'; bd.onclick = admCloseDrawer; document.body.appendChild(bd); } bd.style.display = 'block';
+            if (!el.querySelector('.adm-drawer-bar')) { const bar = document.createElement('div'); bar.className = 'adm-drawer-bar'; bar.innerHTML = `<span>${which === 'ath' ? '선수' : '종목'}</span><button class="btn btn-sm btn-outline adm-drawer-close" onclick="admCloseDrawer()">닫기</button>`; el.insertBefore(bar, el.firstChild); }
         }
-        function admCloseDrawer() { document.querySelectorAll('.adm-drawer.open').forEach(el => el.classList.remove('open')); document.body.classList.remove('adm-drawer-open'); }
+        function admCloseDrawer() { document.querySelectorAll('.adm-drawer.open').forEach(el => el.classList.remove('open')); document.body.classList.remove('adm-drawer-open'); const bd = document.getElementById('adm-drawer-backdrop'); if (bd) bd.style.display = 'none'; }
         document.addEventListener('keydown', e => { if (e.key === 'Escape') admCloseDrawer(); });
         document.addEventListener('DOMContentLoaded', () => {
             const ath = document.querySelector('#tab-athletes > div > div:last-child'); if (ath) ath.classList.add('adm-drawer');
@@ -3666,7 +3668,7 @@ POST /api/external/event-result-link/batch<br>
                 let today = []; try { today = await fetch(`/api/timetable/${_selectedCompId}/today`).then(r => r.json()); } catch (e) {}
                 const upcoming = (Array.isArray(today) ? today : []).filter(r => r.event_round_status !== 'completed').slice(0, 8);
                 const rows = [
-                    ...live.map(e => `<div class="adm-ov-row"><span class="badge-pill badge-ok">LIVE</span><span class="adm-ov-name">${G[e.gender] || ''} ${e.name} ${RT[e.round_type] || ''}</span><button class="btn btn-sm btn-ghost" onclick="switchTab('events');setTimeout(()=>openEvtModal(${e.id}),150)">열기</button></div>`),
+                    ...live.map(e => `<div class="adm-ov-row"><span class="badge-pill badge-ok">LIVE</span><span class="adm-ov-name">${G[e.gender] || ''} ${e.name} ${RT[e.round_type] || ''}</span><button class="btn btn-sm btn-outline" onclick="switchTab('events');setTimeout(()=>openEvtModal(${e.id}),150)">열기</button></div>`),
                     ...upcoming.map(r => `<div class="adm-ov-row"><span class="adm-ov-time num">${r.time || ''}</span><span class="adm-ov-name">${r.event_name || ''}${r.round ? ' · ' + r.round : ''}</span>${r.callroom_time ? `<span class="t-muted t-xs">소집 ${r.callroom_time}</span>` : ''}</div>`),
                 ];
                 document.getElementById('ov-today').innerHTML = rows.join('') || '<div class="adm-empty"><p>오늘 예정된 종목이 없습니다</p></div>';
@@ -3676,7 +3678,7 @@ POST /api/external/event-result-link/batch<br>
                 const rd = await fetch(`/api/admin/competitions/${_selectedCompId}/readiness`, { headers: { 'x-admin-key': AK() } }).then(r => r.ok ? r.json() : null);
                 const bad = []; (rd && rd.groups || []).forEach(g => (g.items || []).forEach(it => { if (it.status === 'warn' || it.status === 'fail') bad.push({ ...it, group: g.title }); }));
                 document.getElementById('ov-warn').innerHTML = bad.length
-                    ? bad.slice(0, 10).map(it => `<div class="adm-ov-row"><span class="badge-pill ${it.status === 'fail' ? 'badge-err' : 'badge-warn'}">${it.status === 'fail' ? '오류' : '주의'}</span><span class="adm-ov-name">${it.label}${it.detail ? `<small class="t-muted"> — ${it.detail}</small>` : ''}</span>${it.action && it.action.tab ? `<button class="btn btn-sm btn-ghost" onclick="switchTab('${it.action.tab}')">${it.action.label || '이동'}</button>` : ''}</div>`).join('') + (bad.length > 10 ? `<div class="t-muted t-xs" style="margin-top:6px;">외 ${bad.length - 10}건 — 운영 체크리스트에서 전체 보기</div>` : '')
+                    ? bad.slice(0, 10).map(it => `<div class="adm-ov-row"><span class="badge-pill ${it.status === 'fail' ? 'badge-err' : 'badge-warn'}">${it.status === 'fail' ? '오류' : '주의'}</span><span class="adm-ov-name">${it.label}${it.detail ? `<small class="t-muted"> — ${it.detail}</small>` : ''}</span>${it.action && it.action.tab ? `<button class="btn btn-sm btn-outline" onclick="switchTab('${it.action.tab}')">${it.action.label || '이동'}</button>` : ''}</div>`).join('') + (bad.length > 10 ? `<div class="t-muted t-xs" style="margin-top:6px;">외 ${bad.length - 10}건 — 운영 체크리스트에서 전체 보기</div>` : '')
                     : '<div class="adm-ov-row"><span class="badge-pill badge-ok">정상</span><span class="adm-ov-name">확인이 필요한 항목이 없습니다</span></div>';
             } catch (e) { document.getElementById('ov-warn').innerHTML = ''; }
             // 최근 활동: 분류 배지 · 내용 · 수행자 · 시각
@@ -3716,9 +3718,10 @@ POST /api/external/event-result-link/batch<br>
             list = list.slice().sort((x, y) => (x.team || '').localeCompare(y.team || '') || bibNum(x.bib_number) - bibNum(y.bib_number) || x.name.localeCompare(y.name));
             const gChip = g => g === 'M' ? '<span class="gender-badge M">남</span>' : g === 'F' ? '<span class="gender-badge F">여</span>' : '<span class="gender-badge X">혼</span>';
             let html = '';
+            const hasGrade = list.some(a => a.grade);
             if (list.length) {
-                html = `<table class="crud-table adm-ath-table"><thead><tr><th style="width:72px;">배번</th><th>이름</th><th style="width:56px;">성별</th><th>소속</th><th style="width:64px;">학년</th></tr></thead><tbody>` +
-                    list.map(a => `<tr class="adm-row${a.id === _athSelectedId ? ' selected-row' : ''}" onclick="selectAthlete(${a.id})"><td class="num">${bib(a.bib_number)}</td><td><b>${a.name}</b></td><td>${gChip(a.gender)}</td><td>${a.team || '<span class="t-muted">—</span>'}</td><td>${a.grade ? a.grade + '학년' : ''}</td></tr>`).join('') + '</tbody></table>';
+                html = `<table class="crud-table adm-ath-table"><thead><tr><th style="width:80px;text-align:right;">배번</th><th style="width:220px;">이름</th><th style="width:64px;">성별</th><th>소속</th>${hasGrade ? '<th style="width:72px;">학년</th>' : ''}</tr></thead><tbody>` +
+                    list.map(a => `<tr class="adm-row${a.id === _athSelectedId ? ' selected-row' : ''}" onclick="selectAthlete(${a.id})"><td class="num" style="text-align:right;">${bib(a.bib_number)}</td><td><b>${a.name}</b></td><td>${gChip(a.gender)}</td><td>${a.team || '<span class="t-muted">—</span>'}</td>${hasGrade ? `<td>${a.grade ? a.grade + '학년' : ''}</td>` : ''}</tr>`).join('') + '</tbody></table>';
             } else html = '<div class="adm-empty" style="padding:40px 0;"><div class="ph-icon">' + ICON('user', { size: 32 }) + '</div><p>선수가 없습니다</p></div>';
             document.getElementById('ath-tree').innerHTML = html;
             document.getElementById('ath-count').textContent = `${list.length}명 · ${teams.size}개 팀`;
@@ -4036,11 +4039,11 @@ POST /api/external/event-result-link/batch<br>
                 : allGenderEvents.filter(e => (e.division || '') === _evtDivision);
             const subEvents = _allAdminEvents.filter(e => e.gender === _evtGender && e.parent_event_id);
             const categories = [
-                { key: 'track', label: 'TRACK', match: c => c === 'track' },
-                { key: 'field', label: 'FIELD', match: c => c === 'field_distance' || c === 'field_height' },
-                { key: 'combined', label: 'COMBINED', match: c => c === 'combined' },
-                { key: 'relay', label: 'RELAY', match: c => c === 'relay' },
-                { key: 'road', label: 'ROAD', match: c => c === 'road' },
+                { key: 'track', label: '트랙', match: c => c === 'track' },
+                { key: 'field', label: '필드', match: c => c === 'field_distance' || c === 'field_height' },
+                { key: 'combined', label: '혼성경기', match: c => c === 'combined' },
+                { key: 'relay', label: '계주', match: c => c === 'relay' },
+                { key: 'road', label: '도로', match: c => c === 'road' },
             ];
             // Group by name + category + division (FIX: division 누락으로 인한 부별 중복/누락 방지)
             const eventGroups = {};
@@ -4132,8 +4135,8 @@ POST /api/external/event-result-link/batch<br>
                             const parentKey = 'adm-subs-' + (parentIds[0] || g.name);
                             const doneCount = subOrder.filter(sn => subGroups[sn].some(r => r.round_status === 'completed' || r.round_status === 'in_progress')).length;
                             html += `<tr class="combined-sub-toggle-row">
-                                <td colspan="4" style="padding:4px 8px;background:linear-gradient(135deg,#f8f4ea,#faf6ec);border-left:3px solid #8a7640;">
-                                    <button onclick="toggleAdminCombinedSubs('${parentKey}')" class="btn btn-sm btn-ghost" id="toggle-btn-${parentKey}">▼ 세부 ${subOrder.length}개</button>
+                                <td colspan="4" style="padding:4px 8px;background:#fff;">
+                                    <button onclick="toggleAdminCombinedSubs('${parentKey}')" class="btn btn-sm btn-ghost" id="toggle-btn-${parentKey}">세부 ${subOrder.length}개</button>
                                     <span style="font-size:12px;color:#8a7640;font-weight:600;margin-left:6px;">${doneCount}/${subOrder.length}</span>
                                 </td></tr>`;
                             subOrder.forEach((seName, idx) => {
@@ -4142,11 +4145,10 @@ POST /api/external/event-result-link/batch<br>
                                 const sePrelim = seRounds.find(r => r.round_type === 'preliminary');
                                 const seSemi = seRounds.find(r => r.round_type === 'semifinal');
                                 const shortName = seName.replace(/^\[.*?\]\s*/, '');
-                                const prefix = idx === subOrder.length - 1 ? '└' : '├';
                                 const seStatus = seFin || sePrelim || seSemi;
-                                const dot = seStatus ? (seStatus.round_status === 'completed' ? '<span style="color:#9a8548;">●</span>' : seStatus.round_status === 'in_progress' ? '<span style="color:#f59e0b;">●</span>' : '<span style="color:#d1d5db;">○</span>') : '<span style="color:#d1d5db;">○</span>';
+                                const dot = `<span class="adm-dot ${seStatus ? (seStatus.round_status === 'completed' ? 'adm-dot-done' : seStatus.round_status === 'in_progress' ? 'adm-dot-active' : '') : ''}"></span>`;
                                 html += `<tr class="combined-sub-row ${parentKey}">
-                                    <td class="rec-matrix-event" style="padding-left:20px;font-size:12px;color:#555;"><span style="color:#a78bfa;margin-right:3px;">${prefix}</span>${dot} <strong>${shortName}</strong></td>
+                                    <td class="rec-matrix-event" style="padding-left:20px;font-size:12px;color:#555;">${dot} <strong>${shortName}</strong></td>
                                     <td class="round-cell">${_admRoundBtn(sePrelim, '예선')}</td>
                                     <td class="round-cell">${_admRoundBtn(seSemi, '준결')}</td>
                                     <td class="round-cell">${_admRoundBtn(seFin, '결승')}</td>
@@ -4181,7 +4183,7 @@ POST /api/external/event-result-link/batch<br>
             const visible = rows.length > 0 && rows[0].style.display !== 'none';
             rows.forEach(r => r.style.display = visible ? 'none' : '');
             const btn = document.getElementById('toggle-btn-' + parentKey);
-            if (btn) btn.innerHTML = (visible ? '▶' : '▼') + ` 세부 ${rows.length}개`;
+            if (btn) btn.textContent = `세부 ${rows.length}개 ${visible ? '접기' : '보기'}`;
         }
 
         async function autoSortEvents() {
@@ -5868,17 +5870,17 @@ POST /api/external/event-result-link/batch<br>
                             </div>
                             <div class="admin-form-group"><label>정렬순서</label><input type="number" id="em-sort" value="${e.sort_order||0}" style="width:80px;"></div>
                         </div>
-                        <div style="display:flex;gap:8px;">
-                            <div class="admin-form-group" style="flex:1;"><label>영상 URL <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(YouTube 등)</span></label>
+                        <div class="admin-form-row">
+                            <div class="admin-form-group"><label>영상 URL</label>
                                 <div style="display:flex;gap:6px;">
                                     <input id="em-video-url" placeholder="https://youtube.com/..." style="flex:1;" value="">
-                                    <button class="btn btn-sm btn-outline" onclick="previewEvtVideo()" title="영상 미리보기">▶</button>
+                                    <button class="btn btn-sm btn-outline" onclick="previewEvtVideo()" title="영상 미리보기">미리보기</button>
                                 </div>
                             </div>
-                            <div class="admin-form-group" style="flex:1;"><label>결과 링크 (Result URL) <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(외부 결과 페이지)</span></label>
+                            <div class="admin-form-group"><label>결과 링크</label>
                                 <div style="display:flex;gap:6px;">
                                     <input id="em-result-url" placeholder="https://example.com/results..." style="flex:1;" value="${(e.result_url||'').replace(/"/g,'&quot;')}">
-                                    <button class="btn btn-sm btn-outline" onclick="openEvtResultUrl()" title="결과 링크 열기">↗</button>
+                                    <button class="btn btn-sm btn-outline" onclick="openEvtResultUrl()" title="결과 링크 열기">열기</button>
                                 </div>
                             </div>
                         </div>
@@ -6096,11 +6098,10 @@ POST /api/external/event-result-link/batch<br>
                 const label = h.heat_name || (isFinalSingle ? '결승' : (h.heat_number + '조'));
                 const sbKeyBadge = h.scoreboard_key 
                     ? `<span style="font-size:11px;color:var(--text-muted);background:#f3f4f6;padding:1px 4px;border-radius:3px;cursor:pointer;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;" onclick="emEditScoreboardKey(${h.id})" title="스코어보드 키: ${h.scoreboard_key}&#10;클릭하여 수정">${h.scoreboard_key}</span>` 
-                    : `<span style="font-size:11px;color:#f59e0b;cursor:pointer;" onclick="emEditScoreboardKey(${h.id})" title="스코어보드 키 없음 — 클릭하여 설정">• 키없음</span>`;
+                    : `<span style="font-size:11px;color:#f59e0b;cursor:pointer;" onclick="emEditScoreboardKey(${h.id})" title="스코어보드 키 없음 — 클릭하여 설정">키 없음</span>`;
                 return `<span style="display:inline-flex;align-items:center;gap:2px;position:relative;">
                     <button class="heat-tab-btn ${active}" onclick="switchEmHeat(${h.id}, this)" title="클릭: 선수 보기">${label}</button>
-                    <button class="btn btn-sm btn-ghost" style="min-width:0;line-height:1;" onclick="emRenameHeatInline(${h.id})" title="조 이름 수정">수정</button>
-                    ${sbKeyBadge}
+                    ${active ? `<button class="btn btn-sm btn-ghost" style="min-width:0;line-height:1;" onclick="emRenameHeatInline(${h.id})" title="조 이름 수정">수정</button>${sbKeyBadge}` : ''}
                 </span>`;
             }).join('');
             tabsHtml += `<button class="btn btn-xs btn-primary" onclick="emAddHeat(${eventId})">+ 조 추가</button>`;
@@ -6169,7 +6170,7 @@ POST /api/external/event-result-link/batch<br>
                         <td style="text-align:left;font-weight:600;cursor:pointer;color:var(--blue);text-decoration:underline;" onclick="openRelayMemberModal(${e.event_entry_id},'${escapedName}',${_emEventId})">${e.name} <span class="t-xs t-muted">(${members.length}명) 수정</span></td>
                         <td style="text-align:center;">${members.length}</td>
                         ${legCells}
-                        <td><button class="btn btn-xs btn-danger" onclick="emRemoveEntry(${heatId},${e.event_entry_id},'${escapedName}')" title="이 조에서 제거">&times;</button></td>
+                        <td><button class="btn btn-xs btn-danger" onclick="emRemoveEntry(${heatId},${e.event_entry_id},'${escapedName}')" title="이 조에서 제거">제거</button></td>
                     </tr>`;
                 });
                 html += '</tbody></table>';
@@ -6196,12 +6197,12 @@ POST /api/external/event-result-link/batch<br>
                     <td class="t-sm">${stLabel}</td>
                     <td>
                         <select class="heat-move-select" style="font-size:10px;padding:2px 4px;" onchange="setEntryGroup(${e.heat_entry_id || 0},${e.event_entry_id},this.value)">
-                            <option value="">—</option>
+                            <option value="">없음</option>
                             <option value="A" ${groupLabel==='A'?'selected':''}>A</option>
                             <option value="B" ${groupLabel==='B'?'selected':''}>B</option>
                         </select>
                     </td>
-                    <td>${moveOpts ? `<select class="heat-move-select" style="font-size:10px;padding:2px 4px;" onchange="emMoveEntry(${heatId},${e.event_entry_id},this.value);this.selectedIndex=0;"><option value="">이동...</option>${moveOpts}</select>` : '—'}</td>
+                    <td>${moveOpts ? `<select class="heat-move-select" style="font-size:10px;padding:2px 4px;" onchange="emMoveEntry(${heatId},${e.event_entry_id},this.value);this.selectedIndex=0;"><option value="">이동</option>${moveOpts}</select>` : ''}</td>
                     <td><button class="btn btn-xs btn-danger" onclick="emRemoveEntry(${heatId},${e.event_entry_id},'${e.name.replace(/'/g,"\\'")}')" title="이 조에서 제거">&times;</button></td>
                 </tr>`;
             });
