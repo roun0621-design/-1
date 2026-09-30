@@ -1,0 +1,96 @@
+/* ============================================================
+   관리자 콘솔 디자인 레이어 — 재설계 1단계 (2026-09-30, docs/ADMIN_REDESIGN_PLAN.md §5)
+   원칙: 카드 한 종류 · 버튼 4종(32px) · 타이포 6단계 · 색은 의미(성공·주의·오류·정보)에만 · 이모지/글자 배지 없음
+   admin.html 의 인라인 스타일보다 뒤에 로드되며, 카드 색 보더 같은 "장식"은 !important 로 눌러 둔다.
+   ============================================================ */
+:root {
+    --adm-text: #1f2328; --adm-muted: #6b7280; --adm-line: #e5e7eb; --adm-line-strong: #d1d5db;
+    --adm-surface: #ffffff; --adm-surface-2: #f8f9fa; --adm-bg: #f5f4f0;
+    --adm-primary: #b79f58; --adm-primary-hover: #a68d47; --adm-primary-ink: #1a1f2b;
+    --adm-ok: #15803d; --adm-ok-bg: #ecfdf5; --adm-warn: #b45309; --adm-warn-bg: #fffbeb; --adm-err: #b91c1c; --adm-err-bg: #fef2f2; --adm-info: #1d4ed8; --adm-info-bg: #eff6ff;
+    --adm-radius: 8px; --adm-radius-sm: 6px;
+}
+
+/* ── 레이아웃 ── */
+.admin-main { min-width: 0; font-size: 14px; color: var(--adm-text); }
+.admin-sidebar { width: 224px; min-width: 224px; padding: 8px; border-radius: var(--adm-radius); border-color: var(--adm-line); }
+.sb-group { margin-bottom: 4px; }
+.sb-group-title { font-size: 11px; letter-spacing: .06em; padding: 8px 10px 4px; }
+.sb-item { padding: 6px 10px; font-size: 13px; border-radius: var(--adm-radius-sm); }
+.sb-item.active { background: #f6f1e4; color: #6b5520; }
+.sb-item.active .sb-icon { color: #8a7640; }
+
+/* ── 카드: 흰 배경 · 1px 보더 · 8px · 20px 패딩. 좌측 컬러 보더·배경색 폐지 ── */
+.admin-main .admin-card {
+    background: var(--adm-surface); border: 1px solid var(--adm-line) !important; border-radius: var(--adm-radius);
+    padding: 20px 22px; margin-bottom: 16px; box-shadow: none;
+}
+.admin-main .admin-card h4 { font-size: 16px; font-weight: 700; margin: 0 0 14px; line-height: 1.3; color: var(--adm-text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-main .admin-card h4 .t-sm, .admin-main .admin-card h4 .t-xs { font-size: 12px; font-weight: 500; color: var(--adm-muted); }
+.admin-main .admin-card h5 { font-size: 14px; font-weight: 700; margin: 0 0 8px; }
+.admin-main .admin-card p, .admin-main .admin-card .t-md { font-size: 13px; line-height: 1.55; }
+.admin-main .admin-card .t-xs { font-size: 12px; }
+.admin-main .admin-card .t-muted { color: var(--adm-muted); }
+/* 카드 안의 설명 상자(예전 파스텔 박스) — 한 톤 */
+.admin-main .adm-note { background: var(--adm-surface-2); border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); padding: 10px 12px; font-size: 12.5px; line-height: 1.55; color: #374151; }
+/* 위험 구역: 카드 맨 아래 한 패턴 */
+.admin-main .danger-zone { border: 1px solid #fecaca; background: var(--adm-err-bg); border-radius: var(--adm-radius); padding: 18px 22px; margin-top: 16px; }
+.admin-main .danger-zone h4 { color: var(--adm-err); }
+
+/* ── 버튼 4종: Primary(골드) / Secondary(아웃라인) / Tertiary(텍스트) / Destructive(빨강). 높이 32px, 표 안 28px ── */
+.admin-main .btn { min-height: 32px; padding: 0 14px; font-size: 13px; font-weight: 600; border-radius: var(--adm-radius-sm); line-height: 1.2; white-space: nowrap; box-shadow: none; }
+.admin-main .btn:hover:not(:disabled) { transform: none; box-shadow: none; }
+.admin-main .btn-sm, .admin-main .btn-xs { min-height: 28px; padding: 0 10px; font-size: 12px; }
+.admin-main .btn-primary { background: var(--adm-primary); color: #fff; }
+.admin-main .btn-primary:hover:not(:disabled) { background: var(--adm-primary-hover); }
+.admin-main .btn-outline, .admin-main .btn-excel, .admin-main .btn-pdf, .admin-main .btn-success, .admin-main .btn-accent, .admin-main .btn-word {
+    background: var(--adm-surface); color: var(--adm-text); border: 1px solid var(--adm-line-strong);
+}
+.admin-main .btn-outline:hover:not(:disabled), .admin-main .btn-excel:hover:not(:disabled), .admin-main .btn-pdf:hover:not(:disabled), .admin-main .btn-success:hover:not(:disabled), .admin-main .btn-accent:hover:not(:disabled) { background: var(--adm-surface-2); border-color: #9ca3af; }
+.admin-main .btn-ghost { background: transparent; color: var(--adm-muted); }
+.admin-main .btn-ghost:hover:not(:disabled) { background: var(--adm-surface-2); color: var(--adm-text); }
+.admin-main .btn-danger { background: var(--adm-surface); color: var(--adm-err); border: 1px solid #fca5a5; }
+.admin-main .btn-danger:hover:not(:disabled) { background: var(--adm-err-bg); }
+/* 파일 형식은 색이 아니라 라벨로 — 예전 초록/빨강 채움 버튼의 인라인 색은 무시 */
+.admin-main .btn-excel[style], .admin-main .btn-pdf[style] { background: var(--adm-surface) !important; color: var(--adm-text) !important; border-color: var(--adm-line-strong) !important; }
+/* 브라우저 기본 파일 입력 */
+.admin-main input[type="file"] { font-size: 12px; color: var(--adm-muted); }
+.admin-main input[type="file"]::file-selector-button { min-height: 28px; padding: 0 10px; margin-right: 8px; border: 1px solid var(--adm-line-strong); border-radius: var(--adm-radius-sm); background: var(--adm-surface); color: var(--adm-text); font-size: 12px; font-weight: 600; cursor: pointer; }
+
+/* ── 폼 ── */
+.admin-main .admin-form-group label { font-size: 12px; font-weight: 600; color: var(--adm-muted); }
+.admin-main .admin-form-group input, .admin-main .admin-form-group select, .admin-main .admin-card select, .admin-main .admin-card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"]), .admin-main .admin-card textarea {
+    min-height: 32px; padding: 5px 10px; border: 1px solid var(--adm-line-strong); border-radius: var(--adm-radius-sm); font-size: 13px; background: var(--adm-surface); color: var(--adm-text);
+}
+.admin-main .admin-card textarea { min-height: 72px; line-height: 1.5; }
+.admin-main .admin-card input:focus, .admin-main .admin-card select:focus, .admin-main .admin-card textarea:focus { outline: 2px solid rgba(183, 159, 88, .35); outline-offset: 0; border-color: var(--adm-primary); }
+.admin-main .admin-card label { font-size: 13px; }
+
+/* ── 표 ── */
+.admin-main .crud-table, .admin-main .heat-entries-table { font-size: 13px; }
+.admin-main .crud-table th, .admin-main .heat-entries-table th { background: var(--adm-surface); color: var(--adm-muted); font-size: 12px; font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--adm-line-strong); }
+.admin-main .crud-table td, .admin-main .heat-entries-table td { padding: 9px 10px; border-bottom: 1px solid var(--adm-line); }
+.admin-main .crud-table tr:hover td { background: var(--adm-surface-2); }
+.admin-main .crud-table td .btn, .admin-main .crud-table td button { min-height: 28px; }
+.admin-main .crud-table input, .admin-main .crud-table select { min-height: 28px; font-size: 12.5px; }
+
+/* ── 상태 배지: 성공·주의·오류·정보·중립 ── */
+.admin-main .badge-pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.admin-main .badge-pill.badge-on, .admin-main .badge-ok { background: var(--adm-ok-bg); color: var(--adm-ok); }
+.admin-main .badge-warn { background: var(--adm-warn-bg); color: var(--adm-warn); }
+.admin-main .badge-err { background: var(--adm-err-bg); color: var(--adm-err); }
+.admin-main .badge-pill.badge-base, .admin-main .badge-info { background: var(--adm-info-bg); color: var(--adm-info); }
+.admin-main .badge-pill.badge-off, .admin-main .badge-neutral { background: var(--adm-line); color: #374151; }
+
+/* ── 빈 상태 컴포넌트 ── */
+.admin-main .detail-placeholder, .admin-main .adm-empty { color: var(--adm-muted); font-size: 13px; text-align: center; }
+.admin-main .ph-icon svg { width: 32px; height: 32px; }
+.admin-main .detail-placeholder p, .admin-main .adm-empty p { margin: 6px 0 0; }
+
+/* ── 헤더 바(연도·대회 선택·종료 배지) ── */
+.admin-main .comp-selector select, #admin-comp-select { min-height: 34px; border: 1px solid var(--adm-line-strong); border-radius: var(--adm-radius-sm); font-size: 13px; }
+.card-flash { animation: cardFlash 1.2s ease-out; }
+@keyframes cardFlash { 0% { box-shadow: 0 0 0 0 rgba(183, 159, 88, 0); } 30% { box-shadow: 0 0 0 4px rgba(183, 159, 88, .45); } 100% { box-shadow: 0 0 0 0 rgba(183, 159, 88, 0); } }
+
+/* 이모지·기호 흔적(⚠ ⭐ ※ ①②) 대신 텍스트만 — 이모지 폰트 폴백이 튀지 않게 */
+.admin-main .ui-emoji { vertical-align: -2px; }

@@ -35,19 +35,19 @@
         .crud-table td > span[style*="border-radius"] { white-space:nowrap; display:inline-block; line-height:1.4; }
         .crud-table th { white-space:nowrap; }
         /* 공통 배지 유틸리티 */
-        .badge-pill { display:inline-block; padding:2px 8px; border-radius:8px; font-size:10px; font-weight:600; white-space:nowrap; line-height:1.4; }
+        .badge-pill { display:inline-block; padding:2px 8px; border-radius:8px; font-size:12px; font-weight:600; white-space:nowrap; line-height:1.4; }
         .badge-pill.badge-base { background:#dbeafe; color:#1e40af; }
-        .badge-pill.badge-user { background:#fef3c7; color:#92400e; }
+        .badge-pill.badge-user { background:#f8f9fa; color:#92400e; }
         .badge-pill.badge-on   { background:#dcfce7; color:#166534; }
-        .badge-pill.badge-off  { background:#f3f4f6; color:#6b7280; }
+        .badge-pill.badge-off  { background:#f8f9fa; color:#6b7280; }
         .crud-scroll { max-height:500px; overflow-y:auto; border:1px solid var(--gray); border-radius:var(--radius); }
         .admin-form-row { display:flex; gap:12px; margin-bottom:12px; align-items:flex-end; flex-wrap:wrap; }
         .admin-form-group { display:flex; flex-direction:column; gap:4px; }
-        .admin-form-group label { font-size:11px; font-weight:600; color:var(--text-muted); }
+        .admin-form-group label { font-size:12px; font-weight:600; color:var(--text-muted); }
         .admin-form-group input, .admin-form-group select { padding:6px 10px; border:1.5px solid var(--gray); border-radius:var(--radius); font-size:13px; }
         .admin-card { background:var(--white); border:1px solid var(--gray); border-radius:var(--radius); padding:16px; margin-bottom:16px; }
         .admin-card h4 { margin:0 0 12px; font-size:14px; }
-        .evt-filter-group { background:#f3f4f6; border-radius:6px; padding:2px; display:flex; gap:2px; }
+        .evt-filter-group { background:#f8f9fa; border-radius:6px; padding:2px; display:flex; gap:2px; }
         /* Admin Event Matrix Panel — matches callroom/record layout */
         .admin-evt-matrix-panel {
             width: 360px; min-width: 280px; flex-shrink: 0;
@@ -55,11 +55,11 @@
             border-right: 1px solid var(--gray);
             background: var(--white); overflow: hidden;
         }
-        .admin-evt-matrix-panel .gender-tabs-fixed { padding: 8px 10px; border-bottom: 1px solid var(--gray); background: #fafafa; }
-        .evt-div-tab { padding: 3px 10px; border: 1px solid var(--gray); background: #fff; border-radius: 12px; font-size: 11px; cursor: pointer; color: #555; transition: all .12s; }
+        .admin-evt-matrix-panel .gender-tabs-fixed { padding: 8px 10px; border-bottom: 1px solid var(--gray); background:#f8f9fa; }
+        .evt-div-tab { padding: 3px 10px; border: 1px solid var(--gray); background: #fff; border-radius: 12px; font-size:12px; cursor: pointer; color: #555; transition: all .12s; }
         .evt-div-tab:hover { border-color: var(--accent); color: var(--accent); }
         .evt-div-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
-        .evt-div-tab .div-count { margin-left: 4px; font-size: 10px; opacity: 0.8; }
+        .evt-div-tab .div-count { margin-left: 4px; font-size:12px; opacity: 0.8; }
         .admin-evt-detail-panel {
             flex: 1; display: flex; flex-direction: column;
             background: var(--white); overflow: hidden;
@@ -73,13 +73,13 @@
         /* Admin round btn — same as rec-round-btn but with admin-specific highlight */
         .adm-round-btn {
             display: inline-block; padding: 3px 8px; border-radius: 4px;
-            font-size: 10px; font-weight: 600; text-decoration: none; cursor: pointer;
+            font-size:12px; font-weight: 600; text-decoration: none; cursor: pointer;
             border: 1.5px solid; min-width: 36px; text-align: center;
             transition: all 0.12s; white-space: nowrap;
         }
         .adm-round-btn.adm-status-none { background: var(--gray-light); color: var(--text-muted); border-color: #e5e7eb; cursor: default; }
         .adm-round-btn.adm-status-created { background: #f9fafb; color: #6b7280; border-color: #e5e7eb; }
-        .adm-round-btn.adm-status-created:hover { background: #f3f4f6; border-color: #d1d5db; }
+        .adm-round-btn.adm-status-created:hover { background:#f8f9fa; border-color: #d1d5db; }
         .adm-round-btn.adm-status-ready { background: #fef9c3; color: #a16207; border-color: #fde68a; }
         .adm-round-btn.adm-status-ready:hover { background: #fef08a; }
         .adm-round-btn.adm-status-active { background: #e8e8e8; color: #6b6b6b; border-color: #c0c0c0; font-weight: 700; }
@@ -88,37 +88,37 @@
         /* CSS Icons — replacing emoji throughout */
         .css-icon {
             display: inline-flex; align-items: center; justify-content: center;
-            width: 18px; height: 18px; border-radius: 4px; font-size: 10px;
+            width: 18px; height: 18px; border-radius: 4px; font-size:12px;
             font-weight: 700; flex-shrink: 0; line-height: 1;
         }
         .css-icon-sm { width: 14px; height: 14px; font-size: 8px; border-radius: 3px; }
-        .css-icon-medal { background: #fef3c7; color: #d97706; }
+        .css-icon-medal { background:#f8f9fa; color: #d97706; }
         .css-icon-judge { background: #e8e8e8; color: #6b6b6b; }
         .css-icon-chart { background: #faf6ec; color: #8a7640; }
         .css-icon-download { background: #f5f0e0; color: #9a8548; }
         .css-icon-key { background: #fef9c3; color: #a16207; }
-        .css-icon-file { background: #e0f2fe; color: #0369a1; }
+        .css-icon-file { background:#f8f9fa; color: #0369a1; }
         .css-icon-check { background: #f5f0e0; color: #9a8548; }
-        .css-icon-link { background: #f8f4ea; color: #8a7640; }
+        .css-icon-link { background:#f8f9fa; color: #8a7640; }
         .css-icon-sync { background: #e8e8e8; color: #6b6b6b; }
-        .css-icon-auto { background: #f0fdf4; color: #15803d; }
+        .css-icon-auto { background:#f8f9fa; color: #15803d; }
         .css-icon-edit { background: #f1f5f9; color: #475569; }
-        .css-icon-warn { background: #fff7ed; color: #ea580c; }
+        .css-icon-warn { background:#f8f9fa; color: #ea580c; }
         .css-icon-add { background: #e8e8e8; color: #6b6b6b; }
-        .css-icon-timer { background: #fef3c7; color: #b45309; }
+        .css-icon-timer { background:#f8f9fa; color: #b45309; }
         .css-icon-copy { background: #f1f5f9; color: #475569; }
-        .css-icon-folder { background: #f8f4ea; color: #6b5520; }
-        .css-icon-danger { background: #fef2f2; color: #dc2626; }
+        .css-icon-folder { background:#f8f9fa; color: #6b5520; }
+        .css-icon-danger { background:#f8f9fa; color: #dc2626; }
         .css-icon::before { content: attr(data-icon); }
         .adm-round-btn.adm-status-done:hover { background: #bbf7d0; }
         .adm-round-btn.adm-btn-selected { box-shadow: 0 0 0 2px var(--blue); }
-        .btn-xs { padding:3px 8px; font-size:11px; }
+        .btn-xs { padding:3px 8px; font-size:12px; }
         .search-bar { display:flex; gap:8px; margin-bottom:12px; }
         .search-bar input { flex:1; padding:8px 12px; border:1.5px solid var(--gray); border-radius:var(--radius); font-size:13px; }
-        .gender-badge { display:inline-block; padding:1px 6px; border-radius:8px; font-size:10px; font-weight:700; }
+        .gender-badge { display:inline-block; padding:1px 6px; border-radius:8px; font-size:12px; font-weight:700; }
         .gender-badge.M { background:#e8eaf0; color:#1a2a5e; }
         .gender-badge.F { background:#f0e0e4; color:#8b1a2a; }
-        .gender-badge.X { background:#f8f4ea; color:#b79f58; }
+        .gender-badge.X { background:#f8f9fa; color:#b79f58; }
         .key-display { font-family:monospace; background:var(--bg-dark); padding:4px 10px; border-radius:4px; font-size:14px; letter-spacing:1px; user-select:all; }
         .toast { position:fixed; bottom:20px; right:20px; padding:12px 20px; border-radius:var(--radius); color:var(--white); font-size:13px; font-weight:600; z-index:9999; animation:fadeInUp .3s; }
         .toast.success { background:var(--green); }
@@ -139,10 +139,10 @@
         .heat-tab-btn:hover { border-color:var(--blue); }
         .heat-tab-btn.active { background:var(--blue); color:var(--white); border-color:var(--blue); }
         .heat-entries-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
-        .heat-entries-table th { background:var(--bg); padding:6px 10px; text-align:left; font-weight:600; font-size:11px; }
+        .heat-entries-table th { background:var(--bg); padding:6px 10px; text-align:left; font-weight:600; font-size:12px; }
         .heat-entries-table td { padding:6px 10px; border-bottom:1px solid var(--gray-light); }
         .heat-entries-table tr:hover td { background:#f8f9ff; }
-        .heat-move-select { padding:3px 6px; font-size:11px; border:1px solid var(--gray); border-radius:4px; }
+        .heat-move-select { padding:3px 6px; font-size:12px; border:1px solid var(--gray); border-radius:4px; }
         .heat-summary { display:flex; gap:16px; margin-bottom:10px; font-size:12px; color:var(--text-muted); flex-wrap:wrap; }
         .heat-summary strong { color:var(--text); }
         /* Pacing Light styles */
@@ -155,7 +155,7 @@
         .pacing-segment-row input { width:80px; padding:4px 6px; border:1px solid var(--gray); border-radius:4px; font-size:12px; font-family:monospace; text-align:right; }
         .pacing-segment-row .cum-display { font-family:monospace; font-size:12px; font-weight:700; color:var(--primary); min-width:70px; }
         .pacing-config-item { display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--gray); border-radius:6px; margin-bottom:4px; cursor:pointer; transition:all .12s; }
-        .pacing-config-item:hover { border-color:var(--primary); background:#f8f6f0; }
+        .pacing-config-item:hover { border-color:var(--primary); background:#f8f9fa; }
         .pacing-config-item.active { border-color:var(--primary); background:#f0f0f0; }
         .pacing-config-item .dots { display:flex; gap:3px; }
         .pacing-config-item .dots span { width:10px; height:10px; border-radius:50%; display:inline-block; }
@@ -178,7 +178,7 @@
 
         .sb-group { margin-bottom:6px; }
         .sb-group-title {
-            font-size:11px; font-weight:700; color:var(--text-muted);
+            font-size:12px; font-weight:700; color:var(--text-muted);
             padding:8px 8px 4px; letter-spacing:0.5px; text-transform:uppercase;
         }
         .sb-item {
@@ -188,7 +188,7 @@
             border:none; background:none; width:100%; text-align:left;
             transition:background .12s;
         }
-        .sb-item:hover { background:#f3f4f6; }
+        .sb-item:hover { background:#f8f9fa; }
         .sb-item.active { background:#eef2ff; color:#3730a3; font-weight:700; }
         .sb-item .sb-icon { width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted); flex-shrink:0; }
         .sb-item.active .sb-icon { color:#3730a3; }
@@ -197,7 +197,7 @@
         .card-icon { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; color:var(--text-muted); flex-shrink:0; vertical-align:-3px; }
         .card-icon svg { display:block; }
         .sb-item .sb-badge {
-            margin-left:auto; font-size:10px; background:#e5e7eb;
+            margin-left:auto; font-size:12px; background:#e5e7eb;
             color:#374151; padding:1px 6px; border-radius:10px; font-weight:600;
         }
 
@@ -254,7 +254,7 @@
         .cert-filter-btn:hover { border-color:#b79f58; color:#8a7640; }
         .cert-filter-btn.active { background:#b79f58; border-color:#b79f58; color:#fff; }
         .cert-evt-group-title {
-            font-size:11px; font-weight:800; color:#8a7640; letter-spacing:1px;
+            font-size:12px; font-weight:800; color:#8a7640; letter-spacing:1px;
             margin:8px 0 3px; padding-bottom:2px; border-bottom:1px solid #eee;
         }
         .cert-evt-group-title:first-child { margin-top:0; }
@@ -266,7 +266,7 @@
         .cert-evt-item:hover { background:#f3eee0; }
         .cert-evt-item input { width:15px; height:15px; flex-shrink:0; cursor:pointer; }
         .cert-evt-g {
-            display:inline-block; font-size:10px; font-weight:700; color:#fff;
+            display:inline-block; font-size:12px; font-weight:700; color:#fff;
             padding:1px 5px; border-radius:3px; flex-shrink:0; min-width:24px; text-align:center;
         }
         .cert-evt-g-M { background:#1a2a5e; }
@@ -275,7 +275,7 @@
         .cert-evt-name { font-weight:600; }
         .cert-rounds { display:inline-flex; gap:4px; margin-left:auto; flex-shrink:0; }
         .cert-round-chip {
-            font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; cursor:pointer;
+            font-size:12px; font-weight:700; padding:2px 9px; border-radius:999px; cursor:pointer;
             border:1px solid #ccc; color:#777; background:#fff; user-select:none; transition:all .12s;
         }
         .cert-round-chip:hover { border-color:#b79f58; color:#8a7640; }
@@ -288,27 +288,28 @@
     /* ── 필드 기록카드 가져오기 (수기 기록지 → AI 전사 xlsx) ── */
     .fc-drop { border:2px dashed #b7c6de; border-radius:10px; padding:22px 14px; text-align:center; cursor:pointer; background:#fbfcfe; transition:background .15s, border-color .15s; }
     .fc-drop:hover, .fc-drop.over { background:#eef3fa; border-color:#5b7fb5; }
-    .fc-table { width:100%; font-size:11px; border-collapse:collapse; }
+    .fc-table { width:100%; font-size:12px; border-collapse:collapse; }
     .fc-table th, .fc-table td { padding:3px 5px; border-top:1px solid #f0f0f0; text-align:center; white-space:nowrap; vertical-align:top; }
     .fc-table th { background:#f7f8fa; font-weight:600; }
     .fc-table td.l, .fc-table th.l { text-align:left; }
     .fc-cell-foul { color:#c0392b; font-weight:600; }
     .fc-cell-pass { color:#888; }
-    .fc-wind { display:block; font-size:11px; color:#6b7280; }
+    .fc-wind { display:block; font-size:12px; color:#6b7280; }
     .fc-existing { display:block; font-size:9.5px; color:#9ca3af; }
-    .fc-row-error td { background:#fef2f2; }
-    .fc-row-warn td { background:#fffbeb; }
+    .fc-row-error td { background:#f8f9fa; }
+    .fc-row-warn td { background:#f8f9fa; }
     .fc-row-skip td { color:#9ca3af; }
-    .fc-issue { font-size:10.5px; padding:1px 0 1px 8px; white-space:normal; }
+    .fc-issue { font-size:12px; padding:1px 0 1px 8px; white-space:normal; }
     .fc-issue.error { color:#dc2626; }
     .fc-issue.warn { color:#b45309; }
     .fc-issue.info { color:#6b7280; }
-    .fc-badge { display:inline-block; padding:0 6px; border-radius:10px; font-size:10px; font-weight:700; }
-    .fc-badge.changed { background:#fef3c7; color:#92400e; }
-    .fc-badge.same { background:#f3f4f6; color:#6b7280; }
+    .fc-badge { display:inline-block; padding:0 6px; border-radius:10px; font-size:12px; font-weight:700; }
+    .fc-badge.changed { background:#f8f9fa; color:#92400e; }
+    .fc-badge.same { background:#f8f9fa; color:#6b7280; }
     .fc-badge.skip { background:#fee2e2; color:#991b1b; }
     .fc-badge.new { background:#dcfce7; color:#166534; }
     </style>
+    <link rel="stylesheet" href="/admin.css?v=1">
 </head>
 <body>
 
@@ -350,11 +351,11 @@
                     <label style="font-weight:600;font-size:13px;white-space:nowrap;">대회:</label>
                     <select id="admin-comp-select" onchange="onCompChange()" style="flex:1;"></select>
                     <!-- 대회 종료/재개 컨트롤 — 관리자만 작동 -->
-                    <span id="comp-status-badge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fee2e2;color:#991b1b;white-space:nowrap;" title="이 대회는 종료되었습니다. 운영자는 뷰어 모드로 동작합니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> 종료됨</span>
+                    <span id="comp-status-badge" style="display:none;font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fee2e2;color:#991b1b;white-space:nowrap;" title="이 대회는 종료되었습니다. 운영자는 뷰어 모드로 동작합니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> 종료됨</span>
                     <button id="comp-close-btn" class="btn btn-sm btn-outline" onclick="toggleCompetitionClose()" style="white-space:nowrap;font-size:12px;display:none;" title="대회 종료/재개 (관리자 전용)">대회 종료</button>
                 </div>
                 <!-- 종료된 대회일 때 운영자에게 보이는 안내 배너 -->
-                <div id="comp-ended-banner" style="display:none;padding:8px 12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;font-size:12px;color:#78350f;line-height:1.5;">
+                <div id="comp-ended-banner" style="display:none;padding:8px 12px;background:#f8f9fa;border:1px solid #fcd34d;border-radius:8px;font-size:12px;color:#78350f;line-height:1.5;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> <strong>이 대회는 종료되었습니다.</strong> 운영자 권한으로는 더 이상 수정할 수 없으며, 모든 데이터는 읽기 전용으로 표시됩니다. 수정이 필요하면 관리자에게 문의하세요.
                 </div>
             </div>
@@ -408,7 +409,7 @@
                 <div style="display:flex;gap:16px;height:calc(100vh - 260px);min-height:500px;">
                     <!-- Left Panel: Team Tree -->
                     <div style="width:320px;min-width:260px;flex-shrink:0;display:flex;flex-direction:column;border:1px solid var(--gray);border-radius:var(--radius);background:var(--white);overflow:hidden;">
-                        <div style="padding:10px 12px;border-bottom:1px solid var(--gray);background:#fafafa;">
+                        <div style="padding:10px 12px;border-bottom:1px solid var(--gray);background:#f8f9fa;">
                             <input type="text" id="ath-search" placeholder="선수명, BIB, 소속 검색..." oninput="filterAthletes()" style="width:100%;padding:7px 10px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:12px;box-sizing:border-box;">
                             <div style="display:flex;gap:6px;margin-top:8px;">
                                 <button class="btn btn-sm btn-primary" onclick="showAddAthlete()" style="flex:1;">+ 선수 추가</button>
@@ -418,7 +419,7 @@
                             </div>
                         </div>
                         <div id="ath-tree" style="flex:1;overflow-y:auto;padding:6px;font-size:12px;"></div>
-                        <div id="ath-count" style="padding:6px 12px;border-top:1px solid var(--gray);font-size:11px;color:var(--text-muted);background:#fafafa;"></div>
+                        <div id="ath-count" style="padding:6px 12px;border-top:1px solid var(--gray);font-size:12px;color:var(--text-muted);background:#f8f9fa;"></div>
                     </div>
                     <!-- Right Panel: Athlete Detail -->
                     <div style="flex:1;display:flex;flex-direction:column;border:1px solid var(--gray);border-radius:var(--radius);background:var(--white);overflow:hidden;">
@@ -447,7 +448,7 @@
                                     <button class="gender-tab" data-gender="F" onclick="switchEvtGender('F',this)">여자</button>
                                     <button class="gender-tab" data-gender="X" onclick="switchEvtGender('X',this)">혼성</button>
                                 </div>
-                                <span class="comp-mode-badge" style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;background:#dbeafe;color:#1e40af;">운영 모드</span>
+                                <span class="comp-mode-badge" style="font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;background:#dbeafe;color:#1e40af;">운영 모드</span>
                             </div>
                             <!-- 부별 필터 (division) -->
                             <div class="evt-div-tabs" id="evt-div-tabs" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;padding-top:6px;border-top:1px dashed #e5e5e5;">
@@ -455,7 +456,7 @@
                             </div>
                         </div>
                         <div class="matrix-scroll-area" id="evt-matrix"></div>
-                        <div style="padding:6px 10px;border-top:1px solid var(--gray);font-size:11px;color:var(--text-muted);background:#fafafa;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <div style="padding:6px 10px;border-top:1px solid var(--gray);font-size:12px;color:var(--text-muted);background:#f8f9fa;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
                             <span id="evt-count" style="flex:1 1 100%;"></span>
                             <div style="display:flex;gap:4px;flex-wrap:wrap;">
                                 <button class="btn btn-sm btn-outline" id="btn-division-manager" onclick="openDivisionManagerModal()" title="부(division) 추가/수정/삭제 관리">부 관리</button>
@@ -509,12 +510,12 @@
                         <svg class="ui-icon" width="1em" height="1em" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;color:#b3261e;"><path d="M24 6L44 42H4z"/><path d="M24 19v11"/><circle cx="24" cy="36" r="1.6" fill="currentColor" stroke="none"/></svg> <strong>본인이 관리자(admin)로 로그인되어 있어야</strong> 이 탭의 기능을 사용할 수 있습니다.
                         로그인은 <a href="/login.html" style="color:#b79f58;font-weight:600;">/login.html</a> 의 "관리자·매니저 (NEW)" 탭에서 진행하세요.
                     </p>
-                    <div id="users-auth-warning" style="display:none;background:#fff3cd;border:1.5px solid #e5a100;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#7a6400;font-weight:600;">
+                    <div id="users-auth-warning" style="display:none;background:#f8f9fa;border:1.5px solid #e5a100;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#7a6400;font-weight:600;">
                         JWT 로그인 정보가 없습니다. <a href="/login.html?redirect=/admin.html" style="color:#b79f58;font-weight:700;">로그인 페이지</a> 로 이동하세요.
                     </div>
 
                     <!-- 신규 계정 추가 폼 -->
-                    <div style="background:#fafafa;border:1px solid #e0d8c8;border-radius:8px;padding:14px;margin-bottom:14px;">
+                    <div style="background:#f8f9fa;border:1px solid #e0d8c8;border-radius:8px;padding:14px;margin-bottom:14px;">
                         <h5 style="margin:0 0 10px;font-size:14px;">+ 새 계정 추가</h5>
                         <div class="admin-form-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
                             <div class="admin-form-group"><label>아이디 *</label><input id="new-user-username" placeholder="3-32자, 영문/숫자/._-"></div>
@@ -584,11 +585,11 @@
             <!-- TAB: Upload -->
             <div id="tab-upload" class="admin-tab-panel">
                 <!-- Template Download -->
-                <div class="admin-card" style="border-left:4px solid #6b6b6b;margin-bottom:12px;">
+                <div class="admin-card" style="margin-bottom:12px;">
                     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
                         <div>
                             <h4 style="color:#6b6b6b;margin:0;">엑셀 양식 다운로드</h4>
-                            <p style="font-size:11px;color:var(--text-muted);margin:4px 0 0;">선수명단 + 조편성 + 당일조편성 + 작성가이드 포함</p>
+                            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">선수명단 + 조편성 + 당일조편성 + 작성가이드 포함</p>
                         </div>
                         <a href="/PACERISE_upload_template.xlsx" download class="btn btn-sm btn-primary" style="text-decoration:none;">양식 다운로드 (.xlsx)</a>
                     </div>
@@ -598,7 +599,7 @@
                 <div class="admin-card">
                     <h4>1단계: 연맹 명단 업로드</h4>
                     <p class="t-help">연맹 엑셀 파일을 업로드하면 <strong>선수 + 종목 + 출전배정</strong>이 한번에 자동 등록됩니다.</p>
-                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 양식 (열 순서 고정):</strong><br>
                         A열: <code>팀명 *</code> | B열: <code>선수명 *</code> | C열: <code>성별(남/여) *</code> | D열: <code>생년월일</code> | <code>종목1</code> / <code>종목2</code> 열은 헤더명으로 자동 인식 (양식처럼 E열 휴대폰 뒤에 있어도 됨, 헤더 없으면 E·F열)<br>
                         G열~K열: <code>릴레이(4x100mR, 4x400mR, Mixed 등)</code> — 참가 시 <code>O</code> 입력<br>
@@ -627,13 +628,13 @@
                 </div>
 
                 <!-- Step 2: Heat Assignment Upload (조편성) -->
-                <div class="admin-card" style="border-left:4px solid #ef4444;">
+                <div class="admin-card" style="">
                     <h4 style="color:#ef4444;">2단계: 조편성 업로드</h4>
                     <p class="t-help">
                         조편성 엑셀 파일을 업로드하면 <strong>해당 종목의 조/레인/배번</strong>이 배정됩니다.<br>
                         <span style="color:#ef4444;">파일에 포함된 종목만 변경되며, 포함되지 않은 종목은 영향 없습니다.</span>
                     </p>
-                    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #fecaca;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 양식:</strong><br>
                         A열: <code>성별(남/여/혼성)</code> | B열: <code>종목</code> | C열: <code>라운드(예선/결승)</code><br>
                         D열: <code>조</code> | E열: <code>그룹(A/B)</code> — 5000m/10000m만 해당<br>
@@ -655,7 +656,7 @@
                 <div class="admin-card">
                     <h4>선수 명단 엑셀 업로드 (별도)</h4>
                     <p class="t-help">종목 배정 없이 선수만 등록합니다. <strong style="color:#f59e0b;">종목 배정은 소집실 → 선수 추가 또는 관리탭에서 별도 진행하세요.</strong></p>
-                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 양식 (열 순서 고정):</strong><br>
                         A열: <code>배번(BIB)</code> — 비워둘 수 있음 | B열: <code>선수명 *</code> | C열: <code>소속</code> | D열: <code>성별(남/여) *</code> | E열: <code>바코드</code>(선택)<br>
                         <span style="color:#ef4444;font-weight:600;">* 배번·바코드를 비워 두면 비운 채로 저장됩니다 (자동 생성하지 않음)</span><br>
@@ -672,13 +673,13 @@
                 </div>
 
                 <!-- BIB Number Bulk Update -->
-                <div class="admin-card" style="border-left:4px solid #b79f58;">
+                <div class="admin-card" style="">
                     <h4 style="color:#b79f58;">3단계: BIB 번호 일괄 수정</h4>
                     <p class="t-help">
                         엑셀 파일에서 배번을 읽어 기존 선수와 <b>이름+소속+성별</b>로 매칭하여 <b>BIB만</b> 업데이트합니다.<br>
                         <span style="color:#22c55e;">기존 기록(결과, 조편성 등)에 영향 없음 — BIB은 표시용 필드입니다.</span>
                     </p>
-                    <div style="background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #fde68a;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 양식 (머리글 이름으로 열을 찾습니다 · 순서 무관):</strong><br>
                         A열: <code>배번(BIB) *</code> — 새로 부여할 배번 | B열: <code>선수명 *</code> | C열: <code>소속 *</code> | D열: <code>성별(남/여)</code> 선택<br>
                         <span style="color:#d97706;font-weight:600;">* 매칭 키: 선수명 + 소속 (성별 열이 있으면 + 성별도 비교)</span><br>
@@ -694,13 +695,13 @@
                 </div>
 
                 <!-- Phone Number Bulk Update -->
-                <div class="admin-card" style="border-left:4px solid #16a085;">
+                <div class="admin-card" style="">
                     <h4 style="color:#16a085;">휴대폰 번호 일괄 업로드 (SMS 발송용)</h4>
                     <p class="t-help">
                         엑셀에서 휴대폰 번호를 읽어 기존 선수와 <b>이름+소속(+성별)</b>으로 매칭하여 <b>휴대폰만</b> 업데이트합니다.<br>
                         <span style="color:#16a085;">선수 업로드 양식(PACERISE_upload_template.xlsx)을 그대로 사용 가능 — 휴대폰 칸이 비어있으면 건너뜁니다.</span>
                     </p>
-                    <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #a7f3d0;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 인식 컬럼 (헤더명 기준 자동 매칭):</strong><br>
                         <code>선수명</code> 또는 <code>성명</code>/<code>이름</code>/<code>name</code> *<br>
                         <code>팀명</code> 또는 <code>소속</code>/<code>team</code><br>
@@ -720,7 +721,7 @@
                 <div class="admin-card">
                     <h4>종목 리스트 엑셀 업로드</h4>
                     <p class="t-help">종목만 일괄 등록합니다. (종합경기 10종·7종·5종은 세부 종목 자동 생성)</p>
-                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 양식 (열 순서 고정):</strong><br>
                         A열: <code>종목명 *</code> | B열: <code>카테고리</code> | C열: <code>성별</code> | D열: <code>라운드</code><br>
                         <span style="color:#6b7280;">카테고리: track, 트랙, field_distance, 필드(거리), field_height, 필드(높이), relay, 릴레이, combined, 종합(10종·7종·5종), road, 도로</span><br>
@@ -738,7 +739,7 @@
                 </div>
 
                 <!-- Timetable Upload (moved from Competition Settings) -->
-                <div class="admin-card" style="border-left:4px solid #6b6b6b;">
+                <div class="admin-card" style="">
                     <h4 style="color:#6b6b6b;">시간표 업로드</h4>
                     <p class="t-help-lg">
                         엑셀 파일로 경기 시간표를 업로드합니다. 시트별로 일차가 구분됩니다.<br>
@@ -756,7 +757,7 @@
                 </div>
 
                 <!-- Timetable Matching Panel -->
-                <div class="admin-card" style="border-left:4px solid #b79f58;">
+                <div class="admin-card" style="">
                     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
                         <h4 style="color:#b79f58;margin:0;">시간표 ↔ 종목 매칭 현황</h4>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -772,7 +773,7 @@
 
             <!-- TAB: Scoreboard (전광판) -->
             <div id="tab-scoreboard" class="admin-tab-panel">
-                <div class="admin-card" style="border-left:4px solid #8a7640;">
+                <div class="admin-card" style="">
                     <h4 style="color:#8a7640;">스코어보드 연동 (.lif 파일 가져오기) <span class="t-sm t-muted">Scoreboard Import</span></h4>
                     <p class="t-help-lg">
                         스코어보드 시스템에서 내보낸 .lif 결과 파일을 업로드하면 자동으로 종목/조를 매칭하고 기록을 입력합니다.
@@ -802,12 +803,12 @@
                 </div>
 
                 <!-- 기록 엑셀 가져오기 (.lif 대안) -->
-                <div class="admin-card" style="border-left:4px solid #b8945a;">
+                <div class="admin-card" style="">
                     <h4 style="color:#8a7640;">기록 엑셀 가져오기 <span class="t-sm t-muted">Record Excel Import (.lif 대안)</span></h4>
                     <p class="t-help-lg">
                         헤더형 기록 엑셀(.xlsx)을 업로드하면 <strong>배번(BIB) 기준</strong>으로 종목·조·선수를 매칭하고 기록을 입력합니다.
                     </p>
-                    <div style="background:#f8f4ea;border:1px solid #e8dfc0;border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #e8dfc0;border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 컬럼:</strong> 종별 · 세부종목 · 라운드 · 조 · 순위 · 레인 · <strong>배번</strong> · 성명 · 기록 · 풍속 · 팀명 · 기록구분<br>
                         <span style="color:#8a7640;">배번 앞자리 0 자동 정규화 · 기록 <code>4:15.21</code>→초/필드 미터 자동변환 · 순위칸의 <code>DNS/DNF/DQ</code> 인식</span>
                     </div>
@@ -829,10 +830,10 @@
                 </div>
 
                 <!-- 계측 결과 .txt 가져오기 (드래그 업로드) -->
-                <div class="admin-card" style="border-left:4px solid #16a085;">
+                <div class="admin-card" style="">
                     <h4 style="color:#0e7c66;">계측 결과 가져오기 (.txt) <span class="t-sm t-muted">Timing Result Import — 드래그 업로드</span></h4>
                     <p class="t-help-lg">계측업체 결과프로그램이 저장한 <strong>.txt 결과파일</strong>을 끌어다 놓으면 종목·조·선수를 자동 매칭해 기록을 입력합니다. (여러 파일 동시 가능)</p>
-                    <div style="background:#f0fbf8;border:1px solid #cdeee5;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;color:#0e7c66;">
+                    <div style="background:#f0fbf8;border:1px solid #cdeee5;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;color:#0e7c66;">
                         <strong>인식 형식:</strong> 1행 <code>성별 부 종목 라운드 [조]</code> + 풍속 · 2행 <code>순위 번호 레인 이름 소속 기록</code> · 배번→레인→성명 순 매칭 · 기록 <code>1:05.3</code>→초/필드 미터 자동변환 · <code>DNS/DNF/DQ</code> 인식
                     </div>
                     <div id="tt-drop" style="border:2px dashed #6ec8b3;border-radius:10px;padding:26px 16px;text-align:center;color:#0e7c66;background:#f0fbf8;cursor:pointer;transition:all .15s;">
@@ -853,14 +854,14 @@
                 </div>
 
                 <!-- 필드 수기 기록카드 가져오기 (사진 → AI 전사 xlsx → 시기별 저장) -->
-                <div class="admin-card" style="border-left:4px solid #5b7fb5;">
+                <div class="admin-card" style="">
                     <h4 style="color:#3d5a8a;">필드 기록카드 가져오기 <span class="t-sm t-muted">Field Record Card Import (수기 기록지 → AI 전사 xlsx)</span></h4>
                     <p class="t-help-lg">
                         심판 수기 기록카드 <strong>사진을 그대로 드롭하면 서버가 AI 로 전사</strong>하고, <strong>배번 기준</strong>으로 종목·조·선수를 매칭해
                         시기별 기록·풍속·높이 O/X 를 저장합니다. ChatGPT/Claude 로 직접 만든 <strong>xlsx</strong> 를 올려도 됩니다.
                         카드의 <strong>최고기록·순위는 저장하지 않고 계산값과 대조(검산)</strong>해 다르면 경고로 표시합니다.
                     </p>
-                    <div style="background:#eef3fa;border:1px solid #cfdcee;border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:11px;line-height:1.7;">
+                    <div style="background:#eef3fa;border:1px solid #cfdcee;border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>표기:</strong> 기록 <code>36.20</code> · 파울 <code>X</code> · 패스 <code>-</code> · 시도 없음 빈칸 · 풍속 <code>+0.8</code> (유효 시기만, 파울·패스는 빈칸) · 높이 <code>O / XO / XXO / XXX / -</code> · 기록구분 <code>DNS / DNF / DQ / NM</code><br>
                         <span style="color:#3d5a8a;">저장 규칙: 파일에 기록이 있는 선수만 그 선수의 시기 전체를 파일대로 교체 · 빈 행과 파일에 없는 선수는 그대로 · 오류 행(인식 불가·매칭 실패)은 건너뜀 · 관리자 키 필요</span><br>
                         <span style="color:#6b7280;">사진 전사: 서버 .env 의 <code>ANTHROPIC_API_KEY</code> 필요 · 카드 1장에 약 100원 · 사진은 브라우저에서 긴 변 2,576px JPEG 로 줄여 전송 · 판독이 불확실한 셀은 경고로 표시</span>
@@ -893,11 +894,11 @@
                 </div>
 
                 <!-- 합동 종목 관리 (Joint Group Management — Multi-event) -->
-                <div class="admin-card" style="border-left:4px solid #6b5520;">
+                <div class="admin-card" style="">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
                         <h4 style="display:flex;align-items:center;gap:8px;color:#6b5520;margin:0;">
                             <span class="css-icon css-icon-link" data-icon="G"></span> 합동 종목 관리
-                            <span id="jg-count-badge" class="t-sm" style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-weight:600;">활성 0</span>
+                            <span id="jg-count-badge" class="t-sm" style="background:#f8f9fa;color:#92400e;padding:2px 8px;border-radius:10px;font-weight:600;">활성 0</span>
                         </h4>
                         <div style="display:flex;gap:6px;align-items:center;">
                             <button class="btn btn-sm btn-outline" onclick="jgShowDupModal()" title="조편성 재업로드 등으로 동일 종목이 여러 번 등록되었는지 확인 후 정리합니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 중복 종목 진단</button>
@@ -929,7 +930,7 @@
                 <div id="jg-dup-loading" style="text-align:center;padding:20px;color:#6b7280;">분석 중...</div>
                 <div id="jg-dup-content" style="display:none;"></div>
             </div>
-            <div style="padding:12px 22px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#fafafa;">
+            <div style="padding:12px 22px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#f8f9fa;">
                 <span id="jg-dup-summary" style="font-size:12px;color:#6b7280;"></span>
                 <div style="display:flex;gap:6px;">
                     <button class="btn btn-ghost" onclick="document.getElementById('jg-dup-modal').style.display='none'">닫기</button>
@@ -947,17 +948,17 @@
             <!-- TAB: Competition Settings -->
             <div id="tab-competition" class="admin-tab-panel">
                 <!-- 대회 운영 체크리스트 — 시스템이 직접 점검 -->
-                <div class="admin-card" id="card-readiness" style="border-left:4px solid #0e7c66;">
+                <div class="admin-card" id="card-readiness" style="">
                     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
                         <h4 style="margin:0;color:#0e7c66;">대회 운영 체크리스트</h4>
-                        <span id="rd-phase" style="font-size:11px;font-weight:700;color:#fff;background:#0e7c66;border-radius:4px;padding:2px 8px;"></span>
+                        <span id="rd-phase" style="font-size:12px;font-weight:700;color:#fff;background:#0e7c66;border-radius:4px;padding:2px 8px;"></span>
                         <span id="rd-summary" style="font-size:12px;color:var(--text-muted);"></span>
                         <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="loadReadiness()">다시 점검</button>
                     </div>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">대회 전·당일·후에 빠뜨리기 쉬운 것을 시스템이 직접 확인합니다. 빨강은 반드시, 주황은 확인해 보세요.</p>
                     <div id="rd-groups" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;"></div>
                 </div>
-                <div class="admin-card" id="card-intl" style="border-left:4px solid #1a2a5e;">
+                <div class="admin-card" id="card-intl" style="">
                     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
                         <h4 style="margin:0;color:#1a2a5e;">국제대회 동기화</h4>
                         <span class="t-xs t-muted">공식 결과 사이트(Bornan 웹결과)의 API 에서 일정·엔트리·결과를 자동으로 가져옵니다. 대회 기간엔 60초마다.</span>
@@ -986,7 +987,7 @@
                         <button class="btn btn-sm btn-outline" onclick="intlUploadInfo()">반영</button>
                     </div>
                 </div>
-                <div class="admin-card" id="card-undo" style="border-left:4px solid #b79f58;">
+                <div class="admin-card" id="card-undo" style="">
                     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
                         <h4 style="margin:0;">최근 되돌리기</h4>
                         <span class="t-xs t-muted">기록 초기화·선수/종목/조 삭제는 24시간 안에 그대로 되살릴 수 있습니다</span>
@@ -1105,7 +1106,7 @@
                 </div>
 
                 <!-- 심판장·로고 설정 (독립 섹션) -->
-                <div class="admin-card" id="card-chief-judge" style="border-left:4px solid var(--gold);scroll-margin-top:20px;">
+                <div class="admin-card" id="card-chief-judge" style="scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;"><span class="card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg></span>심판장 이름 · 로고 설정</h4>
                     <p class="t-help-lg">종합기록지·세부기록지에 표시되는 심판장 이름과 로고를 설정합니다. 변경 후 <strong>저장</strong> 버튼을 눌러야 반영됩니다.</p>
                     <div class="admin-form-row" style="align-items:flex-end;">
@@ -1122,20 +1123,20 @@
                         <label style="font-size:12px;font-weight:600;color:var(--text);display:block;margin-bottom:8px;">좌측 로고</label>
                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                             <img id="quick-logo-left-preview" src="" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;display:none;">
-                            <input type="file" id="quick-logo-left-file" accept="image/*" style="font-size:11px;width:200px;">
+                            <input type="file" id="quick-logo-left-file" accept="image/*" style="font-size:12px;width:200px;">
                             <button class="btn btn-sm btn-outline" onclick="quickUploadLogo('left')">업로드</button>
                             <button class="btn btn-sm btn-danger-soft" style="display:none;" id="quick-logo-left-del" onclick="quickDeleteLogo('left')">삭제</button>
-                            <span id="quick-logo-left-status" style="font-size:11px;color:var(--green);"></span>
+                            <span id="quick-logo-left-status" style="font-size:12px;color:var(--green);"></span>
                         </div>
                     </div>
                     <div style="margin-top:10px;">
                         <label style="font-size:12px;font-weight:600;color:var(--text);display:block;margin-bottom:8px;">우측 로고</label>
                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                             <img id="quick-logo-right-preview" src="" style="width:80px;height:40px;object-fit:contain;border:1px solid #ddd;border-radius:4px;display:none;">
-                            <input type="file" id="quick-logo-right-file" accept="image/*" style="font-size:11px;width:200px;">
+                            <input type="file" id="quick-logo-right-file" accept="image/*" style="font-size:12px;width:200px;">
                             <button class="btn btn-sm btn-outline" onclick="quickUploadLogo('right')">업로드</button>
                             <button class="btn btn-sm btn-danger-soft" style="display:none;" id="quick-logo-right-del" onclick="quickDeleteLogo('right')">삭제</button>
-                            <span id="quick-logo-right-status" style="font-size:11px;color:var(--green);"></span>
+                            <span id="quick-logo-right-status" style="font-size:12px;color:var(--green);"></span>
                         </div>
                     </div>
                     <div style="margin-top:14px;">
@@ -1148,7 +1149,7 @@
                     <h4>데이터 백업</h4>
 
                     <!-- 1) 대회별 부분 백업 (기존) -->
-                    <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;margin-bottom:14px;background:#fafafa;">
+                    <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;margin-bottom:14px;background:#f8f9fa;">
                         <h5 style="margin:0 0 8px;font-size:13px;color:var(--text);">대회별 데이터 백업</h5>
                         <p class="t-help-lg" style="margin:0 0 10px;">선택한 대회의 데이터(선수·종목·기록·조편성)만 JSON/Excel로 다운로드합니다.</p>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -1163,7 +1164,7 @@
                     <!-- 2) 통백업 / 통복원 (Full Snapshot) -->
                     <div style="border:2px solid #b79f58;border-radius:8px;padding:14px;background:#fffdf5;">
                         <h5 style="margin:0 0 8px;font-size:13px;color:#7a5d1e;display:flex;align-items:center;gap:8px;">
-                            <span style="background:#b79f58;color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;white-space:nowrap;">FULL</span>
+                            <span style="background:#b79f58;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;white-space:nowrap;">FULL</span>
                             시스템 통백업 / 복원
                         </h5>
                         <p class="t-help-lg" style="margin:0 0 12px;">
@@ -1174,23 +1175,23 @@
                         <!-- STEP 1: 통백업 다운로드 -->
                         <div style="margin-bottom:14px;padding:12px;background:#fff;border:1px solid #e8d9a8;border-radius:6px;">
                             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                                <span style="background:#16a085;color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">1</span>
+                                <span style="background:#16a085;color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">1</span>
                                 <strong style="font-size:13px;color:#0e6a52;">통백업 다운로드</strong>
                             </div>
-                            <p style="margin:0 0 8px;font-size:11px;color:var(--text-muted);line-height:1.5;">
+                            <p style="margin:0 0 8px;font-size:12px;color:var(--text-muted);line-height:1.5;">
                                 지금 이 순간의 시스템 전체 상태를 ZIP 한 개로 받아 보관하세요.<br>
                                 (별도로 매일/매시간 자동 백업도 backups/ 폴더에 저장됩니다)
                             </p>
                             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                                 <button class="btn btn-primary" onclick="downloadFullBackup()">통백업 ZIP 다운로드</button>
-                                <span style="font-size:11px;color:var(--text-muted);">관리자 키 필요</span>
+                                <span style="font-size:12px;color:var(--text-muted);">관리자 키 필요</span>
                             </div>
                         </div>
 
                         <!-- STEP 2: 통복원 업로드 -->
                         <div style="padding:12px;background:#fff;border:1px solid #f3c4c4;border-radius:6px;">
                             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                                <span style="background:#c0392b;color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">2</span>
+                                <span style="background:#c0392b;color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">2</span>
                                 <strong style="font-size:13px;color:#922b21;">통복원 (ZIP 붙여넣기)</strong>
                             </div>
                             <div style="background:#fff5f5;border:1px solid #e74c3c;padding:8px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;color:#c0392b;line-height:1.6;">
@@ -1252,7 +1253,7 @@
                 </div>
 
                 <!-- 기록위원 전용 키 (Phase C 확장) -->
-                <div class="admin-card" id="card-record-officer-key" style="border-left:4px solid #c0392b;scroll-margin-top:20px;">
+                <div class="admin-card" id="card-record-officer-key" style="scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;"><span class="card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"/><polyline points="8.21 13.89 7 22 12 19 17 22 15.79 13.88"/></svg></span>기록위원 전용 키 <span class="t-sm t-muted">신기록 승인/거부 전담</span></h4>
                     <p class="t-help-lg">
                         기록위원 키를 별도로 설정하면, 관리자 권한 없이도 NR/DR/CR 승인·거부만 가능한 전용 역할이 활성화됩니다.
@@ -1292,7 +1293,7 @@
                 </div>
 
                 <!-- Home Popup CMS -->
-                <div class="admin-card" id="card-home-popup" style="border-left:4px solid #6366f1;scroll-margin-top:20px;">
+                <div class="admin-card" id="card-home-popup" style="scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;">홈 팝업 관리 <span class="t-sm t-muted">홈 화면 자동 팝업 설정</span></h4>
                     <p class="t-help-lg">홈 진입 시 자동으로 표시되는 팝업을 관리합니다. 일반 유저용 / 관리자용 각각 설정 가능합니다.</p>
                     <div style="display:flex;gap:8px;margin-bottom:16px;">
@@ -1305,7 +1306,7 @@
 
                 <!-- Popup Editor Modal (inline) -->
                 <div id="popup-editor-wrap" style="display:none;">
-                    <div class="admin-card" style="border:2px solid #6366f1;background:#fafafe;">
+                    <div class="admin-card" style="border:2px solid #6366f1;background:#f8f9fa;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                             <h4 id="popup-editor-heading" style="margin:0;">팝업 편집</h4>
                             <button class="btn btn-sm btn-ghost" onclick="closePopupEditor()">닫기</button>
@@ -1368,7 +1369,7 @@
                 </div>
 
                 <!-- Phase C: 기록 시스템 운영 가이드 -->
-                <div class="admin-card" id="card-record-guide" style="border-left:4px solid #e67e22;scroll-margin-top:20px;">
+                <div class="admin-card" id="card-record-guide" style="scroll-margin-top:20px;">
                     <h4 style="display:flex;align-items:center;gap:8px;"><span class="card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5a2.5 2.5 0 0 0 0 5H20"/></svg></span>기록 관리 시스템 운영 가이드 <span class="t-sm t-muted">NR / DR / CR · 자동 감지 워크플로</span></h4>
                     <p class="t-help-lg">신기록 자동 감지 시스템의 동작 원리와 운영 규칙입니다. 관리자/운영자가 숙지해야 할 내용입니다.</p>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;">
@@ -1389,7 +1390,7 @@
                                 <li>승인 시 자동으로 공식 기록 갱신 + 공개 페이지 배너 표시</li>
                             </ol>
                         </div>
-                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#fafafe;">
+                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#f8f9fa;">
                             <h5 style="margin:0 0 6px;color:#6366f1;font-size:13px;">자동 제외 규정</h5>
                             <ul style="font-size:12px;color:var(--text);margin:0;padding-left:18px;line-height:1.7;">
                                 <li><strong>풍속 +2.0 m/s 초과</strong> — 100m / 200m / 100mH / 110mH / 멀리뛰기 / 세단뛰기에서 자동 <strong style="color:#7f8c8d;">참고기록</strong> 처리 (신기록 불인정, 토스트 안내)</li>
@@ -1413,7 +1414,7 @@
 
             <!-- TAB: External API (외부 API 키 관리) -->
             <div id="tab-extapi" class="admin-tab-panel">
-                <div class="admin-card" style="border-left:4px solid #6366f1;">
+                <div class="admin-card" style="">
                     <h4 style="display:flex;align-items:center;gap:8px;margin:0;">외부 API 키 관리 <span class="t-sm t-muted">External Result-Link API</span></h4>
                     <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;line-height:1.5;">
                         외부 시스템(예: OpenClaw on Mac mini)이 노출용(display) 대회 종목에 결과/영상 링크를 자동 등록할 때 사용하는 API 키를 발급/회수합니다.<br>
@@ -1459,7 +1460,7 @@
                     <div style="overflow-x:auto;">
                         <table id="ext-keys-table" style="width:100%;font-size:12px;border-collapse:collapse;">
                             <thead>
-                                <tr style="background:#f8f6f0;text-align:left;">
+                                <tr style="background:#f8f9fa;text-align:left;">
                                     <th style="padding:8px;border-bottom:1px solid var(--gray);">ID</th>
                                     <th style="padding:8px;border-bottom:1px solid var(--gray);">Prefix</th>
                                     <th style="padding:8px;border-bottom:1px solid var(--gray);">라벨</th>
@@ -1492,11 +1493,11 @@
                             <button class="btn btn-sm btn-ghost" onclick="extDownloadLogsCsv()" title="조회 조건 그대로 CSV">CSV</button>
                         </div>
                     </div>
-                    <div id="ext-log-summary" style="font-size:11px;color:var(--text-muted);margin:-4px 0 8px;"></div>
+                    <div id="ext-log-summary" style="font-size:12px;color:var(--text-muted);margin:-4px 0 8px;"></div>
                     <div style="overflow-x:auto;">
-                        <table style="width:100%;font-size:11px;border-collapse:collapse;">
+                        <table style="width:100%;font-size:12px;border-collapse:collapse;">
                             <thead>
-                                <tr style="background:#f8f6f0;text-align:left;">
+                                <tr style="background:#f8f9fa;text-align:left;">
                                     <th style="padding:6px;border-bottom:1px solid var(--gray);">시각</th>
                                     <th style="padding:6px;border-bottom:1px solid var(--gray);">키</th>
                                     <th style="padding:6px;border-bottom:1px solid var(--gray);">엔드포인트</th>
@@ -1515,9 +1516,9 @@
                 </div>
 
                 <!-- Quick Reference -->
-                <div class="admin-card" style="background:#fafafe;">
+                <div class="admin-card" style="background:#f8f9fa;">
                     <h4>빠른 참조 - API 사용법</h4>
-                    <div style="font-family:monospace;font-size:11px;background:#fff;border:1px solid var(--gray);border-radius:6px;padding:10px;line-height:1.6;overflow-x:auto;">
+                    <div style="font-family:monospace;font-size:12px;background:#fff;border:1px solid var(--gray);border-radius:6px;padding:10px;line-height:1.6;overflow-x:auto;">
 <b>인증:</b> 헤더 <code>X-API-Key: pkr_...</code> (또는 <code>Authorization: Bearer pkr_...</code>)<br><br>
 <b># 1) 종목 검색</b><br>
 GET /api/external/events/search?competition_id=31&amp;name=100m&amp;division=선수권<br><br>
@@ -1530,14 +1531,14 @@ POST /api/external/event-result-link<br>
 POST /api/external/event-result-link/batch<br>
 &nbsp;&nbsp;{"items":[{"event_id":1,"url":"https://..."}, ...], "dry_run":false, "stop_on_error":false}<br>
                     </div>
-                    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">자세한 내용: <code>docs/EXTERNAL_API.md</code></p>
+                    <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">자세한 내용: <code>docs/EXTERNAL_API.md</code></p>
                 </div>
             </div>
 
             <!-- TAB: Pacing Light (페이싱 라이트) -->
             <div id="tab-pacing" class="admin-tab-panel">
                 <!-- Notice area -->
-                <div class="admin-card" style="border-left:4px solid #b79f58;">
+                <div class="admin-card" style="">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <h4 style="display:flex;align-items:center;gap:8px;margin:0;">페이싱 라이트 관리 <span class="t-sm t-muted">WaveLight / Pacing Light Configuration</span></h4>
                         <button id="pacing-zoom-btn" class="btn btn-sm btn-outline" onclick="togglePacingZoom()" style="font-size:13px;padding:6px 14px;white-space:nowrap;">크게 보기</button>
@@ -1584,7 +1585,7 @@ POST /api/external/event-result-link/batch<br>
                     </div>
 
                     <!-- Seconds conversion tool -->
-                    <div class="admin-card" style="border-left:4px solid #6b6b6b;">
+                    <div class="admin-card" style="">
                         <h4 style="display:flex;align-items:center;gap:6px;margin-bottom:10px;"><span class="css-icon css-icon-sm css-icon-timer" data-icon="T"></span> 시간 → 초 변환기 <span class="t-sm t-muted">WaveLight 시스템 입력용</span></h4>
                         <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
                             <div class="admin-form-group">
@@ -1598,24 +1599,24 @@ POST /api/external/event-result-link/batch<br>
                             <div style="font-size:20px;padding:0 4px;color:var(--text-muted);">=</div>
                             <div class="admin-form-group">
                                 <label>총 초 (s)</label>
-                                <input type="text" id="conv-result" readonly style="width:120px;font-family:monospace;font-weight:700;font-size:16px;background:#f8f6f0;border-color:#6b6b6b;">
+                                <input type="text" id="conv-result" readonly style="width:120px;font-family:monospace;font-weight:700;font-size:16px;background:#f8f9fa;border-color:#6b6b6b;">
                             </div>
                             <button class="btn btn-sm btn-outline" onclick="copyConvResult()" title="클립보드 복사">복사</button>
                         </div>
-                        <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">분:초 형태의 시간을 초 단위로 변환합니다. 웨이브라이트 시스템에 입력할 때 사용하세요.</div>
+                        <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">분:초 형태의 시간을 초 단위로 변환합니다. 웨이브라이트 시스템에 입력할 때 사용하세요.</div>
                     </div>
                 </div>
             </div>
 
             <!-- TAB: Records Management (종목별 기록 관리) — v4 매트릭스 UI -->
             <div id="tab-records" class="admin-tab-panel">
-                <div class="admin-card" style="border-left:4px solid #b79f58;">
-                    <h4 style="margin:0;">종목별 기록 관리 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(NR · DR · CR)</span></h4>
+                <div class="admin-card" style="">
+                    <h4 style="margin:0;">종목별 기록 관리 <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(NR · DR · CR)</span></h4>
                     <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;">한국기록(NR) · 부별기록(DR, 13부) · 대회기록(CR, 시리즈별)을 종목별로 관리합니다. 기록지/종합기록/실시간 보드 등에 자동 표시됩니다.</p>
                 </div>
 
                 <!-- 기록표 엑셀 일괄 업로드 (NR/DR/CR) -->
-                <div class="admin-card" style="border-left:4px solid #6b5520;">
+                <div class="admin-card" style="">
                     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
                         <div>
                             <h4 style="margin:0;">기록표 엑셀 일괄 업로드 <span class="t-sm t-muted">NR · DR · CR 한 번에</span></h4>
@@ -1623,7 +1624,7 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                         <a href="/PACERISE_records_template.xlsx" download class="btn btn-sm btn-outline" style="text-decoration:none;">양식 다운로드 (.xlsx)</a>
                     </div>
-                    <div style="background:#f8f4ea;border:1px solid #e8dfc0;border-radius:6px;padding:9px 12px;margin:10px 0 12px;font-size:11px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #e8dfc0;border-radius:6px;padding:9px 12px;margin:10px 0 12px;font-size:12px;line-height:1.7;">
                         <strong>열:</strong> <code>종류</code>(NR/DR/CR) · <code>성별</code>(남/여/혼성) · <code>부</code>(DR만: 대학/일반/고등/중등/초등 — 실업은 일반) · <code>종목</code> · <code>기록</code> · 성명 · 소속 · 대회명 · 장소 · 일자 · 풍속 · 비고<br>
                         <span style="color:#8a7640;">기록 표기: <code>10.07</code> · <code>1:44.14</code> · <code>2:07:20</code> · <code>2.36</code>(=2m36) · <code>7860</code>(점수). 종목은 <code>10000m</code> <code>3000mSC</code> <code>4x100mR</code> <code>4x400mR(Mixed)</code> 처럼 규격 괄호 없이.</span><br>
                         <span style="color:#b45309;">대회기록(CR) 행은 아래에서 고른 <strong>시리즈</strong>에 들어갑니다 — 파일 하나 = 시리즈 하나. 기존보다 나쁜 값으로 바뀌는 행은 체크해야만 덮어씁니다.</span>
@@ -1640,7 +1641,7 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- 승인 대기 큐 (Phase C) -->
-                <div class="admin-card" id="record-breaks-card" style="border-left:4px solid #e67e22;display:none;">
+                <div class="admin-card" id="record-breaks-card" style="display:none;">
                     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="record-breaks-toggle">
                         <div>
                             <h4 style="margin:0;display:flex;align-items:center;gap:8px;"><span class="card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"/><polyline points="8.21 13.89 7 22 12 19 17 22 15.79 13.88"/></svg></span>기록 갱신 승인 대기 <span id="rb-pending-badge" style="display:inline-block;background:#e67e22;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;margin-left:8px;">0</span></h4>
@@ -1656,7 +1657,7 @@ POST /api/external/event-result-link/batch<br>
                                 <option value="rejected">거부됨</option>
                                 <option value="all">전체</option>
                             </select>
-                            <button class="btn btn-sm btn-outline" onclick="loadRecordBreaks()" style="font-size:11px;">새로고침</button>
+                            <button class="btn btn-sm btn-outline" onclick="loadRecordBreaks()" style="font-size:12px;">새로고침</button>
                             <span id="record-breaks-collapse-icon" style="font-size:18px;color:var(--text-muted);">▼</span>
                         </div>
                     </div>
@@ -1698,10 +1699,10 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- 대회 시리즈 마스터 -->
-                <div class="admin-card" style="border-left:4px solid #2980b9;">
+                <div class="admin-card" style="">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                         <div>
-                            <h4 style="margin:0;">대회 시리즈 마스터 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(CR 기준)</span></h4>
+                            <h4 style="margin:0;">대회 시리즈 마스터 <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(CR 기준)</span></h4>
                             <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회기록(CR)을 그룹화하는 시리즈입니다. 대회 설정에서 시리즈를 연결하면 해당 대회 기록을 가져옵니다.</p>
                         </div>
                         <button class="btn btn-sm btn-primary" onclick="openSeriesModal()">+ 시리즈 추가</button>
@@ -1710,19 +1711,19 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- 시리즈 ↔ 대회 종목 매칭 진단 (Issue 3b) -->
-                <div class="admin-card" style="border-left:4px solid #16a085;">
+                <div class="admin-card" style="">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
                         <div>
-                            <h4 style="margin:0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 시리즈 ↔ 대회 종목 매칭 진단 <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(NR / DR / CR)</span></h4>
+                            <h4 style="margin:0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 시리즈 ↔ 대회 종목 매칭 진단 <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(NR / DR / CR)</span></h4>
                             <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0;">대회의 각 종목이 등록된 NR/DR/CR 기록과 매칭되는지 진단합니다. <strong>매칭 안 됨</strong> 옆의 드롭다운에서 DB 후보를 선택하고 <strong>[연결]</strong>, 자동 후보가 없으면 <strong>[전체 후보에서 선택]</strong> 으로 DB 전체 목록에서 강제 매칭, 정말 없으면 <strong>[+ 신규 등록]</strong> 으로 직접 입력합니다. 표기 차이가 많을 땐 <strong>일괄 정규화</strong> 로 한 번에 정리하세요.</p>
                         </div>
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                             <select id="match-comp-select" onchange="loadMatchingDiagnostic()" style="padding:5px 8px;font-size:12px;border:1px solid var(--gray);border-radius:5px;min-width:220px;">
                                 <option value="">대회 선택…</option>
                             </select>
-                            <button class="btn btn-sm btn-outline" onclick="loadMatchingDiagnostic()" style="font-size:11px;">새로고침</button>
-                            <button class="btn btn-sm btn-outline" onclick="previewNormalizeAll()" style="font-size:11px;" title="실제 적용하지 않고 어떤 행이 어떻게 바뀔지 미리보기"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="6" y="3" width="12" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg> 정규화 미리보기</button>
-                            <button class="btn btn-sm btn-primary" onclick="confirmNormalizeAll()" style="font-size:11px;background:#16a085;border-color:#16a085;" title="event_record 의 event_name 을 정규화된 형태로 일괄 업데이트"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> 일괄 정규화 실행</button>
+                            <button class="btn btn-sm btn-outline" onclick="loadMatchingDiagnostic()" style="font-size:12px;">새로고침</button>
+                            <button class="btn btn-sm btn-outline" onclick="previewNormalizeAll()" style="font-size:12px;" title="실제 적용하지 않고 어떤 행이 어떻게 바뀔지 미리보기"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="6" y="3" width="12" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg> 정규화 미리보기</button>
+                            <button class="btn btn-sm btn-primary" onclick="confirmNormalizeAll()" style="font-size:12px;background:#16a085;border-color:#16a085;" title="event_record 의 event_name 을 정규화된 형태로 일괄 업데이트"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> 일괄 정규화 실행</button>
                         </div>
                     </div>
                     <div id="matching-summary" style="margin-top:6px;"></div>
@@ -1749,10 +1750,10 @@ POST /api/external/event-result-link/batch<br>
                         <h3 style="margin:0;font-size:16px;">부(Division) 관리</h3>
                         <button class="btn btn-sm btn-primary" onclick="openDivisionEditModal(null)">+ 부 추가</button>
                     </div>
-                    <p style="margin:0 0 10px;font-size:11px;color:var(--text-muted);">기본 13부는 라벨/정렬값만 편집 가능합니다. 사용자 정의 부만 성별/학교급/삭제 가능.</p>
+                    <p style="margin:0 0 10px;font-size:12px;color:var(--text-muted);">기본 13부는 라벨/정렬값만 편집 가능합니다. 사용자 정의 부만 성별/학교급/삭제 가능.</p>
                     <div style="flex:1;overflow-y:auto;border:1px solid var(--gray);border-radius:8px;">
                         <table class="crud-table" id="division-master-table" style="width:100%;font-size:12px;">
-                            <thead style="position:sticky;top:0;background:#f5f5f5;z-index:1;">
+                            <thead style="position:sticky;top:0;background:#f8f9fa;z-index:1;">
                                 <tr>
                                     <th style="width:90px;">code</th>
                                     <th>라벨</th>
@@ -1780,7 +1781,7 @@ POST /api/external/event-result-link/batch<br>
                     <input type="hidden" id="division-edit-original-code">
                     <input type="hidden" id="division-edit-is-base" value="0">
                     <div style="display:flex;flex-direction:column;gap:10px;">
-                        <label style="font-size:12px;">code * <span style="color:var(--text-muted);font-size:10px;">(영문 대문자/숫자/언더스코어, 생성 후 변경 불가)</span>
+                        <label style="font-size:12px;">code * <span style="color:var(--text-muted);font-size:12px;">(영문 대문자/숫자/언더스코어, 생성 후 변경 불가)</span>
                             <input type="text" id="division-edit-code" placeholder="예: M_ELEM_5" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;font-family:monospace;text-transform:uppercase;">
                         </label>
                         <label style="font-size:12px;">라벨 (한글) *
@@ -1809,7 +1810,7 @@ POST /api/external/event-result-link/batch<br>
                                 <input type="number" id="division-edit-sort" value="500" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;">
                             </label>
                         </div>
-                        <label style="font-size:12px;">학년 <span style="color:var(--text-muted);font-size:10px;">(학년 단위 부만 — 초3~6·중1~3·고1~3. 종목의 부 '중1학년부'가 이 부의 기록(DR)과 이어진다)</span>
+                        <label style="font-size:12px;">학년 <span style="color:var(--text-muted);font-size:12px;">(학년 단위 부만 — 초3~6·중1~3·고1~3. 종목의 부 '중1학년부'가 이 부의 기록(DR)과 이어진다)</span>
                             <select id="division-edit-grade" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--gray);border-radius:6px;">
                                 <option value="">없음 (학교급 전체)</option>
                                 <option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option><option value="4">4학년</option><option value="5">5학년</option><option value="6">6학년</option>
@@ -1880,7 +1881,7 @@ POST /api/external/event-result-link/batch<br>
                     <h3 id="jg-modal-title" style="margin:0;font-size:16px;font-weight:700;">합동 그룹 추가</h3>
                     <button class="btn btn-ghost" style="padding:4px 10px;font-size:18px;line-height:1;" onclick="jgCloseModal()" title="닫기">×</button>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#6b7280;">
+                <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;">
                     <span class="jg-step-dot" data-step="1" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#6b5520;color:#fff;font-weight:700;">1</span>
                     <span class="jg-step-label" data-step="1" style="font-weight:600;color:#6b5520;">이름</span>
                     <span style="flex:0 0 24px;height:1px;background:#e5e7eb;"></span>
@@ -1900,7 +1901,7 @@ POST /api/external/event-result-link/batch<br>
                     <input id="jg-create-name" placeholder="예: 여자 장대 합동, 10000mW 합동" style="width:100%;padding:10px 12px;font-size:14px;border:1.5px solid var(--gray);border-radius:8px;">
                     <p class="t-help" style="margin-top:8px;color:#6b7280;font-size:12px;line-height:1.5;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c1 .8 1 2 1 3.3h6c0-1.3 0-2.5 1-3.3A7 7 0 0 0 12 2z"/></svg> 합동 그룹의 이름을 짧고 명확하게 적어주세요. 메인 목록과 스코어보드 노출 시 식별에 사용됩니다.<br>
-                        예: <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px;">여자 장대 합동</code>, <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px;">10000mW 4-way 합동</code>
+                        예: <code style="background:#f8f9fa;padding:1px 5px;border-radius:3px;">여자 장대 합동</code>, <code style="background:#f8f9fa;padding:1px 5px;border-radius:3px;">10000mW 4-way 합동</code>
                     </p>
                 </div>
 
@@ -1908,7 +1909,7 @@ POST /api/external/event-result-link/batch<br>
                 <div id="jg-step-2" class="jg-step-panel" style="display:none;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <label class="t-md t-bold">연결할 대회 (2개 이상 선택)</label>
-                        <label style="font-size:11px;color:#6b7280;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                        <label style="font-size:12px;color:#6b7280;display:flex;align-items:center;gap:4px;cursor:pointer;">
                             <input type="checkbox" id="jg-show-completed" onchange="jgRenderComps()"> 종료된 대회도 표시
                         </label>
                     </div>
@@ -1941,9 +1942,9 @@ POST /api/external/event-result-link/batch<br>
             </div>
 
             <!-- Footer -->
-            <div style="padding:14px 24px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#fafafa;">
+            <div style="padding:14px 24px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#f8f9fa;">
                 <button id="jg-prev-btn" class="btn btn-ghost" onclick="jgPrevStep()" style="visibility:hidden;">← 이전</button>
-                <div id="jg-selection-summary" style="font-size:11px;color:#6b7280;flex:1;text-align:center;"></div>
+                <div id="jg-selection-summary" style="font-size:12px;color:#6b7280;flex:1;text-align:center;"></div>
                 <div style="display:flex;gap:6px;">
                     <button class="btn btn-ghost" onclick="jgCloseModal()">취소</button>
                     <button id="jg-next-btn" class="btn btn-primary" onclick="jgNextStep()">다음 →</button>
@@ -1965,7 +1966,7 @@ POST /api/external/event-result-link/batch<br>
                 <input id="jg-addmem-search" placeholder="종목 검색…" oninput="jgRenderAddMemberList()" style="width:100%;padding:6px 10px;font-size:12px;border:1px solid #e5e7eb;border-radius:4px;margin-bottom:8px;">
                 <div id="jg-addmem-list" style="border:1px solid #e5e7eb;border-radius:6px;max-height:340px;overflow-y:auto;"></div>
             </div>
-            <div style="padding:12px 22px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:6px;background:#fafafa;">
+            <div style="padding:12px 22px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:6px;background:#f8f9fa;">
                 <button class="btn btn-ghost" onclick="document.getElementById('jg-addmem-modal').style.display='none'">취소</button>
                 <button class="btn btn-primary" onclick="jgSubmitAddMembers()">추가</button>
             </div>
@@ -2007,12 +2008,12 @@ POST /api/external/event-result-link/batch<br>
             <!-- TAB: Documents (문서·다운로드) -->
             <div id="tab-documents" class="admin-tab-panel">
                 <!-- Download Center -->
-                <div class="admin-card" style="border-left:4px solid #2d5016;">
+                <div class="admin-card" style="">
                     <h4 style="color:#2d5016;margin-bottom:8px;">다운로드 센터</h4>
                     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;">
                         <div style="flex:1;min-width:200px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
                             <h5 style="font-size:13px;margin-bottom:8px;">종합기록지</h5>
-                            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">종합기록 + 개별 종목별 기록시트 (트랙/필드/릴레이) 전체 포함</p>
+                            <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">종합기록 + 개별 종목별 기록시트 (트랙/필드/릴레이) 전체 포함</p>
                             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                                 <button class="btn btn-sm btn-excel" onclick="downloadFullRecord('M')">남자 Excel</button>
                                 <button class="btn btn-sm btn-excel" onclick="downloadFullRecord('F')">여자 Excel</button>
@@ -2025,7 +2026,7 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                         <div id="card-kjaf-record" style="flex:1;min-width:220px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
                             <h5 style="font-size:13px;margin-bottom:8px;">중·고연맹 종합기록지</h5>
-                            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">한국중·고육상연맹 양식(남중·여중·학년부·믹스릴레이·신기록현황 시트). 종목의 <b>부(중등부·고등부·N학년부)</b>로 시트가 나뉘고, 결승 기록·승인된 신기록(CR/DR/KR)만 들어갑니다.</p>
+                            <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">한국중·고육상연맹 양식(남중·여중·학년부·믹스릴레이·신기록현황 시트). 종목의 <b>부(중등부·고등부·N학년부)</b>로 시트가 나뉘고, 결승 기록·승인된 신기록(CR/DR/KR)만 들어갑니다.</p>
                             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                                 <button class="btn btn-sm btn-excel" onclick="downloadKjafRecord()">Excel</button>
                                 <span class="t-xs t-muted">시트 이름·묶음은 부 설정을 따릅니다</span>
@@ -2033,7 +2034,7 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                         <div id="card-idcard" style="flex:1;min-width:260px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
                             <h5 style="font-size:13px;margin-bottom:8px;">ID카드 (AD카드)</h5>
-                            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">배번·성명·소속·참가 종목 + <b>소집실에서 스캔되는 바코드</b>. 계주 팀은 제외됩니다.</p>
+                            <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">배번·성명·소속·참가 종목 + <b>소집실에서 스캔되는 바코드</b>. 계주 팀은 제외됩니다.</p>
                             <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:12px;">
                                 <label for="idc-team">소속</label><select id="idc-team" style="padding:4px 6px;border:1px solid var(--gray);border-radius:4px;min-width:0;"><option value="">전체</option></select>
                                 <label for="idc-gender">성별</label><select id="idc-gender" style="padding:4px 6px;border:1px solid var(--gray);border-radius:4px;"><option value="">전체</option><option value="M">남자</option><option value="F">여자</option></select>
@@ -2041,24 +2042,24 @@ POST /api/external/event-result-link/batch<br>
                                 <label for="idc-per-page">한 쪽에</label><select id="idc-per-page" style="padding:4px 6px;border:1px solid var(--gray);border-radius:4px;"><option value="4">4장</option><option value="2">2장</option><option value="1">1장 (크게)</option></select>
                             </div>
                             <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
-                                <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;"><input type="checkbox" id="idc-barcode" checked> 바코드 포함</label>
+                                <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;"><input type="checkbox" id="idc-barcode" checked> 바코드 포함</label>
                                 <button class="btn btn-sm btn-pdf" style="margin-left:auto;" onclick="openIdCards()">PDF 열기</button>
                             </div>
                         </div>
                         <div style="flex:1;min-width:200px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
                             <h5 style="font-size:13px;margin-bottom:8px;">데이터 백업</h5>
-                            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">선수, 종목, 기록, 조편성 전체 백업</p>
+                            <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">선수, 종목, 기록, 조편성 전체 백업</p>
                             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                                 <button class="btn btn-sm btn-outline" onclick="downloadBackup('json')">JSON</button>
                                 <button class="btn btn-sm btn-outline" onclick="downloadBackup('xlsx')">Excel</button>
-                                <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
+                                <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
                                     <input type="checkbox" id="backup-comp-only2" checked> 현재 대회만
                                 </label>
                             </div>
                         </div>
                         <div style="flex:1;min-width:200px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
                             <h5 style="font-size:13px;margin-bottom:8px;">엑셀 양식</h5>
-                            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">선수명단 + 조편성 + 작성가이드 포함</p>
+                            <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">선수명단 + 조편성 + 작성가이드 포함</p>
                             <a href="/PACERISE_upload_template.xlsx" download class="btn btn-sm btn-outline" style="text-decoration:none;">양식 다운로드 (.xlsx)</a>
                         </div>
                     </div>
@@ -2075,7 +2076,7 @@ POST /api/external/event-result-link/batch<br>
                         <h4 style="font-size:14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
                             <span class="css-icon css-icon-chart" data-icon="R"></span> 종합기록지 (Comprehensive Record)
                         </h4>
-                        <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">성별별로 전체 종목의 순위·기록을 한 장에 정리한 Excel 문서입니다.</p>
+                        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">성별별로 전체 종목의 순위·기록을 한 장에 정리한 Excel 문서입니다.</p>
                         <div class="admin-form-row">
                             <div class="admin-form-group">
                                 <label>소속 라벨</label>
@@ -2105,7 +2106,7 @@ POST /api/external/event-result-link/batch<br>
                             <div class="admin-form-group">
                                 <label>좌측 로고</label>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                    <input type="file" id="doc-comp-logo-left-file" accept="image/*" style="font-size:11px;width:180px;">
+                                    <input type="file" id="doc-comp-logo-left-file" accept="image/*" style="font-size:12px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('comprehensive','left','doc-comp-logo-left-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-comp-logo-left-del" onclick="deleteDocLogo('comprehensive','left')">삭제</button>
                                     <span id="doc-comp-logo-left-status" class="t-sm t-muted"></span>
@@ -2115,7 +2116,7 @@ POST /api/external/event-result-link/batch<br>
                             <div class="admin-form-group">
                                 <label>우측 로고</label>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                    <input type="file" id="doc-comp-logo-right-file" accept="image/*" style="font-size:11px;width:180px;">
+                                    <input type="file" id="doc-comp-logo-right-file" accept="image/*" style="font-size:12px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('comprehensive','right','doc-comp-logo-right-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-comp-logo-right-del" onclick="deleteDocLogo('comprehensive','right')">삭제</button>
                                     <span id="doc-comp-logo-right-status" class="t-sm t-muted"></span>
@@ -2195,7 +2196,7 @@ POST /api/external/event-result-link/batch<br>
                             <div class="admin-form-group">
                                 <label>좌측 로고</label>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                    <input type="file" id="doc-sl-logo-left-file" accept="image/*" style="font-size:11px;width:180px;">
+                                    <input type="file" id="doc-sl-logo-left-file" accept="image/*" style="font-size:12px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('start_list','left','doc-sl-logo-left-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-sl-logo-left-del" onclick="deleteDocLogo('start_list','left')">삭제</button>
                                     <span id="doc-sl-logo-left-status" class="t-sm t-muted"></span>
@@ -2205,7 +2206,7 @@ POST /api/external/event-result-link/batch<br>
                             <div class="admin-form-group">
                                 <label>우측 로고</label>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                    <input type="file" id="doc-sl-logo-right-file" accept="image/*" style="font-size:11px;width:180px;">
+                                    <input type="file" id="doc-sl-logo-right-file" accept="image/*" style="font-size:12px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('start_list','right','doc-sl-logo-right-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-sl-logo-right-del" onclick="deleteDocLogo('start_list','right')">삭제</button>
                                     <span id="doc-sl-logo-right-status" class="t-sm t-muted"></span>
@@ -2261,7 +2262,7 @@ POST /api/external/event-result-link/batch<br>
                             <div class="admin-form-group">
                                 <label>좌측 로고</label>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                    <input type="file" id="doc-rs-logo-left-file" accept="image/*" style="font-size:11px;width:180px;">
+                                    <input type="file" id="doc-rs-logo-left-file" accept="image/*" style="font-size:12px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('result_sheet','left','doc-rs-logo-left-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-rs-logo-left-del" onclick="deleteDocLogo('result_sheet','left')">삭제</button>
                                     <span id="doc-rs-logo-left-status" class="t-sm t-muted"></span>
@@ -2271,7 +2272,7 @@ POST /api/external/event-result-link/batch<br>
                             <div class="admin-form-group">
                                 <label>우측 로고</label>
                                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                    <input type="file" id="doc-rs-logo-right-file" accept="image/*" style="font-size:11px;width:180px;">
+                                    <input type="file" id="doc-rs-logo-right-file" accept="image/*" style="font-size:12px;width:180px;">
                                     <button class="btn btn-sm btn-outline" onclick="uploadDocLogo('result_sheet','right','doc-rs-logo-right-file')">업로드</button>
                                     <button class="btn btn-sm btn-danger-soft" style="display:none;" id="doc-rs-logo-right-del" onclick="deleteDocLogo('result_sheet','right')">삭제</button>
                                     <span id="doc-rs-logo-right-status" class="t-sm t-muted"></span>
@@ -2318,14 +2319,14 @@ POST /api/external/event-result-link/batch<br>
                             </label>
                             <div id="doc-rs-records-area" style="margin-top:10px;">
                                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
-                                    <label style="font-size:11px;font-weight:600;color:#555;">종목 선택:</label>
+                                    <label style="font-size:12px;font-weight:600;color:#555;">종목 선택:</label>
                                     <select id="doc-rs-records-event" style="font-size:12px;padding:4px 8px;border:1px solid var(--gray);border-radius:6px;min-width:200px;" onchange="loadEventRecords()">
                                         <option value="">-- 종목을 선택하세요 --</option>
                                     </select>
                                     <button class="btn btn-sm btn-primary" onclick="saveEventRecords()">이 종목 저장</button>
-                                    <span id="doc-rs-records-save-status" style="font-size:11px;color:var(--green);font-weight:600;"></span>
+                                    <span id="doc-rs-records-save-status" style="font-size:12px;color:var(--green);font-weight:600;"></span>
                                 </div>
-                                <table style="width:100%;font-size:11px;border-collapse:collapse;">
+                                <table style="width:100%;font-size:12px;border-collapse:collapse;">
                                     <thead>
                                         <tr style="background:var(--gray-light,#f0f0f0);">
                                             <th style="padding:4px 6px;text-align:left;border:1px solid #ddd;width:22%;">구분</th>
@@ -2389,7 +2390,7 @@ POST /api/external/event-result-link/batch<br>
                                         </tr>
                                     </tbody>
                                 </table>
-                                <p style="font-size:10px;color:var(--text-muted);margin-top:6px;">종목을 선택한 후 기록을 입력하고 "이 종목 저장"을 클릭하세요. 비워두면 빈 칸으로 출력됩니다.</p>
+                                <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">종목을 선택한 후 기록을 입력하고 "이 종목 저장"을 클릭하세요. 비워두면 빈 칸으로 출력됩니다.</p>
                             </div>
                         </div>
                         <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -2413,7 +2414,7 @@ POST /api/external/event-result-link/batch<br>
             <div id="tab-certificates" class="admin-tab-panel">
 
                 <!-- A. 일괄 발급 -->
-                <div class="admin-card" style="border-left:4px solid #b8945a;">
+                <div class="admin-card" style="">
                     <h4 style="color:#7a5a20;margin-bottom:8px;">상장 일괄 발급 · 인쇄</h4>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
                         대회·종목·순위 범위를 선택하면 A4 세로 PDF로 일괄 생성됩니다. 한 페이지에 한 명씩 인쇄용으로 출력됩니다.
@@ -2452,7 +2453,7 @@ POST /api/external/event-result-link/batch<br>
                                 <input type="number" id="cert-rank-from" min="1" value="1" style="width:60px;padding:4px;border:1px solid var(--gray);border-radius:4px;">
                                 <span>~</span>
                                 <input type="number" id="cert-rank-to" min="1" value="3" style="width:60px;padding:4px;border:1px solid var(--gray);border-radius:4px;">
-                                <span style="font-size:11px;color:var(--text-muted);">위</span>
+                                <span style="font-size:12px;color:var(--text-muted);">위</span>
                             </div>
                         </div>
                         <div>
@@ -2466,7 +2467,7 @@ POST /api/external/event-result-link/batch<br>
 
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">발급 대상 종목 (미선택 시 대회 전체 결승)</label>
-                        <div id="cert-event-list" style="border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#fafafa;">
+                        <div id="cert-event-list" style="border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#f8f9fa;">
                             대회를 선택하면 종목이 표시됩니다.
                         </div>
                         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
@@ -2484,8 +2485,8 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- W. 워드 상장 양식 (현장 인쇄용) — PDF 양식과 별개 -->
-                <div class="admin-card" id="card-award-docx" style="border-left:4px solid #2b579a;">
-                    <h4 style="color:#2b579a;margin-bottom:6px;">워드 상장 양식 <span style="font-size:11px;font-weight:600;color:#fff;background:#2b579a;border-radius:4px;padding:2px 6px;vertical-align:middle;">현장 인쇄용</span></h4>
+                <div class="admin-card" id="card-award-docx" style="">
+                    <h4 style="color:#2b579a;margin-bottom:6px;">워드 상장 양식 <span style="font-size:12px;font-weight:600;color:#fff;background:#2b579a;border-radius:4px;padding:2px 6px;vertical-align:middle;">현장 인쇄용</span></h4>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6;">
                         기록입력 화면의 <b>상장 출력</b> 버튼과 위 일괄 발급의 <b>워드(.docx)</b> 형식이 쓰는 양식입니다. 받은 파일은 워드·한글에서 열어 고칠 수 있습니다.<br>
                         아래 <b>양식 관리</b>(PDF)는 문자로 보내는 기록증·상장용이며 이 양식과는 별개입니다.
@@ -2540,7 +2541,7 @@ POST /api/external/event-result-link/batch<br>
 
                 <!-- B. 양식 관리 -->
                 <div class="admin-card">
-                    <h4>양식 관리 <span style="font-size:11px;font-weight:600;color:#7a5a20;background:#f5ecd6;border-radius:4px;padding:2px 6px;vertical-align:middle;">PDF · 문자 발송용</span></h4>
+                    <h4>양식 관리 <span style="font-size:12px;font-weight:600;color:#7a5a20;background:#f5ecd6;border-radius:4px;padding:2px 6px;vertical-align:middle;">PDF · 문자 발송용</span></h4>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">시상장·완주증·단체상 등 여러 양식을 저장해두고 발급 시 선택할 수 있습니다.</p>
                     <div id="cert-template-list" style="margin-bottom:12px;"></div>
                     <button class="btn btn-sm btn-primary" onclick="openCertTemplateEditor(null)">+ 새 양식 추가</button>
@@ -2662,7 +2663,7 @@ POST /api/external/event-result-link/batch<br>
                                 <input type="file" id="cert-img-input-logo_left" accept="image/*" style="display:none;" onchange="uploadCertImage('logo_left', this.files[0])">
                                 <div style="display:flex;gap:4px;margin-top:4px;">
                                     <button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('cert-img-input-logo_left').click()">선택</button>
-                                    <button type="button" class="btn btn-xs" style="background:#fee;color:#a00;" onclick="deleteCertImage('logo_left')">제거</button>
+                                    <button type="button" class="btn btn-xs" style="background:#f8f9fa;color:#a00;" onclick="deleteCertImage('logo_left')">제거</button>
                                 </div>
                             </div>
                             <div>
@@ -2671,7 +2672,7 @@ POST /api/external/event-result-link/batch<br>
                                 <input type="file" id="cert-img-input-logo_right" accept="image/*" style="display:none;" onchange="uploadCertImage('logo_right', this.files[0])">
                                 <div style="display:flex;gap:4px;margin-top:4px;">
                                     <button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('cert-img-input-logo_right').click()">선택</button>
-                                    <button type="button" class="btn btn-xs" style="background:#fee;color:#a00;" onclick="deleteCertImage('logo_right')">제거</button>
+                                    <button type="button" class="btn btn-xs" style="background:#f8f9fa;color:#a00;" onclick="deleteCertImage('logo_right')">제거</button>
                                 </div>
                             </div>
                             <div>
@@ -2680,7 +2681,7 @@ POST /api/external/event-result-link/batch<br>
                                 <input type="file" id="cert-img-input-seal" accept="image/*" style="display:none;" onchange="uploadCertImage('seal', this.files[0])">
                                 <div style="display:flex;gap:4px;margin-top:4px;">
                                     <button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('cert-img-input-seal').click()">선택</button>
-                                    <button type="button" class="btn btn-xs" style="background:#fee;color:#a00;" onclick="deleteCertImage('seal')">제거</button>
+                                    <button type="button" class="btn btn-xs" style="background:#f8f9fa;color:#a00;" onclick="deleteCertImage('seal')">제거</button>
                                 </div>
                             </div>
                             <div>
@@ -2689,7 +2690,7 @@ POST /api/external/event-result-link/batch<br>
                                 <input type="file" id="cert-img-input-watermark" accept="image/*" style="display:none;" onchange="uploadCertImage('watermark', this.files[0])">
                                 <div style="display:flex;gap:4px;margin-top:4px;">
                                     <button type="button" class="btn btn-xs btn-outline" onclick="document.getElementById('cert-img-input-watermark').click()">선택</button>
-                                    <button type="button" class="btn btn-xs" style="background:#fee;color:#a00;" onclick="deleteCertImage('watermark')">제거</button>
+                                    <button type="button" class="btn btn-xs" style="background:#f8f9fa;color:#a00;" onclick="deleteCertImage('watermark')">제거</button>
                                 </div>
                             </div>
                         </div>
@@ -2707,7 +2708,7 @@ POST /api/external/event-result-link/batch<br>
                             <span class="t-xs t-muted">옅을수록 본문 가독성↑ · 중앙 배치</span>
                         </div>
                     </div>
-                    <div id="cert-images-section-disabled" style="margin-top:14px;border-top:1px solid #eee;padding-top:12px;font-size:11px;color:var(--text-muted);">
+                    <div id="cert-images-section-disabled" style="margin-top:14px;border-top:1px solid #eee;padding-top:12px;font-size:12px;color:var(--text-muted);">
                         새 양식은 저장 후 이미지(로고·인장)를 업로드할 수 있습니다.
                     </div>
 
@@ -2720,15 +2721,15 @@ POST /api/external/event-result-link/batch<br>
             </div>
 
             <style>
-            .cert-img-slot { width:100%; height:80px; border:1px dashed #ccc; border-radius:6px; background:#fafafa; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+            .cert-img-slot { width:100%; height:80px; border:1px dashed #ccc; border-radius:6px; background:#f8f9fa; display:flex; align-items:center; justify-content:center; overflow:hidden; }
             .cert-img-slot img { max-width:100%; max-height:100%; object-fit:contain; }
-            .cert-img-slot .empty { color:#aaa; font-size:11px; }
+            .cert-img-slot .empty { color:#aaa; font-size:12px; }
             </style>
 
             <!-- ========== tab-sms : 문자 발송 ========== -->
             <div id="tab-sms" class="admin-tab-panel">
                 <!-- 푸시(앱 알림) 공지 -->
-                <div class="admin-card" style="border-left:4px solid #b79f58;">
+                <div class="admin-card" style="">
                     <h4 style="color:#8a7640;margin-bottom:8px;"><svg class="ui-icon" width="1em" height="1em" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;"><rect x="13" y="4" width="22" height="40" rx="5"/><path d="M21 38h6"/></svg> 앱 푸시 알림 (공지 보내기)</h4>
                     <div id="push-status-box" style="font-size:12px;color:#666;margin-bottom:10px;">상태 확인 중…</div>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
@@ -2764,9 +2765,9 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- A. 발송 설정 -->
-                <div class="admin-card" style="border-left:4px solid #2d5016;">
+                <div class="admin-card" style="">
                     <h4 style="color:#2d5016;margin-bottom:8px;">알리고(Aligo) SMS 설정</h4>
-                    <div style="background:#fff3cd;border:1px solid #ffe69c;border-radius:6px;padding:10px;font-size:12px;margin-bottom:12px;">
+                    <div style="background:#f8f9fa;border:1px solid #ffe69c;border-radius:6px;padding:10px;font-size:12px;margin-bottom:12px;">
                         <strong>알리고 가입 안내:</strong> <a href="https://smartsms.aligo.in/" target="_blank" rel="noopener">smartsms.aligo.in</a> 가입 → 발신번호 등록 → API 키 발급 → 아래에 입력하세요.<br>
                         <strong>시뮬레이션 모드</strong>가 켜져 있으면 실제 발송 없이 로그만 기록됩니다 (가입 전 테스트용).
                     </div>
@@ -2800,7 +2801,7 @@ POST /api/external/event-result-link/batch<br>
                         <div style="grid-column:1 / -1;">
                             <label class="t-xs">기본 메시지 템플릿 (변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {competition_name} {cert_url} {heat_label} {heat})</label>
                             <textarea id="sms-cfg-template" rows="4" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;font-family:inherit;"></textarea>
-                            <div style="display:flex;gap:10px;align-items:center;margin-top:4px;font-size:11px;color:var(--text-muted);">
+                            <div style="display:flex;gap:10px;align-items:center;margin-top:4px;font-size:12px;color:var(--text-muted);">
                                 <span id="sms-cfg-tpl-bytes">0 bytes</span>
                                 <span id="sms-cfg-tpl-type">SMS</span>
                                 <span id="sms-cfg-tpl-cost">예상: 13원/건</span>
@@ -2848,7 +2849,7 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- C. 일괄 발송 -->
-                <div class="admin-card" style="border-left:4px solid #b8945a;">
+                <div class="admin-card" style="">
                     <h4 style="color:#7a5a20;">일괄 발송 — 결과 + 상장 링크</h4>
                     <p class="t-xs t-muted" style="margin-bottom:10px;">대회·종목·순위 범위를 선택해 선수에게 결과 안내 + 상장 다운로드 링크 SMS를 보냅니다.</p>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px;">
@@ -2890,7 +2891,7 @@ POST /api/external/event-result-link/batch<br>
                     <p class="t-xs t-muted" style="margin:-4px 0 10px;">※ 기록이 없는(미출전) 선수는 자동 제외됩니다. 조를 지정하면 그 조만, 중복 방지를 켜면 같은 종목에서 이미 받은 선수는 다시 보내지 않습니다.</p>
                     <div style="margin-bottom:10px;">
                         <label class="t-xs" style="font-weight:600;">발송 대상 종목</label>
-                        <div id="sms-batch-event-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#fafafa;">대회를 선택하면 종목이 표시됩니다.</div>
+                        <div id="sms-batch-event-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#f8f9fa;">대회를 선택하면 종목이 표시됩니다.</div>
                         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
                             <button class="btn btn-xs btn-outline" onclick="smsBatchSelectAll(true)">전체 선택</button>
                             <button class="btn btn-xs btn-outline" onclick="smsBatchSelectAll(false)">전체 해제</button>
@@ -2902,7 +2903,7 @@ POST /api/external/event-result-link/batch<br>
                         <label class="t-xs" style="font-weight:600;">조 선택</label>
                         <div id="sms-batch-heat-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;"></div>
                     </div>
-                    <div style="margin-bottom:10px;background:#f5f5f5;border-radius:6px;padding:10px;">
+                    <div style="margin-bottom:10px;background:#f8f9fa;border-radius:6px;padding:10px;">
                         <div class="t-xs t-muted" style="margin-bottom:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 선수 휴대폰 번호는 athlete.phone 컬럼에서 가져옵니다. 비어 있는 선수는 자동 시뮬레이션 실패로 기록됩니다.</div>
                         <button class="btn btn-sm btn-warning" onclick="dryRunSmsBatch()">먼저 미리보기 (발송 없이 대상자 표시)</button>
                     </div>
@@ -2914,7 +2915,7 @@ POST /api/external/event-result-link/batch<br>
                         <span id="sms-batch-status" style="font-size:12px;font-weight:600;"></span>
                     </div>
                     <p class="t-xs t-muted" style="margin-top:6px;">체크하면 시뮬레이션 모드여도 실제로 발송됩니다(대상자 전원, 요금 발생). API Key·발신번호 저장 필수.</p>
-                    <div id="sms-batch-result" style="margin-top:10px;font-size:11px;"></div>
+                    <div id="sms-batch-result" style="margin-top:10px;font-size:12px;"></div>
                 </div>
 
                 <!-- D. 발송 이력 -->
@@ -2923,7 +2924,7 @@ POST /api/external/event-result-link/batch<br>
                     <div style="margin-bottom:8px;">
                         <button class="btn btn-xs btn-outline" onclick="loadSmsLog()">새로고침</button>
                     </div>
-                    <div id="sms-log-list" style="max-height:400px;overflow-y:auto;font-size:11px;">로딩 중...</div>
+                    <div id="sms-log-list" style="max-height:400px;overflow-y:auto;font-size:12px;">로딩 중...</div>
                 </div>
             </div>
 
@@ -3461,6 +3462,22 @@ POST /api/external/event-result-link/batch<br>
         };
         // 빈 상태 아이콘(.ph-icon[data-icon]) — 텍스트 'USER'/'E' 대신 선 아이콘
         document.addEventListener('DOMContentLoaded', () => { document.querySelectorAll('.ph-icon[data-icon]').forEach(el => { try { el.innerHTML = ICON(el.dataset.icon, { size: 32 }); } catch (e) {} }); });
+        // 재설계 1단계 정돈 (docs/ADMIN_REDESIGN_PLAN.md §5): 알파벳 원형 배지(R/S/U/L/J/E/G)·영문 부제·글자 아이콘을 뺀다 — 마크업은 그대로 두고 로드 때 한 번
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                document.querySelectorAll('.admin-main h4 span, .admin-main h4 div, .admin-main h5 span').forEach(el => {
+                    const t = el.textContent.trim();
+                    if (/^[A-Z]$/.test(t) && /50%/.test(el.getAttribute('style') || '')) el.remove();                       // 원형 글자 배지
+                    else if (t && !/[가-힣]/.test(t) && /^[A-Za-z0-9 .,()/&:+\-–—]+$/.test(t) && t.length > 3 && el.className.includes('t-muted')) el.remove();   // 영문 부제 (Scoreboard Import 등)
+                });
+                const ICON_MAP = { medal: 'award', judge: 'user', chart: 'chart', download: 'file', key: 'key', file: 'file', check: 'check', link: 'plug', sync: 'plug', auto: 'traffic', edit: 'tag', warn: 'shield', add: 'list', timer: 'timer', copy: 'file', folder: 'folder', danger: 'trash' };   // ICON_PATHS 에 있는 이름만
+                document.querySelectorAll('.css-icon').forEach(el => {
+                    const k = [...el.classList].map(c => c.replace('css-icon-', '')).find(c => ICON_MAP[c]);
+                    el.style.background = 'transparent'; el.style.color = 'var(--adm-muted)';
+                    try { el.innerHTML = ICON(k ? ICON_MAP[k] : 'list', { size: 16 }); el.removeAttribute('data-icon'); } catch (e) { el.textContent = ''; }
+                });
+            } catch (e) {}
+        });
         function ICON(name, opts) {
             opts = opts || {};
             const size = opts.size || 16;
