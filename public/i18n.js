@@ -14,7 +14,7 @@
     'use strict';
 
     var STORAGE_KEY = 'pace_lang';
-    var DICT_VERSION = (window.PACE_I18N_VERSION || '1');
+    var DICT_VERSION = (window.PACE_I18N_VERSION || '2');
     var LANGS = [
         { code: 'ko', label: '한국어', short: 'KO' },
         { code: 'en', label: 'English', short: 'EN' },
@@ -100,7 +100,7 @@
     function tText(src, lang) {
         if (lang === 'ko' || !src) return null;
         var d = TEXT[lang]; if (!d) return null;
-        var s = src.trim(); if (!s || !HANGUL.test(s)) return null;
+        var s = src.replace(/\s+/g, ' ').trim(); if (!s || !HANGUL.test(s)) return null;   // 안쪽 줄바꿈·연속 공백은 한 칸으로 (추출기와 같은 정규화)
         if (d[s] != null) return d[s];
         var ps = PATTERNS[lang];
         for (var i = 0; i < ps.length; i++) {
