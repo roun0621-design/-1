@@ -169,3 +169,43 @@
 #adm-help-body .admin-card { border: none; border-bottom: 1px solid var(--adm-line); border-radius: 0; padding: 0 0 14px; }
 .adm-preview-head .btn { min-height: 28px; }
 #adm-topbar-actions #pace-lang-switcher { margin: 0; }
+
+/* ── 4단계: 전폭 표 + 드로어, 현황 대시보드, 다운로드 행, 작은 드롭존 ── */
+#tab-athletes > div { height: auto !important; min-height: 0 !important; display: block !important; }
+#tab-athletes > div > div:first-child { width: auto !important; min-width: 0 !important; border: none !important; background: transparent !important; }
+#tab-athletes > div > div:first-child > div:first-child { background: transparent !important; border: none !important; padding: 0 0 12px !important; }
+#tab-athletes #ath-tree { flex: none !important; overflow: visible !important; padding: 0 !important; font-size: 13px !important; }
+#tab-athletes #ath-count { background: transparent !important; border: none !important; padding: 10px 0 !important; }
+#tab-athletes #ath-search { min-height: 36px; font-size: 14px; }
+.admin-main .adm-ath-table td.num, .admin-main .num { font-family: var(--font-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.admin-main .adm-row { cursor: pointer; }
+.admin-main .adm-row.selected-row td { background: #fbf8f0 !important; }
+#tab-events > div { height: auto !important; min-height: 0 !important; display: block !important; }
+#tab-events .admin-evt-matrix-panel { width: auto !important; min-width: 0 !important; border-right: none !important; }
+#tab-events .matrix-scroll-area { max-height: none !important; overflow: visible !important; }
+#tab-events .matrix-table-compact th, #tab-events .matrix-table-compact td { font-size: 13px; padding: 8px 10px; }
+.admin-main .adm-drawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(620px, 94vw); background: var(--adm-surface); border-left: 1px solid var(--adm-line); box-shadow: -12px 0 32px rgba(17, 24, 39, .12); transform: translateX(102%); transition: transform .2s ease; z-index: 10020; overflow-y: auto; padding: 16px 20px 32px; display: block !important; }
+.admin-main .adm-drawer.open { transform: none; }
+.admin-main .adm-drawer .adm-drawer-close { position: sticky; top: 0; float: right; z-index: 1; background: var(--adm-surface); }
+.admin-main .adm-drawer .detail-placeholder { height: 60vh; }
+.adm-ov-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 1000px) { .adm-ov-grid { grid-template-columns: 1fr; } }
+.admin-main .adm-ov-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--adm-line); font-size: 13px; }
+.admin-main .adm-ov-row:last-child { border-bottom: none; }
+.admin-main .adm-ov-row .adm-ov-name { flex: 1; min-width: 0; }
+.admin-main .adm-ov-row .adm-ov-time { color: var(--adm-muted); font-size: 12px; white-space: nowrap; }
+.admin-main .admin-status-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.admin-main .stat-card { background: var(--adm-surface); border: 1px solid var(--adm-line) !important; border-radius: var(--adm-radius); padding: 14px 18px; }
+.admin-main .stat-card .stat-number { font-size: 28px; font-weight: 800; color: var(--adm-text) !important; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.admin-main .stat-card .stat-label { font-size: 12px; color: var(--adm-muted); margin-top: 4px; }
+.admin-main .adm-doc-row { display: flex; align-items: flex-start; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--adm-line); }
+.admin-main .adm-doc-row:last-child { border-bottom: none; }
+.admin-main .adm-doc-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.admin-main .adm-doc-info small { color: var(--adm-muted); font-size: 12px; line-height: 1.5; }
+.admin-main .adm-doc-opts { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 12px; color: #374151; }
+.admin-main .adm-doc-opts label { display: inline-flex; align-items: center; gap: 6px; }
+.admin-main .adm-doc-opts select, .admin-main .adm-doc-opts input[type="text"] { min-height: 28px; font-size: 12px; }
+.admin-main .adm-doc-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
+.admin-main .adm-drop-sm { padding: 10px 14px; margin: 0; }
+.admin-main .adm-drop-sm .adm-drop-txt b { font-size: 12.5px; }
+.admin-main #tt-match-list button { min-height: 24px; font-size: 12px !important; padding: 0 8px !important; }

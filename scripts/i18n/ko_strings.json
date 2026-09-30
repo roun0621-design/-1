@@ -365,12 +365,11 @@
    "results.js"
   ]
  },
- "진행중": {
-  "count": 9,
+ "진행 중": {
+  "count": 2,
   "files": [
    "admin.html",
-   "callroom.js",
-   "index.html"
+   "dashboard.js"
   ]
  },
  "대기": {
@@ -382,16 +381,66 @@
    "monitor.html"
   ]
  },
- "{0}명": {
-  "count": 18,
+ "openEvtModal({0}),150)\">열기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "외 {0}건 — 운영 체크리스트에서 전체 보기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "배번": {
+  "count": 25,
+  "files": [
+   "admin.html",
+   "dashboard.js",
+   "display-manage.html",
+   "field-card-upload.js",
+   "record.js",
+   "results.js"
+  ]
+ },
+ "이름": {
+  "count": 12,
+  "files": [
+   "admin.html",
+   "dashboard.js",
+   "event-record.html",
+   "record.js"
+  ]
+ },
+ "성별": {
+  "count": 23,
+  "files": [
+   "admin.html",
+   "dashboard.js",
+   "display-manage.html",
+   "event-record.html"
+  ]
+ },
+ "소속": {
+  "count": 62,
   "files": [
    "admin.html",
    "callroom.js",
    "dashboard.js",
-   "display-manage.html"
+   "display-manage.html",
+   "event-record.html",
+   "record.js",
+   "results.js"
   ]
  },
- "총 {0}명 / {1}개 팀": {
+ "학년": {
+  "count": 7,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "{0}명 · {1}개 팀": {
   "count": 1,
   "files": [
    "admin.html"
@@ -420,29 +469,8 @@
    "results.js"
   ]
  },
- "소속": {
-  "count": 61,
-  "files": [
-   "admin.html",
-   "callroom.js",
-   "dashboard.js",
-   "display-manage.html",
-   "event-record.html",
-   "record.js",
-   "results.js"
-  ]
- },
- "성별": {
-  "count": 22,
-  "files": [
-   "admin.html",
-   "dashboard.js",
-   "display-manage.html",
-   "event-record.html"
-  ]
- },
  "남": {
-  "count": 50,
+  "count": 51,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -456,7 +484,7 @@
   ]
  },
  "여": {
-  "count": 50,
+  "count": 51,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -484,12 +512,6 @@
  },
  "(SMS 발송용)": {
   "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "학년": {
-  "count": 6,
   "files": [
    "admin.html"
   ]
@@ -693,7 +715,7 @@
   ]
  },
  "종목": {
-  "count": 23,
+  "count": 24,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -708,7 +730,7 @@
   ]
  },
  "예선": {
-  "count": 45,
+  "count": 46,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -731,7 +753,7 @@
   ]
  },
  "결승": {
-  "count": 62,
+  "count": 63,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -892,7 +914,7 @@
   ]
  },
  "혼성": {
-  "count": 66,
+  "count": 67,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -925,7 +947,7 @@
   ]
  },
  "준결승": {
-  "count": 41,
+  "count": 42,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -1254,7 +1276,7 @@
   ]
  },
  "닫기": {
-  "count": 38,
+  "count": 39,
   "files": [
    "admin.html",
    "callroom.js",
@@ -1453,6 +1475,15 @@
   "count": 1,
   "files": [
    "admin.html"
+  ]
+ },
+ "{0}명": {
+  "count": 17,
+  "files": [
+   "admin.html",
+   "callroom.js",
+   "dashboard.js",
+   "display-manage.html"
   ]
  },
  "개인 종목 ({0}개):": {
@@ -1728,6 +1759,14 @@
    "index.html"
   ]
  },
+ "진행중": {
+  "count": 8,
+  "files": [
+   "admin.html",
+   "callroom.js",
+   "index.html"
+  ]
+ },
  "정렬순서": {
   "count": 1,
   "files": [
@@ -1802,7 +1841,7 @@
   ]
  },
  "이동": {
-  "count": 3,
+  "count": 4,
   "files": [
    "admin.html",
    "common.js"
@@ -2324,7 +2363,7 @@
   ]
  },
  "기록": {
-  "count": 33,
+  "count": 34,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -2377,17 +2416,6 @@
   "count": 1,
   "files": [
    "admin.html"
-  ]
- },
- "배번": {
-  "count": 24,
-  "files": [
-   "admin.html",
-   "dashboard.js",
-   "display-manage.html",
-   "field-card-upload.js",
-   "record.js",
-   "results.js"
   ]
  },
  "{0}건 입력": {
@@ -2993,15 +3021,6 @@
   "count": 2,
   "files": [
    "admin.html"
-  ]
- },
- "이름": {
-  "count": 11,
-  "files": [
-   "admin.html",
-   "dashboard.js",
-   "event-record.html",
-   "record.js"
   ]
  },
  "현재 BIB": {
@@ -4750,6 +4769,12 @@
   ]
  },
  "위험 구역": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "되돌릴 수 없는 작업입니다. 실행 전 백업을 확인하세요.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -4762,7 +4787,7 @@
   ]
  },
  "가져오기": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -4832,7 +4857,7 @@
   ]
  },
  "다운로드": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -4952,6 +4977,75 @@
    "admin.html"
   ]
  },
+ "남자": {
+  "count": 43,
+  "files": [
+   "admin.html",
+   "callroom-monitor.html",
+   "callroom.html",
+   "callroom.js",
+   "common.js",
+   "dashboard.html",
+   "dashboard.js",
+   "display-manage.html",
+   "field-card-upload.js",
+   "monitor.html",
+   "record.html",
+   "record.js",
+   "result-image.js",
+   "results.js"
+  ]
+ },
+ "여자": {
+  "count": 43,
+  "files": [
+   "admin.html",
+   "callroom-monitor.html",
+   "callroom.html",
+   "callroom.js",
+   "common.js",
+   "dashboard.html",
+   "dashboard.js",
+   "display-manage.html",
+   "field-card-upload.js",
+   "monitor.html",
+   "record.html",
+   "record.js",
+   "result-image.js",
+   "results.js"
+  ]
+ },
+ "오늘 예정된 종목이 없습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "오류": {
+  "count": 5,
+  "files": [
+   "admin.html",
+   "dashboard.js"
+  ]
+ },
+ "주의": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "정상": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "확인이 필요한 항목이 없습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "소집": {
   "count": 7,
   "files": [
@@ -4961,11 +5055,25 @@
    "oplog.html"
   ]
  },
- "업로드": {
-  "count": 10,
+ "페이싱": {
+  "count": 3,
   "files": [
    "admin.html",
-   "common.js"
+   "oplog.html"
+  ]
+ },
+ "일반": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "dashboard.js",
+   "oplog.html"
+  ]
+ },
+ "되돌림": {
+  "count": 1,
+  "files": [
+   "admin.html"
   ]
  },
  "선수 목록 로드 실패": {
@@ -4974,10 +5082,15 @@
    "admin.html"
   ]
  },
- "(소속 없음)": {
-  "count": 1,
+ "혼": {
+  "count": 12,
   "files": [
-   "admin.html"
+   "admin.html",
+   "callroom-monitor.html",
+   "common.js",
+   "dashboard.js",
+   "display-manage.html",
+   "monitor.html"
   ]
  },
  "선수가 없습니다": {
@@ -5391,44 +5504,6 @@
   "count": 1,
   "files": [
    "admin.html"
-  ]
- },
- "남자": {
-  "count": 42,
-  "files": [
-   "admin.html",
-   "callroom-monitor.html",
-   "callroom.html",
-   "callroom.js",
-   "common.js",
-   "dashboard.html",
-   "dashboard.js",
-   "display-manage.html",
-   "field-card-upload.js",
-   "monitor.html",
-   "record.html",
-   "record.js",
-   "result-image.js",
-   "results.js"
-  ]
- },
- "여자": {
-  "count": 42,
-  "files": [
-   "admin.html",
-   "callroom-monitor.html",
-   "callroom.html",
-   "callroom.js",
-   "common.js",
-   "dashboard.html",
-   "dashboard.js",
-   "display-manage.html",
-   "field-card-upload.js",
-   "monitor.html",
-   "record.html",
-   "record.js",
-   "result-image.js",
-   "results.js"
   ]
  },
  "모든 종목을 WA 표준 육상 순서로 재정렬하시겠습니까?": {
@@ -7372,17 +7447,6 @@
    "admin.html"
   ]
  },
- "혼": {
-  "count": 11,
-  "files": [
-   "admin.html",
-   "callroom-monitor.html",
-   "common.js",
-   "dashboard.js",
-   "display-manage.html",
-   "monitor.html"
-  ]
- },
  "빈 종목 (안전 삭제 가능)": {
   "count": 1,
   "files": [
@@ -7683,13 +7747,6 @@
   "count": 1,
   "files": [
    "admin.html"
-  ]
- },
- "오류": {
-  "count": 4,
-  "files": [
-   "admin.html",
-   "dashboard.js"
   ]
  },
  "나쁜 값(확인)": {
@@ -9428,12 +9485,6 @@
    "admin.html"
   ]
  },
- "추가 등록·분실 재발급용. W31 = 여자 31번, M31 = 남자 31번": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
  "예: 10.07": {
   "count": 1,
   "files": [
@@ -9608,11 +9659,31 @@
    "admin.html"
   ]
  },
- "페이싱": {
-  "count": 2,
+ "오늘 진행": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "불러오는 중…": {
+  "count": 8,
   "files": [
    "admin.html",
-   "oplog.html"
+   "common.js",
+   "dashboard.html",
+   "dashboard.js"
+  ]
+ },
+ "확인이 필요한 항목": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "최근 활동": {
+  "count": 1,
+  "files": [
+   "admin.html"
   ]
  },
  "빠른 이동": {
@@ -10095,7 +10166,7 @@
   ]
  },
  "파일을 끌어다 놓거나 클릭해서 선택": {
-  "count": 10,
+  "count": 13,
   "files": [
    "admin.html"
   ]
@@ -10314,7 +10385,7 @@
    "admin.html"
   ]
  },
- "시간표 ↔ 종목 매칭": {
+ "시간표 · 종목 매칭": {
   "count": 1,
   "files": [
    "admin.html"
@@ -10931,15 +11002,6 @@
    "admin.html"
   ]
  },
- "불러오는 중…": {
-  "count": 5,
-  "files": [
-   "admin.html",
-   "common.js",
-   "dashboard.html",
-   "dashboard.js"
-  ]
- },
  "대회명": {
   "count": 1,
   "files": [
@@ -11210,6 +11272,13 @@
   "count": 5,
   "files": [
    "admin.html"
+  ]
+ },
+ "업로드": {
+  "count": 9,
+  "files": [
+   "admin.html",
+   "common.js"
   ]
  },
  "우측 로고": {
@@ -12608,19 +12677,13 @@
    "admin.html"
   ]
  },
- "다운로드 센터": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
  "종합기록지": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
  },
- "종합기록 + 개별 종목별 기록시트 (트랙/필드/릴레이) 전체 포함": {
+ "종합기록 + 종목별 기록 시트(트랙 · 필드 · 계주)": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12650,31 +12713,7 @@
    "admin.html"
   ]
  },
- "인쇄용": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "한국중·고육상연맹 양식(남중·여중·학년부·믹스릴레이·신기록현황 시트). 종목의": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "부(중등부·고등부·N학년부)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "로 시트가 나뉘고, 결승 기록·승인된 신기록(CR/DR/KR)만 들어갑니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "시트 이름·묶음은 부 설정을 따릅니다": {
+ "한국중·고육상연맹 양식 — 남중 · 여중 · 학년부 · 믹스릴레이 · 신기록현황 시트. 종목의 부 설정을 따릅니다.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12686,25 +12725,19 @@
    "admin.html"
   ]
  },
- "배번·성명·소속·참가 종목 +": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "소집실에서 스캔되는 바코드": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- ". 계주 팀은 제외됩니다.": {
+ "배번 · 성명 · 소속 · 참가 종목 + 소집실 스캔용 바코드. 계주 팀은 제외.": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
  "한 쪽에": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "8장": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12722,7 +12755,7 @@
    "admin.html"
   ]
  },
- "1장 (크게)": {
+ "1장": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12747,12 +12780,6 @@
   ]
  },
  "각 문서의 표시 항목, 레이아웃, 라벨 등을 설정합니다. 저장 후 문서 생성 시 반영됩니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "종합기록지 (Comprehensive Record)": {
   "count": 1,
   "files": [
    "admin.html"
@@ -16718,13 +16745,6 @@
    "dashboard.js"
   ]
  },
- "일반": {
-  "count": 2,
-  "files": [
-   "dashboard.js",
-   "oplog.html"
-  ]
- },
  "실업": {
   "count": 2,
   "files": [
@@ -16775,12 +16795,6 @@
   ]
  },
  "시작 전": {
-  "count": 1,
-  "files": [
-   "dashboard.js"
-  ]
- },
- "진행 중": {
   "count": 1,
   "files": [
    "dashboard.js"
