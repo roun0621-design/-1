@@ -425,7 +425,7 @@
                         <div id="ath-detail" style="flex:1;overflow-y:auto;padding:16px;">
                             <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:14px;">
                                 <div style="text-align:center;">
-                                    <div style="font-size:28px;opacity:0.3;margin-bottom:8px;font-weight:700;color:#999;">USER</div>
+                                    <div class="ph-icon" data-icon="user" style="opacity:0.35;margin-bottom:8px;color:#999;"></div>
                                     <p>왼쪽에서 선수를 선택하세요</p>
                                 </div>
                             </div>
@@ -455,9 +455,9 @@
                             </div>
                         </div>
                         <div class="matrix-scroll-area" id="evt-matrix"></div>
-                        <div style="padding:6px 10px;border-top:1px solid var(--gray);font-size:11px;color:var(--text-muted);background:#fafafa;display:flex;justify-content:space-between;align-items:center;gap:4px;">
-                            <span id="evt-count"></span>
-                            <div style="display:flex;gap:4px;">
+                        <div style="padding:6px 10px;border-top:1px solid var(--gray);font-size:11px;color:var(--text-muted);background:#fafafa;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+                            <span id="evt-count" style="flex:1 1 100%;"></span>
+                            <div style="display:flex;gap:4px;flex-wrap:wrap;">
                                 <button class="btn btn-sm btn-outline" id="btn-division-manager" onclick="openDivisionManagerModal()" title="부(division) 추가/수정/삭제 관리">부 관리</button>
                                 <button class="btn btn-sm btn-outline" onclick="cleanupUndefinedEvents()" style="color:#c62828;border-color:#ef9a9a;" title="부별이 빈 '미지정' 종목을 부별 있는 동일 종목으로 흡수하거나 삭제합니다">미지정 정리</button>
                                 <button class="btn btn-sm btn-outline" onclick="autoSortEvents()" title="표준 육상 순서로 종목을 자동 정렬합니다">종목 재정렬</button>
@@ -468,7 +468,7 @@
                     <!-- Right Panel: Event Detail -->
                     <div class="admin-evt-detail-panel" id="evt-detail-panel">
                         <div class="detail-placeholder">
-                            <div class="placeholder-icon" style="width:40px;height:40px;background:#fef3c7;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;"><span style="color:#d97706;font-size:18px;font-weight:700;">E</span></div>
+                            <div class="ph-icon" data-icon="list" style="opacity:0.35;margin:0 auto 8px;color:#999;"></div>
                             <p>왼쪽에서 종목을 선택하세요</p>
                         </div>
                     </div>
@@ -938,13 +938,10 @@
             </div>
         </div>
     </div>
-                <!-- Legacy 1:1 links (hidden, kept for backward compat) -->
-                <div class="admin-card" style="margin-top:8px;display:none;">
-                    <h4 class="t-lg">레거시 1:1 연결 (구버전)</h4>
-                    <div id="jl-links-list" class="t-md"></div>
-                    <select id="jl-target-comp" style="display:none;"><option value=""></option></select>
-                    <div id="jl-manual-area" style="display:none;"><select id="jl-evt-a"></select><select id="jl-evt-b"></select></div>
-                </div>
+                <!-- 구버전 1:1 연결의 잔재 — 화면엔 없고 옛 스크립트가 참조하는 id 만 유지 -->
+                <div id="jl-links-list" style="display:none;"></div>
+                <select id="jl-target-comp" style="display:none;"><option value=""></option></select>
+                <div id="jl-manual-area" style="display:none;"><select id="jl-evt-a"></select><select id="jl-evt-b"></select></div>
             </div>
 
             <!-- TAB: Competition Settings -->
@@ -3010,18 +3007,18 @@ POST /api/external/event-result-link/batch<br>
         });
 
 
-        function applyRoleRestrictions() {
-            const adminOnlyTabs = ['upload', 'competition', 'settings', 'pacing', 'documents'];
-            const managerTabs = ['judges']; // admin + can_manage operation
+        // 역할별로 볼 수 있는 화면 — 탭바(숨김)와 사이드바가 같은 규칙을 쓴다 (2026-09-30: 예전엔 사이드바에 필터가 없어 운영자에게 시스템·삭제까지 보였다)
+        const ADMIN_ONLY_TABS = ['upload', 'competition', 'settings', 'pacing', 'documents', 'users', 'extapi', 'sms', 'certificates'];   // 문자·상장 발급 API 도 관리자 키 전용
+        const MANAGER_TABS = ['judges']; // admin + can_manage operation
+        function _canSeeTab(t) {
             const canManage = localStorage.getItem('pace_can_manage') === '1';
-            document.querySelectorAll('.admin-tab').forEach(tab => {
-                const t = tab.dataset.tab;
-                if (adminOnlyTabs.includes(t)) {
-                    tab.style.display = _adminRole === 'admin' ? '' : 'none';
-                } else if (managerTabs.includes(t)) {
-                    tab.style.display = (_adminRole === 'admin' || canManage) ? '' : 'none';
-                }
-            });
+            if (ADMIN_ONLY_TABS.includes(t)) return _adminRole === 'admin';
+            if (MANAGER_TABS.includes(t)) return _adminRole === 'admin' || canManage;
+            return true;
+        }
+        function applyRoleRestrictions() {
+            document.querySelectorAll('.admin-tab').forEach(tab => { tab.style.display = _canSeeTab(tab.dataset.tab) ? '' : 'none'; });
+            try { renderSidebar(); } catch (e) {}
         }
 
         // ---- COMPETITION SELECTOR ----
@@ -3158,41 +3155,10 @@ POST /api/external/event-result-link/batch<br>
         }
 
         // ---- TABS ----
-        // [세부 분리] 사이드바 anchor 항목 클릭 시 같은 탭 내 다른 카드 숨기기 위한 헬퍼
-        // 직접 자식 .admin-card만 대상 (popup-editor-wrap 내부의 nested card 제외)
-        function _isolateCardInTab(tabName, anchorId) {
-            const panel = document.getElementById('tab-' + tabName);
-            if (!panel) return;
-            // :scope > .admin-card 로 직접 자식만 선택
-            panel.querySelectorAll(':scope > .admin-card').forEach(card => {
-                card.style.display = (card.id === anchorId) ? '' : 'none';
-            });
-            // popup-editor-wrap, sb-keys-area 등 wrapper 들도 anchor 격리 시 일관되게 숨김
-            panel.querySelectorAll(':scope > div:not(.admin-card)').forEach(wrap => {
-                // anchor 대상이 .admin-card 가 아닌 wrapper(예: danger-zone)인 경우에도 단독 표시
-                if (wrap.id === anchorId) { wrap.style.display = ''; return; }
-                // 그 외 wrapper 는 카드 격리 모드에서 숨김 (복원용 이전 display 보관)
-                wrap.dataset._prevDisplay = wrap.style.display || '';
-                wrap.style.display = 'none';
-            });
-        }
-        function _showAllCardsInTab(tabName) {
-            const panel = document.getElementById('tab-' + tabName);
-            if (!panel) return;
-            panel.querySelectorAll(':scope > .admin-card').forEach(card => {
-                card.style.display = '';
-            });
-            panel.querySelectorAll(':scope > div:not(.admin-card)').forEach(wrap => {
-                // 이전에 격리로 숨겼던 wrap 복원
-                if (wrap.dataset._prevDisplay !== undefined) {
-                    wrap.style.display = wrap.dataset._prevDisplay;
-                    delete wrap.dataset._prevDisplay;
-                } else {
-                    // 기본값 유지: 명시적으로 display 속성이 인라인에 있으면 그대로
-                    // (예: popup-editor-wrap 의 display:none 기본값)
-                }
-            });
-        }
+        // 사이드바 anchor 항목: 예전엔 그 카드만 남기고 나머지를 숨겼다(_isolateCardInTab). 카드가 다른 카드 안에 중첩돼 있으면
+        // 부모까지 숨겨 빈 화면이 됐고(중·고연맹 종합기록지·ID카드), 기본 숨김 카드가 강제로 드러났다. 이제 숨기지 않고 스크롤·강조만 한다 (2026-09-30, 재설계 0단계)
+        function _isolateCardInTab() {}
+        function _showAllCardsInTab() {}
 
         function switchTab(name, btn) {
             document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
@@ -3214,7 +3180,6 @@ POST /api/external/event-result-link/batch<br>
             if (name === 'scoreboard') { jgLoadGroups(); }
             if (name === 'settings') { loadSystemSettings(); loadSiteConfigAdmin(); loadHomePopups(); }
             if (name === 'pacing') loadPacingTab();
-            if (name === 'relay') loadRelayTab();
             if (name === 'documents') { loadDocTemplates(); idcLoadTeams(); }
             if (name === 'competition') { loadReadiness(); loadUndoList(); loadIntlStatus(); }
             if (name === 'records') loadRecordsTab();
@@ -3494,6 +3459,8 @@ POST /api/external/event-result-link/batch<br>
             close:      '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
             trash:      '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
         };
+        // 빈 상태 아이콘(.ph-icon[data-icon]) — 텍스트 'USER'/'E' 대신 선 아이콘
+        document.addEventListener('DOMContentLoaded', () => { document.querySelectorAll('.ph-icon[data-icon]').forEach(el => { try { el.innerHTML = ICON(el.dataset.icon, { size: 32 }); } catch (e) {} }); });
         function ICON(name, opts) {
             opts = opts || {};
             const size = opts.size || 16;
@@ -3569,7 +3536,7 @@ POST /api/external/event-result-link/batch<br>
             const root = document.getElementById('sidebar-nav');
             if (!root) return;
             const html = ADMIN_GROUPS.map(g => {
-                const items = ADMIN_FEATURES.filter(f => f.group === g.id);
+                const items = ADMIN_FEATURES.filter(f => f.group === g.id && (typeof _canSeeTab !== 'function' || _canSeeTab(f.tab)));
                 if (items.length === 0) return '';
                 return `
                     <div class="sb-group">
@@ -3824,7 +3791,7 @@ POST /api/external/event-result-link/batch<br>
             const gBadge = a.gender === 'M' ? '<span class="gender-badge M">남</span>' : a.gender === 'F' ? '<span class="gender-badge F">여</span>' : '<span class="gender-badge X">혼성</span>';
             detail.innerHTML = `
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--gray);">
-                    <div style="font-size:22px;font-weight:700;color:#999;">USER</div>
+                    <div style="color:#999;opacity:.6;">${ICON('user', { size: 28 })}</div>
                     <div style="flex:1;">
                         <h3 style="margin:0;font-size:18px;">${a.name} ${gBadge}</h3>
                         <p style="margin:2px 0 0;font-size:12px;color:var(--text-muted);">BIB: <strong>${bib(a.bib_number)}</strong> | 소속: <strong>${a.team || '-'}</strong>${a.barcode ? ' | 바코드: ' + a.barcode : ''}</p>
@@ -7107,9 +7074,6 @@ POST /api/external/event-result-link/batch<br>
         // ============================================================
         // RELAY TAB — Team member management
         // ============================================================
-        async function loadRelayTab() {
-            // 릴레이 관리는 종목관리 탭에서 진행 — 별도 로딩 불필요
-        }
 
 
         async function openRelayMemberModal(eventEntryId, teamName, eventId) {
