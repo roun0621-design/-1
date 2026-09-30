@@ -254,6 +254,7 @@
 .admin-main .admin-card div[style*="background:#f8f9fa"] { background: transparent !important; border-color: var(--adm-line) !important; }
 
 /* 4단계 재검수 반영 */
+.admin-main .adm-ov-detail::before { content: " — "; }
 .admin-main .t-sm, .admin-main .t-xs { font-size: 12px; }
 .admin-main .adm-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; margin-right: 4px; vertical-align: middle; }
 .admin-main .adm-dot-done { background: #9a8548; }

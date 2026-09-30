@@ -211,7 +211,7 @@ function renderCallroomBtn(evt, suffix) {
     }
     return `<a class="round-btn ${cls}${activeClass} rec-round-btn" href="javascript:void(0)"
         data-event-id="${evt.id}" onclick="selectCallroomEventSafe(${evt.id})"
-        title="${roundLabel} ${suffix}">${roundLabel} ${suffix}</a>`;
+        title="${roundLabel} ${suffix}">${suffix}</a>`;
 }
 
 function getRoundStatusClass(evt) {

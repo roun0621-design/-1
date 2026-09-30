@@ -596,7 +596,7 @@
             <!-- TAB: Upload → 가져오기 (재설계 3단계: 5단계 스텝, 한 번에 한 단계) -->
             <div id="tab-upload" class="admin-tab-panel">
                 <div class="adm-steps" id="imp-steps">
-                    <button type="button" class="active" onclick="impGoStep(1)"><b>1</b>명단</button>
+                    <button type="button" class="active" onclick="impGoStep(1)"><b>1</b>선수 명단</button>
                     <button type="button" onclick="impGoStep(2)"><b>2</b>종목</button>
                     <button type="button" onclick="impGoStep(3)"><b>3</b>조편성</button>
                     <button type="button" onclick="impGoStep(4)"><b>4</b>시간표</button>
@@ -3678,7 +3678,7 @@ POST /api/external/event-result-link/batch<br>
                 const rd = await fetch(`/api/admin/competitions/${_selectedCompId}/readiness`, { headers: { 'x-admin-key': AK() } }).then(r => r.ok ? r.json() : null);
                 const bad = []; (rd && rd.groups || []).forEach(g => (g.items || []).forEach(it => { if (it.status === 'warn' || it.status === 'fail') bad.push({ ...it, group: g.title }); }));
                 document.getElementById('ov-warn').innerHTML = bad.length
-                    ? bad.slice(0, 10).map(it => `<div class="adm-ov-row"><span class="badge-pill ${it.status === 'fail' ? 'badge-err' : 'badge-warn'}">${it.status === 'fail' ? '오류' : '주의'}</span><span class="adm-ov-name">${it.label}${it.detail ? `<small class="t-muted"> — ${it.detail}</small>` : ''}</span>${it.action && it.action.tab ? `<button class="btn btn-sm btn-outline" onclick="switchTab('${it.action.tab}')">${it.action.label || '이동'}</button>` : ''}</div>`).join('') + (bad.length > 10 ? `<div class="t-muted t-xs" style="margin-top:6px;">외 ${bad.length - 10}건 — 운영 체크리스트에서 전체 보기</div>` : '')
+                    ? bad.slice(0, 10).map(it => `<div class="adm-ov-row"><span class="badge-pill ${it.status === 'fail' ? 'badge-err' : 'badge-warn'}">${it.status === 'fail' ? '오류' : '주의'}</span><span class="adm-ov-name">${it.label}${it.detail ? `<small class="t-muted adm-ov-detail">${it.detail}</small>` : ''}</span>${it.action && it.action.tab ? `<button class="btn btn-sm btn-outline" onclick="switchTab('${it.action.tab}')">${it.action.label || '이동'}</button>` : ''}</div>`).join('') + (bad.length > 10 ? `<div class="t-muted t-xs" style="margin-top:6px;">외 ${bad.length - 10}건 — 운영 체크리스트에서 전체 보기</div>` : '')
                     : '<div class="adm-ov-row"><span class="badge-pill badge-ok">정상</span><span class="adm-ov-name">확인이 필요한 항목이 없습니다</span></div>';
             } catch (e) { document.getElementById('ov-warn').innerHTML = ''; }
             // 최근 활동: 분류 배지 · 내용 · 수행자 · 시각
@@ -4114,7 +4114,7 @@ POST /api/external/event-result-link/batch<br>
                         const c = DIV_BADGE_COLOR[g.division] || { bg:'#eee', fg:'#555' };
                         divBadge = `<span class="evt-div-badge" style="background:${c.bg};color:${c.fg};font-size:12px;font-weight:700;padding:1px 6px;border-radius:8px;margin-right:4px;">${g.division}</span>`;
                     } else if (_evtDivision === 'all' && !g.division) {
-                        divBadge = `<span class="evt-div-badge" style="background:#f5f5f5;color:#999;font-size:12px;font-weight:700;padding:1px 6px;border-radius:8px;margin-right:4px;" title="division 미지정">—</span>`;
+                        divBadge = '';   // 부 미지정은 표시하지 않는다(디자인 틀 §2)
                     }
                     // Indicator for events that have any link (result_url or video_url) to encourage usage
                     const anyLink = g.rounds.some(r => (r.result_url && r.result_url.trim()) || (r.video_url && r.video_url.trim()));

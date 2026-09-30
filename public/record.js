@@ -470,7 +470,7 @@ function renderRecordBtn(evt) {
     const roundLabel = fmtRound(evt.round_type);
     return `<a class="round-btn ${cls}${activeClass} rec-round-btn" href="javascript:void(0)" 
         data-event-id="${evt.id}" onclick="selectEventSafe(${evt.id})" 
-        title="${roundLabel} 기록">${roundLabel} 기록</a>`;
+        title="${roundLabel} 기록">기록</a>`;
 }
 
 function getRecStatusClass(evt) {

@@ -1328,7 +1328,7 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 .matrix-table-compact th:not(:first-child),
 .matrix-table-compact td:not(:first-child) { width: 58px; }
 .rec-matrix-event { font-weight: 600; font-size: 12px !important; text-align: left !important; white-space: normal; word-break: keep-all; line-height: 1.25; }
-.rec-round-btn { font-size: 11px !important; padding: 3px 8px !important; white-space: nowrap; }
+.rec-round-btn { font-size: 12px !important; padding: 3px 8px !important; white-space: nowrap; }
 .rec-round-btn.rec-btn-active {
     background: var(--green) !important; color: #fff !important;
     box-shadow: 0 0 0 2px var(--green-soft);
@@ -1705,7 +1705,7 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
     .matrix-table th { font-size: 11px; padding: 8px 10px; }
     .matrix-table td { padding: 8px 10px; font-size: 13px; }
     .rec-matrix-event { font-size: 12px !important; }
-    .rec-round-btn { font-size: 11px !important; padding: 3px 8px !important; }
+    .rec-round-btn { font-size: 12px !important; padding: 3px 8px !important; }
     .round-btn { font-size: 11px; padding: 5px 10px; }
 
     /* Data tables — keep readable */
@@ -2420,5 +2420,5 @@ html[data-lang="en"] .round-btn, html[data-lang="ja"] .round-btn { font-size: 10
 html[data-lang="en"] .seg-toggle button, html[data-lang="ja"] .seg-toggle button { padding-left: 6px; padding-right: 6px; font-size: 11px; }
 html[data-lang="en"] .card-chip, html[data-lang="ja"] .card-chip { letter-spacing: -0.01em; }
 /* 기록입력·소집실 왼쪽 종목 목록의 라운드 칩: EN/JA 는 글자가 길어 3열 격자에서 잘린다 → 더 작게, 넘치면 말줄임 대신 두 줄 허용 */
-html[data-lang="en"] .rec-round-btn, html[data-lang="ja"] .rec-round-btn { font-size: 9px; padding: 3px 4px; white-space: normal; line-height: 1.2; }
+html[data-lang="en"] .rec-round-btn, html[data-lang="ja"] .rec-round-btn { padding: 3px 6px !important; white-space: nowrap; }
 html[data-lang="en"] .matrix-table th, html[data-lang="ja"] .matrix-table th { font-size: 10px; letter-spacing: 0; padding-left: 4px; padding-right: 4px; }
