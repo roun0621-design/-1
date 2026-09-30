@@ -2416,7 +2416,9 @@ body { font-variant-numeric: tabular-nums; }
 /* ── 다국어(EN/JA) 글자 길이 보정 (2026-09-30, i18n) ──
    영어는 한국어보다 길고 일본어는 띄어쓰기가 없어 버튼이 한 글자씩 줄바꿈된다. 버튼·칩·탭은 한 줄로 두고 글자만 조금 줄인다 */
 html[data-lang="en"] .btn, html[data-lang="en"] button, html[data-lang="ja"] .btn, html[data-lang="ja"] button { white-space: nowrap; }
-html[data-lang="ja"] body { word-break: keep-all; overflow-wrap: anywhere; }
 html[data-lang="en"] .round-btn, html[data-lang="ja"] .round-btn { font-size: 10px; padding: 4px 6px; letter-spacing: -0.01em; }
 html[data-lang="en"] .seg-toggle button, html[data-lang="ja"] .seg-toggle button { padding-left: 6px; padding-right: 6px; font-size: 11px; }
 html[data-lang="en"] .card-chip, html[data-lang="ja"] .card-chip { letter-spacing: -0.01em; }
+/* 기록입력·소집실 왼쪽 종목 목록의 라운드 칩: EN/JA 는 글자가 길어 3열 격자에서 잘린다 → 더 작게, 넘치면 말줄임 대신 두 줄 허용 */
+html[data-lang="en"] .rec-round-btn, html[data-lang="ja"] .rec-round-btn { font-size: 9px; padding: 3px 4px; white-space: normal; line-height: 1.2; }
+html[data-lang="en"] .matrix-table th, html[data-lang="ja"] .matrix-table th { font-size: 10px; letter-spacing: 0; padding-left: 4px; padding-right: 4px; }
