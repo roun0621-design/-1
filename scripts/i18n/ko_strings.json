@@ -4132,7 +4132,7 @@
   ]
  },
  "현황": {
-  "count": 3,
+  "count": 6,
   "files": [
    "admin.html"
   ]
@@ -4150,7 +4150,7 @@
   ]
  },
  "국제대회 동기화": {
-  "count": 2,
+  "count": 3,
   "files": [
    "admin.html"
   ]
@@ -4345,7 +4345,7 @@
   ]
  },
  "문서 · 다운로드": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -4537,7 +4537,7 @@
   ]
  },
  "페이싱 라이트": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -4555,7 +4555,7 @@
   ]
  },
  "외부 API": {
-  "count": 2,
+  "count": 3,
   "files": [
    "admin.html"
   ]
@@ -4591,7 +4591,7 @@
   ]
  },
  "부(Division) 마스터": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -4700,6 +4700,186 @@
   ]
  },
  "시스템 / 마스터": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "대회": {
+  "count": 7,
+  "files": [
+   "admin.html",
+   "callroom.js",
+   "common.js"
+  ]
+ },
+ "준비": {
+  "count": 4,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "진행": {
+  "count": 5,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "결과 · 문서": {
+  "count": 4,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "시스템": {
+  "count": 8,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "대회 설정": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기본 정보": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "서명 · 로고": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "위험 구역": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "운영 체크리스트": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "가져오기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "선수": {
+  "count": 7,
+  "files": [
+   "admin.html",
+   "callroom-monitor.html",
+   "monitor.html"
+  ]
+ },
+ "종목 · 조편성": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기록 관리": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "계측 가져오기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "합동 종목": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "callroom.js",
+   "record.js"
+  ]
+ },
+ "되돌리기 · 활동 로그": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "상장": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "알림 (푸시 · 문자)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "사용자 · 키": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "계정": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "심판 운영키": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기본 키 · 기록위원 키": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "브랜드 · 홈": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "마스터 (연맹 · 부)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "실업·대학·고등·중등·일반·학년 단위 부를 추가·수정합니다. 종목 화면의 부별 필터와 부별 기록(DR)이 이 목록을 씁니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "부 관리 열기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "백업 · 복원": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "도움말": {
   "count": 1,
   "files": [
    "admin.html"
@@ -7898,14 +8078,6 @@
    "admin.html"
   ]
  },
- "선수": {
-  "count": 6,
-  "files": [
-   "admin.html",
-   "callroom-monitor.html",
-   "monitor.html"
-  ]
- },
  "이 기록 갱신을 승인하시겠습니까?\\n승인 시 종목별 기록(NR/DR/CR)이 즉시 갱신됩니다.": {
   "count": 1,
   "files": [
@@ -9339,19 +9511,7 @@
    "admin.html"
   ]
  },
- "대회 설정": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
  "업로드·시간표": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "기록 관리": {
   "count": 1,
   "files": [
    "admin.html"
@@ -9380,12 +9540,6 @@
   "files": [
    "admin.html",
    "oplog.html"
-  ]
- },
- "시스템": {
-  "count": 1,
-  "files": [
-   "admin.html"
   ]
  },
  "빠른 이동": {
@@ -10824,12 +10978,6 @@
    "admin.html"
   ]
  },
- "레거시 1:1 연결 (구버전)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
  "다시 점검": {
   "count": 1,
   "files": [
@@ -11016,6 +11164,30 @@
    "admin.html"
   ]
  },
+ "대회명 (영문)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "EN 화면용": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "대회명 (일문)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "JA 화면용": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "홈 노출": {
   "count": 1,
   "files": [
@@ -11145,7 +11317,7 @@
    "admin.html"
   ]
  },
- "※ 이미지 업로드는 먼저": {
+ "이미지 업로드는 먼저": {
   "count": 1,
   "files": [
    "admin.html"
@@ -11357,13 +11529,13 @@
    "admin.html"
   ]
  },
- "① 파일 검증": {
+ "1. 파일 검증": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
- "② 복원 실행": {
+ "2. 복원 실행": {
   "count": 1,
   "files": [
    "admin.html"
@@ -11979,14 +12151,6 @@
    "admin.html"
   ]
  },
- "대회": {
-  "count": 3,
-  "files": [
-   "admin.html",
-   "callroom.js",
-   "common.js"
-  ]
- },
  "코드": {
   "count": 1,
   "files": [
@@ -12065,13 +12229,13 @@
    "admin.html"
   ]
  },
- "① 성별 선택": {
+ "1. 성별 선택": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
- "② 종목 선택 (트랙 800m 이상 + 종합경기)": {
+ "2. 종목 선택 (트랙 800m 이상 + 종합경기)": {
   "count": 1,
   "files": [
    "admin.html"
@@ -13782,7 +13946,7 @@
    "admin.html"
   ]
  },
- "※ Firebase 설정(환경변수) 전에는 발송이 비활성(미설정) 상태로 표시됩니다.": {
+ "Firebase 설정(환경변수) 전에는 발송이 비활성(미설정) 상태로 표시됩니다.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -13956,7 +14120,7 @@
    "admin.html"
   ]
  },
- "※ 기록이 없는(미출전) 선수는 자동 제외됩니다. 조를 지정하면 그 조만, 중복 방지를 켜면 같은 종목에서 이미 받은 선수는 다시 보내지 않습니다.": {
+ "기록이 없는(미출전) 선수는 자동 제외됩니다. 조를 지정하면 그 조만, 중복 방지를 켜면 같은 종목에서 이미 받은 선수는 다시 보내지 않습니다.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -14184,13 +14348,6 @@
   "count": 1,
   "files": [
    "callroom.js"
-  ]
- },
- "합동 종목": {
-  "count": 2,
-  "files": [
-   "callroom.js",
-   "record.js"
   ]
  },
  "스코어보드 키: {0}": {
