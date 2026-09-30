@@ -153,3 +153,19 @@
 #adm-help-body { overflow-y: auto; padding: 16px 18px; flex: 1; }
 #adm-help-body .admin-card { margin-bottom: 14px; }
 #adm-preview-modal, #adm-help-modal { position: fixed; inset: 0; background: rgba(17, 24, 39, .45); display: flex; align-items: center; justify-content: center; }
+
+/* ── 3차 검수 반영: 카드 속 상자 평탄화 · 제목 배지/아이콘 제거 · 도움말 본문 · 위험 구역 한 카드 ── */
+.admin-main .admin-card > div[style*="border:1px solid"], .admin-main .admin-card > div[style*="border: 1px solid"] { border-color: transparent !important; background: transparent !important; padding-left: 0 !important; padding-right: 0 !important; }
+.admin-main .admin-card > div[style*="border:1px solid"] + div[style*="border:1px solid"] { border-top-color: var(--adm-line) !important; border-radius: 0 !important; padding-top: 14px !important; }
+.admin-main .admin-card h4 > span[style*="background"]:not(#rb-pending-badge), .admin-main .admin-card h4 .card-icon { display: none !important; }
+.admin-main .admin-card h4 svg.ui-icon { display: none; }
+.admin-main #sec-warn-box, .admin-main .sec-warn-box { background: var(--adm-warn-bg) !important; border: 1px solid #fde68a !important; color: var(--adm-warn) !important; }
+.admin-main .adm-seg button { min-height: 32px; }
+.admin-main .adm-danger .danger-zone { border: none; background: transparent; padding: 0; margin: 0 0 12px; }
+.admin-main .adm-danger .danger-zone h4 { font-size: 14px; }
+.admin-main .adm-danger { border-color: #fecaca !important; }
+#adm-help-body .admin-card div[style*="background"] { background: transparent !important; border: none !important; padding: 0 !important; }
+#adm-help-body .admin-card h4, #adm-help-body .admin-card h5, #adm-help-body .admin-card strong { color: var(--adm-text) !important; }
+#adm-help-body .admin-card { border: none; border-bottom: 1px solid var(--adm-line); border-radius: 0; padding: 0 0 14px; }
+.adm-preview-head .btn { min-height: 28px; }
+#adm-topbar-actions #pace-lang-switcher { margin: 0; }

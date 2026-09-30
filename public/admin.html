@@ -330,7 +330,7 @@
     <main class="main-content">
         <div class="page-title-bar">
             <a href="/" class="back-link">&larr; 홈</a>
-            <h2>관리자 <span class="page-sub">Admin Panel</span></h2>
+            <h2>관리자</h2>
         </div>
 
         <!-- ACCESS DENIED (shown when not logged in as admin/operation) -->
@@ -357,7 +357,7 @@
                     <label style="font-weight:600;font-size:13px;white-space:nowrap;">대회:</label>
                     <select id="admin-comp-select" onchange="onCompChange()" style="flex:1;"></select>
                     <!-- 대회 종료/재개 컨트롤 — 관리자만 작동 -->
-                    <button class="btn btn-sm btn-ghost" onclick="admOpenHelp()" title="도움말" style="margin-left:auto;">도움말</button> <span id="comp-status-badge" style="display:none;font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fee2e2;color:#991b1b;white-space:nowrap;" title="이 대회는 종료되었습니다. 운영자는 뷰어 모드로 동작합니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> 종료됨</span>
+                    <span id="adm-topbar-actions" style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;"><button class="btn btn-sm btn-ghost" onclick="admOpenHelp()" title="도움말">도움말</button></span> <span id="comp-status-badge" style="display:none;font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;background:#fee2e2;color:#991b1b;white-space:nowrap;" title="이 대회는 종료되었습니다. 운영자는 뷰어 모드로 동작합니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> 종료됨</span>
                     <button id="comp-close-btn" class="btn btn-sm btn-outline" onclick="toggleCompetitionClose()" style="white-space:nowrap;font-size:12px;display:none;" title="대회 종료/재개 (관리자 전용)">대회 종료</button>
                 </div>
                 <!-- 종료된 대회일 때 운영자에게 보이는 안내 배너 -->
@@ -643,7 +643,7 @@
                     <div class="adm-actions"><button class="btn btn-primary" onclick="uploadEvents()">가져오기 실행</button></div>
                     <div id="evt-upload-result" style="display:none;padding:10px;border-radius:6px;font-size:13px;font-weight:600;margin-top:12px;"></div>
                 </div>
-                <div class="adm-step-nav"><button class="btn btn-ghost" onclick="impGoStep(1)">← 명단</button><button class="btn btn-outline" onclick="impGoStep(3)">다음: 조편성 →</button></div>
+                <div class="adm-step-nav"><button class="btn btn-outline" onclick="impGoStep(1)">← 명단</button><button class="btn btn-outline" onclick="impGoStep(3)">다음: 조편성 →</button></div>
                 </section>
 
                 <section class="adm-step" data-step="3" style="display:none;">
@@ -657,7 +657,7 @@
                     <div id="ha-preview" style="display:none;margin-top:12px;"></div>
                     <div id="ha-result" style="display:none;padding:12px;border-radius:6px;font-size:13px;font-weight:600;margin-top:12px;"></div>
                 </div>
-                <div class="adm-step-nav"><button class="btn btn-ghost" onclick="impGoStep(2)">← 종목</button><button class="btn btn-outline" onclick="impGoStep(4)">다음: 시간표 →</button></div>
+                <div class="adm-step-nav"><button class="btn btn-outline" onclick="impGoStep(2)">← 종목</button><button class="btn btn-outline" onclick="impGoStep(4)">다음: 시간표 →</button></div>
                 </section>
 
                 <section class="adm-step" data-step="4" style="display:none;">
@@ -673,13 +673,13 @@
                 </div>
                 <div class="admin-card" id="card-imp-matching">
                     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-                        <h4 style="margin:0;">시간표 ↔ 종목 매칭</h4>
+                        <h4 style="margin:0;">시간표 · 종목 매칭</h4>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" onclick="ttRematch()">자동 재매칭</button><button class="btn btn-outline btn-sm" onclick="ttLoadMatching()">새로고침</button></div>
                     </div>
                     <div id="tt-match-summary" style="margin-top:10px;font-size:13px;color:var(--adm-muted);"></div>
                     <details class="adm-help" id="tt-match-details" style="margin-top:8px;"><summary>매칭 목록 보기</summary><div id="tt-match-list" style="font-size:12px;"></div></details>
                 </div>
-                <div class="adm-step-nav"><button class="btn btn-ghost" onclick="impGoStep(3)">← 조편성</button><button class="btn btn-outline" onclick="impGoStep(5)">다음: 배번 · 연락처 →</button></div>
+                <div class="adm-step-nav"><button class="btn btn-outline" onclick="impGoStep(3)">← 조편성</button><button class="btn btn-outline" onclick="impGoStep(5)">다음: 배번 · 연락처 →</button></div>
                 </section>
 
                 <section class="adm-step" data-step="5" style="display:none;">
@@ -703,7 +703,7 @@
                         <div id="phone-update-result" class="t-md" style="margin-top:12px;"></div>
                     </div>
                 </div>
-                <div class="adm-step-nav"><button class="btn btn-ghost" onclick="impGoStep(4)">← 시간표</button><span></span></div>
+                <div class="adm-step-nav"><button class="btn btn-outline" onclick="impGoStep(4)">← 시간표</button><span></span></div>
                 </section>
             </div>
 
@@ -1915,7 +1915,7 @@ POST /api/external/event-result-link/batch<br>
                     <!-- Comprehensive Record Sheet (종합기록지) Settings -->
                     <div style="border:1px solid var(--gray);border-radius:8px;padding:16px;margin-bottom:16px;">
                         <h4 style="font-size:14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
-                            <span class="css-icon css-icon-chart" data-icon="R"></span> 종합기록지 (Comprehensive Record)
+                            <span class="css-icon css-icon-chart" data-icon="R"></span> 종합기록지
                         </h4>
                         <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">성별별로 전체 종목의 순위·기록을 한 장에 정리한 Excel 문서입니다.</p>
                         <div class="admin-form-row">
@@ -3019,6 +3019,8 @@ POST /api/external/event-result-link/batch<br>
             if (name === 'documents') { loadDocTemplates(); idcLoadTeams(); }
             if (name === 'records') loadRecordsTab();
             if (name === 'extapi') { extLoadCompetitions(); extLoadKeys(); extLoadLogs(); }
+            if (name === 'certificates') { loadCertTemplates(); loadCertEvents(); loadCertLog(); setTimeout(toggleCertRankRangeWrap, 50); }
+            if (name === 'sms') { loadSmsConfig(); loadSmsBatchEvents(); loadSmsLog(); setTimeout(toggleSmsBatchRankWrap, 50); loadPushStatus(); }
         }
         // switchTab(name): name 은 화면 id(comp·import·timing …) 또는 옛 탭 이름(competition·upload …). 옛 이름은 그 카드를 품은 화면으로 간다
         function switchTab(name, btn, subIdx) {
@@ -3409,7 +3411,7 @@ POST /api/external/event-result-link/batch<br>
         const ADMIN_SCREENS = [
             { id:'overview',     group:'현황',      label:'현황',                icon:'chart',    tab:'overview',    loads:['overview'], roleTab:'overview' },
             { id:'comp',         group:'대회',      label:'대회 설정',           icon:'building', loads:['competition'], roleTab:'competition',
-              subtabs:[ { label:'기본 정보', items:['card-comp-edit'] }, { label:'위험 구역', items:['card-comp-reset','card-comp-delete'] } ] },
+              subtabs:[ { label:'기본 정보', items:['card-comp-edit'] }, { label:'위험 구역', items:['card-comp-reset','card-comp-delete'], wrap:{ cls:'admin-card adm-danger', title:'위험 구역', lead:'되돌릴 수 없는 작업입니다. 실행 전 백업을 확인하세요.' } } ] },
             { id:'intl',         group:'대회',      label:'국제대회 동기화',     icon:'plug',     items:['card-intl'], loads:['competition'], roleTab:'competition', when: c => !!(c && c.sync_source) },
             { id:'readiness',    group:'대회',      label:'운영 체크리스트',     icon:'check',    items:['card-readiness'], loads:['competition'], roleTab:'competition' },
             { id:'import',       group:'준비',      label:'가져오기',            icon:'upload',   tab:'upload',      loads:['upload'], roleTab:'upload' },
@@ -3422,9 +3424,9 @@ POST /api/external/event-result-link/batch<br>
             { id:'activity',     group:'진행',      label:'되돌리기 · 활동 로그', icon:'undo',     items:['card-undo','card-audit-log'], loads:['competition','overview'], roleTab:'competition' },
             { id:'docs',         group:'결과 · 문서', label:'문서 · 다운로드',   icon:'file',     loads:['documents','competition'], roleTab:'documents', rest:'documents',
               subtabs:[ { label:'다운로드', items:['card-download-center'] }, { label:'양식 설정', items:['card-doc-templates'] }, { label:'서명 · 로고', items:['card-chief-judge'] } ] },
-            { id:'certs',        group:'결과 · 문서', label:'상장 · 기록증',      icon:'award',    loads:[], roleTab:'certificates', rest:'certificates',
+            { id:'certs',        group:'결과 · 문서', label:'상장 · 기록증',      icon:'award',    loads:['certificates'], roleTab:'certificates', rest:'certificates',
               subtabs:[ { label:'발급', items:['card-cert-issue'] }, { label:'양식', items:['card-cert-pdf-templates','card-award-docx'] }, { label:'이력', items:['card-cert-log'] } ] },
-            { id:'notify',       group:'결과 · 문서', label:'알림 (푸시 · 문자)', icon:'message',  loads:[], roleTab:'sms', rest:'sms',
+            { id:'notify',       group:'결과 · 문서', label:'알림 (푸시 · 문자)', icon:'message',  loads:['sms'], roleTab:'sms', rest:'sms',
               subtabs:[ { label:'푸시 공지', items:['card-notify-push'] }, { label:'문자 설정', items:['card-sms-config'] }, { label:'문자 발송', items:['card-sms-test','card-sms-batch'] }, { label:'이력', items:['card-sms-log'] } ] },
             { id:'access',       group:'시스템',    label:'사용자 · 키',         icon:'key',      loads:['users','judges','settings','extapi'], roleTab:'judges',
               subtabs:[ { label:'계정', tab:'users' }, { label:'심판 운영키', tab:'judges' }, { label:'기본 키 · 기록위원 키', items:['card-default-keys','card-record-officer-key'] }, { label:'외부 API', tab:'extapi' } ] },
@@ -3468,7 +3470,12 @@ POST /api/external/event-result-link/batch<br>
                     const bar = document.createElement('div'); bar.className = 'adm-subtabs';
                     sc.subtabs.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = st.label; b.onclick = () => _activateSubtab(sc, i); bar.appendChild(b); });
                     panel.appendChild(bar);
-                    sc.subtabs.forEach((st, i) => { const box = document.createElement('div'); box.className = 'adm-subpanel'; box.dataset.sub = String(i); moveInto(box, st); panel.appendChild(box); });
+                    sc.subtabs.forEach((st, i) => {
+                        const box = document.createElement('div'); box.className = 'adm-subpanel'; box.dataset.sub = String(i);
+                        if (st.wrap) { const w = document.createElement('div'); w.className = st.wrap.cls; w.innerHTML = `<h4>${st.wrap.title}</h4>${st.wrap.lead ? `<p class="adm-lead">${st.wrap.lead}</p>` : ''}`; moveInto(w, st); box.appendChild(w); }
+                        else moveInto(box, st);
+                        panel.appendChild(box);
+                    });
                 } else if (sc.items) { moveInto(panel, sc); }
                 if (sc.extraHtml) panel.insertAdjacentHTML('beforeend', sc.extraHtml);
                 if (sc.rest) { const src = document.getElementById('tab-' + sc.rest); if (src && src !== panel) { while (src.firstChild) panel.appendChild(src.firstChild); } }   // 모달 등 나머지도 같이 (숨은 패널 안에 남으면 안 뜬다)
@@ -3564,7 +3571,7 @@ POST /api/external/event-result-link/batch<br>
             const kjaf = document.getElementById('card-kjaf-record'); if (kjaf) kjaf.style.display = (c.federation === 'KJAF') ? '' : 'none';
         }
 
-        document.addEventListener('DOMContentLoaded', () => { renderSidebar(); initAdmDrops(); admApplyBackendUI(); });
+        document.addEventListener('DOMContentLoaded', () => { renderSidebar(); initAdmDrops(); admApplyBackendUI(); try { if (window.PaceI18n) PaceI18n.mountSwitcher(document.getElementById('adm-topbar-actions')); } catch (e) {} });
         // 시간표 ↔ 종목 매칭: 요약만 보이고, 미매칭이 있을 때만 목록을 편다
         document.addEventListener('DOMContentLoaded', () => {
             if (typeof ttLoadMatching !== 'function') return;
@@ -12075,27 +12082,7 @@ POST /api/external/event-result-link/batch<br>
             if (batchMode) batchMode.addEventListener('change', toggleSmsBatchRankWrap);
         });
 
-        // 탭 진입 시 자동 로드 — switchTab 후킹
-        (function() {
-            const _origSwitchTab = window.switchTab;
-            if (typeof _origSwitchTab === 'function') {
-                window.switchTab = function(name, btn) {
-                    _origSwitchTab(name, btn);
-                    if (name === 'certificates') {
-                        loadCertTemplates();
-                        loadCertEvents();
-                        loadCertLog();
-                        setTimeout(toggleCertRankRangeWrap, 50);
-                    } else if (name === 'sms') {
-                        loadSmsConfig();
-                        loadSmsBatchEvents();
-                        loadSmsLog();
-                        setTimeout(toggleSmsBatchRankWrap, 50);
-                        loadPushStatus();
-                    }
-                };
-            }
-        })();
+        // (예전 switchTab 후킹은 _runTabLoaders 로 옮김 — 사이드바 화면 id 로 들어와도 상장·알림 데이터가 로드된다, 2026-10-01)
 
         // ===== 푸시(앱 알림) 공지 =====
         async function loadPushStatus() {
