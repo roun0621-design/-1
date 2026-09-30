@@ -55,3 +55,19 @@ describe('대회 시간대', () => {
         expect(ttSeoul.body.length).toBe(0);                                          // 서울은 10/1 → 9/30 시간표 없음
     });
 });
+
+describe('대회명 영문·일문 (name_en/name_ja) → /api/labels text', () => {
+    let app, db; const ADMIN = 'testadmin1234', OP = 'testopkey';
+    beforeAll(async () => { const mod = require('../../server.js'); app = mod.app; db = mod.db; await mod.ready; });
+    it('저장·수정되고 /api/labels?lang=en 의 text 에 원문→영문으로 실린다', async () => {
+        const r = await request(app).post('/api/competitions').send({ admin_key: ADMIN, name: '2026 아이치 나고야 아시안게임 육상 (테스트)', start_date: '2026-09-23', end_date: '2026-09-29', name_en: '2026 Aichi-Nagoya Asian Games Athletics', name_ja: '2026愛知・名古屋アジア競技大会 陸上競技' });
+        expect(r.status).toBe(200); expect(r.body.name_en).toBe('2026 Aichi-Nagoya Asian Games Athletics');
+        const en = (await request(app).get('/api/labels').query({ lang: 'en' })).body;
+        expect(en.text['2026 아이치 나고야 아시안게임 육상 (테스트)']).toBe('2026 Aichi-Nagoya Asian Games Athletics');
+        const ja = (await request(app).get('/api/labels').query({ lang: 'ja' })).body;
+        expect(ja.text['2026 아이치 나고야 아시안게임 육상 (테스트)']).toBe('2026愛知・名古屋アジア競技大会 陸上競技');
+        await request(app).put(`/api/competitions/${r.body.id}`).send({ admin_key: OP, name_en: '' });
+        expect((await request(app).get('/api/labels').query({ lang: 'en' })).body.text['2026 아이치 나고야 아시안게임 육상 (테스트)']).toBeUndefined();
+        expect((await db.get('SELECT name_ja FROM competition WHERE id=?', r.body.id)).name_ja).toBe('2026愛知・名古屋アジア競技大会 陸上競技');   // 안 보낸 열은 유지
+    });
+});

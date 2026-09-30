@@ -58,6 +58,18 @@ function _renderSpotlightButton() {
     b.classList.toggle('active', _spotlightOnly);
 }
 // 히어로 오른쪽 반쪽 '대표팀 명단' — 관심 국가(KOR)가 있는 대회에서만. 일반 대회는 시간표 카드 한 장 그대로
+// 선수 이름 표시 — 언어에 따라 (2026-09-30, B3): KO 는 name + 병기(name_alt). EN/JA 는 라틴 이름을 앞에, 한글 병기는 숨긴다
+//   국제대회: name=공식 영문, name_alt=한글 → EN/JA 에선 영문만. 국내: name=한글, name_alt=영문(있으면) → EN/JA 에선 영문 앞·한글 뒤
+function _dispName(r) {
+    const name = String((r && r.name) || ''), alt = String((r && r.name_alt) || '');
+    const lang = (window.PaceI18n && PaceI18n.getLang()) || 'ko';
+    if (lang === 'ko') return { main: name, alt };
+    const han = /[가-힣]/;
+    if (han.test(name) && alt && !han.test(alt)) return { main: alt, alt: name };
+    return { main: name, alt: han.test(alt) ? '' : alt };
+}
+// 언어가 바뀌면 이름 표시 규칙(_dispName)이 달라지므로 매트릭스를 다시 그린다 (열려 있는 창은 다시 열면 반영)
+window.addEventListener('pace:langchange', () => { try { if (typeof renderMatrix === 'function' && allEvents.length) renderMatrix(); } catch (e) {} });
 let _rosterCache = null, _rosterCacheAt = 0;
 async function _loadRoster(force) {
     if (!force && _rosterCache && Date.now() - _rosterCacheAt < 60000) return _rosterCache;
@@ -218,7 +230,7 @@ ${prCloseBtn('closeRosterModal()')}
         // 이름 줄 전체가 네이버 프로필 링크(새 탭) — 오른쪽 끝 ↗ 로 밖으로 나감을 표시. 아래 종목 줄은 엔트리/결과 창
         const nameLine = a => a.is_team
             ? `<div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span>${esc(dispName(a))}</span></div>`
-            : `<a class="roster-name-link" href="${naverUrl(a)}" target="_blank" rel="noopener" title="네이버에서 선수 프로필 보기" onclick="event.stopPropagation()"><span class="naver-link">N</span><span class="nm">${esc(a.name)}</span>${a.name_alt ? `<span class="alt">${esc(a.name_alt)}</span>` : ''}${a.birth_year ? `<span class="alt">${a.birth_year}</span>` : ''}${PaceIcons.svg('external', { size: 13, cls: 'ext' })}</a>`;
+            : `<a class="roster-name-link" href="${naverUrl(a)}" target="_blank" rel="noopener" title="네이버에서 선수 프로필 보기" onclick="event.stopPropagation()"><span class="naver-link">N</span><span class="nm">${esc(_dispName(a).main)}</span>${_dispName(a).alt ? `<span class="alt">${esc(_dispName(a).alt)}</span>` : ''}${a.birth_year ? `<span class="alt">${a.birth_year}</span>` : ''}${PaceIcons.svg('external', { size: 13, cls: 'ext' })}</a>`;
         const membersLine = a => a.members && a.members.length ? `<div style="font-size:11px;color:#666;margin-top:1px;">${a.members.map(m => esc(m.name)).join(' · ')}</div>` : '';
         const athletes = data.athletes || [];
         const teams = (data.teams || []).map(t => ({ ...t, members: (t.events[0] && t.events[0].members) || [] }));
@@ -1615,7 +1627,7 @@ async function openEntriesModal(eventId, eventName) {
             const pbUnder = phone && pb ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:#666;margin-top:2px;white-space:nowrap;">${esc(pb)}</div>` : '';
             return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 14px;border-top:1px solid #f1f1f1;${e.team === spot ? 'background:#fff6f6;' : ''}">
                 <div style="flex:none;width:52px;font-weight:800;font-size:12px;color:${e.team === spot ? '#8b1a2a' : '#555'};">${e.team === spot && spot === 'KOR' ? flag(e.team) : esc(e.team || '')}</div>
-                <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:${e.team === spot ? 700 : 500};">${esc(isRelay ? (e.name || '') : e.name)}${e.name_alt ? `<span style="font-size:11px;color:#888;margin-left:6px;">${esc(e.name_alt)}</span>` : ''}${year(e.date_of_birth) ? `<span style="font-size:11px;color:#999;margin-left:6px;">${year(e.date_of_birth)}</span>` : ''}</div>${mem}${pbUnder}</div>
+                <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:${e.team === spot ? 700 : 500};">${esc(isRelay ? (e.name || '') : _dispName(e).main)}${!isRelay && _dispName(e).alt ? `<span style="font-size:11px;color:#888;margin-left:6px;">${esc(_dispName(e).alt)}</span>` : ''}${year(e.date_of_birth) ? `<span style="font-size:11px;color:#999;margin-left:6px;">${year(e.date_of_birth)}</span>` : ''}</div>${mem}${pbUnder}</div>
                 ${phone ? '' : `<div style="flex:none;font-family:var(--font-mono);font-size:11px;color:#555;white-space:nowrap;">${esc(pb)}</div>`}</div>`;
         };
         const korRows = rows.filter(e => spot && e.team === spot), rest = rows.filter(e => !(spot && e.team === spot));
@@ -2133,7 +2145,7 @@ function renderLiveTrackResults(data, relayMembers) {
                 : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark}${recBadges}${_recTagHtml(_recTagOf(r.remark))}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
             return `<div class="rr rr-nocard${hasRec ? ' rr-has-rec' : ''}" data-team="${r.team || ''}">
                 ${rankHtml}
-                <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
+                <div class="rr-who"><span class="rr-name">${_dispName(r).main}${_dispName(r).alt ? `<span class="rr-alt">${_dispName(r).alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
                 <div class="rr-meta">${meta}</div>
                 <div class="rr-pbsb-row">${_pbSb(r)}</div>
                 ${recHtml}
@@ -2916,7 +2928,7 @@ function renderTrackResults(data, relayMembers) {
                 : (hasRec ? `<div class="rr-rec">${formatTime(r.time_seconds)}${wMark2}${recBadges}${_recTagHtml(_recTagOf(r.remark))}</div>` : '<div class="rr-rec rr-rec-st">—</div>');
             return `<div class="rr${scAttr ? '' : ' rr-nocard'}"${scAttr} data-team="${r.team || ''}">
                 ${rankHtml}
-                <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
+                <div class="rr-who"><span class="rr-name">${_dispName(r).main}${_dispName(r).alt ? `<span class="rr-alt">${_dispName(r).alt}</span>` : ''}</span>${isRelay ? '' : `<span class="rr-team">${r.team || ''}${_pbSb(r)}</span>`}</div>
                 <div class="rr-meta">${meta}</div>
                 <div class="rr-pbsb-row">${_pbSb(r)}</div>
                 ${recHtml}
@@ -2971,7 +2983,7 @@ function _rrFieldDistList(rows, needsWind, opts) {
         const scAttr = (!live && hasRec) ? _scAttr(evt, r, formatHeight(r.best), rankNum, { windAided: bwa }) : '';
         return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr} data-team="${r.team || ''}">
             ${_rrFieldRankHtml(r.status_code, rankNum)}
-            <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
+            <div class="rr-who"><span class="rr-name">${_dispName(r).main}${_dispName(r).alt ? `<span class="rr-alt">${_dispName(r).alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">${meta}</div>
                 <div class="rr-pbsb-row">${_pbSb(r)}</div>
             ${recHtml}
@@ -3004,7 +3016,7 @@ function _rrFieldHeightList(rows, hts, opts) {
         const scAttr = (!live && hasRec) ? _scAttr(evt, r, formatHeight(r.best), rankNum) : '';
         return `<div class="rr${scAttr ? '' : ' rr-nocard'}${live && hasRec ? ' rr-has-rec' : ''}"${scAttr} data-team="${r.team || ''}">
             ${_rrFieldRankHtml(status, rankNum)}
-            <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
+            <div class="rr-who"><span class="rr-name">${_dispName(r).main}${_dispName(r).alt ? `<span class="rr-alt">${_dispName(r).alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">${meta}</div>
                 <div class="rr-pbsb-row">${_pbSb(r)}</div>
             ${recHtml}
@@ -3074,7 +3086,7 @@ function _rrCombinedList(rows, subDefs, day1Max, opts) {
         const scAttr = (!live && r.total > 0 && opts && opts.scAttr) ? opts.scAttr(r) : '';
         return `<div class="rr rr-cmb${scAttr ? '' : ' rr-nocard'}${live && r.total > 0 ? ' rr-has-rec' : ''}"${scAttr} data-team="${r.team || ''}">
             ${_rrFieldRankHtml(status, rankNum)}
-            <div class="rr-who"><span class="rr-name">${r.name}${r.name_alt ? `<span class="rr-alt">${r.name_alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
+            <div class="rr-who"><span class="rr-name">${_dispName(r).main}${_dispName(r).alt ? `<span class="rr-alt">${_dispName(r).alt}</span>` : ''}</span><span class="rr-team">${r.team || ''}${_pbSb(r)}</span></div>
             <div class="rr-meta">BIB ${bib(r.bib_number)}<i>·</i><span class="d1">1일차 ${fmtPts(d1)}</span><i>·</i><span class="d2">2일차 ${d2 || nowOrder > day1Max ? fmtPts(d2) : '–'}</span></div>
             <div class="rr-tot"><b>${r.total > 0 ? fmtPts(r.total) : '—'}</b>${sub}</div>
             <div class="rr-go" aria-hidden="true">${scAttr ? '›' : ''}</div>
@@ -3577,7 +3589,7 @@ async function loadRosterModalData(eventId) {
                 //   폭이 모자라면 음절 단위로 줄바꿈(word-break:normal + overflow-wrap:anywhere).
                 if (spot) {
                     html += `<td style="padding:7px 6px;text-align:left;font-weight:800;font-size:11px;color:${isSpot ? '#8b1a2a' : '#555'};white-space:nowrap;">${isSpot && spot === 'KOR' ? PaceIcons.svg('flagKR', { size: 22, style: 'vertical-align:-5px' }) : escT(e.team || '')}</td>`;
-                    html += `<td style="padding:7px 8px;text-align:left;font-weight:${isSpot ? 800 : 600};white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.3;">${escT(e.name)}${e.name_alt ? `<span style="font-size:10px;color:#888;margin-left:5px;font-weight:500;">${escT(e.name_alt)}</span>` : ''}${yearOf(e.date_of_birth) ? `<span style="font-size:10px;color:#999;margin-left:5px;font-weight:500;">${yearOf(e.date_of_birth)}</span>` : ''}${window.innerWidth < 640 && (e.personal_best || e.season_best) ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:#666;font-weight:500;margin-top:3px;white-space:nowrap;">${_rankTag(e)}${[e.personal_best ? 'PB ' + escT(e.personal_best) : '', e.season_best ? 'SB ' + escT(e.season_best) : ''].filter(Boolean).join(' · ')}</div>` : ''}</td>`;
+                    html += `<td style="padding:7px 8px;text-align:left;font-weight:${isSpot ? 800 : 600};white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.3;">${escT(_dispName(e).main)}${_dispName(e).alt ? `<span style="font-size:10px;color:#888;margin-left:5px;font-weight:500;">${escT(_dispName(e).alt)}</span>` : ''}${yearOf(e.date_of_birth) ? `<span style="font-size:10px;color:#999;margin-left:5px;font-weight:500;">${yearOf(e.date_of_birth)}</span>` : ''}${window.innerWidth < 640 && (e.personal_best || e.season_best) ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:#666;font-weight:500;margin-top:3px;white-space:nowrap;">${_rankTag(e)}${[e.personal_best ? 'PB ' + escT(e.personal_best) : '', e.season_best ? 'SB ' + escT(e.season_best) : ''].filter(Boolean).join(' · ')}</div>` : ''}</td>`;
                     if (window.innerWidth >= 640) html += `<td style="padding:5px 8px;text-align:right;font-family:var(--font-mono);font-size:10.5px;color:#555;white-space:nowrap;line-height:1.25;">${_rankTag(e)}${pbsbOf(e)}</td>`;
                 } else {
                     html += `<td style="padding:5px 8px;text-align:left;font-weight:600;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.25;">${e.name}</td>`;

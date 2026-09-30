@@ -1287,6 +1287,8 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_competition_event_slug ON competit
 try { db.exec(`ALTER TABLE competition ADD COLUMN home_visibility TEXT NOT NULL DEFAULT 'auto'`); } catch(e) {}
 // competition.timezone: 대회 시간대(IANA) — 해외 대회 대비 (lib/tz.js)
 try { db.exec(`ALTER TABLE competition ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Asia/Seoul'`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN name_en TEXT DEFAULT ''`); } catch(e) {}   // 대회명 영문·일문 (2026-09-30)
+try { db.exec(`ALTER TABLE competition ADD COLUMN name_ja TEXT DEFAULT ''`); } catch(e) {}
 // competition.manual_status_lock: 관리자가 '대회 재개'로 수동 상태변경한 경우 1 — 날짜 기반 자동 상태갱신(active→completed)을 막아 재잠금을 방지
 try { db.exec(`ALTER TABLE competition ADD COLUMN manual_status_lock INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 // event.division: 중등부/고등부/대학부/일반부/국제/U20
@@ -1830,6 +1832,8 @@ if (db.isAsync) {
             // competition: 홈 노출 강제 설정 (auto | pinned | hidden)
             await pgIdempotentAddCol('competition', 'home_visibility', `TEXT NOT NULL DEFAULT 'auto'`);
             await pgIdempotentAddCol('competition', 'timezone', `TEXT NOT NULL DEFAULT 'Asia/Seoul'`);
+            await pgIdempotentAddCol('competition', 'name_en', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'name_ja', `TEXT DEFAULT ''`);
             // federation_list: 연맹 숨김 (홈·운영 화면 목록에서 소속 대회 전체 제외)
             await pgIdempotentAddCol('federation_list', 'hidden', `BIGINT NOT NULL DEFAULT 0`);
             // 연맹 기본값 (PG 는 빈 테이블 시드가 없었음) + 한국중·고육상연맹 (Phase 7)

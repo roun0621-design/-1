@@ -68,7 +68,7 @@
         if (!d) return out;
         for (var k in d) {
             if (k.indexOf('{') < 0) continue;
-            var esc = k.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\\\{(\d)\\\}|\{(\d)\}/g, '(.+?)');
+            var esc = k.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{(\d)(?::ord)?\}/g, '(.+?)');
             out.push({ re: new RegExp('^' + esc + '$'), tpl: d[k], key: k });
         }
         // 긴 키부터 (구체적인 패턴 우선)
@@ -77,14 +77,20 @@
     }
     function ensureDict(lang, cb) {
         if (lang === 'ko' || TEXT[lang]) { if (cb) cb(); return; }
-        var cacheKey = 'pace_i18n_' + lang + '_' + DICT_VERSION;
-        try { var cached = localStorage.getItem(cacheKey); if (cached) { TEXT[lang] = JSON.parse(cached); PATTERNS[lang] = compilePatterns(lang); if (cb) cb(); return; } } catch (e) {}
         if (loading[lang]) { loading[lang].push(cb); return; }
         loading[lang] = [cb];
-        fetch('/locales/' + lang + '.json?v=' + DICT_VERSION).then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) {
-            TEXT[lang] = j || {}; PATTERNS[lang] = compilePatterns(lang);
-            try { localStorage.setItem(cacheKey, JSON.stringify(TEXT[lang])); } catch (e) {}
-        }).catch(function () { TEXT[lang] = {}; }).then(function () {
+        var cacheKey = 'pace_i18n_' + lang + '_' + DICT_VERSION;
+        var base = null;
+        try { var cached = localStorage.getItem(cacheKey); if (cached) base = JSON.parse(cached); } catch (e) {}
+        var p = base ? Promise.resolve(base) : fetch('/locales/' + lang + '.json?v=' + DICT_VERSION).then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) {
+            try { localStorage.setItem(cacheKey, JSON.stringify(j || {})); } catch (e) {}
+            return j || {};
+        }).catch(function () { return {}; });
+        p.then(function (dict) {
+            // 서버가 가진 원문→번역(대회명 영문·일문 등)을 덧붙인다 — 캐시 경로에서도, 실패해도 사전은 그대로
+            return fetch('/api/labels?lang=' + lang).then(function (r) { return r.ok ? r.json() : null; }).then(function (l) { if (l && l.text) Object.assign(dict, l.text); return dict; }).catch(function () { return dict; });
+        }).then(function (dict) {
+            TEXT[lang] = dict; PATTERNS[lang] = compilePatterns(lang);
             var cbs = loading[lang]; delete loading[lang];
             (cbs || []).forEach(function (f) { if (f) f(); });
         });
@@ -99,7 +105,12 @@
         var ps = PATTERNS[lang];
         for (var i = 0; i < ps.length; i++) {
             var m = s.match(ps[i].re);
-            if (m) { var out = ps[i].tpl; for (var g = 1; g < m.length; g++) out = out.replace(new RegExp('\\{' + (g - 1) + '\\}', 'g'), tText(m[g], lang) || m[g]); return out; }
+            if (!m) continue;
+            // 잡힌 조각에 한글이 있으면 그 조각도 번역돼야 한다 — '현대자동차' 가 '{0}차'(Attempt {0}) 에, '10종경기' 가 '{0}경기' 에 잡히는 오인 방지
+            var vals = [], bad = false;
+            for (var g = 1; g < m.length; g++) { var tv2 = HANGUL.test(m[g]) ? tText(m[g], lang) : m[g]; if (tv2 == null) { bad = true; break; } vals.push(tv2); }
+            if (bad) continue;
+            var out = ps[i].tpl; for (var g2 = 0; g2 < vals.length; g2++) out = fill(out, g2, vals[g2], lang); return out;
         }
         // 낱말 조합: "남자 100m 결승", "멀리뛰기 일반부" — 한글이 든 낱말이 모두 사전에 있어야 한다
         var parts = s.split(/(\s+|·|\/|\(|\)|,)/);
@@ -116,11 +127,21 @@
         }
         return null;
     }
+    // {0:ord} — 서수 (en: 1st 2nd 3rd, ja: 1位, ko: 1위)
+    function ordinal(v, lang) {
+        var n = parseInt(v, 10); if (isNaN(n)) return v;
+        if (lang === 'ja') return n + '位';
+        if (lang !== 'en') return n + '위';
+        var s = ['th', 'st', 'nd', 'rd'], r = n % 100; return n + (s[(r - 20) % 10] || s[r] || s[0]);
+    }
+    function fill(tpl, idx, val, lang) {
+        return String(tpl).replace(new RegExp('\\{' + idx + '(?::ord)?\\}', 'g'), function (m) { return m.indexOf(':ord') >= 0 ? ordinal(val, lang) : val; });
+    }
     function t(src) {
         var lang = getLang();
         var v = tText(src, lang);
         if (v == null) v = src;
-        for (var i = 1; i < arguments.length; i++) v = String(v).replace(new RegExp('\\{' + (i - 1) + '\\}', 'g'), arguments[i]);
+        for (var i = 1; i < arguments.length; i++) v = fill(v, i - 1, arguments[i], lang);
         return v;
     }
 

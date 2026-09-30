@@ -1009,6 +1009,10 @@
                     <div class="admin-form-row">
                         <div class="admin-form-group" style="flex:1;"><label>장소</label><input id="comp-edit-venue"></div>
                         <div class="admin-form-group"><label>시간대 <span class="t-xs t-muted">(개최지)</span></label><input id="comp-edit-timezone" list="pace-tz-list" placeholder="Asia/Seoul" style="width:170px;"><datalist id="pace-tz-list"></datalist></div>
+                    </div>
+                    <div class="admin-form-row">
+                        <div class="admin-form-group" style="flex:1;"><label>대회명 (영문) <span class="t-xs t-muted">EN 화면용</span></label><input id="comp-edit-name-en" placeholder="2026 Aichi-Nagoya Asian Games Athletics"></div>
+                        <div class="admin-form-group" style="flex:1;"><label>대회명 (일문) <span class="t-xs t-muted">JA 화면용</span></label><input id="comp-edit-name-ja" placeholder="2026愛知・名古屋アジア競技大会 陸上競技"></div>
                         <div class="admin-form-group"><label>상태</label>
                             <select id="comp-edit-status"><option value="upcoming">예정</option><option value="active">진행중</option><option value="completed">종료</option></select>
                         </div>
@@ -4412,6 +4416,7 @@ POST /api/external/event-result-link/batch<br>
                 document.getElementById('comp-edit-end').value = c.end_date || '';
                 document.getElementById('comp-edit-venue').value = c.venue || '';
                 { const tzEl = document.getElementById('comp-edit-timezone'), dl = document.getElementById('pace-tz-list'); if (tzEl) { tzEl.value = c.timezone || 'Asia/Seoul'; if (dl && !dl.children.length) dl.innerHTML = PACE_COMMON_TZ.map(z => `<option value="${z}">`).join(''); } }
+                { const a = document.getElementById('comp-edit-name-en'), b = document.getElementById('comp-edit-name-ja'); if (a) a.value = c.name_en || ''; if (b) b.value = c.name_ja || ''; }
                 document.getElementById('comp-edit-status').value = c.status || 'upcoming';
                 const _hv = document.getElementById('comp-edit-home-vis'); if (_hv) _hv.value = c.home_visibility || 'auto';
                 document.getElementById('comp-edit-video').value = c.video_url || '';
@@ -4493,6 +4498,8 @@ POST /api/external/event-result-link/batch<br>
                     end_date: document.getElementById('comp-edit-end').value,
                     venue: document.getElementById('comp-edit-venue').value,
                     timezone: (document.getElementById('comp-edit-timezone')?.value || '').trim() || 'Asia/Seoul',
+                    name_en: (document.getElementById('comp-edit-name-en')?.value || '').trim(),
+                    name_ja: (document.getElementById('comp-edit-name-ja')?.value || '').trim(),
                     status: document.getElementById('comp-edit-status').value,
                     video_url: document.getElementById('comp-edit-video').value,
                     federation: document.getElementById('comp-edit-federation').value,
