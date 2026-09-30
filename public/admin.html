@@ -80,7 +80,7 @@
         .adm-round-btn.adm-status-none { background: var(--gray-light); color: var(--text-muted); border-color: #e5e7eb; cursor: default; }
         .adm-round-btn.adm-status-created { background: #f9fafb; color: #6b7280; border-color: #e5e7eb; }
         .adm-round-btn.adm-status-created:hover { background:#f8f9fa; border-color: #d1d5db; }
-        .adm-round-btn.adm-status-ready { background: #fef9c3; color: #a16207; border-color: #fde68a; }
+        .adm-round-btn.adm-status-ready { background:#f8f9fa; color: #a16207; border-color:#e5e7eb; }
         .adm-round-btn.adm-status-ready:hover { background: #fef08a; }
         .adm-round-btn.adm-status-active { background: #e8e8e8; color: #6b6b6b; border-color: #c0c0c0; font-weight: 700; }
         .adm-round-btn.adm-status-active:hover { background: #bfdbfe; }
@@ -96,7 +96,7 @@
         .css-icon-judge { background: #e8e8e8; color: #6b6b6b; }
         .css-icon-chart { background: #faf6ec; color: #8a7640; }
         .css-icon-download { background: #f5f0e0; color: #9a8548; }
-        .css-icon-key { background: #fef9c3; color: #a16207; }
+        .css-icon-key { background:#f8f9fa; color: #a16207; }
         .css-icon-file { background:#f8f9fa; color: #0369a1; }
         .css-icon-check { background: #f5f0e0; color: #9a8548; }
         .css-icon-link { background:#f8f9fa; color: #8a7640; }
@@ -124,7 +124,7 @@
         .toast.success { background:var(--green); }
         .toast.error { background:var(--danger); }
         @keyframes fadeInUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-        .danger-zone { border:2px solid var(--danger); border-radius:var(--radius); padding:16px; margin-top:20px; }
+        .danger-zone { border:1px solid #e5e7eb; border-radius:var(--radius); padding:16px; margin-top:20px; }
         .danger-zone h4 { color:var(--danger); margin:0 0 8px; }
         .comp-info-line { display:flex; align-items:center; gap:8px; padding:8px 16px; background:var(--bg-dark); border-radius:var(--radius); font-size:13px; margin-bottom:16px; flex-wrap:wrap; }
         .comp-info-name { font-weight:700; }
@@ -286,7 +286,7 @@
         }
 
     /* ── 필드 기록카드 가져오기 (수기 기록지 → AI 전사 xlsx) ── */
-    .fc-drop { border:2px dashed #b7c6de; border-radius:10px; padding:22px 14px; text-align:center; cursor:pointer; background:#fbfcfe; transition:background .15s, border-color .15s; }
+    .fc-drop { border:1px solid #e5e7eb; border-radius:10px; padding:22px 14px; text-align:center; cursor:pointer; background:#fbfcfe; transition:background .15s, border-color .15s; }
     .fc-drop:hover, .fc-drop.over { background:#eef3fa; border-color:#5b7fb5; }
     .fc-table { width:100%; font-size:12px; border-collapse:collapse; }
     .fc-table th, .fc-table td { padding:3px 5px; border-top:1px solid #f0f0f0; text-align:center; white-space:nowrap; vertical-align:top; }
@@ -388,7 +388,7 @@
             <!-- TAB: Overview -->
             <div id="tab-overview" class="admin-tab-panel active">
                 <div class="admin-status-grid" id="admin-status-grid"></div>
-                <div class="admin-card" style="margin-top:16px;">
+                <div class="admin-card" id="card-quick-links" style="margin-top:16px;">
                     <h4>빠른 이동</h4>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                         <a href="/" class="btn btn-outline">홈</a>
@@ -398,7 +398,7 @@
                         <a href="/results.html" class="btn btn-outline">결과확인</a>
                     </div>
                 </div>
-                <div class="admin-card">
+                <div class="admin-card" id="card-audit-log">
                     <h4>감사 로그 (최근 20건)</h4>
                     <div id="admin-audit-log" style="max-height:300px;overflow-y:auto;font-size:12px;"></div>
                 </div>
@@ -457,10 +457,10 @@
                         </div>
                         <div class="matrix-scroll-area" id="evt-matrix"></div>
                         <div style="padding:6px 10px;border-top:1px solid var(--gray);font-size:12px;color:var(--text-muted);background:#f8f9fa;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
-                            <span id="evt-count" style="flex:1 1 100%;"></span>
+                            <span id="evt-count" style="flex:1 1 auto;min-width:120px;"></span>
                             <div style="display:flex;gap:4px;flex-wrap:wrap;">
                                 <button class="btn btn-sm btn-outline" id="btn-division-manager" onclick="openDivisionManagerModal()" title="부(division) 추가/수정/삭제 관리">부 관리</button>
-                                <button class="btn btn-sm btn-outline" onclick="cleanupUndefinedEvents()" style="color:#c62828;border-color:#ef9a9a;" title="부별이 빈 '미지정' 종목을 부별 있는 동일 종목으로 흡수하거나 삭제합니다">미지정 정리</button>
+                                <button class="btn btn-sm btn-outline" onclick="cleanupUndefinedEvents()" style="color:#c62828;border-color:#e5e7eb;" title="부별이 빈 '미지정' 종목을 부별 있는 동일 종목으로 흡수하거나 삭제합니다">미지정 정리</button>
                                 <button class="btn btn-sm btn-outline" onclick="autoSortEvents()" title="표준 육상 순서로 종목을 자동 정렬합니다">종목 재정렬</button>
                                 <button class="btn btn-sm btn-primary" onclick="showAddEvent()">+ 종목 추가</button>
                             </div>
@@ -569,7 +569,7 @@
                         로그인 이력
                     </h4>
                     <p class="t-help-lg">관리자 계정(JWT)과 심판 운영키 로그인의 성공·실패 기록입니다. 같은 IP·심판명으로 10분에 10회 실패하면 10분간 잠깁니다.</p>
-                    <div id="sec-warn-box" style="display:none;background:#fdecea;border:1.5px solid #d32f2f;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#8b1a1a;font-weight:600;"></div>
+                    <div id="sec-warn-box" style="display:none;background:#f8f9fa;border:1.5px solid #d32f2f;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#8b1a1a;font-weight:600;"></div>
                     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
                         <label style="font-size:13px;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="audit-only-fail" onchange="loginAudit_reload()"> 실패만</label>
                         <span id="audit-locked" style="font-size:12px;color:#b3261e;"></span>
@@ -634,7 +634,7 @@
                         조편성 엑셀 파일을 업로드하면 <strong>해당 종목의 조/레인/배번</strong>이 배정됩니다.<br>
                         <span style="color:#ef4444;">파일에 포함된 종목만 변경되며, 포함되지 않은 종목은 영향 없습니다.</span>
                     </p>
-                    <div style="background:#f8f9fa;border:1px solid #fecaca;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 양식:</strong><br>
                         A열: <code>성별(남/여/혼성)</code> | B열: <code>종목</code> | C열: <code>라운드(예선/결승)</code><br>
                         D열: <code>조</code> | E열: <code>그룹(A/B)</code> — 5000m/10000m만 해당<br>
@@ -679,7 +679,7 @@
                         엑셀 파일에서 배번을 읽어 기존 선수와 <b>이름+소속+성별</b>로 매칭하여 <b>BIB만</b> 업데이트합니다.<br>
                         <span style="color:#22c55e;">기존 기록(결과, 조편성 등)에 영향 없음 — BIB은 표시용 필드입니다.</span>
                     </p>
-                    <div style="background:#f8f9fa;border:1px solid #fde68a;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 양식 (머리글 이름으로 열을 찾습니다 · 순서 무관):</strong><br>
                         A열: <code>배번(BIB) *</code> — 새로 부여할 배번 | B열: <code>선수명 *</code> | C열: <code>소속 *</code> | D열: <code>성별(남/여)</code> 선택<br>
                         <span style="color:#d97706;font-weight:600;">* 매칭 키: 선수명 + 소속 (성별 열이 있으면 + 성별도 비교)</span><br>
@@ -696,12 +696,12 @@
 
                 <!-- Phone Number Bulk Update -->
                 <div class="admin-card" style="">
-                    <h4 style="color:#16a085;">휴대폰 번호 일괄 업로드 (SMS 발송용)</h4>
+                    <h4 style="">휴대폰 번호 일괄 업로드 (SMS 발송용)</h4>
                     <p class="t-help">
                         엑셀에서 휴대폰 번호를 읽어 기존 선수와 <b>이름+소속(+성별)</b>으로 매칭하여 <b>휴대폰만</b> 업데이트합니다.<br>
                         <span style="color:#16a085;">선수 업로드 양식(PACERISE_upload_template.xlsx)을 그대로 사용 가능 — 휴대폰 칸이 비어있으면 건너뜁니다.</span>
                     </p>
-                    <div style="background:#f8f9fa;border:1px solid #a7f3d0;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 인식 컬럼 (헤더명 기준 자동 매칭):</strong><br>
                         <code>선수명</code> 또는 <code>성명</code>/<code>이름</code>/<code>name</code> *<br>
                         <code>팀명</code> 또는 <code>소속</code>/<code>team</code><br>
@@ -773,8 +773,8 @@
 
             <!-- TAB: Scoreboard (전광판) -->
             <div id="tab-scoreboard" class="admin-tab-panel">
-                <div class="admin-card" style="">
-                    <h4 style="color:#8a7640;">스코어보드 연동 (.lif 파일 가져오기) <span class="t-sm t-muted">Scoreboard Import</span></h4>
+                <div class="admin-card" id="card-sb-lif" style="">
+                    <h4 style="">스코어보드 연동 (.lif 파일 가져오기) <span class="t-sm t-muted">Scoreboard Import</span></h4>
                     <p class="t-help-lg">
                         스코어보드 시스템에서 내보낸 .lif 결과 파일을 업로드하면 자동으로 종목/조를 매칭하고 기록을 입력합니다.
                         <br>조편성 업로드 시 자동 생성된 <strong>스코어보드 키</strong>와 .lif 파일의 종목명을 대조합니다.
@@ -803,12 +803,12 @@
                 </div>
 
                 <!-- 기록 엑셀 가져오기 (.lif 대안) -->
-                <div class="admin-card" style="">
-                    <h4 style="color:#8a7640;">기록 엑셀 가져오기 <span class="t-sm t-muted">Record Excel Import (.lif 대안)</span></h4>
+                <div class="admin-card" id="card-sb-xlsx" style="">
+                    <h4 style="">기록 엑셀 가져오기 <span class="t-sm t-muted">Record Excel Import (.lif 대안)</span></h4>
                     <p class="t-help-lg">
                         헤더형 기록 엑셀(.xlsx)을 업로드하면 <strong>배번(BIB) 기준</strong>으로 종목·조·선수를 매칭하고 기록을 입력합니다.
                     </p>
-                    <div style="background:#f8f9fa;border:1px solid #e8dfc0;border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:9px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;">
                         <strong>엑셀 컬럼:</strong> 종별 · 세부종목 · 라운드 · 조 · 순위 · 레인 · <strong>배번</strong> · 성명 · 기록 · 풍속 · 팀명 · 기록구분<br>
                         <span style="color:#8a7640;">배번 앞자리 0 자동 정규화 · 기록 <code>4:15.21</code>→초/필드 미터 자동변환 · 순위칸의 <code>DNS/DNF/DQ</code> 인식</span>
                     </div>
@@ -830,13 +830,13 @@
                 </div>
 
                 <!-- 계측 결과 .txt 가져오기 (드래그 업로드) -->
-                <div class="admin-card" style="">
-                    <h4 style="color:#0e7c66;">계측 결과 가져오기 (.txt) <span class="t-sm t-muted">Timing Result Import — 드래그 업로드</span></h4>
+                <div class="admin-card" id="card-sb-txt" style="">
+                    <h4 style="">계측 결과 가져오기 (.txt) <span class="t-sm t-muted">Timing Result Import — 드래그 업로드</span></h4>
                     <p class="t-help-lg">계측업체 결과프로그램이 저장한 <strong>.txt 결과파일</strong>을 끌어다 놓으면 종목·조·선수를 자동 매칭해 기록을 입력합니다. (여러 파일 동시 가능)</p>
                     <div style="background:#f0fbf8;border:1px solid #cdeee5;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;line-height:1.7;color:#0e7c66;">
                         <strong>인식 형식:</strong> 1행 <code>성별 부 종목 라운드 [조]</code> + 풍속 · 2행 <code>순위 번호 레인 이름 소속 기록</code> · 배번→레인→성명 순 매칭 · 기록 <code>1:05.3</code>→초/필드 미터 자동변환 · <code>DNS/DNF/DQ</code> 인식
                     </div>
-                    <div id="tt-drop" style="border:2px dashed #6ec8b3;border-radius:10px;padding:26px 16px;text-align:center;color:#0e7c66;background:#f0fbf8;cursor:pointer;transition:all .15s;">
+                    <div id="tt-drop" style="border:1px solid #e5e7eb;border-radius:10px;padding:26px 16px;text-align:center;color:#0e7c66;background:#f0fbf8;cursor:pointer;transition:all .15s;">
                         <div style="font-size:26px;color:#8a7640;"><svg class="ui-icon" width="30px" height="30px" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4h18l10 10v30H12z"/><path d="M30 4v10h10M18 26h12M18 34h12"/></svg></div>
                         <div style="font-weight:700;margin-top:6px;">여기로 .txt 결과파일을 끌어다 놓으세요</div>
                         <div style="font-size:12px;color:#5b8f82;margin-top:4px;">또는 클릭해서 선택 (복수 가능)</div>
@@ -854,8 +854,8 @@
                 </div>
 
                 <!-- 필드 수기 기록카드 가져오기 (사진 → AI 전사 xlsx → 시기별 저장) -->
-                <div class="admin-card" style="">
-                    <h4 style="color:#3d5a8a;">필드 기록카드 가져오기 <span class="t-sm t-muted">Field Record Card Import (수기 기록지 → AI 전사 xlsx)</span></h4>
+                <div class="admin-card" id="card-sb-fieldcard" style="">
+                    <h4 style="">필드 기록카드 가져오기 <span class="t-sm t-muted">Field Record Card Import (수기 기록지 → AI 전사 xlsx)</span></h4>
                     <p class="t-help-lg">
                         심판 수기 기록카드 <strong>사진을 그대로 드롭하면 서버가 AI 로 전사</strong>하고, <strong>배번 기준</strong>으로 종목·조·선수를 매칭해
                         시기별 기록·풍속·높이 O/X 를 저장합니다. ChatGPT/Claude 로 직접 만든 <strong>xlsx</strong> 를 올려도 됩니다.
@@ -894,9 +894,9 @@
                 </div>
 
                 <!-- 합동 종목 관리 (Joint Group Management — Multi-event) -->
-                <div class="admin-card" style="">
+                <div class="admin-card" id="card-joint" style="">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
-                        <h4 style="display:flex;align-items:center;gap:8px;color:#6b5520;margin:0;">
+                        <h4 style="display:flex;align-items:center;gap:8px;margin:0;">
                             <span class="css-icon css-icon-link" data-icon="G"></span> 합동 종목 관리
                             <span id="jg-count-badge" class="t-sm" style="background:#f8f9fa;color:#92400e;padding:2px 8px;border-radius:10px;font-weight:600;">활성 0</span>
                         </h4>
@@ -950,7 +950,7 @@
                 <!-- 대회 운영 체크리스트 — 시스템이 직접 점검 -->
                 <div class="admin-card" id="card-readiness" style="">
                     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
-                        <h4 style="margin:0;color:#0e7c66;">대회 운영 체크리스트</h4>
+                        <h4 style="margin:0;">대회 운영 체크리스트</h4>
                         <span id="rd-phase" style="font-size:12px;font-weight:700;color:#fff;background:#0e7c66;border-radius:4px;padding:2px 8px;"></span>
                         <span id="rd-summary" style="font-size:12px;color:var(--text-muted);"></span>
                         <button class="btn btn-xs btn-outline" style="margin-left:auto;" onclick="loadReadiness()">다시 점검</button>
@@ -1076,7 +1076,7 @@
                                     <button type="button" class="btn btn-xs btn-outline" style="margin-top:4px;" onclick="document.getElementById('comp-brand-wm-input').click()">워터마크 업로드</button>
                                 </div>
                             </div>
-                            <div class="t-xs t-muted" style="margin-top:8px;">※ 이미지 업로드는 먼저 <b>저장</b> 후 가능. 슬러그·색 변경도 저장을 눌러야 반영됩니다.</div>
+                            <div class="t-xs t-muted" style="margin-top:8px;">이미지 업로드는 먼저 <b>저장</b> 후 가능. 슬러그·색 변경도 저장을 눌러야 반영됩니다.</div>
                         </div>
                         <div class="admin-form-group"><label>부 구분</label>
                             <select id="comp-edit-division">
@@ -1162,7 +1162,7 @@
                     </div>
 
                     <!-- 2) 통백업 / 통복원 (Full Snapshot) -->
-                    <div style="border:2px solid #b79f58;border-radius:8px;padding:14px;background:#fffdf5;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#fffdf5;">
                         <h5 style="margin:0 0 8px;font-size:13px;color:#7a5d1e;display:flex;align-items:center;gap:8px;">
                             <span style="background:#b79f58;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;white-space:nowrap;">FULL</span>
                             시스템 통백업 / 복원
@@ -1194,7 +1194,7 @@
                                 <span style="background:#c0392b;color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">2</span>
                                 <strong style="font-size:13px;color:#922b21;">통복원 (ZIP 붙여넣기)</strong>
                             </div>
-                            <div style="background:#fff5f5;border:1px solid #e74c3c;padding:8px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;color:#c0392b;line-height:1.6;">
+                            <div style="background:#f8f9fa;border:1px solid #e74c3c;padding:8px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;color:#c0392b;line-height:1.6;">
                                 <strong>[경고] 복원 시 현재 모든 데이터가 백업 파일의 내용으로 교체됩니다.</strong><br>
                                 · 복원 직전 현재 상태를 자동으로 안전 백업합니다 (backups/backup_prerestore_*.db)<br>
                                 · 복원 후 서버가 자동 재시작되고 약 10초 후 페이지가 새로고침됩니다<br>
@@ -1202,8 +1202,8 @@
                             </div>
                             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                                 <input type="file" id="full-restore-file" accept=".zip" style="font-size:12px;flex:1;min-width:220px;">
-                                <button class="btn btn-outline" onclick="previewFullRestore()">① 파일 검증</button>
-                                <button class="btn btn-danger" onclick="applyFullRestore()" id="btn-full-restore" disabled>② 복원 실행</button>
+                                <button class="btn btn-outline" onclick="previewFullRestore()">1.  파일 검증</button>
+                                <button class="btn btn-danger" onclick="applyFullRestore()" id="btn-full-restore" disabled>2.  복원 실행</button>
                             </div>
                             <div id="full-restore-status" style="margin-top:10px;font-size:12px;"></div>
                         </div>
@@ -1373,7 +1373,7 @@
                     <h4 style="display:flex;align-items:center;gap:8px;"><span class="card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5a2.5 2.5 0 0 0 0 5H20"/></svg></span>기록 관리 시스템 운영 가이드 <span class="t-sm t-muted">NR / DR / CR · 자동 감지 워크플로</span></h4>
                     <p class="t-help-lg">신기록 자동 감지 시스템의 동작 원리와 운영 규칙입니다. 관리자/운영자가 숙지해야 할 내용입니다.</p>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;">
-                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#fffaf3;">
+                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#f8f9fa;">
                             <h5 style="margin:0 0 6px;color:#c0392b;font-size:13px;">기록 종류</h5>
                             <ul style="font-size:12px;color:var(--text);margin:0;padding-left:18px;line-height:1.7;">
                                 <li><strong style="color:#c0392b;">NR (National Record)</strong> — 한국기록</li>
@@ -1381,7 +1381,7 @@
                                 <li><strong style="color:#27ae60;">CR (Competition Record)</strong> — 대회기록 (시리즈별, 예: KTFL/광주올림픽시리즈 등)</li>
                             </ul>
                         </div>
-                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#f3faff;">
+                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#f8f9fa;">
                             <h5 style="margin:0 0 6px;color:#2980b9;font-size:13px;">자동 감지 흐름</h5>
                             <ol style="font-size:12px;color:var(--text);margin:0;padding-left:18px;line-height:1.7;">
                                 <li>경기 결과 입력 시 NR/DR/CR 동시 비교</li>
@@ -1391,7 +1391,7 @@
                             </ol>
                         </div>
                         <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#f8f9fa;">
-                            <h5 style="margin:0 0 6px;color:#6366f1;font-size:13px;">자동 제외 규정</h5>
+                            <h5 style="margin:0 0 6px;font-size:13px;">자동 제외 규정</h5>
                             <ul style="font-size:12px;color:var(--text);margin:0;padding-left:18px;line-height:1.7;">
                                 <li><strong>풍속 +2.0 m/s 초과</strong> — 100m / 200m / 100mH / 110mH / 멀리뛰기 / 세단뛰기에서 자동 <strong style="color:#7f8c8d;">참고기록</strong> 처리 (신기록 불인정, 토스트 안내)</li>
                                 <li><strong>DQ / DNS / DNF / NM</strong> — 비유효 상태는 비교 대상에서 제외</li>
@@ -1399,7 +1399,7 @@
                                 <li><strong>예선/준결승</strong> — 결승 race만 비교 대상</li>
                             </ul>
                         </div>
-                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#f4faf3;">
+                        <div style="border:1px solid var(--gray);border-radius:8px;padding:12px;background:#f8f9fa;">
                             <h5 style="margin:0 0 6px;color:#27ae60;font-size:13px;">운영 권장 사항</h5>
                             <ul style="font-size:12px;color:var(--text);margin:0;padding-left:18px;line-height:1.7;">
                                 <li>대회 생성 시 <strong>시리즈 연결</strong>해야 CR 자동 감지 작동</li>
@@ -1549,14 +1549,14 @@ POST /api/external/event-result-link/batch<br>
                 <!-- Event selector + config list -->
                 <div class="admin-card">
                     <div style="margin-bottom:14px;">
-                        <label class="t-label">① 성별 선택</label>
+                        <label class="t-label">1.  성별 선택</label>
                         <div style="display:flex;gap:6px;">
                             <button class="btn btn-sm" id="pacing-gender-M" onclick="switchPacingGender('M')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="10" cy="14" r="6"/><line x1="14.5" y1="9.5" x2="21" y2="3"/><polyline points="15 3 21 3 21 9"/></svg> 남자</button>
                             <button class="btn btn-sm btn-outline" id="pacing-gender-F" onclick="switchPacingGender('F')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="9" r="6"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="9" y1="19" x2="15" y2="19"/></svg> 여자</button>
                         </div>
                     </div>
                     <div style="margin-bottom:14px;">
-                        <label class="t-label">② 종목 선택 (트랙 800m 이상 + 종합경기)</label>
+                        <label class="t-label">2.  종목 선택 (트랙 800m 이상 + 종합경기)</label>
                         <div id="pacing-event-btns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
                     </div>
                     <input type="hidden" id="pacing-event-select" value="">
@@ -1624,7 +1624,7 @@ POST /api/external/event-result-link/batch<br>
                         </div>
                         <a href="/PACERISE_records_template.xlsx" download class="btn btn-sm btn-outline" style="text-decoration:none;">양식 다운로드 (.xlsx)</a>
                     </div>
-                    <div style="background:#f8f9fa;border:1px solid #e8dfc0;border-radius:6px;padding:9px 12px;margin:10px 0 12px;font-size:12px;line-height:1.7;">
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:9px 12px;margin:10px 0 12px;font-size:12px;line-height:1.7;">
                         <strong>열:</strong> <code>종류</code>(NR/DR/CR) · <code>성별</code>(남/여/혼성) · <code>부</code>(DR만: 대학/일반/고등/중등/초등 — 실업은 일반) · <code>종목</code> · <code>기록</code> · 성명 · 소속 · 대회명 · 장소 · 일자 · 풍속 · 비고<br>
                         <span style="color:#8a7640;">기록 표기: <code>10.07</code> · <code>1:44.14</code> · <code>2:07:20</code> · <code>2.36</code>(=2m36) · <code>7860</code>(점수). 종목은 <code>10000m</code> <code>3000mSC</code> <code>4x100mR</code> <code>4x400mR(Mixed)</code> 처럼 규격 괄호 없이.</span><br>
                         <span style="color:#b45309;">대회기록(CR) 행은 아래에서 고른 <strong>시리즈</strong>에 들어갑니다 — 파일 하나 = 시리즈 하나. 기존보다 나쁜 값으로 바뀌는 행은 체크해야만 덮어씁니다.</span>
@@ -2008,8 +2008,8 @@ POST /api/external/event-result-link/batch<br>
             <!-- TAB: Documents (문서·다운로드) -->
             <div id="tab-documents" class="admin-tab-panel">
                 <!-- Download Center -->
-                <div class="admin-card" style="">
-                    <h4 style="color:#2d5016;margin-bottom:8px;">다운로드 센터</h4>
+                <div class="admin-card" id="card-download-center" style="">
+                    <h4 style="margin-bottom:8px;">다운로드 센터</h4>
                     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;">
                         <div style="flex:1;min-width:200px;border:1px solid var(--gray);border-radius:8px;padding:12px;">
                             <h5 style="font-size:13px;margin-bottom:8px;">종합기록지</h5>
@@ -2065,7 +2065,7 @@ POST /api/external/event-result-link/batch<br>
                     </div>
                 </div>
 
-                <div class="admin-card">
+                <div class="admin-card" id="card-doc-templates">
                     <h4>문서 양식 설정</h4>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">각 문서의 표시 항목, 레이아웃, 라벨 등을 설정합니다. 저장 후 문서 생성 시 반영됩니다.</p>
 
@@ -2486,7 +2486,7 @@ POST /api/external/event-result-link/batch<br>
 
                 <!-- W. 워드 상장 양식 (현장 인쇄용) — PDF 양식과 별개 -->
                 <div class="admin-card" id="card-award-docx" style="">
-                    <h4 style="color:#2b579a;margin-bottom:6px;">워드 상장 양식 <span style="font-size:12px;font-weight:600;color:#fff;background:#2b579a;border-radius:4px;padding:2px 6px;vertical-align:middle;">현장 인쇄용</span></h4>
+                    <h4 style="margin-bottom:6px;">워드 상장 양식 <span style="font-size:12px;font-weight:600;color:#fff;background:#2b579a;border-radius:4px;padding:2px 6px;vertical-align:middle;">현장 인쇄용</span></h4>
                     <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6;">
                         기록입력 화면의 <b>상장 출력</b> 버튼과 위 일괄 발급의 <b>워드(.docx)</b> 형식이 쓰는 양식입니다. 받은 파일은 워드·한글에서 열어 고칠 수 있습니다.<br>
                         아래 <b>양식 관리</b>(PDF)는 문자로 보내는 기록증·상장용이며 이 양식과는 별개입니다.
@@ -2730,7 +2730,7 @@ POST /api/external/event-result-link/batch<br>
             <div id="tab-sms" class="admin-tab-panel">
                 <!-- 푸시(앱 알림) 공지 -->
                 <div class="admin-card" style="">
-                    <h4 style="color:#8a7640;margin-bottom:8px;"><svg class="ui-icon" width="1em" height="1em" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;"><rect x="13" y="4" width="22" height="40" rx="5"/><path d="M21 38h6"/></svg> 앱 푸시 알림 (공지 보내기)</h4>
+                    <h4 style="margin-bottom:8px;"><svg class="ui-icon" width="1em" height="1em" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;"><rect x="13" y="4" width="22" height="40" rx="5"/><path d="M21 38h6"/></svg> 앱 푸시 알림 (공지 보내기)</h4>
                     <div id="push-status-box" style="font-size:12px;color:#666;margin-bottom:10px;">상태 확인 중…</div>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
                         <div>
@@ -2761,13 +2761,13 @@ POST /api/external/event-result-link/batch<br>
                         <button class="btn btn-primary" onclick="sendPushNotice()">공지 발송</button>
                         <span id="push-send-status" style="font-size:12px;font-weight:600;"></span>
                     </div>
-                    <div class="t-xs t-muted" style="margin-top:8px;">※ Firebase 설정(환경변수) 전에는 발송이 비활성(미설정) 상태로 표시됩니다.</div>
+                    <div class="t-xs t-muted" style="margin-top:8px;">Firebase 설정(환경변수) 전에는 발송이 비활성(미설정) 상태로 표시됩니다.</div>
                 </div>
 
                 <!-- A. 발송 설정 -->
                 <div class="admin-card" style="">
-                    <h4 style="color:#2d5016;margin-bottom:8px;">알리고(Aligo) SMS 설정</h4>
-                    <div style="background:#f8f9fa;border:1px solid #ffe69c;border-radius:6px;padding:10px;font-size:12px;margin-bottom:12px;">
+                    <h4 style="margin-bottom:8px;">알리고(Aligo) SMS 설정</h4>
+                    <div style="background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:10px;font-size:12px;margin-bottom:12px;">
                         <strong>알리고 가입 안내:</strong> <a href="https://smartsms.aligo.in/" target="_blank" rel="noopener">smartsms.aligo.in</a> 가입 → 발신번호 등록 → API 키 발급 → 아래에 입력하세요.<br>
                         <strong>시뮬레이션 모드</strong>가 켜져 있으면 실제 발송 없이 로그만 기록됩니다 (가입 전 테스트용).
                     </div>
@@ -2888,7 +2888,7 @@ POST /api/external/event-result-link/batch<br>
                             </label>
                         </div>
                     </div>
-                    <p class="t-xs t-muted" style="margin:-4px 0 10px;">※ 기록이 없는(미출전) 선수는 자동 제외됩니다. 조를 지정하면 그 조만, 중복 방지를 켜면 같은 종목에서 이미 받은 선수는 다시 보내지 않습니다.</p>
+                    <p class="t-xs t-muted" style="margin:-4px 0 10px;">기록이 없는(미출전) 선수는 자동 제외됩니다. 조를 지정하면 그 조만, 중복 방지를 켜면 같은 종목에서 이미 받은 선수는 다시 보내지 않습니다.</p>
                     <div style="margin-bottom:10px;">
                         <label class="t-xs" style="font-weight:600;">발송 대상 종목</label>
                         <div id="sms-batch-event-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#f8f9fa;">대회를 선택하면 종목이 표시됩니다.</div>
@@ -2960,7 +2960,7 @@ POST /api/external/event-result-link/batch<br>
         {
             const globalCompId = getCompetitionId();
             if (globalCompId) {
-                _selectedCompId = parseInt(globalCompId);
+                _selectedCompId = parseInt(globalCompId);   try { renderSidebar(); } catch (e) {}   // 대회가 정해지면 대회 조건부 화면(국제대회 동기화) 반영
                 const y = new Date().getFullYear(); // default, will be corrected after competitions load
             }
         }
@@ -3065,6 +3065,7 @@ POST /api/external/event-result-link/batch<br>
             // Update mode badge wherever it is rendered
             updateCompModeBadge();
             updateCompStatusUI();
+            try { renderSidebar(); } catch (e) {}   // 대회 목록·선택이 정해진 뒤에야 대회 조건부 화면(국제대회 동기화·중고연맹 기록지)을 판단할 수 있다
         }
         function updateCompModeBadge() {
             const badges = document.querySelectorAll('.comp-mode-badge');
@@ -3150,9 +3151,10 @@ POST /api/external/event-result-link/batch<br>
             if (typeof renderPageNav === 'function') {
                 try { renderPageNav('admin'); } catch(e) { console.warn('renderPageNav 실패:', e); }
             }
-            // Reload current tab
-            const activeTab = document.querySelector('.admin-tab.active');
-            if (activeTab) switchTab(activeTab.dataset.tab, activeTab);
+            // 대회에 따라 보이는 화면·카드가 달라진다(국제대회 동기화, 중·고연맹 기록지 등) → 사이드바 갱신 후 현재 화면 다시 로드
+            try { renderSidebar(); _applyCompConditionals(); } catch (e) {}
+            const cur = _screenFor(_activeScreenId) || ADMIN_SCREENS[0];
+            switchTab(_screenVisible(cur) ? cur.id : 'overview');
         }
 
         // ---- TABS ----
@@ -3161,33 +3163,42 @@ POST /api/external/event-result-link/batch<br>
         function _isolateCardInTab() {}
         function _showAllCardsInTab() {}
 
-        function switchTab(name, btn) {
-            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.remove('active'));
-            // 사이드바에서 호출했을 때 btn이 없을 수도 있으니, data-tab으로 자동 매칭
-            if (!btn) btn = document.querySelector(`.admin-tab[data-tab="${name}"]`);
-            if (btn) btn.classList.add('active');
-            const panel = document.getElementById('tab-' + name);
-            if (panel) panel.classList.add('active');
-            // 탭 전환 시 항상 모든 카드 복원 (사이드바 anchor 격리 모드를 초기화)
-            _showAllCardsInTab(name);
+        // 옛 탭 이름별 데이터 로더 — 화면(screen)이 여러 탭의 카드를 모아 보여주므로 화면이 열릴 때 필요한 로더를 모두 부른다
+        function _runTabLoaders(name) {
             if (name === 'overview') loadOverview();
             if (name === 'athletes') loadAthletes();
             if (name === 'events') loadEvents();
             if (name === 'judges') loadJudgeKeys();
             if (name === 'users') adminUsers_reload();
-            if (name === 'competition') { loadCompEdit(); loadFederations(); loadQuickJudgeLogo(); }
+            if (name === 'competition') { loadCompEdit(); loadFederations(); loadQuickJudgeLogo(); loadReadiness(); loadUndoList(); loadIntlStatus(); }
             if (name === 'upload') { loadTimetableInfo(); ttLoadMatching(); }
             if (name === 'scoreboard') { jgLoadGroups(); }
             if (name === 'settings') { loadSystemSettings(); loadSiteConfigAdmin(); loadHomePopups(); }
             if (name === 'pacing') loadPacingTab();
             if (name === 'documents') { loadDocTemplates(); idcLoadTeams(); }
-            if (name === 'competition') { loadReadiness(); loadUndoList(); loadIntlStatus(); }
             if (name === 'records') loadRecordsTab();
             if (name === 'extapi') { extLoadCompetitions(); extLoadKeys(); extLoadLogs(); }
-            // [대 리뉴얼] 사이드바 활성 항목 동기화
-            try { syncSidebarActive(name); } catch(_) {}
         }
+        // switchTab(name): name 은 화면 id(comp·import·timing …) 또는 옛 탭 이름(competition·upload …). 옛 이름은 그 카드를 품은 화면으로 간다
+        function switchTab(name, btn, subIdx) {
+            try { renderSidebar(); } catch (e) {}   // 대회가 바뀌었으면 보이는 화면 목록도 바뀐다
+            const sc = _screenFor(name);
+            const screenId = sc ? sc.id : name;
+            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.remove('active'));
+            // 옛 탭 버튼(숨김)도 맞춰 둔다 — onCompChange 등이 .admin-tab.active 를 읽는다
+            const primaryTab = sc ? (sc.tab || (sc.loads && sc.loads[0]) || name) : name;
+            const tb = btn || document.querySelector(`.admin-tab[data-tab="${primaryTab}"]`);
+            if (tb) { tb.classList.add('active'); tb.dataset.screen = screenId; }
+            const panel = document.getElementById('tab-' + screenId) || document.getElementById('tab-' + name);
+            if (panel) panel.classList.add('active');
+            if (sc && sc.subtabs) _activateSubtab(sc, subIdx != null ? subIdx : (sc._sub || 0));
+            const loads = sc ? (sc.loads || []) : [name];
+            loads.forEach(n => { try { _runTabLoaders(n); } catch (e) { console.warn('loader 실패:', n, e); } });
+            try { syncSidebarActive(screenId); } catch(_) {}
+            _activeScreenId = screenId;
+        }
+        let _activeScreenId = 'overview';
 
         // ============================================================
         // B-5: 사용자 관리 (JWT 인증)
@@ -3468,7 +3479,7 @@ POST /api/external/event-result-link/batch<br>
                 document.querySelectorAll('.admin-main h4 span, .admin-main h4 div, .admin-main h5 span').forEach(el => {
                     const t = el.textContent.trim();
                     if (/^[A-Z]$/.test(t) && /50%/.test(el.getAttribute('style') || '')) el.remove();                       // 원형 글자 배지
-                    else if (t && !/[가-힣]/.test(t) && /^[A-Za-z0-9 .,()/&:+\-–—]+$/.test(t) && t.length > 3 && el.className.includes('t-muted')) el.remove();   // 영문 부제 (Scoreboard Import 등)
+                    else if (t.length > 3 && /^[A-Za-z]/.test(t) && el.className.includes('t-muted') && el.closest('h4')) el.remove();   // 영문 부제 (Scoreboard Import, Record Excel Import (.lif 대안) 등)
                 });
                 const ICON_MAP = { medal: 'award', judge: 'user', chart: 'chart', download: 'file', key: 'key', file: 'file', check: 'check', link: 'plug', sync: 'plug', auto: 'traffic', edit: 'tag', warn: 'shield', add: 'list', timer: 'timer', copy: 'file', folder: 'folder', danger: 'trash' };   // ICON_PATHS 에 있는 이름만
                 document.querySelectorAll('.css-icon').forEach(el => {
@@ -3548,85 +3559,124 @@ POST /api/external/event-result-link/batch<br>
             { id:'sys',      title:'시스템 / 마스터' },
         ];
 
-        // 사이드바 렌더
-        function renderSidebar() {
-            const root = document.getElementById('sidebar-nav');
-            if (!root) return;
-            const html = ADMIN_GROUPS.map(g => {
-                const items = ADMIN_FEATURES.filter(f => f.group === g.id && (typeof _canSeeTab !== 'function' || _canSeeTab(f.tab)));
-                if (items.length === 0) return '';
-                return `
-                    <div class="sb-group">
-                        <div class="sb-group-title">${g.title}</div>
-                        ${items.map((f, i) => `
-                            <button class="sb-item" data-tab="${f.tab}"
-                                    data-anchor="${f.anchor || ''}"
-                                    data-action="${f.action || ''}"
-                                    onclick="sidebarNavigate(${ADMIN_FEATURES.indexOf(f)})">
-                                <span class="sb-icon">${ICON(f.icon || 'list', { size: 15 })}</span>
-                                <span>${f.label}</span>
-                            </button>
-                        `).join('')}
-                    </div>`;
-            }).join('');
-            root.innerHTML = html;
-            // 초기 활성 동기화 (현재 활성 탭)
-            const activeTab = document.querySelector('.admin-tab.active');
-            if (activeTab) syncSidebarActive(activeTab.dataset.tab);
+        // ============================================================
+        // 화면(screen) 구조 — 재설계 2단계 (docs/ADMIN_REDESIGN_PLAN.md §4)
+        //   사이드바는 화면만 나열한다. 화면은 기존 탭 하나(tab)이거나 기존 카드들을 옮겨 모은 것(items/subtabs)이다.
+        //   카드 DOM 을 옮길 뿐이라 id·이벤트 핸들러·로더는 그대로 동작한다. roleTab: 역할 필터 기준(_canSeeTab), when: 대회 조건
+        // ============================================================
+        const ADMIN_SCREEN_GROUPS = ['현황', '대회', '준비', '진행', '결과 · 문서', '시스템'];
+        const ADMIN_SCREENS = [
+            { id:'overview',     group:'현황',      label:'현황',                icon:'chart',    tab:'overview',    loads:['overview'], roleTab:'overview' },
+            { id:'comp',         group:'대회',      label:'대회 설정',           icon:'building', loads:['competition'], roleTab:'competition',
+              subtabs:[ { label:'기본 정보', items:['card-comp-edit'] }, { label:'서명 · 로고', items:['card-chief-judge'] }, { label:'위험 구역', items:['card-comp-reset','card-comp-delete'] } ] },
+            { id:'intl',         group:'대회',      label:'국제대회 동기화',     icon:'plug',     items:['card-intl'], loads:['competition'], roleTab:'competition', when: c => !!(c && c.sync_source) },
+            { id:'readiness',    group:'대회',      label:'운영 체크리스트',     icon:'check',    items:['card-readiness'], loads:['competition'], roleTab:'competition' },
+            { id:'import',       group:'준비',      label:'가져오기',            icon:'upload',   tab:'upload',      loads:['upload'], roleTab:'upload' },
+            { id:'athletes',     group:'준비',      label:'선수',                icon:'user',     tab:'athletes',    loads:['athletes'], roleTab:'athletes' },
+            { id:'events',       group:'준비',      label:'종목 · 조편성',       icon:'list',     tab:'events',      loads:['events'], roleTab:'events' },
+            { id:'records',      group:'진행',      label:'기록 관리',           icon:'trophy',   tab:'records',     loads:['records'], roleTab:'records' },
+            { id:'timing',       group:'진행',      label:'계측 가져오기',       icon:'timer',    items:['card-sb-lif','sb-keys-area','card-sb-xlsx','card-sb-txt','card-sb-fieldcard'], loads:['scoreboard'], roleTab:'scoreboard' },
+            { id:'joint',        group:'진행',      label:'합동 종목',           icon:'folder',   items:['card-joint'], loads:['scoreboard'], roleTab:'scoreboard' },
+            { id:'activity',     group:'진행',      label:'되돌리기 · 활동 로그', icon:'undo',     items:['card-undo','card-audit-log'], loads:['competition','overview'], roleTab:'competition' },
+            { id:'documents',    group:'결과 · 문서', label:'문서 · 다운로드',   icon:'file',     tab:'documents',   loads:['documents'], roleTab:'documents' },
+            { id:'certificates', group:'결과 · 문서', label:'상장',              icon:'award',    tab:'certificates', loads:[], roleTab:'certificates' },
+            { id:'notify',       group:'결과 · 문서', label:'알림 (푸시 · 문자)', icon:'message',  tab:'sms',         loads:[], roleTab:'sms' },
+            { id:'access',       group:'시스템',    label:'사용자 · 키',         icon:'key',      loads:['users','judges','settings','extapi'], roleTab:'judges',
+              subtabs:[ { label:'계정', tab:'users' }, { label:'심판 운영키', tab:'judges' }, { label:'기본 키 · 기록위원 키', items:['card-default-keys','card-record-officer-key'] }, { label:'외부 API', tab:'extapi' } ] },
+            { id:'pacing',       group:'시스템',    label:'페이싱 라이트',       icon:'traffic',  tab:'pacing',      loads:['pacing'], roleTab:'pacing' },
+            { id:'brand',        group:'시스템',    label:'브랜드 · 홈',         icon:'home',     items:['card-site-content','card-home-popup','popup-editor-wrap'], loads:['settings'], roleTab:'settings' },
+            { id:'masters',      group:'시스템',    label:'마스터 (연맹 · 부)',  icon:'book',     items:['card-federations'], loads:['competition'], roleTab:'competition', extraHtml:'<div class="admin-card" id="card-division-entry"><h4>부(Division) 마스터</h4><p class="t-muted" style="margin:0 0 12px;">실업·대학·고등·중등·일반·학년 단위 부를 추가·수정합니다. 종목 화면의 부별 필터와 부별 기록(DR)이 이 목록을 씁니다.</p><button class="btn btn-outline" onclick="openDivisionManagerModal()">부 관리 열기</button></div>' },
+            { id:'backup',       group:'시스템',    label:'백업 · 복원',         icon:'shield',   items:['card-data-backup'], loads:['competition'], roleTab:'competition' },
+            { id:'guide',        group:'시스템',    label:'도움말',              icon:'book',     items:['card-record-guide','card-quick-links'], loads:[], roleTab:'overview' },
+        ];
+        function _screenFor(name) {
+            if (!name) return null;
+            let sc = ADMIN_SCREENS.find(x => x.id === name);
+            if (sc) return sc;
+            sc = ADMIN_SCREENS.find(x => x.tab === name) || ADMIN_SCREENS.find(x => (x.subtabs || []).some(st => st.tab === name));
+            if (sc) return sc;
+            // 옛 탭 이름 → 그 탭의 카드가 주로 사는 화면
+            const legacy = { competition:'comp', scoreboard:'timing', settings:'brand', judges:'access', users:'access', extapi:'access', sms:'notify', upload:'import' };
+            return ADMIN_SCREENS.find(x => x.id === legacy[name]) || null;
         }
-
-        // 사이드바 활성 표시 (탭 이름 기준)
-        function syncSidebarActive(tabName) {
-            document.querySelectorAll('#sidebar-nav .sb-item').forEach(el => {
-                el.classList.toggle('active', el.dataset.tab === tabName && !el.dataset.anchor);
+        function _screenVisible(sc) {
+            if (typeof _canSeeTab === 'function' && sc.roleTab && !_canSeeTab(sc.roleTab)) return false;
+            if (sc.when) { const c = (typeof _competitions !== 'undefined' && _competitions || []).find(x => x.id === _selectedCompId); try { return !!sc.when(c); } catch (e) { return false; } }
+            return true;
+        }
+        // 화면 패널 만들기 — 카드 DOM 을 옮긴다 (한 번만)
+        let _screensBuilt = false;
+        function buildScreens() {
+            if (_screensBuilt) return; _screensBuilt = true;
+            const main = document.querySelector('.admin-main'); if (!main) return;
+            const moveInto = (container, spec) => {
+                if (spec.tab) { const src = document.getElementById('tab-' + spec.tab); if (src) { while (src.firstChild) container.appendChild(src.firstChild); } }
+                (spec.items || []).forEach(id => { const el = document.getElementById(id); if (el) container.appendChild(el); });
+            };
+            ADMIN_SCREENS.forEach(sc => {
+                let panel;
+                if (sc.tab && !sc.subtabs && !sc.items) { panel = document.getElementById('tab-' + sc.tab); if (!panel) return; if (sc.id !== sc.tab) { panel.id = 'tab-' + sc.id; panel.dataset.legacyTab = sc.tab; } }
+                else { if (document.getElementById('tab-' + sc.id)) console.warn('[screens] id 충돌:', sc.id); panel = document.createElement('div'); panel.id = 'tab-' + sc.id; panel.className = 'admin-tab-panel'; main.appendChild(panel); }
+                // 화면 제목 바
+                const title = document.createElement('div'); title.className = 'adm-page-title'; title.innerHTML = `<h2>${sc.label}</h2>`;
+                panel.insertBefore(title, panel.firstChild);
+                if (sc.subtabs) {
+                    const bar = document.createElement('div'); bar.className = 'adm-subtabs';
+                    sc.subtabs.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = st.label; b.onclick = () => _activateSubtab(sc, i); bar.appendChild(b); });
+                    panel.appendChild(bar);
+                    sc.subtabs.forEach((st, i) => { const box = document.createElement('div'); box.className = 'adm-subpanel'; box.dataset.sub = String(i); moveInto(box, st); panel.appendChild(box); });
+                } else if (sc.items) { moveInto(panel, sc); }
+                if (sc.extraHtml) panel.insertAdjacentHTML('beforeend', sc.extraHtml);
             });
         }
+        function _activateSubtab(sc, i) {
+            sc._sub = i;
+            const panel = document.getElementById('tab-' + sc.id); if (!panel) return;
+            panel.querySelectorAll('.adm-subtabs button').forEach((b, k) => b.classList.toggle('active', k === i));
+            panel.querySelectorAll('.adm-subpanel').forEach(box => { box.style.display = box.dataset.sub === String(i) ? '' : 'none'; });
+        }
+        // 카드 id 로 이동 (현황 타일 등 딥링크): 그 카드가 사는 화면·서브탭을 열고 스크롤·강조
+        function goToCard(cardId) {
+            const el = document.getElementById(cardId); if (!el) return;
+            const panel = el.closest('.admin-tab-panel'); if (!panel) return;
+            const sc = ADMIN_SCREENS.find(x => 'tab-' + x.id === panel.id);
+            const box = el.closest('.adm-subpanel');
+            switchTab(sc ? sc.id : panel.id.replace('tab-', ''), null, box ? Number(box.dataset.sub) : undefined);
+            setTimeout(() => { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.remove('card-flash'); void el.offsetWidth; el.classList.add('card-flash'); }, 80);
+        }
 
-        // 사이드바/팔레트에서 항목 클릭 시 이동
-        // [세부 분리] anchor가 있는 메뉴 → 해당 카드만 단독 표시, anchor 없는 메뉴 → 탭 내 모든 카드 표시
-        function sidebarNavigate(idx) {
-            const f = ADMIN_FEATURES[idx];
-            if (!f) return;
-            const tabBtn = document.querySelector(`.admin-tab[data-tab="${f.tab}"]`);
-            // 다른 탭이면 우선 switchTab으로 이동
-            const isAlreadyActive = tabBtn && tabBtn.classList.contains('active');
-            if (!isAlreadyActive) {
-                switchTab(f.tab, tabBtn);
-            }
-            // 사이드바 활성: 클릭한 항목 자체를 active로
-            document.querySelectorAll('#sidebar-nav .sb-item').forEach(el => el.classList.remove('active'));
-            const target = document.querySelectorAll('#sidebar-nav .sb-item')[idx];
-            if (target) target.classList.add('active');
-
-            // [세부 분리] 카드 격리/복원
-            // - anchor 있음: 해당 카드만 단독 표시 (메뉴별 전문성·집중도 ↑)
-            // - anchor 없음(탭 전체 메뉴): 모든 카드 표시
-            if (f.anchor) {
-                _isolateCardInTab(f.tab, f.anchor);
-            } else {
-                _showAllCardsInTab(f.tab);
-            }
-
-            // 카드/요소 점프 + 액션
-            setTimeout(() => {
-                if (f.anchor) {
-                    const card = document.getElementById(f.anchor);
-                    if (card) {
-                        // 격리 후 단독 카드를 부드럽게 강조
-                        card.scrollIntoView({ behavior:'smooth', block:'start' });
-                        card.classList.remove('card-flash');
-                        void card.offsetWidth; // reflow
-                        card.classList.add('card-flash');
-                    }
-                } else {
-                    // 탭 상단으로 스크롤
-                    const panel = document.getElementById('tab-' + f.tab);
-                    if (panel) panel.scrollIntoView({ behavior:'smooth', block:'start' });
-                }
-                if (f.action && typeof window[f.action] === 'function') {
-                    try { window[f.action](); } catch(e) { console.warn('action 실행 실패:', e); }
-                }
-            }, isAlreadyActive ? 0 : 120);
+        // 사이드바 렌더 — 화면 목록 (역할·대회 조건 필터)
+        let _sidebarSig = '';
+        function renderSidebar(force) {
+            const root = document.getElementById('sidebar-nav');
+            if (!root) return;
+            buildScreens();
+            try { _applyCompConditionals(); } catch (e) {}
+            const sig = ADMIN_SCREENS.filter(_screenVisible).map(sc => sc.id).join(',') + '|' + _activeScreenId;
+            if (!force && sig === _sidebarSig && root.children.length) return;
+            _sidebarSig = sig;
+            root.innerHTML = ADMIN_SCREEN_GROUPS.map(g => {
+                const items = ADMIN_SCREENS.filter(sc => sc.group === g && _screenVisible(sc));
+                if (!items.length) return '';
+                return `<div class="sb-group"><div class="sb-group-title">${g}</div>${items.map(sc => `
+                    <button class="sb-item${sc.id === _activeScreenId ? ' active' : ''}" data-screen="${sc.id}" onclick="sidebarNavigate('${sc.id}')">
+                        <span class="sb-icon">${ICON(sc.icon || 'list', { size: 15 })}</span><span>${sc.label}</span>
+                    </button>`).join('')}</div>`;
+            }).join('');
+        }
+        function syncSidebarActive(screenId) {
+            document.querySelectorAll('#sidebar-nav .sb-item').forEach(el => el.classList.toggle('active', el.dataset.screen === screenId));
+        }
+        function sidebarNavigate(screenId) {
+            switchTab(screenId);
+            const panel = document.getElementById('tab-' + screenId);
+            if (panel) window.scrollTo({ top: Math.max(0, panel.getBoundingClientRect().top + window.scrollY - 80), behavior: 'smooth' });
+        }
+        window.goToCard = goToCard;
+        // 대회 조건부 카드: 중·고연맹 종합기록지는 KJAF 대회에서만
+        function _applyCompConditionals() {
+            const c = (typeof _competitions !== 'undefined' && _competitions || []).find(x => x.id === _selectedCompId) || {};
+            const kjaf = document.getElementById('card-kjaf-record'); if (kjaf) kjaf.style.display = (c.federation === 'KJAF') ? '' : 'none';
         }
 
         document.addEventListener('DOMContentLoaded', () => { renderSidebar(); });

@@ -94,3 +94,22 @@
 
 /* 이모지·기호 흔적(⚠ ⭐ ※ ①②) 대신 텍스트만 — 이모지 폰트 폴백이 튀지 않게 */
 .admin-main .ui-emoji { vertical-align: -2px; }
+
+/* ── 화면 제목 바 · 화면 안 서브탭 (재설계 2단계) ── */
+.admin-main .adm-page-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 0 14px; }
+.admin-main .adm-page-title h2 { font-size: 20px; font-weight: 800; margin: 0; letter-spacing: -0.01em; color: var(--adm-text); }
+.admin-main .adm-subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--adm-line); margin-bottom: 16px; }
+.admin-main .adm-subtabs button { min-height: 36px; padding: 0 14px; border: none; background: none; font-size: 13px; font-weight: 600; color: var(--adm-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+.admin-main .adm-subtabs button:hover { color: var(--adm-text); }
+.admin-main .adm-subtabs button.active { color: var(--adm-primary-ink); border-bottom-color: var(--adm-primary); }
+
+/* ── 1단계 검수 반영 ── */
+.admin-main .admin-card h4, .admin-main .admin-card h5 { color: var(--adm-text) !important; }
+.admin-main .danger-zone { background: var(--adm-surface); }
+.admin-main .btn[style*="background:#16a085"], .admin-main .btn[style*="background: #16a085"] { background: var(--adm-primary) !important; border-color: var(--adm-primary) !important; color: #fff !important; }
+.admin-main .stat-card { flex: 1 1 160px; min-width: 160px; border-top: 1px solid var(--adm-line) !important; }
+.admin-main .stat-card .stat-label, .admin-main .stat-card small { font-size: 12px; }
+.admin-main #evt-count { font-size: 12px; }
+.admin-main .fc-drop, .admin-main #tt-drop { border: 1px dashed var(--adm-line-strong); background: var(--adm-surface-2); }
+.admin-main .fc-drop:hover, .admin-main .fc-drop.over, .admin-main #tt-drop:hover, .admin-main #tt-drop.over { background: #f6f1e4; border-color: var(--adm-primary); }
+.admin-main #ath-tree, .admin-main .matrix-scroll-area { font-size: 12px; }
