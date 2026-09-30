@@ -14,7 +14,7 @@
     'use strict';
 
     var STORAGE_KEY = 'pace_lang';
-    var DICT_VERSION = (window.PACE_I18N_VERSION || '2');
+    var DICT_VERSION = (window.PACE_I18N_VERSION || '3');
     var LANGS = [
         { code: 'ko', label: '한국어', short: 'KO' },
         { code: 'en', label: 'English', short: 'EN' },
@@ -50,6 +50,7 @@
     // ── 원문 사전 (언어별) ──
     var TEXT = { en: null, ja: null };          // { 원문: 번역 }
     var PATTERNS = { en: [], ja: [] };          // [{ re, tpl }] — 키에 {0} 이 든 항목
+    var PHRASES = { en: [], ja: [] };           // 서버가 준 긴 원문(대회명 등) — 문장 안에 들어 있어도 바꾼다 (긴 것부터)
     var loading = {};
 
     function getLang() {
@@ -88,7 +89,10 @@
         }).catch(function () { return {}; });
         p.then(function (dict) {
             // 서버가 가진 원문→번역(대회명 영문·일문 등)을 덧붙인다 — 캐시 경로에서도, 실패해도 사전은 그대로
-            return fetch('/api/labels?lang=' + lang).then(function (r) { return r.ok ? r.json() : null; }).then(function (l) { if (l && l.text) Object.assign(dict, l.text); return dict; }).catch(function () { return dict; });
+            return fetch('/api/labels?lang=' + lang).then(function (r) { return r.ok ? r.json() : null; }).then(function (l) {
+                if (l && l.text) { Object.assign(dict, l.text); PHRASES[lang] = Object.keys(l.text).filter(function (k) { return k.length >= 4; }).sort(function (a, b) { return b.length - a.length; }); }
+                return dict;
+            }).catch(function () { return dict; });
         }).then(function (dict) {
             TEXT[lang] = dict; PATTERNS[lang] = compilePatterns(lang);
             var cbs = loading[lang]; delete loading[lang];
@@ -125,6 +129,12 @@
             }
             if (ok) return res.join('');
         }
+        // 서버가 준 긴 원문(대회명)이 문장 안에 있으면 그 부분만 바꾼다: '2026 아이치 … 육상 (2026-09-23)' → '2026 Aichi … (2026-09-23)'
+        var ph = PHRASES[lang]; if (ph && ph.length) {
+            var changed = false, o = s;
+            for (var q = 0; q < ph.length; q++) if (o.indexOf(ph[q]) >= 0) { o = o.split(ph[q]).join(d[ph[q]]); changed = true; }
+            if (changed) return o;
+        }
         return null;
     }
     // {0:ord} — 서수 (en: 1st 2nd 3rd, ja: 1位, ko: 1위)
@@ -147,7 +157,7 @@
 
     // ── DOM 번역 ──
     var SKIP_TAG = { SCRIPT: 1, STYLE: 1, CODE: 1, PRE: 1, TEXTAREA: 1, NOSCRIPT: 1, SVG: 1, svg: 1 };
-    var ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+    var ATTRS = ['placeholder', 'title', 'aria-label', 'alt', 'data-label'];   // data-label: CSS content:attr() 로 그리는 라벨(대시보드 폰 카드의 라운드명)
     var origText = new WeakMap();    // 텍스트 노드 → 한국어 원문
     var origAttr = new WeakMap();    // 요소 → { attr: 원문 }
     var lastSet = new WeakMap();     // 우리가 마지막으로 써 넣은 값 — 관찰자가 우리 변경을 남의 변경으로 오해하지 않게
@@ -268,7 +278,7 @@
         harvest(); applyKeys(lang);
         ensureDict(lang, function () {
             translateAll(lang);
-            try { document.documentElement.lang = lang; } catch (e) {}
+            try { document.documentElement.lang = lang; document.documentElement.setAttribute('data-lang', lang); } catch (e) {}
             updateSwitcherActive(lang);
             try { window.dispatchEvent(new CustomEvent('pace:langchange', { detail: { lang: lang } })); } catch (e) {}
         });
