@@ -56,8 +56,29 @@ CREATE TABLE IF NOT EXISTS "combined_score" (
 );
 
 -- Table: competition
+-- Organization (조직 = 테넌트, 멀티테넌시 1단계 2026-10-01 — docs/MULTI_TENANCY_PLAN.md)
+CREATE TABLE IF NOT EXISTS "organization" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "slug" TEXT NOT NULL UNIQUE,
+    "name" TEXT NOT NULL,
+    "name_en" TEXT NOT NULL DEFAULT '',
+    "country" TEXT NOT NULL DEFAULT 'KR',
+    "default_tz" TEXT NOT NULL DEFAULT 'Asia/Seoul',
+    "default_lang" TEXT NOT NULL DEFAULT 'ko',
+    "custom_domain" TEXT NOT NULL DEFAULT '',
+    "site_name" TEXT NOT NULL DEFAULT '',
+    "brand_logo_path" TEXT NOT NULL DEFAULT '',
+    "brand_color_point" TEXT NOT NULL DEFAULT '',
+    "brand_color_accent" TEXT NOT NULL DEFAULT '',
+    "settings_json" TEXT NOT NULL DEFAULT '{}',
+    "active" INTEGER NOT NULL DEFAULT 1,
+    "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "updated_at" TEXT NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS "competition" (
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 1단계)
     "name" TEXT NOT NULL,
     "start_date" TEXT NOT NULL,
     "end_date" TEXT NOT NULL,
@@ -376,6 +397,7 @@ DO $$ BEGIN ALTER TABLE "combined_score" ADD COLUMN "status_code" TEXT DEFAULT '
 -- Table: home_popup
 CREATE TABLE IF NOT EXISTS "home_popup" (
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 조직별 홈 팝업 (멀티테넌시 1단계)
     "popup_type" TEXT NOT NULL DEFAULT 'public',
     "title" TEXT NOT NULL DEFAULT '',
     "subtitle" TEXT NOT NULL DEFAULT '',

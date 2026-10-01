@@ -452,3 +452,10 @@ await db.transaction(async () => {
 ## 다국어 (2026-09-30, B3)
 - `public/i18n.js` v2: 한국어 원문이 키인 사전(`public/locales/en.json`·`ja.json`, 각 ≈3,680항목)으로 전 페이지(오버레이·open·privacy 제외)의 DOM 텍스트·속성·문서 제목을 실시간 번역(MutationObserver). 언어는 `localStorage.pace_lang` → 없으면 브라우저 언어(ko/ja/그 밖엔 en). 대회명은 `competition.name_en/name_ja`(관리자 대회 설정) 를 `/api/labels` 의 `text` 로 받아 사전에 합친다. 선수명은 EN/JA 에서 라틴 이름 우선(`dashboard.js _dispName`).
 - 도구 `scripts/i18n/`: `extract.js`(원문 추출·통계·누락), `parts/<lang>_*.json`(번역 조각), `build.js`(자동 항목 + 조각 + `locales/<lang>.overrides.json` → 사전), `GLOSSARY.md`. 새 한국어 문장을 넣었으면 extract → 번역 → build, 사전이 바뀌면 `i18n.js` 의 `DICT_VERSION` 올리기. 자세한 건 `docs/I18N_GUIDE.md`.
+
+## 조직 — 멀티테넌시 1단계 (2026-10-01, docs/MULTI_TENANCY_PLAN.md)
+- `organization` 테이블(slug·국가·기본 시간대·기본 언어·전용 도메인·사이트 이름·브랜드·settings_json). 기본 조직 id 1 (`ORG_DEFAULT_SLUG`, 기본 `pace-rise`)은 부팅 때 자동 생성, 기존 대회·계정은 전부 조직 1.
+- `lib/org.js` `createResolver(() => db)` → `app.use(ORG.middleware())` 가 요청마다 `req.org` 를 둔다: `?org=`/`x-org` → 전용 도메인 → 서브도메인 첫 라벨 == slug → 기본 조직. 60초 캐시, 조직 변경 시 `invalidate()`.
+- 조직 스코프가 들어간 곳: `lib/routes/competitions.js`(목록·recent·by-federation·조회·생성·복제·`/api/event/:slug` — 다른 조직 대회는 404, 새 대회 시간대 기본값 = 조직), `lib/routes/home_popups.js`(`home_popup.organization_id`), `lib/routes/admin_keys.js` `/api/site-config`(기본 조직은 `system_config site_*`, 다른 조직은 `organization.settings_json`; 응답에 `org` 요약 포함).
+- `lib/routes/organizations.js`: `GET /api/org`(공개), `GET/POST/PUT /api/admin/organizations`(기본 조직의 관리자 키만). 관리자 › 시스템 › 조직 화면(`card-organizations`, 플랫폼 관리자만 보임), 홈은 기본 조직이 아니면 사이트 이름을 조직 이름으로.
+- 아직 전역인 것(2·3단계): 기록표 NR, 연맹·부·시리즈 마스터, 운영키·계정, 상장 양식, 문자 설정, 외부 API 키, 푸시.

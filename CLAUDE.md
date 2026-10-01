@@ -59,6 +59,9 @@ A single adapter exposes a unified interface over **two backends**, selected by 
 
 When adding protected routes, follow the pattern of the surrounding routes in that domain rather than mixing the two schemes arbitrarily.
 
+### Organizations (multi-tenancy, 1단계 적용 2026-10-01)
+`organization` 테이블 + `competition.organization_id`. `lib/org.js` 미들웨어가 요청 호스트(서브도메인·전용 도메인·`?org=`)로 `req.org` 를 정한다. 대회 목록·조회·생성·홈 팝업·site-config 는 `req.org.id` 로 걸러진다. **새로 만드는 전역 데이터(마스터·설정·키)는 `organization_id` 를 두고 `req.org` 로 거른다**; 다른 조직의 대회는 404 로 "없는 것처럼" 답한다. 단계·남은 전역 테이블 목록은 `docs/MULTI_TENANCY_PLAN.md`.
+
 ### Post-competition lock
 Many write routes are gated by `requireAdminAfterCompEnd()` / `isCompetitionEnded()`: once a competition's `status='completed'` (or `end_date` passed with no explicit status), non-admins are blocked from mutations. Preserve this when touching write paths.
 

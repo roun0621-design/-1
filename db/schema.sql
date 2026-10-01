@@ -6,8 +6,30 @@
 PRAGMA foreign_keys = ON;
 
 -- Competitions (대회)
+-- Organization (조직 = 테넌트, 멀티테넌시 1단계 2026-10-01 — docs/MULTI_TENANCY_PLAN.md)
+--   기본 조직 id 1 (slug 'pace-rise', KR). 요청 호스트(서브도메인·전용 도메인)로 조직을 고른다 (lib/org.js)
+CREATE TABLE IF NOT EXISTS organization (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,                       -- 서브도메인·URL 식별자 (a-z0-9-)
+    name TEXT NOT NULL,
+    name_en TEXT NOT NULL DEFAULT '',
+    country TEXT NOT NULL DEFAULT 'KR',              -- ISO 3166-1 alpha-2
+    default_tz TEXT NOT NULL DEFAULT 'Asia/Seoul',   -- 새 대회 기본 시간대
+    default_lang TEXT NOT NULL DEFAULT 'ko',         -- ko | en | ja
+    custom_domain TEXT NOT NULL DEFAULT '',          -- 전용 도메인 (있으면 호스트가 이와 같을 때 이 조직)
+    site_name TEXT NOT NULL DEFAULT '',
+    brand_logo_path TEXT NOT NULL DEFAULT '',
+    brand_color_point TEXT NOT NULL DEFAULT '',
+    brand_color_accent TEXT NOT NULL DEFAULT '',
+    settings_json TEXT NOT NULL DEFAULT '{}',        -- site_* 류 설정 (기본 조직은 system_config 사용)
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS competition (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    organization_id INTEGER NOT NULL DEFAULT 1 REFERENCES organization(id),   -- 소속 조직 (멀티테넌시 1단계)
     name TEXT NOT NULL,
     start_date TEXT NOT NULL,
     end_date TEXT NOT NULL,

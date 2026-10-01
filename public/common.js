@@ -647,6 +647,7 @@ const API = {
 
     // Federations (cached — called by renderCompInfoBar)
     getFederations: () => cachedApi('federations', () => api('GET', '/api/federations')),
+    getOrg: () => cachedApi('org', () => api('GET', '/api/org')).then(o => { window.PACE_ORG = o; return o; }),   // 현재 호스트의 조직 (멀티테넌시 1단계)
     createFederation: (data, adminKey) => api('POST', '/api/federations', { ...data, admin_key: adminKey }),
     updateFederation: (id, data, adminKey) => api('PUT', `/api/federations/${id}`, { ...data, admin_key: adminKey }),
     deleteFederation: (id, adminKey) => api('DELETE', `/api/federations/${id}`, { admin_key: adminKey }),
@@ -1477,7 +1478,7 @@ function _buildMobileMenu(pages, currentPage, role) {
 
     menu.innerHTML = `
         <div class="mobile-menu-header">
-            <span class="mm-brand">PACE RISE <span class="mm-colon">:</span> <span class="mm-scope">Node</span></span>
+            <span class="mm-brand">${(window.PACE_ORG && !window.PACE_ORG.is_default) ? (window.PACE_ORG.site_name || window.PACE_ORG.name) : 'PACE RISE <span class="mm-colon">:</span> <span class="mm-scope">Node</span>'}</span>
             ${prCloseBtn('closeMobileMenu()', { cls: 'mobile-menu-close' })}
         </div>
         <div class="mobile-menu-nav">${navLinks}</div>

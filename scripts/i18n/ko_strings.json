@@ -317,6 +317,23 @@
    "admin.html"
   ]
  },
+ "닫기": {
+  "count": 39,
+  "files": [
+   "admin.html",
+   "callroom.js",
+   "common.js",
+   "dashboard.js",
+   "display-manage.html",
+   "field-card-upload.js",
+   "index.html",
+   "push.js",
+   "record.html",
+   "record.js",
+   "result-image.js",
+   "results.html"
+  ]
+ },
  "{0} 기록 갱신 후보 {1}건 감지": {
   "count": 1,
   "files": [
@@ -405,7 +422,7 @@
   ]
  },
  "이름": {
-  "count": 12,
+  "count": 13,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -432,12 +449,6 @@
    "event-record.html",
    "record.js",
    "results.js"
-  ]
- },
- "학년": {
-  "count": 7,
-  "files": [
-   "admin.html"
   ]
  },
  "{0}명 · {1}개 팀": {
@@ -516,8 +527,14 @@
    "admin.html"
   ]
  },
+ "학년": {
+  "count": 7,
+  "files": [
+   "admin.html"
+  ]
+ },
  "저장": {
-  "count": 22,
+  "count": 23,
   "files": [
    "admin.html",
    "display-manage.html",
@@ -565,7 +582,7 @@
   ]
  },
  "제거": {
-  "count": 11,
+  "count": 12,
   "files": [
    "admin.html",
    "callroom.js",
@@ -633,7 +650,7 @@
   ]
  },
  "취소": {
-  "count": 40,
+  "count": 41,
   "files": [
    "admin.html",
    "callroom.js",
@@ -715,7 +732,7 @@
   ]
  },
  "종목": {
-  "count": 24,
+  "count": 25,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -768,13 +785,7 @@
    "results.js"
   ]
  },
- "division 미지정": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "▼ 세부 {0}개": {
+ "세부 {0}개": {
   "count": 1,
   "files": [
    "admin.html"
@@ -792,7 +803,7 @@
    "admin.html"
   ]
  },
- "세부 {0}개": {
+ "세부 {0}개 {1}": {
   "count": 1,
   "files": [
    "admin.html"
@@ -1126,11 +1137,68 @@
    "admin.html"
   ]
  },
+ "주소": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "국가": {
+  "count": 2,
+  "files": [
+   "admin.html",
+   "dashboard.js"
+  ]
+ },
+ "시간대": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "index.html"
+  ]
+ },
+ "언어": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "대회": {
+  "count": 8,
+  "files": [
+   "admin.html",
+   "callroom.js",
+   "common.js"
+  ]
+ },
+ "상태": {
+  "count": 31,
+  "files": [
+   "admin.html",
+   "callroom.js",
+   "dashboard.js",
+   "field-card-upload.js",
+   "record.js",
+   "results.js"
+  ]
+ },
  "수정": {
   "count": 7,
   "files": [
    "admin.html",
    "display-manage.html"
+  ]
+ },
+ "접속 주소:": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "— DNS 에서 서브도메인(와일드카드)을 이 서버로 연결해야 합니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
   ]
  },
  "{0} 연맹의 대회 전체를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?": {
@@ -1273,23 +1341,6 @@
    "admin.html",
    "common.js",
    "index.html"
-  ]
- },
- "닫기": {
-  "count": 39,
-  "files": [
-   "admin.html",
-   "callroom.js",
-   "common.js",
-   "dashboard.js",
-   "display-manage.html",
-   "field-card-upload.js",
-   "index.html",
-   "push.js",
-   "record.html",
-   "record.js",
-   "result-image.js",
-   "results.html"
   ]
  },
  "통백업 완료 ({0} MB) — {1}": {
@@ -1560,17 +1611,6 @@
    "admin.html"
   ]
  },
- "상태": {
-  "count": 30,
-  "files": [
-   "admin.html",
-   "callroom.js",
-   "dashboard.js",
-   "field-card-upload.js",
-   "record.js",
-   "results.js"
-  ]
- },
  "변경사항": {
   "count": 1,
   "files": [
@@ -1779,19 +1819,20 @@
    "admin.html"
   ]
  },
- "(YouTube 등)": {
-  "count": 1,
+ "미리보기": {
+  "count": 17,
   "files": [
    "admin.html"
   ]
  },
- "결과 링크 (Result URL)": {
-  "count": 1,
+ "결과 링크": {
+  "count": 2,
   "files": [
-   "admin.html"
+   "admin.html",
+   "display-manage.html"
   ]
  },
- "(외부 결과 페이지)": {
+ "열기": {
   "count": 1,
   "files": [
    "admin.html"
@@ -1966,19 +2007,13 @@
    "admin.html"
   ]
  },
- "• 키없음": {
+ "키 없음": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
  "클릭: 선수 보기": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "조 이름 수정": {
   "count": 2,
   "files": [
    "admin.html"
@@ -2083,6 +2118,14 @@
    "admin.html",
    "callroom.js",
    "dashboard.js"
+  ]
+ },
+ "없음": {
+  "count": 18,
+  "files": [
+   "admin.html",
+   "callroom.js",
+   "display-manage.html"
   ]
  },
  "{0}명 배정": {
@@ -2363,7 +2406,7 @@
   ]
  },
  "기록": {
-  "count": 34,
+  "count": 35,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -3741,12 +3784,6 @@
    "admin.html"
   ]
  },
- "미리보기": {
-  "count": 16,
-  "files": [
-   "admin.html"
-  ]
- },
  "선택": {
   "count": 5,
   "files": [
@@ -4724,14 +4761,6 @@
    "admin.html"
   ]
  },
- "대회": {
-  "count": 7,
-  "files": [
-   "admin.html",
-   "callroom.js",
-   "common.js"
-  ]
- },
  "준비": {
   "count": 4,
   "files": [
@@ -4751,7 +4780,7 @@
   ]
  },
  "시스템": {
-  "count": 7,
+  "count": 8,
   "files": [
    "admin.html"
   ]
@@ -4793,7 +4822,7 @@
   ]
  },
  "선수": {
-  "count": 7,
+  "count": 8,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -4857,7 +4886,7 @@
   ]
  },
  "다운로드": {
-  "count": 2,
+  "count": 1,
   "files": [
    "admin.html"
   ]
@@ -4961,6 +4990,12 @@
  },
  "부 관리 열기": {
   "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "조직": {
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -5119,7 +5154,7 @@
   ]
  },
  "저장 실패": {
-  "count": 19,
+  "count": 20,
   "files": [
    "admin.html",
    "event-record.html",
@@ -5456,7 +5491,7 @@
   ]
  },
  "트랙": {
-  "count": 21,
+  "count": 22,
   "files": [
    "admin.html",
    "common.js",
@@ -5487,11 +5522,33 @@
   ]
  },
  "도로": {
-  "count": 10,
+  "count": 11,
   "files": [
    "admin.html",
    "common.js",
    "display-manage.html"
+  ]
+ },
+ "필드": {
+  "count": 15,
+  "files": [
+   "admin.html",
+   "dashboard.js",
+   "display-manage.html"
+  ]
+ },
+ "혼성경기": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "dashboard.js"
+  ]
+ },
+ "계주": {
+  "count": 9,
+  "files": [
+   "admin.html",
+   "dashboard.js"
   ]
  },
  "링크 있음": {
@@ -5504,6 +5561,19 @@
   "count": 1,
   "files": [
    "admin.html"
+  ]
+ },
+ "접기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "보기": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "dashboard.js"
   ]
  },
  "모든 종목을 WA 표준 육상 순서로 재정렬하시겠습니까?": {
@@ -5564,14 +5634,6 @@
   "count": 1,
   "files": [
    "admin.html"
-  ]
- },
- "없음": {
-  "count": 17,
-  "files": [
-   "admin.html",
-   "callroom.js",
-   "display-manage.html"
   ]
  },
  "(비활성)": {
@@ -5811,6 +5873,56 @@
   "count": 1,
   "files": [
    "admin.html"
+  ]
+ },
+ "조직 관리는 기본 조직에서만 할 수 있습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "불러오지 못했습니다": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "common.js"
+  ]
+ },
+ "사용": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "중지": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "조직 추가": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "조직을 저장했습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "조직을 추가했습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "저장 실패:": {
+  "count": 9,
+  "files": [
+   "admin.html",
+   "record.js"
   ]
  },
  "등록된 연맹이 없습니다.": {
@@ -6199,14 +6311,6 @@
   "count": 1,
   "files": [
    "admin.html"
-  ]
- },
- "필드": {
-  "count": 14,
-  "files": [
-   "admin.html",
-   "dashboard.js",
-   "display-manage.html"
   ]
  },
  "원반던지기": {
@@ -6605,6 +6709,12 @@
   ]
  },
  "스코어보드 키: ${h.scoreboard_key}&#10;클릭하여 수정": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "조 이름 수정": {
   "count": 1,
   "files": [
    "admin.html"
@@ -7324,13 +7434,6 @@
    "index.html"
   ]
  },
- "계주": {
-  "count": 8,
-  "files": [
-   "admin.html",
-   "dashboard.js"
-  ]
- },
  "종합": {
   "count": 4,
   "files": [
@@ -7523,13 +7626,6 @@
   "count": 1,
   "files": [
    "admin.html"
-  ]
- },
- "저장 실패:": {
-  "count": 8,
-  "files": [
-   "admin.html",
-   "record.js"
   ]
  },
  "좌측": {
@@ -9287,6 +9383,30 @@
    "admin.html"
   ]
  },
+ "예: jp": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "예: 일본육상경기연맹": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "비우면 조직 이름": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "예: results.jaaf.or.jp (선택)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "예: KTFL": {
   "count": 1,
   "files": [
@@ -9666,7 +9786,7 @@
   ]
  },
  "불러오는 중…": {
-  "count": 8,
+  "count": 9,
   "files": [
    "admin.html",
    "common.js",
@@ -10017,12 +10137,10 @@
    "admin.html"
   ]
  },
- "명단": {
-  "count": 12,
+ "선수 명단": {
+  "count": 1,
   "files": [
-   "admin.html",
-   "callroom.js",
-   "dashboard.js"
+   "admin.html"
   ]
  },
  "시간표": {
@@ -11028,13 +11146,6 @@
    "index.html"
   ]
  },
- "시간대": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "index.html"
-  ]
- },
  "(개최지)": {
   "count": 1,
   "files": [
@@ -11123,12 +11234,6 @@
   ]
  },
  "행사 주소(slug)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "접속 주소:": {
   "count": 1,
   "files": [
    "admin.html"
@@ -11366,6 +11471,73 @@
   ]
  },
  "이 서버는 PostgreSQL 을 씁니다. 데이터베이스 전체 백업은 클라우드(RDS) 자동 백업과 서버의 일일 pg_backup(S3 보관)이 맡고, 복원은 서버 관리자가 합니다. 대회 단위 파일은 위의 대회별 백업을 쓰세요.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "조직마다 자기 주소(서브도메인)로 들어가면 자기 대회·설정만 보입니다. 기본 조직은 이 서버의 주소 그대로입니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "주소(slug) *": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이름 *": {
+  "count": 2,
+  "files": [
+   "admin.html",
+   "event-record.html"
+  ]
+ },
+ "영문 이름": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "국가 (2자리)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기본 시간대": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기본 언어": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "한국어": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "사이트 이름": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "전용 도메인": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "주소는 만든 뒤에도 바꿀 수 있지만, 바꾸면 그 조직의 링크가 모두 바뀝니다.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12677,6 +12849,12 @@
    "admin.html"
   ]
  },
+ "문서 내려받기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "종합기록지": {
   "count": 2,
   "files": [
@@ -12879,13 +13057,6 @@
   "count": 1,
   "files": [
    "admin.html"
-  ]
- },
- "혼성경기": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "dashboard.js"
   ]
  },
  "Excel 다운로드": {
@@ -14194,6 +14365,13 @@
    "callroom.js"
   ]
  },
+ "명단": {
+  "count": 11,
+  "files": [
+   "callroom.js",
+   "dashboard.js"
+  ]
+ },
  "출전 선수 명단 ({0}명)": {
   "count": 1,
   "files": [
@@ -15406,12 +15584,6 @@
    "common.js"
   ]
  },
- "불러오지 못했습니다": {
-  "count": 1,
-  "files": [
-   "common.js"
-  ]
- },
  "네트워크나 서버 상태를 확인하고 다시 시도하세요.": {
   "count": 1,
   "files": [
@@ -15713,12 +15885,6 @@
   ]
  },
  "우리 선수 종목의 소집·결과 알림": {
-  "count": 2,
-  "files": [
-   "dashboard.js"
-  ]
- },
- "보기": {
   "count": 2,
   "files": [
    "dashboard.js"
@@ -16223,12 +16389,6 @@
   ]
  },
  "대기 {0}명": {
-  "count": 1,
-  "files": [
-   "dashboard.js"
-  ]
- },
- "국가": {
   "count": 1,
   "files": [
    "dashboard.js"
@@ -16862,12 +17022,6 @@
   ]
  },
  "명단 연결": {
-  "count": 1,
-  "files": [
-   "display-manage.html"
-  ]
- },
- "결과 링크": {
   "count": 1,
   "files": [
    "display-manage.html"
@@ -18143,12 +18297,6 @@
  },
  "간편 기록입력": {
   "count": 2,
-  "files": [
-   "event-record.html"
-  ]
- },
- "이름 *": {
-  "count": 1,
   "files": [
    "event-record.html"
   ]
@@ -20147,7 +20295,7 @@
   ]
  },
  "{0} 기록": {
-  "count": 2,
+  "count": 1,
   "files": [
    "record.js"
   ]

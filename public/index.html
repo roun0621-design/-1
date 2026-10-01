@@ -899,6 +899,16 @@
         async function loadSiteConfig() {
             try {
                 const cfg = await fetch('/api/site-config').then(r => r.json());
+                // 조직(멀티테넌시 1단계): 기본 조직이 아니면 사이트 이름을 조직 이름으로
+                if (cfg.org) {
+                    window.PACE_ORG = cfg.org;
+                    if (!cfg.org.is_default) {
+                        const nm = cfg.org.site_name || cfg.org.name;
+                        document.title = nm;
+                        document.querySelectorAll('.header-title, .home-hero h1, .mm-brand').forEach(h => { h.textContent = nm; });
+                        const og = document.querySelector('meta[property="og:site_name"]'); if (og) og.setAttribute('content', nm);
+                    }
+                }
                 // Install guide: override steps if configured
                 if (cfg.site_install_android) {
                     const el = document.getElementById('install-android-steps');

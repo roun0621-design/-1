@@ -1070,6 +1070,33 @@
                     <p class="adm-lead">이 서버는 PostgreSQL 을 씁니다. 데이터베이스 전체 백업은 클라우드(RDS) 자동 백업과 서버의 일일 pg_backup(S3 보관)이 맡고, 복원은 서버 관리자가 합니다. 대회 단위 파일은 위의 대회별 백업을 쓰세요.</p>
                 </div>
                 <!-- Federation Management (moved from settings) -->
+                <div class="admin-card" id="card-organizations">
+                    <h4>조직</h4>
+                    <p class="adm-lead">조직마다 자기 주소(서브도메인)로 들어가면 자기 대회·설정만 보입니다. 기본 조직은 이 서버의 주소 그대로입니다.</p>
+                    <div id="org-list" style="margin-bottom:16px;"><div class="t-muted">불러오는 중…</div></div>
+                    <form id="org-form" onsubmit="orgSave(event)" autocomplete="off">
+                        <input type="hidden" id="org-id" value="">
+                        <div class="admin-form-row">
+                            <div class="admin-form-group"><label>주소(slug) *</label><input id="org-slug" placeholder="예: jp" pattern="[a-z0-9][a-z0-9\-]{1,38}" required></div>
+                            <div class="admin-form-group"><label>이름 *</label><input id="org-name" placeholder="예: 일본육상경기연맹" required></div>
+                            <div class="admin-form-group"><label>영문 이름</label><input id="org-name-en" placeholder="Japan Association of Athletics"></div>
+                        </div>
+                        <div class="admin-form-row">
+                            <div class="admin-form-group"><label>국가 (2자리)</label><input id="org-country" value="KR" maxlength="2" style="text-transform:uppercase;width:80px;"></div>
+                            <div class="admin-form-group"><label>기본 시간대</label><select id="org-tz"></select></div>
+                            <div class="admin-form-group"><label>기본 언어</label><select id="org-lang"><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option></select></div>
+                        </div>
+                        <div class="admin-form-row">
+                            <div class="admin-form-group"><label>사이트 이름</label><input id="org-site-name" placeholder="비우면 조직 이름"></div>
+                            <div class="admin-form-group"><label>전용 도메인</label><input id="org-domain" placeholder="예: results.jaaf.or.jp (선택)"></div>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+                            <button type="submit" class="btn btn-primary" id="org-save-btn">조직 추가</button>
+                            <button type="button" class="btn btn-outline" id="org-cancel-btn" onclick="orgReset()" hidden>취소</button>
+                            <span id="org-form-hint" class="t-muted" style="font-size:12px;">주소는 만든 뒤에도 바꿀 수 있지만, 바꾸면 그 조직의 링크가 모두 바뀝니다.</span>
+                        </div>
+                    </form>
+                </div>
                 <div class="admin-card" id="card-federations" style="scroll-margin-top:20px;">
                     <h4>연맹 관리</h4>
                     <p class="t-help-lg">대회에 배정할 수 있는 연맹 목록을 관리합니다.</p>
@@ -2978,6 +3005,7 @@ POST /api/external/event-result-link/batch<br>
         // 옛 탭 이름별 데이터 로더 — 화면(screen)이 여러 탭의 카드를 모아 보여주므로 화면이 열릴 때 필요한 로더를 모두 부른다
         function _runTabLoaders(name) {
             if (name === 'overview') loadOverview();
+            if (name === 'orgs') loadOrganizations();
             if (name === 'athletes') loadAthletes();
             if (name === 'events') loadEvents();
             if (name === 'judges') loadJudgeKeys();
@@ -3254,6 +3282,7 @@ POST /api/external/event-result-link/batch<br>
         const ICON_PATHS = {
             // overview
             chart:      '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/>',
+            globe:      '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
             undo:       '<polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>',
             // 대회 운영
             stadium:    '<path d="M3 8c0-2 4-3 9-3s9 1 9 3-4 3-9 3-9-1-9-3z"/><path d="M3 8v8c0 2 4 3 9 3s9-1 9-3V8"/>',
@@ -3404,6 +3433,7 @@ POST /api/external/event-result-link/batch<br>
             { id:'pacing',       group:'시스템',    label:'페이싱 라이트',       icon:'traffic',  tab:'pacing',      loads:['pacing'], roleTab:'pacing' },
             { id:'brand',        group:'시스템',    label:'브랜드 · 홈',         icon:'home',     items:['card-site-content','card-home-popup','popup-editor-wrap'], loads:['settings'], roleTab:'settings' },
             { id:'masters',      group:'시스템',    label:'마스터 (연맹 · 부)',  icon:'book',     items:['card-federations'], loads:['competition'], roleTab:'competition', extraHtml:'<div class="admin-card" id="card-division-entry"><h4>부(Division) 마스터</h4><p class="t-muted" style="margin:0 0 12px;">실업·대학·고등·중등·일반·학년 단위 부를 추가·수정합니다. 종목 화면의 부별 필터와 부별 기록(DR)이 이 목록을 씁니다.</p><button class="btn btn-outline" onclick="openDivisionManagerModal()">부 관리 열기</button></div>' },
+            { id:'orgs',         group:'시스템',    label:'조직',                icon:'globe',    items:['card-organizations'], loads:['orgs'], roleTab:'users', when: () => !!(window.PACE_ORG && window.PACE_ORG.is_default) },   // 플랫폼 관리자(기본 조직)만 — 멀티테넌시 1단계
             { id:'backup',       group:'시스템',    label:'백업 · 복원',         icon:'shield',   items:['card-data-backup','card-backup-full','card-backup-pg'], loads:['competition'], roleTab:'competition' },
         ];
         function _screenFor(name) {
@@ -3557,7 +3587,7 @@ POST /api/external/event-result-link/batch<br>
             const kjaf = document.getElementById('card-kjaf-record'); if (kjaf) kjaf.style.display = (c.federation === 'KJAF') ? '' : 'none';
         }
 
-        document.addEventListener('DOMContentLoaded', () => { renderSidebar(); initAdmDrops(); admApplyBackendUI(); try { if (window.PaceI18n) PaceI18n.mountSwitcher(document.getElementById('adm-topbar-actions')); } catch (e) {} });
+        document.addEventListener('DOMContentLoaded', () => { fetch('/api/org').then(r => r.json()).then(o => { window.PACE_ORG = o; renderSidebar(); if (!o.is_default) { const nm = o.site_name || o.name; document.querySelectorAll('.header-title').forEach(h => { h.textContent = nm; }); document.title = nm + ' — ' + document.title.split(' — ').pop(); } }).catch(() => {}); renderSidebar(); initAdmDrops(); admApplyBackendUI(); try { if (window.PaceI18n) PaceI18n.mountSwitcher(document.getElementById('adm-topbar-actions')); } catch (e) {} });
         // 시간표 ↔ 종목 매칭: 요약만 보이고, 미매칭이 있을 때만 목록을 편다
         document.addEventListener('DOMContentLoaded', () => {
             if (typeof ttLoadMatching !== 'function') return;
@@ -4619,6 +4649,67 @@ POST /api/external/event-result-link/batch<br>
 
         // ---- FEDERATION MANAGEMENT ----
         let _federations = [];
+        // ─── 조직 (멀티테넌시 1단계, 플랫폼 관리자 전용) ───
+        let _orgRows = [];
+        async function loadOrganizations() {
+            const box = document.getElementById('org-list'); if (!box) return;
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            try {
+                const r = await fetch('/api/admin/organizations', { headers: { 'x-admin-key': AK() } });
+                if (!r.ok) { box.innerHTML = `<div class="t-muted">${r.status === 403 ? '조직 관리는 기본 조직에서만 할 수 있습니다' : '불러오지 못했습니다'}</div>`; return; }
+                _orgRows = await r.json();
+                const sel = document.getElementById('org-tz');
+                if (sel && !sel.options.length) sel.innerHTML = (typeof PACE_COMMON_TZ !== 'undefined' ? PACE_COMMON_TZ : ['Asia/Seoul']).map(z => `<option value="${z}">${z}</option>`).join('');
+                const host = location.hostname;
+                box.innerHTML = `<table class="crud-table"><thead><tr><th>주소</th><th>이름</th><th style="width:60px;">국가</th><th>시간대</th><th style="width:60px;">언어</th><th style="width:70px;text-align:right;">대회</th><th style="width:70px;">상태</th><th style="width:60px;"></th></tr></thead><tbody>` +
+                    _orgRows.map(o => `<tr><td><b>${esc(o.slug)}</b>${o.custom_domain ? `<br><span class="t-muted" style="font-size:12px;">${esc(o.custom_domain)}</span>` : ''}</td><td>${esc(o.name)}${o.name_en ? `<br><span class="t-muted" style="font-size:12px;">${esc(o.name_en)}</span>` : ''}</td><td>${esc(o.country)}</td><td>${esc(o.default_tz)}</td><td>${esc(o.default_lang)}</td><td style="text-align:right;">${o.competition_count || 0}</td><td>${o.active ? '<span class="badge-pill badge-ok">사용</span>' : '<span class="badge-pill badge-neutral">중지</span>'}</td><td><button class="btn btn-sm btn-ghost" onclick="orgEdit(${o.id})">수정</button></td></tr>`).join('') + '</tbody></table>' +
+                    `<p class="t-muted" style="font-size:12px;margin:8px 0 0;">접속 주소: <code>&lt;slug&gt;.${esc(host)}</code> — DNS 에서 서브도메인(와일드카드)을 이 서버로 연결해야 합니다.</p>`;
+            } catch (e) { box.innerHTML = '<div class="t-muted">불러오지 못했습니다</div>'; }
+        }
+        function orgEdit(id) {
+            const o = _orgRows.find(x => x.id === id); if (!o) return;
+            document.getElementById('org-id').value = o.id;
+            document.getElementById('org-slug').value = o.slug;
+            document.getElementById('org-name').value = o.name;
+            document.getElementById('org-name-en').value = o.name_en || '';
+            document.getElementById('org-country').value = o.country || 'KR';
+            const tz = document.getElementById('org-tz'); if (![...tz.options].some(x => x.value === o.default_tz)) tz.add(new Option(o.default_tz, o.default_tz)); tz.value = o.default_tz;
+            document.getElementById('org-lang').value = o.default_lang || 'ko';
+            document.getElementById('org-site-name').value = o.site_name || '';
+            document.getElementById('org-domain').value = o.custom_domain || '';
+            document.getElementById('org-save-btn').textContent = '저장';
+            document.getElementById('org-cancel-btn').hidden = false;
+            document.getElementById('org-form').scrollIntoView({ block: 'nearest' });
+        }
+        function orgReset() {
+            const f = document.getElementById('org-form'); if (!f) return;
+            f.reset(); document.getElementById('org-id').value = ''; document.getElementById('org-country').value = 'KR';
+            document.getElementById('org-save-btn').textContent = '조직 추가';
+            document.getElementById('org-cancel-btn').hidden = true;
+        }
+        async function orgSave(ev) {
+            ev.preventDefault();
+            const id = document.getElementById('org-id').value;
+            const body = {
+                admin_key: AK(),
+                slug: document.getElementById('org-slug').value.trim().toLowerCase(),
+                name: document.getElementById('org-name').value.trim(),
+                name_en: document.getElementById('org-name-en').value.trim(),
+                country: document.getElementById('org-country').value.trim().toUpperCase(),
+                default_tz: document.getElementById('org-tz').value,
+                default_lang: document.getElementById('org-lang').value,
+                site_name: document.getElementById('org-site-name').value.trim(),
+                custom_domain: document.getElementById('org-domain').value.trim(),
+            };
+            try {
+                const r = await fetch(id ? `/api/admin/organizations/${id}` : '/api/admin/organizations', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                const j = await r.json();
+                if (!r.ok) { toast(j.error || '저장 실패', 'error'); return; }
+                toast(id ? '조직을 저장했습니다' : '조직을 추가했습니다', 'success');
+                orgReset(); loadOrganizations();
+            } catch (e) { toast('저장 실패: ' + e.message, 'error'); }
+        }
+
         async function loadFederations() {
             try { _federations = await API.getFederations(); } catch(e) { _federations = []; }
             renderFederationList();

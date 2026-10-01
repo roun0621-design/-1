@@ -319,6 +319,9 @@ app.use(compression());
 app.use(express.json());
 // AUTH Phase 2: JWT 쿠키 파싱 (HttpOnly access_token / refresh_token)
 try { app.use(require('cookie-parser')()); } catch (e) { console.warn('[auth] cookie-parser 미설치:', e.message); }
+// 조직 선택 — 호스트(서브도메인·전용 도메인)로 req.org 를 정한다 (lib/org.js, 멀티테넌시 1단계 2026-10-01)
+const ORG = require('./lib/org').createResolver(() => db);   // db 는 아래에서 선언 → getter
+app.use(ORG.middleware());
 
 // ─── JWT → 레거시 키 브리지 (2026-09 인증 정리) ─────────────────────────────
 //   라우트 ~90곳이 isAdminKey(req.query.key / body.admin_key / x-admin-key) 로 권한을 검사한다.
@@ -1126,6 +1129,33 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS pacing_segment (
     UNIQUE(pacing_color_id, segment_order)
 )`); } catch(e) {}
 
+// ─── 조직(organization) — 멀티테넌시 1단계 (2026-10-01, docs/MULTI_TENANCY_PLAN.md) ───
+//   한 서버에서 조직별 칸막이. 기본 조직(id 1, slug 'pace-rise')을 만들고 기존 데이터는 전부 조직 1 소속으로 둔다.
+try { db.exec(`CREATE TABLE IF NOT EXISTS organization (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    name_en TEXT NOT NULL DEFAULT '',
+    country TEXT NOT NULL DEFAULT 'KR',
+    default_tz TEXT NOT NULL DEFAULT 'Asia/Seoul',
+    default_lang TEXT NOT NULL DEFAULT 'ko',
+    custom_domain TEXT NOT NULL DEFAULT '',
+    site_name TEXT NOT NULL DEFAULT '',
+    brand_logo_path TEXT NOT NULL DEFAULT '',
+    brand_color_point TEXT NOT NULL DEFAULT '',
+    brand_color_accent TEXT NOT NULL DEFAULT '',
+    settings_json TEXT NOT NULL DEFAULT '{}',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) {}
+try {
+    const orgCount = db.raw.prepare('SELECT COUNT(*) as cnt FROM organization').get().cnt;
+    if (orgCount === 0) db.raw.prepare(`INSERT INTO organization (id, slug, name, name_en, country) VALUES (1, ?, 'PACE RISE', 'PACE RISE', 'KR')`).run(process.env.ORG_DEFAULT_SLUG || 'pace-rise');
+} catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 1`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_competition_org ON competition(organization_id)`); } catch(e) {}
+
 // Federation list table (dynamic federation management)
 try { db.exec(`CREATE TABLE IF NOT EXISTS federation_list (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1176,6 +1206,7 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS home_popup (
 try { db.exec(`ALTER TABLE home_popup ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 // Add competition_id to home_popup (NULL = 공통/전체 노출, 특정 id = 그 대회 전용) — 대회별 팝업
 try { db.exec(`ALTER TABLE home_popup ADD COLUMN competition_id INTEGER DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE home_popup ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 1`); } catch(e) {}   // 조직별 홈 팝업 (멀티테넌시 1단계, 2026-10-01)
 try { db.exec(`CREATE TABLE IF NOT EXISTS home_popup_section (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     popup_id INTEGER NOT NULL REFERENCES home_popup(id) ON DELETE CASCADE,
@@ -1834,6 +1865,32 @@ if (db.isAsync) {
             await pgIdempotentAddCol('competition', 'timezone', `TEXT NOT NULL DEFAULT 'Asia/Seoul'`);
             await pgIdempotentAddCol('competition', 'name_en', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'name_ja', `TEXT DEFAULT ''`);
+            // 조직(organization) — 멀티테넌시 1단계 (2026-10-01)
+            try {
+                await db.run(`CREATE TABLE IF NOT EXISTS "organization" (
+                    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    "slug" TEXT NOT NULL UNIQUE,
+                    "name" TEXT NOT NULL,
+                    "name_en" TEXT NOT NULL DEFAULT '',
+                    "country" TEXT NOT NULL DEFAULT 'KR',
+                    "default_tz" TEXT NOT NULL DEFAULT 'Asia/Seoul',
+                    "default_lang" TEXT NOT NULL DEFAULT 'ko',
+                    "custom_domain" TEXT NOT NULL DEFAULT '',
+                    "site_name" TEXT NOT NULL DEFAULT '',
+                    "brand_logo_path" TEXT NOT NULL DEFAULT '',
+                    "brand_color_point" TEXT NOT NULL DEFAULT '',
+                    "brand_color_accent" TEXT NOT NULL DEFAULT '',
+                    "settings_json" TEXT NOT NULL DEFAULT '{}',
+                    "active" INTEGER NOT NULL DEFAULT 1,
+                    "created_at" TEXT NOT NULL DEFAULT NOW(),
+                    "updated_at" TEXT NOT NULL DEFAULT NOW()
+                )`);
+                const oc = await db.get('SELECT COUNT(*)::int AS c FROM organization');
+                if (!oc || !oc.c) await db.run(`INSERT INTO organization ("id","slug","name","name_en","country") OVERRIDING SYSTEM VALUE VALUES (1, ?, 'PACE RISE', 'PACE RISE', 'KR')`, process.env.ORG_DEFAULT_SLUG || 'pace-rise');
+            } catch (e) { console.warn('[PG migration] organization:', e.message); }
+            await pgIdempotentAddCol('competition', 'organization_id', `BIGINT NOT NULL DEFAULT 1`);
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_competition_org ON competition(organization_id)`); } catch(e) {}
+            await pgIdempotentAddCol('home_popup', 'organization_id', `BIGINT NOT NULL DEFAULT 1`);
             // federation_list: 연맹 숨김 (홈·운영 화면 목록에서 소속 대회 전체 제외)
             await pgIdempotentAddCol('federation_list', 'hidden', `BIGINT NOT NULL DEFAULT 0`);
             // 연맹 기본값 (PG 는 빈 테이블 시드가 없었음) + 한국중·고육상연맹 (Phase 7)
@@ -2892,7 +2949,7 @@ app.post('/api/admin/verify', authLimiter, async (req, res) => {
 // COMPETITIONS CRUD — lib/routes/competitions.js 로 추출
 // ============================================================
 require("./lib/routes/competitions")(app, {
-    db, isAdminKey, isOperationKey, isAdminOrManager, opLog, broadcastSSE, kstNow, performBackup
+    db, isAdminKey, isOperationKey, isAdminOrManager, opLog, broadcastSSE, kstNow, performBackup, org: ORG
 });
 
 
@@ -2928,6 +2985,7 @@ require('./lib/routes/federations')(app, { db, isAdminKey, opLog });
 // HOME POPUP — CMS  (lib/routes/home_popups.js 로 추출됨)
 // ============================================================
 require('./lib/routes/home_popups')(app, { db, isAdminKey, opLog });
+require('./lib/routes/organizations')(app, { db, isAdminKey, opLog, org: ORG });   // 조직 (멀티테넌시 1단계)
 
 
 
@@ -3119,7 +3177,7 @@ app.get('/api/public/callroom-summary', async (req, res) => {
 });
 
 // ── 관리자 키·운영키·사이트 설정(키 변경/조회, 운영키 발급·재발급·삭제·수정, 등록 심판, site-config) → lib/routes/admin_keys.js (2026-09-22) ──
-const _admin_keysRoutes = require('./lib/routes/admin_keys')(app, { ACCESS_KEYS, ADMIN_ID, OPKEY_BCRYPT_COST, _opKeyHint, _opKeyIsHash, _opKeyLookup, _opKeyPrefix, _refreshDbSecurityWarnings, _reloadOpKeyCacheAsync, bcrypt, crypto, db, getConfigKey, getJudgeName, isAdminKey, isDefaultOperationKey, isOperationKey, opLog, setConfigKey, setDefaultOperationKey });
+const _admin_keysRoutes = require('./lib/routes/admin_keys')(app, { org: ORG, ACCESS_KEYS, ADMIN_ID, OPKEY_BCRYPT_COST, _opKeyHint, _opKeyIsHash, _opKeyLookup, _opKeyPrefix, _refreshDbSecurityWarnings, _reloadOpKeyCacheAsync, bcrypt, crypto, db, getConfigKey, getJudgeName, isAdminKey, isDefaultOperationKey, isOperationKey, opLog, setConfigKey, setDefaultOperationKey });
 // ── 관리자 선수·종목·조 관리(공개 선수 조회, 선수 CRUD·출전, 종목 CRUD·자동정렬·영상 URL, 조 추가/삭제/선수 이동, 상태 강제 변경) → lib/routes/admin_events.js (2026-09-22) ──
 const _admin_eventsRoutes = require('./lib/routes/admin_events')(app, { _undo, _undoSnapshotEvent, audit, autoLinkDisplayTimetable: (...a) => autoLinkDisplayTimetable(...a) /* display 모듈이 뒤에서 마운트 */, broadcastSSE, db, getJudgeName, isAdminKey, isOperationKey, opLog, orderByBibSql });
 const _normalizeAthletePhone = _admin_eventsRoutes._normalizeAthletePhone;
@@ -7152,6 +7210,7 @@ async function backfillEventCodes(compId) {
 async function _pgBootAsync() {
     await Promise.allSettled(_bootTasks);          // 인증 테이블·PG 열 마이그레이션·상장 양식 시드
     await backfillEventCodes();
+    try { await db.run('UPDATE app_user SET organization_id=1 WHERE organization_id IS NULL'); } catch (e) {}   // 기존 계정 → 기본 조직 (멀티테넌시 1단계)
     if (!db.isAsync) return;
     try {
         await _loadConfigCacheAsync();
