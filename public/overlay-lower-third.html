@@ -1,15 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<!-- Google Analytics 4 -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-3PRW9G7KVQ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-3PRW9G7KVQ');
-</script>
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
     <title>PACE RISE Lower Third Overlay</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -122,10 +114,11 @@ function showLatestResult(data) {
     const isTrack = data.event.category === 'track' || data.event.category === 'relay' || data.event.category === 'road';
 
     // Find entries with records, sort by rank
-    const withRecords = data.entries.filter(e => e.record != null && e.status_code !== 'DNS' && e.status_code !== 'DNF');
+    // 실격(DQ)·기권·결장은 제외 — 예전엔 DQ 선수가 기록이 있으면 '1st PLACE' 로 떴다. 순위는 서버가 계산한 rank 를 쓴다
+    const withRecords = data.entries.filter(e => e.record != null && !e.status_code && e.rank != null);
     if (withRecords.length === 0) return;
 
-    withRecords.sort((a, b) => isTrack ? a.record - b.record : b.record - a.record);
+    withRecords.sort((a, b) => a.rank - b.rank);
 
     // Show the leader
     const leader = withRecords[0];
@@ -134,7 +127,7 @@ function showLatestResult(data) {
     document.getElementById('lt-bib').textContent = leader.bib_number || '-';
     document.getElementById('lt-name').textContent = leader.name || '-';
     document.getElementById('lt-team').textContent = leader.team || '';
-    document.getElementById('lt-record').textContent = formatTime(leader.record, isTrack);
+    document.getElementById('lt-record').textContent = leader.record_text || formatTime(leader.record, isTrack);
     document.getElementById('lt-rank').textContent = '1st PLACE';
 
     const gL = data.event.gender === 'M' ? 'Men' : data.event.gender === 'F' ? 'Women' : 'Mixed';

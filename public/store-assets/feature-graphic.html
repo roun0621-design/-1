@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Feature Graphic 1024x500</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Noto+Sans+KR:wght@400;700;800&display=swap');
+  html,body { margin:0; background:#33373f; display:flex; flex-direction:column; align-items:center; gap:14px; padding:24px; font-family:'Noto Sans KR',sans-serif; }
+  /* ── Google Play 그래픽 이미지: 정확히 1024 x 500 px ── */
+  #fg {
+    width:1024px; height:500px; position:relative; overflow:hidden;
+    background: linear-gradient(120deg, #11183a 0%, #1f2a5e 42%, #b79f58 100%);
+    color:#fff; box-shadow:0 8px 40px rgba(0,0,0,.4);
+  }
+  #fg::before { content:''; position:absolute; inset:0;
+    background: radial-gradient(circle at 86% 18%, rgba(255,255,255,.16), transparent 55%); }
+  .fg-inner { position:absolute; inset:0; padding:64px 72px; display:flex; flex-direction:column; justify-content:center; z-index:1; }
+  .fg-brand { font-family:'Audiowide',sans-serif; font-size:72px; letter-spacing:1px; line-height:1.05; }
+  .fg-brand .dot { color:#f4d98b; }
+  .fg-sub { margin-top:18px; font-size:30px; font-weight:800; opacity:.96; }
+  .fg-tags { margin-top:22px; font-size:19px; font-weight:700; opacity:.9; letter-spacing:.5px; }
+  .fg-tags span { background:rgba(255,255,255,.16); padding:6px 14px; border-radius:20px; margin-right:8px; backdrop-filter:blur(4px); }
+  .fg-foot { position:absolute; right:64px; bottom:40px; font-size:16px; font-weight:700; opacity:.75; letter-spacing:1px; z-index:1; }
+  .hint { color:#cfd3da; font-size:13px; max-width:1024px; line-height:1.6; }
+  .hint b { color:#fff; }
+</style>
+</head>
+<body>
+  <div id="fg">
+    <div class="fg-inner">
+      <div class="fg-brand">PACE RISE <span class="dot">:</span> Node</div>
+      <div class="fg-sub">육상 경기 운영 통합 플랫폼</div>
+      <div class="fg-tags"><span>실시간 기록</span><span>전광판·중계</span><span>상장·기록증</span></div>
+    </div>
+    <div class="fg-foot">COMPETITION OPERATING SYSTEM</div>
+  </div>
+  <div class="hint">
+    ▲ 위 박스가 <b>정확히 1024×500</b> 입니다. 추출법:<br>
+    1) 크롬에서 이 파일 열기 → <b>F12(개발자도구)</b> → 요소 탭에서 <code>&lt;div id="fg"&gt;</code> 우클릭 →
+    <b>"Capture node screenshot"</b> → 1024×500 PNG 자동 저장.<br>
+    2) 또는 화면 캡처 후 1024×500 으로 잘라도 됨. 색/문구는 이 파일에서 바로 수정 가능.
+  </div>
+</body>
+</html>

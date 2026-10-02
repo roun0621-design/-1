@@ -88,6 +88,17 @@ img, video, iframe {
         white-space: nowrap;
     }
 
+    /* 좁은 표(소집 명단·간단 리스트 등) opt-out:
+       위 display:block(가로 스크롤용) 패턴은 표 셀이 내용폭만 차지해
+       모달/카드 안에서 왼쪽으로 쏠리고 오른쪽이 비는 버그가 있다.
+       가로 스크롤이 필요 없는 좁은 표에는 .fill-table 을 붙여 진짜 표로 되돌리고
+       폭을 100% 채운다. (넓은 표는 클래스 없이 기존 스크롤 동작 유지) */
+    table.fill-table {
+        display: table !important;
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
     /* 너무 큰 컨테이너의 좌우 패딩 축소 */
     .container,
     .wrap,

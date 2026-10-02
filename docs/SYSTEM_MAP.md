@@ -113,6 +113,9 @@ server.js
     ↓ lib/fullRecordExcel.js / lib/fullRecordPdf.js
     ↓ (DB에서 데이터 조회)
 PDF/Excel 파일 응답
+
+GET /api/documents/kjaf-record/:compId/excel  → lib/kjafRecordSheet.js  (한국중·고육상연맹 종합기록지, 2026-09 Phase 7-①)
+    시트 묶음(남중/여중/N학년부/믹스릴레이/신기록현황)은 종목의 division 으로 결정 (planSheets). 결승 라운드만, 순위 8칸, 승인된 신기록만 CR/DR/KR.
 ```
 
 ---
@@ -181,7 +184,7 @@ html2canvas-pro.min.js      → 결과지 스크린샷
 
 ## 6. 죽은 코드 / 정리 대상 식별
 
-### 🗑️ Tier 1 — 즉시 삭제 가능 (영향 없음)
+### 🗑️ Tier 1 — 즉시 삭제 가능 (영향 없음) — 2026-09-18 정리 완료(`_convert.js`, `download_server.py`, `db_import/`, `public/test-*.lif`, `i18n-demo.html` 포함)
 
 | 항목 | 위치 | 이유 |
 |---|---|---|
@@ -432,3 +435,28 @@ await db.transaction(async () => {
 - 단위 테스트 28/28 ✅
 - 동시쓰기 250/250 ✅
 - 에러 로그 0건 ✅
+
+## 대회 시간대 (2026-09-30)
+- `competition.timezone`(IANA, 기본 `Asia/Seoul`) — 관리자 대회 설정·홈 '대회 추가'에서 지정. 검증 `lib/tz.js isValidTz`.
+- 서버: '오늘' 판정은 전부 `TZ.todayIn(TZ.compTz(comp))` — 자동 상태 전환(`competitions.js autoUpdateCompetitionStatus`, 대회마다 따로), 종료 잠금(`isCompetitionEnded`), 대회 재개, 운영 체크리스트, 시간표 `is_today`·`/today`·업로드의 '지난 날' 보존, 국제대회 동기화 기간 판정. 날짜 더하기는 `TZ.shiftYmd`(서버 시간대 무관).
+- 로그·백업 파일명의 `kstNow()` 는 서버 기본 시간대(`APP_TZ`, 기본 Asia/Seoul) — 대회와 무관.
+- 화면: `API.getCompetition` 이 `window.PACE_TZ` 를 채우고, `paceNow()`(common.js)가 대회 시간대의 오늘·현재 분을 준다 — 소집 시간창(−10/+5분), 대시보드 '지금'·NEXT·히어로 일차 전환, 시간표 창 일차 자동 선택, 종료 대회 진입 차단.
+
+## 종목 코드 (2026-09-30, 해외 대회 대비 B2)
+- `event.code`(NULL 허용) — `lib/eventCatalog.js` 사전의 코드(`100`·`110H`·`3000SC`·`5000W`·`LJ`·`SP`·`DEC`·`4X100`·`4X400X`(혼성 계주)·`HM`·`MAR`·`20KW` …). `event.name`(한글 정식명 + 부 접미)은 그대로 두고 코드를 옆에 채운다.
+- 채우는 곳: 관리자 종목 생성·종목 xlsx 업로드·연맹 통합 업로드·국제 동기화·준결승/결승 생성(부모 코드 복사)·혼성 세부종목 생성. 그 밖의 경로(노출용 대회·조편성 업로드·복제)는 부팅 `backfillEventCodes()` 와 `GET /api/events` 의 lazy 채움이 잡는다. 사전에 없는 이름은 NULL.
+- 이름 → 코드 매핑 `codeOf()`: `recordKey` 정규화(라운드·성별·부 접미·콤마·단위) → 사전(한글·영문·약어·연맹·Bornan 표기 별칭) → 낱말 단위 부분 일치(글자 단위 아님 — '4x400m' 안의 '400m' 오인 방지).
+- 쓰는 곳: `GET /api/events` 의 `code`·`name_en`(영문 표시명, B3 영문 UI 의 기준), 풍속 규제 판정(`recordCompare.isWindAffectedEvent` 가 코드도 본다). 정렬(`sortIndex`)·문서·오버레이는 아직 이름 기준 — B3/B5 에서 코드로 옮긴다.
+- 라벨 사전 `lib/labels.js`(라운드·라운드 상태·대회 상태·성별·종목군·엔트리 상태·상태코드·진출 표기·기록 종류·학교급, ko/en) + `division_master.label_en`(비우면 성별·학교급·학년으로 자동). `GET /api/labels?lang=en|ko` 가 사전 + 종목 사전(`events`) + 부(`divisions`, `division_by_ko`)를 한 번에 준다(5분 캐시) — B3 영문 UI 가 여기서 표기를 고른다.
+
+## 다국어 (2026-09-30, B3)
+- `public/i18n.js` v2: 한국어 원문이 키인 사전(`public/locales/en.json`·`ja.json`, 각 ≈3,680항목)으로 전 페이지(오버레이·open·privacy 제외)의 DOM 텍스트·속성·문서 제목을 실시간 번역(MutationObserver). 언어는 `localStorage.pace_lang` → 없으면 브라우저 언어(ko/ja/그 밖엔 en). 대회명은 `competition.name_en/name_ja`(관리자 대회 설정) 를 `/api/labels` 의 `text` 로 받아 사전에 합친다. 선수명은 EN/JA 에서 라틴 이름 우선(`dashboard.js _dispName`).
+- 도구 `scripts/i18n/`: `extract.js`(원문 추출·통계·누락), `parts/<lang>_*.json`(번역 조각), `build.js`(자동 항목 + 조각 + `locales/<lang>.overrides.json` → 사전), `GLOSSARY.md`. 새 한국어 문장을 넣었으면 extract → 번역 → build, 사전이 바뀌면 `i18n.js` 의 `DICT_VERSION` 올리기. 자세한 건 `docs/I18N_GUIDE.md`.
+
+## 조직 — 멀티테넌시 1단계 (2026-10-01, docs/MULTI_TENANCY_PLAN.md)
+- `organization` 테이블(slug·국가·기본 시간대·기본 언어·전용 도메인·사이트 이름·브랜드·settings_json). 기본 조직 id 1 (`ORG_DEFAULT_SLUG`, 기본 `pace-rise`)은 부팅 때 자동 생성, 기존 대회·계정은 전부 조직 1.
+- `lib/org.js` `createResolver(() => db)` → `app.use(ORG.middleware())` 가 요청마다 `req.org` 를 둔다: `?org=`/`x-org` → 전용 도메인 → 서브도메인 첫 라벨 == slug → 기본 조직. 60초 캐시, 조직 변경 시 `invalidate()`.
+- 조직 스코프가 들어간 곳: `lib/routes/competitions.js`(목록·recent·by-federation·조회·생성·복제·`/api/event/:slug` — 다른 조직 대회는 404, 새 대회 시간대 기본값 = 조직), `lib/routes/home_popups.js`(`home_popup.organization_id`), `lib/routes/admin_keys.js` `/api/site-config`(기본 조직은 `system_config site_*`, 다른 조직은 `organization.settings_json`; 응답에 `org` 요약 포함).
+- `lib/routes/organizations.js`: `GET /api/org`(공개), `GET/POST/PUT /api/admin/organizations`(기본 조직의 관리자 키만). 관리자 › 시스템 › 조직 화면(`card-organizations`, 플랫폼 관리자만 보임), 홈은 기본 조직이 아니면 사이트 이름을 조직 이름으로.
+- 2단계(2026-10-02): `event_record`·`competition_series`·`federation_list`·`division_master`(0=공용)·`certificate_template`·`award_docx_template`·`sms_config`(조직별 행, `lib/smsConfig.js`)·`push_*`·`external_api_key` 에 `organization_id`; `joint_group.competition_id`. 기록 감지(`lib/recordCompare.js` `findEventRecord(..., orgId)`)·문서(`fullRecordExcel`·`pdf_documents`)·국제 동기화는 대회의 `organization_id` 로 기록표를 본다.
+- 아직 전역(3단계): 관리자 계정·운영키·`login_audit`·`undo_snapshot`·백업.
