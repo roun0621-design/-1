@@ -848,6 +848,32 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS sms_config (
 
 // 단일 row 보장
 try { db.exec(`INSERT OR IGNORE INTO sms_config (id) VALUES (1)`); } catch(e) {}
+// 멀티테넌시 2단계 (2026-10-02): 문자 설정을 조직마다 한 행으로 — CHECK(id=1) 을 떼고 organization_id(UNIQUE) 를 둔다. 기존 id=1 행 = 기본 조직
+try {
+    const _smsSql = db.raw.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='sms_config'").get();
+    if (_smsSql && /CHECK\s*\(\s*id\s*=\s*1\s*\)/i.test(_smsSql.sql)) {
+        db.exec('ALTER TABLE sms_config RENAME TO sms_config_old');
+        db.exec(`CREATE TABLE sms_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL DEFAULT 'aligo',
+            api_key TEXT NOT NULL DEFAULT '',
+            user_id TEXT NOT NULL DEFAULT '',
+            sender_number TEXT NOT NULL DEFAULT '',
+            sender_name TEXT NOT NULL DEFAULT '',
+            sim_mode INTEGER NOT NULL DEFAULT 1,
+            default_template TEXT NOT NULL DEFAULT '안녕하세요 {athlete_name}님,\n{competition_name} {event_name} 결과:\n{rank_label} {record_value}\n상장 다운로드: {cert_url}',
+            monthly_quota INTEGER NOT NULL DEFAULT 0,
+            sent_this_month INTEGER NOT NULL DEFAULT 0,
+            last_reset_month TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            organization_id INTEGER NOT NULL DEFAULT 1 UNIQUE
+        )`);
+        db.exec(`INSERT INTO sms_config (id, provider, api_key, user_id, sender_number, sender_name, sim_mode, default_template, monthly_quota, sent_this_month, last_reset_month, updated_at, organization_id)
+                 SELECT id, provider, api_key, user_id, sender_number, sender_name, sim_mode, default_template, monthly_quota, sent_this_month, last_reset_month, updated_at, 1 FROM sms_config_old`);
+        db.exec('DROP TABLE sms_config_old');
+        console.log('[DB Migration] sms_config → 조직별 행 구조로 재생성');
+    }
+} catch(e) { console.error('[DB] sms_config org migration:', e.message); }
 
 try { db.exec(`CREATE TABLE IF NOT EXISTS sms_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1457,6 +1483,14 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS event_record (
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(record_type, event_name, gender, division_code, series_id)
 )`); } catch(e) {}
+// ─── 멀티테넌시 2단계 (2026-10-02): 지금까지 서버에 하나뿐이던 것들에 소속 조직을 붙인다. 기존 행은 전부 기본 조직(1).
+//     division_master 는 0 = 공용(기본 13개·기존 학년부), 조직이 추가한 부만 자기 조직 번호.
+//     event_record 의 UNIQUE 는 NULL 때문에 원래 느슨하므로(두 백엔드 모두 NULL 은 서로 다름) 조직 조건은 조회 쪽에서 건다.
+for (const [t, def] of [['event_record', '1'], ['competition_series', '1'], ['federation_list', '1'], ['division_master', '0'], ['certificate_template', '1'], ['award_docx_template', '1'], ['external_api_key', '1'], ['push_token', '1'], ['push_interest', '1'], ['sms_config', '1']]) {
+    try { db.exec(`ALTER TABLE ${t} ADD COLUMN organization_id INTEGER NOT NULL DEFAULT ${def}`); } catch(e) {}
+}
+try { db.exec(`ALTER TABLE joint_group ADD COLUMN competition_id INTEGER`); } catch(e) {}   // 합동 전광판 그룹에 대회가 없던 버그
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_record_org ON event_record(organization_id, gender, event_name)`); } catch(e) {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS record_breaking_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     competition_id INTEGER NOT NULL REFERENCES competition(id),
@@ -1891,6 +1925,14 @@ if (db.isAsync) {
             await pgIdempotentAddCol('competition', 'organization_id', `BIGINT NOT NULL DEFAULT 1`);
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_competition_org ON competition(organization_id)`); } catch(e) {}
             await pgIdempotentAddCol('home_popup', 'organization_id', `BIGINT NOT NULL DEFAULT 1`);
+            // 멀티테넌시 2단계: 전역이던 표에 소속 조직 (division_master 는 0 = 공용)
+            for (const [t, def] of [['event_record', '1'], ['competition_series', '1'], ['federation_list', '1'], ['division_master', '0'], ['certificate_template', '1'], ['award_docx_template', '1'], ['external_api_key', '1'], ['push_token', '1'], ['push_interest', '1'], ['sms_config', '1']]) {
+                await pgIdempotentAddCol(t, 'organization_id', `BIGINT NOT NULL DEFAULT ${def}`);
+            }
+            await pgIdempotentAddCol('joint_group', 'competition_id', `BIGINT`);
+            try { await db.run(`ALTER TABLE sms_config DROP CONSTRAINT IF EXISTS sms_config_id_check`); } catch(e) {}   // 조직별 문자 설정 행
+            try { await db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sms_config_org ON sms_config(organization_id)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_org ON event_record(organization_id, gender, event_name)`); } catch(e) {}
             // federation_list: 연맹 숨김 (홈·운영 화면 목록에서 소속 대회 전체 제외)
             await pgIdempotentAddCol('federation_list', 'hidden', `BIGINT NOT NULL DEFAULT 0`);
             // 연맹 기본값 (PG 는 빈 테이블 시드가 없었음) + 한국중·고육상연맹 (Phase 7)
@@ -5045,16 +5087,16 @@ app.get('/api/event-records/lookup', async (req, res) => {
         async function _findOne(typeKey, extraSql, extraArgs) {
             // 1차: 정확 매칭
             const exact = await db.get(
-                `SELECT * FROM event_record WHERE record_type='${typeKey}' AND event_name=? AND gender=?
+                `SELECT * FROM event_record WHERE organization_id=? AND record_type='${typeKey}' AND event_name=? AND gender=?
                  ${extraSql} AND approved=1 ORDER BY id DESC LIMIT 1`,
-                eventName, gender, ...extraArgs
+                (req.org && req.org.id) || 1, eventName, gender, ...extraArgs
             );
             if (exact) return exact;
             // 2차: 동일 (gender + 조건) 안에서 event_name 정규화 후 비교
             const candidates = await db.all(
-                `SELECT * FROM event_record WHERE record_type='${typeKey}' AND gender=?
+                `SELECT * FROM event_record WHERE organization_id=? AND record_type='${typeKey}' AND gender=?
                  ${extraSql} AND approved=1`,
-                gender, ...extraArgs
+                (req.org && req.org.id) || 1, gender, ...extraArgs
             );
             for (const c of (candidates || [])) {
                 if (normalizeEventNameServer(c.event_name || '') === targetNorm) return c;
@@ -5669,7 +5711,7 @@ app.get('/api/documents/comprehensive/:compId/excel', async (req, res) => {
     const _compSeriesId = (comp && comp.series_id != null) ? comp.series_id : null;
     const _baseByTpl = {}; // template_name -> { national, division, competition }
     try {
-      const _recRows = await db.all('SELECT * FROM event_record WHERE gender IN (?, ?)', gender, 'X');
+      const _recRows = await db.all('SELECT * FROM event_record WHERE organization_id=? AND gender IN (?, ?)', (comp && comp.organization_id) || 1, gender, 'X');
       for (const rr of _recRows) {
         if (rr.record_type === 'national') { if (rr.series_id != null || rr.division_code != null) continue; }
         else if (rr.record_type === 'division') { if (rr.series_id != null) continue; }
@@ -6163,7 +6205,14 @@ function externalApiAuth(req, res, next) {
 // 헬퍼: 키의 적용 대회 제한 검증
 //   - allowed_competition_id가 NULL이면 모든 노출용 대회 허용
 //   - 값이 있으면 요청의 competition_id와 일치해야 함
-function _checkCompetitionScope(extApiKey, requestedCompId) {
+async function _checkCompetitionScope(extApiKey, requestedCompId) {
+    // 멀티테넌시 2단계: 키는 발급한 조직의 대회에만 통한다 (allowed_competition_id 가 없어도)
+    if (requestedCompId) {
+        try {
+            const c = await db.get('SELECT organization_id FROM competition WHERE id=?', requestedCompId);
+            if (c && Number(c.organization_id || 1) !== Number(extApiKey.organization_id || 1)) return { ok: false, code: 'COMPETITION_FORBIDDEN', message: '이 키의 조직에 속하지 않은 대회입니다.' };
+        } catch (e) {}
+    }
     if (!extApiKey.allowed_competition_id) return { ok: true };
     if (!requestedCompId) return { ok: false, code: 'COMPETITION_REQUIRED', message: '이 키는 특정 대회 전용입니다. competition_id를 명시해주세요.' };
     if (parseInt(requestedCompId) !== extApiKey.allowed_competition_id) {
@@ -6365,7 +6414,7 @@ app.get('/api/external/event/:id', externalApiAuth, async (req, res) => {
         if (!compCheck.ok) return res.status(404).json({ ok: false, code: compCheck.code, message: compCheck.message });
 
         // 키 범위 검증 — 키가 대표 멤버 대회에 접근 가능해야 함
-        const scope = _checkCompetitionScope(req.extApiKey, rep.competition_id);
+        const scope = await _checkCompetitionScope(req.extApiKey, rep.competition_id);
         if (!scope.ok) return res.status(403).json({ ok: false, code: scope.code, message: scope.message });
 
         return res.json({
@@ -6414,7 +6463,7 @@ app.get('/api/external/event/:id', externalApiAuth, async (req, res) => {
     }
 
     // 키 범위 검증
-    const scope = _checkCompetitionScope(req.extApiKey, evt.competition_id);
+    const scope = await _checkCompetitionScope(req.extApiKey, evt.competition_id);
     if (!scope.ok) return res.status(403).json({ ok: false, code: scope.code, message: scope.message });
 
     const compCheck = await _ensureDisplayCompetition(evt.competition_id);
@@ -6461,7 +6510,7 @@ app.post('/api/external/event-result-link', externalApiAuth, async (req, res) =>
         return res.status(404).json({ ok: false, code: 'EVENT_NOT_FOUND', message: '종목을 찾을 수 없습니다.' });
     }
 
-    const scope = _checkCompetitionScope(req.extApiKey, evt.competition_id);
+    const scope = await _checkCompetitionScope(req.extApiKey, evt.competition_id);
     if (!scope.ok) return res.status(403).json({ ok: false, code: scope.code, message: scope.message });
 
     const compCheck = await _ensureDisplayCompetition(evt.competition_id);
@@ -6568,7 +6617,7 @@ app.post('/api/external/event-result-link/batch', externalApiAuth, async (req, r
             prepared.push({ index: i, ok: false, code: 'EVENT_NOT_FOUND', message: '종목 없음.', event_id: eventId });
             continue;
         }
-        const scope = _checkCompetitionScope(req.extApiKey, evt.competition_id);
+        const scope = await _checkCompetitionScope(req.extApiKey, evt.competition_id);
         if (!scope.ok) {
             prepared.push({ index: i, ok: false, code: scope.code, message: scope.message, event_id: eventId });
             continue;

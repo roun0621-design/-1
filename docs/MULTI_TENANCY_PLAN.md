@@ -28,7 +28,7 @@ organization
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1 | `organization` 테이블·기본 조직·`competition.organization_id`·`app_user` 백필, `req.org` 미들웨어, 공개 목록·대회 조회·생성·복제·recent·슬러그·홈 팝업·site-config 를 조직으로 스코프, 새 대회 기본 시간대 = 조직, 조직별 `/api/site-config` 에 `org{slug,name,country,default_tz,default_lang,brand}` 포함, `/manifest.json` 조직별, 관리자 › 시스템 › **조직** 화면(플랫폼 관리자), 테스트 | **구현 완료(2026-10-01)** — `tests/api/53_organization.test.js` 6건, 전체 590 통과. `/manifest.json` 조직별은 보류(정적 그대로) |
-| 2 | 전역 테이블에 `organization_id`: `event_record`(UNIQUE 에 포함, NR 조직별), `competition_series`, `federation_list`, `division_master`(조직별 추가분만; 기본 13개는 공용), `home_popup`, `certificate_template`, `award_docx_template`(`scope_key` → `o<id>`), `external_api_key`, `push_*`, `sms_config`(조직별 행), `joint_group.competition_id` 추가(버그 수정). 각 조회에 `req.org.id` 조건 | 대기 |
+| 2 | 전역 테이블에 `organization_id`: `event_record`(NR/DR/CR, 조회·갱신·승인·감지·문서·엑셀·국제동기화 전부 조직 조건), `competition_series`, `federation_list`, `division_master`(0 = 공용 기본 부, 조직이 추가한 부만 자기 것; 공용은 기본 조직만 수정), `certificate_template`(목록·조회·수정·삭제·발급·공개 링크 선택), `award_docx_template`(전체 기본 키: 기본 조직 `global`, 다른 조직 `o<id>`), `sms_config`(조직마다 한 행 — CHECK(id=1) 제거 마이그레이션, `lib/smsConfig.js`), `push_token/push_interest`, `external_api_key`(키는 발급 조직의 대회에만 통함), `joint_group.competition_id` 추가(버그 수정). `record_breaking_log` 목록·승인은 대회의 조직으로 | **완료(2026-10-02)** — `tests/api/54_org_scope_masters.test.js`·`55_org_scope_settings.test.js` 10건. `event_record` UNIQUE 는 NULL 때문에 원래 느슨해서 그대로 두고 조회 조건으로 분리 |
 | 3 | 계정·키 조직 소속: `app_user.organization_id` 강제(로그인 호스트와 불일치 시 거부), `operation_key.organization_id`, `_opKeyCache` 조직별, JWT 브리지에 `organization_id` 전달 + 대회 접근 시 조직 일치 검사(`requireCompetitionInOrg`), 관리자 화면 조직 전환 없음(호스트가 곧 조직) | 대기 |
 | 4 | 운영: 쿠키 `domain` 옵션·CORS(필요 시), Docker 이미지·리전 배포 옵션, 과금·셀프 가입(고객 생긴 뒤) | 나중 |
 
@@ -43,3 +43,8 @@ organization
 - 프런트: 홈이 `/api/site-config` 의 `org` 를 받아 `window.PACE_ORG` 설정, 기본 조직이 아니면 헤더·문서 제목·og:site_name 을 조직 사이트 이름으로. `API.getOrg()` 추가. i18n 기본 언어는 지금처럼 브라우저 언어(ko/ja/그 외 en) — 조직 기본 언어 반영은 보류(브라우저 언어가 이미 세 언어를 가른다).
 - 관리자: 시스템 › 조직 화면(디자인 틀 준수 — 표 + 드로어 아님, 소규모라 카드 + 폼), 플랫폼 관리자만 사이드바에 보임.
 - 테스트 `tests/api/53_organization.test.js`.
+
+## 5. 2단계 메모 (2026-10-02)
+- 연맹 `code`·시리즈 `name`·부 `code` 의 UNIQUE 는 서버 전체 유일 그대로다(두 조직이 같은 코드를 못 씀). 해외 조직은 자기 코드(JAAF 등)를 쓰므로 실무 충돌은 없고, 필요해지면 `(organization_id, code)` 로 바꾼다.
+- 새 조직에는 상장 양식 시드가 없다 → 그 조직 관리자가 상장·기록증 › 양식에서 만들어야 한다(없으면 발급 시 "양식이 없습니다").
+- 아직 전역: 관리자 계정·운영키·`login_audit`·`undo_snapshot`·백업 폴더(3단계).

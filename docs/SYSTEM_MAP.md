@@ -458,4 +458,5 @@ await db.transaction(async () => {
 - `lib/org.js` `createResolver(() => db)` → `app.use(ORG.middleware())` 가 요청마다 `req.org` 를 둔다: `?org=`/`x-org` → 전용 도메인 → 서브도메인 첫 라벨 == slug → 기본 조직. 60초 캐시, 조직 변경 시 `invalidate()`.
 - 조직 스코프가 들어간 곳: `lib/routes/competitions.js`(목록·recent·by-federation·조회·생성·복제·`/api/event/:slug` — 다른 조직 대회는 404, 새 대회 시간대 기본값 = 조직), `lib/routes/home_popups.js`(`home_popup.organization_id`), `lib/routes/admin_keys.js` `/api/site-config`(기본 조직은 `system_config site_*`, 다른 조직은 `organization.settings_json`; 응답에 `org` 요약 포함).
 - `lib/routes/organizations.js`: `GET /api/org`(공개), `GET/POST/PUT /api/admin/organizations`(기본 조직의 관리자 키만). 관리자 › 시스템 › 조직 화면(`card-organizations`, 플랫폼 관리자만 보임), 홈은 기본 조직이 아니면 사이트 이름을 조직 이름으로.
-- 아직 전역인 것(2·3단계): 기록표 NR, 연맹·부·시리즈 마스터, 운영키·계정, 상장 양식, 문자 설정, 외부 API 키, 푸시.
+- 2단계(2026-10-02): `event_record`·`competition_series`·`federation_list`·`division_master`(0=공용)·`certificate_template`·`award_docx_template`·`sms_config`(조직별 행, `lib/smsConfig.js`)·`push_*`·`external_api_key` 에 `organization_id`; `joint_group.competition_id`. 기록 감지(`lib/recordCompare.js` `findEventRecord(..., orgId)`)·문서(`fullRecordExcel`·`pdf_documents`)·국제 동기화는 대회의 `organization_id` 로 기록표를 본다.
+- 아직 전역(3단계): 관리자 계정·운영키·`login_audit`·`undo_snapshot`·백업.

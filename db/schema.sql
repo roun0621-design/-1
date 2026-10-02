@@ -238,6 +238,7 @@ CREATE TABLE IF NOT EXISTS pacing_segment (
 -- Division Master (부별 마스터)
 -- 13 codes: 성별 6 학교급(초/중/고/대/일반/공개) × 2 + MIXED(혼성)
 CREATE TABLE IF NOT EXISTS division_master (
+    organization_id INTEGER NOT NULL DEFAULT 0,     -- 0 = 공용(기본 13개), 조직이 추가한 부는 자기 조직 (멀티테넌시 2단계)
     code TEXT PRIMARY KEY,                          -- M_OPEN / F_HIGH / MIXED 등
     label_ko TEXT NOT NULL,                         -- 남자일반부, 여자고등부, 통합부
     gender TEXT NOT NULL CHECK(gender IN ('M','F','X')),
@@ -253,6 +254,7 @@ CREATE TABLE IF NOT EXISTS division_master (
 -- 예: "전국실업단대항육상경기대회" 한 묶음 → 매년 1회 개최되는 시리즈
 CREATE TABLE IF NOT EXISTS competition_series (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    organization_id INTEGER NOT NULL DEFAULT 1,     -- 소속 조직 (멀티테넌시 2단계)
     name TEXT NOT NULL UNIQUE,                      -- 시리즈명
     federation TEXT NOT NULL DEFAULT '',            -- 주관 연맹 (KAAF, KTFL, etc.)
     description TEXT NOT NULL DEFAULT '',
@@ -286,6 +288,7 @@ CREATE TABLE IF NOT EXISTS event_record (
     approved_by TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    organization_id INTEGER NOT NULL DEFAULT 1,     -- 소속 조직 (멀티테넌시 2단계 — 조회마다 조직 조건을 건다)
     UNIQUE(record_type, event_name, gender, division_code, series_id)
 );
 
@@ -365,6 +368,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_
 
 -- 워드 상장 양식 (현장 인쇄용) — scope_key: 'global' | 'c<대회id>', config: JSON (lib/awardDocxTemplate.js)
 CREATE TABLE IF NOT EXISTS award_docx_template (
+    organization_id INTEGER NOT NULL DEFAULT 1,
     scope_key TEXT PRIMARY KEY,
     config TEXT NOT NULL,
     updated_at TEXT

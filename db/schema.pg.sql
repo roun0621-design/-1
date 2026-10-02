@@ -190,6 +190,7 @@ CREATE TABLE IF NOT EXISTS "event_link" (
 
 -- Table: division_master (부별 마스터, 13개)
 CREATE TABLE IF NOT EXISTS "division_master" (
+    "organization_id" BIGINT NOT NULL DEFAULT 0,   -- 소속 조직 (멀티테넌시 2단계)
     "code" TEXT PRIMARY KEY,
     "label_ko" TEXT NOT NULL,
     "gender" TEXT NOT NULL,
@@ -205,6 +206,7 @@ CREATE TABLE IF NOT EXISTS "division_master" (
 
 -- Table: competition_series (대회 시리즈 = 회차 묶음)
 CREATE TABLE IF NOT EXISTS "competition_series" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "name" TEXT NOT NULL UNIQUE,
     "federation" TEXT NOT NULL DEFAULT '',
@@ -217,6 +219,7 @@ CREATE TABLE IF NOT EXISTS "competition_series" (
 -- Table: event_record (NR/DR/CR 통합)
 -- 기존 테이블은 boot 마이그레이션에서 drop 후 재생성
 CREATE TABLE IF NOT EXISTS "event_record" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "record_type" TEXT NOT NULL,
     "event_name" TEXT NOT NULL,
@@ -301,6 +304,7 @@ CREATE TABLE IF NOT EXISTS "event_records" (
 
 -- Table: external_api_key
 CREATE TABLE IF NOT EXISTS "external_api_key" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "key_hash" TEXT NOT NULL,
     "key_prefix" TEXT NOT NULL,
@@ -335,6 +339,7 @@ CREATE TABLE IF NOT EXISTS "external_api_log" (
 
 -- Table: federation_list
 CREATE TABLE IF NOT EXISTS "federation_list" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL DEFAULT '',
@@ -431,6 +436,7 @@ CREATE TABLE IF NOT EXISTS "home_popup_section" (
 
 -- Table: joint_group
 CREATE TABLE IF NOT EXISTS "joint_group" (
+    "competition_id" BIGINT,   -- 합동 전광판 그룹의 대회 (2026-10-02)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "name" TEXT NOT NULL DEFAULT '',
     "joint_scoreboard_key" TEXT,
@@ -611,6 +617,7 @@ DO $$ BEGIN ALTER TABLE "result" ADD CONSTRAINT "fk_result_heat_id" FOREIGN KEY 
 -- 상장(Certificate) 시스템 — 양식 저장 + 발행 로그
 -- ============================================================
 CREATE TABLE IF NOT EXISTS "certificate_template" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "competition_id" BIGINT,
     "name" TEXT NOT NULL,
@@ -663,6 +670,7 @@ CREATE TABLE IF NOT EXISTS "certificate_issue_log" (
 -- 문자(SMS) 시스템 — Aligo + Simulation
 -- ============================================================
 CREATE TABLE IF NOT EXISTS "sms_config" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT PRIMARY KEY CHECK (id = 1),
     "provider" TEXT NOT NULL DEFAULT 'aligo',
     "api_key" TEXT NOT NULL DEFAULT '',
@@ -702,6 +710,7 @@ CREATE TABLE IF NOT EXISTS "sms_log" (
 -- 푸시(FCM 웹푸시) 토큰
 -- ============================================================
 CREATE TABLE IF NOT EXISTS "push_token" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "token" TEXT NOT NULL UNIQUE,
     "audience" TEXT NOT NULL DEFAULT 'public',
@@ -714,6 +723,7 @@ CREATE TABLE IF NOT EXISTS "push_token" (
 );
 
 CREATE TABLE IF NOT EXISTS "push_interest" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "token" TEXT NOT NULL,
     "competition_id" BIGINT,
@@ -761,6 +771,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_
 
 -- 워드 상장 양식 (현장 인쇄용) — scope_key: 'global' | 'c<대회id>', config: JSON (lib/awardDocxTemplate.js)
 CREATE TABLE IF NOT EXISTS award_docx_template (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     scope_key TEXT PRIMARY KEY,
     config TEXT NOT NULL,
     updated_at TEXT
