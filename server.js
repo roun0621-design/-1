@@ -785,6 +785,7 @@ try { db.exec(`ALTER TABLE result ADD COLUMN remark TEXT DEFAULT ''`); } catch(e
 try { db.exec(`ALTER TABLE result ADD COLUMN status_code TEXT DEFAULT ''`); } catch(e) {}
 // Add wind columns (migration)
 try { db.exec(`ALTER TABLE result ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
+try { db.exec(`ALTER TABLE result ADD COLUMN gun_time REAL DEFAULT NULL`); } catch(e) {}   // 도로 종목 건타임(총성 기준) — time_seconds 는 넷(칩) 타임 (C6)
 try { db.exec(`ALTER TABLE heat ADD COLUMN wind REAL DEFAULT NULL`); } catch(e) {}
 // 오프라인 재전송 충돌 판정용 — 풍속·소집 상태가 마지막으로 바뀐 시각 (2026-09)
 try { db.exec(`ALTER TABLE heat ADD COLUMN wind_updated_at TEXT DEFAULT NULL`); } catch(e) {}
@@ -1556,6 +1557,10 @@ try { db.exec(`ALTER TABLE competition ADD COLUMN sync_state TEXT DEFAULT NULL`)
 try { db.exec(`ALTER TABLE event ADD COLUMN external_key TEXT DEFAULT NULL`); } catch(e) {}
 // event.code: 종목 코드 (lib/eventCatalog.js) — 부팅 뒤 backfillEventCodes 가 이름으로 채운다 (2026-09-30)
 try { db.exec(`ALTER TABLE event ADD COLUMN code TEXT DEFAULT NULL`); } catch(e) {}
+// C5·C6 (2026-10-09): 참가기준기록·타깃 타임·승상 높이표(쉼표 목록) — 종목 단위
+try { db.exec(`ALTER TABLE event ADD COLUMN entry_standard TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE event ADD COLUMN target_time TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE event ADD COLUMN height_progression TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_code ON event(code)`); } catch(e) {}
 try { db.exec(`ALTER TABLE heat ADD COLUMN external_key TEXT DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE heat ADD COLUMN scheduled_at TEXT DEFAULT NULL`); } catch(e) {}
@@ -1936,6 +1941,11 @@ if (db.isAsync) {
                 await pgIdempotentAddCol(t, 'organization_id', `BIGINT NOT NULL DEFAULT ${def}`);
             }
             await pgIdempotentAddCol('joint_group', 'competition_id', `BIGINT`);
+            // C5·C6: 참가기준기록·타깃 타임·승상 높이표, 도로 건타임
+            await pgIdempotentAddCol('event', 'entry_standard', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('event', 'target_time', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('event', 'height_progression', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('result', 'gun_time', `DOUBLE PRECISION`);
             try { await db.run(`ALTER TABLE sms_config DROP CONSTRAINT IF EXISTS sms_config_id_check`); } catch(e) {}   // 조직별 문자 설정 행
             try { await db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sms_config_org ON sms_config(organization_id)`); } catch(e) {}
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_event_record_org ON event_record(organization_id, gender, event_name)`); } catch(e) {}

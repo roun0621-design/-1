@@ -17,6 +17,18 @@ function isOfflineResp(r) { return r && (r.queued === true || r.offline === true
 
 // 옵티미스틱: state.results 배열에 임시 result 객체를 삽입/갱신.
 // 서버 응답을 못 받아도 화면이 즉시 입력값을 반영하도록.
+// 동시 편집 보호 (C6): 화면이 마지막으로 본 결과 행의 updated_at — 서버가 그 사이 바뀌었으면 409 CONFLICT_STALE
+function _expUpd(eid, attempt) { const r = (state.results || []).find(x => x.event_entry_id === eid && ((attempt == null && x.attempt_number == null) || x.attempt_number === attempt)); return r && r.updated_at ? r.updated_at : undefined; }
+function _isStale(resp) { return !!(resp && (resp.error === 'CONFLICT_STALE' || (resp.status === 409 && resp.body && resp.body.error === 'CONFLICT_STALE'))); }
+async function _onStale() { showToast('다른 입력자가 먼저 저장했습니다 — 최신 기록으로 새로 고쳤습니다', 'error', 3500); try { if (typeof loadTrackHeatData === 'function') await loadTrackHeatData(); } catch (e) {} }
+// 도로 종목 건타임 (총성 기준) — 기록 칸은 넷(칩) 타임
+async function saveGunTime(inp) {
+    const eid = parseInt(inp.dataset.eid, 10); const hid = getSaveHeatId(eid);
+    const v = String(inp.value || '').trim(); let sec = null;
+    if (v) { const p = v.split(':').map(Number); if (p.some(n => isNaN(n))) { inp.classList.add('error'); return; } sec = p.reduce((a, n) => a * 60 + n, 0); }
+    try { const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, gun_time: sec }); if (_isStale(resp)) return _onStale(); inp.classList.add('has-value'); } catch (e) { if (e && e.error === 'CONFLICT_STALE') return _onStale(); showToast('건타임 저장 실패', 'error'); }
+}
+function _progressionOf(evt) { return String((evt && evt.height_progression) || '').split(/[,\s]+/).map(Number).filter(n => n > 0 && n < 10); }
 function _optimisticUpsertResult(eid, attempt, fields) {
     const idx = state.results.findIndex(r =>
         r.event_entry_id === eid &&
@@ -947,7 +959,7 @@ async function renderTrackTable() {
             <thead><tr>
                 <th style="width:50px;">RANK</th><th style="width:50px;">${smallNumLabel}</th>
                 <th style="width:60px;">BIB</th><th style="text-align:left;">${isRelayEvent ? '팀명' : '선수명'}</th><th style="text-align:left;">소속</th>
-                <th style="width:140px;">기록</th>
+                <th style="width:140px;">${_isRoad ? '넷타임' : '기록'}</th>${_isRoad ? '<th style="width:110px;" title="총성 기준 시간">건타임</th>' : ''}
                 <th style="width:80px;" title="DQ/DNS/DNF/NM 입력">상태</th>
                 <th style="width:100px;">비고</th>
             </tr></thead>
@@ -981,7 +993,7 @@ async function renderTrackTable() {
                     <td style="font-size:12px;text-align:left;">${r.team || ''}</td>
                     <td><input class="track-time-input ${savedClass}" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" data-row="${idx}"
                         value="${displayVal}" placeholder="${placeholder}" ${r.status_code ? 'disabled' : ''}
-                        onkeydown="trackInlineKeydown(event,this)" oninput="trackInlineInput(this)" onfocus="this.select()"></td>
+                        onkeydown="trackInlineKeydown(event,this)" oninput="trackInlineInput(this)" onfocus="this.select()"></td>${_isRoad ? `<td><input class="track-time-input${r.gun_time != null ? ' has-value' : ''}" type="text" inputmode="decimal" data-eid="${r.event_entry_id}" value="${r.gun_time != null ? formatTime(r.gun_time, _roadFmt) : ''}" placeholder="h:mm:ss" onchange="saveGunTime(this)" onfocus="this.select()"></td>` : ''}
                     <td><select class="sc-select" data-eid="${r.event_entry_id}" onchange="setStatusCode(this)" title="DQ=실격, DNS=불출발, DNF=미완주, NM=기록없음">
                         <option value="">—</option><option value="DQ" ${r.status_code==='DQ'?'selected':''}>DQ</option>
                         <option value="DNS" ${r.status_code==='DNS'?'selected':''}>DNS</option>
@@ -1069,7 +1081,8 @@ async function saveSingleTrackInline(inp, doRerender = true) {
         // ─── 옵티미스틱: 화면 state 에 먼저 반영 (오프라인에서도 보이게)
         _optimisticUpsertResult(eid, null, { heat_id: hid, time_seconds: v, status_code: '' });
 
-        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, time_seconds: v });
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: eid, time_seconds: v, expected_updated_at: _expUpd(eid, null) });
+        if (_isStale(resp)) { inp.classList.remove('saving'); inp.disabled = false; delete state._pendingInlineTrack[eid]; return _onStale(); }
         delete state._pendingInlineTrack[eid];
         if (Object.keys(state._pendingInlineTrack).length === 0) clearUnsaved();
         inp.classList.remove('saving'); inp.classList.add('has-value');
@@ -1086,7 +1099,7 @@ async function saveSingleTrackInline(inp, doRerender = true) {
         }
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
-    } catch (err) { inp.classList.remove('saving'); inp.disabled = false; inp.classList.add('error'); setTimeout(() => inp.classList.remove('error'), 1500); showToast(err.error || '저장 실패', 'error'); }
+    } catch (err) { if (err && err.error === 'CONFLICT_STALE') { inp.classList.remove('saving'); inp.disabled = false; delete state._pendingInlineTrack[eid]; return _onStale(); } inp.classList.remove('saving'); inp.disabled = false; inp.classList.add('error'); setTimeout(() => inp.classList.remove('error'), 1500); showToast(err.error || '저장 실패', 'error'); }
 }
 
 async function saveAllTrackInline() {
@@ -1989,7 +2002,8 @@ async function saveFieldInline(entryId, attempt, distance) {
         state._activeWindCell = null;
         renderFieldDistanceContent();
 
-        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind });
+        const resp = await API.upsertResult({ heat_id: hid, event_entry_id: entryId, attempt_number: attempt, distance_meters: distance, wind, expected_updated_at: _expUpd(entryId, attempt) });
+        if (_isStale(resp)) { await _onStale(); try { renderFieldDistanceContent(); } catch (e) {} return; }
         if (isOfflineResp(resp)) {
             showToast('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 로컬 저장 (오프라인)');
         } else {
@@ -2011,6 +2025,7 @@ async function saveFieldInline(entryId, attempt, distance) {
         if (state.selectedEvent && state.selectedEvent.parent_event_id) await syncCombinedFromSubEvent(state.selectedEvent.parent_event_id);
         renderAuditLog();
     } catch (err) {
+        if (err && err.error === 'CONFLICT_STALE') { await _onStale(); try { renderFieldDistanceContent(); } catch (e) {} return; }
         _recSaveFailed('기록', err, true);
     }
 }
@@ -2369,7 +2384,8 @@ async function loadFieldHeightData() {
     state.results = allResults;
 
     const existingHeights = [...new Set(state.heightAttempts.map(a => a.bar_height))].sort((a, b) => a - b);
-    state._heightBarList = [...new Set([...(state._heightBarList || []), ...existingHeights])].sort((a, b) => a - b);
+    const _plan = _progressionOf(state.selectedEvent);   // 관리자가 적은 승상 높이표 (C6)
+    state._heightBarList = [...new Set([...(state._heightBarList || []), ...existingHeights, ...(state._heightBarList && state._heightBarList.length ? [] : _plan)])].sort((a, b) => a - b);
     renderHeightContent();
 }
 

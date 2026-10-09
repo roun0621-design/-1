@@ -6101,6 +6101,11 @@ POST /api/external/event-result-link/batch<br>
                                 </div>
                             </div>
                         </div>
+                        <div class="admin-form-row">
+                            <div class="admin-form-group"><label>참가기준기록</label><input id="em-entry-standard" placeholder="예: 10.40 · 7.60 · 2:05.00" value="${(e.entry_standard||'').replace(/"/g,'&quot;')}" title="스타트리스트에 표시되고, 엔트리 기록이 이 기준을 넘는 선수에 '기준' 표시"></div>
+                            <div class="admin-form-group"><label>타깃 타임</label><input id="em-target-time" placeholder="예: 13:00.00" value="${(e.target_time||'').replace(/"/g,'&quot;')}" title="스타트리스트·결과 창에 표시되는 목표 기록"></div>
+                            <div class="admin-form-group"><label>승상 높이 (높이 종목)</label><input id="em-height-progression" placeholder="예: 1.80,1.85,1.90,1.95" value="${(e.height_progression||'').replace(/"/g,'&quot;')}" title="기록 입력 화면의 바 높이 목록을 미리 채웁니다"></div>
+                        </div>
                     </div>
                     <input type="hidden" id="em-id" value="${e.id}">
                     <div style="display:flex;gap:8px;margin-top:10px;">
@@ -6701,7 +6706,8 @@ POST /api/external/event-result-link/batch<br>
                 const videoUrl = document.getElementById('em-video-url').value.trim();
                 const resultUrl = (document.getElementById('em-result-url')?.value || '').trim();
                 const division = document.getElementById('em-division')?.value || '';
-                await API.adminUpdateEvent(id, {
+                const _std = (document.getElementById('em-entry-standard')?.value || '').trim(), _tgt = (document.getElementById('em-target-time')?.value || '').trim(), _hp = (document.getElementById('em-height-progression')?.value || '').trim();
+                await API.adminUpdateEvent(id, { entry_standard: _std, target_time: _tgt, height_progression: _hp,
                     name: document.getElementById('em-name').value,
                     category: document.getElementById('em-category').value,
                     gender: document.getElementById('em-gender').value,

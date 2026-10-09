@@ -16012,6 +16012,18 @@
    "dashboard.js"
   ]
  },
+ "참가기준기록 충족": {
+  "count": 1,
+  "files": [
+   "dashboard.js"
+  ]
+ },
+ "기준": {
+  "count": 1,
+  "files": [
+   "dashboard.js"
+  ]
+ },
  "PB 기준 ${isFinalR ? '전체' : '조'} 순번 (PB 있는 ${tot}명 중)": {
   "count": 1,
   "files": [
@@ -16026,6 +16038,18 @@
   ]
  },
  "PB 없음": {
+  "count": 1,
+  "files": [
+   "dashboard.js"
+  ]
+ },
+ "참가기준기록": {
+  "count": 1,
+  "files": [
+   "dashboard.js"
+  ]
+ },
+ "타깃 타임": {
   "count": 1,
   "files": [
    "dashboard.js"
@@ -20260,6 +20284,18 @@
    "record.js"
   ]
  },
+ "다른 입력자가 먼저 저장했습니다 — 최신 기록으로 새로 고쳤습니다": {
+  "count": 1,
+  "files": [
+   "record.js"
+  ]
+ },
+ "건타임 저장 실패": {
+  "count": 1,
+  "files": [
+   "record.js"
+  ]
+ },
  "대회가 종료되었습니다.": {
   "count": 1,
   "files": [
@@ -20466,6 +20502,24 @@
  },
  "모든 조의 결과를 통합하여 결승 진출자를 선택합니다": {
   "count": 2,
+  "files": [
+   "record.js"
+  ]
+ },
+ "넷타임": {
+  "count": 1,
+  "files": [
+   "record.js"
+  ]
+ },
+ "총성 기준 시간": {
+  "count": 1,
+  "files": [
+   "record.js"
+  ]
+ },
+ "건타임": {
+  "count": 1,
   "files": [
    "record.js"
   ]

@@ -140,6 +140,9 @@ CREATE TABLE IF NOT EXISTS "doc_template" (
 -- Table: event
 CREATE TABLE IF NOT EXISTS "event" (
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "entry_standard" TEXT DEFAULT '',   -- C5
+    "target_time" TEXT DEFAULT '',
+    "height_progression" TEXT DEFAULT '',   -- C6
     "competition_id" BIGINT NOT NULL,
     "name" TEXT NOT NULL,
     "category" TEXT NOT NULL,
@@ -542,6 +545,7 @@ CREATE TABLE IF NOT EXISTS "relay_member" (
 -- Table: result
 CREATE TABLE IF NOT EXISTS "result" (
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "gun_time" DOUBLE PRECISION,   -- C6 도로 건타임
     "heat_id" BIGINT NOT NULL,
     "event_entry_id" BIGINT NOT NULL,
     "attempt_number" BIGINT,

@@ -264,5 +264,21 @@
   "조 크기": "Heat size",
   "이전 대회 기록 불러오기": "Carry over marks from past meets",
   "같은 조직의 지난 대회에서 선수·종목이 같은 PB/SB 를 빈 엔트리에 채웁니다": "Fills empty PB/SB from the same athlete and event in this organization's past competitions",
-  "엔트리 {0}건 채움 (PB {1} · SB {2})": "{0} entries filled (PB {1} · SB {2})"
+  "엔트리 {0}건 채움 (PB {1} · SB {2})": "{0} entries filled (PB {1} · SB {2})",
+  "참가기준기록 충족": "Meets entry standard",
+  "기준": "STD",
+  "참가기준기록": "Entry standard",
+  "타깃 타임": "Target time",
+  "다른 입력자가 먼저 저장했습니다 — 최신 기록으로 새로 고쳤습니다": "Someone else saved first — reloaded the latest marks",
+  "건타임 저장 실패": "Failed to save gun time",
+  "넷타임": "Net time",
+  "총성 기준 시간": "Time from the gun",
+  "건타임": "Gun time",
+  "승상 높이 (높이 종목)": "Bar progression (vertical jumps)",
+  "예: 1.80,1.85,1.90,1.95": "e.g. 1.80,1.85,1.90,1.95",
+  "예: 10.40 · 7.60 · 2:05.00": "e.g. 10.40 · 7.60 · 2:05.00",
+  "예: 13:00.00": "e.g. 13:00.00",
+  "스타트리스트에 표시되고, 엔트리 기록이 이 기준을 넘는 선수에 '기준' 표시": "Shown on the start list; athletes whose entry mark meets it get a STD badge",
+  "스타트리스트·결과 창에 표시되는 목표 기록": "Target mark shown on the start list and results",
+  "기록 입력 화면의 바 높이 목록을 미리 채웁니다": "Pre-fills the bar heights on the recording screen"
 }

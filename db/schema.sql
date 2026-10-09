@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS event (
     division TEXT NOT NULL DEFAULT '',
     result_url TEXT DEFAULT '',
     external_key TEXT DEFAULT NULL,                 -- 국제대회 동기화: 공식 결과 API 의 종목 키 (lib/intl)
+    entry_standard TEXT DEFAULT '',                  -- 참가기준기록 (C5) 예: 10.40 / 7.60
+    target_time TEXT DEFAULT '',                     -- 타깃 타임(표시용, C5)
+    height_progression TEXT DEFAULT '',              -- 승상 높이표 쉼표 목록 (C6) 예: 1.80,1.85,1.90
     code TEXT DEFAULT NULL                          -- 종목 코드(lib/eventCatalog.js: 100·110H·LJ·DEC·4X100…) — 이름과 별개로 종목을 식별, 영문 표기·정렬·풍속 규제의 기준 (2026-09-30)
 );
 
@@ -125,6 +128,7 @@ CREATE TABLE IF NOT EXISTS result (
     attempt_number INTEGER,
     distance_meters REAL,
     time_seconds REAL,
+    gun_time REAL,                                   -- 도로 건타임 (C6; time_seconds = 넷타임)
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(heat_id, event_entry_id, attempt_number)

@@ -3468,7 +3468,10 @@ async function loadRosterModalData(eventId) {
         const spot = (allEvents.find(e => e.spotlight) || {}).spotlight || null;
         const escT = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         const yearOf = d => (String(d || '').match(/^\d{4}/) || [''])[0];
-        const pbsbOf = e => [e.personal_best ? 'PB ' + e.personal_best : '', e.season_best ? 'SB ' + e.season_best : ''].filter(Boolean).map(escT).join('<br>');
+        // 참가기준기록 (C5): 엔트리 기록(SB 우선, 없으면 PB)이 기준을 넘으면 '기준' 표시
+        const _stdNum = parseRecordValueClient(evt.entry_standard || ''); const _higher = ['field_distance', 'field_height'].includes(evt.category);
+        const _meetsStd = e => { if (!(_stdNum > 0)) return false; const v = parseRecordValueClient(e.season_best || e.personal_best || ''); return v > 0 && (_higher ? v >= _stdNum : v <= _stdNum); };
+        const pbsbOf = e => [e.personal_best ? 'PB ' + e.personal_best : '', e.season_best ? 'SB ' + e.season_best : ''].filter(Boolean).map(escT).join('<br>') + (_meetsStd(e) ? ' <span class="pb-rank" title="참가기준기록 충족">기준</span>' : '');
         // 소집 진행 중 여부 (heats_generated 이후 = 소집 가능 상태)
         const showCallroomStatus = (evt.round_status === 'in_progress' || evt.round_status === 'heats_generated');
         let html = '';
@@ -3621,7 +3624,8 @@ async function loadRosterModalData(eventId) {
                 spotTop = `<div class="spot-block"><div style="display:flex;align-items:center;gap:8px;margin-bottom:2px"><span style="font-size:11px;font-weight:800;color:#B8432A;letter-spacing:.05em">한국 선수 · 스타트 리스트</span><span style="margin-left:auto;font-size:10px;color:#999">PB 기준 순번 · 참고</span></div>${lines.join('')}${_pbNote ? `<div style="font-size:11px;color:#888;margin-top:4px">진출 규칙 ${escT(_pbNote)}</div>` : ''}</div>`;
             }
         }
-        body.innerHTML = (await _recordsLineHtml(evt)) + spotTop + (html || '<div style="padding:20px;text-align:center;color:var(--text-muted);">조 편성 데이터가 없습니다.</div>');
+        const _stdLine = (evt.entry_standard || evt.target_time) ? `<div style="font-size:12px;color:var(--text-muted);padding:4px 0 6px;">${evt.entry_standard ? '참가기준기록 <b>' + escT(evt.entry_standard) + '</b>' : ''}${evt.entry_standard && evt.target_time ? ' · ' : ''}${evt.target_time ? '타깃 타임 <b>' + escT(evt.target_time) + '</b>' : ''}</div>` : '';
+        body.innerHTML = (await _recordsLineHtml(evt)) + _stdLine + spotTop + (html || '<div style="padding:20px;text-align:center;color:var(--text-muted);">조 편성 데이터가 없습니다.</div>');
 
         // 운영자용 소집실/기록실 링크 추가
         const isAdmin = currentRole === 'admin';

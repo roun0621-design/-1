@@ -479,3 +479,8 @@ await db.transaction(async () => {
 ## PB/SB 자동 누적 (2026-10-09, C4)
 - `lib/pbsb.js`: `updateEntryMarks(db, event)` — 종목 완료(`POST /api/events/:id/complete`, `lib/routes/callroom.js`) 때 자동 호출. 트랙·도로 MIN(time), 필드 거리 MAX, 높이 MAX(O); 상태 코드 있는 결과·풍속 +2.0 초과(`EventCatalog.isWindAffected`) 제외; `event_entry.personal_best/season_best` 가 더 좋을 때만 갱신(SB 는 대회 연도 기준), 선수가 한 종목만 뛰면 `athlete` 행도. `carryOverMarks(db, comp)` — 같은 조직·이전 대회·같은 선수(이름+성별+생년월일, 생년월일 없으면 소속)·같은 종목 코드의 PB/SB 를 빈 엔트리에.
 - 라우트 `lib/routes/pbsb.js`: `POST /api/events/:id/marks/update`, `POST /api/competitions/:id/marks/carry-over`. 관리자 선수 화면 '이전 대회 기록 불러오기'. 테스트 `tests/api/62_pbsb.test.js`.
+
+## 참가기준기록·승상 높이표·건타임·동시 편집 보호 (2026-10-09, C5·C6)
+- `event.entry_standard / target_time / height_progression`(관리자 종목 드로어, `PUT /api/admin/events/:id`). 대시보드 소집 명단(`loadRosterModalData`)에 기준·타깃 줄 + 엔트리 기록(SB→PB)이 기준을 넘으면 '기준' 배지; PDF 스타트리스트에도 한 줄. 기록 입력(`record.js`)은 `height_progression` 으로 바 높이 목록을 미리 채운다.
+- `result.gun_time`(도로 종목 건타임; `time_seconds` 는 넷타임) — 기록 입력 도로 표에 건타임 열(`saveGunTime`), `/api/results/upsert` 가 `gun_time` 을 받는다.
+- 낙관적 락: `/api/results/upsert` 에 `expected_updated_at` 을 보내면 서버 `updated_at` 과 다를 때 409 `CONFLICT_STALE`(server_value 포함). `record.js` 는 트랙·필드 저장에 `_expUpd()` 로 붙이고 409 면 최신으로 새로 고침(`_onStale`). 보내지 않으면 예전처럼 마지막 저장이 이긴다(가져오기·동기화 경로).
