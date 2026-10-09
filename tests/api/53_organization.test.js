@@ -74,7 +74,7 @@ describe('조직(멀티테넌시 1단계)', () => {
         expect((await request(app).get('/api/home-popups?competition_id=common')).body.map(x => x.id)).not.toContain(pid);
         expect((await request(app).get('/api/home-popups?competition_id=common').set('Host', JP)).body.map(x => x.id)).toContain(pid);
         expect((await request(app).delete(`/api/home-popups/${pid}`).send({ admin_key: ADMIN })).status).toBe(404);   // 다른 조직에서 삭제 불가
-        const sc = await request(app).post('/api/admin/site-config').set('Host', JP).send({ admin_key: OP, configs: { site_manual_html: '<p>JP manual</p>' } });
+        const sc = await request(app).post('/api/admin/site-config').set('Host', JP).send({ admin_key: ADMIN, configs: { site_manual_html: '<p>JP manual</p>' } });
         expect(sc.status).toBe(200);
         const jpCfg = (await request(app).get('/api/site-config').set('Host', JP)).body;
         expect(jpCfg.site_manual_html).toBe('<p>JP manual</p>');

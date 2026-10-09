@@ -455,6 +455,7 @@ CREATE TABLE IF NOT EXISTS "joint_group_member" (
 
 -- Table: operation_key
 CREATE TABLE IF NOT EXISTS "operation_key" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 운영키 소속 조직 (멀티테넌시 3단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "judge_name" TEXT NOT NULL,
     "key_value" TEXT NOT NULL,

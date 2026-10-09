@@ -322,6 +322,8 @@ try { app.use(require('cookie-parser')()); } catch (e) { console.warn('[auth] co
 // 조직 선택 — 호스트(서브도메인·전용 도메인)로 req.org 를 정한다 (lib/org.js, 멀티테넌시 1단계 2026-10-01)
 const ORG = require('./lib/org').createResolver(() => db);   // db 는 아래에서 선언 → getter
 app.use(ORG.middleware());
+const RC = require('./lib/reqContext');   // 키 검사 함수들이 '지금 요청의 조직'을 알도록 (멀티테넌시 3단계)
+app.use((req, res, next) => RC.run({ orgId: (req.org && req.org.id) || 1 }, () => next()));
 
 // ─── JWT → 레거시 키 브리지 (2026-09 인증 정리) ─────────────────────────────
 //   라우트 ~90곳이 isAdminKey(req.query.key / body.admin_key / x-admin-key) 로 권한을 검사한다.
@@ -356,8 +358,11 @@ app.use(async (req, res, next) => {
         }
         const payload = await require('./lib/auth/jwt').verifyAccess(db, tok);
         if (!payload || !payload.role || payload.role === 'viewer') return next();
+        // 멀티테넌시 3단계: 계정의 조직이 이 호스트의 조직과 다르면 권한 없음 (기본 조직의 admin 은 플랫폼 관리자 — 어디서나)
+        const _uOrg = Number(payload.organization_id || 1), _rOrg = (req.org && req.org.id) || 1;
+        if (_uOrg !== _rOrg && !(_uOrg === 1 && payload.role === 'admin')) return next();
         const t = 'jwtb:' + crypto.randomBytes(18).toString('hex');
-        _bridgeTokens.set(t, { role: payload.role, name: payload.username || 'user', userId: payload.sub });
+        _bridgeTokens.set(t, { role: payload.role, name: payload.username || 'user', userId: payload.sub, organization_id: _uOrg });
         req._bridgeToken = t;
         req.user = req.user || { id: payload.sub, username: payload.username, role: payload.role, source: 'jwt' };
         res.on('close', () => _bridgeTokens.delete(t));
@@ -394,6 +399,21 @@ app.use((req, res, next) => {
     if (/^multipart\/form-data/i.test(req.headers['content-type'] || '')) return next();
     if (_hasValidWriteKey(req)) return next();
     return res.status(403).json({ error: '인증 키가 필요합니다. (운영키 또는 관리자 로그인)' });
+});
+
+// ─── 조직 가드 (멀티테넌시 3단계, 2026-10-09) ────────────────────────────
+//   요청이 가리키는 대회(경로·본문·쿼리의 대회/종목/조/선수 id)가 이 호스트의 조직 것이 아니면 404 — "없는 것처럼".
+//   종료 가드와 같은 추출기(_extractCompetitionIdFromRequest)를 쓴다. 조직 관리 API 자체는 제외.
+app.use(async (req, res, next) => {
+    if (!req.path.startsWith('/api/') || /^\/api\/(org$|admin\/organizations)/.test(req.path)) return next();
+    try {
+        const cid = await _extractCompetitionIdFromRequest(req);
+        if (cid) {
+            const c = await db.get('SELECT organization_id FROM competition WHERE id=?', cid);
+            if (c && Number(c.organization_id || 1) !== ((req.org && req.org.id) || 1)) return res.status(404).json({ error: 'Not found' });
+        }
+    } catch (e) { /* 추출 실패는 통과 — 라우트 자체 검사에 맡긴다 */ }
+    next();
 });
 
 // ------------------------------------------------------------
@@ -729,6 +749,7 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS system_config (
 )`); } catch(e) {}
 // Add can_manage column if missing (migration)
 try { db.exec(`ALTER TABLE operation_key ADD COLUMN can_manage INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
+try { db.exec(`ALTER TABLE operation_key ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 1`); } catch(e) {}   // 운영키 소속 조직 (멀티테넌시 3단계)
 // (2026-09 결정) 운영키는 해시로 저장한다: key_value = bcrypt 해시, key_prefix = 앞 3자(후보 좁히기), key_hint = 화면 표시용 'abc••••'
 try { db.exec(`ALTER TABLE operation_key ADD COLUMN key_prefix TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE operation_key ADD COLUMN key_hint TEXT DEFAULT ''`); } catch(e) {}
@@ -1486,7 +1507,7 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS event_record (
 // ─── 멀티테넌시 2단계 (2026-10-02): 지금까지 서버에 하나뿐이던 것들에 소속 조직을 붙인다. 기존 행은 전부 기본 조직(1).
 //     division_master 는 0 = 공용(기본 13개·기존 학년부), 조직이 추가한 부만 자기 조직 번호.
 //     event_record 의 UNIQUE 는 NULL 때문에 원래 느슨하므로(두 백엔드 모두 NULL 은 서로 다름) 조직 조건은 조회 쪽에서 건다.
-for (const [t, def] of [['event_record', '1'], ['competition_series', '1'], ['federation_list', '1'], ['division_master', '0'], ['certificate_template', '1'], ['award_docx_template', '1'], ['external_api_key', '1'], ['push_token', '1'], ['push_interest', '1'], ['sms_config', '1']]) {
+for (const [t, def] of [['event_record', '1'], ['competition_series', '1'], ['federation_list', '1'], ['division_master', '0'], ['certificate_template', '1'], ['award_docx_template', '1'], ['external_api_key', '1'], ['push_token', '1'], ['push_interest', '1'], ['sms_config', '1'], ['operation_key', '1']]) {
     try { db.exec(`ALTER TABLE ${t} ADD COLUMN organization_id INTEGER NOT NULL DEFAULT ${def}`); } catch(e) {}
 }
 try { db.exec(`ALTER TABLE joint_group ADD COLUMN competition_id INTEGER`); } catch(e) {}   // 합동 전광판 그룹에 대회가 없던 버그
@@ -1926,7 +1947,7 @@ if (db.isAsync) {
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_competition_org ON competition(organization_id)`); } catch(e) {}
             await pgIdempotentAddCol('home_popup', 'organization_id', `BIGINT NOT NULL DEFAULT 1`);
             // 멀티테넌시 2단계: 전역이던 표에 소속 조직 (division_master 는 0 = 공용)
-            for (const [t, def] of [['event_record', '1'], ['competition_series', '1'], ['federation_list', '1'], ['division_master', '0'], ['certificate_template', '1'], ['award_docx_template', '1'], ['external_api_key', '1'], ['push_token', '1'], ['push_interest', '1'], ['sms_config', '1']]) {
+            for (const [t, def] of [['event_record', '1'], ['competition_series', '1'], ['federation_list', '1'], ['division_master', '0'], ['certificate_template', '1'], ['award_docx_template', '1'], ['external_api_key', '1'], ['push_token', '1'], ['push_interest', '1'], ['sms_config', '1'], ['operation_key', '1']]) {
                 await pgIdempotentAddCol(t, 'organization_id', `BIGINT NOT NULL DEFAULT ${def}`);
             }
             await pgIdempotentAddCol('joint_group', 'competition_id', `BIGINT`);
@@ -2065,10 +2086,12 @@ const _opKeyCache = { has: k => !!_opKeyLookup(k), get: k => _opKeyLookup(k), ge
 function _opKeySetRows(rows) { _opKeyRows = rows; _opKeyVerified.clear(); }
 function _opKeyLookup(key) {
     if (!key || typeof key !== 'string') return null;
-    const hit = _opKeyVerified.get(key); if (hit) return hit;
+    const _org = RC.orgId();   // 운영키는 자기 조직 호스트에서만 통한다 (멀티테넌시 3단계)
+    const hit = _opKeyVerified.get(key); if (hit) return Number(hit.organization_id || 1) === _org ? hit : null;
     const pre = _opKeyPrefix(key);
     for (const r of _opKeyRows) {
         if (!r.active) continue;
+        if (Number(r.organization_id || 1) !== _org) continue;
         if (_opKeyIsHash(r.key_value)) {
             if (r.key_prefix && r.key_prefix !== pre) continue;
             try { if (bcrypt.compareSync(key, r.key_value)) { _opKeyVerified.set(key, r); return r; } } catch (e) {}
@@ -2078,11 +2101,11 @@ function _opKeyLookup(key) {
 }
 function _loadOpKeyCacheSync() {
     if (db.isAsync) return;
-    try { _opKeySetRows(db.raw.prepare('SELECT id, key_value, key_prefix, key_hint, judge_name, can_manage, active FROM operation_key WHERE active=1').all()); }
+    try { _opKeySetRows(db.raw.prepare('SELECT id, key_value, key_prefix, key_hint, judge_name, can_manage, active, organization_id FROM operation_key WHERE active=1').all()); }
     catch (e) { console.error('[opkey-cache] sync load failed:', e.message); }
 }
 async function _reloadOpKeyCacheAsync() {
-    try { _opKeySetRows(await db.all('SELECT id, key_value, key_prefix, key_hint, judge_name, can_manage, active FROM operation_key WHERE active=1')); }
+    try { _opKeySetRows(await db.all('SELECT id, key_value, key_prefix, key_hint, judge_name, can_manage, active, organization_id FROM operation_key WHERE active=1')); }
     catch (e) { console.error('[opkey-cache] async reload failed:', e.message); }
 }
 // 부팅 마이그레이션: 평문으로 남아 있는 키를 해시로 (원본은 key_hint 에 앞 2자만 남긴다)
@@ -2106,6 +2129,7 @@ setInterval(() => { _reloadOpKeyCacheAsync().catch(() => {}); }, 60 * 1000).unre
 // 기본 운영키(system_config.operation_key) — 역시 해시로 저장. 설정 시 평문은 한 번만 돌려준다
 const _defaultOpVerified = { key: null };
 function isDefaultOperationKey(key) {
+    if (RC.orgId() !== 1) return false;   // 기본 운영키는 기본 조직에서만 (멀티테넌시 3단계)
     const stored = ACCESS_KEYS.operation;
     if (!stored || !key) return false;
     if (!_opKeyIsHash(stored)) return key === stored;                       // 아직 해시되지 않은 값
@@ -2161,6 +2185,7 @@ function isAdminOrManager(key) {
 function isRecordOfficerKey(key) {
     if (!key) return false;
     const _b = _bridgeOf(key); if (_b) return _b.role === 'record_officer';
+    if (RC.orgId() !== 1) return false;   // 기록위원 키는 기본 조직에서만 (멀티테넌시 3단계)
     const stored = ACCESS_KEYS.recordOfficer;
     if (!stored) return false; // 비활성 상태
     return key === stored;

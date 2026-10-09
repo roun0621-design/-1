@@ -459,4 +459,5 @@ await db.transaction(async () => {
 - 조직 스코프가 들어간 곳: `lib/routes/competitions.js`(목록·recent·by-federation·조회·생성·복제·`/api/event/:slug` — 다른 조직 대회는 404, 새 대회 시간대 기본값 = 조직), `lib/routes/home_popups.js`(`home_popup.organization_id`), `lib/routes/admin_keys.js` `/api/site-config`(기본 조직은 `system_config site_*`, 다른 조직은 `organization.settings_json`; 응답에 `org` 요약 포함).
 - `lib/routes/organizations.js`: `GET /api/org`(공개), `GET/POST/PUT /api/admin/organizations`(기본 조직의 관리자 키만). 관리자 › 시스템 › 조직 화면(`card-organizations`, 플랫폼 관리자만 보임), 홈은 기본 조직이 아니면 사이트 이름을 조직 이름으로.
 - 2단계(2026-10-02): `event_record`·`competition_series`·`federation_list`·`division_master`(0=공용)·`certificate_template`·`award_docx_template`·`sms_config`(조직별 행, `lib/smsConfig.js`)·`push_*`·`external_api_key` 에 `organization_id`; `joint_group.competition_id`. 기록 감지(`lib/recordCompare.js` `findEventRecord(..., orgId)`)·문서(`fullRecordExcel`·`pdf_documents`)·국제 동기화는 대회의 `organization_id` 로 기록표를 본다.
-- 아직 전역(3단계): 관리자 계정·운영키·`login_audit`·`undo_snapshot`·백업.
+- 3단계(2026-10-09): `lib/reqContext.js`(AsyncLocalStorage 로 요청 조직 전달) → `_opKeyLookup`·기본 운영키·기록위원 키가 조직을 본다; 로그인·JWT 브리지·계정 관리(`admin_users.js`)·운영키 관리(`admin_keys.js`)·되돌리기 조직 검사; **조직 가드 미들웨어**(server.js, 쓰기 가드 뒤) — 요청이 가리키는 대회가 다른 조직이면 404.
+- 아직 전역: WebSocket 구독(대회 id 만), 백업 ZIP, 대회 없는 `audit_log`/`operation_log` 행.

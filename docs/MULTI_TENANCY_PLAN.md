@@ -29,7 +29,7 @@ organization
 |---|---|---|
 | 1 | `organization` 테이블·기본 조직·`competition.organization_id`·`app_user` 백필, `req.org` 미들웨어, 공개 목록·대회 조회·생성·복제·recent·슬러그·홈 팝업·site-config 를 조직으로 스코프, 새 대회 기본 시간대 = 조직, 조직별 `/api/site-config` 에 `org{slug,name,country,default_tz,default_lang,brand}` 포함, `/manifest.json` 조직별, 관리자 › 시스템 › **조직** 화면(플랫폼 관리자), 테스트 | **구현 완료(2026-10-01)** — `tests/api/53_organization.test.js` 6건, 전체 590 통과. `/manifest.json` 조직별은 보류(정적 그대로) |
 | 2 | 전역 테이블에 `organization_id`: `event_record`(NR/DR/CR, 조회·갱신·승인·감지·문서·엑셀·국제동기화 전부 조직 조건), `competition_series`, `federation_list`, `division_master`(0 = 공용 기본 부, 조직이 추가한 부만 자기 것; 공용은 기본 조직만 수정), `certificate_template`(목록·조회·수정·삭제·발급·공개 링크 선택), `award_docx_template`(전체 기본 키: 기본 조직 `global`, 다른 조직 `o<id>`), `sms_config`(조직마다 한 행 — CHECK(id=1) 제거 마이그레이션, `lib/smsConfig.js`), `push_token/push_interest`, `external_api_key`(키는 발급 조직의 대회에만 통함), `joint_group.competition_id` 추가(버그 수정). `record_breaking_log` 목록·승인은 대회의 조직으로 | **완료(2026-10-02)** — `tests/api/54_org_scope_masters.test.js`·`55_org_scope_settings.test.js` 10건. `event_record` UNIQUE 는 NULL 때문에 원래 느슨해서 그대로 두고 조회 조건으로 분리 |
-| 3 | 계정·키 조직 소속: `app_user.organization_id` 강제(로그인 호스트와 불일치 시 거부), `operation_key.organization_id`, `_opKeyCache` 조직별, JWT 브리지에 `organization_id` 전달 + 대회 접근 시 조직 일치 검사(`requireCompetitionInOrg`), 관리자 화면 조직 전환 없음(호스트가 곧 조직) | 대기 |
+| 3 | 계정·키 조직 소속: 로그인 시 계정 조직 ≠ 호스트 조직이면 403(기본 조직의 admin = 플랫폼 관리자는 어디서나), JWT 브리지도 같은 규칙(다른 조직 토큰은 권한 없음), 계정 목록·생성·수정·삭제·잠금 해제·로그인 이력은 호스트 조직만, `operation_key.organization_id` + `_opKeyLookup` 이 요청 조직(`lib/reqContext.js`, AsyncLocalStorage)으로 거름, 기본 운영키·기록위원 키는 기본 조직에서만, **조직 가드 미들웨어**(요청이 가리키는 대회가 다른 조직이면 404 — 종료 가드의 대회 추출기 재사용), 되돌리기도 조직 검사 | **완료(2026-10-09)** — `tests/api/56_org_auth.test.js` 4건 |
 | 4 | 운영: 쿠키 `domain` 옵션·CORS(필요 시), Docker 이미지·리전 배포 옵션, 과금·셀프 가입(고객 생긴 뒤) | 나중 |
 
 각 단계는 기존 한국 운영에 영향 없이 배포 가능해야 하고, `npm test` 가 통과해야 한다.
@@ -48,3 +48,9 @@ organization
 - 연맹 `code`·시리즈 `name`·부 `code` 의 UNIQUE 는 서버 전체 유일 그대로다(두 조직이 같은 코드를 못 씀). 해외 조직은 자기 코드(JAAF 등)를 쓰므로 실무 충돌은 없고, 필요해지면 `(organization_id, code)` 로 바꾼다.
 - 새 조직에는 상장 양식 시드가 없다 → 그 조직 관리자가 상장·기록증 › 양식에서 만들어야 한다(없으면 발급 시 "양식이 없습니다").
 - 아직 전역: 관리자 계정·운영키·`login_audit`·`undo_snapshot`·백업 폴더(3단계).
+
+## 6. 3단계 메모 (2026-10-09)
+- 레거시 관리자 비밀번호(`system_config.admin_pw`)는 플랫폼 운영자의 것 → 모든 호스트에서 관리자. 해외 조직 관리자는 JWT 계정(role admin, organization_id = 그 조직)으로만.
+- 호스트가 곧 조직이다 — 관리자 화면에 조직 전환은 없다. 플랫폼 관리자가 다른 조직을 손보려면 그 조직 주소로 들어가 같은 계정으로 로그인한다.
+- 남은 틈: WebSocket 구독은 대회 id 만 보고 조직을 보지 않는다(실시간 결과 push 가 다른 호스트로 새어 나갈 수 있음 — 공개 데이터라 낮은 위험, 4단계에서 호스트 검사 추가). 백업 ZIP·`audit_log`·`operation_log`(대회 없는 행)는 플랫폼 관리자만 본다.
+- 운영 전제: DNS 와일드카드(`*.pace-rise-node.com`) + nginx `server_name` 에 와일드카드 추가. 쿠키는 호스트별이라 조직마다 따로 로그인한다(정상).
