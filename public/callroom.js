@@ -139,7 +139,7 @@ function renderMatrix() {
                     const parentKey = 'cr-subs-' + (parentIds[0] || g.name);
                     const doneCount = subOrder.filter(sn => subGroups[sn].some(r => r.round_status === 'completed' || r.round_status === 'in_progress')).length;
                     html += `<tr class="combined-sub-toggle-row">
-                        <td colspan="4" style="padding:4px 8px;background:linear-gradient(135deg,#F6E4DF,#F6E4DF);border-left:3px solid #B8432A;">
+                        <td colspan="4" style="padding:4px 8px;background:#F6E4DF;border-left:3px solid #B8432A;">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <button onclick="toggleCombinedSubs('${parentKey}')" class="btn btn-sm btn-ghost" style="font-size:11px;padding:2px 10px;" id="toggle-btn-${parentKey}">
                                     ▼ 세부종목 ${subOrder.length}개

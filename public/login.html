@@ -8,13 +8,13 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
-    <meta name="theme-color" content="#C24A2E">
+    <meta name="theme-color" content="#F4F3EF">
     <link rel="stylesheet" href="styles.css?v=79">
     <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
         :root {
             --brand-gold: #C24A2E;
-            --brand-dark: #1a1f2b;
+            --brand-dark: #0E0E10;
         }
         body {
             min-height: 100vh;
@@ -45,7 +45,8 @@
             color: var(--brand-dark);
             margin-bottom: 4px;
         }
-        .login-header .brand .accent { color: var(--brand-gold); }
+        .login-header .brand { display:inline-flex; align-items:baseline; gap:8px; }
+        .login-header .brand .brand-node { font-family: var(--font-brand, 'Audiowide', sans-serif); font-size: 13px; letter-spacing: 1.5px; color: var(--brand-dark); }
         .login-header .sub { font-size: 13px; color: #7a7066; letter-spacing: 1px; }
 
         /* ── 패널 (운영진/심판 메인) ── */
@@ -76,7 +77,7 @@
             margin-top: 6px;
             width: 100%;
             padding: 13px 20px;
-            background: linear-gradient(135deg, var(--brand-dark) 0%, #2a3340 100%);
+            background: var(--brand-dark);
             color: #fff;
             border: none;
             border-radius: 10px;
@@ -165,7 +166,7 @@
             display: none;
             margin-top: 12px;
             padding: 14px;
-            background: linear-gradient(180deg, rgba(194,74,46,0.06) 0%, rgba(194,74,46,0.02) 100%);
+            background: #FBF1EE;
             border: 1px solid rgba(194,74,46,0.25);
             border-radius: 10px;
             flex-direction: column;
@@ -184,7 +185,7 @@
             background: #fff;
         }
         .admin-panel .btn-login {
-            background: linear-gradient(135deg, var(--brand-gold) 0%, #c8b06e 100%);
+            background: var(--brand-gold);
             color: #fff;
             padding: 11px 18px;
             font-size: 13.5px;
@@ -245,7 +246,7 @@
     <div class="login-wrap">
         <div class="login-card">
             <div class="login-header">
-                <div class="brand">PACE <span class="accent">RISE</span></div>
+                <div class="brand"><img class="brand-wordmark" src="/brand/wordmark.svg" alt="PACE RISE" style="height:28px;width:auto;"><span class="brand-node">Node</span></div>
                 <div class="sub">로그인</div>
             </div>
 
@@ -283,7 +284,7 @@
             <div class="admin-toggle-row">
                 <button type="button" class="admin-toggle-btn" id="admin-toggle-btn" aria-expanded="false" aria-controls="panel-jwt">
                     관리자·매니저 로그인
-                    <span class="badge-new">NEW</span>
+
                     <span class="chev">▼</span>
                 </button>
 
