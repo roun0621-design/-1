@@ -2431,3 +2431,6 @@ html[data-lang="en"] .card-chip, html[data-lang="ja"] .card-chip { letter-spacin
 /* 기록입력·소집실 왼쪽 종목 목록의 라운드 칩: EN/JA 는 글자가 길어 3열 격자에서 잘린다 → 더 작게, 넘치면 말줄임 대신 두 줄 허용 */
 html[data-lang="en"] .rec-round-btn, html[data-lang="ja"] .rec-round-btn { padding: 3px 6px !important; white-space: nowrap; }
 html[data-lang="en"] .matrix-table th, html[data-lang="ja"] .matrix-table th { font-size: 10px; letter-spacing: 0; padding-left: 4px; padding-right: 4px; }
+
+/* EN/JA: 10종·7종 세부종목 이름(Javelin Throw 등)이 소집실·기록입력 좌측 목록에서 잘리지 않게 줄바꿈 허용 (2026-10-09) */
+html[data-lang="en"] .combined-sub-row .rec-matrix-event, html[data-lang="ja"] .combined-sub-row .rec-matrix-event { white-space: normal; word-break: normal; line-height: 1.2; }
