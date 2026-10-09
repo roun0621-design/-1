@@ -14,7 +14,7 @@
     'use strict';
 
     var STORAGE_KEY = 'pace_lang';
-    var DICT_VERSION = (window.PACE_I18N_VERSION || '11');
+    var DICT_VERSION = (window.PACE_I18N_VERSION || '12');
     var LANGS = [
         { code: 'ko', label: '한국어', short: 'KO' },
         { code: 'en', label: 'English', short: 'EN' },
@@ -57,6 +57,7 @@
         try {
             var v = localStorage.getItem(STORAGE_KEY);
             if (v) return v;
+            if (window._paceOrgLang) return window._paceOrgLang;
             // 처음: 브라우저 언어로 (ko → 한국어, ja → 일본어, 그 밖엔 영어)
             var nl = String(navigator.language || navigator.userLanguage || 'ko').toLowerCase();
             return nl.indexOf('ko') === 0 ? 'ko' : nl.indexOf('ja') === 0 ? 'ja' : 'en';
@@ -292,7 +293,7 @@
         box.id = 'pace-lang-switcher'; box.setAttribute('aria-label', 'Language'); box.setAttribute('data-i18n-skip', '');
         box.style.cssText = inline
             ? 'display:inline-flex;align-items:center;gap:1px;vertical-align:middle;border:1px solid rgba(0,0,0,.12);border-radius:999px;padding:2px 5px;font-family:system-ui,sans-serif;user-select:none;line-height:1'
-            : 'position:fixed;bottom:14px;right:14px;z-index:99999;display:inline-flex;align-items:center;gap:1px;background:rgba(26,31,43,.9);border:1px solid rgba(183,159,88,.5);border-radius:999px;padding:4px 8px;font-family:system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25);user-select:none';
+            : 'position:fixed;bottom:14px;right:14px;z-index:99999;display:inline-flex;align-items:center;gap:1px;background:rgba(26,31,43,.9);border:1px solid rgba(194,74,46,.5);border-radius:999px;padding:4px 8px;font-family:system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25);user-select:none';
         box._inline = inline;
         var globe = document.createElement('span');
         if (window.PaceIcons) globe.innerHTML = PaceIcons.svg('globe', { size: 16 }); else globe.textContent = 'A';
@@ -322,12 +323,20 @@
     function updateSwitcherActive(lang) {
         if (!switcherEl) return;
         var inline = switcherEl._inline, btns = switcherEl.querySelectorAll('button[data-lang]');
-        for (var i = 0; i < btns.length; i++) { var on = btns[i].getAttribute('data-lang') === lang; btns[i].style.background = on ? '#b79f58' : 'transparent'; btns[i].style.color = on ? '#1a1f2b' : (inline ? '#6b7280' : '#cdd3df'); }
+        for (var i = 0; i < btns.length; i++) { var on = btns[i].getAttribute('data-lang') === lang; btns[i].style.background = on ? '#C24A2E' : 'transparent'; btns[i].style.color = on ? '#fff' : (inline ? '#6b7280' : '#cdd3df'); }
     }
 
     function init() {
         apply(getLang());
         startObserver();
+        // 조직 기본 언어 (멀티테넌시): 사용자가 아직 언어를 고르지 않았고 기본 조직이 아니면 그 조직의 기본 언어로
+        try {
+            if (!localStorage.getItem(STORAGE_KEY) && typeof fetch === 'function') {
+                fetch('/api/org', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (o) {
+                    if (o && !o.is_default && o.default_lang && LANGS.some(function (l) { return l.code === o.default_lang; }) && o.default_lang !== getLang()) { apply(o.default_lang); updateSwitcherActive(o.default_lang); window._paceOrgLang = o.default_lang; }
+                }).catch(function () {});
+            }
+        } catch (e) {}
         setTimeout(function () { if (!switcherEl) floatFallback(); }, 400);
     }
 

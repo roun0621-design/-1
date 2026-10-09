@@ -20,7 +20,7 @@ describe('조직 스코프 — 상장 양식·문자·푸시·외부 API 키', (
         expect(mk.status).toBe(200); const id = mk.body.template.id;
         expect(mk.body.template.organization_id).toBe(jpOrg.id);
         const jpList = (await request(app).get('/api/admin/certificate-templates').set('Host', JP).query({ admin_key: ADMIN })).body.templates;
-        expect(jpList.map(t => t.id)).toEqual([id]);   // 기본 조직의 시드 양식은 안 보인다
+        expect(jpList.map(t => t.id)).toContain(id); expect(jpList.every(t => t.organization_id === jpOrg.id)).toBe(true);   // 기본 조직 양식은 안 보이고, 새 조직엔 자기 시드 양식 + 방금 만든 것
         const krList = (await request(app).get('/api/admin/certificate-templates').query({ admin_key: ADMIN })).body.templates;
         expect(krList.length).toBe(krBefore); expect(krList.map(t => t.id)).not.toContain(id);
         expect((await request(app).get(`/api/admin/certificate-templates/${id}`).query({ admin_key: ADMIN })).status).toBe(404);

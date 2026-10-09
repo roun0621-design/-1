@@ -1,30 +1,30 @@
 /* ============================================================
    PACE RISE : Node — v7.0 Shared Styles
    Font: Audiowide (Google Fonts) for English/brand
-   Colors: White base, Gold/Charcoal/Warm-ivory accents
+   Colors: Line White base, Tartan accent, Track Black text (2026-10-09 새 팔레트; --green* 변수명은 호환용, 값은 타탄)
    ============================================================ */
 @import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Noto+Sans+KR:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
     --white: #ffffff;
-    --bg: #f8f6f0;
+    --bg: #F4F3EF;
     --bg-dark: #e8eaed;
     --bg-card: #ffffff;
-    --green: #b79f58;
-    --green-light: #f8f4ea;
-    --green-soft: #e8dfc0;
+    --green: #C24A2E;
+    --green-light: #F6E4DF;
+    --green-soft: #EFC9BF;
     --blue: #6b6b6b;
     --blue-light: #f5f5f5;
     --blue-soft: #e0e0e0;
-    --gray: #e8e2d0;
+    --gray: #D6D3CB;
     --gray-light: #f3f4f6;
     --gray-mid: #bfc5cd;
     --gray-dark: #6b7280;
-    --text: #1a1f2b;
-    --text-light: #7a8190;   /* 대비 3.9:1 (보조 글자) — 2026-09 접근성: 전 #9ca3af 2.5:1 */
-    --text-muted: #6d7380;   /* 대비 4.7:1 (본문 보조) — 전 #b0b6c0 1.9:1, 회색 위 회색 */
-    --danger: #dc3545;
-    --danger-light: #fde8ea;
+    --text: #0E0E10;
+    --text-light: #7A7770;   /* 대비 4.0:1 (보조 글자) — 2026-09 접근성: 전 #9ca3af 2.5:1 */
+    --text-muted: #6D6A64;   /* 대비 5.2:1 (본문 보조) — 전 #b0b6c0 1.9:1, 회색 위 회색 */
+    --danger: #B4232C;
+    --danger-light: #F9E3E5;
     --warning: #e5a100;
     --warning-light: #fef6dc;
     --accent: #6b6b6b;
@@ -124,8 +124,17 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     font-size: 22px; font-weight: 400;
     color: var(--text); letter-spacing: 2.5px;
 }
-.header-colon { color: #b79f58; }
-.header-scope { color: #b79f58; }
+/* 브랜드 워드마크(2026-10-09 새 로고): RISE 의 I 가 심볼인 SVG. 최소 높이 18px(브랜드 규칙), 옆의 'Node' 는 Audiowide 소형 글자 */
+.header-title { display: inline-flex; align-items: baseline; gap: 10px; line-height: 1; }
+.brand-wordmark { height: 20px; width: auto; display: inline-block; vertical-align: baseline; }
+.brand-node { font-family: var(--font-brand); font-size: 13px; letter-spacing: 1.5px; color: var(--text); }
+.hero-wordmark { height: 56px; }
+.hero-node { font-size: 22px; }
+.mobile-menu-header .mm-brand { display: inline-flex; align-items: baseline; gap: 8px; }
+.mobile-menu-header .mm-brand .brand-wordmark { height: 18px; }
+.mobile-menu-header .mm-brand .brand-node { font-size: 12px; }
+.header-colon { color: var(--text); }
+.header-scope { color: var(--text); }
 .header-subtitle {
     font-size: 11px; color: var(--text-muted);
     font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase;
@@ -359,7 +368,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .btn-primary:hover:not(:disabled) { background: #258a69; }
 .btn-accent { background: var(--blue); color: #fff; }
 .btn-accent:hover:not(:disabled) { background: #2f6ab5; }
-.btn-success { background: #b79f58; color: #fff; }
+.btn-success { background: #C24A2E; color: #fff; }
 .btn-success:hover:not(:disabled) { background: #1d9359; }
 .btn-danger { background: var(--danger); color: #fff; }
 .btn-danger:hover:not(:disabled) { background: #c82333; }
@@ -439,8 +448,8 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 }
 .gender-tab:hover { color: var(--text); }
 .gender-tab[data-gender="M"].active { color: #1a2a5e; border-bottom-color: #1a2a5e; background: #e8eaf0; }
-.gender-tab[data-gender="F"].active { color: #8b1a2a; border-bottom-color: #8b1a2a; background: #f0e0e4; }
-.gender-tab[data-gender="X"].active { color: #b79f58; border-bottom-color: #b79f58; background: #f8f4ea; }
+.gender-tab[data-gender="F"].active { color: #8E2A6B; border-bottom-color: #8E2A6B; background: #F1E3EC; }
+.gender-tab[data-gender="X"].active { color: #1F7A6D; border-bottom-color: #1F7A6D; background: #E0F0ED; }
 .gender-tab.active { color: #1a2a5e; border-bottom-color: #1a2a5e; background: #e8eaf0; }
 
 /* ============================================================
@@ -1040,15 +1049,15 @@ a, button, [role="button"], .btn, .tab, .nav-link,
    ============================================================ */
 .empty-state { text-align: center; padding: 36px; color: var(--text-muted); font-size: 13px; }
 /* 접근성 (2026-09, 규칙집 §12): 키보드 포커스는 항상 보이게, 글자 최소 11px(배지·라벨)·13px(본문) */
-:focus-visible { outline: 2px solid #b79f58; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(183,159,88,.25); }
+:focus-visible { outline: 2px solid #C24A2E; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(194,74,46,.25); }
 button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 /* 세 상태(비어 있음 · 불러오는 중 · 실패) 공통 — common.js uiStateHtml() (규칙집 §10) */
 .ui-state { text-align: center; padding: 36px 16px; color: var(--text-muted); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .ui-state .ui-state-title { font-size: 14px; font-weight: 700; color: var(--text); }
 .ui-state .ui-state-hint { font-size: 12px; max-width: 46ch; line-height: 1.5; }
 .ui-state .ui-state-action { margin-top: 8px; }
-.ui-state.is-error .ui-state-title { color: var(--danger, #b3261e); }
-.ui-state .ui-state-spinner { width: 22px; height: 22px; border: 3px solid rgba(0,0,0,.12); border-top-color: var(--accent, #b79f58); border-radius: 50%; animation: ui-state-spin .8s linear infinite; margin-bottom: 4px; }
+.ui-state.is-error .ui-state-title { color: var(--danger, #B4232C); }
+.ui-state .ui-state-spinner { width: 22px; height: 22px; border: 3px solid rgba(0,0,0,.12); border-top-color: var(--accent, #C24A2E); border-radius: 50%; animation: ui-state-spin .8s linear infinite; margin-bottom: 4px; }
 @keyframes ui-state-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .ui-state .ui-state-spinner { animation: none; } }
 
@@ -1192,7 +1201,7 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 .record-dashboard.sb-collapsed { grid-template-columns: minmax(0, 1fr); }
 .record-dashboard.sb-collapsed .record-matrix-panel { display: none; }
 .sb-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
-.sb-toggle[aria-expanded="false"] { background: var(--primary, #b79f58); color: #fff; border-color: var(--primary, #b79f58); }
+.sb-toggle[aria-expanded="false"] { background: var(--primary, #C24A2E); color: #fff; border-color: var(--primary, #C24A2E); }
 @media (max-width: 600px) { .sb-toggle .sb-toggle-label { display: none; } }
 
 /* Matrix Panel (Left) */
@@ -1469,9 +1478,9 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
     border-bottom: 2px solid #1a2a5e;
 }
 .results-unified-table .gender-header-female {
-    background: #f4e8ec;
-    color: #8b1a2a;
-    border-bottom: 2px solid #8b1a2a;
+    background: #F1E3EC;
+    color: #8E2A6B;
+    border-bottom: 2px solid #8E2A6B;
 }
 .results-unified-table .gender-divider {
     width: 3px;
@@ -1497,7 +1506,7 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 }
 .results-unified-table .round-col-female {
     background: #f7f0f2;
-    color: #8b1a2a;
+    color: #8E2A6B;
 }
 .results-unified-table .event-name-cell {
     font-weight: 700;
@@ -1528,13 +1537,13 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
     border-color: #1a2a5e;
 }
 .round-btn.result-btn-female {
-    background: #f4e8ec;
-    color: #8b1a2a;
+    background: #F1E3EC;
+    color: #8E2A6B;
     border: 1px solid #b08090;
 }
 .round-btn.result-btn-female:hover {
     background: #e8d0d8;
-    border-color: #8b1a2a;
+    border-color: #8E2A6B;
 }
 .round-btn.result-btn-female.status-ready {
     background: var(--gray-light);
@@ -1542,9 +1551,9 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
     border-color: var(--gray);
 }
 .round-btn.result-btn-female.status-done {
-    background: #8b1a2a;
+    background: #8E2A6B;
     color: #fff;
-    border-color: #8b1a2a;
+    border-color: #8E2A6B;
 }
 
 /* ============================================================
@@ -1552,16 +1561,16 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
    ============================================================ */
 .ico { display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;border-radius:4px;padding:1px 5px;line-height:1.3;letter-spacing:0.3px;vertical-align:middle; }
 .ico-track { background:#eef1f7;color:#1a2a5e;border:1px solid #c0c8d8; }
-.ico-field { background:#f8f4ea;color:#b79f58;border:1px solid #e8dfc0; }
-.ico-link { font-size:11px;color:#b79f58;margin-left:3px;font-weight:700;opacity:0.7; }
+.ico-field { background:#F6E4DF;color:#B8432A;border:1px solid #EFC9BF; }
+.ico-link { font-size:11px;color:#B8432A;margin-left:3px;font-weight:700;opacity:0.7; }
 .ico-wind { background:#eef4fa;color:#0369a1;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #bae6fd; }
 .ico-doc { font-size:11px;font-weight:700;color:#6b7280; }
 .ico-callroom { background:#1a2a5e;color:#fff;font-size:11px;font-weight:800;padding:2px 7px;border-radius:8px;letter-spacing:0.5px;animation:cr-pulse 2s ease-in-out infinite; }
 @keyframes cr-pulse { 0%,100%{opacity:1;} 50%{opacity:0.7;} }
 .ico-dot { display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle; }
 .ico-dot-m { background:#1a2a5e; }
-.ico-dot-f { background:#8b1a2a; }
-.ico-dot-x { background:#b79f58; }
+.ico-dot-f { background:#8E2A6B; }
+.ico-dot-x { background:#1F7A6D; }
 .ico-dot-green { background:#22c55e; }
 .ico-dot-yellow { background:#eab308; }
 .ico-dot-gray { background:#d1d5db; }
@@ -1636,8 +1645,8 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 .mobile-menu-header .mm-brand {
     font-family: var(--font-brand); font-size: 16px; letter-spacing: 1.5px; color: var(--text);
 }
-.mobile-menu-header .mm-brand .mm-colon { color: #b79f58; }
-.mobile-menu-header .mm-brand .mm-scope { color: #b79f58; }
+.mobile-menu-header .mm-brand .mm-colon { color: #B8432A; }
+.mobile-menu-header .mm-brand .mm-scope { color: #B8432A; }
 .mobile-menu-close { }   /* 공통 .pr-close */
 
 .mobile-menu-nav { padding: 8px 0; flex: 1; }
@@ -1647,7 +1656,7 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
     font-size: 15px; font-weight: 500; transition: background .15s;
 }
 .mobile-menu-nav a:active { background: var(--gray-light); }
-.mobile-menu-nav a.mm-active { color: #b79f58; font-weight: 700; background: rgba(183,159,88,0.06); }
+.mobile-menu-nav a.mm-active { color: #B8432A; font-weight: 700; background: rgba(194,74,46,0.06); }
 
 .mobile-menu-divider { height: 1px; background: var(--gray-light); margin: 4px 20px; }
 
@@ -1982,7 +1991,7 @@ body.viewer-mode .footer { display: none; }
 .qual-badge.qual-q { background: #ff8f00; color: #fff; }
 .qual-badge.qual-none { background: var(--gray-light); color: var(--text-muted); font-size: 11px; }
 .qual-badge:hover { transform: scale(1.2); box-shadow: 0 2px 6px rgba(0,0,0,.2); }
-.row-qual-selected { background: #f5f0e0 !important; }
+.row-qual-selected { background: #F6E4DF !important; }
 .qual-panel { background: var(--card); border: 1.5px solid var(--primary); border-radius: var(--radius); padding: 16px; margin-top: 12px; }
 .qual-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .qual-panel-header h3 { margin: 0; font-size: 15px; }
@@ -1991,10 +2000,10 @@ body.viewer-mode .footer { display: none; }
    STATUS CODE BADGES & SELECT
    ============================================================ */
 .sc-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
-.sc-DQ { background: #fde8ea; color: #991b1b; }
+.sc-DQ { background: #F9E3E5; color: #991b1b; }
 .sc-DNS { background: #fff3cd; color: #7a6400; }
 .sc-DNF { background: #f0f0f0; color: #6b6b6b; }
-.sc-NM { background: #f8f4ea; color: #8a7640; }
+.sc-NM { background: #F6E4DF; color: #B8432A; }
 .sc-select { padding: 3px 4px; border: 1px solid var(--gray); border-radius: 4px; font-size: 11px; background: var(--white); cursor: pointer; min-width: 48px; }
 .sc-select:focus { border-color: var(--blue); outline: none; }
 
@@ -2008,7 +2017,7 @@ body.viewer-mode .footer { display: none; }
    SAVED ROW HIGHLIGHT
    ============================================================ */
 .row-saved { background: #f0fdf4 !important; }
-.row-saved:hover { background: #f5f0e0 !important; }
+.row-saved:hover { background: #F6E4DF !important; }
 
 /* ============================================================
    LOADING OVERLAY (page transition spinner)
@@ -2021,9 +2030,9 @@ body.viewer-mode .footer { display: none; }
    ROW STYLES FOR CALLROOM
    ============================================================ */
 .row-checked-in { background: #f0fdf4; }
-.row-checked-in:hover { background: #f5f0e0 !important; }
+.row-checked-in:hover { background: #F6E4DF !important; }
 .row-no-show { background: #fef2f2; }
-.row-no-show:hover { background: #fde8ea !important; }
+.row-no-show:hover { background: #F9E3E5 !important; }
 
 /* ============================================================
    BUTTON COLOR NEUTRALIZATION (sky-blue → light-gray)
@@ -2062,7 +2071,7 @@ body.viewer-mode .footer { display: none; }
 }
 .field-wind-input:focus {
     border-color: var(--primary); outline: none;
-    box-shadow: 0 0 0 2px rgba(183,159,88,0.15);
+    box-shadow: 0 0 0 2px rgba(194,74,46,0.15);
     background: #fff;
 }
 
@@ -2077,7 +2086,7 @@ body.viewer-mode .footer { display: none; }
 
 /* Qual badges */
 .qual-badge.qual-Q { background: #6b6b6b; color: #fff; padding: 2px 8px; border-radius: 10px; font-weight: 700; font-size: 13px; }
-.qual-badge.qual-q { background: #b79f58; color: #fff; padding: 2px 8px; border-radius: 10px; font-weight: 700; font-size: 13px; }
+.qual-badge.qual-q { background: #C24A2E; color: #fff; padding: 2px 8px; border-radius: 10px; font-weight: 700; font-size: 13px; }
 .qual-badge.qual-none { color: var(--text-muted); font-size: 13px; }
 
 /* Pass mark display — blue */
@@ -2166,10 +2175,10 @@ body.viewer-mode .footer { display: none; }
     font-family: var(--font-mono); background: #fff;
 }
 .field-wind-input-2row:focus {
-    outline: none; box-shadow: 0 0 0 2px rgba(183,159,88,0.2);
+    outline: none; box-shadow: 0 0 0 2px rgba(194,74,46,0.2);
 }
 /* Foul mark in 2-row */
-.field-2row-table .foul-mark { color: #8b1a2a; font-weight: 700; }
+.field-2row-table .foul-mark { color: #B4232C; font-weight: 700; }
 .field-2row-table .pass-mark { color: #999; }
 
 /* Sort toggle bar */
@@ -2181,7 +2190,7 @@ body.viewer-mode .footer { display: none; }
     font-weight: 700; font-size: 11px; margin-left: 4px; vertical-align: middle;
 }
 .result-qual-Q { background: #6b6b6b; color: #fff; }
-.result-qual-q { background: #b79f58; color: #fff; }
+.result-qual-q { background: #C24A2E; color: #fff; }
 
 /* Wind input bar - larger version */
 .wind-input-bar-large {
@@ -2201,7 +2210,7 @@ body.viewer-mode .footer { display: none; }
 .wind-input-bar-large input:focus {
     border-color: var(--primary) !important;
     outline: none;
-    box-shadow: 0 0 0 3px rgba(183,159,88,0.15);
+    box-shadow: 0 0 0 3px rgba(194,74,46,0.15);
 }
 
 /* Heat edit modal */
@@ -2209,7 +2218,7 @@ body.viewer-mode .footer { display: none; }
 .heat-edit-group .lane-edit-input:focus {
     border-color: var(--primary) !important;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(183,159,88,0.2);
+    box-shadow: 0 0 0 2px rgba(194,74,46,0.2);
 }
 
 /* Manual heat edit button */
@@ -2309,8 +2318,8 @@ body.viewer-mode .footer { display: none; }
    - 각 <tr data-row-gender="M|F|X"> 에 좌측 4px 막대 + 종목명 앞 배지로
      성별을 표시 → "전체" 탭에서도, 개별 성별 탭에서도 동일하게 적용
    - 남자(M): 네이비 #1a2a5e
-   - 여자(F): 버건디 #8b1a2a
-   - 혼성(X): 골드   #b79f58
+   - 여자(F): 자두   #8E2A6B
+   - 혼성(X): 청록   #1F7A6D
    ============================================================ */
 .matrix-table tbody tr[data-row-gender] td:first-child {
     position: relative;
@@ -2326,8 +2335,8 @@ body.viewer-mode .footer { display: none; }
     background: var(--row-gender-color, transparent);
 }
 .matrix-table tbody tr[data-row-gender="M"] { --row-gender-color: #1a2a5e; }
-.matrix-table tbody tr[data-row-gender="F"] { --row-gender-color: #8b1a2a; }
-.matrix-table tbody tr[data-row-gender="X"] { --row-gender-color: #b79f58; }
+.matrix-table tbody tr[data-row-gender="F"] { --row-gender-color: #8E2A6B; }
+.matrix-table tbody tr[data-row-gender="X"] { --row-gender-color: #1F7A6D; }
 
 /* 종목명 앞 성별 배지 (남/여/혼) */
 .gender-badge {
@@ -2343,8 +2352,8 @@ body.viewer-mode .footer { display: none; }
     color: #fff;
 }
 .gender-badge[data-g="M"] { background: #1a2a5e; }
-.gender-badge[data-g="F"] { background: #8b1a2a; }
-.gender-badge[data-g="X"] { background: #b79f58; }
+.gender-badge[data-g="F"] { background: #8E2A6B; }
+.gender-badge[data-g="X"] { background: #1F7A6D; }
 
 /* 결과 버튼 성별색 (행의 data-row-gender 를 상속받아 결정) */
 .matrix-table tbody tr[data-row-gender="M"] .round-btn.round-btn-result {
@@ -2352,12 +2361,12 @@ body.viewer-mode .footer { display: none; }
     border-color: #1a2a5e !important;
 }
 .matrix-table tbody tr[data-row-gender="F"] .round-btn.round-btn-result {
-    background: #8b1a2a !important;
-    border-color: #8b1a2a !important;
+    background: #8E2A6B !important;
+    border-color: #8E2A6B !important;
 }
 .matrix-table tbody tr[data-row-gender="X"] .round-btn.round-btn-result {
-    background: #b79f58 !important;
-    border-color: #b79f58 !important;
+    background: #1F7A6D !important;
+    border-color: #1F7A6D !important;
 }
 
 

@@ -634,6 +634,19 @@ app.get('/open.html', (req, res, next) => {
     next();
 });
 
+// 조직별 manifest.json (멀티테넌시): 이름·짧은 이름만 조직 것으로, 아이콘·색은 공통. static 보다 먼저
+app.get('/manifest.json', (req, res) => {
+    try {
+        const base = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'manifest.json'), 'utf8'));
+        const o = req.org;
+        if (o && o.id && o.id !== 1) {
+            const nm = o.site_name || o.name || base.name;
+            base.name = nm; base.short_name = String(nm).slice(0, 12); base.lang = o.default_lang || base.lang;
+            if (Array.isArray(base.screenshots)) delete base.screenshots;   // 스크린샷은 한국 대회 화면이라 뺀다
+        }
+        res.set('Cache-Control', 'no-cache'); res.type('application/manifest+json').send(JSON.stringify(base));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.use(express.static(path.join(__dirname, 'public'), {
     etag: false,
     setHeaders: (res, filePath) => {
@@ -976,39 +989,9 @@ if (!db.isAsync) {
 // SQLite/PostgreSQL 양쪽에서 동작하도록 통합 db API 사용 (비동기)
 _bootTasks.push((async () => {
     try {
-        const cntRow = await db.get('SELECT COUNT(*) AS c FROM certificate_template');
-        const cnt = cntRow ? Number(cntRow.c) : 0;
-        if (cnt === 0) {
-            const now = new Date().toISOString();
-            const INS_SQL = `INSERT INTO certificate_template (
-                competition_id, name, kind, title_text, body_template, rank_label_style,
-                signer_org, signer_title, signer_name,
-                paper_orientation, show_record_value, show_athlete_team, show_date,
-                background_color, border_style, font_family, is_default, sort_order,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-            // 1) 기본 시상장 (ordinal: 우승/준우승/3위)
-            await db.run(INS_SQL, null, '기본 시상장 (우승/준우승)', 'award', '상  장',
-                '위 선수는 {competition_name}\n{event_name} 종목에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
-                'ordinal', '', '회장', '',
-                'portrait', 1, 1, 1, '#fffdf6', 'double-gold', 'NanumSquare', 1, 1, now, now);
-            // 2) 숫자형 시상장 (1위/2위/3위)
-            await db.run(INS_SQL, null, '기본 시상장 (1위/2위/3위)', 'award', '상  장',
-                '위 선수는 {competition_name}\n{event_name} 종목에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
-                'numeric', '', '회장', '',
-                'portrait', 1, 1, 1, '#fffdf6', 'double-gold', 'NanumSquare', 0, 2, now, now);
-            // 3) 완주증 (마스터즈 등 — 등수 없음)
-            await db.run(INS_SQL, null, '완주증 (마스터즈용)', 'finisher', '완 주 증',
-                '위 선수는 {competition_name} {event_name} 종목에 출전하여\n끝까지 완주하였기에 그 노력과 의지를 높이 평가하여\n이 증서를 수여합니다.',
-                'ordinal', '', '회장', '',
-                'portrait', 1, 1, 1, '#fffdf6', 'classic', 'NanumSquare', 0, 3, now, now);
-            // 4) 단체상
-            await db.run(INS_SQL, null, '단체상', 'team', '단 체 상',
-                '위 단체는 {competition_name}에서 {rank_label}을 차지하여\n그 우수한 성적을 인정하여 이 상장을 수여합니다.',
-                'ordinal', '', '회장', '',
-                'portrait', 0, 0, 1, '#fffdf6', 'double-gold', 'NanumSquare', 0, 4, now, now);
-            console.log('[DB] certificate_template seeded (4 templates)');
-        }
+        // 기본 조직의 상장 양식 4종 — 비어 있을 때만 (lib/certificateTemplates.js, 새 조직 생성 때도 같은 함수)
+        const n = await require('./lib/certificateTemplates').seedDefaultTemplates(db, 1, 'ko');
+        if (n) console.log(`[DB] certificate_template seeded (${n} templates)`);
     } catch(e) { console.error('[DB] certificate_template seed error:', e.message); }
 })());
 // Add heat_name to heat (custom display name, e.g. "준결1조", "A조")
@@ -3056,7 +3039,7 @@ require('./lib/routes/federations')(app, { db, isAdminKey, opLog });
 // HOME POPUP — CMS  (lib/routes/home_popups.js 로 추출됨)
 // ============================================================
 require('./lib/routes/home_popups')(app, { db, isAdminKey, opLog });
-require('./lib/routes/organizations')(app, { db, isAdminKey, opLog, org: ORG });   // 조직 (멀티테넌시 1단계)
+require('./lib/routes/organizations')(app, { db, isAdminKey, opLog, org: ORG, upload });   // 조직 (멀티테넌시 1단계)
 require('./lib/routes/entry_import_intl')(app, { db, isOperationKey, opLog, upload });   // 국제 양식 엔트리 가져오기 (B4)
 
 

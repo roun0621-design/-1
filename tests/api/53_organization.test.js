@@ -91,4 +91,22 @@ describe('조직(멀티테넌시 1단계)', () => {
         expect((await request(app).get('/api/org').set('Host', JP)).body.slug).toBe('pace-rise');
         expect((await request(app).put('/api/admin/organizations/1').send({ admin_key: ADMIN, slug: 'other' })).status).toBe(400);
     });
+
+    it('새 조직: 기본 상장 양식 시드, 로고 업로드, 조직별 manifest', async () => {
+        const o = (await request(app).post('/api/admin/organizations').send({ admin_key: ADMIN, slug: 'us', name: 'US Demo', country: 'US', default_lang: 'en', site_name: 'PACE RISE US' })).body;
+        expect(o.id).toBeTruthy();
+        const tpls = await db.all('SELECT kind, is_default FROM certificate_template WHERE organization_id=? ORDER BY sort_order', o.id);
+        expect(tpls.length).toBe(3); expect(tpls[0].kind).toBe('award');
+        // 로고: 기본 조직 호스트에서 플랫폼 관리자가 올림
+        const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+        const up = await request(app).post(`/api/admin/organizations/${o.id}/logo`).field('admin_key', ADMIN).attach('image', png, 'logo.png');
+        expect(up.status).toBe(200); expect(up.body.path).toBe(`/uploads/brand/org_${o.id}.png`);
+        expect((await request(app).get('/api/org').set('Host', 'us.localhost')).body.brand.logo).toBe(`/uploads/brand/org_${o.id}.png`);
+        // 다른 조직 호스트(jp)에서는 us 로고를 못 바꾼다
+        expect((await request(app).post(`/api/admin/organizations/${o.id}/logo`).set('Host', 'japan.localhost').field('admin_key', ADMIN).attach('image', png, 'logo.png')).status).toBe(403);
+        const m = await request(app).get('/manifest.json').set('Host', 'us.localhost');
+        expect(m.status).toBe(200); expect(m.body.name).toBe('PACE RISE US'); expect(m.body.lang).toBe('en');
+        expect((await request(app).get('/manifest.json')).body.name).toContain('PACE RISE');
+        expect((await request(app).delete(`/api/admin/organizations/${o.id}/logo`).send({ admin_key: ADMIN })).status).toBe(200);
+    });
 });

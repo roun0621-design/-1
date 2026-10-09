@@ -406,12 +406,12 @@ function renderMatrix() {
                         return rs.some(r => r.round_status === 'completed' || r.round_status === 'in_progress');
                     }).length;
                     html += `<tr class="combined-sub-toggle-row">
-                        <td colspan="4" style="padding:4px 8px;background:linear-gradient(135deg,#f8f4ea,#faf6ec);border-left:3px solid #8a7640;">
+                        <td colspan="4" style="padding:4px 8px;background:linear-gradient(135deg,#F6E4DF,#F6E4DF);border-left:3px solid #B8432A;">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <button onclick="toggleCombinedSubs('${parentKey}')" class="btn btn-sm btn-ghost" style="font-size:11px;padding:2px 10px;" id="toggle-btn-${parentKey}">
                                     ▼ 세부종목 ${subOrder.length}개
                                 </button>
-                                <span style="font-size:10px;color:#8a7640;font-weight:600;">${doneCount}/${subOrder.length} 진행</span>
+                                <span style="font-size:10px;color:#B8432A;font-weight:600;">${doneCount}/${subOrder.length} 진행</span>
                             </div>
                         </td>
                     </tr>`;
@@ -426,7 +426,7 @@ function renderMatrix() {
                         // Determine sub-event status for visual indicator
                         const seStatus = (seFin || sePrelim || seSemi);
                         const statusDot = seStatus ? (
-                            seStatus.round_status === 'completed' ? '<span style="color:#9a8548;">●</span>' :
+                            seStatus.round_status === 'completed' ? '<span style="color:#B8432A;">●</span>' :
                             seStatus.round_status === 'in_progress' ? '<span style="color:#f59e0b;">●</span>' :
                             '<span style="color:#d1d5db;">○</span>'
                         ) : '<span style="color:#d1d5db;">○</span>';
@@ -566,7 +566,7 @@ async function editEventVideoUrl() {
 function buildJointInfoHTML() {
     const jg = state._jointGroup;
     if (!jg) return '';
-    const fedColors = ['#6b6b6b', '#dc2626', '#9a8548', '#ea580c', '#8a7640'];
+    const fedColors = ['#6b6b6b', '#dc2626', '#1F7A6D', '#ea580c', '#B8432A'];
     const memberBadges = jg.members.map((m, i) => {
         const color = fedColors[i % fedColors.length];
         const isCurrent = m.event_id === state.selectedEventId;
@@ -574,7 +574,7 @@ function buildJointInfoHTML() {
     }).join(' ');
     return `<div style="margin:6px 0 10px;padding:8px 12px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:6px;border-left:4px solid #f59e0b;font-size:12px;">
         <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:11px;font-weight:700;color:#b79f58;">LINK</span>
+            <span style="font-size:11px;font-weight:700;color:#B8432A;">LINK</span>
             <strong>합동 종목</strong>
             <span style="font-size:10px;color:#92400e;">키: ${jg.joint_scoreboard_key || '-'}</span>
             <span style="margin-left:auto;">${memberBadges}</span>
@@ -695,7 +695,7 @@ function getSaveHeatId(eid) {
 function jointBadgeHTML(entry) {
     if (!entry || !entry._federation) return '';
     // 색상 팔레트 — federation 별 안정적 색상 (joint info bar 와 동일 색)
-    const palette = ['#6b6b6b', '#dc2626', '#9a8548', '#ea580c', '#8a7640', '#2563eb', '#059669'];
+    const palette = ['#6b6b6b', '#dc2626', '#1F7A6D', '#ea580c', '#B8432A', '#2563eb', '#059669'];
     let idx = 0;
     if (state._jointGroup && Array.isArray(state._jointGroup.members)) {
         const m = state._jointGroup.members.find(mm => mm.event_id === entry._sourceEventId);
@@ -816,7 +816,7 @@ async function renderTrackDetail(evt) {
             <button class="btn btn-sm btn-primary" onclick="saveHeatWind()" title="현재 히트 풍속 저장" style="padding:8px 16px;font-size:13px;">저장</button>
             <span id="wind-status" style="font-size:12px;margin-left:6px;"></span>
             <span id="wind-record-badge" style="font-size:12px;margin-left:6px;"></span>
-            <span id="wind-warning-inline" style="display:none;font-size:11px;color:#b79f58;font-weight:700;margin-left:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 풍속 미입력</span>
+            <span id="wind-warning-inline" style="display:none;font-size:11px;color:#B8432A;font-weight:700;margin-left:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#d97706;" class="ui-emoji"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 풍속 미입력</span>
         </div>` : ''}
         <div class="heat-tabs">
             ${heatTabs}
@@ -1512,7 +1512,7 @@ function renderFieldDistanceContent() {
     content.className = (isView || isRank) ? 'view-mode' : '';
     const hasRound3ForUI = rows.some(r => r.attempts[3] !== undefined);
     const activeAthletes = entries.filter(x => x.status !== 'no_show').length;
-    const round3Note = (isRank && hasRound3ForUI && !isCombinedSub && activeAthletes > 8) ? `<div style="padding:6px 10px;background:#f8f4ea;border-radius:var(--radius);font-size:11px;margin-bottom:8px;border-left:3px solid #f9a825;">3차시기 완료 \u2014 상위 8명이 상단에 표시됩니다. (4\u20136차시기 진출)</div>` : '';
+    const round3Note = (isRank && hasRound3ForUI && !isCombinedSub && activeAthletes > 8) ? `<div style="padding:6px 10px;background:#F6E4DF;border-radius:var(--radius);font-size:11px;margin-bottom:8px;border-left:3px solid #f9a825;">3차시기 완료 \u2014 상위 8명이 상단에 표시됩니다. (4\u20136차시기 진출)</div>` : '';
 
     const sortBtns = `<div class="sort-toggle-bar" style="display:flex;gap:4px;margin-bottom:8px;align-items:center;">
         <span style="font-size:11px;font-weight:700;color:var(--text-muted);">정렬:</span>
@@ -2854,7 +2854,7 @@ async function _renderScoreboard(container) {
         <p style="margin-top:6px;font-size:11px;color:var(--text-muted);">종목명을 클릭하면 해당 종목 기록 입력으로 이동합니다.</p>
         <div class="track-actions" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             ${evt.round_status === 'completed'
-                ? `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:13px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 경기 완료됨</div>
+                ? `<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#F6E4DF;border-radius:var(--radius);color:#B8432A;font-weight:600;font-size:13px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 경기 완료됨</div>
                    <button class="btn btn-warning btn-sm" onclick="revertCombinedComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>`
                 : `<button class="btn btn-success" onclick="completeCombinedEvent()" title="모든 세부종목 기록을 최종 확정하고 경기를 완료합니다"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> 모든 경기 완료</button>`}
             <button class="btn btn-sm btn-outline" onclick="repairCombinedScoresAction()" title="점수가 이상하게 표시될 때 모든 세부기록을 재계산합니다 (이전 잘못된 매핑 자동 정리)" style="margin-left:auto;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 점수 재계산</button>
@@ -4219,7 +4219,7 @@ function renderQualPanel(title, isSemifinal) {
     // 중·고연맹 요강: 예선이 5조 이상이면 준결승을 둔다 — 예선에서 바로 결승을 뽑으려 할 때 안내
     const kjafSemiNote = (!isSemifinal && state.selectedEvent && state.selectedEvent.round_type === 'preliminary' && heatNums.length >= 5
         && String((state.competition || {}).federation || '').toUpperCase() === 'KJAF')
-        ? `<div style="margin:0 0 8px;padding:8px 12px;border:1px solid #b79f58;background:#fbf6e9;border-radius:6px;font-size:12px;color:#6b5a1e;">예선이 ${heatNums.length}조입니다 — 중·고연맹 요강은 예선 5조 이상이면 <b>준결승</b>을 둡니다. 결승 대신 '준결승 진출자 선택'을 쓰세요.</div>` : '';
+        ? `<div style="margin:0 0 8px;padding:8px 12px;border:1px solid #C24A2E;background:#F6E4DF;border-radius:6px;font-size:12px;color:#0E0E10;">예선이 ${heatNums.length}조입니다 — 중·고연맹 요강은 예선 5조 이상이면 <b>준결승</b>을 둡니다. 결승 대신 '준결승 진출자 선택'을 쓰세요.</div>` : '';
     section.innerHTML = `
         <div class="qual-panel-header">
             <h3>${title}</h3>
@@ -4244,13 +4244,13 @@ function renderQualPanel(title, isSemifinal) {
         </p>
         <div id="qual-table-container"></div>
         ${isSemifinal ? `
-            <div style="margin:10px 0;display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f4ea;border-radius:var(--radius);border-left:3px solid #b79f58;">
+            <div style="margin:10px 0;display:flex;align-items:center;gap:8px;padding:8px 12px;background:#F6E4DF;border-radius:var(--radius);border-left:3px solid #C24A2E;">
                 <label style="font-size:12px;font-weight:700;">준결승 조 수:</label>
-                <input type="number" id="semi-group-count" value="2" min="1" max="8" style="width:60px;padding:6px 10px;border:2px solid #b79f58;border-radius:4px;font-size:14px;font-weight:700;text-align:center;" title="생성할 준결승 조의 수를 입력하세요">
+                <input type="number" id="semi-group-count" value="2" min="1" max="8" style="width:60px;padding:6px 10px;border:2px solid #C24A2E;border-radius:4px;font-size:14px;font-weight:700;text-align:center;" title="생성할 준결승 조의 수를 입력하세요">
                 <span style="font-size:11px;color:var(--text-muted);">WA 규정: ≤800m 종목 조당 최대 8명, 서펜타인 시딩</span>
             </div>
         ` : `
-            <div style="margin:10px 0;display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f5f0e0;border-radius:var(--radius);border-left:3px solid var(--green);">
+            <div style="margin:10px 0;display:flex;align-items:center;gap:8px;padding:8px 12px;background:#F6E4DF;border-radius:var(--radius);border-left:3px solid var(--green);">
                 <label style="font-size:12px;font-weight:700;">결승 조 수:</label>
                 <input type="number" id="final-group-count" value="1" min="1" max="4" style="width:60px;padding:6px 10px;border:2px solid var(--green);border-radius:4px;font-size:14px;font-weight:700;text-align:center;" title="결승 조 수 (기본 1조)">
                 <span style="font-size:11px;color:var(--text-muted);">WA 규정: 자동 레인 배정 (중앙→외곽)</span>
@@ -4284,7 +4284,7 @@ function autoAssignQualification() {
         if (_aq.ties.length) {
             const nameOf = id => { const r = _qualAllRows.find(x => x.event_entry_id === id); return r ? `${r.name}(${r.heat_number}조 ${formatTime(r.time_seconds)})` : id; };
             _aq.ties.forEach(t => t.ids.forEach(id => { const r = _qualAllRows.find(x => x.event_entry_id === id); if (r) r.tieWarn = true; }));
-            warn.innerHTML = PaceIcons.svg('warn', { style: 'margin-right:4px;color:#b3261e' }) + '진출 마지막 자리에 동기록이 있습니다 — 자동 선정은 앞 순서대로만 넣었으니 심판장 결정(레인 여유 시 모두 진출 / 추첨)에 따라 직접 조정하세요.<br>' +
+            warn.innerHTML = PaceIcons.svg('warn', { style: 'margin-right:4px;color:#B4232C' }) + '진출 마지막 자리에 동기록이 있습니다 — 자동 선정은 앞 순서대로만 넣었으니 심판장 결정(레인 여유 시 모두 진출 / 추첨)에 따라 직접 조정하세요.<br>' +
                 _aq.ties.map(t => `· ${t.type === 'Q' ? t.heat_number + '조 순위 진출(Q)' : '기록 진출(q)'}: ${t.ids.map(nameOf).join(' = ')}`).join('<br>');
             warn.style.display = 'block';
         } else warn.style.display = 'none';
@@ -4563,7 +4563,7 @@ async function approveSemifinalQualification() {
 function _buildCompleteUI(evt) {
     // NOTE: 한글 깨짐 이슈로 "결과 이미지" 다운로드 버튼은 제거함 (PDF 결과지로 대체)
     if (evt.round_status === 'completed') {
-        return `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#f5f0e0;border-radius:var(--radius);color:#8a7640;font-weight:600;font-size:12px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 경기 완료됨</div>
+        return `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:#F6E4DF;border-radius:var(--radius);color:#B8432A;font-weight:600;font-size:12px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#16a34a;" class="ui-emoji"><polyline points="20 6 9 17 4 12"/></svg> 경기 완료됨</div>
                 <button class="btn btn-warning btn-sm" onclick="revertRoundComplete()" title="경기 완료를 취소하고 다시 진행 중 상태로 되돌립니다">완료 취소</button>
                 ${(evt.round_type === 'final' && !evt.parent_event_id) ? `<button class="btn btn-primary btn-sm" onclick="downloadAwardDocx()" title="1~3위 상장을 워드 파일(.docx)로 받습니다. 워드·한글에서 열어 내용을 고칠 수 있고, 문구는 관리자 → 상장관리에서 바꿉니다">상장 출력</button>` : ''}`;
     }

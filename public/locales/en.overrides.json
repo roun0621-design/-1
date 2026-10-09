@@ -230,5 +230,13 @@
   "이름 순서": "Name order",
   "이름 성 (Guk-young KIM)": "First Last (Guk-young KIM)",
   "성 이름 (KIM Guk-young)": "Last First (KIM Guk-young)",
-  "오류 행 건너뛰기": "Skip error rows"
+  "오류 행 건너뛰기": "Skip error rows",
+  "로고": "Logo",
+  "로고 지우기": "Remove logo",
+  "올리기": "Upload",
+  "지우기": "Remove",
+  "로고를 올렸습니다": "Logo uploaded",
+  "로고를 지웠습니다": "Logo removed",
+  "이 조직의 로고를 지울까요? 헤더에는 조직 이름이 글자로 표시됩니다.": "Remove this organization's logo? The header will show the organization name as text.",
+  "업로드 실패": "Upload failed"
 }

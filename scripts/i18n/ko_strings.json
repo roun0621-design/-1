@@ -318,7 +318,7 @@
   ]
  },
  "닫기": {
-  "count": 39,
+  "count": 38,
   "files": [
    "admin.html",
    "callroom.js",
@@ -372,7 +372,7 @@
   ]
  },
  "완료": {
-  "count": 12,
+  "count": 10,
   "files": [
    "admin.html",
    "common.js",
@@ -411,7 +411,7 @@
   ]
  },
  "배번": {
-  "count": 26,
+  "count": 25,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -422,7 +422,7 @@
   ]
  },
  "이름": {
-  "count": 14,
+  "count": 13,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -431,7 +431,7 @@
   ]
  },
  "성별": {
-  "count": 24,
+  "count": 22,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -440,7 +440,7 @@
   ]
  },
  "소속": {
-  "count": 63,
+  "count": 62,
   "files": [
    "admin.html",
    "callroom.js",
@@ -481,7 +481,7 @@
   ]
  },
  "남": {
-  "count": 51,
+  "count": 46,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -495,7 +495,7 @@
   ]
  },
  "여": {
-  "count": 51,
+  "count": 46,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -534,7 +534,7 @@
   ]
  },
  "저장": {
-  "count": 23,
+  "count": 20,
   "files": [
    "admin.html",
    "display-manage.html",
@@ -543,7 +543,7 @@
   ]
  },
  "삭제": {
-  "count": 26,
+  "count": 22,
   "files": [
    "admin.html",
    "display-manage.html"
@@ -562,13 +562,13 @@
   ]
  },
  "로딩중...": {
-  "count": 2,
+  "count": 1,
   "files": [
    "admin.html"
   ]
  },
  "추가": {
-  "count": 12,
+  "count": 11,
   "files": [
    "admin.html",
    "display-manage.html",
@@ -582,7 +582,7 @@
   ]
  },
  "제거": {
-  "count": 12,
+  "count": 11,
   "files": [
    "admin.html",
    "callroom.js",
@@ -650,7 +650,7 @@
   ]
  },
  "취소": {
-  "count": 41,
+  "count": 38,
   "files": [
    "admin.html",
    "callroom.js",
@@ -663,7 +663,7 @@
   ]
  },
  "\"{0}\" 선수를 삭제하시겠습니까?": {
-  "count": 2,
+  "count": 1,
   "files": [
    "admin.html"
   ]
@@ -732,7 +732,7 @@
   ]
  },
  "종목": {
-  "count": 26,
+  "count": 23,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -747,7 +747,7 @@
   ]
  },
  "예선": {
-  "count": 46,
+  "count": 41,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -770,7 +770,7 @@
   ]
  },
  "결승": {
-  "count": 63,
+  "count": 48,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -888,7 +888,7 @@
   ]
  },
  "예: 100m": {
-  "count": 4,
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -900,32 +900,32 @@
   ]
  },
  "종목명 *": {
-  "count": 3,
+  "count": 2,
   "files": [
    "admin.html"
   ]
  },
  "카테고리": {
-  "count": 6,
+  "count": 3,
   "files": [
    "admin.html",
    "display-manage.html"
   ]
  },
  "Field 거리": {
-  "count": 5,
+  "count": 2,
   "files": [
    "admin.html"
   ]
  },
  "Field 높이": {
-  "count": 5,
+  "count": 2,
   "files": [
    "admin.html"
   ]
  },
  "혼성": {
-  "count": 67,
+  "count": 62,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -943,13 +943,13 @@
   ]
  },
  "부(Division)": {
-  "count": 2,
+  "count": 1,
   "files": [
    "admin.html"
   ]
  },
  "라운드": {
-  "count": 16,
+  "count": 14,
   "files": [
    "admin.html",
    "common.js",
@@ -958,7 +958,7 @@
   ]
  },
  "준결승": {
-  "count": 42,
+  "count": 38,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -1028,7 +1028,7 @@
   ]
  },
  "활성": {
-  "count": 8,
+  "count": 7,
   "files": [
    "admin.html"
   ]
@@ -1171,8 +1171,14 @@
    "common.js"
   ]
  },
+ "로고": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "상태": {
-  "count": 32,
+  "count": 28,
   "files": [
    "admin.html",
    "callroom.js",
@@ -1180,841 +1186,6 @@
    "field-card-upload.js",
    "record.js",
    "results.js"
-  ]
- },
- "수정": {
-  "count": 7,
-  "files": [
-   "admin.html",
-   "display-manage.html"
-  ]
- },
- "접속 주소:": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "— DNS 에서 서브도메인(와일드카드)을 이 서버로 연결해야 합니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0} 연맹의 대회 전체를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "index.html"
-  ]
- },
- "{0} 연맹 숨김": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0} 연맹 숨김 해제": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "예: 남자실업부": {
-  "count": 3,
-  "files": [
-   "admin.html"
-  ]
- },
- "예: 여자실업부": {
-  "count": 3,
-  "files": [
-   "admin.html"
-  ]
- },
- "예: 혼성실업부": {
-  "count": 3,
-  "files": [
-   "admin.html"
-  ]
- },
- "연맹 명칭": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "스코어보드 남자 명칭": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "스코어보드 여자 명칭": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "스코어보드 혼성 명칭": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "연맹 수정: {0}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "공통": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "common.js"
-  ]
- },
- "위로": {
-  "count": 4,
-  "files": [
-   "admin.html"
-  ]
- },
- "아래로": {
-  "count": 4,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0}개 섹션": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "수정 수정": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "섹션 {0}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "비워두면 표시 안함": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "제목": {
-  "count": 5,
-  "files": [
-   "admin.html"
-  ]
- },
- "내용 (HTML 가능 · 엔터로 줄바꿈됨)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "링크 버튼 텍스트": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "링크 URL": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "오늘 하루 보지 않음": {
-  "count": 3,
-  "files": [
-   "admin.html",
-   "common.js",
-   "index.html"
-  ]
- },
- "통백업 완료 ({0} MB) — {1}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "[검증 통과]": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "· 백업 생성 시각: {0}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "· 백업 버전: v{0} ({1})": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "· ZIP 크기: {0} MB · 자산 {1}개 ({2} MB)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "· DB 파일: {0} · 총 엔트리 {1}개": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "[복원 실행] 버튼을 누르면 현재 시스템이 위 시점으로 되돌아갑니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "[검증 실패] {0}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "[복원 완료]": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "· 자산 {0}개 복원": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "· 자동 안전 백업: {0}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "· 백업 시점: {0}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "서버 재시작 중... 10초 후 페이지를 새로고침합니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "[복원 실패] {0}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "정말로 \"{0}\" 대회를 삭제하시겠습니까?\\n\\n모든 선수, 종목, 기록, 로그가 영구 삭제됩니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0}일차 삭제": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0}일차": {
-  "count": 9,
-  "files": [
-   "admin.html",
-   "common.js",
-   "dashboard.js",
-   "display-manage.html"
-  ]
- },
- "{0}건": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "oplog.html"
-  ]
- },
- "(트랙{0} 필드{1})": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "총 {0}건": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "전체 삭제": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0}/{1} 매칭됨 ({2}%)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0}건 미매칭": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "({0}/{1} 매칭)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "해제": {
-  "count": 3,
-  "files": [
-   "admin.html",
-   "callroom.js"
-  ]
- },
- "종목 선택...": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "연결": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "자동 재매칭 완료: {0}/{1}건 연결됨": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "행": {
-  "count": 4,
-  "files": [
-   "admin.html",
-   "display-manage.html"
-  ]
- },
- "신규 선수": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "기존 선수": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "출전": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "dashboard.js"
-  ]
- },
- "새 종목": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "모르는 종목: {0}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "계주는 제외: {0}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "생년월일": {
-  "count": 3,
-  "files": [
-   "admin.html"
-  ]
- },
- "기존": {
-  "count": 3,
-  "files": [
-   "admin.html"
-  ]
- },
- "신규": {
-  "count": 6,
-  "files": [
-   "admin.html",
-   "field-card-upload.js"
-  ]
- },
- "오류: {0}": {
-  "count": 29,
-  "files": [
-   "admin.html",
-   "dashboard.js",
-   "record.js"
-  ]
- },
- "선수 신규 {0}명 · 갱신 {1}명": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "종목 {0}개": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "출전 {0}건": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "건너뜀 {0}행": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "시트:": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "선수:": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0}명": {
-  "count": 17,
-  "files": [
-   "admin.html",
-   "callroom.js",
-   "dashboard.js",
-   "display-manage.html"
-  ]
- },
- "개인 종목 ({0}개):": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "릴레이 ({0}개):": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0} ({1}팀)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "선수 {0}명 | 종목 {1}개 | 엔트리 {2}건 | 조 {3}개": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "조편성 미리보기 — {0}개 종목 감지 (총 {1}행)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "변경 적용: {0}개": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "생성 예정: {0}개": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "기록있음: {0}개": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "변경없음: {0}개": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "미발견: {0}개": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "엑셀": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "변경사항": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "라운드 {0}→{1}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "조: {0}→{1}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "+{0}명": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "-{0}명": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "강제 변경": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0}명${item.excelHeats ?": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "적용하기": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "모든 종목 변경사항 없음 — 기존 데이터가 유지됩니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "[경고] {0}개 종목의 기록이 초기화됩니다. 정말 진행하시겠습니까?": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "조편성 적용 완료": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "변경: {0}개 종목 | 스킵(변경없음): {1}개 | 스킵(기록보호): {2}개": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "| 미발견: {0}개": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "| 신규선수: {0}명": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "선수 {0}명 추가 | {1}명 스킵": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "종목 {0}개 추가 | {1}개 스킵": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0} 라운드 추가": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "영상 미리보기": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "결과 링크 열기": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "검증 없이 강제 상태 변경": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "상위 종목의 선수를 모든 세부종목에 동기화합니다": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "세부종목 추가": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "이 종목에 선수를 추가합니다": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "선수를 반으로 나눠 자동 A/B 배정": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "◆ 세부종목": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "← 부모 종목으로": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0} · {1} · {2} · 정렬: {3}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "라운드:": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "종목 정보 편집": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "생성": {
-  "count": 4,
-  "files": [
-   "admin.html",
-   "index.html"
-  ]
- },
- "조편성": {
-  "count": 5,
-  "files": [
-   "admin.html",
-   "index.html"
-  ]
- },
- "진행중": {
-  "count": 8,
-  "files": [
-   "admin.html",
-   "callroom.js",
-   "index.html"
-  ]
- },
- "정렬순서": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "영상 URL": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "미리보기": {
-  "count": 18,
-  "files": [
-   "admin.html"
-  ]
- },
- "결과 링크": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "display-manage.html"
-  ]
- },
- "열기": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "세부종목 관리": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "동기화": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "+ 추가": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "종목명": {
-  "count": 6,
-  "files": [
-   "admin.html",
-   "display-manage.html"
-  ]
- },
- "조편성 관리": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "+ 선수 추가": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "선택한 선수를": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "이동": {
-  "count": 4,
-  "files": [
-   "admin.html",
-   "common.js"
-  ]
- },
- "전체 합조": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "A/B 그룹 배정:": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "선택 → A조": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "선택 → B조": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "자동 A/B 배정": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "{0}의 세부종목": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "({0}개)": {
-  "count": 1,
-  "files": [
-   "admin.html"
   ]
  },
  "클릭: 조편성/기록/선수 관리 열기": {
@@ -2042,10 +1213,18 @@
   ]
  },
  "관리": {
-  "count": 4,
+  "count": 3,
   "files": [
    "admin.html",
    "common.js"
+  ]
+ },
+ "오류: {0}": {
+  "count": 21,
+  "files": [
+   "admin.html",
+   "dashboard.js",
+   "record.js"
   ]
  },
  "세부종목 \"{0}\"을(를) 삭제하시겠습니까?\\n기록이 있으면 함께 삭제됩니다.": {
@@ -2064,6 +1243,15 @@
   "count": 1,
   "files": [
    "admin.html"
+  ]
+ },
+ "{0}명": {
+  "count": 15,
+  "files": [
+   "admin.html",
+   "callroom.js",
+   "dashboard.js",
+   "display-manage.html"
   ]
  },
  "| 조 수:": {
@@ -2207,8 +1395,15 @@
    "dashboard.js"
   ]
  },
+ "이동": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "common.js"
+  ]
+ },
  "없음": {
-  "count": 18,
+  "count": 15,
   "files": [
    "admin.html",
    "callroom.js",
@@ -2618,7 +1813,7 @@
   ]
  },
  "순서": {
-  "count": 7,
+  "count": 6,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -2656,7 +1851,7 @@
   ]
  },
  "구분": {
-  "count": 7,
+  "count": 6,
   "files": [
    "admin.html",
    "display-manage.html",
@@ -2846,6 +2041,13 @@
    "admin.html"
   ]
  },
+ "해제": {
+  "count": 2,
+  "files": [
+   "admin.html",
+   "callroom.js"
+  ]
+ },
  "묶인 종목": {
   "count": 1,
   "files": [
@@ -2883,6 +2085,12 @@
   ]
  },
  "대회 {0}개": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "종목 {0}개": {
   "count": 1,
   "files": [
    "admin.html"
@@ -3303,6 +2511,13 @@
    "admin.html"
   ]
  },
+ "종목명": {
+  "count": 4,
+  "files": [
+   "admin.html",
+   "display-manage.html"
+  ]
+ },
  "분류": {
   "count": 2,
   "files": [
@@ -3519,6 +2734,13 @@
    "admin.html"
   ]
  },
+ "수정": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "display-manage.html"
+  ]
+ },
  "불러오기 실패: {0}": {
   "count": 3,
   "files": [
@@ -3563,6 +2785,12 @@
  },
  "선택한 DB 기록의 event_name 을 현재 종목명으로 변경하여 연결": {
   "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "연결": {
+  "count": 1,
   "files": [
    "admin.html"
   ]
@@ -3861,6 +3089,12 @@
  },
  "문제 {0} · 확인 {1} · 정상 {2}": {
   "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "미리보기": {
+  "count": 17,
   "files": [
    "admin.html"
   ]
@@ -5228,14 +4462,14 @@
   ]
  },
  "저장 완료": {
-  "count": 7,
+  "count": 6,
   "files": [
    "admin.html",
    "record.js"
   ]
  },
  "저장 실패": {
-  "count": 20,
+  "count": 16,
   "files": [
    "admin.html",
    "event-record.html",
@@ -5263,7 +4497,7 @@
   ]
  },
  "추가 가능한 종목 없음": {
-  "count": 2,
+  "count": 1,
   "files": [
    "admin.html"
   ]
@@ -5281,37 +4515,37 @@
   ]
  },
  "종목을 선택하세요": {
-  "count": 5,
+  "count": 4,
   "files": [
    "admin.html"
   ]
  },
  "종목 추가 완료": {
-  "count": 3,
-  "files": [
-   "admin.html"
-  ]
- },
- "추가 실패": {
-  "count": 5,
-  "files": [
-   "admin.html"
-  ]
- },
- "이 종목 배정을 제거하시겠습니까?": {
   "count": 2,
   "files": [
    "admin.html"
   ]
  },
+ "추가 실패": {
+  "count": 4,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이 종목 배정을 제거하시겠습니까?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "제거 완료": {
-  "count": 3,
+  "count": 2,
   "files": [
    "admin.html"
   ]
  },
  "제거 실패": {
-  "count": 4,
+  "count": 3,
   "files": [
    "admin.html"
   ]
@@ -5329,7 +4563,7 @@
   ]
  },
  "삭제 실패": {
-  "count": 15,
+  "count": 10,
   "files": [
    "admin.html",
    "record.js"
@@ -5471,7 +4705,7 @@
   ]
  },
  "대학(남)": {
-  "count": 7,
+  "count": 4,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -5479,7 +4713,7 @@
   ]
  },
  "대학(여)": {
-  "count": 5,
+  "count": 4,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -5572,7 +4806,7 @@
   ]
  },
  "트랙": {
-  "count": 22,
+  "count": 13,
   "files": [
    "admin.html",
    "common.js",
@@ -5610,8 +4844,30 @@
    "display-manage.html"
   ]
  },
+ "생성": {
+  "count": 2,
+  "files": [
+   "admin.html",
+   "index.html"
+  ]
+ },
+ "조편성": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "index.html"
+  ]
+ },
+ "진행중": {
+  "count": 6,
+  "files": [
+   "admin.html",
+   "callroom.js",
+   "index.html"
+  ]
+ },
  "필드": {
-  "count": 15,
+  "count": 9,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -5778,14 +5034,14 @@
   ]
  },
  "업로드 실패": {
-  "count": 3,
+  "count": 2,
   "files": [
    "admin.html",
    "display-manage.html"
   ]
  },
  "업로드 완료": {
-  "count": 2,
+  "count": 1,
   "files": [
    "admin.html"
   ]
@@ -5909,7 +5165,7 @@
   ]
  },
  "삭제 완료": {
-  "count": 5,
+  "count": 3,
   "files": [
    "admin.html"
   ]
@@ -5963,788 +5219,25 @@
   ]
  },
  "불러오지 못했습니다": {
-  "count": 3,
+  "count": 2,
   "files": [
    "admin.html",
    "common.js"
   ]
  },
- "사용": {
+ "로고 지우기": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
- "중지": {
+ "위로": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
- "조직 추가": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "조직을 저장했습니다": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "조직을 추가했습니다": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "저장 실패:": {
-  "count": 9,
-  "files": [
-   "admin.html",
-   "record.js"
-  ]
- },
- "등록된 연맹이 없습니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "숨김": {
-  "count": 3,
-  "files": [
-   "admin.html",
-   "index.html"
-  ]
- },
- "${f.hidden ? '이 연맹 대회를 홈·운영 화면에 다시 표시' : '이 연맹 대회 전체를 홈·운영 화면 목록에서 숨김'}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "숨김 해제": {
-  "count": 3,
-  "files": [
-   "admin.html",
-   "index.html"
-  ]
- },
- "연맹 숨기기": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "index.html"
-  ]
- },
- "연맹 숨김 변경 실패:": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "index.html"
-  ]
- },
- "연맹 코드를 입력하세요.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "연맹 추가 완료": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "연맹 추가 실패": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "이 연맹을 삭제하시겠습니까?": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "수정 완료": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "수정 실패": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "순서 변경 실패": {
-  "count": 3,
-  "files": [
-   "admin.html"
-  ]
- },
- "사이트 설정 저장 완료": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "등록된 팝업이 없습니다. 위 버튼으로 추가하세요.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "● 관리자용": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "○ 일반 유저용": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "대회#": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "시작없음": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "종료없음": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "(제목 없음)": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "팝업 순서 변경됨": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "공통 (전체 · 홈에 노출)": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "새 팝업 생성": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "팝업 수정": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "섹션이 없습니다. + 섹션 추가를 눌러 추가하세요.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "팝업 저장 완료": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "이 팝업을 삭제하시겠습니까?": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "관리자 키가 필요합니다.": {
-  "count": 3,
-  "files": [
-   "admin.html"
-  ]
- },
- "백업 생성 중...": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "통백업 ZIP 생성 중... (DB + 업로드 파일 묶는 중)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "백업 실패: HTTP": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "백업 다운로드 실패": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "[경고] ZIP 파일을 선택하세요.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "[경고] .zip 파일만 가능합니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "검증 중...": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "검증 실패": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "포함": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "먼저 [파일 검증]을 통과해야 합니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "시스템 전체 복원을 진행하시겠습니까?\\n\\n": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "현재 모든 데이터(대회·선수·기록·로그·설정·업로드 파일)가\\n": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "백업 파일의 내용으로 교체됩니다.\\n\\n": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "계속하려면 RESTORE 라고 입력하세요:": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "복원 취소됨": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "복원 중... 서버가 곧 재시작됩니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "복원 실패": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "대회를 선택하세요": {
-  "count": 10,
-  "files": [
-   "admin.html"
-  ]
- },
- "대회를 완전히 삭제합니다.\\n이 작업은 복구할 수 없습니다.\\n\\n관리자 키를 입력하세요:": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "선택된 대회": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "대회가 삭제되었습니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "대회 삭제 실패": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "파일을 선택하세요": {
-  "count": 15,
-  "files": [
-   "admin.html"
-  ]
- },
- "업로드 중...": {
-  "count": 4,
-  "files": [
-   "admin.html",
-   "display-manage.html"
-  ]
- },
- "\\n\\n지금 강제 덮어쓰기로 다시 올릴까요? (해당 일차의 기존 시간표가 파일 내용으로 교체됩니다)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "반영된 내용이 없습니다": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "시간표 업로드 실패": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "엑셀 라이브러리가 로드되지 않았습니다. 페이지를 새로고침하세요.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "시간": {
-  "count": 4,
-  "files": [
-   "admin.html",
-   "display-manage.html"
-  ]
- },
- "부별": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "비고": {
-  "count": 24,
-  "files": [
-   "admin.html",
-   "dashboard.js",
-   "display-manage.html",
-   "record.js",
-   "results.js"
-  ]
- },
- "실업(남)": {
-  "count": 6,
-  "files": [
-   "admin.html"
-  ]
- },
- "대학/실업(여)": {
-  "count": 4,
-  "files": [
-   "admin.html"
-  ]
- },
- "7종(1)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "원반던지기": {
-  "count": 7,
-  "files": [
-   "admin.html",
-   "common.js",
-   "dashboard.js",
-   "display-manage.html"
-  ]
- },
- "멀리뛰기": {
-  "count": 11,
-  "files": [
-   "admin.html",
-   "common.js",
-   "dashboard.js",
-   "display-manage.html",
-   "monitor.html",
-   "results.js"
-  ]
- },
- "10종(2)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "높이뛰기": {
-  "count": 9,
-  "files": [
-   "admin.html",
-   "common.js",
-   "dashboard.js",
-   "display-manage.html"
-  ]
- },
- "7종(2)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "해머던지기": {
-  "count": 5,
-  "files": [
-   "admin.html",
-   "dashboard.js",
-   "display-manage.html"
-  ]
- },
- "창던지기": {
-  "count": 8,
-  "files": [
-   "admin.html",
-   "common.js",
-   "dashboard.js",
-   "display-manage.html"
-  ]
- },
- "대학/실업(남)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "예시": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "1일차": {
-  "count": 4,
-  "files": [
-   "admin.html",
-   "display-manage.html"
-  ]
- },
- "2일차": {
-  "count": 4,
-  "files": [
-   "admin.html",
-   "display-manage.html"
-  ]
- },
- "시간표_양식.xlsx": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "양식 생성 오류:": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "등록된 시간표 없음": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "${d}일차 삭제": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "일차 시간표를 삭제하시겠습니까? 다른 일차는 유지됩니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "일차 시간표가 삭제되었습니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "전체 시간표를 삭제하시겠습니까?": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "전체 시간표가 삭제되었습니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "등록된 시간표가 없습니다. 먼저 시간표를 업로드하세요.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "전체 매칭 완료": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "시간표 매칭 정보를 불러올 수 없습니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "연결 완료": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "연결 실패": {
-  "count": 3,
-  "files": [
-   "admin.html"
-  ]
- },
- "해제 완료": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "해제 실패": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "재매칭 실패": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "분석 중…": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "field-card-upload.js"
-  ]
- },
- "(새)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "알 수 없는 오류": {
-  "count": 16,
-  "files": [
-   "admin.html",
-   "dashboard.js",
-   "display-manage.html",
-   "record.js"
-  ]
- },
- "가져오는 중…": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "가져오기 완료": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "분석 중...": {
-  "count": 6,
-  "files": [
-   "admin.html"
-  ]
- },
- "기존 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "가져오는 중...": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "연맹 데일리 자동 변환 · 확인할 내용": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "라운드 자동 보정 (엑셀 입력 오류 감지)": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "변경": {
-  "count": 4,
-  "files": [
-   "admin.html",
-   "display-manage.html",
-   "field-card-upload.js"
-  ]
- },
- "기록있음": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "callroom.js"
-  ]
- },
- "스킵": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "생성 예정": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "미발견": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "레인 변경": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "조편성을 적용합니다. 계속하시겠습니까?": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "적용 중...": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "기존 선수 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "선수 업로드 완료": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "기존 종목 데이터를 삭제하고 새로 가져옵니다. 계속하시겠습니까?": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "종목 업로드 완료": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "선수를 삭제했습니다": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "출전 종목 없음": {
-  "count": 2,
-  "files": [
-   "admin.html",
-   "dashboard.js"
-  ]
- },
- "로드 실패": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "${ROUND_L[rt]} 라운드 추가": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "세부종목": {
-  "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "세부종목이 없습니다. 우측 버튼으로 추가하세요.": {
+ "아래로": {
   "count": 1,
   "files": [
    "admin.html"
@@ -6784,6 +5277,12 @@
   ]
  },
  "카테고리 변경 실패": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "순서 변경 실패": {
   "count": 1,
   "files": [
    "admin.html"
@@ -7116,6 +5615,16 @@
    "admin.html"
   ]
  },
+ "비고": {
+  "count": 23,
+  "files": [
+   "admin.html",
+   "dashboard.js",
+   "display-manage.html",
+   "record.js",
+   "results.js"
+  ]
+ },
  "합계": {
   "count": 1,
   "files": [
@@ -7431,6 +5940,21 @@
    "field-card-upload.js"
   ]
  },
+ "신규": {
+  "count": 4,
+  "files": [
+   "admin.html",
+   "field-card-upload.js"
+  ]
+ },
+ "변경": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "display-manage.html",
+   "field-card-upload.js"
+  ]
+ },
  "동일": {
   "count": 2,
   "files": [
@@ -7727,6 +6251,19 @@
    "admin.html"
   ]
  },
+ "저장 실패:": {
+  "count": 8,
+  "files": [
+   "admin.html",
+   "record.js"
+  ]
+ },
+ "파일을 선택하세요": {
+  "count": 7,
+  "files": [
+   "admin.html"
+  ]
+ },
  "좌측": {
   "count": 6,
   "files": [
@@ -7793,6 +6330,12 @@
    "admin.html"
   ]
  },
+ "분석 중...": {
+  "count": 4,
+  "files": [
+   "admin.html"
+  ]
+ },
  "BIB 번호를 일괄 수정하시겠습니까? 기존 기록에는 영향이 없습니다.": {
   "count": 1,
   "files": [
@@ -7817,6 +6360,15 @@
    "admin.html"
   ]
  },
+ "높이뛰기": {
+  "count": 7,
+  "files": [
+   "admin.html",
+   "common.js",
+   "dashboard.js",
+   "display-manage.html"
+  ]
+ },
  "장대높이뛰기": {
   "count": 6,
   "files": [
@@ -7824,6 +6376,17 @@
    "common.js",
    "dashboard.js",
    "display-manage.html"
+  ]
+ },
+ "멀리뛰기": {
+  "count": 10,
+  "files": [
+   "admin.html",
+   "common.js",
+   "dashboard.js",
+   "display-manage.html",
+   "monitor.html",
+   "results.js"
   ]
  },
  "세단뛰기": {
@@ -7838,6 +6401,32 @@
   ]
  },
  "포환던지기": {
+  "count": 7,
+  "files": [
+   "admin.html",
+   "common.js",
+   "dashboard.js",
+   "display-manage.html"
+  ]
+ },
+ "원반던지기": {
+  "count": 6,
+  "files": [
+   "admin.html",
+   "common.js",
+   "dashboard.js",
+   "display-manage.html"
+  ]
+ },
+ "해머던지기": {
+  "count": 4,
+  "files": [
+   "admin.html",
+   "dashboard.js",
+   "display-manage.html"
+  ]
+ },
+ "창던지기": {
   "count": 7,
   "files": [
    "admin.html",
@@ -7950,6 +6539,13 @@
    "admin.html"
   ]
  },
+ "행": {
+  "count": 2,
+  "files": [
+   "admin.html",
+   "display-manage.html"
+  ]
+ },
  "종류": {
   "count": 4,
   "files": [
@@ -7968,6 +6564,21 @@
    "admin.html"
   ]
  },
+ "기존": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "알 수 없는 오류": {
+  "count": 8,
+  "files": [
+   "admin.html",
+   "dashboard.js",
+   "display-manage.html",
+   "record.js"
+  ]
+ },
  "기존 기록보다 나쁜 값으로 덮어쓰는 행이 포함됩니다. 정말 적용하시겠습니까?": {
   "count": 1,
   "files": [
@@ -7975,6 +6586,12 @@
   ]
  },
  "기록표를 적용합니다. 계속하시겠습니까?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "적용 중...": {
   "count": 1,
   "files": [
    "admin.html"
@@ -8216,6 +6833,12 @@
  },
  "종목이 없습니다.": {
   "count": 3,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "연결 실패": {
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -9505,6 +8128,24 @@
    "admin.html"
   ]
  },
+ "예: 남자실업부": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "예: 여자실업부": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "예: 혼성실업부": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "비워두면 유지": {
   "count": 2,
   "files": [
@@ -9943,6 +8584,12 @@
    "admin.html"
   ]
  },
+ "+ 선수 추가": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "왼쪽에서 선수를 선택하세요": {
   "count": 1,
   "files": [
@@ -10321,6 +8968,12 @@
    "admin.html"
   ]
  },
+ "생년월일": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
  "종목1": {
   "count": 1,
   "files": [
@@ -10649,10 +9302,37 @@
    "admin.html"
   ]
  },
+ "시간": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "display-manage.html"
+  ]
+ },
+ "부별": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "· 시트 이름": {
   "count": 1,
   "files": [
    "admin.html"
+  ]
+ },
+ "1일차": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "display-manage.html"
+  ]
+ },
+ "2일차": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "display-manage.html"
   ]
  },
  "시간표 양식 내려받기": {
@@ -10866,6 +9546,12 @@
   ]
  },
  "종별": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "세부종목": {
   "count": 1,
   "files": [
    "admin.html"
@@ -11397,6 +10083,12 @@
    "admin.html"
   ]
  },
+ "접속 주소:": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "포인트색": {
   "count": 1,
   "files": [
@@ -11695,6 +10387,12 @@
    "admin.html"
   ]
  },
+ "조직 추가": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "주소는 만든 뒤에도 바꿀 수 있지만, 바꾸면 그 조직의 링크가 모두 바뀝니다.": {
   "count": 1,
   "files": [
@@ -11732,6 +10430,24 @@
   ]
  },
  "글자색": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "스코어보드 남자 명칭": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "스코어보드 여자 명칭": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "스코어보드 혼성 명칭": {
   "count": 1,
   "files": [
    "admin.html"
@@ -11923,8 +10639,20 @@
    "admin.html"
   ]
  },
+ "공통 (전체 · 홈에 노출)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "특정 대회를 고르면 그 대회 대시보드의 [공지] 버튼에서만 표시됩니다.": {
   "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "제목": {
+  "count": 4,
   "files": [
    "admin.html"
   ]
@@ -15048,6 +13776,12 @@
    "callroom.js"
   ]
  },
+ "기록있음": {
+  "count": 1,
+  "files": [
+   "callroom.js"
+  ]
+ },
  "{0}메달": {
   "count": 1,
   "files": [
@@ -15088,6 +13822,13 @@
   "count": 2,
   "files": [
    "common.js"
+  ]
+ },
+ "오늘 하루 보지 않음": {
+  "count": 2,
+  "files": [
+   "common.js",
+   "index.html"
   ]
  },
  "종료된 대회입니다.\\n\\n[{0}]\\n운영진(심판) 권한으로는 종료된 대회의 작업 페이지에 접근할 수 없습니다.\\n관리자만 수정 가능합니다.": {
@@ -15320,6 +14061,14 @@
   "count": 1,
   "files": [
    "common.js"
+  ]
+ },
+ "{0}일차": {
+  "count": 8,
+  "files": [
+   "common.js",
+   "dashboard.js",
+   "display-manage.html"
   ]
  },
  "{0}경기": {
@@ -15719,6 +14468,12 @@
   ]
  },
  "저장되지 않은 변경사항이 있습니다. 이동하시겠습니까?": {
+  "count": 1,
+  "files": [
+   "common.js"
+  ]
+ },
+ "공통": {
   "count": 1,
   "files": [
    "common.js"
@@ -16716,6 +15471,12 @@
    "dashboard.js"
   ]
  },
+ "출전 종목 없음": {
+  "count": 1,
+  "files": [
+   "dashboard.js"
+  ]
+ },
  "선수단 명단이 아직 없습니다": {
   "count": 2,
   "files": [
@@ -16928,6 +15689,12 @@
   ]
  },
  "다른 국가": {
+  "count": 1,
+  "files": [
+   "dashboard.js"
+  ]
+ },
+ "출전": {
   "count": 1,
   "files": [
    "dashboard.js"
@@ -17174,6 +15941,12 @@
   ]
  },
  "명단 연결": {
+  "count": 1,
+  "files": [
+   "display-manage.html"
+  ]
+ },
+ "결과 링크": {
   "count": 1,
   "files": [
    "display-manage.html"
@@ -18177,6 +16950,12 @@
    "display-manage.html"
   ]
  },
+ "업로드 중...": {
+  "count": 1,
+  "files": [
+   "display-manage.html"
+  ]
+ },
  "시간표 업로드 완료": {
   "count": 1,
   "files": [
@@ -18705,6 +17484,12 @@
    "field-card-upload.js"
   ]
  },
+ "분석 중…": {
+  "count": 1,
+  "files": [
+   "field-card-upload.js"
+  ]
+ },
  "배번·성명 수정 시 재매칭": {
   "count": 1,
   "files": [
@@ -18747,7 +17532,19 @@
    "index.html"
   ]
  },
+ "{0} 연맹의 대회 전체를 홈과 운영 화면 목록에서 숨깁니다. 관리자 페이지에서는 계속 보이고, 직접 링크는 열립니다. 계속할까요?": {
+  "count": 1,
+  "files": [
+   "index.html"
+  ]
+ },
  "이 연맹 대회를 다시 표시": {
+  "count": 2,
+  "files": [
+   "index.html"
+  ]
+ },
+ "숨김 해제": {
   "count": 2,
   "files": [
    "index.html"
@@ -18755,6 +17552,12 @@
  },
  "이 연맹 대회 전체를 홈·운영 화면 목록에서 숨김": {
   "count": 2,
+  "files": [
+   "index.html"
+  ]
+ },
+ "연맹 숨기기": {
+  "count": 1,
   "files": [
    "index.html"
   ]
@@ -18831,6 +17634,12 @@
    "index.html"
   ]
  },
+ "연맹 숨김 변경 실패:": {
+  "count": 1,
+  "files": [
+   "index.html"
+  ]
+ },
  "해당 연도의 대회가 없습니다.": {
   "count": 1,
   "files": [
@@ -18839,6 +17648,12 @@
  },
  "기타 대회": {
   "count": 1,
+  "files": [
+   "index.html"
+  ]
+ },
+ "숨김": {
+  "count": 2,
   "files": [
    "index.html"
   ]
@@ -19619,6 +18434,12 @@
   "count": 1,
   "files": [
    "open.html"
+  ]
+ },
+ "{0}건": {
+  "count": 1,
+  "files": [
+   "oplog.html"
   ]
  },
  "운영키 또는 관리자 로그인이 필요합니다.": {

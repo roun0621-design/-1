@@ -13,8 +13,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
-    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
-    <meta name="theme-color" content="#b79f58">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
+    <meta name="theme-color" content="#C24A2E">
     <title>PACE RISE : Node - 소집 모니터</title>
     <link rel="stylesheet" href="styles.css?v=79">
     <link rel="stylesheet" href="/lib/responsive.css?v=1">
@@ -36,15 +36,15 @@
         }
         .mon-comp-bar button:active { transform: scale(0.97); }
         .mon-comp-bar button.active {
-            background: linear-gradient(135deg, #b79f58, #8a7640); color: #fff;
-            border-color: #b79f58; font-weight: 700;
-            box-shadow: 0 3px 12px rgba(183,159,88,0.3);
+            background: #C24A2E; color: #fff;
+            border-color: #B8432A; font-weight: 700;
+            box-shadow: 0 3px 12px rgba(194,74,46,0.3);
         }
         .mon-comp-bar .comp-dot {
             display: inline-block; width: 8px; height: 8px; border-radius: 50%;
             margin-right: 6px; vertical-align: middle;
         }
-        .mon-comp-bar .comp-dot.s-active { background: #b79f58; }
+        .mon-comp-bar .comp-dot.s-active { background: #C24A2E; }
         .mon-comp-bar button.active .comp-dot.s-active { background: #fff; }
         .mon-comp-bar .comp-dot.s-upcoming { background: #FB8C00; }
         .mon-comp-bar button.active .comp-dot.s-upcoming { background: #fff; }
@@ -61,7 +61,7 @@
             font-weight: 600; cursor: pointer; color: #9CA3AF;
             border-bottom: 3px solid transparent; transition: all .15s;
         }
-        .mon-gender-tabs button.active { color: #b79f58; border-bottom-color: #b79f58; }
+        .mon-gender-tabs button.active { color: #B8432A; border-bottom-color: #B8432A; }
 
         /* Filter tabs */
         .mon-filter-tabs {
@@ -74,7 +74,7 @@
             border: 1px solid #E5E7EB; background: #fff;
             font-size: 12px; cursor: pointer; color: #1F2937; font-weight: 500;
         }
-        .mon-filter-tabs button.active { background: #b79f58; color: #fff; border-color: #b79f58; }
+        .mon-filter-tabs button.active { background: #C24A2E; color: #fff; border-color: #B8432A; }
 
         /* Summary bar */
         .mon-summary-bar {
@@ -107,7 +107,7 @@
             background: #fff; border-radius: 10px; margin-bottom: 8px;
             border: 1px solid #E5E7EB; overflow: hidden; transition: opacity .3s;
         }
-        .mon-event-card.st-callroom-done { border-left: 3px solid #b79f58; }
+        .mon-event-card.st-callroom-done { border-left: 3px solid #C24A2E; }
         .mon-event-card.st-progress { border-left: 3px solid #6b6b6b; }
         .mon-event-card.st-waiting { border-left: 3px solid #E5E7EB; opacity: 0.7; }
         .mon-event-card.st-race-done { border-left: 3px solid #6B7280; opacity: 0.5; }
@@ -121,7 +121,7 @@
         .mon-event-round { font-size: 11px; color: #9CA3AF; margin-left: 6px; }
         .mon-event-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
         .mon-event-count { font-size: 13px; font-weight: 700; }
-        .mon-event-count .done { color: #b79f58; }
+        .mon-event-count .done { color: #B8432A; }
         .mon-event-count .sep { color: #9CA3AF; font-weight: 400; }
         .mon-event-count .total { color: #9CA3AF; }
 
@@ -130,7 +130,7 @@
             font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
             white-space: nowrap;
         }
-        .mon-badge-callroom-done { background: #f5f0e0; color: #9a8548; }
+        .mon-badge-callroom-done { background: #F6E4DF; color: #B8432A; }
         .mon-badge-progress { background: #e8e8e8; color: #555555; }
         .mon-badge-waiting { background: #f3f4f6; color: #6b7280; }
         .mon-badge-race-done { background: #e5e7eb; color: #4b5563; }
@@ -138,7 +138,7 @@
         /* Progress bar */
         .mon-progress { height: 4px; background: #E5E7EB; border-radius: 2px; margin: 0 14px 8px; }
         .mon-progress-fill { height: 100%; border-radius: 2px; transition: width .3s; }
-        .mon-progress-fill.pg-green { background: #b79f58; }
+        .mon-progress-fill.pg-green { background: #C24A2E; }
         .mon-progress-fill.pg-blue { background: #6b6b6b; }
         .mon-progress-fill.pg-gray { background: #6B7280; }
 
@@ -169,7 +169,7 @@
 <body class="monitor-body">
     <header class="header">
         <div class="header-inner">
-            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">Node</span></h1>
+            <h1 class="header-title"><img class="brand-wordmark" src="/brand/wordmark.svg" alt="PACE RISE"><span class="brand-node">Node</span></h1>
             <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
         </div>
         <nav class="page-nav" id="page-nav"></nav>
@@ -364,7 +364,7 @@
         document.getElementById('summary-bar').innerHTML = `
             <div class="mon-summary-item"><span class="num">${totalEvents}</span><span class="lbl">종목</span></div>
             <div class="mon-summary-item"><span class="num">${totalAthletes}</span><span class="lbl">선수</span></div>
-            <div class="mon-summary-item"><span class="num" style="color:#b79f58">${totalCIn}</span><span class="lbl">출석</span></div>
+            <div class="mon-summary-item"><span class="num" style="color:#B8432A">${totalCIn}</span><span class="lbl">출석</span></div>
             <div class="mon-summary-item"><span class="num" style="color:#E53935">${totalNS}</span><span class="lbl">결석</span></div>
         `;
 

@@ -245,12 +245,12 @@ function renderResultsMatrix() {
                                (fS && (fS.round_status === 'completed' || fS.round_status === 'in_progress'));
                     }).length;
                     html += `<tr class="combined-sub-toggle-row">
-                        <td colspan="8" style="padding:4px 8px;background:linear-gradient(135deg,#f8f4ea,#faf6ec);border-left:3px solid #8a7640;">
+                        <td colspan="8" style="padding:4px 8px;background:linear-gradient(135deg,#F6E4DF,#F6E4DF);border-left:3px solid #B8432A;">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <button onclick="toggleCombinedSubs('${parentKey}')" class="btn btn-sm btn-ghost" style="font-size:11px;padding:2px 10px;" id="toggle-btn-${parentKey}">
                                     ▼ 세부종목 ${subNames.length}개
                                 </button>
-                                <span style="font-size:10px;color:#8a7640;font-weight:600;">${doneCount}/${subNames.length} 진행</span>
+                                <span style="font-size:10px;color:#B8432A;font-weight:600;">${doneCount}/${subNames.length} 진행</span>
                             </div>
                         </td>
                     </tr>`;
@@ -262,7 +262,7 @@ function renderResultsMatrix() {
                         const prefix = isLast ? '└' : '├';
                         const seStatus = mSe || fSe;
                         const statusDot = seStatus ? (
-                            seStatus.round_status === 'completed' ? '<span style="color:#9a8548;">●</span>' :
+                            seStatus.round_status === 'completed' ? '<span style="color:#B8432A;">●</span>' :
                             seStatus.round_status === 'in_progress' ? '<span style="color:#f59e0b;">●</span>' :
                             '<span style="color:#d1d5db;">○</span>'
                         ) : '<span style="color:#d1d5db;">○</span>';
@@ -313,7 +313,7 @@ function renderResultBtn(evt, genderClass) {
         return `<div style="display:flex;flex-direction:column;gap:3px;align-items:center;">
             <a class="round-btn ${statusCls} ${genderCls}" href="javascript:void(0)" onclick="openResultDetail(${evt.id})" title="종합순위" style="font-size:11px;padding:3px 8px;">종합순위</a>
             <a class="round-btn status-active ${genderCls}" href="javascript:void(0)" onclick="openResultDetail(${evt.id})" title="Day 1" style="font-size:10px;padding:2px 6px;background:#e8ecf4;color:#1a2a5e;">Day 1</a>
-            <a class="round-btn status-active ${genderCls}" href="javascript:void(0)" onclick="openResultDetail(${evt.id})" title="Day 2" style="font-size:10px;padding:2px 6px;background:#f4e8ec;color:#8b1a2a;">Day 2</a>
+            <a class="round-btn status-active ${genderCls}" href="javascript:void(0)" onclick="openResultDetail(${evt.id})" title="Day 2" style="font-size:10px;padding:2px 6px;background:#F1E3EC;color:#8E2A6B;">Day 2</a>
         </div>`;
     }
     return `<a class="round-btn ${statusCls} ${genderCls}" href="javascript:void(0)" onclick="openResultDetail(${evt.id})" title="${roundLabel} 결과">${roundLabel} 결과</a>`;
@@ -1144,7 +1144,7 @@ async function renderCombinedResults() {
     let hdr = '<tr><th>RANK</th><th>BIB</th><th style="text-align:left;">선수명</th>';
     subDefs.forEach(se => {
         if (se.order === 1) hdr += '<th style="font-size:11px;padding:3px 4px;background:#e8ecf4;color:#1a2a5e;font-weight:700;border-left:3px solid #1a2a5e;">DAY 1</th>';
-        if (se.order === day1Max + 1) hdr += '<th style="font-size:11px;padding:3px 4px;background:#f4e8ec;color:#8b1a2a;font-weight:700;border-left:3px solid #8b1a2a;">DAY 2</th>';
+        if (se.order === day1Max + 1) hdr += '<th style="font-size:11px;padding:3px 4px;background:#F1E3EC;color:#8E2A6B;font-weight:700;border-left:3px solid #8E2A6B;">DAY 2</th>';
         const bg = se.order <= day1Max ? 'background:#eef1f7;' : 'background:#f7f0f2;';
         hdr += `<th style="font-size:11px;padding:3px 2px;writing-mode:vertical-lr;max-width:26px;${bg}">${se.name}</th>`;
     });
@@ -1164,7 +1164,7 @@ async function renderCombinedResults() {
             if (rec === 0 && p === 0) { d = '<div style="font-size:10px;color:var(--danger);font-weight:700;">NM</div><div style="font-size:10px;color:var(--text-muted);">0</div>'; }
             else if (rec && rec > 0) { const isHt = se.key && (se.key.includes('high_jump') || se.key.includes('pole_vault')); const rs = se.unit === 's' ? formatTime(rec) : formatHeight(rec); d = `<div style="font-size:10px;">${rs}</div><div style="font-size:10px;color:var(--green);font-weight:700;">${p}</div>`; }
             if (se.order === 1) c += '<td style="border-left:3px solid #1a2a5e;"></td>'; // Day1 spacer
-            if (se.order === day1Max + 1) c += '<td style="border-left:3px solid #8b1a2a;"></td>'; // Day2 spacer
+            if (se.order === day1Max + 1) c += '<td style="border-left:3px solid #8E2A6B;"></td>'; // Day2 spacer
             c += `<td style="padding:2px 3px;line-height:1.2;">${d}</td>`;
         });
         return `<tr><td>${medal}</td><td><strong>${bib(r.bib_number)}</strong></td><td style="text-align:left;">${r.name}</td>${c}<td><span class="combined-total-points">${r.total > 0 ? r.total : '—'}</span></td></tr>`;

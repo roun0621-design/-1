@@ -30,9 +30,8 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
-    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png">
-    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
-    <meta name="theme-color" content="#b79f58">
+        <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
+    <meta name="theme-color" content="#C24A2E">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="P-R:Node">
@@ -48,7 +47,7 @@
         .comp-card:hover { border-color: var(--blue); box-shadow: 0 2px 8px rgba(33,150,243,.12); transform: translateY(-1px); }
         .comp-card-status { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
         .comp-card-status.upcoming { background: #e5a100; }
-        .comp-card-status.active { background: #b79f58; }
+        .comp-card-status.active { background: #C24A2E; }
         .comp-card-status.completed { background: #1a1f2b; }
         .comp-card-info { flex: 1; }
         .comp-card-name { font-family: var(--font-brand); font-size: 16px; font-weight: 400; margin-bottom: 2px; letter-spacing: 0.5px; }
@@ -56,11 +55,11 @@
         .comp-card-arrow { color: var(--text-muted); font-size: 20px; }
         .comp-card-dday { font-family: var(--font-brand); font-size: 11px; font-weight: 400; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
         .comp-card-dday.upcoming { background: #fef6dc; color: #7a6400; }
-        .comp-card-dday.active { background: #f8f4ea; color: #065f46; }
+        .comp-card-dday.active { background: #F6E4DF; color: #B8432A; }
         .comp-card-dday.completed { background: #f5f5f5; color: #616161; }
         .comp-status-label { font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 99px; }
         .comp-status-label.upcoming { background: #fef6dc; color: #7a6400; }
-        .comp-status-label.active { background: #f8f4ea; color: #065f46; }
+        .comp-status-label.active { background: #F6E4DF; color: #B8432A; }
         .comp-status-label.completed { background: #f5f5f5; color: #616161; }
         .comp-empty { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
         .home-actions { display: flex; gap: 10px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
@@ -76,7 +75,7 @@
         .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
         .role-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
         .role-badge.admin { background: #f0f0f0; color: #6b6b6b; }
-        .role-badge.operation { background: #f5f0e0; color: #8a7640; }
+        .role-badge.operation { background: #F6E4DF; color: #B8432A; }
         .role-badge.viewer { background: #f5f5f5; color: #757575; }
         .comp-list-title { font-family: var(--font-brand); margin-top: 30px; font-size: 16px; font-weight: 400; letter-spacing: 1px; }
         .fed-group summary::-webkit-details-marker { display:none; }
@@ -119,7 +118,7 @@
 
     <header class="header" style="position:relative;">
         <div class="header-inner">
-            <h1 class="header-title">PACE RISE <span class="header-colon">:</span> <span class="header-scope">Node</span></h1>
+            <h1 class="header-title"><img class="brand-wordmark" src="/brand/wordmark.svg" alt="PACE RISE"><span class="brand-node">Node</span></h1>
             <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
             <button class="header-login-btn" id="header-login-btn" onclick="toggleLogin()">
                 <span id="header-login-label">로그인</span>
@@ -130,7 +129,7 @@
 
     <main class="home-container">
         <div class="home-hero">
-            <h1>PACE RISE <span style="color:#b79f58">:</span> <span style="color:#b79f58">Node</span></h1>
+            <h1><img class="brand-wordmark hero-wordmark" src="/brand/wordmark.svg" alt="PACE RISE"><span class="brand-node hero-node">Node</span></h1>
             <div class="hero-sub">Sport Competition Operation Platform for Excellence</div>
         </div>
 
@@ -693,7 +692,7 @@
             const statusBadge = (isLive
                 ? '<span class="comp-card-dday active">LIVE</span>'
                 : `<span class="comp-card-dday ${c.status}">${{upcoming:'예정',completed:'종료'}[c.status]||c.status}</span>`) + pinBadge;
-            return `<div class="comp-card" onclick="selectCompetition(${c.id})" style="${isLive?'border-color:#b79f58;':''}">
+            return `<div class="comp-card" onclick="selectCompetition(${c.id})" style="${isLive?'border-color:#B8432A;':''}">
                 <div class="comp-card-status ${c.status}"></div>
                 <div class="comp-card-info">
                     <div class="comp-card-name">${c.name} ${fedBadge}</div>
@@ -726,13 +725,13 @@
                 // 헤더(라벨 + 펼침 토글)
                 const toggleLabel = _recentExpanded ? '접기 ▲' : '전체 대회 펼치기 ▼';
 
-                let html = `<div style="padding:16px;background:linear-gradient(135deg,#f8f4ea,#f0f0f0);border:1.5px solid #b79f58;border-radius:var(--radius);">
+                let html = `<div style="padding:16px;background:#F6E4DF;border:1.5px solid #C24A2E;border-radius:var(--radius);">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
-                        <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#065f46;letter-spacing:1px;">
+                        <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#B8432A;letter-spacing:1px;">
                             RECENT • 진행중 대회 (±3일)
                         </div>
                         <button type="button" onclick="toggleRecentExpanded()" class="btn btn-sm btn-ghost"
-                            style="font-size:12px;padding:4px 10px;border:1px solid #b79f58;background:#fff;color:#065f46;border-radius:6px;cursor:pointer;">
+                            style="font-size:12px;padding:4px 10px;border:1px solid #C24A2E;background:#fff;color:#B8432A;border-radius:6px;cursor:pointer;">
                             ${toggleLabel}
                         </button>
                     </div>`;
@@ -752,8 +751,8 @@
                     const allItems = Array.isArray(allResp) ? allResp : (allResp.items || []);
                     const activeIds = new Set(activeItems.map(c => c.id));
                     const others = allItems.filter(c => !activeIds.has(c.id));
-                    html += `<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #b79f58;">
-                        <div style="font-size:12px;color:#065f46;letter-spacing:1px;margin-bottom:8px;font-weight:600;">전체 대회 (${others.length})</div>`;
+                    html += `<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #C24A2E;">
+                        <div style="font-size:12px;color:#B8432A;letter-spacing:1px;margin-bottom:8px;font-weight:600;">전체 대회 (${others.length})</div>`;
                     if (others.length) {
                         html += `<div style="display:flex;flex-direction:column;gap:8px;">`;
                         others.forEach(c => { html += _renderCompCard(c); });
@@ -905,7 +904,9 @@
                     if (!cfg.org.is_default) {
                         const nm = cfg.org.site_name || cfg.org.name;
                         document.title = nm;
-                        document.querySelectorAll('.header-title, .home-hero h1, .mm-brand').forEach(h => { h.textContent = nm; });
+                        const logo = cfg.org.brand && cfg.org.brand.logo;   // 다른 조직: 워드마크 대신 조직 로고(있으면) 또는 이름
+                        document.querySelectorAll('.header-title, .mm-brand').forEach(h => { if (logo) h.innerHTML = `<img class="brand-wordmark" src="${logo}" alt="${nm.replace(/"/g, '&quot;')}" style="height:28px;">`; else h.textContent = nm; });
+                        document.querySelectorAll('.home-hero h1').forEach(h => { if (logo) h.innerHTML = `<img src="${logo}" alt="${nm.replace(/"/g, '&quot;')}" style="height:72px;max-width:80vw;object-fit:contain;">`; else h.textContent = nm; });
                         const og = document.querySelector('meta[property="og:site_name"]'); if (og) og.setAttribute('content', nm);
                     }
                 }

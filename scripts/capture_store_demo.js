@@ -69,7 +69,7 @@ const FN_injectCompTitle = (comp) => {
     /전국육상|코리아오픈|선수권/.test(e.textContent || '') &&
     (e.textContent || '').length < 140 && e.children.length <= 4);
   if (cand) {
-    cand.innerHTML = `${comp.title} &nbsp;<span style="display:inline-block;background:#b79f58;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;vertical-align:middle;">${comp.badge}</span> &nbsp;|&nbsp; ${comp.dateRange} &nbsp;|&nbsp; ${comp.venue}`;
+    cand.innerHTML = `${comp.title} &nbsp;<span style="display:inline-block;background:#C24A2E;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;vertical-align:middle;">${comp.badge}</span> &nbsp;|&nbsp; ${comp.dateRange} &nbsp;|&nbsp; ${comp.venue}`;
   }
 };
 
@@ -99,14 +99,14 @@ const FN_showRoster = (RO) => {
   const panel = document.getElementById('result-panel');
   if (!overlay || !panel) return false;
   const rows = RO.rows.map(a => `<tr style="border-bottom:1px solid #f0f0f0;">
-      <td style="padding:8px 4px;text-align:center;font-weight:700;color:#b79f58;">${a.lane}</td>
+      <td style="padding:8px 4px;text-align:center;font-weight:700;color:#B8432A;">${a.lane}</td>
       <td style="padding:8px 4px;text-align:center;font-weight:700;">${a.bib}</td>
       <td style="padding:8px 12px;font-weight:600;">${a.name}</td>
       <td style="padding:8px 12px;color:#555;">${a.team}</td>
     </tr>`).join('');
   const body = `<div style="margin-bottom:16px;">
       <div style="font-size:13px;font-weight:700;padding:6px 10px;background:#f5f5f5;border-radius:4px;margin-bottom:6px;">예선 — ${RO.rows.length}명</div>
-      <div style="font-size:12px;font-weight:700;color:#b79f58;padding:5px 10px;margin-top:8px;margin-bottom:4px;background:#f8f4ea;border-radius:4px;display:flex;justify-content:space-between;"><span>${RO.heatLabel}</span><span style="color:#888;font-weight:500;">${RO.rows.length}명</span></div>
+      <div style="font-size:12px;font-weight:700;color:#B8432A;padding:5px 10px;margin-top:8px;margin-bottom:4px;background:#F6E4DF;border-radius:4px;display:flex;justify-content:space-between;"><span>${RO.heatLabel}</span><span style="color:#888;font-weight:500;">${RO.rows.length}명</span></div>
       <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;">
         <colgroup><col style="width:50px"><col style="width:60px"><col style="width:auto"><col style="width:40%"></colgroup>
         <thead><tr style="border-bottom:2px solid #e5e7eb;">

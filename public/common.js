@@ -785,14 +785,14 @@ const API = {
 // ============================================================
 function getGenderColor(gender) {
     if (gender === 'M') return '#1a2a5e'; // navy
-    if (gender === 'F') return '#8b1a2a'; // burgundy
-    if (gender === 'X') return '#b79f58'; // gold
+    if (gender === 'F') return '#8E2A6B'; // plum
+    if (gender === 'X') return '#1F7A6D'; // teal
     return '#9E9E9E';
 }
 function getGenderBg(gender) {
     if (gender === 'M') return '#e8eaf0';
-    if (gender === 'F') return '#f0e0e4';
-    if (gender === 'X') return '#f8f4ea';
+    if (gender === 'F') return '#F1E3EC';
+    if (gender === 'X') return '#F6E4DF';
     return '#f5f5f5';
 }
 function getGenderLabel(gender) {
@@ -954,11 +954,11 @@ async function renderCompInfoBar(containerId) {
         // (간격은 .comp-info-actions 의 gap 이 담당 — 버튼 자체엔 margin 없음)
         const _cibBtnBase = 'white-space:nowrap;font-size:12px;font-weight:600;padding:3px 13px;border:none;border-radius:999px;color:#fff;cursor:pointer;transition:all 0.15s;letter-spacing:0.2px;';
         const docBtnHtml = role !== 'viewer'
-            ? `<button id="comp-doc-btn" style="${_cibBtnBase}background:linear-gradient(135deg,#b79f58,#8a7640);box-shadow:0 2px 6px rgba(183,159,88,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(183,159,88,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(183,159,88,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
+            ? `<button id="comp-doc-btn" style="${_cibBtnBase}background:#C24A2E;box-shadow:0 2px 6px rgba(194,74,46,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(194,74,46,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(194,74,46,0.3)';this.style.transform=''" onclick="openDocumentList()">&#44592;&#47197;&#51648;</button>`
             : '';
         // 대시보드 모드에서는 히어로 카드가 시간표 진입점을 대체하므로 상단 버튼 숨김
         const isDashboardMode = document.body.classList.contains('dashboard-mode');
-        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}background:linear-gradient(135deg,#2a3a6e,#1a2a5e);box-shadow:0 2px 6px rgba(26,42,94,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(26,42,94,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(26,42,94,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
+        const ttBtnHtml = isDashboardMode ? '' : `<button id="comp-tt-btn" style="${_cibBtnBase}background:#0E0E10;box-shadow:0 2px 6px rgba(14,14,16,0.3);" onmouseover="this.style.boxShadow='0 4px 12px rgba(14,14,16,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 2px 6px rgba(14,14,16,0.3)';this.style.transform=''" onclick="openTimetable()">&#49884;&#44036;&#54364;</button>`;
         // 정보(줄1) 와 액션 버튼(줄2) 을 분리 → 대회명이 길어도 버튼이 항상 한 줄에 나란히
         el.innerHTML = `<div class="comp-info-main">
                 <span class="comp-info-name">${info.name || ''}</span>
@@ -1153,7 +1153,7 @@ async function renderCompSelector(currentPage) {
         container.innerHTML = `<select id="comp-dropdown" style="
             width:100%; padding:10px 32px 10px 12px; border-radius:8px;
             border:none; font-size:13px; font-weight:700; letter-spacing:0.3px;
-            background:#b79f58; color:#fff;
+            background:#C24A2E; color:#fff;
             cursor:pointer; appearance:auto;
             -webkit-appearance:auto;
         ">${opts}</select>`;
@@ -1478,7 +1478,7 @@ function _buildMobileMenu(pages, currentPage, role) {
 
     menu.innerHTML = `
         <div class="mobile-menu-header">
-            <span class="mm-brand">${(window.PACE_ORG && !window.PACE_ORG.is_default) ? (window.PACE_ORG.site_name || window.PACE_ORG.name) : 'PACE RISE <span class="mm-colon">:</span> <span class="mm-scope">Node</span>'}</span>
+            <span class="mm-brand">${(window.PACE_ORG && !window.PACE_ORG.is_default) ? (window.PACE_ORG.site_name || window.PACE_ORG.name) : '<img class="brand-wordmark" src="/brand/wordmark.svg" alt="PACE RISE"><span class="brand-node">Node</span>'}</span>
             ${prCloseBtn('closeMobileMenu()', { cls: 'mobile-menu-close' })}
         </div>
         <div class="mobile-menu-nav">${navLinks}</div>
@@ -1739,7 +1739,7 @@ function openVideoModal(url, title) {
         #pacerise-footer .pr-footer-logo { font-family:'Audiowide','Noto Sans KR',sans-serif; font-size:12px; color:#6b7280; letter-spacing:2px; }
         #pacerise-footer .pr-footer-links { font-size:10px; color:#9ca3af; }
         #pacerise-footer .pr-footer-links a { color:#6b7280; text-decoration:none; transition:color 0.15s; }
-        #pacerise-footer .pr-footer-links a:hover { color:#b79f58; }
+        #pacerise-footer .pr-footer-links a:hover { color:#B8432A; }
         #pacerise-footer .pr-footer-sep { margin:0 8px; color:#d1d5db; }
         #pacerise-footer .pr-footer-privacy { margin-top:12px; border-top:1px solid #e5e7eb; padding-top:10px; }
         #pacerise-footer .pr-footer-privacy summary { font-size:10px; color:#9ca3af; cursor:pointer; }
@@ -1764,7 +1764,7 @@ function showToast(message, type = 'success', duration = 2000) {
         document.body.appendChild(container);
     }
     const toast = document.createElement('div');
-    const bg = type === 'success' ? 'var(--green)' : type === 'error' ? '#8b1a2a' : '#b79f58';
+    const bg = type === 'success' ? 'var(--green)' : type === 'error' ? '#B4232C' : '#C24A2E';
     toast.style.cssText = `background:${bg};color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.15);opacity:0;transform:translateY(10px);transition:all 0.25s ease;pointer-events:auto;`;
     // 코드에서 박아 넣는 아이콘(<svg …>) 으로 시작하는 메시지만 HTML 로 렌더 — 그 외(서버 에러 문자열 등)는 텍스트
     if (/^\s*<svg\b/i.test(String(message))) {
@@ -1795,7 +1795,7 @@ function showShortcutHelp() {
     wrap.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(20,18,15,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
     wrap.innerHTML = `<div role="dialog" aria-modal="true" aria-label="단축키" style="background:#fff;color:#1f1d1a;border-radius:12px;max-width:560px;width:100%;max-height:85vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.3);padding:18px 20px;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><h3 style="margin:0;font-size:16px;">단축키</h3><span style="font-size:12px;color:#777;">입력칸 밖에서 <kbd>?</kbd></span><button type="button" class="btn btn-sm btn-ghost" style="margin-left:auto;" onclick="document.getElementById('shortcut-help').remove()">닫기</button></div>
-        ${sections.map(sec => `<div style="margin:10px 0 4px;font-size:12px;font-weight:800;color:#8a7640;letter-spacing:.04em;">${esc(sec.title)}</div>
+        ${sections.map(sec => `<div style="margin:10px 0 4px;font-size:12px;font-weight:800;color:#B8432A;letter-spacing:.04em;">${esc(sec.title)}</div>
             <table style="width:100%;border-collapse:collapse;font-size:13px;">${sec.rows.map(([k, d]) => `<tr><td style="padding:5px 8px 5px 0;white-space:nowrap;width:1%;">${kbd(k)}</td><td style="padding:5px 0;color:#333;">${esc(d)}</td></tr>`).join('')}</table>`).join('')}
     </div>`;
     wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
@@ -1833,11 +1833,11 @@ function showUndoToast(message, undoId, onRestored, duration = 10000) {
         document.body.appendChild(container);
     }
     const t = document.createElement('div');
-    t.style.cssText = 'background:#262324;color:#fff;padding:10px 12px 10px 16px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.25);display:flex;align-items:center;gap:12px;pointer-events:auto;opacity:0;transform:translateY(10px);transition:all .25s ease;';
+    t.style.cssText = 'background:#0E0E10;color:#fff;padding:10px 12px 10px 16px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.25);display:flex;align-items:center;gap:12px;pointer-events:auto;opacity:0;transform:translateY(10px);transition:all .25s ease;';
     const msg = document.createElement('span'); msg.textContent = message;
     const btn = document.createElement('button');
     btn.type = 'button'; btn.textContent = '되돌리기';
-    btn.style.cssText = 'background:#b79f58;color:#1f1d1a;border:0;border-radius:6px;padding:6px 12px;font-weight:800;font-size:12px;cursor:pointer;min-height:32px;';
+    btn.style.cssText = 'background:#C24A2E;color:#fff;border:0;border-radius:6px;padding:6px 12px;font-weight:800;font-size:12px;cursor:pointer;min-height:32px;';
     t.appendChild(msg); t.appendChild(btn); container.appendChild(t);
     requestAnimationFrame(() => { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; });
     const close = () => { t.style.opacity = '0'; t.style.transform = 'translateY(10px)'; setTimeout(() => t.remove(), 300); };
@@ -2171,7 +2171,7 @@ async function openTimetable(compId) {
                 <button type="button" id="tt-day-current" onclick="window._ttToggleDayList()" aria-haspopup="listbox" aria-expanded="false" style="height:40px;padding:0 10px;border:0;background:transparent;color:#1f1d1a;font-size:16px;font-weight:700;letter-spacing:-.01em;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">${_ttDayLabel(activeDay, data.days[activeDay] || {}, data)}<span style="font-size:12px;font-weight:500;color:#888;">${cntOf(activeDay)}경기</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
                 ${btn(idx >= dayKeys.length - 1, 1)}
                 <div id="tt-day-list" role="listbox" hidden style="position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:5;background:#fff;border:1px solid #e5e5e5;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.14);min-width:230px;padding:4px;">
-                    ${dayKeys.map(d => `<button type="button" role="option" aria-selected="${d === activeDay}" onclick="window._ttShowDay(${d})" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:0;border-radius:8px;background:${d === activeDay ? '#f5f0e0' : 'transparent'};color:#333;font-size:13px;font-weight:${d === activeDay ? 700 : 500};cursor:pointer;text-align:left;">${_ttDayLabel(d, data.days[d] || {}, data)}<span style="font-size:11px;color:#888;">${cntOf(d)}경기</span></button>`).join('')}
+                    ${dayKeys.map(d => `<button type="button" role="option" aria-selected="${d === activeDay}" onclick="window._ttShowDay(${d})" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:0;border-radius:8px;background:${d === activeDay ? '#F6E4DF' : 'transparent'};color:#333;font-size:13px;font-weight:${d === activeDay ? 700 : 500};cursor:pointer;text-align:left;">${_ttDayLabel(d, data.days[d] || {}, data)}<span style="font-size:11px;color:#888;">${cntOf(d)}경기</span></button>`).join('')}
                 </div>`;
         }
         window._ttToggleDayList = function () {
@@ -2232,9 +2232,9 @@ async function openTimetable(compId) {
                 const cb = r.match(/(10종|7종|5종)/);
                 if (cb) return { label: cb[1], fg: '#4a148c', bg: '#f3e5f5' };
                 if (/종경기|기록경기/.test(r)) return { label: '기록경기', fg: '#4a148c', bg: '#f3e5f5' };
-                if (/준결승|^준/.test(r)) return { label: '준결승', fg: '#e65100', bg: '#fff3e0' };      // '준결승'이 /결승/ 에도 걸리므로 먼저
-                if (/결승/.test(r)) { const j = r.match(/(\d+)\s*조/); return { label: j ? `결승 ${j[1]}조` : '결승', fg: '#b71c1c', bg: '#ffebee' }; }
-                if (/예선/.test(r) || /^\d+-\d+\+\d+$/.test(r)) return { label: '예선', fg: '#1565c0', bg: '#e3f2fd' };
+                if (/준결승|^준/.test(r)) return { label: '준결승', fg: '#6B3FA0', bg: '#EEE6F7' };      // '준결승'이 /결승/ 에도 걸리므로 먼저
+                if (/결승/.test(r)) { const j = r.match(/(\d+)\s*조/); return { label: j ? `결승 ${j[1]}조` : '결승', fg: '#0E0E10', bg: '#E9E8E4' }; }
+                if (/예선/.test(r) || /^\d+-\d+\+\d+$/.test(r)) return { label: '예선', fg: '#1A5FB4', bg: '#E3ECF8' };
                 return { label: r, fg: '#555', bg: '#f0f0f0' };
             };
             // 부(division)→색: admin.html divBadgeColor 와 동일 팔레트(앱 전체 색 일관)
@@ -2261,7 +2261,7 @@ async function openTimetable(compId) {
             let html = '';
             const sections = [
                 { key: 'track', label: '트랙 경기', badgeCls: 'ico ico-track', badgeText: 'TRACK', color: '#6b6b6b', bg: '#f0f0f0', border: '#c0c0c0' },
-                { key: 'field', label: '필드 경기', badgeCls: 'ico ico-field', badgeText: 'FIELD', color: '#b79f58', bg: '#f8f4ea', border: '#e8dfc0' }
+                { key: 'field', label: '필드 경기', badgeCls: 'ico ico-field', badgeText: 'FIELD', color: '#C24A2E', bg: '#F6E4DF', border: '#EFC9BF' }
             ];
 
             for (const sec of sections) {
@@ -2279,26 +2279,26 @@ async function openTimetable(compId) {
                 items.forEach((item, idx) => {
                     const borderBottom = idx < items.length - 1 ? 'border-bottom:1px solid #f5f5f5;' : '';
                     const isHighlighted = closestEventId === ('tt-item-' + item.id);
-                    const nowBadge = isHighlighted ? '<span style="background:#b79f58;color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;">NOW</span>' : '';
+                    const nowBadge = isHighlighted ? '<span style="background:#C24A2E;color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;">NOW</span>' : '';
                     // Call Room badge: show only within callroom_time -10min ~ +5min (KST)
                     const crBadge = isCallRoomWindow(item.callroom_time, item.scheduled_date) ? '<span class="ico-callroom" style="margin-left:4px;">Call Room</span>' : '';
                     const hasLink = !!item.event_id;
                     // 앞쪽 3뱃지: [부별][성별][라운드/복합] — 부는 부별 색, 성별/라운드도 색 구분
                     const _cat = _ttSplitCategory(item.category);
                     const _dcol = _ttDivColor(_cat.div);
-                    const _gst = _cat.gender === '남' ? { fg: '#1565c0', bg: '#e3f2fd' } : _cat.gender === '여' ? { fg: '#c2185b', bg: '#fde7ef' } : { fg: '#6a1b9a', bg: '#f3e5f5' };
+                    const _gst = _cat.gender === '남' ? { fg: '#1a2a5e', bg: '#e8eaf0' } : _cat.gender === '여' ? { fg: '#8E2A6B', bg: '#F1E3EC' } : { fg: '#1F7A6D', bg: '#E0F0ED' };
                     const _rd = _ttRoundFront(item.round);
                     const _frontBadges = _ttBadge(_cat.div, _dcol.fg, _dcol.bg) + _ttBadge(_cat.gender, _gst.fg, _gst.bg) + _ttBadge(_rd.label, _rd.fg, _rd.bg);
                     // 성별 → 행 배경 은은한 틴트(남=남색 / 여=버건디 / 혼=보라) + 좌측 보더. NOW 하이라이트가 최우선.
-                    const _grow = _cat.gender === '남' ? { bg:'#f3f6fc', bar:'#1a2a5e' } : _cat.gender === '여' ? { bg:'#fbf4f6', bar:'#8a1f3d' } : { bg:'#f8f5fb', bar:'#6a1b9a' };
-                    const rowBg = isHighlighted ? '#f5f0e0' : _grow.bg;
-                    const rowBar = isHighlighted ? '#b79f58' : _grow.bar;
+                    const _grow = _cat.gender === '남' ? { bg:'#f3f6fc', bar:'#1a2a5e' } : _cat.gender === '여' ? { bg:'#F8F1F6', bar:'#8E2A6B' } : { bg:'#EEF6F4', bar:'#1F7A6D' };
+                    const rowBg = isHighlighted ? '#F6E4DF' : _grow.bg;
+                    const rowBar = isHighlighted ? '#C24A2E' : _grow.bar;
                     const hoverBg = hasLink ? '#f1ead7' : rowBg;
                     // 뒤쪽 가변 뱃지: 상태(명단/LIVE/결과보기) + 괄호(A,B) + 결과링크
                     const _roundFull = (item.round || '').trim();
                     const _bracketMatch = _roundFull.match(/\(([^)]+)\)/);
                     const _resultTag = item.result_url ? `<span style="color:#fff;font-size:11px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window.open('${(item.result_url||'').replace(/'/g,"\\'")}','_blank')">결과</span>` : '';
-                    const _bracketTag = _bracketMatch ? `<span style="color:#8a7640;font-size:10px;font-weight:600;background:#f8f4ea;padding:1px 6px;border-radius:8px;white-space:nowrap;">(${_bracketMatch[1]})</span>` : '';
+                    const _bracketTag = _bracketMatch ? `<span style="color:#B8432A;font-size:10px;font-weight:600;background:#F6E4DF;padding:1px 6px;border-radius:8px;white-space:nowrap;">(${_bracketMatch[1]})</span>` : '';
                     // Status badge based on round_status (so operators can see at a glance whether records are entered)
                     let _statusTag = '';
                     if (item.event_id && item.round_status) {
@@ -2307,7 +2307,7 @@ async function openTimetable(compId) {
                             _statusTag = `<span style="color:#fff;font-size:11px;font-weight:700;background:#2e7d32;padding:2px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="결과 보기">결과보기</span>`;
                         } else if (item.round_status === 'in_progress') {
                             // 진행중 — 골드 LIVE
-                            _statusTag = `<span style="color:#b79f58;font-size:11px;font-weight:700;background:#f8f4ea;border:1px solid #e8dfc0;padding:1px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="실시간 기록">LIVE</span>`;
+                            _statusTag = `<span style="color:#B8432A;font-size:11px;font-weight:700;background:#F6E4DF;border:1px solid #EFC9BF;padding:1px 6px;border-radius:8px;white-space:nowrap;cursor:pointer;" onclick="event.stopPropagation();window._ttOpenResult(${item.event_id})" title="실시간 기록">LIVE</span>`;
                         } else if (item.round_status === 'heats_generated' || (item.round_status === 'created' && item.lane_count > 0)) {
                             // 스타트 리스트 — 조·레인 확정 (초록 채움; 엔트리 점선과 구분). 국제대회는 상태가 created 여도 레인이 들어오면 스타트 리스트
                             _statusTag = `<span style="color:#fff;font-size:11px;font-weight:700;background:#1b7f4d;border:1px solid #1b7f4d;padding:1px 7px;border-radius:8px;white-space:nowrap;">스타트 리스트</span>`;
@@ -2426,8 +2426,8 @@ function _ttCategoryBadge(cat) {
     const c = cat.trim();
     let bg = '#e0e0e0', color = '#333';
     if (c.includes('남') && !c.includes('여')) { bg = '#f0f0f0'; color = '#6b6b6b'; }
-    else if (c.includes('여') && !c.includes('남')) { bg = '#f0e0e4'; color = '#8b1a2a'; }
-    else if (c.includes('/') || c.includes('혼')) { bg = '#f8f4ea'; color = '#8a7640'; }
+    else if (c.includes('여') && !c.includes('남')) { bg = '#F1E3EC'; color = '#8E2A6B'; }
+    else if (c.includes('/') || c.includes('혼')) { bg = '#E0F0ED'; color = '#1F7A6D'; }
     return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${bg};color:${color};white-space:nowrap;">${c}</span>`;
 }
 
@@ -2435,9 +2435,10 @@ function _ttRoundBadge(round) {
     if (!round) return '';
     const r = round.trim();
     let bg = '#f5f5f5', color = '#616161';
-    if (r.includes('결승') || r.toLowerCase().includes('final')) { bg = '#f5f0e0'; color = '#8a7640'; }
-    else if (r.includes('예선') || r.includes('준결')) { bg = '#f8f4ea'; color = '#b79f58'; }
-    else if (r.match(/\d+종/)) { bg = '#f8f4ea'; color = '#6b5520'; }
+    if (r.includes('결승') || r.toLowerCase().includes('final')) { bg = '#E9E8E4'; color = '#0E0E10'; }
+    else if (r.includes('준결')) { bg = '#EEE6F7'; color = '#6B3FA0'; }
+    else if (r.includes('예선')) { bg = '#E3ECF8'; color = '#1A5FB4'; }
+    else if (r.match(/\d+종/)) { bg = '#F6E4DF'; color = '#B8432A'; }
     return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${bg};color:${color};white-space:nowrap;">${r}</span>`;
 }
 
@@ -2479,10 +2480,10 @@ async function openDocumentList() {
             const isExcel = d.type.includes('excel');
             const icon = '';
             const badgeStyle = isExcel
-                ? 'background:#f5f0e0;color:#8a7640;border:1px solid #d4c8a0;'
-                : 'background:#f8f4ea;color:#b79f58;border:1px solid #e8dfc0;';
+                ? 'background:#F6E4DF;color:#B8432A;border:1px solid #EFC9BF;'
+                : 'background:#F6E4DF;color:#B8432A;border:1px solid #EFC9BF;';
             const badgeLabel = isExcel ? 'EXCEL' : 'PDF';
-            return `<a href="${d.url}" target="_blank" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;background:#fafafa;text-decoration:none;color:#333;font-size:13px;font-weight:600;transition:all 0.15s;border:1px solid #e8e8e8;" onmouseover="this.style.background='#f5f0e0';this.style.borderColor='#c4b070'" onmouseout="this.style.background='#fafafa';this.style.borderColor='#e8e8e8'">
+            return `<a href="${d.url}" target="_blank" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;background:#fafafa;text-decoration:none;color:#333;font-size:13px;font-weight:600;transition:all 0.15s;border:1px solid #e8e8e8;" onmouseover="this.style.background='#F6E4DF';this.style.borderColor='#c4b070'" onmouseout="this.style.background='#fafafa';this.style.borderColor='#e8e8e8'">
                 <span style="font-size:20px;line-height:1;">${icon}</span>
                 <span style="flex:1;">${d.label.replace(/^\s*/, '')}</span>
                 <span style="display:inline-block;padding:3px 10px;border-radius:5px;font-size:10px;font-weight:800;letter-spacing:0.5px;${badgeStyle}">${badgeLabel}</span>
@@ -2519,8 +2520,8 @@ async function openDocumentList() {
                         <span style="flex:1;font-weight:600;color:#333;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ev.name}${roundStr ? ` <span style="font-weight:400;color:#999;font-size:11px;">${roundStr}</span>` : ''}</span>
                         <div style="display:flex;gap:4px;flex-shrink:0;">
                             ${sl ? `<a href="${sl.url}" target="_blank" style="display:inline-flex;align-items:center;gap:3px;padding:5px 12px;border-radius:6px;background:#f0f0f0;color:#6b6b6b;text-decoration:none;font-size:11px;font-weight:700;border:1px solid #c0c0c0;transition:all 0.15s;" onmouseover="this.style.background='#d8d8d8'" onmouseout="this.style.background='#f0f0f0'">출전</a>` : '<span style="display:inline-block;width:60px;"></span>'}
-                            ${rs ? `<a href="${rs.url}" target="_blank" style="display:inline-flex;align-items:center;gap:3px;padding:5px 12px;border-radius:6px;background:#f8f4ea;color:#b79f58;text-decoration:none;font-size:11px;font-weight:700;border:1px solid #e8dfc0;transition:all 0.15s;" onmouseover="this.style.background='#f0ead6'" onmouseout="this.style.background='#f8f4ea'">결과</a>` : '<span style="display:inline-block;width:60px;"></span>'}
-                            ${evId ? `<button onclick="docDownloadResultPNG(${evId}, this)" style="display:inline-flex;align-items:center;gap:3px;padding:5px 12px;border-radius:6px;background:#f5f0e0;color:#8a7640;font-size:11px;font-weight:700;border:1px solid #d4c8a0;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background='#e8dfc0'" onmouseout="this.style.background='#f5f0e0'">PNG</button>` : ''}
+                            ${rs ? `<a href="${rs.url}" target="_blank" style="display:inline-flex;align-items:center;gap:3px;padding:5px 12px;border-radius:6px;background:#F6E4DF;color:#B8432A;text-decoration:none;font-size:11px;font-weight:700;border:1px solid #EFC9BF;transition:all 0.15s;" onmouseover="this.style.background='#EFC9BF'" onmouseout="this.style.background='#F6E4DF'">결과</a>` : '<span style="display:inline-block;width:60px;"></span>'}
+                            ${evId ? `<button onclick="docDownloadResultPNG(${evId}, this)" style="display:inline-flex;align-items:center;gap:3px;padding:5px 12px;border-radius:6px;background:#F6E4DF;color:#B8432A;font-size:11px;font-weight:700;border:1px solid #EFC9BF;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background='#EFC9BF'" onmouseout="this.style.background='#F6E4DF'">PNG</button>` : ''}
                         </div>
                     </div>`;
                 }).join('');
@@ -2530,9 +2531,9 @@ async function openDocumentList() {
                 </div>`;
             }
 
-            const gColor = g === 'M' ? '#1a2a5e' : g === 'F' ? '#8b1a2a' : '#b79f58';
-            const gBg = g === 'M' ? '#e8eaf0' : g === 'F' ? '#f0e0e4' : '#f8f4ea';
-            const gBorder = g === 'M' ? '#b0b4c8' : g === 'F' ? '#c89898' : '#d4c8a0';
+            const gColor = g === 'M' ? '#1a2a5e' : g === 'F' ? '#8E2A6B' : '#1F7A6D';
+            const gBg = g === 'M' ? '#e8eaf0' : g === 'F' ? '#F1E3EC' : '#F6E4DF';
+            const gBorder = g === 'M' ? '#b0b4c8' : g === 'F' ? '#c89898' : '#EFC9BF';
             eventSectionsHtml += `
             <div class="doc-gender-section" style="margin-top:16px;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
@@ -2550,10 +2551,10 @@ async function openDocumentList() {
         const modal = document.createElement('div');
         modal.style.cssText = 'background:#fff;border-radius:16px;max-width:720px;width:94%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,0.3);overflow:hidden;';
         modal.innerHTML = `
-            <div style="background:linear-gradient(135deg,#f8f4ea,#f5f0e0);padding:18px 22px;border-bottom:1px solid #e8dfc0;flex-shrink:0;">
+            <div style="background:linear-gradient(135deg,#F6E4DF,#F6E4DF);padding:18px 22px;border-bottom:1px solid #EFC9BF;flex-shrink:0;">
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <div>
-                        <h3 style="font-size:18px;font-weight:800;margin:0;color:#6b5520;">기록지 / 문서</h3>
+                        <h3 style="font-size:18px;font-weight:800;margin:0;color:#B8432A;">기록지 / 문서</h3>
                         <p style="font-size:11px;color:#c4b070;margin:3px 0 0;font-weight:500;">총 ${totalDocs}개 문서</p>
                     </div>
                     ${prCloseBtn("this.closest('#doc-list-overlay').remove()")}
@@ -2562,14 +2563,14 @@ async function openDocumentList() {
             <div style="padding:10px 22px;border-bottom:1px solid #f0f0f0;flex-shrink:0;background:#fafafa;">
                 <div style="position:relative;">
                     <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;opacity:0.4;color:#999;">검색</span>
-                    <input type="text" id="${filterId}" placeholder="종목명으로 검색..." style="width:100%;padding:9px 12px 9px 32px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;outline:none;transition:border 0.2s;box-sizing:border-box;background:#fff;" onfocus="this.style.borderColor='#b79f58';this.style.boxShadow='0 0 0 3px rgba(183,159,88,0.1)'" onblur="this.style.borderColor='#e0e0e0';this.style.boxShadow='none'">
+                    <input type="text" id="${filterId}" placeholder="종목명으로 검색..." style="width:100%;padding:9px 12px 9px 32px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;outline:none;transition:border 0.2s;box-sizing:border-box;background:#fff;" onfocus="this.style.borderColor='#C24A2E';this.style.boxShadow='0 0 0 3px rgba(194,74,46,0.1)'" onblur="this.style.borderColor='#e0e0e0';this.style.boxShadow='none'">
                 </div>
             </div>
             <div style="overflow-y:auto;padding:16px 22px 22px;flex:1;">
                 <div style="margin-bottom:16px;">
-                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #f5f0e0;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #F6E4DF;">
                         <span class="ico ico-track" style="font-size:11px;">DATA</span>
-                        <span style="font-size:14px;font-weight:800;color:#8a7640;">종합 문서</span>
+                        <span style="font-size:14px;font-weight:800;color:#B8432A;">종합 문서</span>
                     </div>
                     <div style="display:flex;flex-direction:column;gap:8px;">
                         ${generalHtml}
@@ -2884,13 +2885,13 @@ function _showConflictModal(conflicts) {
         css.textContent = `
             .pr-app-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9500; display: flex; align-items: center; gap: 10px;
                 padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-                background: #fff; border-top: 1px solid #e8dfc0; box-shadow: 0 -6px 20px rgba(38,35,36,.10);
+                background: #fff; border-top: 1px solid #EFC9BF; box-shadow: 0 -6px 20px rgba(38,35,36,.10);
                 font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
             .pr-app-banner img { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; }
             .pr-app-banner .t { flex: 1 1 auto; min-width: 0; line-height: 1.3; }
-            .pr-app-banner .t b { display: block; font-size: 13px; color: #262324; letter-spacing: -0.01em; }
+            .pr-app-banner .t b { display: block; font-size: 13px; color: #0E0E10; letter-spacing: -0.01em; }
             .pr-app-banner .t span { display: block; font-size: 11px; color: #7a746e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .pr-app-banner .get { flex: 0 0 auto; background: #b79f58; color: #fff; font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 999px; text-decoration: none; letter-spacing: .02em; }
+            .pr-app-banner .get { flex: 0 0 auto; background: #C24A2E; color: #fff; font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 999px; text-decoration: none; letter-spacing: .02em; }
             .pr-app-banner .x { flex: 0 0 auto; width: 30px; height: 30px; border: none; background: none; color: #9a938d; font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }
             body.pr-app-banner-on { padding-bottom: 64px; }
             body.pr-app-banner-on .events-scroll { padding-bottom: 72px; }
@@ -3083,7 +3084,7 @@ function _uiDialog(kind, message, opts) {
         const box = document.createElement('div');
         box.style.cssText = 'background:#fff;border-radius:12px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3);overflow:hidden;';
         const body = document.createElement('div');
-        body.style.cssText = `padding:22px 22px 14px;font-size:15px;line-height:1.6;color:#222;white-space:pre-wrap;word-break:keep-all;border-top:4px solid ${danger ? '#c0392b' : '#b79f58'};`;
+        body.style.cssText = `padding:22px 22px 14px;font-size:15px;line-height:1.6;color:#222;white-space:pre-wrap;word-break:keep-all;border-top:4px solid ${danger ? '#B4232C' : '#C24A2E'};`;
         body.textContent = text;
         box.appendChild(body);
         let input = null;

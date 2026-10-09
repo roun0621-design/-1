@@ -6,7 +6,7 @@
 :root {
     --adm-text: #1f2328; --adm-muted: #6b7280; --adm-line: #e5e7eb; --adm-line-strong: #d1d5db;
     --adm-surface: #ffffff; --adm-surface-2: #f8f9fa; --adm-bg: #f5f4f0;
-    --adm-primary: #b79f58; --adm-primary-hover: #a68d47; --adm-primary-ink: #1a1f2b;
+    --adm-primary: #C24A2E; --adm-primary-hover: #A63E26; --adm-primary-ink: #0E0E10;
     --adm-ok: #15803d; --adm-ok-bg: #ecfdf5; --adm-warn: #b45309; --adm-warn-bg: #fffbeb; --adm-err: #b91c1c; --adm-err-bg: #fef2f2; --adm-info: #1d4ed8; --adm-info-bg: #eff6ff;
     --adm-radius: 8px; --adm-radius-sm: 6px;
 }
@@ -17,8 +17,8 @@
 .sb-group { margin-bottom: 4px; }
 .sb-group-title { font-size: 11px; letter-spacing: .06em; padding: 8px 10px 4px; }
 .sb-item { padding: 6px 10px; font-size: 13px; border-radius: var(--adm-radius-sm); }
-.sb-item.active { background: #f6f1e4; color: #6b5520; }
-.sb-item.active .sb-icon { color: #8a7640; }
+.sb-item.active { background: #F6E4DF; color: #B8432A; }
+.sb-item.active .sb-icon { color: #B8432A; }
 
 /* ── 카드: 흰 배경 · 1px 보더 · 8px · 20px 패딩. 좌측 컬러 보더·배경색 폐지 ── */
 .admin-main .admin-card {
@@ -63,7 +63,7 @@
     min-height: 32px; padding: 5px 10px; border: 1px solid var(--adm-line-strong); border-radius: var(--adm-radius-sm); font-size: 13px; background: var(--adm-surface); color: var(--adm-text);
 }
 .admin-main .admin-card textarea { min-height: 72px; line-height: 1.5; }
-.admin-main .admin-card input:focus, .admin-main .admin-card select:focus, .admin-main .admin-card textarea:focus { outline: 2px solid rgba(183, 159, 88, .35); outline-offset: 0; border-color: var(--adm-primary); }
+.admin-main .admin-card input:focus, .admin-main .admin-card select:focus, .admin-main .admin-card textarea:focus { outline: 2px solid rgba(194,74,46, .35); outline-offset: 0; border-color: var(--adm-primary); }
 .admin-main .admin-card label { font-size: 13px; }
 
 /* ── 표 ── */
@@ -90,7 +90,7 @@
 /* ── 헤더 바(연도·대회 선택·종료 배지) ── */
 .admin-main .comp-selector select, #admin-comp-select { min-height: 34px; border: 1px solid var(--adm-line-strong); border-radius: var(--adm-radius-sm); font-size: 13px; }
 .card-flash { animation: cardFlash 1.2s ease-out; }
-@keyframes cardFlash { 0% { box-shadow: 0 0 0 0 rgba(183, 159, 88, 0); } 30% { box-shadow: 0 0 0 4px rgba(183, 159, 88, .45); } 100% { box-shadow: 0 0 0 0 rgba(183, 159, 88, 0); } }
+@keyframes cardFlash { 0% { box-shadow: 0 0 0 0 rgba(194,74,46, 0); } 30% { box-shadow: 0 0 0 4px rgba(194,74,46, .45); } 100% { box-shadow: 0 0 0 0 rgba(194,74,46, 0); } }
 
 /* 이모지·기호 흔적(⚠ ⭐ ※ ①②) 대신 텍스트만 — 이모지 폰트 폴백이 튀지 않게 */
 .admin-main .ui-emoji { vertical-align: -2px; }
@@ -111,14 +111,14 @@
 .admin-main .stat-card .stat-label, .admin-main .stat-card small { font-size: 12px; }
 .admin-main #evt-count { font-size: 12px; }
 .admin-main .fc-drop, .admin-main #tt-drop { border: 1px dashed var(--adm-line-strong); background: var(--adm-surface-2); }
-.admin-main .fc-drop:hover, .admin-main .fc-drop.over, .admin-main #tt-drop:hover, .admin-main #tt-drop.over { background: #f6f1e4; border-color: var(--adm-primary); }
+.admin-main .fc-drop:hover, .admin-main .fc-drop.over, .admin-main #tt-drop:hover, .admin-main #tt-drop.over { background: #F6E4DF; border-color: var(--adm-primary); }
 .admin-main #ath-tree, .admin-main .matrix-scroll-area { font-size: 12px; }
 
 /* ── 3단계 컴포넌트: 스텝 바 · 세그먼트 · 드롭존 · 형식 안내 · 액션 줄 · 미리보기 모달 ── */
 .admin-main .adm-steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 16px; }
 .admin-main .adm-steps button { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px 0 6px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); font-size: 13px; font-weight: 600; color: var(--adm-muted); cursor: pointer; }
 .admin-main .adm-steps button b { width: 24px; height: 24px; border-radius: 50%; background: var(--adm-line); color: #374151; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
-.admin-main .adm-steps button.active { border-color: var(--adm-primary); color: var(--adm-primary-ink); background: #fbf8f0; }
+.admin-main .adm-steps button.active { border-color: var(--adm-primary); color: var(--adm-primary-ink); background: #FBF1EE; }
 .admin-main .adm-steps button.active b { background: var(--adm-primary); color: #fff; }
 .admin-main .adm-steps-link { margin-left: auto; font-size: 13px; color: var(--adm-muted); text-decoration: underline; }
 .admin-main .adm-step-nav { display: flex; justify-content: space-between; align-items: center; margin: -4px 0 16px; }
@@ -134,7 +134,7 @@
 .admin-main details.adm-help > div { padding: 0 12px 10px; }
 .admin-main details.adm-help code { background: #fff; border: 1px solid var(--adm-line); border-radius: 3px; padding: 0 4px; font-size: 12px; }
 .admin-main .adm-drop { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border: 1px dashed var(--adm-line-strong); border-radius: var(--adm-radius); background: var(--adm-surface-2); cursor: pointer; margin: 0 0 12px; color: var(--adm-text); transition: background .12s, border-color .12s; text-align: left; }
-.admin-main .adm-drop:hover, .admin-main .adm-drop.over { background: #fbf8f0; border-color: var(--adm-primary); }
+.admin-main .adm-drop:hover, .admin-main .adm-drop.over { background: #FBF1EE; border-color: var(--adm-primary); }
 .admin-main .adm-drop .adm-drop-ic { color: var(--adm-muted); display: inline-flex; flex-shrink: 0; }
 .admin-main .adm-drop .adm-drop-txt { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .admin-main .adm-drop .adm-drop-txt small { color: var(--adm-muted); font-size: 12px; }
@@ -179,7 +179,7 @@
 #tab-athletes #ath-search { min-height: 36px; font-size: 14px; }
 .admin-main .adm-ath-table td.num, .admin-main .num { font-variant-numeric: tabular-nums; }
 .admin-main .adm-row { cursor: pointer; }
-.admin-main .adm-row.selected-row td { background: #fbf8f0 !important; }
+.admin-main .adm-row.selected-row td { background: #FBF1EE !important; }
 #tab-events > div { height: auto !important; min-height: 0 !important; display: block !important; }
 #tab-events .admin-evt-matrix-panel { width: auto !important; min-width: 0 !important; border-right: none !important; }
 #tab-events .matrix-scroll-area { max-height: none !important; overflow: visible !important; }
@@ -240,7 +240,7 @@
 #evt-matrix .evt-div-badge[title="division 미지정"] { display: none; }
 #evt-matrix .adm-round-btn.adm-status-none { background: transparent; border-color: transparent; color: var(--adm-line-strong); min-width: 0; }
 #evt-matrix .adm-round-btn { font-size: 12px; padding: 4px 8px; }
-#evt-matrix .adm-round-btn.adm-status-done { background: #fbf8f0; border-color: #e6d9b8; color: #6b5520; }
+#evt-matrix .adm-round-btn.adm-status-done { background: #FBF1EE; border-color: #e6d9b8; color: #B8432A; }
 #evt-matrix .adm-round-btn.adm-status-done:hover, #evt-matrix .adm-round-btn.adm-status-active:hover, #evt-matrix .adm-round-btn.adm-status-ready:hover, #evt-matrix .adm-round-btn.adm-status-created:hover { background: #f3ecd8; border-color: var(--adm-primary); }
 #evt-matrix .adm-round-btn.adm-btn-selected { box-shadow: 0 0 0 2px var(--adm-primary); }
 #evt-matrix .matrix-section-title { font-size: 12px; letter-spacing: .04em; color: var(--adm-muted); }
@@ -259,9 +259,9 @@
 .admin-main .adm-ov-detail::before { content: " — "; }
 .admin-main .t-sm, .admin-main .t-xs { font-size: 12px; }
 .admin-main .adm-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; margin-right: 4px; vertical-align: middle; }
-.admin-main .adm-dot-done { background: #9a8548; }
+.admin-main .adm-dot-done { background: #B8432A; }
 .admin-main .adm-dot-active { background: #f59e0b; }
-#evt-matrix .adm-round-btn.adm-status-done, #evt-matrix .adm-round-btn.adm-status-completed { background: #fbf8f0 !important; border-color: #e6d9b8 !important; color: #6b5520 !important; }
+#evt-matrix .adm-round-btn.adm-status-done, #evt-matrix .adm-round-btn.adm-status-completed { background: #FBF1EE !important; border-color: #e6d9b8 !important; color: #B8432A !important; }
 #em-heat-tabs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 #em-heat-tabs .heat-tab-btn { min-height: 28px; }
 .admin-main .adm-drawer .admin-form-row .admin-form-group > div { display: flex; gap: 6px; }

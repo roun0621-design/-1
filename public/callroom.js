@@ -114,9 +114,9 @@ function renderMatrix() {
             const schedEvt = fin ? _crScheduleMap[fin.id] : (semi ? _crScheduleMap[semi.id] : (prelim ? _crScheduleMap[prelim.id] : null));
             let timeBadge = '';
             if (schedEvt && schedEvt.time) {
-                const tColor = schedEvt.is_today ? '#b79f58' : '#999';
+                const tColor = schedEvt.is_today ? '#C24A2E' : '#999';
                 const crBadge = isCallRoomWindow(schedEvt.callroom_time, schedEvt.scheduled_date) ? ' <span class="ico-callroom">Call Room</span>' : '';
-                timeBadge = `<span style="font-size:11px;color:${tColor};padding:1px 4px;border-radius:4px;background:${schedEvt.is_today ? '#f8f4ea' : '#f5f5f5'};margin-left:3px;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
+                timeBadge = `<span style="font-size:11px;color:${tColor};padding:1px 4px;border-radius:4px;background:${schedEvt.is_today ? '#F6E4DF' : '#f5f5f5'};margin-left:3px;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
             }
             html += `<tr>
                 <td class="rec-matrix-event">${g.name}${timeBadge}</td>
@@ -139,12 +139,12 @@ function renderMatrix() {
                     const parentKey = 'cr-subs-' + (parentIds[0] || g.name);
                     const doneCount = subOrder.filter(sn => subGroups[sn].some(r => r.round_status === 'completed' || r.round_status === 'in_progress')).length;
                     html += `<tr class="combined-sub-toggle-row">
-                        <td colspan="4" style="padding:4px 8px;background:linear-gradient(135deg,#f8f4ea,#faf6ec);border-left:3px solid #8a7640;">
+                        <td colspan="4" style="padding:4px 8px;background:linear-gradient(135deg,#F6E4DF,#F6E4DF);border-left:3px solid #B8432A;">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <button onclick="toggleCombinedSubs('${parentKey}')" class="btn btn-sm btn-ghost" style="font-size:11px;padding:2px 10px;" id="toggle-btn-${parentKey}">
                                     ▼ 세부종목 ${subOrder.length}개
                                 </button>
-                                <span style="font-size:10px;color:#8a7640;font-weight:600;">${doneCount}/${subOrder.length} 진행</span>
+                                <span style="font-size:10px;color:#B8432A;font-weight:600;">${doneCount}/${subOrder.length} 진행</span>
                             </div>
                         </td>
                     </tr>`;
@@ -158,7 +158,7 @@ function renderMatrix() {
                         const prefix = isLast ? '└' : '├';
                         const seStatus = (seFin || sePrelim || seSemi);
                         const statusDot = seStatus ? (
-                            seStatus.round_status === 'completed' ? '<span style="color:#9a8548;">●</span>' :
+                            seStatus.round_status === 'completed' ? '<span style="color:#B8432A;">●</span>' :
                             seStatus.round_status === 'in_progress' ? '<span style="color:#f59e0b;">●</span>' :
                             '<span style="color:#d1d5db;">○</span>'
                         ) : '<span style="color:#d1d5db;">○</span>';
@@ -288,8 +288,8 @@ async function selectCallroomEvent(eventId) {
                         ${subEvents.filter((s,i) => i < day1Max).map(s => `<span style="background:#f0f0f0;color:#6b6b6b;padding:2px 8px;border-radius:10px;font-size:11px;">${s.name.replace(/\[.*?\]\s*/, '')}</span>`).join('')}
                     </div>
                     <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
-                        <span style="font-size:11px;font-weight:700;color:#8b1a2a;margin-right:4px;">Day2:</span>
-                        ${subEvents.filter((s,i) => i >= day1Max).map(s => `<span style="background:#f0e0e4;color:#8b1a2a;padding:2px 8px;border-radius:10px;font-size:11px;">${s.name.replace(/\[.*?\]\s*/, '')}</span>`).join('')}
+                        <span style="font-size:11px;font-weight:700;color:#8E2A6B;margin-right:4px;">Day2:</span>
+                        ${subEvents.filter((s,i) => i >= day1Max).map(s => `<span style="background:#F1E3EC;color:#8E2A6B;padding:2px 8px;border-radius:10px;font-size:11px;">${s.name.replace(/\[.*?\]\s*/, '')}</span>`).join('')}
                     </div>
                 </div>`;
             }
@@ -303,7 +303,7 @@ async function selectCallroomEvent(eventId) {
         const jointData = await api('GET', `/api/joint-groups/by-event/${eventId}`);
         if (jointData && jointData.length > 0) {
             _crJointGroup = jointData[0]; // Use first group
-            const fedColors = ['#6b6b6b', '#dc2626', '#9a8548', '#ea580c', '#8a7640'];
+            const fedColors = ['#6b6b6b', '#dc2626', '#1F7A6D', '#ea580c', '#B8432A'];
             const memberBadges = _crJointGroup.members.map((m, i) => {
                 const color = fedColors[i % fedColors.length];
                 const isCurrent = m.event_id === eventId;
@@ -311,7 +311,7 @@ async function selectCallroomEvent(eventId) {
             }).join(' ');
             jointInfoHtml = `<div style="margin-bottom:12px;padding:10px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:var(--radius);border-left:4px solid #f59e0b;font-size:12px;">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                    <span style="font-size:11px;font-weight:700;color:#b79f58;">LINK</span>
+                    <span style="font-size:11px;font-weight:700;color:#B8432A;">LINK</span>
                     <strong>합동 종목</strong>
                     <span style="font-size:10px;color:#92400e;">스코어보드 키: ${_crJointGroup.joint_scoreboard_key || '-'}</span>
                 </div>
@@ -336,7 +336,7 @@ async function selectCallroomEvent(eventId) {
         <!-- Event-level memo (인쇄 시 제목 하단에 큰 글씨로 표시) -->
         <div style="margin:8px 0 12px;padding:10px 14px;background:linear-gradient(135deg,#f0f0f0,#d8d8d8);border-radius:8px;border-left:4px solid #6b6b6b;">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-                <span style="font-size:12px;font-weight:700;color:#8a7640;">MEMO</span>
+                <span style="font-size:12px;font-weight:700;color:#B8432A;">MEMO</span>
                 <label style="font-size:15px;font-weight:700;color:#6b6b6b;">소집 메모</label>
                 <span style="font-size:11px;color:#888;">(인쇄 시 종목 제목 하단에 큰 글씨로 출력됩니다)</span>
                 <span id="event-memo-status" style="font-size:11px;color:#999;margin-left:auto;"></span>
@@ -543,7 +543,7 @@ async function loadCallroomHeatData() {
         const fedColors = { };
         if (hasJoint) {
             const feds = [...new Set(allDisplayEntries.map(e => e._federation))];
-            const colors = ['#6b6b6b', '#dc2626', '#9a8548', '#ea580c', '#8a7640', '#0891b2'];
+            const colors = ['#6b6b6b', '#dc2626', '#1F7A6D', '#ea580c', '#B8432A', '#0891b2'];
             feds.forEach((f, i) => { fedColors[f] = colors[i % colors.length]; });
         }
 
@@ -571,7 +571,7 @@ async function loadCallroomHeatData() {
             <tbody>
                 ${allDisplayEntries.map(e => {
                     const groupLabel = hasSubGroup ? (e.sub_group || '—') : '';
-                    const groupTd = hasSubGroup ? `<td><span style="font-size:11px;font-weight:700;color:${groupLabel==='A'?'#6b6b6b':groupLabel==='B'?'#8b1a2a':'var(--text-muted)'}">${groupLabel}</span></td>` : '';
+                    const groupTd = hasSubGroup ? `<td><span style="font-size:11px;font-weight:700;color:${groupLabel==='A'?'#6b6b6b':groupLabel==='B'?'#8E2A6B':'var(--text-muted)'}">${groupLabel}</span></td>` : '';
                     let smallNum = e.lane_number || '';
                     const fedBadge = hasJoint ? `<td><span style="background:${fedColors[e._federation] || '#888'};color:#fff;padding:0 4px;border-radius:3px;font-size:11px;font-weight:600;">${e._federation}</span></td>` : '';
                     const jointRowStyle = e._isJoint ? 'background:#fffbeb;' : '';
@@ -1182,7 +1182,7 @@ onSSE('entry_status', async (data) => {
     const row = document.querySelector(`tr[data-entry-id="${data.event_entry_id}"]`);
     if (row) {
         row.style.transition = 'background-color 0.5s ease';
-        row.style.backgroundColor = newStatus === 'checked_in' ? 'rgba(183,159,88,0.25)' : newStatus === 'no_show' ? 'rgba(244,67,54,0.25)' : 'rgba(255,193,7,0.25)';
+        row.style.backgroundColor = newStatus === 'checked_in' ? 'rgba(194,74,46,0.25)' : newStatus === 'no_show' ? 'rgba(244,67,54,0.25)' : 'rgba(255,193,7,0.25)';
         setTimeout(() => { row.style.backgroundColor = ''; }, 1200);
     }
 });
@@ -1313,7 +1313,7 @@ async function printCallroom(mode) {
             // 그룹 헤더 (A/B 가 있을 때만)
             if (hasSubGroup) {
                 const groupLabel = grp ? `${grp} 그룹` : '미지정';
-                tablesHtml += `<div style="margin-top:8px;padding:4px 8px;background:#f0f0f0;border-left:4px solid ${grp==='A'?'#555':grp==='B'?'#8b1a2a':'#bbb'};font-size:13px;font-weight:700;">
+                tablesHtml += `<div style="margin-top:8px;padding:4px 8px;background:#f0f0f0;border-left:4px solid ${grp==='A'?'#555':grp==='B'?'#8E2A6B':'#bbb'};font-size:13px;font-weight:700;">
                     ${groupLabel}
                     <span style="font-size:11px;font-weight:400;color:#666;margin-left:8px;">
                         출석 ${gIn}/${gTotal} | 결석 ${gNS}
@@ -1335,7 +1335,7 @@ async function printCallroom(mode) {
                     ${grpEntries.map((e, i) => `<tr>
                         <td><strong>${e.lane_number || ''}</strong></td>
                         <td><strong>${bib(e.bib_number)}</strong></td>
-                        ${hasSubGroup ? `<td><strong style="color:${e.sub_group==='A'?'#555':e.sub_group==='B'?'#8b1a2a':'#999'};">${e.sub_group || '—'}</strong></td>` : ''}
+                        ${hasSubGroup ? `<td><strong style="color:${e.sub_group==='A'?'#555':e.sub_group==='B'?'#8E2A6B':'#999'};">${e.sub_group || '—'}</strong></td>` : ''}
                         <td style="text-align:left;">${e.name}</td>
                         <td style="text-align:left;font-size:11px;">${e.team || ''}</td>
                         <td>${e.status === 'checked_in' ? '출석' : e.status === 'no_show' ? '결석' : '—'}</td>
@@ -1573,7 +1573,7 @@ function openBatchCallroom() {
         const list = groups[div];
         const divId = 'bcg-' + gi;
         body += `<div style="margin-bottom:8px;border:1px solid #eee;border-radius:8px;overflow:hidden;">
-          <div style="padding:7px 12px;background:#f8f4ea;">
+          <div style="padding:7px 12px;background:#F6E4DF;">
             <label style="display:flex;align-items:center;gap:6px;font-weight:700;font-size:13px;cursor:pointer;">
               <input type="checkbox" class="bc-divall" onclick="bcToggleDiv(this,'${divId}')"> ${div}
               <span style="color:#999;font-weight:400;font-size:11px;">${list.length}종목</span>
@@ -1593,8 +1593,8 @@ function openBatchCallroom() {
     m.id = 'batch-callroom-modal';
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:14px;';
     m.innerHTML = `<div style="background:#fff;border-radius:12px;width:min(560px,97vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2);">
-      <div style="padding:13px 18px;background:#faf6ec;display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-weight:800;font-size:15px;color:#6b5520;">${PaceIcons.svg('speaker', { style: 'margin-right:6px' })}일괄 소집</div>
+      <div style="padding:13px 18px;background:#F6E4DF;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-weight:800;font-size:15px;color:#B8432A;">${PaceIcons.svg('speaker', { style: 'margin-right:6px' })}일괄 소집</div>
         <button onclick="closeBatchCallroom()" style="border:none;background:none;font-size:22px;line-height:1;cursor:pointer;color:#999;">&times;</button>
       </div>
       <div style="padding:9px 14px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -1606,7 +1606,7 @@ function openBatchCallroom() {
       <div style="padding:12px 16px;border-top:1px solid #eee;display:flex;align-items:center;gap:8px;">
         <span id="bc-count" style="font-size:13px;color:#666;font-weight:700;">0개 선택</span>
         <div style="flex:1;"></div>
-        <button class="btn btn-outline" style="border-color:#dc3545;color:#dc3545;" onclick="bcRun('revert')">되돌리기</button>
+        <button class="btn btn-outline" style="border-color:#B4232C;color:#B4232C;" onclick="bcRun('revert')">되돌리기</button>
         <button class="btn btn-primary" onclick="bcRun('complete')">소집완료</button>
       </div>
     </div>`;

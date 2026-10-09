@@ -93,8 +93,8 @@
             const e = r.e; const isSpot = !!(spot && e.team === spot);
             const dispName = isSpot && evt.category === 'relay' ? '대한민국' : (evt.category === 'relay' ? shortTeam(e.name) : e.name);
             const tag = tagOf(r.remark), q = qualOf(r.remark);
-            const placeHtml = r.place == null ? `<span style="color:#b3261e;font-size:${Math.round(fs * 0.7)}px;font-weight:800">${esc(r.status)}</span>`
-                : (isFinal && r.place <= 3 ? medalHtml(r.place, Math.round(rowH * 0.62)) : `<span style="font-weight:800;color:${r.place === 1 ? '#b79f58' : '#333'}">${r.place}</span>`);
+            const placeHtml = r.place == null ? `<span style="color:#B4232C;font-size:${Math.round(fs * 0.7)}px;font-weight:800">${esc(r.status)}</span>`
+                : (isFinal && r.place <= 3 ? medalHtml(r.place, Math.round(rowH * 0.62)) : `<span style="font-weight:800;color:${r.place === 1 ? '#C24A2E' : '#333'}">${r.place}</span>`);
             const flag = isSpot && spot === 'KOR' ? PaceIcons.svg('flagKR', { size: Math.round(fs * 0.95), style: 'vertical-align:-3px' }) : `<span style="font-weight:800;color:#666;font-size:${Math.round(fs * 0.8)}px;letter-spacing:.04em">${esc(e.team || '')}</span>`;
             const members = showMembers ? (() => { const all = relayMembers.filter(m => m.event_entry_id === e.event_entry_id).sort((a, b) => (a.leg_order || 99) - (b.leg_order || 99)); const legs = all.filter(m => m.leg_order >= 1 && m.leg_order <= 4); return (legs.length ? legs : all.slice(0, 4)).map(m => esc(m.name)).join(' · '); })() : '';
             const markText = r.mark == null ? '' : fmtMark(r.mark, calc.isTime, evt.category);
@@ -105,16 +105,16 @@
             return `<div style="display:flex;align-items:center;height:${rowH}px;border-bottom:1px solid #ece8de;${isSpot ? 'background:#fff3f3;margin:0 -16px;padding:0 16px;border-radius:10px;' : ''}">
                 <div style="flex:none;width:76px;text-align:center;font-family:'D2Coding',monospace;font-size:${fsMark}px;display:flex;align-items:center;justify-content:center">${placeHtml}</div>
                 <div style="flex:none;width:92px;display:flex;align-items:center">${flag}</div>
-                <div style="flex:1;min-width:0;font-weight:${isSpot ? 900 : 700};color:${isSpot ? '#8b1a2a' : '#1f1d1a'};line-height:1.2"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:${fitFs(fs, dispName, nameColW, isSpot ? 900 : 700)}px">${esc(dispName)}</div>${members ? (() => { const plain = members.replace(/&[a-z#0-9]+;/g, 'x'); let mfs = Math.round(fs * 0.55), lines = 2; while (mfs > 16 && textW(plain, mfs, 500) > nameColW * 1.9) mfs -= 1; if (textW(plain, mfs, 500) > nameColW * 1.9) lines = 3;   /* 16px 아래로는 안 줄이고 세 줄 */ const html = members.split(' · ').map(m => `<span style="white-space:nowrap">${m}</span>`).join(' · '); return `<div style="font-size:${mfs}px;color:#777;font-weight:500;margin-top:3px;white-space:normal;line-height:1.25;max-height:${Math.round(mfs * 1.25 * lines + 2)}px;overflow:hidden">${html}</div>`; })() : ''}</div>
-                <div style="flex:none;min-width:150px;text-align:right;display:flex;align-items:center;justify-content:flex-end;gap:12px"><span style="flex:none;min-width:130px;text-align:left">${tagHtml}</span><span style="font-family:'D2Coding',monospace;font-size:${fsMark}px;font-weight:700;color:${isSpot ? '#8b1a2a' : '#1f1d1a'};letter-spacing:-.01em">${markHtml}</span></div>
+                <div style="flex:1;min-width:0;font-weight:${isSpot ? 900 : 700};color:${isSpot ? '#B8432A' : '#1f1d1a'};line-height:1.2"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:${fitFs(fs, dispName, nameColW, isSpot ? 900 : 700)}px">${esc(dispName)}</div>${members ? (() => { const plain = members.replace(/&[a-z#0-9]+;/g, 'x'); let mfs = Math.round(fs * 0.55), lines = 2; while (mfs > 16 && textW(plain, mfs, 500) > nameColW * 1.9) mfs -= 1; if (textW(plain, mfs, 500) > nameColW * 1.9) lines = 3;   /* 16px 아래로는 안 줄이고 세 줄 */ const html = members.split(' · ').map(m => `<span style="white-space:nowrap">${m}</span>`).join(' · '); return `<div style="font-size:${mfs}px;color:#777;font-weight:500;margin-top:3px;white-space:normal;line-height:1.25;max-height:${Math.round(mfs * 1.25 * lines + 2)}px;overflow:hidden">${html}</div>`; })() : ''}</div>
+                <div style="flex:none;min-width:150px;text-align:right;display:flex;align-items:center;justify-content:flex-end;gap:12px"><span style="flex:none;min-width:130px;text-align:left">${tagHtml}</span><span style="font-family:'D2Coding',monospace;font-size:${fsMark}px;font-weight:700;color:${isSpot ? '#8E2A6B' : '#1f1d1a'};letter-spacing:-.01em">${markHtml}</span></div>
             </div>`;
         }).join('');
         return `<div class="ri-page" style="width:${W}px;height:${H}px;box-sizing:border-box;padding:${padY}px 56px;background:#fbfaf6;color:#1f1d1a;font-family:'Noto Sans KR','Apple SD Gothic Neo',sans-serif;display:flex;flex-direction:column;position:relative;overflow:hidden">
             <div style="height:${headH}px;flex:none">
-                <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:24px;font-weight:700;color:#8a7640;letter-spacing:.04em">${esc(comp.name || '')}</div><div style="font-family:'Audiowide',sans-serif;font-size:24px;letter-spacing:2px;color:#1a2a5e">PACE RISE <span style="color:#b79f58">: Node</span></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:24px;font-weight:700;color:#B8432A;letter-spacing:.04em">${esc(comp.name || '')}</div><div style="font-family:'Audiowide',sans-serif;font-size:24px;letter-spacing:2px;color:#1a2a5e">PACE RISE <span style="color:#B8432A">: Node</span></div></div>
                 <div style="font-size:64px;font-weight:900;letter-spacing:-.03em;line-height:1.15;margin-top:22px;word-break:keep-all">${gL} ${ctx.parentName ? esc(ctx.parentName) + ' · ' + esc(evt.name) : esc(evt.name) + ' ' + roundL}${heatL}</div>
                 <div style="font-size:26px;color:#6f6a62;margin-top:14px;font-weight:500">${[dateL, windL, `${N}${evt.category === 'relay' ? '팀' : '명'}`].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div>
-                <div style="height:4px;background:#b79f58;width:120px;margin-top:22px"></div>
+                <div style="height:4px;background:#C24A2E;width:120px;margin-top:22px"></div>
             </div>
             <div style="flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center">${rowsHtml}</div>
             <div style="height:${footH}px;flex:none;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;font-size:22px;color:#6f6a62">
@@ -231,9 +231,9 @@
             const note = modal.querySelector('div[style*="color:#888"]');
             const anyOld = _isWrapper() && !_hasNativeSave();
             if (note) note.innerHTML = anyOld
-                ? `<b style="color:#8b1a2a">저장은 '전체 화면 → 스크린샷'으로 해 주세요.</b> 공유창의 '이미지 저장'은 앱 업데이트 후 지원돼요(지금 누르면 앱이 닫혀요). 인스타·메시지로 보내기는 '공유'로.`
+                ? `<b style="color:#B4232C">저장은 '전체 화면 → 스크린샷'으로 해 주세요.</b> 공유창의 '이미지 저장'은 앱 업데이트 후 지원돼요(지금 누르면 앱이 닫혀요). 인스타·메시지로 보내기는 '공유'로.`
                 : `${pages.length > 1 ? `조마다 한 장 · ${pages.length}장` : '한 장'} · 저장 / 공유를 누르면 사진 앱에 저장하거나 바로 보낼 수 있어요`;
-        } catch (e) { list.innerHTML = `<div style="color:#b3261e;font-size:12px">이미지 만들기 실패: ${esc(e.message || e)}</div>`; }
+        } catch (e) { list.innerHTML = `<div style="color:#B4232C;font-size:12px">이미지 만들기 실패: ${esc(e.message || e)}</div>`; }
     }
     window.openResultImage = openResultImage;
     window.__buildResultImages = buildResultImages;
