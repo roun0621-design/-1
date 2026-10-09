@@ -267,3 +267,5 @@
 .admin-main .adm-drawer .admin-form-row .admin-form-group > div { display: flex; gap: 6px; }
 .admin-main .adm-drawer .admin-form-row .admin-form-group > div > input { flex: 1; min-width: 0; }
 .admin-main .adm-drawer .admin-form-row .admin-form-group > div > .btn { flex: 0 0 auto; }
+/* 자동 조편성 모달은 body 바로 아래라 .admin-main 규칙 밖 — 12px 하한 유지 */
+#as-modal .badge-pill, #as-modal .t-muted, #as-modal small { font-size: 12px; }

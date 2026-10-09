@@ -318,7 +318,7 @@
   ]
  },
  "닫기": {
-  "count": 38,
+  "count": 39,
   "files": [
    "admin.html",
    "callroom.js",
@@ -440,7 +440,7 @@
   ]
  },
  "소속": {
-  "count": 62,
+  "count": 63,
   "files": [
    "admin.html",
    "callroom.js",
@@ -1137,6 +1137,84 @@
    "admin.html"
   ]
  },
+ "단거리 8 · 그 외 전원": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "자동 조편성": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "엔트리 기록(SB/PB)으로 순위를 매겨 지그재그로 조에 나누고, 같은 소속은 가능한 한 다른 조로, 레인은 WA 규칙으로 배정합니다. 기록이 없는 선수는 맨 뒤 시드입니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "조 크기": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기준 기록": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "SB 우선, 없으면 PB": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "SB 만": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "PB 만": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "같은 소속 분리": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "미리보기": {
+  "count": 18,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "적용": {
+  "count": 3,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기존 조·레인은 지워지고 새로 만들어집니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "조편성 적용: {0}조": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "주소": {
   "count": 1,
   "files": [
@@ -1294,6 +1372,12 @@
    "admin.html"
   ]
  },
+ "엔트리 기록(SB/PB)으로 조·레인 자동 배정": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
  "+ 조 추가": {
   "count": 1,
   "files": [
@@ -1313,7 +1397,7 @@
   ]
  },
  "레인": {
-  "count": 16,
+  "count": 17,
   "files": [
    "admin.html",
    "callroom.js",
@@ -1688,7 +1772,7 @@
   ]
  },
  "기록": {
-  "count": 35,
+  "count": 36,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -3093,12 +3177,6 @@
    "admin.html"
   ]
  },
- "미리보기": {
-  "count": 17,
-  "files": [
-   "admin.html"
-  ]
- },
  "선택": {
   "count": 5,
   "files": [
@@ -3355,7 +3433,7 @@
   ]
  },
  "실패": {
-  "count": 13,
+  "count": 14,
   "files": [
    "admin.html",
    "display-manage.html"
@@ -4137,7 +4215,7 @@
   ]
  },
  "선수": {
-  "count": 8,
+  "count": 9,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -4484,7 +4562,7 @@
   ]
  },
  "조": {
-  "count": 29,
+  "count": 30,
   "files": [
    "admin.html",
    "callroom.js",
@@ -5212,6 +5290,27 @@
    "admin.html"
   ]
  },
+ "명": {
+  "count": 4,
+  "files": [
+   "admin.html",
+   "dashboard.js",
+   "event-record.html",
+   "result-image.js"
+  ]
+ },
+ "시드": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이미 기록이 입력된 종목입니다. 기존 조와 기록을 지우고 다시 나눌까요?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "조직 관리는 기본 조직에서만 할 수 있습니다": {
   "count": 1,
   "files": [
@@ -5223,12 +5322,6 @@
   "files": [
    "admin.html",
    "common.js"
-  ]
- },
- "로고 지우기": {
-  "count": 1,
-  "files": [
-   "admin.html"
   ]
  },
  "위로": {
@@ -9034,12 +9127,6 @@
    "admin.html"
   ]
  },
- "조 크기": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
  "가져오기 실행": {
   "count": 5,
   "files": [
@@ -9409,12 +9496,6 @@
  },
  "(선택). 연맹 '배번 명단' 원본(소속명·성명·생년월일·성별·배번)도 그대로 됩니다. 00012 는 12 로, 동명이인은 생년월일로 구분.": {
   "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "적용": {
-  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -15677,14 +15758,6 @@
   "count": 2,
   "files": [
    "dashboard.js",
-   "result-image.js"
-  ]
- },
- "명": {
-  "count": 3,
-  "files": [
-   "dashboard.js",
-   "event-record.html",
    "result-image.js"
   ]
  },

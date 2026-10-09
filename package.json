@@ -5,6 +5,7 @@
     "main": "server.js",
     "scripts": {
         "start": "node server.js",
+        "timing-watch": "node scripts/timing-watcher/watch.js",
         "dev": "node server.js",
         "test": "vitest run",
         "test:watch": "vitest",

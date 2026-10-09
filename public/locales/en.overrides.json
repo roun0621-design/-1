@@ -246,5 +246,20 @@
   "전체 출력": "Print all",
   "[관리]": "[Admin]",
   "현재 조를 인쇄합니다": "Prints the current heat",
-  "전체 조를 인쇄합니다": "Prints all heats"
+  "전체 조를 인쇄합니다": "Prints all heats",
+  "자동 조편성": "Auto seeding",
+  "엔트리 기록(SB/PB)으로 조·레인 자동 배정": "Seed heats and lanes from entry marks (SB/PB)",
+  "엔트리 기록(SB/PB)으로 순위를 매겨 지그재그로 조에 나누고, 같은 소속은 가능한 한 다른 조로, 레인은 WA 규칙으로 배정합니다. 기록이 없는 선수는 맨 뒤 시드입니다.": "Athletes are ranked by entry marks (SB/PB), distributed across heats in serpentine order, same-team athletes separated where possible, and lanes drawn by WA rules. Athletes without a mark are seeded last.",
+  "단거리 8 · 그 외 전원": "Sprints 8 · others all",
+  "기준 기록": "Seed mark",
+  "SB 우선, 없으면 PB": "SB first, else PB",
+  "SB 만": "SB only",
+  "PB 만": "PB only",
+  "같은 소속 분리": "Separate same team",
+  "기존 조·레인은 지워지고 새로 만들어집니다.": "Existing heats and lanes are replaced.",
+  "조편성 적용: {0}조": "Seeding applied: {0} heats",
+  "시드": "Seed",
+  "이미 기록이 입력된 종목입니다. 기존 조와 기록을 지우고 다시 나눌까요?": "This event already has results. Delete the existing heats and results and reseed?",
+  "적용": "Apply",
+  "조 크기": "Heat size"
 }

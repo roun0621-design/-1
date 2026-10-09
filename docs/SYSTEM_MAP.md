@@ -471,3 +471,7 @@ await db.transaction(async () => {
 ## 문서 영문판 (2026-10-09, B5)
 - `lib/docLabels.js`: `docLabels(lang)` 라벨 묶음 + `compName/eventName/genderLabel/roundLabel/fontName/normLang`. `generateFullRecordExcel(db, comp, gender, getDocTemplate, lang)`, `generateFullRecordPdf(db, comp, gender, lang)`, `generateComprehensiveByDivision(db, comp, lang)`, `lib/routes/pdf_documents.js` 의 start-list·result-sheet·png·ad-card 는 `reqLang(req)`.
 - 라우트의 `lang` 은 `?lang=` → 없으면 `req.org.default_lang`(ja 는 en) → ko. ko 출력은 바이트 동일(검증됨). 종목 매칭·정렬에 쓰는 한글 이름 표는 그대로.
+
+## 계측 워처·자동 조편성 (2026-10-09, C1·C2)
+- `scripts/timing-watcher/watch.js`: 계측 PC 에서 돌리는 폴더 워처(`npm run timing-watch -- --dir … --server … --key … --comp …`). `/api/scoreboard/preview` 로 판정(`judge()`) 후 `/api/scoreboard/import` 또는 `/api/timing-txt/import` 적용; done/review/failed 폴더. 테스트 `tests/api/61_timing_watcher.test.js`(실제 포트로 서버 띄워 processFile 호출). 문서 `docs/TIMING_WATCHER.md`.
+- `lib/routes/auto_seed.js`: `POST /api/events/:id/auto-seed` — 엔트리 SB/PB(`parseRecordValue`) 순위 → `serpentine()` 지그재그 + 같은 소속 교환 → `waAssignLanesBulk` 레인 → 기존 조 삭제 후 재생성(`generateScoreboardKey`), 기록 있으면 `force`. 관리자 종목 드로어 조 탭 옆 '자동 조편성'(`emAutoSeedOpen/Preview/Apply`). 테스트 `tests/api/60_auto_seed.test.js`.
