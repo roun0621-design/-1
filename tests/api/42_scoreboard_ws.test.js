@@ -63,18 +63,18 @@ describe('현재 상태', () => {
         expect(d2.entries[0].record_text).toBe('1m85'); expect(d2.entries[0].rank).toBe(1);       // 예전엔 높이 종목 기록이 아예 안 나왔다
         ws.close();
     });
-    it('④ 다른 대회의 결과 변경은 구독한 오버레이에 오지 않는다 (구독하지 않은 클라이언트에는 온다)', async () => {
+    it('④ 다른 대회의 결과 변경은 구독한 오버레이에 오지 않는다 (구독하지 않은 클라이언트에도 안 온다 — 멀티테넌시 4단계)', async () => {
         const mine = await open(); await next(mine, 'connected'); mine.send(JSON.stringify({ type: 'subscribe', competition_id: fx.comp })); await next(mine, 'subscribed');
         const any = await open(); await next(any, 'connected');
         const request = require('supertest');
         const got = () => mine._q.filter(j => j.type === 'scoreboard_result_update');
-        const pAny = next(any, 'scoreboard_result_update');
+        const pAny = next(any, 'scoreboard_result_update', 600).then(() => 'got', () => 'none');
         // 다른 대회 조의 풍속 → result 아님. 다른 대회 heat 로 result_update 를 흉내: 실제 API 로 결과 입력
         const oa = (await db.run("INSERT INTO athlete (competition_id, name, bib_number, team, gender) VALUES (?, '남의대회', '7', 'T', 'M')", fx.other)).lastInsertRowid;
         const oee = (await db.run("INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?,?, 'checked_in')", fx.oev, oa)).lastInsertRowid; await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?,?,1)', fx.oh, oee);
         const r = await request(mod.app).post('/api/results/upsert').set('x-admin-key', 'testopkey').send({ heat_id: fx.oh, event_entry_id: oee, time_seconds: 21.5 });
         expect(r.status).toBe(200);
-        const anyMsg = await pAny; expect(anyMsg.data.competition_id).toBe(fx.other);
+        expect(await pAny).toBe('none');   // 구독 안 한 소켓엔 대회 메시지가 가지 않는다
         await new Promise(r => setTimeout(r, 200));
         expect(got().length).toBe(0);
         mine.close(); any.close();

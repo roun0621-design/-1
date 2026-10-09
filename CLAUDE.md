@@ -15,6 +15,8 @@ npm test             # vitest run — full suite, runs serially
 npm run test:watch   # vitest watch mode
 npm run test:coverage
 
+# 컨테이너 (멀티테넌시 4단계): docker build -t pacerise . / docker compose up -d app — docs/DEPLOY_DOCKER.md
+
 # Run a single test file or pattern:
 npx vitest run tests/api/02_competitions.test.js
 npx vitest run -t "some test name substring"

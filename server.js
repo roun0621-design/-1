@@ -2299,7 +2299,7 @@ async function _wsForward(eventType, data) {
     const wsMsg = JSON.stringify({ type: 'scoreboard_' + eventType, data: comp ? { ...data, competition_id: comp } : data, timestamp: Date.now() });
     wsClients.forEach(ws => {
         if (ws.readyState !== 1) return;                       // WebSocket.OPEN
-        if (comp && ws._compId && String(ws._compId) !== String(comp)) return;
+        if (comp && (!ws._compId || String(ws._compId) !== String(comp))) return;   // 구독한 대회만 — 구독 없는 소켓엔 대회 메시지 없음 (멀티테넌시 4단계)
         try { ws.send(wsMsg); } catch (e) {}
     });
 }
@@ -7058,13 +7058,20 @@ const wsClients = new Set();
 server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url, `http://${request.headers.host}`);
     if (url.pathname === '/ws/scoreboard') {
-        wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.handleUpgrade(request, socket, head, async (ws) => {
+            // 멀티테넌시 4단계: 소켓도 호스트로 조직을 정한다 — 구독·전송은 그 조직 대회만
+            try { const o = await ORG.resolve({ headers: request.headers, query: Object.fromEntries(url.searchParams) }); ws._orgId = (o && o.id) || 1; } catch (e) { ws._orgId = 1; }
             wss.emit('connection', ws, request);
         });
     } else {
         socket.destroy();
     }
 });
+// 대회가 이 소켓의 조직 것인지 (멀티테넌시 4단계)
+async function _wsCompetitionAllowed(ws, compId) {
+    const id = parseInt(compId, 10); if (!id) return false;
+    try { const c = await db.get('SELECT organization_id FROM competition WHERE id=?', id); return !!c && Number(c.organization_id || 1) === Number(ws._orgId || 1); } catch (e) { return false; }
+}
 
 // 죽은 연결 정리 — 30초마다 ping, 응답 없으면 끊는다 (예전엔 끊긴 태블릿·PC 의 소켓이 TCP 시간 초과까지 남아 전송 버퍼가 쌓였다)
 if (require.main === module) setInterval(() => {
@@ -7088,10 +7095,12 @@ wss.on('connection', (ws) => {
             const data = JSON.parse(msg);
             // Handle client requests
             if (data.type === 'subscribe') {
+                if (!(await _wsCompetitionAllowed(ws, data.competition_id))) { ws.send(JSON.stringify({ type: 'error', error: 'Not found', competition_id: data.competition_id })); return; }
                 ws._compId = data.competition_id;
                 ws.send(JSON.stringify({ type: 'subscribed', competition_id: data.competition_id }));
             }
             if (data.type === 'request_current') {
+                if (!(await _wsCompetitionAllowed(ws, data.competition_id))) { ws.send(JSON.stringify({ type: 'error', error: 'Not found', competition_id: data.competition_id })); return; }
                 await sendCurrentScoreboard(ws, data.competition_id);
             }
         } catch(e) {}
@@ -7109,8 +7118,8 @@ function broadcastToScoreboard(eventType, data) {
     const msg = JSON.stringify({ type: eventType, data, timestamp: Date.now() });
     wsClients.forEach(ws => {
         if (ws.readyState === WebSocket.OPEN) {
-            // Only send to clients subscribed to this competition
-            if (!ws._compId || !data.competition_id || ws._compId == data.competition_id) {
+            // 구독한 대회의 메시지만 (대회 없는 전체 메시지는 모두에게). 구독 안 한 소켓엔 대회 메시지를 보내지 않는다 — 다른 조직으로 새지 않게 (멀티테넌시 4단계)
+            if (!data.competition_id || (ws._compId && ws._compId == data.competition_id)) {
                 try { ws.send(msg); } catch(e) {}
             }
         }

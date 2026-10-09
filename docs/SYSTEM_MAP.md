@@ -460,4 +460,5 @@ await db.transaction(async () => {
 - `lib/routes/organizations.js`: `GET /api/org`(공개), `GET/POST/PUT /api/admin/organizations`(기본 조직의 관리자 키만). 관리자 › 시스템 › 조직 화면(`card-organizations`, 플랫폼 관리자만 보임), 홈은 기본 조직이 아니면 사이트 이름을 조직 이름으로.
 - 2단계(2026-10-02): `event_record`·`competition_series`·`federation_list`·`division_master`(0=공용)·`certificate_template`·`award_docx_template`·`sms_config`(조직별 행, `lib/smsConfig.js`)·`push_*`·`external_api_key` 에 `organization_id`; `joint_group.competition_id`. 기록 감지(`lib/recordCompare.js` `findEventRecord(..., orgId)`)·문서(`fullRecordExcel`·`pdf_documents`)·국제 동기화는 대회의 `organization_id` 로 기록표를 본다.
 - 3단계(2026-10-09): `lib/reqContext.js`(AsyncLocalStorage 로 요청 조직 전달) → `_opKeyLookup`·기본 운영키·기록위원 키가 조직을 본다; 로그인·JWT 브리지·계정 관리(`admin_users.js`)·운영키 관리(`admin_keys.js`)·되돌리기 조직 검사; **조직 가드 미들웨어**(server.js, 쓰기 가드 뒤) — 요청이 가리키는 대회가 다른 조직이면 404.
-- 아직 전역: WebSocket 구독(대회 id 만), 백업 ZIP, 대회 없는 `audit_log`/`operation_log` 행.
+- 4단계(2026-10-09): WebSocket 업그레이드 때 호스트로 조직을 정해 `ws._orgId` — 다른 조직 대회 구독·조회는 `{type:'error'}`, 대회 메시지는 구독한 소켓에만(`_wsForward`·`broadcastToScoreboard`). `COOKIE_DOMAIN` 옵션. `Dockerfile`·`docker-compose.yml`·`docs/DEPLOY_DOCKER.md`.
+- 아직 전역(플랫폼 관리자만): 백업 ZIP, 대회 없는 `audit_log`/`operation_log` 행.
