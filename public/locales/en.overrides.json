@@ -261,5 +261,8 @@
   "시드": "Seed",
   "이미 기록이 입력된 종목입니다. 기존 조와 기록을 지우고 다시 나눌까요?": "This event already has results. Delete the existing heats and results and reseed?",
   "적용": "Apply",
-  "조 크기": "Heat size"
+  "조 크기": "Heat size",
+  "이전 대회 기록 불러오기": "Carry over marks from past meets",
+  "같은 조직의 지난 대회에서 선수·종목이 같은 PB/SB 를 빈 엔트리에 채웁니다": "Fills empty PB/SB from the same athlete and event in this organization's past competitions",
+  "엔트리 {0}건 채움 (PB {1} · SB {2})": "{0} entries filled (PB {1} · SB {2})"
 }

@@ -3042,6 +3042,7 @@ require('./lib/routes/home_popups')(app, { db, isAdminKey, opLog });
 require('./lib/routes/organizations')(app, { db, isAdminKey, opLog, org: ORG, upload });   // 조직 (멀티테넌시 1단계)
 require('./lib/routes/entry_import_intl')(app, { db, isOperationKey, opLog, upload });   // 국제 양식 엔트리 가져오기 (B4)
 require('./lib/routes/auto_seed')(app, { db, isOperationKey, opLog, waAssignLanesBulk, isShortTrackEvent, generateScoreboardKey, broadcastSSE });   // 1라운드 자동 조편성 (C2)
+require('./lib/routes/pbsb')(app, { db, isOperationKey, opLog });   // PB/SB 자동 누적 (C4)
 
 
 

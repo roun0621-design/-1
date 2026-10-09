@@ -1215,6 +1215,12 @@
    "admin.html"
   ]
  },
+ "엔트리 {0}건 채움 (PB {1} · SB {2})": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "주소": {
   "count": 1,
   "files": [
@@ -3433,7 +3439,7 @@
   ]
  },
  "실패": {
-  "count": 14,
+  "count": 15,
   "files": [
    "admin.html",
    "display-manage.html"
@@ -5311,6 +5317,12 @@
    "admin.html"
   ]
  },
+ "대회를 선택하세요": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "조직 관리는 기본 조직에서만 할 수 있습니다": {
   "count": 1,
   "files": [
@@ -5322,6 +5334,18 @@
   "files": [
    "admin.html",
    "common.js"
+  ]
+ },
+ "이 조직 주소의 관리자로 이동": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "로고 지우기": {
+  "count": 1,
+  "files": [
+   "admin.html"
   ]
  },
  "위로": {
@@ -8080,6 +8104,12 @@
    "admin.html"
   ]
  },
+ "같은 조직의 지난 대회에서 선수·종목이 같은 PB/SB 를 빈 엔트리에 채웁니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "부(division) 추가/수정/삭제 관리": {
   "count": 1,
   "files": [
@@ -8678,6 +8708,12 @@
   ]
  },
  "+ 선수 추가": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이전 대회 기록 불러오기": {
   "count": 1,
   "files": [
    "admin.html"

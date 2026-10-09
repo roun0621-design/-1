@@ -423,7 +423,7 @@
                         <div style="padding:10px 12px;border-bottom:1px solid var(--gray);background:#f8f9fa;">
                             <input type="text" id="ath-search" placeholder="선수명, BIB, 소속 검색..." oninput="filterAthletes()" style="width:100%;padding:7px 10px;border:1.5px solid var(--gray);border-radius:var(--radius);font-size:12px;box-sizing:border-box;">
                             <div style="display:flex;gap:6px;margin-top:8px;">
-                                <button class="btn btn-sm btn-primary" onclick="showAddAthlete()" style="flex:1;">+ 선수 추가</button>
+                                <button class="btn btn-sm btn-primary" onclick="showAddAthlete()" style="flex:1;">+ 선수 추가</button><button class="btn btn-sm btn-outline" onclick="admCarryOverMarks()" title="같은 조직의 지난 대회에서 선수·종목이 같은 PB/SB 를 빈 엔트리에 채웁니다">이전 대회 기록 불러오기</button>
                                 <button class="btn btn-sm btn-outline ath-gender-btn active" data-g="all" onclick="filterAthGender('all',this)">전체</button>
                                 <button class="btn btn-sm btn-outline ath-gender-btn" data-g="M" onclick="filterAthGender('M',this)">남</button>
                                 <button class="btn btn-sm btn-outline ath-gender-btn" data-g="F" onclick="filterAthGender('F',this)">여</button>
@@ -4725,6 +4725,14 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) { toast(e.message, 'error'); }
         }
 
+        async function admCarryOverMarks() {
+            if (!_selectedCompId) { toast('대회를 선택하세요', 'error'); return; }
+            try {
+                const r = await fetch(`/api/competitions/${_selectedCompId}/marks/carry-over`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_key: AK() }) });
+                const j = await r.json(); if (!r.ok) throw new Error(j.error || '실패');
+                toast(`엔트리 ${j.entries}건 채움 (PB ${j.pb} · SB ${j.sb})`, 'success'); try { loadAthletes(); } catch (e) {}
+            } catch (e) { toast(e.message, 'error'); }
+        }
         async function loadOrganizations() {
             const box = document.getElementById('org-list'); if (!box) return;
             const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

@@ -475,3 +475,7 @@ await db.transaction(async () => {
 ## 계측 워처·자동 조편성 (2026-10-09, C1·C2)
 - `scripts/timing-watcher/watch.js`: 계측 PC 에서 돌리는 폴더 워처(`npm run timing-watch -- --dir … --server … --key … --comp …`). `/api/scoreboard/preview` 로 판정(`judge()`) 후 `/api/scoreboard/import` 또는 `/api/timing-txt/import` 적용; done/review/failed 폴더. 테스트 `tests/api/61_timing_watcher.test.js`(실제 포트로 서버 띄워 processFile 호출). 문서 `docs/TIMING_WATCHER.md`.
 - `lib/routes/auto_seed.js`: `POST /api/events/:id/auto-seed` — 엔트리 SB/PB(`parseRecordValue`) 순위 → `serpentine()` 지그재그 + 같은 소속 교환 → `waAssignLanesBulk` 레인 → 기존 조 삭제 후 재생성(`generateScoreboardKey`), 기록 있으면 `force`. 관리자 종목 드로어 조 탭 옆 '자동 조편성'(`emAutoSeedOpen/Preview/Apply`). 테스트 `tests/api/60_auto_seed.test.js`.
+
+## PB/SB 자동 누적 (2026-10-09, C4)
+- `lib/pbsb.js`: `updateEntryMarks(db, event)` — 종목 완료(`POST /api/events/:id/complete`, `lib/routes/callroom.js`) 때 자동 호출. 트랙·도로 MIN(time), 필드 거리 MAX, 높이 MAX(O); 상태 코드 있는 결과·풍속 +2.0 초과(`EventCatalog.isWindAffected`) 제외; `event_entry.personal_best/season_best` 가 더 좋을 때만 갱신(SB 는 대회 연도 기준), 선수가 한 종목만 뛰면 `athlete` 행도. `carryOverMarks(db, comp)` — 같은 조직·이전 대회·같은 선수(이름+성별+생년월일, 생년월일 없으면 소속)·같은 종목 코드의 PB/SB 를 빈 엔트리에.
+- 라우트 `lib/routes/pbsb.js`: `POST /api/events/:id/marks/update`, `POST /api/competitions/:id/marks/carry-over`. 관리자 선수 화면 '이전 대회 기록 불러오기'. 테스트 `tests/api/62_pbsb.test.js`.

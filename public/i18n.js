@@ -14,7 +14,7 @@
     'use strict';
 
     var STORAGE_KEY = 'pace_lang';
-    var DICT_VERSION = (window.PACE_I18N_VERSION || '14');
+    var DICT_VERSION = (window.PACE_I18N_VERSION || '15');
     var LANGS = [
         { code: 'ko', label: '한국어', short: 'KO' },
         { code: 'en', label: 'English', short: 'EN' },
