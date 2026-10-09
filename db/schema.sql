@@ -72,6 +72,8 @@ CREATE TABLE IF NOT EXISTS event (
 
 -- Athletes (선수) — linked to competition
 CREATE TABLE IF NOT EXISTS athlete (
+    family_name TEXT DEFAULT '',                    -- 성·이름 분리 (국제 양식 가져오기 B4, 2026-10-09)
+    given_name TEXT DEFAULT '',
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     competition_id INTEGER NOT NULL REFERENCES competition(id),
     name TEXT NOT NULL,

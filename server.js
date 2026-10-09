@@ -1577,6 +1577,8 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_event_code ON event(code)`); } cat
 try { db.exec(`ALTER TABLE heat ADD COLUMN external_key TEXT DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE heat ADD COLUMN scheduled_at TEXT DEFAULT NULL`); } catch(e) {}
 try { db.exec(`ALTER TABLE athlete ADD COLUMN name_alt TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE athlete ADD COLUMN family_name TEXT DEFAULT ''`); } catch(e) {}   // 성·이름 분리 (국제 양식 B4, 2026-10-09)
+try { db.exec(`ALTER TABLE athlete ADD COLUMN given_name TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE athlete ADD COLUMN season_best TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE event_entry ADD COLUMN personal_best TEXT DEFAULT ''`); } catch(e) {}   // 종목별 PB/SB (국제대회)
 try { db.exec(`ALTER TABLE event_entry ADD COLUMN season_best TEXT DEFAULT ''`); } catch(e) {}
@@ -1962,6 +1964,8 @@ if (db.isAsync) {
             }
             // athlete: federation, personal_best, date_of_birth, phone(SMS 발송용)
             await pgIdempotentAddCol('athlete', 'federation', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('athlete', 'family_name', `TEXT DEFAULT ''`);   // 국제 양식 B4
+            await pgIdempotentAddCol('athlete', 'given_name', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'personal_best', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'date_of_birth', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'phone', `TEXT NOT NULL DEFAULT ''`);
@@ -3053,6 +3057,7 @@ require('./lib/routes/federations')(app, { db, isAdminKey, opLog });
 // ============================================================
 require('./lib/routes/home_popups')(app, { db, isAdminKey, opLog });
 require('./lib/routes/organizations')(app, { db, isAdminKey, opLog, org: ORG });   // 조직 (멀티테넌시 1단계)
+require('./lib/routes/entry_import_intl')(app, { db, isOperationKey, opLog, upload });   // 국제 양식 엔트리 가져오기 (B4)
 
 
 
@@ -5282,9 +5287,10 @@ app.get('/api/documents/comprehensive-by-division/:compId/excel', async (req, re
     const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
     const { generateComprehensiveByDivision } = require('./lib/comprehensiveByDivision');
-    const wb = await generateComprehensiveByDivision(db, comp);
+    const lang = String(req.query.lang || (req.org && req.org.default_lang) || 'ko').toLowerCase() === 'ko' ? 'ko' : 'en';   // 문서 언어 (B5): ?lang= 없으면 조직 기본 언어, ja 는 en 으로
+    const wb = await generateComprehensiveByDivision(db, comp, lang);
     const buf = await wb.xlsx.writeBuffer();
-    const baseName = `부별종합기록지_${(comp.name || 'result').replace(/[\\/:*?"<>|]/g, '_')}.xlsx`;
+    const baseName = `${lang === 'en' ? 'Results_by_division_' : '부별종합기록지_'}${((lang === 'en' && comp.name_en) || comp.name || 'result').replace(/[\\/:*?"<>|]/g, '_')}.xlsx`;
     const fileName = encodeURIComponent(baseName);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${fileName}`);
@@ -5851,11 +5857,12 @@ app.get('/api/documents/full-record/:compId/excel', async (req, res) => {
     const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
     const gender = req.query.gender || 'M';
-    const genderLabel = gender === 'M' ? '남자' : '여자';
+    const lang = String(req.query.lang || (req.org && req.org.default_lang) || 'ko').toLowerCase() === 'ko' ? 'ko' : 'en';   // 문서 언어 (B5): ?lang= 없으면 조직 기본 언어, ja 는 en 으로
+    const genderLabel = lang === 'en' ? (gender === 'M' ? 'Men' : 'Women') : (gender === 'M' ? '남자' : '여자');
 
-    const wb = await generateFullRecordExcel(db, comp, gender, getDocTemplate);
+    const wb = await generateFullRecordExcel(db, comp, gender, getDocTemplate, lang);
     const buf = await wb.xlsx.writeBuffer();
-    const fileName = encodeURIComponent(`연맹종합기록지_${genderLabel}_${comp.name || 'result'}.xlsx`);
+    const fileName = encodeURIComponent(lang === 'en' ? `Results_${genderLabel}_${comp.name_en || comp.name || 'result'}.xlsx` : `연맹종합기록지_${genderLabel}_${comp.name || 'result'}.xlsx`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${fileName}`);
     res.end(Buffer.from(buf));
@@ -5876,10 +5883,11 @@ app.get('/api/documents/full-record/:compId/pdf', async (req, res) => {
     const comp = await db.get('SELECT * FROM competition WHERE id=?', req.params.compId);
     if (!comp) return res.status(404).json({ error: 'Competition not found' });
     const gender = req.query.gender || 'M';
-    const genderLabel = gender === 'M' ? '남자' : '여자';
+    const lang = String(req.query.lang || (req.org && req.org.default_lang) || 'ko').toLowerCase() === 'ko' ? 'ko' : 'en';   // 문서 언어 (B5)
+    const genderLabel = lang === 'en' ? (gender === 'M' ? 'Men' : 'Women') : (gender === 'M' ? '남자' : '여자');
 
-    const pdfBuffer = await generateFullRecordPdf(db, comp, gender);
-    const fileName = encodeURIComponent(`연맹종합기록지_${genderLabel}_${comp.name || 'result'}.pdf`);
+    const pdfBuffer = await generateFullRecordPdf(db, comp, gender, lang);
+    const fileName = encodeURIComponent(lang === 'en' ? `Results_${genderLabel}_${comp.name_en || comp.name || 'result'}.pdf` : `연맹종합기록지_${genderLabel}_${comp.name || 'result'}.pdf`);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${fileName}`);
     res.end(pdfBuffer);

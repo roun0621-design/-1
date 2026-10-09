@@ -462,3 +462,12 @@ await db.transaction(async () => {
 - 3단계(2026-10-09): `lib/reqContext.js`(AsyncLocalStorage 로 요청 조직 전달) → `_opKeyLookup`·기본 운영키·기록위원 키가 조직을 본다; 로그인·JWT 브리지·계정 관리(`admin_users.js`)·운영키 관리(`admin_keys.js`)·되돌리기 조직 검사; **조직 가드 미들웨어**(server.js, 쓰기 가드 뒤) — 요청이 가리키는 대회가 다른 조직이면 404.
 - 4단계(2026-10-09): WebSocket 업그레이드 때 호스트로 조직을 정해 `ws._orgId` — 다른 조직 대회 구독·조회는 `{type:'error'}`, 대회 메시지는 구독한 소켓에만(`_wsForward`·`broadcastToScoreboard`). `COOKIE_DOMAIN` 옵션. `Dockerfile`·`docker-compose.yml`·`docs/DEPLOY_DOCKER.md`.
 - 아직 전역(플랫폼 관리자만): 백업 ZIP, 대회 없는 `audit_log`/`operation_log` 행.
+
+## 국제 양식 엔트리 가져오기 (2026-10-09, B4)
+- `lib/routes/entry_import_intl.js`: `GET /api/entries/intl/template.xlsx`, `POST /api/entries/intl/preview|import`(multer `file`, `competition_id`, `name_order=given-family|family-given`, `skip_errors`). 머리글 별칭 표 `H`, 성별·생년월일 파서, CSV 는 UTF-8 로 읽음(`XLSX.read(type:'string')`).
+- 종목은 `EventCatalog.codeOf()` → 사전 한글 정식명 + `code` 로 저장(결승 1조), 선수는 배번 → 이름|소속|성별 순으로 기존 매칭, 기존 행은 빈 칸만 채움. `athlete.family_name/given_name` 컬럼 추가.
+- 관리자 › 가져오기 › 1단계 세그먼트 '국제 양식 (영문 CSV·엑셀)' — `previewIntl()/importIntl()`.
+
+## 문서 영문판 (2026-10-09, B5)
+- `lib/docLabels.js`: `docLabels(lang)` 라벨 묶음 + `compName/eventName/genderLabel/roundLabel/fontName/normLang`. `generateFullRecordExcel(db, comp, gender, getDocTemplate, lang)`, `generateFullRecordPdf(db, comp, gender, lang)`, `generateComprehensiveByDivision(db, comp, lang)`, `lib/routes/pdf_documents.js` 의 start-list·result-sheet·png·ad-card 는 `reqLang(req)`.
+- 라우트의 `lang` 은 `?lang=` → 없으면 `req.org.default_lang`(ja 는 en) → ko. ko 출력은 바이트 동일(검증됨). 종목 매칭·정렬에 쓰는 한글 이름 표는 그대로.

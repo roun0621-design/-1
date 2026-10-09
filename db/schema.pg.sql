@@ -9,6 +9,8 @@
 
 -- Table: athlete
 CREATE TABLE IF NOT EXISTS "athlete" (
+    "family_name" TEXT DEFAULT '',   -- 성·이름 분리 (B4)
+    "given_name" TEXT DEFAULT '',
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "competition_id" BIGINT NOT NULL,
     "name" TEXT NOT NULL,
