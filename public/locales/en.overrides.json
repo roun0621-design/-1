@@ -238,5 +238,6 @@
   "로고를 올렸습니다": "Logo uploaded",
   "로고를 지웠습니다": "Logo removed",
   "이 조직의 로고를 지울까요? 헤더에는 조직 이름이 글자로 표시됩니다.": "Remove this organization's logo? The header will show the organization name as text.",
-  "업로드 실패": "Upload failed"
+  "업로드 실패": "Upload failed",
+  "이 조직 주소의 관리자로 이동": "Open this organization's admin"
 }
