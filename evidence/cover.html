@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="fonts/audiowide_face.css">
+<style>
+  @page { size: A4; margin: 0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Noto Sans CJK KR','NanumSquare','Malgun Gothic',sans-serif; color:#111111; background:#ffffff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .brand { font-family:'Audiowide',sans-serif; letter-spacing:1px; }
+  .page { width:210mm; height:297mm; position:relative; page-break-after:always; background:#ffffff; }
+
+  /* 표지 (화이트/블랙) */
+  .cover { display:flex; flex-direction:column; justify-content:center; padding:34mm 24mm; border:1px solid #ffffff; }
+  .cover .topbar { position:absolute; top:0; left:0; right:0; height:6mm; background:#111111; }
+  .cover .kicker { font-family:'Audiowide',sans-serif; font-size:12pt; letter-spacing:4px; color:#111111; margin-bottom:16mm; }
+  .cover h1 { font-size:30pt; line-height:1.3; font-weight:800; margin-bottom:7mm; color:#000000; }
+  .cover h1 .brand { font-size:33pt; display:block; margin-bottom:3mm; }
+  .cover .sub { font-size:13pt; color:#333333; line-height:1.7; margin-bottom:20mm; border-left:3px solid #111111; padding-left:6mm; }
+  .cover .box { border:1.5px solid #111111; border-radius:6px; padding:8mm 10mm; font-size:11.5pt; line-height:2.1; color:#111111; }
+  .cover .box b { color:#000000; }
+  .cover .box .lbl { display:inline-block; width:30mm; color:#555555; }
+  .cover .foot { position:absolute; bottom:18mm; left:24mm; right:24mm; font-size:10pt; color:#444444; border-top:1.5px solid #111111; padding-top:5mm; }
+
+  /* 목차 (화이트/블랙) */
+  .toc { padding:12mm 22mm; }
+  .toc h2 { font-family:'Audiowide',sans-serif; font-size:18pt; color:#000000; margin-bottom:1.5mm; letter-spacing:1px; }
+  .toc .h2ko { font-size:12pt; color:#555555; margin-bottom:3mm; font-weight:700; }
+  .toc .line { width:55mm; height:3px; background:#111111; margin-bottom:4mm; }
+  .toc .item { display:flex; align-items:flex-start; gap:6mm; padding:2.7mm 0; border-bottom:1px solid #dddddd; }
+  .toc .no { font-family:'Audiowide',sans-serif; background:#111111; color:#ffffff; width:9mm; height:9mm; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10.5pt; flex:0 0 auto; }
+  .toc .txt h3 { font-size:11.5pt; color:#000000; margin-bottom:1mm; }
+  .toc .txt p { font-size:9pt; color:#444444; line-height:1.4; }
+  .toc .tag { display:inline-block; font-size:8pt; padding:1.5px 8px; border-radius:4px; margin-top:1mm; font-weight:700; border:1px solid #111111; }
+  .toc .tag.real { background:#111111; color:#ffffff; }
+  .toc .tag.guide { background:#ffffff; color:#111111; }
+  .toc .note { margin-top:3.5mm; border:1px solid #111111; border-left:4px solid #111111; padding:3.5mm 6mm; font-size:8.5pt; line-height:1.6; color:#222222; border-radius:4px; }
+</style>
+</head>
+<body>
+  <div class="page cover">
+    <div class="topbar"></div>
+    <div class="kicker">EVIDENCE PACKAGE &nbsp;·&nbsp; GOVERNMENT SUPPORT PROJECT</div>
+    <h1><span class="brand">PACE RISE : NODE</span>웹 · 앱 시스템 구축 증빙 자료</h1>
+    <div class="sub">육상경기 운영 관리 플랫폼 — 앱 개발 · 클라우드 인프라 · DB 이관 · 보안(HTTPS) · 웹 시스템 고도화</div>
+    <div class="box">
+      <span class="lbl">대상 시스템</span> <b class="brand">PACE RISE : NODE</b> (웹 + Android TWA 앱)<br>
+      <span class="lbl">운영 도메인</span> <b class="brand">pace-rise-node.com</b> / pace-rise.com<br>
+      <span class="lbl">인프라</span> <b>AWS 서울 리전</b> · PostgreSQL · Let's Encrypt HTTPS<br>
+      <span class="lbl">증빙 구성</span> <b>9개 항목</b> (실행 증빙 + 구성도/가이드)<br>
+      <span class="lbl">사업 형태</span> 외주 용역 — <b>용역업체 개발 → 발주처 인계</b>
+    </div>
+    <div class="foot">작성일: 2026-06-16 &nbsp;|&nbsp; 본 자료의 화면·수치는 용역 수행 과정의 실제 실행 결과 및 형상관리(Git) 이력 측정에 근거합니다.</div>
+  </div>
+
+  <div class="page toc">
+    <h2>CONTENTS</h2>
+    <div class="h2ko">증빙 목차</div>
+    <div class="line"></div>
+
+    <div class="item"><div class="no">1</div><div class="txt">
+      <h3>앱 프로젝트 · 빌드 가이드 및 로컬 구동 화면</h3>
+      <p>기술 스택, 프로젝트 구조, 빌드/실행 절차(웹+AAB), 실제 구동 화면, 이중 DB 백엔드 검증</p>
+      <span class="tag real">실제 실행 증빙</span>
+    </div></div>
+
+    <div class="item"><div class="no">2</div><div class="txt">
+      <h3>AWS 클라우드 구성도 및 콘솔 캡처 가이드</h3>
+      <p>서울 리전 배포 아키텍처, 실측 IP 증거(13.125.x / 52.79.x), 콘솔 캡처 가이드</p>
+      <span class="tag real">실측 기반</span> <span class="tag guide">+ 본인 콘솔 캡처</span>
+    </div></div>
+
+    <div class="item"><div class="no">3</div><div class="txt">
+      <h3>SQLite → PostgreSQL 데이터 이관 검증</h3>
+      <p>34개 테이블 / 7,075행 일치 / 34 PASS · 0 FAIL — 실제 마이그레이션 실행 결과</p>
+      <span class="tag real">실제 실행 증빙</span>
+    </div></div>
+
+    <div class="item"><div class="no">4</div><div class="txt">
+      <h3>HTTPS(SSL/TLS) 적용 증빙 <span style="font-size:9pt;color:#555;">(취약점 점검 미수행 명시)</span></h3>
+      <p>Let's Encrypt 인증서 실측, 실제 사이트 화면, 자물쇠 캡처 가이드 — 증빙 범위는 HTTPS/SSL 적용까지(취약점 진단 범위 외)</p>
+      <span class="tag real">실측 검증</span> <span class="tag guide">+ 본인 자물쇠 캡처</span>
+    </div></div>
+
+    <div class="item"><div class="no">5</div><div class="txt">
+      <h3>웹 개편 전 · 후 비교 화면</h3>
+      <p>git 이력 기반 실제 서버 구동 비교 — 홈/모바일/운영 모니터</p>
+      <span class="tag real">실제 실행 증빙</span>
+    </div></div>
+
+    <div class="item"><div class="no">6</div><div class="txt">
+      <h3>웹 시스템 고도화 — 작업 내역 및 개선 효과 상세</h3>
+      <p>271건 커밋·모듈 2→33 등 정량 지표 + 영역별 "문제→작업→개선" 비교</p>
+      <span class="tag real">git 실측 분석</span>
+    </div></div>
+
+    <div class="item"><div class="no">7</div><div class="txt">
+      <h3>소스코드 일체 납품 · 소유권 인계 증빙</h3>
+      <p>Git 형상관리 기반 전체 소스(189파일·약 70,693행·276커밋) 인계, 소유권 발주처 귀속</p>
+      <span class="tag real">git 실측 분석</span>
+    </div></div>
+
+    <div class="item"><div class="no">8</div><div class="txt">
+      <h3>다수 동시접속 성능 · 실 운영 근거 (PER-001)</h3>
+      <p>실 부하테스트 실측(에러율 0%·동시 500까지 무에러) + 전국/국제대회 실운영 이력(API 확인)</p>
+      <span class="tag real">실측 부하테스트</span>
+    </div></div>
+
+    <div class="item"><div class="no">9</div><div class="txt">
+      <h3>iOS 실기기 구동 증빙 (TER-001)</h3>
+      <p>PWA로 iOS 실기기 풀스크린 구동(소스 근거) — iOS 네이티브 미빌드 현황 정직 명시 + 캡처 가이드</p>
+      <span class="tag real">소스 근거</span> <span class="tag guide">+ 실기기 캡처</span>
+    </div></div>
+
+    <div class="note">
+      ※ 본 증빙 자료는 <b>정부지원 사업</b> 제출용으로, <b>용역업체가 수행하여 발주처에 인계</b>한 산출물을 대상으로 실제 수행 결과·형상관리(Git) 이력 근거로만 기록하였습니다.
+      AWS 콘솔·브라우저 자물쇠 등 계정/환경 의존 화면은 <b>발주처(계정 보유자)가 직접 캡처</b>하여 보완하도록 가이드를 포함하였습니다.
+    </div>
+  </div>
+</body>
+</html>

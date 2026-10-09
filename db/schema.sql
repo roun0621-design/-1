@@ -6,8 +6,30 @@
 PRAGMA foreign_keys = ON;
 
 -- Competitions (대회)
+-- Organization (조직 = 테넌트, 멀티테넌시 1단계 2026-10-01 — docs/MULTI_TENANCY_PLAN.md)
+--   기본 조직 id 1 (slug 'pace-rise', KR). 요청 호스트(서브도메인·전용 도메인)로 조직을 고른다 (lib/org.js)
+CREATE TABLE IF NOT EXISTS organization (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,                       -- 서브도메인·URL 식별자 (a-z0-9-)
+    name TEXT NOT NULL,
+    name_en TEXT NOT NULL DEFAULT '',
+    country TEXT NOT NULL DEFAULT 'KR',              -- ISO 3166-1 alpha-2
+    default_tz TEXT NOT NULL DEFAULT 'Asia/Seoul',   -- 새 대회 기본 시간대
+    default_lang TEXT NOT NULL DEFAULT 'ko',         -- ko | en | ja
+    custom_domain TEXT NOT NULL DEFAULT '',          -- 전용 도메인 (있으면 호스트가 이와 같을 때 이 조직)
+    site_name TEXT NOT NULL DEFAULT '',
+    brand_logo_path TEXT NOT NULL DEFAULT '',
+    brand_color_point TEXT NOT NULL DEFAULT '',
+    brand_color_accent TEXT NOT NULL DEFAULT '',
+    settings_json TEXT NOT NULL DEFAULT '{}',        -- site_* 류 설정 (기본 조직은 system_config 사용)
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS competition (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    organization_id INTEGER NOT NULL DEFAULT 1 REFERENCES organization(id),   -- 소속 조직 (멀티테넌시 1단계)
     name TEXT NOT NULL,
     start_date TEXT NOT NULL,
     end_date TEXT NOT NULL,
@@ -18,7 +40,14 @@ CREATE TABLE IF NOT EXISTS competition (
     federation TEXT DEFAULT '',
     division_type TEXT DEFAULT '',
     mode TEXT NOT NULL DEFAULT 'operation',         -- 'operation' | 'display'
-    series_id INTEGER REFERENCES competition_series(id)
+    series_id INTEGER REFERENCES competition_series(id),
+    home_visibility TEXT NOT NULL DEFAULT 'auto',    -- 'auto' | 'pinned'(홈 고정) | 'hidden'(홈 숨김)
+    manual_status_lock INTEGER NOT NULL DEFAULT 0,   -- 1=관리자 '대회 재개'로 수동 상태고정 → 날짜 자동갱신(active→completed) 제외
+    timezone TEXT NOT NULL DEFAULT 'Asia/Seoul',     -- 대회 시간대(IANA) — '오늘'·소집 시간창·자동 상태 전환 기준 (lib/tz.js)
+    name_en TEXT DEFAULT '',                         -- 대회명 영문·일문 (화면 언어가 EN/JA 면 이 이름으로, 비우면 한글 그대로) (2026-09-30)
+    name_ja TEXT DEFAULT '',
+    sync_source TEXT DEFAULT NULL,                   -- 국제대회 동기화 출처 JSON {provider, base, champ, disc, lang} (lib/intl)
+    sync_state TEXT DEFAULT NULL                     -- 마지막 동기화 상태 JSON
 );
 
 -- Events (종목) — linked to competition
@@ -36,7 +65,9 @@ CREATE TABLE IF NOT EXISTS event (
     video_url TEXT DEFAULT '',
     callroom_event_memo TEXT DEFAULT '',
     division TEXT NOT NULL DEFAULT '',
-    result_url TEXT DEFAULT ''
+    result_url TEXT DEFAULT '',
+    external_key TEXT DEFAULT NULL,                 -- 국제대회 동기화: 공식 결과 API 의 종목 키 (lib/intl)
+    code TEXT DEFAULT NULL                          -- 종목 코드(lib/eventCatalog.js: 100·110H·LJ·DEC·4X100…) — 이름과 별개로 종목을 식별, 영문 표기·정렬·풍속 규제의 기준 (2026-09-30)
 );
 
 -- Athletes (선수) — linked to competition
@@ -58,6 +89,8 @@ CREATE TABLE IF NOT EXISTS event_entry (
     athlete_id INTEGER NOT NULL REFERENCES athlete(id),
     status TEXT NOT NULL DEFAULT 'registered' CHECK(status IN ('registered','checked_in','no_show')),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    personal_best TEXT DEFAULT '',                  -- 종목별 PB (국제대회 선수 보조 정보)
+    season_best TEXT DEFAULT '',                    -- 종목별 SB
     UNIQUE(event_id, athlete_id)
 );
 
@@ -67,6 +100,8 @@ CREATE TABLE IF NOT EXISTS heat (
     event_id INTEGER NOT NULL REFERENCES event(id),
     heat_number INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    external_key TEXT DEFAULT NULL,                 -- 국제대회 동기화: 공식 결과 API 의 조(유닛) 키
+    scheduled_at TEXT DEFAULT NULL,                 -- 조 시작 시각 (ISO, 국제대회 동기화)
     UNIQUE(event_id, heat_number)
 );
 
@@ -203,19 +238,23 @@ CREATE TABLE IF NOT EXISTS pacing_segment (
 -- Division Master (부별 마스터)
 -- 13 codes: 성별 6 학교급(초/중/고/대/일반/공개) × 2 + MIXED(혼성)
 CREATE TABLE IF NOT EXISTS division_master (
+    organization_id INTEGER NOT NULL DEFAULT 0,     -- 0 = 공용(기본 13개), 조직이 추가한 부는 자기 조직 (멀티테넌시 2단계)
     code TEXT PRIMARY KEY,                          -- M_OPEN / F_HIGH / MIXED 등
     label_ko TEXT NOT NULL,                         -- 남자일반부, 여자고등부, 통합부
     gender TEXT NOT NULL CHECK(gender IN ('M','F','X')),
     school_level TEXT NOT NULL CHECK(school_level IN ('OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED')),
     sort_order INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    grade INTEGER DEFAULT NULL,                     -- 학년 단위 부(초3~6·중1~3·고1~3)만 값 있음 (Phase 7-②)
+    label_en TEXT DEFAULT NULL                      -- 영문 라벨 (비우면 lib/labels.js divisionLabelEn 이 성별·학교급·학년으로 만든다, 2026-09-30)
 );
 
 -- Competition Series (대회 시리즈 = 회차 묶음)
 -- 예: "전국실업단대항육상경기대회" 한 묶음 → 매년 1회 개최되는 시리즈
 CREATE TABLE IF NOT EXISTS competition_series (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    organization_id INTEGER NOT NULL DEFAULT 1,     -- 소속 조직 (멀티테넌시 2단계)
     name TEXT NOT NULL UNIQUE,                      -- 시리즈명
     federation TEXT NOT NULL DEFAULT '',            -- 주관 연맹 (KAAF, KTFL, etc.)
     description TEXT NOT NULL DEFAULT '',
@@ -249,6 +288,7 @@ CREATE TABLE IF NOT EXISTS event_record (
     approved_by TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    organization_id INTEGER NOT NULL DEFAULT 1,     -- 소속 조직 (멀티테넌시 2단계 — 조회마다 조직 조건을 건다)
     UNIQUE(record_type, event_name, gender, division_code, series_id)
 );
 
@@ -276,7 +316,8 @@ CREATE TABLE IF NOT EXISTS record_breaking_log (
     detected_at TEXT NOT NULL DEFAULT (datetime('now')),
     reviewed_at TEXT,
     reviewed_by TEXT,
-    review_note TEXT NOT NULL DEFAULT ''
+    review_note TEXT NOT NULL DEFAULT '',
+    is_tie INTEGER NOT NULL DEFAULT 0               -- 타이기록(CT·DT·KT): 기존 기록과 같은 값 (Phase 7-④)
 );
 
 -- ============================================================
@@ -296,6 +337,7 @@ INSERT OR IGNORE INTO division_master (code, label_ko, gender, school_level, sor
     ('F_GEN',   '여자일반부', 'F', 'GEN',  150),
     ('F_OPEN',  '여자공개부', 'F', 'OPEN', 160),
     ('MIXED',   '통합부',     'X', 'MIXED', 900);
+-- 학년 단위 부 20행은 서버 부팅 시 lib/division.js gradeDivisionSeed() 로 시드 (M_ELEM3~6, M_MID1~3, M_HIGH1~3, F_…)
 
 -- ============================================================
 -- competition / event parity (PG에는 있지만 SQLite schema.sql에는 누락됐던 컬럼들)
@@ -313,10 +355,22 @@ CREATE TABLE IF NOT EXISTS event_records (
 
 -- Operation Keys (심판별 운영키)
 CREATE TABLE IF NOT EXISTS operation_key (
+    organization_id INTEGER NOT NULL DEFAULT 1,      -- 운영키 소속 조직 (멀티테넌시 3단계)
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     judge_name TEXT NOT NULL,
     key_value TEXT NOT NULL UNIQUE,
     role TEXT NOT NULL DEFAULT 'operation' CHECK(role IN ('operation','admin')),
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 트랙 기록(attempt_number IS NULL) 중복 방지 — UNIQUE(heat_id,event_entry_id,attempt_number) 는 NULL 에 효력이 없다
+CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_entry_id) WHERE attempt_number IS NULL;
+
+-- 워드 상장 양식 (현장 인쇄용) — scope_key: 'global' | 'c<대회id>', config: JSON (lib/awardDocxTemplate.js)
+CREATE TABLE IF NOT EXISTS award_docx_template (
+    organization_id INTEGER NOT NULL DEFAULT 1,
+    scope_key TEXT PRIMARY KEY,
+    config TEXT NOT NULL,
+    updated_at TEXT
 );

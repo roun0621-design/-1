@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS "athlete" (
     "federation" TEXT DEFAULT '',
     "personal_best" TEXT DEFAULT '',
     "date_of_birth" TEXT DEFAULT '',
+    "phone" TEXT NOT NULL DEFAULT '',
+    "grade" INTEGER,                      -- 학년 (학년별 대회, Phase 7-②)
+    "name_alt" TEXT DEFAULT '',           -- 보조 표기 (국제대회: 한글/영문 이름)
+    "season_best" TEXT DEFAULT '',        -- 시즌 최고 (SB)
     CHECK (gender IN ('M','F'))
 );
 
@@ -52,8 +56,29 @@ CREATE TABLE IF NOT EXISTS "combined_score" (
 );
 
 -- Table: competition
+-- Organization (조직 = 테넌트, 멀티테넌시 1단계 2026-10-01 — docs/MULTI_TENANCY_PLAN.md)
+CREATE TABLE IF NOT EXISTS "organization" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "slug" TEXT NOT NULL UNIQUE,
+    "name" TEXT NOT NULL,
+    "name_en" TEXT NOT NULL DEFAULT '',
+    "country" TEXT NOT NULL DEFAULT 'KR',
+    "default_tz" TEXT NOT NULL DEFAULT 'Asia/Seoul',
+    "default_lang" TEXT NOT NULL DEFAULT 'ko',
+    "custom_domain" TEXT NOT NULL DEFAULT '',
+    "site_name" TEXT NOT NULL DEFAULT '',
+    "brand_logo_path" TEXT NOT NULL DEFAULT '',
+    "brand_color_point" TEXT NOT NULL DEFAULT '',
+    "brand_color_accent" TEXT NOT NULL DEFAULT '',
+    "settings_json" TEXT NOT NULL DEFAULT '{}',
+    "active" INTEGER NOT NULL DEFAULT 1,
+    "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "updated_at" TEXT NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS "competition" (
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 1단계)
     "name" TEXT NOT NULL,
     "start_date" TEXT NOT NULL,
     "end_date" TEXT NOT NULL,
@@ -65,6 +90,20 @@ CREATE TABLE IF NOT EXISTS "competition" (
     "division_type" TEXT DEFAULT '',
     "mode" TEXT NOT NULL DEFAULT 'operation',
     "series_id" BIGINT,
+    "event_slug" TEXT NOT NULL DEFAULT '',
+    "brand_logo_path" TEXT NOT NULL DEFAULT '',
+    "brand_watermark_path" TEXT NOT NULL DEFAULT '',
+    "brand_color_point" TEXT NOT NULL DEFAULT '',
+    "brand_color_accent" TEXT NOT NULL DEFAULT '',
+    "event_show_genders" TEXT NOT NULL DEFAULT 'auto',
+    "event_show_rounds" TEXT NOT NULL DEFAULT 'auto',
+    "home_visibility" TEXT NOT NULL DEFAULT 'auto',
+    "manual_status_lock" INTEGER NOT NULL DEFAULT 0,
+    "timezone" TEXT NOT NULL DEFAULT 'Asia/Seoul',   -- 대회 시간대(IANA, lib/tz.js)
+    "name_en" TEXT DEFAULT '',                     -- 대회명 영문·일문 (2026-09-30)
+    "name_ja" TEXT DEFAULT '',
+    "sync_source" TEXT DEFAULT NULL,      -- 국제대회 동기화 출처 JSON {provider, base, champ, disc, lang}
+    "sync_state" TEXT DEFAULT NULL,       -- 마지막 동기화 상태 JSON
     CHECK (status IN ('upcoming','active','completed'))
 );
 
@@ -92,7 +131,8 @@ CREATE TABLE IF NOT EXISTS "doc_template" (
     "competition_id" BIGINT PRIMARY KEY,
     "ad_card" TEXT DEFAULT '{}',
     "start_list" TEXT DEFAULT '{}',
-    "result_sheet" TEXT DEFAULT '{}'
+    "result_sheet" TEXT DEFAULT '{}',
+    "comprehensive" TEXT DEFAULT '{}'
 );
 
 -- Table: event
@@ -111,6 +151,8 @@ CREATE TABLE IF NOT EXISTS "event" (
     "callroom_event_memo" TEXT DEFAULT '',
     "division" TEXT NOT NULL DEFAULT '',
     "result_url" TEXT DEFAULT '',
+    "external_key" TEXT DEFAULT NULL,    -- 국제대회 동기화: 공식 결과 API 의 종목 키 (lib/intl)
+    "code" TEXT DEFAULT NULL,            -- 종목 코드 (lib/eventCatalog.js)
     CHECK (category IN ('track','field_distance','field_height','combined','relay','road')),
     CHECK (gender IN ('M','F','X')),
     CHECK (round_type IN ('preliminary','semifinal','final'))
@@ -125,7 +167,10 @@ CREATE TABLE IF NOT EXISTS "event_entry" (
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "callroom_memo" TEXT DEFAULT '',
     CHECK (status IN ('registered','checked_in','no_show')),
-    UNIQUE ("event_id", "athlete_id")
+    UNIQUE ("event_id", "athlete_id"),
+    "status_updated_at" TEXT DEFAULT NULL,
+    "personal_best" TEXT DEFAULT '',      -- 종목별 PB (국제대회)
+    "season_best" TEXT DEFAULT ''
 );
 
 -- Table: event_link
@@ -145,6 +190,7 @@ CREATE TABLE IF NOT EXISTS "event_link" (
 
 -- Table: division_master (부별 마스터, 13개)
 CREATE TABLE IF NOT EXISTS "division_master" (
+    "organization_id" BIGINT NOT NULL DEFAULT 0,   -- 소속 조직 (멀티테넌시 2단계)
     "code" TEXT PRIMARY KEY,
     "label_ko" TEXT NOT NULL,
     "gender" TEXT NOT NULL,
@@ -152,12 +198,15 @@ CREATE TABLE IF NOT EXISTS "division_master" (
     "sort_order" BIGINT NOT NULL DEFAULT 0,
     "active" BIGINT NOT NULL DEFAULT 1,
     "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "grade" INTEGER,                      -- 학년 단위 부(초3~6·중1~3·고1~3)만 값 있음 (Phase 7-②, 20행은 부팅 시 시드)
+    "label_en" TEXT DEFAULT NULL,         -- 영문 라벨 (lib/labels.js)
     CHECK (gender IN ('M','F','X')),
     CHECK (school_level IN ('OPEN','ELEM','MID','HIGH','UNIV','GEN','MIXED'))
 );
 
 -- Table: competition_series (대회 시리즈 = 회차 묶음)
 CREATE TABLE IF NOT EXISTS "competition_series" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "name" TEXT NOT NULL UNIQUE,
     "federation" TEXT NOT NULL DEFAULT '',
@@ -170,6 +219,7 @@ CREATE TABLE IF NOT EXISTS "competition_series" (
 -- Table: event_record (NR/DR/CR 통합)
 -- 기존 테이블은 boot 마이그레이션에서 drop 후 재생성
 CREATE TABLE IF NOT EXISTS "event_record" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "record_type" TEXT NOT NULL,
     "event_name" TEXT NOT NULL,
@@ -224,6 +274,7 @@ CREATE TABLE IF NOT EXISTS "record_breaking_log" (
     "reviewed_at" TEXT,
     "reviewed_by" TEXT,
     "review_note" TEXT NOT NULL DEFAULT '',
+    "is_tie" INTEGER NOT NULL DEFAULT 0,          -- 타이기록(CT·DT·KT) (Phase 7-④; wind 는 부팅 마이그레이션)
     CHECK (status IN ('pending','approved','rejected')),
     CHECK (record_type IN ('national','division','competition'))
 );
@@ -253,6 +304,7 @@ CREATE TABLE IF NOT EXISTS "event_records" (
 
 -- Table: external_api_key
 CREATE TABLE IF NOT EXISTS "external_api_key" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "key_hash" TEXT NOT NULL,
     "key_prefix" TEXT NOT NULL,
@@ -287,6 +339,7 @@ CREATE TABLE IF NOT EXISTS "external_api_log" (
 
 -- Table: federation_list
 CREATE TABLE IF NOT EXISTS "federation_list" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL DEFAULT '',
@@ -297,6 +350,7 @@ CREATE TABLE IF NOT EXISTS "federation_list" (
     "gender_label_m" TEXT DEFAULT '',
     "gender_label_f" TEXT DEFAULT '',
     "gender_label_x" TEXT DEFAULT '',
+    "hidden" BIGINT NOT NULL DEFAULT 0,
     UNIQUE ("code")
 );
 
@@ -309,7 +363,10 @@ CREATE TABLE IF NOT EXISTS "heat" (
     "wind" TEXT DEFAULT NULL,
     "heat_name" TEXT DEFAULT NULL,
     "scoreboard_key" TEXT DEFAULT NULL,
-    UNIQUE ("event_id", "heat_number")
+    UNIQUE ("event_id", "heat_number"),
+    "wind_updated_at" TEXT DEFAULT NULL,
+    "external_key" TEXT DEFAULT NULL,    -- 국제대회 동기화: 조(유닛) 키
+    "scheduled_at" TEXT DEFAULT NULL     -- 조 시작 시각 (ISO)
 );
 
 -- Table: heat_entry
@@ -345,6 +402,7 @@ DO $$ BEGIN ALTER TABLE "combined_score" ADD COLUMN "status_code" TEXT DEFAULT '
 -- Table: home_popup
 CREATE TABLE IF NOT EXISTS "home_popup" (
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 조직별 홈 팝업 (멀티테넌시 1단계)
     "popup_type" TEXT NOT NULL DEFAULT 'public',
     "title" TEXT NOT NULL DEFAULT '',
     "subtitle" TEXT NOT NULL DEFAULT '',
@@ -359,6 +417,7 @@ CREATE TABLE IF NOT EXISTS "home_popup" (
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "updated_at" TEXT NOT NULL DEFAULT NOW(),
     "sort_order" BIGINT NOT NULL DEFAULT 0,
+    "competition_id" BIGINT DEFAULT NULL,
     CHECK (popup_type IN ('public','admin'))
 );
 
@@ -377,6 +436,7 @@ CREATE TABLE IF NOT EXISTS "home_popup_section" (
 
 -- Table: joint_group
 CREATE TABLE IF NOT EXISTS "joint_group" (
+    "competition_id" BIGINT,   -- 합동 전광판 그룹의 대회 (2026-10-02)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "name" TEXT NOT NULL DEFAULT '',
     "joint_scoreboard_key" TEXT,
@@ -395,6 +455,7 @@ CREATE TABLE IF NOT EXISTS "joint_group_member" (
 
 -- Table: operation_key
 CREATE TABLE IF NOT EXISTS "operation_key" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 운영키 소속 조직 (멀티테넌시 3단계)
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "judge_name" TEXT NOT NULL,
     "key_value" TEXT NOT NULL,
@@ -403,7 +464,9 @@ CREATE TABLE IF NOT EXISTS "operation_key" (
     "created_at" TEXT NOT NULL DEFAULT NOW(),
     "can_manage" BIGINT NOT NULL DEFAULT 0,
     CHECK (role IN ('operation','admin')),
-    UNIQUE ("key_value")
+    UNIQUE ("key_value"),
+    "key_prefix" TEXT DEFAULT '',
+    "key_hint" TEXT DEFAULT ''
 );
 
 -- Table: operation_log
@@ -552,9 +615,133 @@ DO $$ BEGIN ALTER TABLE "result" ADD CONSTRAINT "fk_result_event_entry_id" FOREI
 DO $$ BEGIN ALTER TABLE "result" ADD CONSTRAINT "fk_result_heat_id" FOREIGN KEY ("heat_id") REFERENCES "heat" ("id"); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================================
+-- 상장(Certificate) 시스템 — 양식 저장 + 발행 로그
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "certificate_template" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "competition_id" BIGINT,
+    "name" TEXT NOT NULL,
+    "kind" TEXT NOT NULL DEFAULT 'award',
+    "title_text" TEXT NOT NULL DEFAULT '상  장',
+    "body_template" TEXT NOT NULL,
+    "rank_label_style" TEXT NOT NULL DEFAULT 'ordinal',
+    "signer_org" TEXT NOT NULL DEFAULT '',
+    "signer_title" TEXT NOT NULL DEFAULT '회장',
+    "signer_name" TEXT NOT NULL DEFAULT '',
+    "logo_left_path" TEXT NOT NULL DEFAULT '',
+    "logo_right_path" TEXT NOT NULL DEFAULT '',
+    "seal_image_path" TEXT NOT NULL DEFAULT '',
+    "paper_orientation" TEXT NOT NULL DEFAULT 'portrait',
+    "show_record_value" BIGINT NOT NULL DEFAULT 1,
+    "show_athlete_team" BIGINT NOT NULL DEFAULT 1,
+    "show_date" BIGINT NOT NULL DEFAULT 1,
+    "background_color" TEXT NOT NULL DEFAULT '#fffdf6',
+    "border_style" TEXT NOT NULL DEFAULT 'double-gold',
+    "font_family" TEXT NOT NULL DEFAULT 'NanumSquare',
+    "is_default" BIGINT NOT NULL DEFAULT 0,
+    "sort_order" BIGINT NOT NULL DEFAULT 0,
+    "watermark_image_path" TEXT NOT NULL DEFAULT '',
+    "watermark_opacity" DOUBLE PRECISION NOT NULL DEFAULT 0.07,
+    "watermark_scale" DOUBLE PRECISION NOT NULL DEFAULT 0.45,
+    "border_color" TEXT NOT NULL DEFAULT '#b8945a',
+    "panel_color" TEXT NOT NULL DEFAULT '#faf8f2',
+    "text_color" TEXT NOT NULL DEFAULT '#1a1a1a',
+    "label_color" TEXT NOT NULL DEFAULT '#8a7f6a',
+    "accent_color" TEXT NOT NULL DEFAULT '#7a3a00',
+    "panel_opacity" DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "updated_at" TEXT NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "certificate_issue_log" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "competition_id" BIGINT NOT NULL,
+    "template_id" BIGINT NOT NULL,
+    "event_id" BIGINT,
+    "athlete_id" BIGINT NOT NULL,
+    "rank_value" BIGINT,
+    "record_value" TEXT NOT NULL DEFAULT '',
+    "issued_at" TEXT NOT NULL DEFAULT NOW(),
+    "issued_by" TEXT NOT NULL DEFAULT '',
+    "note" TEXT NOT NULL DEFAULT ''
+);
+
+-- ============================================================
+-- 문자(SMS) 시스템 — Aligo + Simulation
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "sms_config" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
+    "id" BIGINT PRIMARY KEY CHECK (id = 1),
+    "provider" TEXT NOT NULL DEFAULT 'aligo',
+    "api_key" TEXT NOT NULL DEFAULT '',
+    "user_id" TEXT NOT NULL DEFAULT '',
+    "sender_number" TEXT NOT NULL DEFAULT '',
+    "sender_name" TEXT NOT NULL DEFAULT '',
+    "sim_mode" BIGINT NOT NULL DEFAULT 1,
+    "default_template" TEXT NOT NULL DEFAULT '안녕하세요 {athlete_name}님,
+{competition_name} {event_name} 결과:
+{rank_label} {record_value}
+상장 다운로드: {cert_url}',
+    "monthly_quota" BIGINT NOT NULL DEFAULT 0,
+    "sent_this_month" BIGINT NOT NULL DEFAULT 0,
+    "last_reset_month" TEXT NOT NULL DEFAULT '',
+    "updated_at" TEXT NOT NULL DEFAULT NOW()
+);
+INSERT INTO "sms_config" (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS "sms_log" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "competition_id" BIGINT,
+    "athlete_id" BIGINT,
+    "event_id" BIGINT,
+    "heat_number" BIGINT,
+    "phone_number" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "provider" TEXT NOT NULL DEFAULT 'aligo',
+    "provider_msg_id" TEXT NOT NULL DEFAULT '',
+    "error_message" TEXT NOT NULL DEFAULT '',
+    "cost" BIGINT NOT NULL DEFAULT 0,
+    "sent_at" TEXT NOT NULL DEFAULT NOW(),
+    "triggered_by" TEXT NOT NULL DEFAULT ''
+);
+
+-- ============================================================
+-- 푸시(FCM 웹푸시) 토큰
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "push_token" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "token" TEXT NOT NULL UNIQUE,
+    "audience" TEXT NOT NULL DEFAULT 'public',
+    "competition_id" BIGINT,
+    "user_agent" TEXT NOT NULL DEFAULT '',
+    "platform" TEXT NOT NULL DEFAULT 'web',
+    "active" BIGINT NOT NULL DEFAULT 1,
+    "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "updated_at" TEXT NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "push_interest" (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "token" TEXT NOT NULL,
+    "competition_id" BIGINT,
+    "fav_key" TEXT NOT NULL,
+    "created_at" TEXT NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
 -- Indexes
 -- ============================================================
 
+CREATE INDEX IF NOT EXISTS idx_push_token_active ON push_token(active, audience);
+CREATE INDEX IF NOT EXISTS idx_push_interest_lookup ON push_interest(competition_id, fav_key);
+CREATE INDEX IF NOT EXISTS idx_push_interest_token ON push_interest(token);
+CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue_log(competition_id, issued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sms_log_comp ON sms_log(competition_id, sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sms_log_athlete ON sms_log(athlete_id, sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_athlete_comp_bib ON athlete(competition_id, bib_number);
 CREATE INDEX IF NOT EXISTS idx_athlete_comp_name ON athlete(competition_id, name);
 CREATE INDEX IF NOT EXISTS idx_athlete_competition ON athlete(competition_id);
@@ -579,3 +766,14 @@ CREATE INDEX IF NOT EXISTS idx_relay_member_entry ON relay_member(event_entry_id
 CREATE INDEX IF NOT EXISTS idx_result_event_entry ON result(event_entry_id);
 CREATE INDEX IF NOT EXISTS idx_result_heat ON result(heat_id);
 CREATE INDEX IF NOT EXISTS ux_timetable_full ON timetable(competition_id, day, section, time, event_name, category, round);
+
+-- 트랙 기록(attempt_number IS NULL) 중복 방지 — UNIQUE(heat_id,event_entry_id,attempt_number) 는 NULL 에 효력이 없다
+CREATE UNIQUE INDEX IF NOT EXISTS ux_result_no_attempt ON result(heat_id, event_entry_id) WHERE attempt_number IS NULL;
+
+-- 워드 상장 양식 (현장 인쇄용) — scope_key: 'global' | 'c<대회id>', config: JSON (lib/awardDocxTemplate.js)
+CREATE TABLE IF NOT EXISTS award_docx_template (
+    "organization_id" BIGINT NOT NULL DEFAULT 1,   -- 소속 조직 (멀티테넌시 2단계)
+    scope_key TEXT PRIMARY KEY,
+    config TEXT NOT NULL,
+    updated_at TEXT
+);

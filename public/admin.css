@@ -1,0 +1,269 @@
+/* ============================================================
+   관리자 콘솔 디자인 레이어 — 재설계 1단계 (2026-09-30, docs/ADMIN_REDESIGN_PLAN.md §5)
+   원칙: 카드 한 종류 · 버튼 4종(32px) · 타이포 6단계 · 색은 의미(성공·주의·오류·정보)에만 · 이모지/글자 배지 없음
+   admin.html 의 인라인 스타일보다 뒤에 로드되며, 카드 색 보더 같은 "장식"은 !important 로 눌러 둔다.
+   ============================================================ */
+:root {
+    --adm-text: #1f2328; --adm-muted: #6b7280; --adm-line: #e5e7eb; --adm-line-strong: #d1d5db;
+    --adm-surface: #ffffff; --adm-surface-2: #f8f9fa; --adm-bg: #f5f4f0;
+    --adm-primary: #b79f58; --adm-primary-hover: #a68d47; --adm-primary-ink: #1a1f2b;
+    --adm-ok: #15803d; --adm-ok-bg: #ecfdf5; --adm-warn: #b45309; --adm-warn-bg: #fffbeb; --adm-err: #b91c1c; --adm-err-bg: #fef2f2; --adm-info: #1d4ed8; --adm-info-bg: #eff6ff;
+    --adm-radius: 8px; --adm-radius-sm: 6px;
+}
+
+/* ── 레이아웃 ── */
+.admin-main { min-width: 0; font-size: 14px; color: var(--adm-text); }
+.admin-sidebar { width: 224px; min-width: 224px; padding: 8px; border-radius: var(--adm-radius); border-color: var(--adm-line); }
+.sb-group { margin-bottom: 4px; }
+.sb-group-title { font-size: 11px; letter-spacing: .06em; padding: 8px 10px 4px; }
+.sb-item { padding: 6px 10px; font-size: 13px; border-radius: var(--adm-radius-sm); }
+.sb-item.active { background: #f6f1e4; color: #6b5520; }
+.sb-item.active .sb-icon { color: #8a7640; }
+
+/* ── 카드: 흰 배경 · 1px 보더 · 8px · 20px 패딩. 좌측 컬러 보더·배경색 폐지 ── */
+.admin-main .admin-card {
+    background: var(--adm-surface); border: 1px solid var(--adm-line) !important; border-radius: var(--adm-radius);
+    padding: 20px 22px; margin-bottom: 16px; box-shadow: none;
+}
+.admin-main .admin-card h4 { font-size: 16px; font-weight: 700; margin: 0 0 14px; line-height: 1.3; color: var(--adm-text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-main .admin-card h4 .t-sm, .admin-main .admin-card h4 .t-xs { font-size: 12px; font-weight: 500; color: var(--adm-muted); }
+.admin-main .admin-card h5 { font-size: 14px; font-weight: 700; margin: 0 0 8px; }
+.admin-main .admin-card p, .admin-main .admin-card .t-md { font-size: 13px; line-height: 1.55; }
+.admin-main .admin-card .t-xs { font-size: 12px; }
+.admin-main .admin-card .t-muted { color: var(--adm-muted); }
+/* 카드 안의 설명 상자(예전 파스텔 박스) — 한 톤 */
+.admin-main .adm-note { background: var(--adm-surface-2); border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); padding: 10px 12px; font-size: 12.5px; line-height: 1.55; color: #374151; }
+/* 위험 구역: 카드 맨 아래 한 패턴 */
+.admin-main .danger-zone { border: 1px solid #fecaca; background: var(--adm-err-bg); border-radius: var(--adm-radius); padding: 18px 22px; margin-top: 16px; }
+.admin-main .danger-zone h4 { color: var(--adm-err); }
+
+/* ── 버튼 4종: Primary(골드) / Secondary(아웃라인) / Tertiary(텍스트) / Destructive(빨강). 높이 32px, 표 안 28px ── */
+.admin-main .btn { min-height: 32px; padding: 0 14px; font-size: 13px; font-weight: 600; border-radius: var(--adm-radius-sm); line-height: 1.2; white-space: nowrap; box-shadow: none; }
+.admin-main .btn:hover:not(:disabled) { transform: none; box-shadow: none; }
+.admin-main .btn-sm, .admin-main .btn-xs { min-height: 28px; padding: 0 10px; font-size: 12px; }
+.admin-main .btn-primary { background: var(--adm-primary); color: #fff; }
+.admin-main .btn-primary:hover:not(:disabled) { background: var(--adm-primary-hover); }
+.admin-main .btn-outline, .admin-main .btn-excel, .admin-main .btn-pdf, .admin-main .btn-success, .admin-main .btn-accent, .admin-main .btn-word {
+    background: var(--adm-surface); color: var(--adm-text); border: 1px solid var(--adm-line-strong);
+}
+.admin-main .btn-outline:hover:not(:disabled), .admin-main .btn-excel:hover:not(:disabled), .admin-main .btn-pdf:hover:not(:disabled), .admin-main .btn-success:hover:not(:disabled), .admin-main .btn-accent:hover:not(:disabled) { background: var(--adm-surface-2); border-color: #9ca3af; }
+.admin-main .btn-ghost { background: transparent; color: var(--adm-muted); }
+.admin-main .btn-ghost:hover:not(:disabled) { background: var(--adm-surface-2); color: var(--adm-text); }
+.admin-main .btn-danger { background: var(--adm-surface); color: var(--adm-err); border: 1px solid #fca5a5; }
+.admin-main .btn-danger:hover:not(:disabled) { background: var(--adm-err-bg); }
+/* 파일 형식은 색이 아니라 라벨로 — 예전 초록/빨강 채움 버튼의 인라인 색은 무시 */
+.admin-main .btn-excel[style], .admin-main .btn-pdf[style] { background: var(--adm-surface) !important; color: var(--adm-text) !important; border-color: var(--adm-line-strong) !important; }
+/* 브라우저 기본 파일 입력 */
+.admin-main input[type="file"] { font-size: 12px; color: var(--adm-muted); }
+.admin-main input[type="file"]::file-selector-button { min-height: 28px; padding: 0 10px; margin-right: 8px; border: 1px solid var(--adm-line-strong); border-radius: var(--adm-radius-sm); background: var(--adm-surface); color: var(--adm-text); font-size: 12px; font-weight: 600; cursor: pointer; }
+
+/* ── 폼 ── */
+.admin-main .admin-form-group label { font-size: 12px; font-weight: 600; color: var(--adm-muted); }
+.admin-main .admin-form-group input, .admin-main .admin-form-group select, .admin-main .admin-card select, .admin-main .admin-card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"]), .admin-main .admin-card textarea {
+    min-height: 32px; padding: 5px 10px; border: 1px solid var(--adm-line-strong); border-radius: var(--adm-radius-sm); font-size: 13px; background: var(--adm-surface); color: var(--adm-text);
+}
+.admin-main .admin-card textarea { min-height: 72px; line-height: 1.5; }
+.admin-main .admin-card input:focus, .admin-main .admin-card select:focus, .admin-main .admin-card textarea:focus { outline: 2px solid rgba(183, 159, 88, .35); outline-offset: 0; border-color: var(--adm-primary); }
+.admin-main .admin-card label { font-size: 13px; }
+
+/* ── 표 ── */
+.admin-main .crud-table, .admin-main .heat-entries-table { font-size: 13px; }
+.admin-main .crud-table th, .admin-main .heat-entries-table th { background: var(--adm-surface); color: var(--adm-muted); font-size: 12px; font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--adm-line-strong); }
+.admin-main .crud-table td, .admin-main .heat-entries-table td { padding: 9px 10px; border-bottom: 1px solid var(--adm-line); }
+.admin-main .crud-table tr:hover td { background: var(--adm-surface-2); }
+.admin-main .crud-table td .btn, .admin-main .crud-table td button { min-height: 28px; }
+.admin-main .crud-table input, .admin-main .crud-table select { min-height: 28px; font-size: 12.5px; }
+
+/* ── 상태 배지: 성공·주의·오류·정보·중립 ── */
+.admin-main .badge-pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.admin-main .badge-pill.badge-on, .admin-main .badge-ok { background: var(--adm-ok-bg); color: var(--adm-ok); }
+.admin-main .badge-warn { background: var(--adm-warn-bg); color: var(--adm-warn); }
+.admin-main .badge-err { background: var(--adm-err-bg); color: var(--adm-err); }
+.admin-main .badge-pill.badge-base, .admin-main .badge-info { background: var(--adm-info-bg); color: var(--adm-info); }
+.admin-main .badge-pill.badge-off, .admin-main .badge-neutral { background: var(--adm-line); color: #374151; }
+
+/* ── 빈 상태 컴포넌트 ── */
+.admin-main .detail-placeholder, .admin-main .adm-empty { color: var(--adm-muted); font-size: 13px; text-align: center; }
+.admin-main .ph-icon svg { width: 32px; height: 32px; }
+.admin-main .detail-placeholder p, .admin-main .adm-empty p { margin: 6px 0 0; }
+
+/* ── 헤더 바(연도·대회 선택·종료 배지) ── */
+.admin-main .comp-selector select, #admin-comp-select { min-height: 34px; border: 1px solid var(--adm-line-strong); border-radius: var(--adm-radius-sm); font-size: 13px; }
+.card-flash { animation: cardFlash 1.2s ease-out; }
+@keyframes cardFlash { 0% { box-shadow: 0 0 0 0 rgba(183, 159, 88, 0); } 30% { box-shadow: 0 0 0 4px rgba(183, 159, 88, .45); } 100% { box-shadow: 0 0 0 0 rgba(183, 159, 88, 0); } }
+
+/* 이모지·기호 흔적(⚠ ⭐ ※ ①②) 대신 텍스트만 — 이모지 폰트 폴백이 튀지 않게 */
+.admin-main .ui-emoji { vertical-align: -2px; }
+
+/* ── 화면 제목 바 · 화면 안 서브탭 (재설계 2단계) ── */
+.admin-main .adm-page-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 0 14px; }
+.admin-main .adm-page-title h2 { font-size: 20px; font-weight: 800; margin: 0; letter-spacing: -0.01em; color: var(--adm-text); }
+.admin-main .adm-subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--adm-line); margin-bottom: 16px; }
+.admin-main .adm-subtabs button { min-height: 36px; padding: 0 14px; border: none; background: none; font-size: 13px; font-weight: 600; color: var(--adm-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+.admin-main .adm-subtabs button:hover { color: var(--adm-text); }
+.admin-main .adm-subtabs button.active { color: var(--adm-primary-ink); border-bottom-color: var(--adm-primary); }
+
+/* ── 1단계 검수 반영 ── */
+.admin-main .admin-card h4, .admin-main .admin-card h5 { color: var(--adm-text) !important; }
+.admin-main .danger-zone { background: var(--adm-surface); }
+.admin-main .btn[style*="background:#16a085"], .admin-main .btn[style*="background: #16a085"] { background: var(--adm-primary) !important; border-color: var(--adm-primary) !important; color: #fff !important; }
+.admin-main .stat-card { flex: 1 1 160px; min-width: 160px; border-top: 1px solid var(--adm-line) !important; }
+.admin-main .stat-card .stat-label, .admin-main .stat-card small { font-size: 12px; }
+.admin-main #evt-count { font-size: 12px; }
+.admin-main .fc-drop, .admin-main #tt-drop { border: 1px dashed var(--adm-line-strong); background: var(--adm-surface-2); }
+.admin-main .fc-drop:hover, .admin-main .fc-drop.over, .admin-main #tt-drop:hover, .admin-main #tt-drop.over { background: #f6f1e4; border-color: var(--adm-primary); }
+.admin-main #ath-tree, .admin-main .matrix-scroll-area { font-size: 12px; }
+
+/* ── 3단계 컴포넌트: 스텝 바 · 세그먼트 · 드롭존 · 형식 안내 · 액션 줄 · 미리보기 모달 ── */
+.admin-main .adm-steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 16px; }
+.admin-main .adm-steps button { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px 0 6px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); font-size: 13px; font-weight: 600; color: var(--adm-muted); cursor: pointer; }
+.admin-main .adm-steps button b { width: 24px; height: 24px; border-radius: 50%; background: var(--adm-line); color: #374151; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.admin-main .adm-steps button.active { border-color: var(--adm-primary); color: var(--adm-primary-ink); background: #fbf8f0; }
+.admin-main .adm-steps button.active b { background: var(--adm-primary); color: #fff; }
+.admin-main .adm-steps-link { margin-left: auto; font-size: 13px; color: var(--adm-muted); text-decoration: underline; }
+.admin-main .adm-step-nav { display: flex; justify-content: space-between; align-items: center; margin: -4px 0 16px; }
+.admin-main .adm-seg { display: inline-flex; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); padding: 2px; margin-bottom: 14px; background: var(--adm-surface-2); }
+.admin-main .adm-seg button { min-height: 30px; padding: 0 14px; border: none; border-radius: 4px; background: transparent; font-size: 13px; font-weight: 600; color: var(--adm-muted); cursor: pointer; }
+.admin-main .adm-seg button.active { background: var(--adm-surface); color: var(--adm-text); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.admin-main .adm-lead { font-size: 13px; color: #374151; line-height: 1.55; margin: 0 0 12px; }
+.admin-main .adm-subhead { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--adm-muted); text-transform: uppercase; margin: 0 0 8px; }
+.admin-main details.adm-help { border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); background: var(--adm-surface-2); margin: 0 0 12px; font-size: 12.5px; line-height: 1.6; color: #374151; }
+.admin-main details.adm-help summary { cursor: pointer; padding: 8px 12px; font-weight: 600; color: var(--adm-muted); list-style: none; display: flex; align-items: center; gap: 6px; }
+.admin-main details.adm-help summary::before { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s; margin-left: 2px; }
+.admin-main details.adm-help[open] summary::before { transform: rotate(45deg); }
+.admin-main details.adm-help > div { padding: 0 12px 10px; }
+.admin-main details.adm-help code { background: #fff; border: 1px solid var(--adm-line); border-radius: 3px; padding: 0 4px; font-size: 12px; }
+.admin-main .adm-drop { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border: 1px dashed var(--adm-line-strong); border-radius: var(--adm-radius); background: var(--adm-surface-2); cursor: pointer; margin: 0 0 12px; color: var(--adm-text); transition: background .12s, border-color .12s; text-align: left; }
+.admin-main .adm-drop:hover, .admin-main .adm-drop.over { background: #fbf8f0; border-color: var(--adm-primary); }
+.admin-main .adm-drop .adm-drop-ic { color: var(--adm-muted); display: inline-flex; flex-shrink: 0; }
+.admin-main .adm-drop .adm-drop-txt { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.admin-main .adm-drop .adm-drop-txt small { color: var(--adm-muted); font-size: 12px; }
+.admin-main .adm-drop .adm-drop-name { margin-left: auto; font-size: 12.5px; color: var(--adm-primary-ink); font-weight: 600; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-main .adm-drop .adm-drop-name:empty { display: none; }
+.admin-main .fc-drop.adm-drop { text-align: left; }
+.admin-main .adm-opts { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 13px; color: #374151; margin: 0 0 12px; }
+.admin-main .adm-opts label { display: inline-flex; align-items: center; gap: 6px; }
+.admin-main .adm-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.admin-main .adm-actions > span:first-child { flex: 1; }
+.adm-preview-box { width: min(960px, 96vw); height: min(88vh, 900px); background: #fff; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.25); margin: auto; }
+.adm-preview-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--adm-line); font-weight: 700; font-size: 14px; }
+.adm-preview-head span { flex: 1; }
+.adm-preview-box iframe { flex: 1; border: none; width: 100%; background: #f3f4f6; }
+.adm-help-box { height: min(84vh, 820px); }
+#adm-help-body { overflow-y: auto; padding: 16px 18px; flex: 1; }
+#adm-help-body .admin-card { margin-bottom: 14px; }
+#adm-preview-modal, #adm-help-modal { position: fixed; inset: 0; background: rgba(17, 24, 39, .45); display: flex; align-items: center; justify-content: center; }
+
+/* ── 3차 검수 반영: 카드 속 상자 평탄화 · 제목 배지/아이콘 제거 · 도움말 본문 · 위험 구역 한 카드 ── */
+.admin-main .admin-card > div[style*="border:1px solid"], .admin-main .admin-card > div[style*="border: 1px solid"] { border-color: transparent !important; background: transparent !important; padding-left: 0 !important; padding-right: 0 !important; }
+.admin-main .admin-card > div[style*="border:1px solid"] + div[style*="border:1px solid"] { border-top-color: var(--adm-line) !important; border-radius: 0 !important; padding-top: 14px !important; }
+.admin-main .admin-card h4 > span[style*="background"]:not(#rb-pending-badge), .admin-main .admin-card h4 .card-icon { display: none !important; }
+.admin-main .admin-card h4 svg.ui-icon { display: none; }
+.admin-main #sec-warn-box, .admin-main .sec-warn-box { background: var(--adm-warn-bg) !important; border: 1px solid #fde68a !important; color: var(--adm-warn) !important; }
+.admin-main .adm-seg button { min-height: 32px; }
+.admin-main .adm-danger .danger-zone { border: none; background: transparent; padding: 0; margin: 0 0 12px; }
+.admin-main .adm-danger .danger-zone h4 { font-size: 14px; }
+.admin-main .adm-danger { border-color: #fecaca !important; }
+#adm-help-body .admin-card div[style*="background"] { background: transparent !important; border: none !important; padding: 0 !important; }
+#adm-help-body .admin-card h4, #adm-help-body .admin-card h5, #adm-help-body .admin-card strong { color: var(--adm-text) !important; }
+#adm-help-body .admin-card { border: none; border-bottom: 1px solid var(--adm-line); border-radius: 0; padding: 0 0 14px; }
+.adm-preview-head .btn { min-height: 28px; }
+#adm-topbar-actions #pace-lang-switcher { margin: 0; }
+
+/* ── 4단계: 전폭 표 + 드로어, 현황 대시보드, 다운로드 행, 작은 드롭존 ── */
+#tab-athletes > div { height: auto !important; min-height: 0 !important; display: block !important; }
+#tab-athletes > div > div:first-child { width: auto !important; min-width: 0 !important; border: none !important; background: transparent !important; }
+#tab-athletes > div > div:first-child > div:first-child { background: transparent !important; border: none !important; padding: 0 0 12px !important; }
+#tab-athletes #ath-tree { flex: none !important; overflow: visible !important; padding: 0 !important; font-size: 13px !important; }
+#tab-athletes #ath-count { background: transparent !important; border: none !important; padding: 10px 0 !important; }
+#tab-athletes #ath-search { min-height: 36px; font-size: 14px; }
+.admin-main .adm-ath-table td.num, .admin-main .num { font-variant-numeric: tabular-nums; }
+.admin-main .adm-row { cursor: pointer; }
+.admin-main .adm-row.selected-row td { background: #fbf8f0 !important; }
+#tab-events > div { height: auto !important; min-height: 0 !important; display: block !important; }
+#tab-events .admin-evt-matrix-panel { width: auto !important; min-width: 0 !important; border-right: none !important; }
+#tab-events .matrix-scroll-area { max-height: none !important; overflow: visible !important; }
+#tab-events .matrix-table-compact th, #tab-events .matrix-table-compact td { font-size: 13px; padding: 8px 10px; }
+.admin-main .adm-drawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(620px, 94vw); background: var(--adm-surface); border-left: 1px solid var(--adm-line); box-shadow: -12px 0 32px rgba(17, 24, 39, .12); transform: translateX(102%); transition: transform .2s ease; z-index: 10020; overflow-y: auto; padding: 16px 20px 32px; display: block !important; }
+.admin-main .adm-drawer.open { transform: none; }
+.admin-main .adm-drawer .adm-drawer-close { position: sticky; top: 0; float: right; z-index: 1; background: var(--adm-surface); }
+.admin-main .adm-drawer .detail-placeholder { height: 60vh; }
+.adm-ov-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 1000px) { .adm-ov-grid { grid-template-columns: 1fr; } }
+.admin-main .adm-ov-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--adm-line); font-size: 13px; }
+.admin-main .adm-ov-row:last-child { border-bottom: none; }
+.admin-main .adm-ov-row .adm-ov-name { flex: 1; min-width: 0; }
+.admin-main .adm-ov-row .adm-ov-time { color: var(--adm-muted); font-size: 12px; white-space: nowrap; }
+.admin-main .admin-status-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.admin-main .stat-card { background: var(--adm-surface); border: 1px solid var(--adm-line) !important; border-radius: var(--adm-radius); padding: 14px 18px; }
+.admin-main .stat-card .stat-number { font-size: 28px; font-weight: 800; color: var(--adm-text) !important; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.admin-main .stat-card .stat-label { font-size: 12px; color: var(--adm-muted); margin-top: 4px; }
+.admin-main .adm-doc-row { display: flex; align-items: flex-start; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--adm-line); }
+.admin-main .adm-doc-row:last-child { border-bottom: none; }
+.admin-main .adm-doc-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.admin-main .adm-doc-info small { color: var(--adm-muted); font-size: 12px; line-height: 1.5; }
+.admin-main .adm-doc-opts { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 12px; color: #374151; }
+.admin-main .adm-doc-opts label { display: inline-flex; align-items: center; gap: 6px; }
+.admin-main .adm-doc-opts select, .admin-main .adm-doc-opts input[type="text"] { min-height: 28px; font-size: 12px; }
+.admin-main .adm-doc-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
+.admin-main .adm-drop-sm { padding: 10px 14px; margin: 0; }
+.admin-main .adm-drop-sm .adm-drop-txt b { font-size: 12.5px; }
+.admin-main #tt-match-list button { min-height: 24px; font-size: 12px !important; padding: 0 8px !important; }
+
+/* ── 4단계 검수 반영 ── */
+#tab-athletes #ath-tree { max-height: calc(100vh - 300px) !important; min-height: 320px; overflow: auto !important; border: 1px solid var(--adm-line); border-radius: var(--adm-radius); }
+.admin-main .adm-ath-table th { position: sticky; top: 0; background: var(--adm-surface); z-index: 1; }
+.admin-main .adm-ath-table td.num { text-align: right; }
+.admin-main .adm-row.selected-row td { background: #f3ecd8 !important; }
+#tab-athletes .btn-primary[onclick="showAddAthlete()"] { flex: 0 0 auto !important; margin-left: auto; }
+#tab-athletes > div > div:first-child > div:first-child > div { align-items: center; }
+/* 드로어 크롬 */
+#adm-drawer-backdrop { position: fixed; inset: 0; background: rgba(17, 24, 39, .28); z-index: 10010; display: none; }
+.admin-main .adm-drawer { top: 0; padding: 0 20px 32px; }
+.admin-main .adm-drawer.adm-drawer-wide { width: min(820px, 96vw); }
+.admin-main .adm-drawer .adm-drawer-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; margin: 0 -20px 16px; padding: 12px 20px; background: var(--adm-surface); border-bottom: 1px solid var(--adm-line); font-weight: 700; font-size: 15px; }
+.admin-main .adm-drawer .adm-drawer-close { float: none; position: static; }
+.admin-main .adm-drawer .admin-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-items: end; }
+.admin-main .adm-drawer .admin-form-row > .admin-form-group { width: auto !important; min-width: 0; }
+.admin-main .adm-drawer .admin-form-group input, .admin-main .adm-drawer .admin-form-group select { width: 100% !important; box-sizing: border-box; }
+.admin-main .adm-drawer .btn-danger { margin-left: auto; }
+.admin-main .adm-drawer .heat-entries-table th { white-space: nowrap; font-size: 12px; }
+.admin-main .adm-drawer .heat-entries-table td { white-space: nowrap; }
+.admin-main .adm-drawer .heat-move-select { min-width: 84px; }
+.admin-main .adm-drawer [style*="font-size:10px"], .admin-main .adm-drawer [style*="font-size:11px"] { font-size: 12px !important; }
+/* 현황 밀도 */
+.admin-main .adm-ov-grid { align-items: start; }
+.admin-main .adm-ov-row small, .admin-main .adm-ov-row .t-xs, .admin-main .adm-ov-row .badge-pill { font-size: 12px; }
+.admin-main .adm-ov-row .adm-ov-name small { display: block; color: var(--adm-muted); margin-top: 2px; }
+/* 종목 매트릭스 */
+#tab-events .comp-mode-badge { font-size: 12px; }
+#evt-matrix .evt-div-badge[title="division 미지정"] { display: none; }
+#evt-matrix .adm-round-btn.adm-status-none { background: transparent; border-color: transparent; color: var(--adm-line-strong); min-width: 0; }
+#evt-matrix .adm-round-btn { font-size: 12px; padding: 4px 8px; }
+#evt-matrix .adm-round-btn.adm-status-done { background: #fbf8f0; border-color: #e6d9b8; color: #6b5520; }
+#evt-matrix .adm-round-btn.adm-status-done:hover, #evt-matrix .adm-round-btn.adm-status-active:hover, #evt-matrix .adm-round-btn.adm-status-ready:hover, #evt-matrix .adm-round-btn.adm-status-created:hover { background: #f3ecd8; border-color: var(--adm-primary); }
+#evt-matrix .adm-round-btn.adm-btn-selected { box-shadow: 0 0 0 2px var(--adm-primary); }
+#evt-matrix .matrix-section-title { font-size: 12px; letter-spacing: .04em; color: var(--adm-muted); }
+#evt-matrix .matrix-table-compact thead { display: none; }
+#evt-matrix .matrix-section:first-child .matrix-table-compact thead { display: table-header-group; }
+#tab-events .gender-tab { min-height: 32px; padding-top: 0; padding-bottom: 0; }
+#tab-events .evt-div-tab { min-height: 28px; display: inline-flex; align-items: center; font-size: 12px; }
+#tab-events .matrix-scroll-area { max-height: calc(100vh - 340px) !important; overflow: auto !important; border: 1px solid var(--adm-line); border-radius: var(--adm-radius); }
+#tab-events .gender-tabs-fixed { position: static; }
+/* 문서 › 양식 설정 안 회색 상자 평탄화 */
+.admin-main .admin-card div[style*="background:#f8f9fa"] { background: transparent !important; border-color: var(--adm-line) !important; }
+
+/* 4단계 재검수 반영 */
+.admin-main [hidden] { display: none !important; }
+.admin-main .badge-pill { font-size: 12px; }
+.admin-main .adm-ov-detail::before { content: " — "; }
+.admin-main .t-sm, .admin-main .t-xs { font-size: 12px; }
+.admin-main .adm-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; margin-right: 4px; vertical-align: middle; }
+.admin-main .adm-dot-done { background: #9a8548; }
+.admin-main .adm-dot-active { background: #f59e0b; }
+#evt-matrix .adm-round-btn.adm-status-done, #evt-matrix .adm-round-btn.adm-status-completed { background: #fbf8f0 !important; border-color: #e6d9b8 !important; color: #6b5520 !important; }
+#em-heat-tabs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#em-heat-tabs .heat-tab-btn { min-height: 28px; }
+.admin-main .adm-drawer .admin-form-row .admin-form-group > div { display: flex; gap: 6px; }
+.admin-main .adm-drawer .admin-form-row .admin-form-group > div > input { flex: 1; min-width: 0; }
+.admin-main .adm-drawer .admin-form-row .admin-form-group > div > .btn { flex: 0 0 auto; }
