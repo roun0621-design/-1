@@ -124,15 +124,18 @@ a, button, [role="button"], .btn, .tab, .nav-link,
     font-size: 22px; font-weight: 400;
     color: var(--text); letter-spacing: 2.5px;
 }
-/* 브랜드 워드마크(2026-10-09 새 로고): RISE 의 I 가 심볼인 SVG. 최소 높이 18px(브랜드 규칙), 옆의 'Node' 는 Audiowide 소형 글자 */
-.header-title { display: inline-flex; align-items: baseline; gap: 10px; line-height: 1; }
+/* 브랜드(2026-10-09 새 로고). 화면 헤더·모바일 메뉴는 B안(2026-10-10): 타탄 심볼 24px + 'Node'(Audiowide 20px) — 심볼 최소 24px(브랜드 규칙).
+   홈 히어로·로그인 화면만 전체 워드마크(RISE 의 I 가 심볼인 SVG, 최소 높이 18px) + 작은 'Node' */
+.header-title { display: inline-flex; align-items: center; gap: 9px; line-height: 1; }
+.brand-symbol { height: 24px; width: auto; display: inline-block; }
 .brand-wordmark { height: 20px; width: auto; display: inline-block; vertical-align: baseline; }
-.brand-node { font-family: var(--font-brand); font-size: 13px; letter-spacing: 1.5px; color: var(--text); }
+.brand-node { font-family: var(--font-brand); font-size: 20px; letter-spacing: 2px; color: var(--text); }
 .hero-wordmark { height: 56px; }
 .hero-node { font-size: 22px; }
-.mobile-menu-header .mm-brand { display: inline-flex; align-items: baseline; gap: 8px; }
-.mobile-menu-header .mm-brand .brand-wordmark { height: 18px; }
-.mobile-menu-header .mm-brand .brand-node { font-size: 12px; }
+.home-hero h1 .brand-node { font-size: 22px; }   /* 로그인 화면은 login.html 자체 규칙(13px) */
+.mobile-menu-header .mm-brand { display: inline-flex; align-items: center; gap: 8px; }
+.mobile-menu-header .mm-brand .brand-symbol { height: 24px; }
+.mobile-menu-header .mm-brand .brand-node { font-size: 18px; }
 .header-colon { color: var(--text); }
 .header-scope { color: var(--text); }
 .header-subtitle {

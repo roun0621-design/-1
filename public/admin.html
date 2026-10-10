@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
     <meta name="theme-color" content="#F4F3EF">
     <title>PACE RISE : Node — 관리자</title>
-    <link rel="stylesheet" href="styles.css?v=79">
+    <link rel="stylesheet" href="styles.css?v=80">
     <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
         .admin-tabs { display:flex; gap:0; border-bottom:2px solid var(--gray); margin-bottom:20px; flex-wrap:wrap; }
@@ -321,7 +321,7 @@
     </div>
     <header class="header">
         <div class="header-inner">
-            <h1 class="header-title"><img class="brand-wordmark" src="/brand/wordmark.svg" alt="PACE RISE"><span class="brand-node">Node</span></h1>
+            <h1 class="header-title"><img class="brand-symbol" src="/brand/symbol-tartan.svg" alt="PACE RISE"><span class="brand-node">Node</span></h1>
             <p class="header-subtitle">Sport Competition Operation Platform for Excellence</p>
         </div>
         <nav class="page-nav" id="page-nav"></nav>
@@ -733,6 +733,7 @@
                 <div class="admin-card" id="card-sb-lif" style="">
                     <h4>.lif 파일 (FinishLynx 사진판독)</h4>
                     <p class="adm-lead">전광판·사진판독 시스템이 내보낸 .lif 파일의 종목명을 조편성 때 만들어진 <b>스코어보드 키</b>와 대조해 조·선수를 찾고 기록을 넣습니다.</p>
+                    <div id="sb-agent-status" class="t-sm t-muted" style="margin:-6px 0 10px;"></div>
                     <details class="adm-help"><summary>형식 안내</summary><div>FinishLynx .lif(UTF-16). 머리글의 종목명(예: <code>남자실업부 100m 예선 2조</code>)이 스코어보드 키와 같아야 하고, 선수는 배번 → 레인 → 성명 순으로 찾습니다. 풍속이 있으면 조에 함께 저장됩니다.</div></details>
                     <label class="adm-drop" for="sb-lif-files"><span class="adm-drop-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="adm-drop-txt"><b>파일을 끌어다 놓거나 클릭해서 선택</b><small>lif · 여러 파일 가능</small></span><span class="adm-drop-name" data-for="sb-lif-files"></span></label>
                         <input type="file" id="sb-lif-files" accept=".lif" multiple onchange="sbPreviewFiles()" hidden>
@@ -2793,7 +2794,7 @@ POST /api/external/event-result-link/batch<br>
     <script src="lib/xlsx.full.min.js"></script>
     <script src="/lib/auth-client.js?v=1"></script>
     <script src="/lib/icons.js?v=1"></script>
-    <script src="common.js?v=102"></script>
+    <script src="common.js?v=103"></script>
     <script>
         renderPageNav('admin');
         // [정책] 종료된 대회 + 운영진(operation) → 진입 차단, dashboard 로 리다이렉트
@@ -7373,6 +7374,22 @@ POST /api/external/event-result-link/batch<br>
         // 전광판 (Scoreboard) .lif Import Functions
         // ============================================================
         let _sbPreviewData = null;
+
+        // 계측 에이전트 상태(2026-10-10): 계측 PC 의 에이전트가 보내는 핑을 20초마다 읽어 .lif 카드 위에 보여 준다 (없으면 안내 한 줄)
+        async function sbAgentStatus() {
+            const el = document.getElementById('sb-agent-status'); if (!el || !_selectedCompId || document.hidden) return;
+            try {
+                const r = await fetch(`/api/timing-agent/status?competition_id=${_selectedCompId}`, { headers: { 'x-admin-key': AK() } });
+                const j = await r.json(); const list = j.agents || [];
+                if (!list.length) { el.innerHTML = '계측 에이전트: 연결된 PC 없음 — 계측 PC 에 에이전트 폴더를 두면(docs/TIMING_WATCHER.md) 결과 파일이 자동으로 올라옵니다.'; return; }
+                el.innerHTML = list.map(a => {
+                    const ago = a.seconds_ago < 60 ? `${a.seconds_ago}초 전` : a.seconds_ago < 3600 ? `${Math.round(a.seconds_ago / 60)}분 전` : `${Math.round(a.seconds_ago / 3600)}시간 전`;
+                    const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.online ? 'var(--green)' : 'var(--text-muted)'};margin-right:6px;vertical-align:middle;"></span>`;
+                    return `${dot}계측 에이전트 <b>${escapeHtml(a.name)}</b> ${a.online ? '연결됨' : '끊김'} (${ago}) · ${a.mode === 'confirm' ? '확인 모드' : '자동 모드'} · 적용 ${a.done} / 확인 필요 ${a.review} / 실패 ${a.failed}${a.last_file ? ` · 마지막 ${escapeHtml(a.last_file)}` : ''}`;
+                }).join('<br>');
+            } catch (e) { /* 조용히 */ }
+        }
+        document.addEventListener('DOMContentLoaded', () => { setTimeout(sbAgentStatus, 1500); setInterval(sbAgentStatus, 20000); });
 
         async function sbPreviewFiles() {
             const fileInput = document.getElementById('sb-lif-files');

@@ -43,3 +43,6 @@ tmp/
 # 테스트 픽스처 (익명화된 실데이터)
 !tests/fixtures/**/*.xlsx
 tests/browser/shots/
+
+# 계측 에이전트 실행 파일 묶음 (scripts/timing-watcher/build-agent.sh 산출물)
+dist/

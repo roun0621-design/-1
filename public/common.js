@@ -1478,7 +1478,7 @@ function _buildMobileMenu(pages, currentPage, role) {
 
     menu.innerHTML = `
         <div class="mobile-menu-header">
-            <span class="mm-brand">${(window.PACE_ORG && !window.PACE_ORG.is_default) ? (window.PACE_ORG.site_name || window.PACE_ORG.name) : '<img class="brand-wordmark" src="/brand/wordmark.svg" alt="PACE RISE"><span class="brand-node">Node</span>'}</span>
+            <span class="mm-brand">${(window.PACE_ORG && !window.PACE_ORG.is_default) ? (window.PACE_ORG.site_name || window.PACE_ORG.name) : '<img class="brand-symbol" src="/brand/symbol-tartan.svg" alt="PACE RISE"><span class="brand-node">Node</span>'}</span>
             ${prCloseBtn('closeMobileMenu()', { cls: 'mobile-menu-close' })}
         </div>
         <div class="mobile-menu-nav">${navLinks}</div>
@@ -1917,7 +1917,10 @@ if ('serviceWorker' in navigator) {
                     newSW.addEventListener('statechange', () => {
                         if (newSW.state === 'activated') {
                             console.log('[SW] New version activated, reloading for fresh content');
-                            window.location.reload();
+                            // 시작 스플래시(홈·대시보드, /brand/splash.js)가 도는 중이면 끝난 뒤에 새로고침 — 첫 방문엔 설치 직후 활성화돼 1초쯤에 새로고침되므로
+                            const go = () => window.location.reload();
+                            if (document.getElementById('pr-splash')) { const t = setInterval(() => { if (!document.getElementById('pr-splash')) { clearInterval(t); go(); } }, 100); setTimeout(() => { clearInterval(t); go(); }, 3000); }
+                            else go();
                         }
                     });
                 }

@@ -4309,7 +4309,7 @@ app.get('/api/public/pacing', async (req, res) => {
 // ============================================================
 // 계측 결과 가져오기 (.lif / 기록 xlsx / .txt) — lib/routes/timing_import.js 로 추출 (2026-09)
 // ============================================================
-const _timingImport = require('./lib/routes/timing_import')(app, { db, upload, isAdminKey, opLog, broadcastSSE, audit, getResultsRoutes: () => _resultsRoutes });
+const _timingImport = require('./lib/routes/timing_import')(app, { db, upload, isAdminKey, isOperationKey, opLog, broadcastSSE, audit, getResultsRoutes: () => _resultsRoutes });
 const { normBib: _recxNormBib, divToken: _recxDivToken, genderOf: _recxGenderOf, round: _recxRound } = _timingImport.recx;
 
 // ============================================================

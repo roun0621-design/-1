@@ -474,6 +474,7 @@ await db.transaction(async () => {
 
 ## 계측 워처·자동 조편성 (2026-10-09, C1·C2)
 - `scripts/timing-watcher/watch.js`: 계측 PC 에서 돌리는 폴더 워처(`npm run timing-watch -- --dir … --server … --key … --comp …`). `/api/scoreboard/preview` 로 판정(`judge()`) 후 `/api/scoreboard/import` 또는 `/api/timing-txt/import` 적용; done/review/failed 폴더. 테스트 `tests/api/61_timing_watcher.test.js`(실제 포트로 서버 띄워 processFile 호출). 문서 `docs/TIMING_WATCHER.md`.
+  - **에이전트(2026-10-10)**: 같은 파일을 `scripts/timing-watcher/build-agent.sh` 가 `@yao-pkg/pkg` 로 실행 파일(`dist/timing-agent/<os>/PaceRise-TimingAgent/` — exe + `config.json` + `inbox/` + 시작·자동시작 bat, zip)로 묶는다. 실행 파일 옆 `config.json`(server/key/competition_id/dir/mode/…)을 읽고 dir 이 비면 옆의 `inbox/` 를 감시 → 폴더에 넣기만 하면 올라간다. 30초마다 `POST /api/timing-agent/ping`(운영키) → 메모리 Map → `GET /api/timing-agent/status?competition_id=` → 관리자 가져오기 › 계측 › .lif 카드 위에 "계측 에이전트 ○○ 연결됨 · 적용/확인/실패 건수"(`sbAgentStatus()`, 20초 폴링). `dist/` 는 git 에 안 들어간다.
 - `lib/routes/auto_seed.js`: `POST /api/events/:id/auto-seed` — 엔트리 SB/PB(`parseRecordValue`) 순위 → `serpentine()` 지그재그 + 같은 소속 교환 → `waAssignLanesBulk` 레인 → 기존 조 삭제 후 재생성(`generateScoreboardKey`), 기록 있으면 `force`. 관리자 종목 드로어 조 탭 옆 '자동 조편성'(`emAutoSeedOpen/Preview/Apply`). 테스트 `tests/api/60_auto_seed.test.js`.
 
 ## PB/SB 자동 누적 (2026-10-09, C4)

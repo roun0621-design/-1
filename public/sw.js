@@ -2,7 +2,7 @@
 // Offline-first PWA: cache app shell, queue API mutations for sync
 // v3: auto version sync, IndexedDB offline queue, background sync
 
-const CACHE_NAME = 'pacerise-v198';
+const CACHE_NAME = 'pacerise-v199';
 const OFFLINE_URL = '/';
 
 // App shell — version-free paths (actual files are network-first, cache updated on every fetch)
@@ -24,7 +24,10 @@ const APP_SHELL = [
     '/callroom.js',
     '/icons/icon-192.png',
     '/icons/icon-512.png',
-    '/manifest.json'
+    '/manifest.json',
+    '/brand/symbol-tartan.svg',
+    '/brand/wordmark.svg',
+    '/brand/splash.js'
 ];
 
 // ---- IndexedDB for offline queue ----

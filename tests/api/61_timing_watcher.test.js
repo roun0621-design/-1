@@ -58,4 +58,22 @@ describe('워처', () => {
         expect(await W.processFile({ ...fx.cfg, key: 'wrong-key' }, f)).toBe('failed');
         expect(fs.existsSync(path.join(fx.dir, 'failed', 'badkey.lif'))).toBe(true);
     });
+
+    it('에이전트(2026-10-10): config.json 병합 — 인자 > 환경변수 > 파일, 틀의 키 자리표시는 빈 키로', () => {
+        const c = W.loadConfig(['--comp', '9'], { server: 'https://x.test/', key: 'filekey', competition_id: 3, mode: 'confirm', interval: 7, name: 'PC-1' });
+        expect(c).toMatchObject({ server: 'https://x.test', key: 'filekey', comp: 9, mode: 'confirm', interval: 7, name: 'PC-1', pingInterval: 30 });
+        expect(W.loadConfig([], W.CONFIG_TEMPLATE).key).toBe('');
+    });
+
+    it('에이전트 핑 → 관리자 상태 조회(대회별, 연결됨/처리 건수) · 키 없으면 403', async () => {
+        W.stats.done = 2; W.stats.review = 1; W.stats.lastFile = 'm100f.lif';
+        await W.ping({ ...fx.cfg, name: '계측PC-1' });
+        const r = await request(app).get(`/api/timing-agent/status?competition_id=${fx.comp}`).set('x-admin-key', OP);
+        expect(r.status).toBe(200); expect(r.body.agents).toHaveLength(1);
+        expect(r.body.agents[0]).toMatchObject({ name: '계측PC-1', online: true, mode: 'auto', done: 2, review: 1, failed: 0, last_file: 'm100f.lif', version: W.AGENT_VERSION });
+        expect(r.body.agents[0].seconds_ago).toBeLessThan(5);
+        expect((await request(app).get(`/api/timing-agent/status?competition_id=${fx.comp + 1}`).set('x-admin-key', OP)).body.agents).toHaveLength(0);   // 다른 대회
+        expect((await request(app).post('/api/timing-agent/ping').send({ competition_id: fx.comp, name: 'x' })).status).toBe(403);
+        expect((await request(app).post('/api/timing-agent/ping').set('x-admin-key', OP).send({ name: 'x' })).status).toBe(400);
+    });
 });
