@@ -4,6 +4,7 @@
 
 - Base URL: `https://pace-rise-node.com` (조직 서브도메인이면 그 호스트)
 - 인증: `X-API-Key: pkr_…` — 관리자 › 계정·키 › **외부 API** 에서 발급. 키는 발급한 조직의 대회만, `allowed_competition_id` 가 있으면 그 대회만. 분당 한도(`X-RateLimit-Limit` / `X-RateLimit-Remaining`), 모든 호출은 외부 API 로그에 남는다.
+- **접두어 두 가지**: `/api/v1/…`(정식) 과 `/api/public/v1/…`(같은 라우트). 운영 nginx 가 `/api/v1/` 을 옛 `pacerise-api`(3001 포트, 2026-05 별도 서비스) 로 보내고 있어, 그걸 정리하기 전까지 **운영에서는 `/api/public/v1` 을 쓴다**(2026-10-12).
 - 명세: `GET /api/v1/openapi.json` (키 없이) — OpenAPI 3.0, Swagger UI 등에 바로 넣을 수 있다.
 - 응답: `{ "success": true, "data": …, "meta": { "version": "v1", "generated_at": "…", "count": n } }` / 오류 `{ "success": false, "error_code": "…", "message": "…" }` (401 키 없음 · 403 키 무효/회수/만료/범위 밖 · 404 없음 · 429 한도)
 - 개인정보(생년월일·연락처)는 어떤 경로로도 나가지 않는다.

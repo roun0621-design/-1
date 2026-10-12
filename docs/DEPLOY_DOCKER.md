@@ -11,7 +11,9 @@
    sudo certbot certonly --manual --preferred-challenges dns -d pace-rise-node.com -d '*.pace-rise-node.com'
    # 또는 Route53 플러그인: certbot certonly --dns-route53 -d pace-rise-node.com -d '*.pace-rise-node.com'
    ```
-3. **nginx** `server_name` 에 와일드카드 추가. 앱은 `Host` 헤더로 조직을 고르므로 `proxy_set_header Host $host;` 가 반드시 있어야 한다.
+3. **(2026-10-12 운영 서버에 설치됨) `sudo pacerise-add-domain <도메인>`** — 원본 `scripts/server/pacerise-add-domain.sh`. DNS 확인 → 인증용 HTTP 블록 → Let's Encrypt(webroot, certbot.timer 자동 갱신) → HTTPS 블록(공용 스니펫 `/etc/nginx/snippets/pacerise-proxy.conf`) → reload. 와일드카드 인증서는 안 쓴다(가비아 DNS 는 API 가 없어 자동 갱신 불가) — 이름마다 1장. 가비아에 `*` A 레코드(→ 52.79.132.6)만 한 번 넣으면 그다음은 조직마다 이 명령 한 줄.
+   (아래 3·4 는 손으로 할 때의 설명)
+3'. **nginx** `server_name` 에 와일드카드 추가. 앱은 `Host` 헤더로 조직을 고르므로 `proxy_set_header Host $host;` 가 반드시 있어야 한다.
    ```nginx
    server {
        listen 443 ssl http2;
