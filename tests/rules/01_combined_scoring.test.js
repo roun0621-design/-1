@@ -15,10 +15,12 @@ const OFFICIAL = {
     M_javelin: [10.14, 7, 1.08], M_1500m: [0.03768, 480, 1.85],
     F_100m_hurdles: [9.23076, 26.7, 1.835], F_high_jump: [1.84523, 75, 1.348], F_shot_put: [56.0211, 1.5, 1.05], F_200m: [4.99087, 42.5, 1.81],
     F_long_jump: [0.188807, 210, 1.41], F_javelin: [15.9803, 3.8, 1.04], F_800m: [0.11193, 254, 1.88],
+    // 5종경기(KAAF 중학교)용 — WA 종합경기 채점표 (2026-10-12)
+    M_800m: [0.13279, 235, 1.85], F_100m: [17.857, 21, 1.81],
 };
 
 describe('종합경기 점수표', () => {
-    it('계수 A·B·C 가 공식 표와 일치 (17종목)', () => {
+    it('계수 A·B·C 가 공식 표와 일치 (10종 10 + 7종 7 + 5종 추가 2 = 19종목)', () => {
         for (const [k, [A, B, C]] of Object.entries(OFFICIAL)) {
             expect(WA_TABLES[k], k).toBeTruthy();
             expect([WA_TABLES[k].A, WA_TABLES[k].B, WA_TABLES[k].C], k).toEqual([A, B, C]);

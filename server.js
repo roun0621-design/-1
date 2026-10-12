@@ -2355,9 +2355,20 @@ const WA_TABLES = {
     F_high_jump:{A:1.84523,B:75,C:1.348,type:'field_cm'},F_shot_put:{A:56.0211,B:1.5,C:1.05,type:'field_m'},
     F_long_jump:{A:0.188807,B:210,C:1.41,type:'field_cm'},F_javelin:{A:15.9803,B:3.8,C:1.04,type:'field_m'},
     F_800m:{A:0.11193,B:254,C:1.88,type:'track'},
+    // 5종경기(KAAF 중학교: 100m·포환·허들·높이·800m)용 — WA 종합경기 채점표 (2026-10-12)
+    M_800m:{A:0.13279,B:235,C:1.85,type:'track'},
+    F_100m:{A:17.857,B:21,C:1.81,type:'track'},
 };
 const DECATHLON_KEYS = ['M_100m','M_long_jump','M_shot_put','M_high_jump','M_400m','M_110m_hurdles','M_discus','M_pole_vault','M_javelin','M_1500m'];
 const HEPTATHLON_KEYS = ['F_100m_hurdles','F_high_jump','F_shot_put','F_200m','F_long_jump','F_javelin','F_800m'];
+const PENTATHLON_M_KEYS = ['M_100m','M_shot_put','M_110m_hurdles','M_high_jump','M_800m'];     // KAAF 5종 남 (서버의 PENTATHLON_M_SUBS 순서와 같다)
+const PENTATHLON_F_KEYS = ['F_100m','F_shot_put','F_100m_hurdles','F_high_jump','F_800m'];     // KAAF 5종 여
+/** 종합경기 부모 종목 → 세부종목 차수별 WA 키. 예전엔 성별만 보고 10종/7종 키를 써서 5종이 엉뚱한 계수로 채점됐다 (2026-10-12) */
+function waKeysFor(parentEvent) {
+    const name = String(parentEvent && parentEvent.name || '');
+    if (/5종|pentathlon|PEN\b/i.test(name) || (parentEvent && parentEvent.code === 'PEN')) return parentEvent.gender === 'F' ? PENTATHLON_F_KEYS : PENTATHLON_M_KEYS;
+    return (parentEvent && parentEvent.gender === 'M') ? DECATHLON_KEYS : HEPTATHLON_KEYS;
+}
 function calcWAPoints(key, rawRecord) {
     const t = WA_TABLES[key];
     if (!t || rawRecord == null || rawRecord <= 0) return 0;
@@ -3108,7 +3119,7 @@ const _events_readRoutes = require('./lib/routes/events_read')(app, { db, orderB
 // RESULTS
 // ============================================================
 // RESULTS 라우트들은 lib/routes/results.js 로 추출됨 (10차)
-const _resultsRoutes = require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, requireAdminAfterCompEnd, audit, parseDbTimestampMs, DECATHLON_KEYS, HEPTATHLON_KEYS, getJudgeName });
+const _resultsRoutes = require('./lib/routes/results')(app, { db, isAdminKey, isOperationKey, opLog, broadcastSSE, calcWAPoints, waKeysFor, requireAdminAfterCompEnd, audit, parseDbTimestampMs, DECATHLON_KEYS, HEPTATHLON_KEYS, getJudgeName });
 // ── 조 풍속·이름·전광판 키, 라이브 결과, 높이 시도 저장/삭제 → lib/routes/heat_meta.js (2026-09-22) ──
 const _heat_metaRoutes = require('./lib/routes/heat_meta')(app, { _resultsRoutes, broadcastSSE, db, isAdminKey, isOperationKey, opLog, orderByBibSql, parseDbTimestampMs, requireAdminAfterCompEnd });
 // ============================================================
@@ -3118,7 +3129,7 @@ require("./lib/routes/combined_scores")(app, {
     db, isAdminKey, isOperationKey, opLog, broadcastSSE,
     // WA 점수 계산용 상수/함수 — combined_scores.js 의 /sync /repair 가 필요로 함.
     // 누락 시 ReferenceError: DECATHLON_KEYS is not defined 로 500 떨어짐 (2026-06 fix)
-    DECATHLON_KEYS, HEPTATHLON_KEYS, WA_TABLES, calcWAPoints,
+    DECATHLON_KEYS, HEPTATHLON_KEYS, WA_TABLES, calcWAPoints, waKeysFor,
     // 종료된 대회 혼성점수 잠금 — 누락 시 try/catch에 삼켜져 잠금이 무력화됨 (2026-06 fix)
     requireAdminAfterCompEnd
 });
@@ -7368,7 +7379,7 @@ const _bootReady = _pgBootAsync();
 // Export app/server for tests; only auto-listen when run directly (node server.js)
 // db 도 노출 — 테스트에서 격리 DB에 픽스처를 직접 삽입하기 위함 (운영에선 미사용)
 if (require.main !== module) {
-    module.exports = { app, server, db, calcWAPoints, WA_TABLES, DECATHLON_KEYS, HEPTATHLON_KEYS, ready: _bootReady };
+    module.exports = { app, server, db, calcWAPoints, WA_TABLES, DECATHLON_KEYS, HEPTATHLON_KEYS, PENTATHLON_M_KEYS, PENTATHLON_F_KEYS, waKeysFor, ready: _bootReady };
 } else
 server.listen(PORT, '0.0.0.0', async () => {
     await _bootReady;

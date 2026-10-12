@@ -62,5 +62,11 @@
   "발송 중…": "Sending…",
   "발송 이력이 없습니다.": "No emails sent yet.",
   "완주자 전원": "All finishers",
-  "SSL(465)": "SSL (465)"
+  "SSL(465)": "SSL (465)",
+  "개인정보 삭제 요청 처리 — 이름을 비공개로 바꾸고 연락처·이메일·생년월일을 지웁니다. 기록은 남습니다.": "Handle a personal-data deletion request — hides the name and erases phone, e-mail and date of birth. Results are kept.",
+  "개인정보 삭제": "Erase personal data",
+  "\"{0}\" 선수의 개인정보를 삭제할까요?\\n이름은 '비공개 선수'로 바뀌고 연락처·이메일·생년월일·바코드가 지워집니다. 기록·순위는 그대로 남으며 되돌릴 수 없습니다.": "Erase personal data of \"{0}\"?\\nThe name becomes 'Anonymous athlete' and phone, e-mail, date of birth and barcode are erased. Results and ranks remain; this cannot be undone.",
+  "비공개 선수": "Anonymous athlete",
+  "개인정보를 삭제했습니다": "Personal data erased",
+  "처리 실패": "Failed"
 }

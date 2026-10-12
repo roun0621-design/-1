@@ -23,13 +23,13 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
 
-        .lt-accent { height: 3px; background: #C24A2E; }
+        .lt-accent { height: 3px; background: var(--ov-point, #C24A2E); }
 
         .lt-content { padding: 14px 24px; display: flex; align-items: center; gap: 18px; }
 
         .lt-bib {
             font-family: 'Audiowide', sans-serif; font-size: 28px; font-weight: 900;
-            color: #fff; background: rgba(194,74,46,0.2); border-radius: 8px;
+            color: #fff; background: color-mix(in srgb, var(--ov-point, #C24A2E) 20%, transparent); border-radius: 8px;
             width: 60px; height: 52px; display: flex; align-items: center; justify-content: center;
             border: 1px solid rgba(194,74,46,0.3);
         }
@@ -47,7 +47,8 @@
             padding: 6px 24px; background: rgba(0,0,0,0.3);
         }
         .lt-event-name { font-size: 11px; color: #64748b; font-weight: 600; letter-spacing: 0.5px; }
-        .lt-brand { font-family: 'Audiowide', sans-serif; font-size: 9px; color: #F4F3EF; opacity: .7; letter-spacing: 1px; }
+        .lt-brand { font-family: 'Audiowide', sans-serif; font-size: 9px; color: #F4F3EF; opacity: .7; letter-spacing: 1px; display:inline-flex; align-items:center; }
+        .lt-brand img { height: 10px; width: auto; }
 
         .hidden { display: none; }
     </style>
@@ -69,7 +70,7 @@
         </div>
         <div class="lt-event-bar">
             <span class="lt-event-name" id="lt-event">-</span>
-            <span class="lt-brand">PACE RISE</span>
+            <span class="lt-brand" id="lt-brand"><img src="/brand/wordmark-white.svg" alt="PACE RISE"></span>
         </div>
     </div>
 </div>
@@ -77,6 +78,15 @@
 <script>
 const params = new URLSearchParams(window.location.search);
 const compId = params.get('comp');
+// 대회 브랜드(포인트색·로고) 반영 — 2026-10-12
+if (compId) fetch(`/api/competitions/${compId}`).then(r => r.ok ? r.json() : null).then(c => {
+    if (!c) return;
+    const point = c.brand_color_point || (c.brand && c.brand.point) || '';
+    if (/^#[0-9a-f]{6}$/i.test(point)) document.documentElement.style.setProperty('--ov-point', point);
+    const logo = c.brand_logo_path || (c.brand && c.brand.logo) || '';
+    const el = document.getElementById('lt-brand');
+    if (el && logo) el.innerHTML = `<img src="${logo.replace(/"/g, '')}" alt="" style="height:12px;">`;
+}).catch(() => {});
 let ws = null;
 let currentData = null;
 let displayTimer = null;

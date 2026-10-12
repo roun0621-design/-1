@@ -19,7 +19,7 @@
 
         .sb-header {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 20px; background: #0E0E10; border-bottom: 2px solid #C24A2E;
+            padding: 10px 20px; background: #0E0E10; border-bottom: 2px solid var(--ov-point, #C24A2E);
         }
         .sb-event-name { font-family: 'Audiowide', sans-serif; font-size: 16px; color: #fff; letter-spacing: 1px; }
         .sb-heat-info { font-size: 12px; color: rgba(255,255,255,0.8); font-weight: 600; }
@@ -33,7 +33,7 @@
             transition: background 0.3s;
         }
         .sb-row:last-child { border-bottom: none; }
-        .sb-row.highlight { background: rgba(194,74,46,0.15); }
+        .sb-row.highlight { background: color-mix(in srgb, var(--ov-point, #C24A2E) 15%, transparent); }
         .sb-row.dns { opacity: 0.4; }
 
         .sb-lane { font-size: 14px; color: #6b7b8d; font-weight: 700; text-align: center; }
@@ -59,7 +59,8 @@
             display: flex; align-items: center; justify-content: space-between;
             padding: 6px 20px; background: rgba(0,0,0,0.3); font-size: 9px; color: #556; letter-spacing: 0.5px;
         }
-        .sb-brand { font-family: 'Audiowide', sans-serif; color: #4a5; }
+        .sb-brand { font-family: 'Audiowide', sans-serif; color: #C9C6BF; display:inline-flex; align-items:center; gap:6px; }
+        .sb-brand img { height: 14px; width: auto; }
 
         .sb-empty { padding: 40px; text-align: center; color: #556; font-size: 14px; }
 
@@ -84,7 +85,7 @@
     </div>
     <div class="sb-footer">
         <span><span class="status-dot" id="status-dot"></span><span id="status-text">Connecting</span></span>
-        <span class="sb-brand">PACE RISE</span>
+        <span class="sb-brand" id="sb-brand"><img src="/brand/wordmark-white.svg" alt="PACE RISE"></span>
     </div>
 </div>
 
@@ -93,6 +94,15 @@ const FED_LABELS = { 'KTFL': '실업', 'KUAF': '대학' };
 
 const params = new URLSearchParams(window.location.search);
 const compId = params.get('comp');
+// 대회 브랜드(포인트색·로고, 관리자 › 대회 설정 › 브랜드) 를 오버레이 색·푸터에 반영 — 없으면 기본 타탄 + PACE RISE 워드마크 (2026-10-12)
+if (compId) fetch(`/api/competitions/${compId}`).then(r => r.ok ? r.json() : null).then(c => {
+    if (!c) return;
+    const point = c.brand_color_point || (c.brand && c.brand.point) || '';
+    if (/^#[0-9a-f]{6}$/i.test(point)) document.documentElement.style.setProperty('--ov-point', point);
+    const logo = c.brand_logo_path || (c.brand && c.brand.logo) || '';
+    const el = document.getElementById('sb-brand');
+    if (el && logo) el.innerHTML = `<img src="${logo.replace(/"/g, '')}" alt="" style="height:16px;">`;
+}).catch(() => {});
 let ws = null;
 let reconnectTimer = null;
 

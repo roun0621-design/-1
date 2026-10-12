@@ -3859,6 +3859,7 @@ POST /api/external/event-result-link/batch<br>
                     <div style="display:flex;gap:8px;margin-top:8px;">
                         <button class="btn btn-sm btn-primary" onclick="saveAthleteDetail(${a.id})">저장</button>
                         <button class="btn btn-danger btn-sm" onclick="deleteAthlete(${a.id},'${a.name.replace(/'/g,"\\'")}')">삭제</button>
+                        <button class="btn btn-outline btn-sm" onclick="anonymizeAthlete(${a.id},'${a.name.replace(/'/g,"\\'")}')" title="개인정보 삭제 요청 처리 — 이름을 비공개로 바꾸고 연락처·이메일·생년월일을 지웁니다. 기록은 남습니다.">개인정보 삭제</button>
                     </div>
                 </div>
                 <div>
@@ -3983,6 +3984,11 @@ POST /api/external/event-result-link/batch<br>
                 toast('선수 추가 완료');
                 loadAthletes();
             } catch (e) { toast(e.error || '추가 실패', 'error'); }
+        }
+        // 개인정보 삭제 요청(GDPR) — 기록은 보존, 사람을 알아볼 정보만 삭제 (2026-10-12)
+        async function anonymizeAthlete(id, name) {
+            if (!await uiConfirm(`"${name}" 선수의 개인정보를 삭제할까요?\n이름은 '비공개 선수'로 바뀌고 연락처·이메일·생년월일·바코드가 지워집니다. 기록·순위는 그대로 남으며 되돌릴 수 없습니다.`)) return;
+            try { await api('POST', `/api/admin/athletes/${id}/anonymize`, { admin_key: AK() }); toast('개인정보를 삭제했습니다'); loadAthletes(); } catch (e) { toast(e.error || '처리 실패', 'error'); }
         }
         async function deleteAthlete(id, name) {
             if (!await uiConfirm(`"${name}" 선수를 삭제하시겠습니까?`)) return;
@@ -12533,6 +12539,6 @@ POST /api/external/event-result-link/batch<br>
         }
     </script>
     <script src="push.js?v=12"></script>
-    <script src="/i18n.js?v=5"></script>
+    <script src="/i18n.js?v=6"></script>
 </body>
 </html>
