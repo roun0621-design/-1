@@ -322,6 +322,28 @@ try { app.use(require('cookie-parser')()); } catch (e) { console.warn('[auth] co
 // 조직 선택 — 호스트(서브도메인·전용 도메인)로 req.org 를 정한다 (lib/org.js, 멀티테넌시 1단계 2026-10-01)
 const ORG = require('./lib/org').createResolver(() => db);   // db 는 아래에서 선언 → getter
 app.use(ORG.middleware());
+
+// ── 운영 관측 라이트 (2026-10-12): 오류 링 버퍼·logs/errors.log·/api 지연 통계 → 관리자 › 현황 '서버 상태' (lib/observe.js) ──
+const Observe = require('./lib/observe');
+Observe.init({ logDir: path.join(__dirname, 'logs') });
+app.use(Observe.requestStats());
+app.get('/api/admin/server-status', async (req, res) => {
+    if (!isAdminKey(req.query.admin_key || req.headers['x-admin-key'])) return res.status(403).json({ error: '관리자 키가 필요합니다.' });
+    res.json(await Observe.snapshot(db, { ws_clients: (typeof wsClients !== 'undefined' && wsClients) ? wsClients.size : 0, org_id: (req.org && req.org.id) || 1 }));
+});
+
+// ── Google Analytics 로더 (2026-10-12): EU/EEA·영국·스위스 조직 호스트에선 동의(localStorage pace_ga_consent='1') 가 있어야 gtag 를 싣는다 — common.js 가 동의 배너를 띄운다 ──
+const GA_ID = 'G-3PRW9G7KVQ';
+const GA_CONSENT_COUNTRIES = new Set(['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE','IS','LI','NO','GB','CH']);
+app.get('/ga.js', (req, res) => {
+    const needs = GA_CONSENT_COUNTRIES.has(String((req.org && req.org.country) || 'KR').toUpperCase());
+    res.type('application/javascript'); res.set('Cache-Control', 'no-cache');
+    res.send(`window.PACE_GA_ID='${GA_ID}';window.PACE_GA_NEEDS_CONSENT=${needs};
+(function(){var ok=true;if(window.PACE_GA_NEEDS_CONSENT){try{ok=localStorage.getItem('pace_ga_consent')==='1'}catch(e){ok=false}}
+window.dataLayer=window.dataLayer||[];window.gtag=window.gtag||function(){dataLayer.push(arguments)};
+window.PACE_GA_LOAD=function(){if(window.__gaLoaded)return;window.__gaLoaded=true;var s=document.createElement('script');s.async=true;s.src='https://www.googletagmanager.com/gtag/js?id=${GA_ID}';document.head.appendChild(s);gtag('js',new Date());gtag('config','${GA_ID}')};
+if(ok)window.PACE_GA_LOAD();})();`);
+});
 const RC = require('./lib/reqContext');   // 키 검사 함수들이 '지금 요청의 조직'을 알도록 (멀티테넌시 3단계)
 app.use((req, res, next) => RC.run({ orgId: (req.org && req.org.id) || 1 }, () => next()));
 
@@ -4906,15 +4928,18 @@ app.use((err, req, res, next) => {
         return res.status(400).json({ error: '필수 값이 누락되었습니다.', detail: err.message });
     }
     console.error('[ERROR]', new Date().toISOString(), err.stack || err);
+    try { Observe.recordError('http', err, req); } catch (e) {}
     res.status(500).json({ error: '서버 내부 오류가 발생했습니다.' });
 });
 
 // 예상치 못한 에러로 서버가 죽지 않도록 보호
 process.on('uncaughtException', (err) => {
     console.error('[FATAL] Uncaught Exception:', new Date().toISOString(), err);
+    try { Observe.recordError('uncaught', err); } catch (e) {}
 });
 process.on('unhandledRejection', (reason) => {
     console.error('[FATAL] Unhandled Rejection:', new Date().toISOString(), reason);
+    try { Observe.recordError('rejection', reason); } catch (e) {}
 });
 
 // WA Validation API endpoints

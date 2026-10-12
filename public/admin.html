@@ -1,14 +1,8 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<!-- Google Analytics 4 -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-3PRW9G7KVQ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-3PRW9G7KVQ');
-</script>
+<!-- Google Analytics 4 — /ga.js 가 조직 국가에 따라 동의 뒤에만 싣는다 (2026-10-12) -->
+<script src="/ga.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="/manifest.json">
@@ -399,6 +393,7 @@
                     <div class="admin-card" id="card-ov-warn"><h4>확인이 필요한 항목</h4><div id="ov-warn"><div class="t-muted">불러오는 중…</div></div></div>
                 </div>
                 <div class="admin-card" id="card-ov-recent"><h4>최근 활동</h4><div id="ov-recent"><div class="t-muted">불러오는 중…</div></div></div>
+                <div class="admin-card" id="card-ov-server" style="margin-top:16px;"><h4 style="display:flex;align-items:center;gap:8px;">서버 상태 <button class="btn btn-xs btn-outline" onclick="loadServerStatus()">새로고침</button></h4><div id="ov-server"><div class="t-muted">불러오는 중…</div></div></div>
                 <div class="admin-card" id="card-quick-links" style="margin-top:16px;">
                     <h4>빠른 이동</h4>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -2842,7 +2837,7 @@ POST /api/external/event-result-link/batch<br>
     <script src="lib/xlsx.full.min.js"></script>
     <script src="/lib/auth-client.js?v=1"></script>
     <script src="/lib/icons.js?v=1"></script>
-    <script src="common.js?v=105"></script>
+    <script src="common.js?v=106"></script>
     <script>
         renderPageNav('admin');
         // [정책] 종료된 대회 + 운영진(operation) → 진입 차단, dashboard 로 리다이렉트
@@ -3744,6 +3739,27 @@ POST /api/external/event-result-link/batch<br>
         })();
 
         // ---- OVERVIEW ----
+        // 서버 상태(관측 라이트, 2026-10-12): 가동 시간·메모리·DB 응답·요청 지연·최근 오류 — 관리자 키만
+        async function loadServerStatus() {
+            const el = document.getElementById('ov-server'); if (!el) return;
+            try {
+                const r = await fetch(`/api/admin/server-status?admin_key=${encodeURIComponent(AK())}`); const d = await r.json();
+                if (!r.ok) { el.innerHTML = `<div class="t-muted">${escapeHtml(d.error || '권한 없음')}</div>`; return; }
+                const up = d.uptime_sec, upTxt = up >= 86400 ? `${Math.floor(up / 86400)}일 ${Math.floor((up % 86400) / 3600)}시간` : up >= 3600 ? `${Math.floor(up / 3600)}시간 ${Math.floor((up % 3600) / 60)}분` : `${Math.floor(up / 60)}분`;
+                const dot = ok => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ok ? 'var(--green)' : 'var(--danger, #B4232C)'};margin-right:6px;vertical-align:middle;"></span>`;
+                const kv = (k, v) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:4px 0;border-bottom:1px solid var(--gray-light);"><span class="t-muted">${k}</span><b>${v}</b></div>`;
+                el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:4px 24px;">
+                    ${kv('데이터베이스', `${dot(d.db.up)}${d.db.backend} · 응답 ${d.db.latency_ms == null ? '-' : d.db.latency_ms + 'ms'}${d.db.file_mb != null ? ' · ' + d.db.file_mb + 'MB' : ''}`)}
+                    ${kv('가동 시간', `${upTxt} <span class="t-muted t-xs">(${escapeHtml(String(d.started_at).replace('T', ' ').slice(0, 16))} 시작)</span>`)}
+                    ${kv('메모리', `${d.rss_mb}MB <span class="t-muted t-xs">(힙 ${d.heap_used_mb}/${d.heap_total_mb}MB)</span>`)}
+                    ${kv('실시간 연결', `${d.ws_clients}개 화면`)}
+                    ${kv('API 요청', `${d.requests.total}건 <span class="t-muted t-xs">지연 p50 ${d.requests.p50_ms ?? '-'}ms · p95 ${d.requests.p95_ms ?? '-'}ms · 1초 초과 ${d.requests.slow_over_1s}건</span>`)}
+                    ${kv('오류', `${dot(d.errors.last_24h === 0)}24시간 ${d.errors.last_24h}건 <span class="t-muted t-xs">(5xx 누적 ${d.requests.err5xx})</span>`)}
+                </div>` + (d.errors.recent.length ? `<details class="adm-help" style="margin-top:8px;"><summary>최근 오류 ${d.errors.recent.length}건</summary><div style="font-size:12px;">${d.errors.recent.map(e => `<div style="padding:4px 0;border-bottom:1px solid var(--gray-light);"><span class="t-muted">${escapeHtml(String(e.ts).replace('T', ' ').slice(0, 19))}</span> · ${escapeHtml(e.kind)} ${escapeHtml(e.method || '')} ${escapeHtml(e.path || '')}<br>${escapeHtml(e.message)}</div>`).join('')}</div></details>` : '');
+            } catch (e) { el.innerHTML = '<div class="t-muted">서버 상태를 불러오지 못했습니다.</div>'; }
+        }
+        document.addEventListener('DOMContentLoaded', () => setTimeout(loadServerStatus, 1200));
+
         async function loadOverview() {
             if (!_selectedCompId) return;
             const events = await API.getAllEvents(_selectedCompId);
@@ -12539,6 +12555,6 @@ POST /api/external/event-result-link/batch<br>
         }
     </script>
     <script src="push.js?v=12"></script>
-    <script src="/i18n.js?v=6"></script>
+    <script src="/i18n.js?v=7"></script>
 </body>
 </html>

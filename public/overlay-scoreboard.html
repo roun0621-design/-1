@@ -63,6 +63,12 @@
         .sb-brand img { height: 14px; width: auto; }
 
         .sb-empty { padding: 40px; text-align: center; color: #556; font-size: 14px; }
+        /* 세로(9:16) LED·세로 화면: 폭을 화면에 맞추고 열을 줄인다 — ?layout=vertical (2026-10-12) */
+        body.v .scoreboard { width: 92vw; max-width: 640px; bottom: 4vh; }
+        body.v .sb-row { grid-template-columns: 36px 48px 1fr 96px 56px; padding: 8px 12px; }
+        body.v .sb-header, body.v .sb-footer { padding-left: 12px; padding-right: 12px; }
+        body.v .sb-event-name { font-size: 14px; }
+        body.v .sb-record { font-size: 16px; }
 
         /* Status indicator */
         .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
@@ -94,6 +100,8 @@ const FED_LABELS = { 'KTFL': '실업', 'KUAF': '대학' };
 
 const params = new URLSearchParams(window.location.search);
 const compId = params.get('comp');
+// 4K 송출은 ?scale=2 (OBS 브라우저 소스 3840×2160), 세로 화면은 ?layout=vertical — 2026-10-12
+(function () { const sc = parseFloat(params.get('scale') || '1'); if (sc > 0 && sc !== 1) document.body.style.zoom = String(sc); if ((params.get('layout') || '') === 'vertical') document.body.classList.add('v'); })();
 // 대회 브랜드(포인트색·로고, 관리자 › 대회 설정 › 브랜드) 를 오버레이 색·푸터에 반영 — 없으면 기본 타탄 + PACE RISE 워드마크 (2026-10-12)
 if (compId) fetch(`/api/competitions/${compId}`).then(r => r.ok ? r.json() : null).then(c => {
     if (!c) return;

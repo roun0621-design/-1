@@ -1,14 +1,8 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<!-- Google Analytics 4 -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-3PRW9G7KVQ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-3PRW9G7KVQ');
-</script>
+<!-- Google Analytics 4 — /ga.js 가 조직 국가에 따라 동의 뒤에만 싣는다 (2026-10-12) -->
+<script src="/ga.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="/manifest.json">
@@ -112,7 +106,7 @@
     </main>
 
     <script src="/lib/icons.js?v=1"></script>
-    <script src="common.js?v=105"></script>
+    <script src="common.js?v=106"></script>
     <script>
         let allLogs = [];
         let currentFilter = 'all';
@@ -189,6 +183,6 @@
         // Fallback refresh
         setInterval(loadLogs, 30000);
     </script>
-    <script src="/i18n.js?v=6"></script>
+    <script src="/i18n.js?v=7"></script>
 </body>
 </html>

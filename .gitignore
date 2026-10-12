@@ -46,3 +46,6 @@ tests/browser/shots/
 
 # 계측 에이전트 실행 파일 묶음 (scripts/timing-watcher/build-agent.sh 산출물)
 dist/
+
+# 운영 관측 오류 로그 (lib/observe.js)
+logs/

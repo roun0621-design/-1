@@ -3118,3 +3118,21 @@ function _uiDialog(kind, message, opts) {
 }
 function uiConfirm(message, opts) { return _uiDialog('confirm', message, opts); }
 function uiPrompt(message, defaultValue, opts) { return _uiDialog('prompt', message, Object.assign({ defaultValue }, opts || {})); }
+
+// ── GA 쿠키 동의 배너 (2026-10-12): EU/EEA·영국·스위스 조직 호스트(/ga.js 가 PACE_GA_NEEDS_CONSENT=true) 에서 동의 전엔 GA 를 싣지 않는다 ──
+(function () {
+    function show() {
+        if (!window.PACE_GA_NEEDS_CONSENT || document.getElementById('pr-consent')) return;
+        try { if (localStorage.getItem('pace_ga_consent') != null) return; } catch (e) { return; }
+        const bar = document.createElement('div'); bar.id = 'pr-consent';
+        bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:9998;background:#1B1B1E;color:#F4F3EF;border-radius:10px;padding:12px 14px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 6px 24px rgba(0,0,0,.25)';
+        bar.innerHTML = '<span style="flex:1;min-width:200px;">이 사이트는 이용 통계를 위해 Google Analytics 쿠키를 씁니다. 동의하면 통계가 수집되고, 거부해도 모든 기능을 쓸 수 있습니다. <a href="/privacy.html" style="color:#F4F3EF;text-decoration:underline;">개인정보 처리방침</a></span>' +
+            '<button type="button" id="pr-consent-no" style="background:transparent;color:#F4F3EF;border:1px solid #8A867E;border-radius:999px;padding:6px 14px;cursor:pointer;">거부</button>' +
+            '<button type="button" id="pr-consent-yes" style="background:#F4F3EF;color:#0E0E10;border:0;border-radius:999px;padding:6px 16px;font-weight:700;cursor:pointer;">동의</button>';
+        document.body.appendChild(bar);
+        const done = v => { try { localStorage.setItem('pace_ga_consent', v); } catch (e) {} bar.remove(); if (v === '1' && typeof window.PACE_GA_LOAD === 'function') window.PACE_GA_LOAD(); };
+        document.getElementById('pr-consent-yes').onclick = () => done('1');
+        document.getElementById('pr-consent-no').onclick = () => done('0');
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
+})();

@@ -42,6 +42,8 @@
         .lt-record { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 26px; font-weight: 800; color: #4ade80; }
         .lt-rank { font-size: 11px; color: #fbbf24; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
 
+        /* 세로 화면: 좌우 여백만 남기고 꽉 채운다 — ?layout=vertical (2026-10-12) */
+        body.v .lower-third { left: 4vw; right: 4vw; bottom: 6vh; min-width: 0; max-width: none; }
         .lt-event-bar {
             display: flex; align-items: center; justify-content: space-between;
             padding: 6px 24px; background: rgba(0,0,0,0.3);
@@ -78,6 +80,8 @@
 <script>
 const params = new URLSearchParams(window.location.search);
 const compId = params.get('comp');
+// 4K 송출은 ?scale=2, 세로 화면은 ?layout=vertical — 2026-10-12
+(function () { const sc = parseFloat(params.get('scale') || '1'); if (sc > 0 && sc !== 1) document.body.style.zoom = String(sc); if ((params.get('layout') || '') === 'vertical') document.body.classList.add('v'); })();
 // 대회 브랜드(포인트색·로고) 반영 — 2026-10-12
 if (compId) fetch(`/api/competitions/${compId}`).then(r => r.ok ? r.json() : null).then(c => {
     if (!c) return;
