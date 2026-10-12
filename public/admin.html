@@ -2749,7 +2749,7 @@ POST /api/external/event-result-link/batch<br>
                         <label class="t-xs" style="font-weight:600;">발송 대상 종목</label>
                         <div id="sms-batch-event-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#f8f9fa;">대회를 선택하면 종목이 표시됩니다.</div>
                         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
-                            <button class="btn btn-xs btn-outline" onclick="smsBatchSelectAll(true)">전체 선택</button>
+                            <button class="btn btn-xs btn-outline" onclick="smsBatchSelectAll(true)">결승 전체선택</button>
                             <button class="btn btn-xs btn-outline" onclick="smsBatchSelectAll(false)">전체 해제</button>
                             <button class="btn btn-xs btn-outline" onclick="loadSmsBatchEvents()">새로고침</button>
                         </div>
@@ -2810,7 +2810,11 @@ POST /api/external/event-result-link/batch<br>
                 <div class="admin-card" id="card-email-send">
                     <h4 style="margin-bottom:8px;">기록증 이메일 발송</h4>
                     <p class="adm-lead">선수 정보의 <b>이메일</b>이 있는 선수에게 종목 결과와 기록증 링크를 보냅니다(문자 일괄 발송과 같은 대상 규칙). 종목을 고르지 않으면 모든 결승 종목.</p>
-                    <div id="em-send-events" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;max-height:160px;overflow-y:auto;"><span class="t-sm t-muted">대회를 선택하면 종목이 나옵니다.</span></div>
+                    <div id="em-send-events" style="border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#f8f9fa;margin-bottom:6px;"><span class="t-sm t-muted">대회를 선택하면 종목이 나옵니다.</span></div>
+                    <div style="margin:0 0 10px;display:flex;gap:6px;flex-wrap:wrap;">
+                        <button class="btn btn-xs btn-outline" onclick="_emailPicker && _emailPicker.selectAll(true)">결승 전체선택</button>
+                        <button class="btn btn-xs btn-outline" onclick="_emailPicker && _emailPicker.selectAll(false)">전체 해제</button>
+                    </div>
                     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                         <label class="t-sm">순위 <input type="number" id="em-send-from" value="1" min="1" style="width:56px;padding:5px;border:1px solid var(--gray);border-radius:6px;"> ~ <input type="number" id="em-send-to" value="3" min="1" style="width:56px;padding:5px;border:1px solid var(--gray);border-radius:6px;"></label>
                         <label class="t-checkbox-row"><input type="checkbox" id="em-send-finishers"> 완주자 전원</label>
@@ -11339,6 +11343,62 @@ POST /api/external/event-result-link/batch<br>
             return 999;
         }
         function _certGenderRank(g) { return g === 'M' ? 0 : g === 'F' ? 1 : g === 'X' ? 2 : 3; }
+
+        // ── 공용 종목 선택기 (D4, 2026-10-12): 상장 발급과 같은 모양(성별·종목군 필터 + 종목별 라운드 칩)을 문자·이메일 일괄 발송에도 ──
+        //   const p = makeEventPicker({ rootId, onChange }); p.setEvents(events, { badge: id => '발송완료', defaultFinals: false }); p.selected() → [id…]
+        window._evPickers = window._evPickers || {};
+        function makeEventPicker(opts) {
+            const st = { root: opts.rootId, events: [], sel: new Set(), g: 'ALL', t: 'ALL', groups: [], badge: null, onChange: opts.onChange || null };
+            const build = () => {
+                const map = {};
+                st.events.forEach(e => { const key = e.name + '|' + e.gender + '|' + (e.division || ''); if (!map[key]) map[key] = { key, name: e.name, gender: e.gender, division: e.division || '', category: e.category, rounds: [] }; map[key].rounds.push({ id: String(e.id), round_type: e.round_type }); });
+                return Object.values(map).map(g => { g.rounds.sort((a, b) => _certRoundRank(a.round_type) - _certRoundRank(b.round_type)); g.primaryId = g.rounds.length ? g.rounds[g.rounds.length - 1].id : null; return g; });
+            };
+            const fire = () => { if (st.onChange) try { st.onChange(api.selected()); } catch (e) {} };
+            const api = {
+                setEvents(events, o) {
+                    st.events = (events || []).filter(e => !e.parent_event_id); st.sel = new Set(); st.g = 'ALL'; st.t = 'ALL'; st.badge = (o && o.badge) || null;
+                    if (o && o.defaultFinals) st.events.forEach(e => { if (e.round_type === 'final') st.sel.add(String(e.id)); });
+                    api.render(); fire();
+                },
+                selected() { return [...st.sel].map(x => parseInt(x, 10)); },
+                toggle(id) { id = String(id); if (st.sel.has(id)) st.sel.delete(id); else st.sel.add(id); api.render(); fire(); },
+                selectAll(on) { st.groups.forEach(g => { if (!g.primaryId) return; if (on) st.sel.add(g.primaryId); else g.rounds.forEach(r => st.sel.delete(r.id)); }); api.render(); fire(); },
+                setGender(g) { st.g = g; api.render(); }, setType(t) { st.t = t; api.render(); },
+                render() {
+                    const root = document.getElementById(st.root); if (!root) return;
+                    if (!st.events.length) { root.innerHTML = '<span class="t-muted">종목이 없습니다.</span>'; return; }
+                    const P = `_evPickers['${st.root}']`;
+                    const gLabel = { ALL: '전체', M: '남자', F: '여자', X: '혼성' };
+                    const genders = ['ALL', ...['M', 'F', 'X'].filter(g => st.events.some(e => e.gender === g))];
+                    const types = ['ALL', ...CERT_TYPE_DEFS.filter(t => st.events.some(e => _certTypeOf(e.category) === t.key)).map(t => t.key)];
+                    const fbtn = (active, label, fn) => `<button type="button" class="cert-filter-btn${active ? ' active' : ''}" onclick="${fn}">${label}</button>`;
+                    let html = '<div class="cert-filter-row">' + genders.map(g => fbtn(st.g === g, gLabel[g], `${P}.setGender('${g}')`)).join('') + '</div>';
+                    html += '<div class="cert-filter-row">' + types.map(t => fbtn(st.t === t, t === 'ALL' ? '전체' : _certTypeLabel(t), `${P}.setType('${t}')`)).join('') + '</div>';
+                    let groups = build().filter(g => (st.g === 'ALL' || g.gender === st.g) && (st.t === 'ALL' || _certTypeOf(g.category) === st.t));
+                    groups.sort((a, b) => _certEvSortIdx(a.name) - _certEvSortIdx(b.name) || _certGenderRank(a.gender) - _certGenderRank(b.gender) || (a.division || '').localeCompare(b.division || '') || a.name.localeCompare(b.name));
+                    st.groups = groups;
+                    if (!groups.length) { root.innerHTML = html + '<div class="t-muted" style="padding:10px 2px;">해당 조건의 종목이 없습니다.</div>'; return; }
+                    const byType = {}; groups.forEach(g => { const k = _certTypeOf(g.category); (byType[k] = byType[k] || []).push(g); });
+                    html += '<div class="cert-evt-list">';
+                    CERT_TYPE_DEFS.forEach(def => {
+                        const list = byType[def.key]; if (!list || !list.length) return;
+                        html += `<div class="cert-evt-group-title">${def.label} <span class="t-muted t-xs">(${list.length})</span></div>`;
+                        html += list.map(g => {
+                            const gtxt = g.gender === 'M' ? '남' : g.gender === 'F' ? '여' : '혼';
+                            const div = g.division ? `<span class="t-muted t-xs">${_esc(g.division)}</span>` : '';
+                            const chips = g.rounds.map(r => `<span class="cert-round-chip${st.sel.has(r.id) ? ' active' : ''}" onclick="${P}.toggle('${r.id}')">${_certRoundLabel(r.round_type)}</span>${st.badge && st.badge(parseInt(r.id, 10)) ? `<span style="font-size:10px;font-weight:700;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:99px;margin-left:2px;">${_esc(st.badge(parseInt(r.id, 10)))}</span>` : ''}`).join('');
+                            return `<div class="cert-evt-item"><span class="cert-evt-g cert-evt-g-${g.gender}">${gtxt}</span><span class="cert-evt-name">${_esc(g.name)}</span>${div}<span class="cert-rounds">${chips}</span></div>`;
+                        }).join('');
+                    });
+                    html += '</div>';
+                    html += `<div class="cert-evt-selinfo">선택 <b>${st.sel.size}</b>개 라운드${st.sel.size === 0 ? ' (미선택 시 대회 전체 결승)' : ''}</div>`;
+                    root.innerHTML = html;
+                },
+            };
+            window._evPickers[st.root] = api;
+            return api;
+        }
         let _certRenderedGroups = [];   // 현재 필터로 화면에 보이는 종목 그룹
 
         // ── 대회 운영 체크리스트 ─────────────────────────────────
@@ -12081,14 +12141,17 @@ POST /api/external/event-result-link/batch<br>
             const box = document.getElementById('em-send-events'); if (!box) return;
             if (!_selectedCompId) { box.innerHTML = '<span class="t-sm t-muted">대회를 선택하면 종목이 나옵니다.</span>'; return; }
             try {
-                const evs = await api('GET', `/api/events?competition_id=${_selectedCompId}`);
-                const list = (Array.isArray(evs) ? evs : evs.events || []).filter(e => !e.parent_event_id);
-                box.innerHTML = list.length ? list.map(e => `<label class="t-checkbox-row t-sm"><input type="checkbox" class="em-ev" value="${e.id}"> ${escapeHtml(e.name)} <span class="t-muted">${e.gender === 'F' ? '여' : e.gender === 'X' ? '혼' : '남'} · ${e.round_type === 'final' ? '결승' : e.round_type === 'preliminary' ? '예선' : '준결승'}</span></label>`).join('') : '<span class="t-sm t-muted">종목이 없습니다.</span>';
+                const [evs, logRes] = await Promise.all([api('GET', `/api/events?competition_id=${_selectedCompId}`), fetch(`/api/admin/email/log?admin_key=${encodeURIComponent(AK())}&competition_id=${_selectedCompId}&limit=500`).then(r => r.json()).catch(() => ({ logs: [] }))]);
+                const list = (Array.isArray(evs) ? evs : evs.events || []);
+                const sentEv = new Set((logRes.logs || []).filter(l => l.status === 'sent' || l.status === 'simulated').map(l => String(l.event_id)));
+                _emailPicker = _emailPicker || makeEventPicker({ rootId: 'em-send-events' });   // 상장·문자와 같은 선택기 (D4)
+                _emailPicker.setEvents(list, { badge: id => sentEv.has(String(id)) ? '발송완료' : '' });
             } catch (e) { box.innerHTML = '<span class="t-sm t-muted">종목을 불러오지 못했습니다.</span>'; }
         }
+        let _emailPicker = null;
         async function sendCertificateEmails(forceReal) {
             if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
-            const ids = [...document.querySelectorAll('.em-ev:checked')].map(x => parseInt(x.value, 10));
+            const ids = _emailPicker ? _emailPicker.selected() : [];
             const st = document.getElementById('em-send-status'); st.textContent = '발송 중…';
             try {
                 const res = await fetch('/api/admin/email/send-certificates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_key: AK(), competition_id: _selectedCompId, event_ids: ids,
@@ -12249,25 +12312,15 @@ POST /api/external/event-result-link/batch<br>
                 _smsBatchSentSummary = (summ && summ.summary) || [];
                 const sentEventIds = new Set(_smsBatchSentSummary.map(s => String(s.event_id)));
                 const events = (data.events || data || []).filter(e => !e.parent_event_id);
-                root.innerHTML = events.length === 0 ? '<span class="t-muted">종목이 없습니다.</span>' :
-                    events.map(e => `
-                        <label style="display:block;padding:3px 0;">
-                            <input type="checkbox" class="sms-batch-event-cb" value="${e.id}" onchange="smsBatchEventChanged()">
-                            ${e.gender === 'M' ? '남' : e.gender === 'F' ? '여' : '혼'} ${_esc(e.name)}
-                            <span class="t-muted t-xs">[${e.round_type || ''}]</span>
-                            ${sentEventIds.has(String(e.id)) ? '<span style="font-size:10px;font-weight:700;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:99px;margin-left:4px;">발송완료</span>' : ''}
-                        </label>
-                    `).join('');
-                smsBatchEventChanged();  // 조 칩 초기화
+                // 상장 발급과 같은 종목 선택기(필터 + 라운드 칩, D4 2026-10-12) — 선택이 바뀌면 조 칩 갱신
+                _smsPicker = _smsPicker || makeEventPicker({ rootId: 'sms-batch-event-list', onChange: () => smsBatchEventChanged() });
+                _smsPicker.setEvents(events, { badge: id => sentEventIds.has(String(id)) ? '발송완료' : '' });
             } catch (e) {
                 root.innerHTML = '<span class="t-muted">종목 로드 실패</span>';
             }
         }
-
-        function smsBatchSelectAll(on) {
-            document.querySelectorAll('.sms-batch-event-cb').forEach(cb => cb.checked = !!on);
-            smsBatchEventChanged();
-        }
+        let _smsPicker = null;
+        function smsBatchSelectAll(on) { if (_smsPicker) _smsPicker.selectAll(on); }
 
         // 종목 선택이 바뀌면: 정확히 1개 선택 & 조 2개 이상일 때만 조 칩 노출
         async function smsBatchEventChanged() {
@@ -12275,9 +12328,9 @@ POST /api/external/event-result-link/batch<br>
             const wrap = document.getElementById('sms-batch-heat-wrap');
             const chips = document.getElementById('sms-batch-heat-chips');
             if (!wrap || !chips) return;
-            const checked = Array.from(document.querySelectorAll('.sms-batch-event-cb:checked'));
+            const checked = _smsPicker ? _smsPicker.selected() : [];
             if (checked.length !== 1) { wrap.style.display = 'none'; chips.innerHTML = ''; return; }
-            const eventId = parseInt(checked[0].value, 10);
+            const eventId = checked[0];
             let heats = [];
             try { heats = await fetch(`/api/heats?event_id=${eventId}`).then(r => r.json()); } catch (_) {}
             heats = Array.isArray(heats) ? heats : [];
@@ -12338,7 +12391,7 @@ POST /api/external/event-result-link/batch<br>
             const includeFinishers = document.getElementById('sms-batch-include-finishers').checked;
             const heatNumber = _smsBatchHeat;  // 조 칩에서 선택 (null=전체)
             const skipSent = (document.getElementById('sms-batch-skip-sent') || {}).checked !== false;
-            const selectedIds = Array.from(document.querySelectorAll('.sms-batch-event-cb:checked')).map(cb => parseInt(cb.value, 10));
+            const selectedIds = _smsPicker ? _smsPicker.selected() : [];
             const forceReal = !!document.getElementById('sms-batch-force-real')?.checked;
             if (forceReal && !await uiConfirm('시뮬레이션을 무시하고 선택한 종목의 대상자 전원에게 실제 문자를 발송합니다.\n요금이 발생하며 수신자에게 실제로 도착합니다. 계속할까요?')) return;
 
