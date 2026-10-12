@@ -14,16 +14,16 @@
         if (document.getElementById('pr-splash')) return;
     } catch (e) { return; }
     function markDone() { try { sessionStorage.setItem('pr_splash', '1'); } catch (e) {} }
-    var T_FILL = 0.25, T_SPLIT = 1.05, T_OUT = 2.0;   // 초: 채우기 시작 / 금 가는 시점 / 막 걷기 시작
+    var T_FILL = 0.35, T_SPLIT = 1.65, T_OUT = 2.85;   // 초: 채우기 시작 / 금 가는 시점 / 막 걷기 시작 (2026-10-12 "너무 빨라" → 전체 ≈3.2초로 늦춤)
     var css = '#pr-splash{position:fixed;inset:0;z-index:99999;background:#F4F3EF;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;pointer-events:none;' +
-        'animation:prs-out .3s ease ' + T_OUT + 's both}' +
+        'animation:prs-out .4s ease ' + T_OUT + 's both}' +
         '#pr-splash svg{width:64px;height:132px;overflow:visible}' +
-        '#pr-splash .prs-bar{fill:#0E0E10;transform-box:fill-box;transform-origin:50% 100%;animation:prs-draw .25s cubic-bezier(.33,1,.68,1) both,prs-hide 0s ' + T_SPLIT + 's both}' +
-        '#pr-splash .prs-fill{fill:#C24A2E;transform-box:fill-box;transform-origin:50% 100%;transform:scaleY(0);animation:prs-draw .8s cubic-bezier(.4,0,.2,1) ' + T_FILL + 's both,prs-hide 0s ' + T_SPLIT + 's both}' +
+        '#pr-splash .prs-bar{fill:#0E0E10;transform-box:fill-box;transform-origin:50% 100%;animation:prs-draw .35s cubic-bezier(.33,1,.68,1) both,prs-hide 0s ' + T_SPLIT + 's both}' +
+        '#pr-splash .prs-fill{fill:#C24A2E;transform-box:fill-box;transform-origin:50% 100%;transform:scaleY(0);animation:prs-draw 1.25s cubic-bezier(.4,0,.2,1) ' + T_FILL + 's both,prs-hide 0s ' + T_SPLIT + 's both}' +
         '#pr-splash .prs-lo,#pr-splash .prs-up{fill:#C24A2E;opacity:0;animation:prs-show 0s ' + T_SPLIT + 's both}' +
-        '#pr-splash .prs-upg{animation:prs-slide .4s cubic-bezier(.22,1,.36,1) ' + T_SPLIT + 's both}' +
-        '#pr-splash .prs-gap{fill:#F4F3EF;opacity:0;animation:prs-glow .6s ease-out ' + T_SPLIT + 's both}' +
-        '#pr-splash .prs-wm{height:18px;width:auto;opacity:0;animation:prs-rise .4s ease-out ' + (T_SPLIT + 0.15) + 's both}' +
+        '#pr-splash .prs-upg{animation:prs-slide .55s cubic-bezier(.22,1,.36,1) ' + T_SPLIT + 's both}' +
+        '#pr-splash .prs-gap{fill:#F4F3EF;opacity:0;animation:prs-glow .7s ease-out ' + T_SPLIT + 's both}' +
+        '#pr-splash .prs-wm{height:18px;width:auto;opacity:0;animation:prs-rise .5s ease-out ' + (T_SPLIT + 0.2) + 's both}' +
         '@keyframes prs-draw{from{transform:scaleY(0)}to{transform:scaleY(1)}}' +
         '@keyframes prs-hide{to{opacity:0}}@keyframes prs-show{to{opacity:1}}' +
         '@keyframes prs-slide{to{transform:translate(6.31px,-17.01px)}}' +

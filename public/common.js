@@ -1919,7 +1919,7 @@ if ('serviceWorker' in navigator) {
                             console.log('[SW] New version activated, reloading for fresh content');
                             // 시작 스플래시(홈·대시보드, /brand/splash.js)가 도는 중이면 끝난 뒤에 새로고침 — 첫 방문엔 설치 직후 활성화돼 1초쯤에 새로고침되므로
                             const go = () => window.location.reload();
-                            if (document.getElementById('pr-splash')) { const t = setInterval(() => { if (!document.getElementById('pr-splash')) { clearInterval(t); go(); } }, 100); setTimeout(() => { clearInterval(t); go(); }, 3000); }
+                            if (document.getElementById('pr-splash')) { const t = setInterval(() => { if (!document.getElementById('pr-splash')) { clearInterval(t); go(); } }, 100); setTimeout(() => { clearInterval(t); go(); }, 4500); }
                             else go();
                         }
                     });
