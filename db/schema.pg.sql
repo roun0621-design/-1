@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS "athlete" (
     "personal_best" TEXT DEFAULT '',
     "date_of_birth" TEXT DEFAULT '',
     "phone" TEXT NOT NULL DEFAULT '',
+    "email" TEXT NOT NULL DEFAULT '',     -- 이메일 발송 (D12, 2026-10-12)
     "grade" INTEGER,                      -- 학년 (학년별 대회, Phase 7-②)
     "name_alt" TEXT DEFAULT '',           -- 보조 표기 (국제대회: 한글/영문 이름)
     "season_best" TEXT DEFAULT '',        -- 시즌 최고 (SB)
@@ -695,6 +696,26 @@ CREATE TABLE IF NOT EXISTS "sms_config" (
     "updated_at" TEXT NOT NULL DEFAULT NOW()
 );
 INSERT INTO "sms_config" (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- 이메일 설정·이력 — 조직별 한 행 (D12, 2026-10-12, lib/mailer.js)
+CREATE TABLE IF NOT EXISTS "email_config" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "organization_id" BIGINT NOT NULL UNIQUE DEFAULT 1,
+    "smtp_host" TEXT NOT NULL DEFAULT '', "smtp_port" BIGINT NOT NULL DEFAULT 587, "smtp_secure" BIGINT NOT NULL DEFAULT 0,
+    "smtp_user" TEXT NOT NULL DEFAULT '', "smtp_pass" TEXT NOT NULL DEFAULT '',
+    "from_address" TEXT NOT NULL DEFAULT '', "from_name" TEXT NOT NULL DEFAULT '',
+    "sim_mode" BIGINT NOT NULL DEFAULT 1, "default_subject" TEXT NOT NULL DEFAULT '', "default_body" TEXT NOT NULL DEFAULT '',
+    "updated_at" TEXT NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS "email_log" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "organization_id" BIGINT NOT NULL DEFAULT 1,
+    "competition_id" BIGINT, "athlete_id" BIGINT, "event_id" BIGINT,
+    "to_address" TEXT NOT NULL DEFAULT '', "subject" TEXT NOT NULL DEFAULT '',
+    "status" TEXT NOT NULL DEFAULT '', "provider_msg_id" TEXT NOT NULL DEFAULT '', "error_message" TEXT NOT NULL DEFAULT '',
+    "sent_at" TEXT NOT NULL DEFAULT NOW(), "triggered_by" TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_email_log_comp ON "email_log"(competition_id, event_id, athlete_id);
 
 CREATE TABLE IF NOT EXISTS "sms_log" (
     "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

@@ -864,6 +864,31 @@ try { db.exec(`CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue
 
 // athlete.phone 컬럼 추가 (SMS 발송용)
 try { db.exec(`ALTER TABLE athlete ADD COLUMN phone TEXT NOT NULL DEFAULT ''`); } catch(e) { /* already exists */ }
+try { db.exec(`ALTER TABLE athlete ADD COLUMN email TEXT NOT NULL DEFAULT ''`); } catch(e) { /* 이메일 발송(D12, 2026-10-12) */ }
+// 이메일 설정·이력 — 조직별 한 행 (D12, 2026-10-12). lib/mailer.js
+try { db.exec(`CREATE TABLE IF NOT EXISTS email_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    organization_id INTEGER NOT NULL UNIQUE DEFAULT 1,
+    smtp_host TEXT NOT NULL DEFAULT '',
+    smtp_port INTEGER NOT NULL DEFAULT 587,
+    smtp_secure INTEGER NOT NULL DEFAULT 0,
+    smtp_user TEXT NOT NULL DEFAULT '',
+    smtp_pass TEXT NOT NULL DEFAULT '',
+    from_address TEXT NOT NULL DEFAULT '',
+    from_name TEXT NOT NULL DEFAULT '',
+    sim_mode INTEGER NOT NULL DEFAULT 1,
+    default_subject TEXT NOT NULL DEFAULT '',
+    default_body TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`); } catch(e) { console.error('[DB] email_config error:', e.message); }
+try { db.exec(`CREATE TABLE IF NOT EXISTS email_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    organization_id INTEGER NOT NULL DEFAULT 1,
+    competition_id INTEGER, athlete_id INTEGER, event_id INTEGER,
+    to_address TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '', provider_msg_id TEXT NOT NULL DEFAULT '', error_message TEXT NOT NULL DEFAULT '',
+    sent_at TEXT NOT NULL DEFAULT (datetime('now')), triggered_by TEXT NOT NULL DEFAULT ''
+)`); db.exec(`CREATE INDEX IF NOT EXISTS idx_email_log_comp ON email_log(competition_id, event_id, athlete_id)`); } catch(e) { console.error('[DB] email_log error:', e.message); }
 
 // ========== SMS System (Aligo + Simulation) ==========
 try { db.exec(`CREATE TABLE IF NOT EXISTS sms_config (
@@ -1962,6 +1987,24 @@ if (db.isAsync) {
             await pgIdempotentAddCol('athlete', 'personal_best', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'date_of_birth', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('athlete', 'phone', `TEXT NOT NULL DEFAULT ''`);
+            await pgIdempotentAddCol('athlete', 'email', `TEXT NOT NULL DEFAULT ''`);   // 이메일 발송 D12
+            try { await db.run(`CREATE TABLE IF NOT EXISTS email_config (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                organization_id BIGINT NOT NULL UNIQUE DEFAULT 1,
+                smtp_host TEXT NOT NULL DEFAULT '', smtp_port BIGINT NOT NULL DEFAULT 587, smtp_secure BIGINT NOT NULL DEFAULT 0,
+                smtp_user TEXT NOT NULL DEFAULT '', smtp_pass TEXT NOT NULL DEFAULT '',
+                from_address TEXT NOT NULL DEFAULT '', from_name TEXT NOT NULL DEFAULT '',
+                sim_mode BIGINT NOT NULL DEFAULT 1, default_subject TEXT NOT NULL DEFAULT '', default_body TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT NOW()
+            )`); } catch(e) { console.error('[PG migration] email_config error:', e.message); }
+            try { await db.run(`CREATE TABLE IF NOT EXISTS email_log (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                organization_id BIGINT NOT NULL DEFAULT 1,
+                competition_id BIGINT, athlete_id BIGINT, event_id BIGINT,
+                to_address TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT '', provider_msg_id TEXT NOT NULL DEFAULT '', error_message TEXT NOT NULL DEFAULT '',
+                sent_at TEXT NOT NULL DEFAULT NOW(), triggered_by TEXT NOT NULL DEFAULT ''
+            )`); await db.run(`CREATE INDEX IF NOT EXISTS idx_email_log_comp ON email_log(competition_id, event_id, athlete_id)`); } catch(e) { console.error('[PG migration] email_log error:', e.message); }
             // certificate_template: 워터마크 (중앙 로고 이미지)
             await pgIdempotentAddCol('certificate_template', 'watermark_image_path', `TEXT NOT NULL DEFAULT ''`);
             await pgIdempotentAddCol('certificate_template', 'watermark_opacity', `DOUBLE PRECISION NOT NULL DEFAULT 0.07`);
@@ -5956,6 +5999,8 @@ app.get('/api/documents/kjaf-record/:compId/excel', async (req, res) => {
 //   _resetSmsCounterIfNeeded 헬퍼는 모듈 내부로 이동.
 //   getEventResultsForCert 는 server.js 의 함수를 그대로 주입 (certificate 추출 시 함께 이동).
 require('./lib/routes/sms')(app, { db, isAdminKey, SMS, getEventResultsForCert });
+// ── 이메일 (D12, 2026-10-12): 설정·시험 발송·기록증 일괄·이력 — lib/mailer.js + lib/routes/email.js ──
+require('./lib/routes/email')(app, { db, isAdminKey, Mail: require('./lib/mailer'), getEventResultsForCert });
 
 // ========== 행사(event) 간편 기록입력 ==========
 require('./lib/routes/eventRecord')(app, { db, isAdminKey, isOperationKey, SMS });

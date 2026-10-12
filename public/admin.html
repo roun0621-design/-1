@@ -2630,20 +2630,21 @@ POST /api/external/event-result-link/batch<br>
                         <div>
                             <label class="t-xs">Provider</label>
                             <select id="sms-cfg-provider" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
-                                <option value="aligo">알리고(Aligo)</option>
+                                <option value="aligo">알리고(Aligo) — 국내</option>
+                                <option value="twilio">Twilio — 해외(국제 번호 +…)</option>
                             </select>
                         </div>
                         <div>
-                            <label class="t-xs">알리고 User ID</label>
-                            <input type="text" id="sms-cfg-user-id" placeholder="알리고 사이트 ID" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                            <label class="t-xs">User ID <span class="t-muted">(알리고 사이트 ID / Twilio Account SID)</span></label>
+                            <input type="text" id="sms-cfg-user-id" placeholder="알리고 사이트 ID 또는 Twilio Account SID" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
                         </div>
                         <div>
                             <label class="t-xs">API Key <span id="sms-cfg-apikey-status" class="t-muted t-xs"></span></label>
                             <input type="password" id="sms-cfg-api-key" placeholder="비워두면 기존 값 유지" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
                         </div>
                         <div>
-                            <label class="t-xs">발신 번호 (사전 등록)</label>
-                            <input type="text" id="sms-cfg-sender-number" placeholder="01012345678" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                            <label class="t-xs">발신 번호 <span class="t-muted">(알리고 사전 등록 번호 / Twilio 번호 +1…)</span></label>
+                            <input type="text" id="sms-cfg-sender-number" placeholder="01012345678 또는 +12025550123" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
                         </div>
                         <div>
                             <label class="t-xs">발신자 이름 (선택)</label>
@@ -2780,6 +2781,49 @@ POST /api/external/event-result-link/batch<br>
                         <button class="btn btn-xs btn-outline" onclick="loadSmsLog()">새로고침</button>
                     </div>
                     <div id="sms-log-list" style="max-height:400px;overflow-y:auto;font-size:12px;">로딩 중...</div>
+                </div>
+
+                <!-- 이메일 (D12, 2026-10-12): 해외 조직은 문자 대신 이메일로 기록증 링크를 보낸다 -->
+                <div class="admin-card" id="card-email-config">
+                    <h4 style="margin-bottom:8px;">이메일 발송 설정 (SMTP)</h4>
+                    <p class="adm-lead">회사 메일(SMTP)이나 SendGrid·SES 같은 서비스의 SMTP 주소를 넣습니다. <b>시뮬레이션 모드</b>가 켜져 있으면 실제로 보내지 않고 이력만 남깁니다.</p>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+                        <div><label class="t-xs">SMTP 호스트</label><input type="text" id="em-cfg-host" placeholder="smtp.example.com" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">포트</label><input type="number" id="em-cfg-port" placeholder="587" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">계정</label><input type="text" id="em-cfg-user" placeholder="SMTP 로그인 계정" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">비밀번호 <span id="em-cfg-pass-status" class="t-muted t-xs"></span></label><input type="password" id="em-cfg-pass" placeholder="비워두면 기존 값 유지" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">보내는 주소</label><input type="email" id="em-cfg-from" placeholder="results@example.com" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div><label class="t-xs">보내는 이름</label><input type="text" id="em-cfg-from-name" placeholder="대회 사무국" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div style="grid-column:1 / -1;"><label class="t-xs">기본 제목 (변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {competition_name} {cert_url} {org_name})</label><input type="text" id="em-cfg-subject" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;"></div>
+                        <div style="grid-column:1 / -1;"><label class="t-xs">기본 본문</label><textarea id="em-cfg-body" rows="5" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;font-family:inherit;"></textarea></div>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px;">
+                        <label class="t-checkbox-row"><input type="checkbox" id="em-cfg-secure"> SSL(465)</label>
+                        <label class="t-checkbox-row"><input type="checkbox" id="em-cfg-sim" checked> 시뮬레이션 모드</label>
+                        <button class="btn btn-primary btn-sm" onclick="saveEmailConfig()">저장</button><span id="em-cfg-save-status" class="t-sm t-muted"></span>
+                        <span style="flex:1"></span>
+                        <input type="email" id="em-test-to" placeholder="시험 발송 받을 주소" style="padding:6px;border:1px solid var(--gray);border-radius:6px;min-width:220px;">
+                        <button class="btn btn-outline btn-sm" onclick="sendEmailTest(false)">시험 발송</button>
+                        <button class="btn btn-outline btn-sm" onclick="sendEmailTest(true)" title="시뮬레이션 모드여도 이 한 통은 실제로 보냅니다">실제로 보내기</button>
+                    </div>
+                </div>
+                <div class="admin-card" id="card-email-send">
+                    <h4 style="margin-bottom:8px;">기록증 이메일 발송</h4>
+                    <p class="adm-lead">선수 정보의 <b>이메일</b>이 있는 선수에게 종목 결과와 기록증 링크를 보냅니다(문자 일괄 발송과 같은 대상 규칙). 종목을 고르지 않으면 모든 결승 종목.</p>
+                    <div id="em-send-events" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;max-height:160px;overflow-y:auto;"><span class="t-sm t-muted">대회를 선택하면 종목이 나옵니다.</span></div>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                        <label class="t-sm">순위 <input type="number" id="em-send-from" value="1" min="1" style="width:56px;padding:5px;border:1px solid var(--gray);border-radius:6px;"> ~ <input type="number" id="em-send-to" value="3" min="1" style="width:56px;padding:5px;border:1px solid var(--gray);border-radius:6px;"></label>
+                        <label class="t-checkbox-row"><input type="checkbox" id="em-send-finishers"> 완주자 전원</label>
+                        <label class="t-checkbox-row"><input type="checkbox" id="em-send-skip" checked> 이미 보낸 선수 건너뜀</label>
+                        <button class="btn btn-primary btn-sm" onclick="sendCertificateEmails(false)">발송</button>
+                        <button class="btn btn-outline btn-sm" onclick="sendCertificateEmails(true)" title="시뮬레이션 모드여도 이번 일괄은 실제로 보냅니다">실제로 발송</button>
+                        <span id="em-send-status" class="t-sm t-muted"></span>
+                    </div>
+                    <div id="em-send-result" class="t-sm" style="margin-top:8px;"></div>
+                </div>
+                <div class="admin-card" id="card-email-log">
+                    <h4 style="margin-bottom:8px;">이메일 발송 이력</h4>
+                    <div id="em-log-list" style="max-height:400px;overflow-y:auto;font-size:12px;">로딩 중...</div>
                 </div>
             </div>
 
@@ -3444,7 +3488,7 @@ POST /api/external/event-result-link/batch<br>
             { id:'certs',        group:'결과 · 문서', label:'상장 · 기록증',      icon:'award',    loads:['certificates'], roleTab:'certificates', rest:'certificates',
               subtabs:[ { label:'발급', items:['card-cert-issue'] }, { label:'양식', items:['card-cert-pdf-templates','card-award-docx'] }, { label:'이력', items:['card-cert-log'] } ] },
             { id:'notify',       group:'결과 · 문서', label:'알림 (푸시 · 문자)', icon:'message',  loads:['sms'], roleTab:'sms', rest:'sms',
-              subtabs:[ { label:'푸시 공지', items:['card-notify-push'] }, { label:'문자 설정', items:['card-sms-config'] }, { label:'문자 발송', items:['card-sms-test','card-sms-batch'] }, { label:'이력', items:['card-sms-log'] } ] },
+              subtabs:[ { label:'푸시 공지', items:['card-notify-push'] }, { label:'문자 설정', items:['card-sms-config'] }, { label:'문자 발송', items:['card-sms-test','card-sms-batch'] }, { label:'이메일', items:['card-email-config','card-email-send'] }, { label:'이력', items:['card-sms-log','card-email-log'] } ] },
             { id:'access',       group:'시스템',    label:'사용자 · 키',         icon:'key',      loads:['users','judges','settings','extapi'], roleTab:'judges',
               subtabs:[ { label:'계정', tab:'users' }, { label:'심판 운영키', tab:'judges' }, { label:'기본 키 · 기록위원 키', items:['card-default-keys','card-record-officer-key'] }, { label:'외부 API', tab:'extapi' } ] },
             { id:'pacing',       group:'시스템',    label:'페이싱 라이트',       icon:'traffic',  tab:'pacing',      loads:['pacing'], roleTab:'pacing' },
@@ -3805,6 +3849,7 @@ POST /api/external/event-result-link/batch<br>
                         <div class="admin-form-group"><label>성별</label><select id="ath-edit-gender"><option value="M" ${a.gender==='M'?'selected':''}>남</option><option value="F" ${a.gender==='F'?'selected':''}>여</option></select></div>
                         <div class="admin-form-group"><label>바코드</label><input id="ath-edit-barcode" value="${a.barcode || ''}" style="width:100px;"></div>
                         <div class="admin-form-group"><label>휴대폰 <span class="t-xs t-muted">(SMS 발송용)</span></label><input id="ath-edit-phone" value="${a.phone || ''}" placeholder="01012345678" style="width:140px;"></div>
+                        <div class="admin-form-group"><label>이메일 <span class="t-xs t-muted">(기록증 이메일 발송용)</span></label><input id="ath-edit-email" type="email" value="${(a.email || '').replace(/"/g, '&quot;')}" placeholder="name@example.com"></div>
                         <div class="admin-form-group"><label>학년</label><select id="ath-edit-grade" style="width:80px;"><option value="">-</option>${[1,2,3,4,5,6].map(g=>`<option value="${g}" ${a.grade==g?'selected':''}>${g}학년</option>`).join('')}</select></div>
                     </div>
                     <div style="display:flex;gap:8px;margin-top:8px;">
@@ -3840,6 +3885,7 @@ POST /api/external/event-result-link/batch<br>
                     gender: document.getElementById('ath-edit-gender').value,
                     barcode: document.getElementById('ath-edit-barcode').value,
                     phone: document.getElementById('ath-edit-phone') ? document.getElementById('ath-edit-phone').value : undefined,
+                    email: document.getElementById('ath-edit-email') ? document.getElementById('ath-edit-email').value.trim() : undefined,
                     grade: document.getElementById('ath-edit-grade') ? (document.getElementById('ath-edit-grade').value || null) : undefined
                 }, AK());
                 toast('저장 완료');
@@ -7385,7 +7431,8 @@ POST /api/external/event-result-link/batch<br>
                 el.innerHTML = list.map(a => {
                     const ago = a.seconds_ago < 60 ? `${a.seconds_ago}초 전` : a.seconds_ago < 3600 ? `${Math.round(a.seconds_ago / 60)}분 전` : `${Math.round(a.seconds_ago / 3600)}시간 전`;
                     const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.online ? 'var(--green)' : 'var(--text-muted)'};margin-right:6px;vertical-align:middle;"></span>`;
-                    return `${dot}계측 에이전트 <b>${escapeHtml(a.name)}</b> ${a.online ? '연결됨' : '끊김'} (${ago}) · ${a.mode === 'confirm' ? '확인 모드' : '자동 모드'} · 적용 ${a.done} / 확인 필요 ${a.review} / 실패 ${a.failed}${a.last_file ? ` · 마지막 ${escapeHtml(a.last_file)}` : ''}`;
+                    // 조각마다 span — 다국어 사전이 텍스트 노드 단위라 '연결됨'·'{0}초 전'·'적용 {0} / 확인 필요 {1} / 실패 {2}' 가 각각 번역된다
+                    return `${dot}<span>계측 에이전트</span> <b>${escapeHtml(a.name)}</b> <span>${a.online ? '연결됨' : '끊김'}</span> (<span>${ago}</span>) · <span>${a.mode === 'confirm' ? '확인 모드' : '자동 모드'}</span> · <span>적용 ${a.done} / 확인 필요 ${a.review} / 실패 ${a.failed}</span>${a.last_file ? ` · <span>마지막</span> <span>${escapeHtml(a.last_file)}</span>` : ''}`;
                 }).join('<br>');
             } catch (e) { /* 조용히 */ }
         }
@@ -11996,7 +12043,75 @@ POST /api/external/event-result-link/batch<br>
         // ====================================================================
         // SMS System
         // ====================================================================
+        // ── 이메일 (D12, 2026-10-12) — 설정·시험 발송·기록증 일괄·이력 ──
+        async function loadEmailConfig() {
+            try {
+                const res = await fetch(`/api/admin/email/config?admin_key=${encodeURIComponent(AK())}`); const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'load failed');
+                const c = data.config; const g = id => document.getElementById(id);
+                g('em-cfg-host').value = c.smtp_host || ''; g('em-cfg-port').value = c.smtp_port || 587; g('em-cfg-user').value = c.smtp_user || '';
+                g('em-cfg-pass').value = ''; g('em-cfg-pass').placeholder = c.smtp_pass_set ? '(설정됨) 변경 시에만 입력' : 'SMTP 비밀번호';
+                g('em-cfg-pass-status').textContent = c.smtp_pass_set ? '설정됨' : '';
+                g('em-cfg-from').value = c.from_address || ''; g('em-cfg-from-name').value = c.from_name || '';
+                g('em-cfg-subject').value = c.default_subject || ''; g('em-cfg-body').value = c.default_body || '';
+                g('em-cfg-secure').checked = !!Number(c.smtp_secure); g('em-cfg-sim').checked = !!Number(c.sim_mode);
+            } catch (e) { toast('이메일 설정 로드 실패: ' + e.message, 'error'); }
+            loadEmailEvents(); loadEmailLog();
+        }
+        async function saveEmailConfig() {
+            const g = id => document.getElementById(id);
+            const body = { admin_key: AK(), smtp_host: g('em-cfg-host').value.trim(), smtp_port: parseInt(g('em-cfg-port').value || 587, 10), smtp_user: g('em-cfg-user').value.trim(),
+                smtp_pass: g('em-cfg-pass').value || '***UNCHANGED***', from_address: g('em-cfg-from').value.trim(), from_name: g('em-cfg-from-name').value.trim(),
+                smtp_secure: g('em-cfg-secure').checked, sim_mode: g('em-cfg-sim').checked, default_subject: g('em-cfg-subject').value, default_body: g('em-cfg-body').value };
+            try {
+                const res = await fetch('/api/admin/email/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'save failed');
+                const st = g('em-cfg-save-status'); st.textContent = '저장됨'; setTimeout(() => { st.textContent = ''; }, 3000); loadEmailConfig();
+            } catch (e) { toast('저장 실패: ' + e.message, 'error'); }
+        }
+        async function sendEmailTest(forceReal) {
+            const to = document.getElementById('em-test-to').value.trim(); if (!to) { toast('받을 주소를 입력하세요', 'error'); return; }
+            try {
+                const res = await fetch('/api/admin/email/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_key: AK(), to, force_real: !!forceReal }) }); const d = await res.json();
+                if (!res.ok) throw new Error(d.error || d.error_message || 'failed');
+                toast(d.status === 'simulated' ? '시뮬레이션으로 기록했습니다 (실제 발송 없음)' : '보냈습니다'); loadEmailLog();
+            } catch (e) { toast('시험 발송 실패: ' + e.message, 'error'); }
+        }
+        async function loadEmailEvents() {
+            const box = document.getElementById('em-send-events'); if (!box) return;
+            if (!_selectedCompId) { box.innerHTML = '<span class="t-sm t-muted">대회를 선택하면 종목이 나옵니다.</span>'; return; }
+            try {
+                const evs = await api('GET', `/api/events?competition_id=${_selectedCompId}`);
+                const list = (Array.isArray(evs) ? evs : evs.events || []).filter(e => !e.parent_event_id);
+                box.innerHTML = list.length ? list.map(e => `<label class="t-checkbox-row t-sm"><input type="checkbox" class="em-ev" value="${e.id}"> ${escapeHtml(e.name)} <span class="t-muted">${e.gender === 'F' ? '여' : e.gender === 'X' ? '혼' : '남'} · ${e.round_type === 'final' ? '결승' : e.round_type === 'preliminary' ? '예선' : '준결승'}</span></label>`).join('') : '<span class="t-sm t-muted">종목이 없습니다.</span>';
+            } catch (e) { box.innerHTML = '<span class="t-sm t-muted">종목을 불러오지 못했습니다.</span>'; }
+        }
+        async function sendCertificateEmails(forceReal) {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const ids = [...document.querySelectorAll('.em-ev:checked')].map(x => parseInt(x.value, 10));
+            const st = document.getElementById('em-send-status'); st.textContent = '발송 중…';
+            try {
+                const res = await fetch('/api/admin/email/send-certificates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_key: AK(), competition_id: _selectedCompId, event_ids: ids,
+                    rank_from: parseInt(document.getElementById('em-send-from').value || 1, 10), rank_to: parseInt(document.getElementById('em-send-to').value || 3, 10),
+                    include_finishers: document.getElementById('em-send-finishers').checked, skip_sent: document.getElementById('em-send-skip').checked, force_real: !!forceReal }) });
+                const d = await res.json(); if (!res.ok) throw new Error(d.error || 'failed');
+                st.textContent = '';
+                document.getElementById('em-send-result').innerHTML = `대상 ${d.total}명 — 보냄 ${d.sent || 0} · 시뮬레이션 ${d.simulated || 0} · 실패 ${d.failed || 0} · 이메일 없음 ${d.no_email} · 이미 보냄 ${d.skipped_sent}` +
+                    (d.results.length ? `<div style="margin-top:6px;max-height:160px;overflow-y:auto;">${d.results.map(r => `<div>${escapeHtml(r.name)} &lt;${escapeHtml(r.to)}&gt; — ${r.status}${r.error ? ' · ' + escapeHtml(r.error) : ''}</div>`).join('')}</div>` : '');
+                loadEmailLog();
+            } catch (e) { st.textContent = ''; toast('발송 실패: ' + e.message, 'error'); }
+        }
+        async function loadEmailLog() {
+            const el = document.getElementById('em-log-list'); if (!el) return;
+            try {
+                const res = await fetch(`/api/admin/email/log?admin_key=${encodeURIComponent(AK())}${_selectedCompId ? `&competition_id=${_selectedCompId}` : ''}`); const d = await res.json();
+                const logs = d.logs || [];
+                el.innerHTML = logs.length ? `<table class="data-table" style="font-size:12px;"><thead><tr><th>시각</th><th>받는 주소</th><th>선수</th><th>종목</th><th>제목</th><th>상태</th></tr></thead><tbody>${logs.map(l => `<tr><td>${escapeHtml(String(l.sent_at || '').replace('T', ' ').slice(0, 16))}</td><td>${escapeHtml(l.to_address)}</td><td>${escapeHtml(l.athlete_name || '')}</td><td>${escapeHtml(l.event_name || '')}</td><td>${escapeHtml(l.subject || '')}</td><td>${escapeHtml(l.status)}${l.error_message ? ' · ' + escapeHtml(l.error_message) : ''}</td></tr>`).join('')}</tbody></table>` : '<span class="t-muted">발송 이력이 없습니다.</span>';
+            } catch (e) { el.textContent = '이력을 불러오지 못했습니다.'; }
+        }
+
         async function loadSmsConfig() {
+            loadEmailConfig();
             try {
                 const res = await fetch(`/api/admin/sms/config?admin_key=${encodeURIComponent(AK())}`);
                 const data = await res.json();
@@ -12365,6 +12480,6 @@ POST /api/external/event-result-link/batch<br>
         }
     </script>
     <script src="push.js?v=12"></script>
-    <script src="/i18n.js?v=4"></script>
+    <script src="/i18n.js?v=5"></script>
 </body>
 </html>
