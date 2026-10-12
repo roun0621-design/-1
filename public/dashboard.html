@@ -20,7 +20,7 @@
     <!-- iOS Safari 시스템 Smart App Banner — 공유 링크(/e/…)로 들어온 사용자에게 앱 설치 유도. 앱 안에서는 표시되지 않음 -->
     <meta name="apple-itunes-app" content="app-id=6784736644">
     <title>PACE RISE : Node — 대시보드</title>
-    <link rel="stylesheet" href="styles.css?v=80">
+    <link rel="stylesheet" href="styles.css?v=81">
     <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
         .comp-info-line { display:flex; flex-direction:row; align-items:center; gap:8px; padding:8px 16px; background:var(--bg-dark); border-radius:var(--radius); font-size:13px; flex-wrap:nowrap; }
@@ -470,7 +470,7 @@
     </style>
 </head>
 <body class="dashboard-mode">
-    <script src="/brand/splash.js?v=1"></script>
+    <script src="/brand/splash.js?v=2"></script>
 
     <header class="header">
         <div class="header-inner">
@@ -562,7 +562,7 @@
 
         <div class="dashboard-footer" style="flex-shrink:0;text-align:center;padding:10px 8px 8px;border-top:1px solid var(--gray);background:var(--white);">
             <div style="font-family:'Audiowide','Noto Sans KR',sans-serif;font-size:11px;color:#9ca3af;letter-spacing:1.5px;text-transform:uppercase;">Competition Operating System</div>
-            <div style="font-size:10px;color:#b0b8c4;margin:2px 0 4px;">Powered by <span style="font-family:'Audiowide','Noto Sans KR',sans-serif;font-size:12px;color:#6b7280;letter-spacing:2px;">PACE RISE</span></div>
+            <div style="font-size:10px;color:#b0b8c4;margin:2px 0 4px;">Powered by <img class="brand-wordmark" src="/brand/wordmark.svg" alt="PACE RISE" style="height:12px;width:auto;vertical-align:-2px;margin-left:2px;"></div>
             <div style="font-size:10px;color:#9ca3af;">
                 <a href="https://pace-rise.com" target="_blank" style="color:#6b7280;text-decoration:none;">pace-rise.com</a>
                 <span style="margin:0 6px;color:#d1d5db;">|</span>
@@ -666,9 +666,10 @@
         .roster-name-link:active { opacity:.6; }
         .roster-chips::-webkit-scrollbar { display:none; }
         .rr-rank-st { font-family: inherit; font-size: 10px; font-weight: 700; letter-spacing: .04em; border-radius: 6px; padding: 3px 0; }
-        .rr-who { grid-column: 2 / 4; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-        .rr-name { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; }
-        .rr-team { font-size: 12px; color: var(--gray-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* 이름이 길면(EN/JA 라틴 이름) 소속·NOC 가 'K…' 로 찌그러지던 것 → 소속은 최소 폭을 지키고 자리가 없으면 다음 줄로 (2026-10-12) */
+        .rr-who { grid-column: 2 / 4; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-width: 0; }
+        .rr-name { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+        .rr-team { font-size: 12px; color: var(--gray-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; min-width: 2.6em; max-width: 100%; }
         .rr-meta { grid-column: 2; font-size: 11px; color: var(--text-light); font-variant-numeric: tabular-nums;
                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .rr-meta i { font-style: normal; margin: 0 5px; opacity: .6; }
@@ -690,7 +691,7 @@
     </style>
 
     <script src="/lib/icons.js?v=1"></script>
-    <script src="common.js?v=103"></script>
+    <script src="common.js?v=104"></script>
     <script src="/lib/ranking.js?v=2"></script>
     <script src="dashboard.js?v=119"></script>
     <script src="share-card.js?v=3"></script>

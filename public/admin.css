@@ -226,6 +226,7 @@
 .admin-main .adm-drawer .admin-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-items: end; }
 .admin-main .adm-drawer .admin-form-row > .admin-form-group { width: auto !important; min-width: 0; }
 .admin-main .adm-drawer .admin-form-group input, .admin-main .adm-drawer .admin-form-group select { width: 100% !important; box-sizing: border-box; }
+.admin-main .adm-drawer .admin-form-group select#ath-edit-grade { width: 50% !important; }   /* 학년은 한 자리 값 — 칸 반폭(재설계 보류 항목, 2026-10-12) */
 .admin-main .adm-drawer .btn-danger { margin-left: auto; }
 .admin-main .adm-drawer .heat-entries-table th { white-space: nowrap; font-size: 12px; }
 .admin-main .adm-drawer .heat-entries-table td { white-space: nowrap; }

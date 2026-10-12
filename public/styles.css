@@ -130,9 +130,11 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 .brand-symbol { height: 24px; width: auto; display: inline-block; }
 .brand-wordmark { height: 20px; width: auto; display: inline-block; vertical-align: baseline; }
 .brand-node { font-family: var(--font-brand); font-size: 20px; letter-spacing: 2px; color: var(--text); }
-.hero-wordmark { height: 56px; }
-.hero-node { font-size: 22px; }
-.home-hero h1 .brand-node { font-size: 22px; }   /* 로그인 화면은 login.html 자체 규칙(13px) */
+/* 홈 히어로(2026-10-12 "페이스라이즈를 줄이고 노드를 키워"): 워드마크 26px + Node 44px, 베이스라인 맞춤 */
+.home-hero h1 { display: inline-flex; align-items: baseline; gap: 12px; }
+.hero-wordmark { height: 26px; }
+.home-hero h1 .brand-node.hero-node { font-size: 44px; letter-spacing: 2px; }   /* 로그인 화면은 login.html 자체 규칙(13px) */
+@media (max-width: 480px) { .hero-wordmark { height: 20px; } .home-hero h1 .brand-node.hero-node { font-size: 34px; } }
 .mobile-menu-header .mm-brand { display: inline-flex; align-items: center; gap: 8px; }
 .mobile-menu-header .mm-brand .brand-symbol { height: 24px; }
 .mobile-menu-header .mm-brand .brand-node { font-size: 18px; }

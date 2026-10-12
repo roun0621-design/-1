@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
     <meta name="theme-color" content="#F4F3EF">
     <title>PACE RISE : Node — 관리자</title>
-    <link rel="stylesheet" href="styles.css?v=80">
+    <link rel="stylesheet" href="styles.css?v=81">
     <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
         .admin-tabs { display:flex; gap:0; border-bottom:2px solid var(--gray); margin-bottom:20px; flex-wrap:wrap; }
@@ -1321,8 +1321,8 @@
                 <div class="admin-card" style="">
                     <h4 style="display:flex;align-items:center;gap:8px;margin:0;">외부 API 키 관리 <span class="t-sm t-muted">External Result-Link API</span></h4>
                     <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;line-height:1.5;">
-                        외부 시스템(예: OpenClaw on Mac mini)이 노출용(display) 대회 종목에 결과/영상 링크를 자동 등록할 때 사용하는 API 키를 발급/회수합니다.<br>
-                        키는 <b>발급 시 1회만 표시</b>되며, 이후에는 prefix만 확인 가능합니다. 안전한 곳에 보관하세요.
+                        외부 시스템이 쓰는 API 키를 발급/회수합니다 — <b>읽기</b>: 전광판·방송·결과 사이트용 공개 읽기 API v1(<a href="/api/v1/openapi.json" target="_blank" rel="noopener">명세</a>, 문서 docs/PUBLIC_API_V1.md) · <b>쓰기</b>: 노출용(display) 대회 종목에 결과/영상 링크 자동 등록.<br>
+                        키는 <b>발급 시 1회만 표시</b>되며, 이후에는 prefix만 확인 가능합니다. 특정 대회 전용으로 발급하면 그 대회만 읽습니다.
                     </p>
                 </div>
 
@@ -2794,7 +2794,7 @@ POST /api/external/event-result-link/batch<br>
     <script src="lib/xlsx.full.min.js"></script>
     <script src="/lib/auth-client.js?v=1"></script>
     <script src="/lib/icons.js?v=1"></script>
-    <script src="common.js?v=103"></script>
+    <script src="common.js?v=104"></script>
     <script>
         renderPageNav('admin');
         // [정책] 종료된 대회 + 운영진(operation) → 진입 차단, dashboard 로 리다이렉트
@@ -8803,6 +8803,13 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('doc-comp-logo-right').value = comp.logo_right || '';
             updateLogoStatus('doc-comp-logo-left-status', comp.logo_left);
             updateLogoStatus('doc-comp-logo-right-status', comp.logo_right);
+            // 서명·로고 탭의 미리보기: 저장된 로고가 있으면 열 때부터 보인다 (예전엔 올린 직후에만 보임 — 재설계 보류 항목, 2026-10-12)
+            for (const [pos, url] of [['left', comp.logo_left || ''], ['right', comp.logo_right || '']]) {
+                const img = document.getElementById(`quick-logo-${pos}-preview`), del = document.getElementById(`quick-logo-${pos}-del`), st = document.getElementById(`quick-logo-${pos}-status`);
+                if (img) { img.src = url; img.style.display = url ? 'block' : 'none'; }
+                if (del) del.style.display = url ? 'inline-block' : 'none';
+                if (st) st.textContent = url ? '등록됨' : '';
+            }
             document.getElementById('doc-comp-chief-judge').value = comp.chief_judge || '';
             document.getElementById('doc-comp-chief-recorder').value = comp.chief_recorder || '';
             document.getElementById('doc-comp-cat-track').checked = comp.cat_track !== false;

@@ -6219,7 +6219,7 @@ function externalApiAuth(req, res, next) {
             const USAGE_SQL = !db.isAsync
                 ? 'UPDATE external_api_key SET last_used_at=datetime(\'now\'), total_calls=total_calls+1 WHERE id=?'
                 : "UPDATE external_api_key SET last_used_at=NOW(), total_calls=total_calls+1 WHERE id=?";
-            db.run(USAGE_SQL, matched.id).catch(()=>{});
+            Promise.resolve().then(() => db.run(USAGE_SQL, matched.id)).catch(() => {});   // SQLite 는 동기라 .catch 가 없다 (2026-10-12 수정)
 
             req.extApiKey = matched;
             next();
@@ -6749,6 +6749,8 @@ app.post('/api/external/event-result-link/batch', externalApiAuth, async (req, r
 
 // ── 외부 API 키 관리(발급·목록·폐기·호출 로그) → lib/routes/external_keys.js (2026-09-22) ──
 const _external_keysRoutes = require('./lib/routes/external_keys')(app, { _generateApiKey, _hashApiKey, _keyPrefix, db, isAdminKey, parseDbTimestampMs });
+// ── 공개 읽기 API v1 (2026-10-12, 전광판·방송·외부 결과 사이트용 읽기 전용) — 같은 외부 API 키로 인증 ──
+require('./lib/routes/public_v1')(app, { db, externalApiAuth, checkCompetitionScope: _checkCompetitionScope, getEventResultsForCert, orderByBibSql });
 
 
 // ============================================================

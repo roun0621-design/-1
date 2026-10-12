@@ -1705,7 +1705,7 @@ function openVideoModal(url, title) {
     footer.innerHTML = `
         <div class="pr-footer-inner">
             <div class="pr-footer-brand">Competition Operating System</div>
-            <div class="pr-footer-powered">Powered by <span class="pr-footer-logo">PACE RISE</span></div>
+            <div class="pr-footer-powered">Powered by <img class="brand-wordmark pr-footer-logo" src="/brand/wordmark.svg" alt="PACE RISE" style="height:14px;width:auto;vertical-align:-2px;margin-left:2px;"></div>
             <div class="pr-footer-links">
                 <a href="https://pace-rise.com" target="_blank" rel="noopener">pace-rise.com</a>
                 <span class="pr-footer-sep">|</span>
