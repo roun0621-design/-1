@@ -122,8 +122,8 @@ function _scInjectStyles() {
 /* 로고는 카드 안에 온전히 들어온다 (잘리지 않음).
    더 왼쪽으로 밀거나 키우면 이름·순위 블록과 겹치고,
    더 내리면 footer 의 'powered by PACE RISE' 글자와 부딪힌다. */
-.sc-logo { position:absolute; right:20px; bottom:300px; width:620px;
-    opacity:0.14; pointer-events:none; }
+.sc-logo { position:absolute; right:88px; bottom:300px; width:120px;
+    opacity:0.16; pointer-events:none; }   /* 2026-10-12: 락업(심볼+워드마크) → 브레이크 심볼만 (사용자 요청) */
 /* 혼성경기는 세부 기록 두 줄이 로고 자리까지 내려오므로 로고를 덜 올린다 */
 .sc-has-marks .sc-logo { bottom:200px; }
 `;
@@ -193,7 +193,7 @@ function _scBuildCard(d) {
             ${d.compDate ? `<div class="sc-date">${_scEsc(_scFmtDate(d.compDate))}</div>` : ''}
             <div class="sc-brand">powered by PACE RISE</div>
         </div>
-        <img class="sc-logo" src="/brand/pacerise-mark.png" alt="">
+        <img class="sc-logo" src="/brand/symbol-tartan.svg" alt="">
     `;
     return card;
 }

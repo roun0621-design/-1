@@ -2132,7 +2132,7 @@ function renderLiveTrackResults(data, relayMembers) {
             }
             const rankHtml = r.status_code
                 ? `<div class="rr-rank rr-rank-st sc-${r.status_code}">${r.status_code}</div>`
-                : `<div class="rr-rank${r.rank === 1 ? ' rr-rank-1' : ''}${r.rank === '—' ? ' rr-rank-wait' : ''}">${r.rank}</div>`;
+                : `<div class="rr-rank${r.rank === 1 ? ' rr-rank-1' : ''}${r.rank === '—' ? ' rr-rank-wait' : ''}${Number(r.rank) >= 100 ? ' rr-rank-3d' : ''}">${r.rank}</div>`;
             const meta = [
                 `${smallNumLabel} ${r.lane_number || '—'}`,
                 `BIB ${bib(r.bib_number)}`,
@@ -2916,7 +2916,7 @@ function renderTrackResults(data, relayMembers) {
             const scAttr = _scAttr(data.event, r, _scRec, typeof r.rank === 'number' ? r.rank : null, { windAided: _isWindAided2 });
             const rankHtml = r.status_code
                 ? `<div class="rr-rank rr-rank-st sc-${r.status_code}">${r.status_code}</div>`
-                : `<div class="rr-rank${r.rank === 1 ? ' rr-rank-1' : ''}">${r.rank}</div>`;
+                : `<div class="rr-rank${r.rank === 1 ? ' rr-rank-1' : ''}${Number(r.rank) >= 100 ? ' rr-rank-3d' : ''}">${r.rank}</div>`;
             const meta = [
                 `${smallNumLabel} ${r.lane_number || '—'}`,
                 `BIB ${bib(r.bib_number)}`,
@@ -2956,7 +2956,7 @@ let _rrFirstOpen = (() => {
 //   완료 결과는 행 전체가 공유 카드(data-sc), LIVE 는 공유 없음 + 기록 들어온 행 연한 강조
 function _rrFieldRankHtml(status, rankNum) {
     if (status) return `<div class="rr-rank rr-rank-st sc-${status}">${status}</div>`;
-    return `<div class="rr-rank${rankNum === 1 ? ' rr-rank-1' : ''}${rankNum == null ? ' rr-rank-wait' : ''}">${rankNum == null ? '—' : rankNum}</div>`;
+    return `<div class="rr-rank${rankNum === 1 ? ' rr-rank-1' : ''}${rankNum == null ? ' rr-rank-wait' : ''}${Number(rankNum) >= 100 ? ' rr-rank-3d' : ''}">${rankNum == null ? '—' : rankNum}</div>`;
 }
 function _rrFieldDistList(rows, needsWind, opts) {
     const live = !!(opts && opts.live), evt = opts && opts.event;

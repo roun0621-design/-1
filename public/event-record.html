@@ -32,7 +32,7 @@
     .er-list { width:100%; border-collapse:collapse; font-size:14px; }
     .er-list th { text-align:left; font-size:11px; color:var(--gray-dark); border-bottom:2px solid var(--gray); padding:6px 8px; text-transform:uppercase; letter-spacing:.5px; }
     .er-list td { padding:8px; border-bottom:1px solid var(--gray-light); }
-    .er-rank { font-weight:800; color:var(--green); width:34px; text-align:center; }
+    .er-rank { font-weight:800; color:var(--green); min-width:34px; text-align:center; white-space:nowrap; }   /* 100위 이상도 칸을 넘지 않게 (2026-10-12) */
     .er-best { font-weight:800; font-variant-numeric:tabular-nums; }
     .er-cert { padding:5px 10px; border:1px solid var(--green); color:var(--green); background:#fff; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; }
     .er-cert:disabled { opacity:.4; cursor:default; }
