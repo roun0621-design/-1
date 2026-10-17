@@ -1,0 +1,16 @@
+node_modules
+.git
+.github
+.claude
+db/*.db
+db/*.db-*
+backups
+public/uploads
+evidence
+tests
+docs/*.png
+*.log
+.env
+.env.*
+!.env.example
+NODE_CATALOG_SOURCE.md

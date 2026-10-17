@@ -315,3 +315,11 @@ print("applied:", batch["applied"], "failed:", batch["failed"])
 | GET    | `/api/admin/external-keys`              | 키 목록 |
 | POST   | `/api/admin/external-keys/:id/revoke`   | 키 회수 |
 | GET    | `/api/admin/external-keys/logs`         | 호출 로그 조회 (`?api_key_id=`, `?limit=`) |
+
+## 호출 로그 기간 조회 (2026-09-22)
+
+관리자 → 외부 API 키 → 호출 로그: 시작일~끝일(한국 날짜)을 넣고 **조회**하면 그 기간 전체(최대 5000건)와 엔드포인트·키별 건수 요약이 나오고, **CSV** 로 같은 조건을 내려받는다.
+
+`GET /api/admin/external-keys/logs?admin_key=…&from=2026-09-13&to=2026-09-16[&api_key_id=N][&format=csv]` — 응답 `{ items, summary:{by_endpoint,by_key,by_status}, range }`. 시각(created_at)은 UTC 저장이라 CSV 의 '시각(UTC)' 열에 9시간을 더하면 한국 시각.
+
+운영 로그도 같은 방식: `GET /api/operation-log?competition_id=N&from=…&to=…[&category=record|callroom|admin…][&format=csv]` (운영 로그 화면의 기간·CSV 버튼).

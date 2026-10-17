@@ -1,0 +1,37 @@
+# PACE RISE : Node — 로컬·단일 서버용 compose (멀티테넌시 4단계, 2026-10-09)
+#   SQLite:      docker compose up -d app
+#   PostgreSQL:  docker compose --profile pg up -d        (DB_BACKEND=postgres, DATABASE_URL 은 .env 에)
+#   앞단 nginx 가 *.도메인 을 이 컨테이너(3000)로 넘긴다 — docs/DEPLOY_DOCKER.md
+services:
+  app:
+    build: .
+    image: pacerise:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PORT=3000
+      - TRUST_PROXY=1
+    ports:
+      - "3000:3000"
+    volumes:
+      - pacerise-db:/app/db
+      - pacerise-uploads:/app/public/uploads
+      - pacerise-backups:/app/backups
+
+  postgres:
+    profiles: ["pg"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=pacerise
+      - POSTGRES_USER=pacerise
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-pacerise}
+    volumes:
+      - pacerise-pg:/var/lib/postgresql/data
+      - ./db/schema.pg.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+
+volumes:
+  pacerise-db:
+  pacerise-uploads:
+  pacerise-backups:
+  pacerise-pg:
