@@ -905,13 +905,13 @@ function renderHeroSchedule() {
     const subEl = document.getElementById('hero-sub');
     const iconEl = document.getElementById('hero-icon');
 
+    // 부가 있는 대회(전국체전 등)는 종목명 뒤에 부·성별(category)을 작게 — 같은 '100m'가 부마다 있으니까 (2026-10-17)
+    const _catTxt = it => (it && it.category && /부$/.test(String(it.category).trim())) ? ` <span style="color:var(--text-muted);font-weight:500;">${_esc(it.category)}</span>` : '';   // 시간표 category 가 '남자 일반부' 꼴이면(부 있는 대회) 표시 — allEvents 보다 먼저 그려져 _hasDivisions 는 못 쓴다. (2026-10-18: 삼항이 주석 뒤에 있어 true 가 찍히고, const 가 한 분기 안에 있어 '다음 경기' 분기에서 ReferenceError → 대시보드가 로딩 중에 멈춤)
     row.classList.toggle('live', !!liveItem);
     if (liveItem) {
         card.classList.add('live');
         iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>';
         titleEl.innerHTML = `<span class="hero-live-dot"></span> LIVE 진행중 ${_heroDayChip(targetDay)}`;
-        // 부가 있는 대회(전국체전 등)는 종목명 뒤에 부·성별(category)을 작게 — 같은 '100m'가 부마다 있으니까 (2026-10-17)
-        const _catTxt = it => (it && it.category && /부$/.test(String(it.category).trim()))   // 시간표 category 가 '남자 일반부' 꼴이면(부 있는 대회) 표시 — allEvents 보다 먼저 그려져 _hasDivisions 는 못 쓴다 ? ` <span style="color:var(--text-muted);font-weight:500;">${_esc(it.category)}</span>` : '';
         const nextTxt = nextItem ? ` · 다음 <strong>${_esc(nextItem.event_name)}</strong>${_catTxt(nextItem)} ${nextItem.time}` : '';
         subEl.innerHTML = `<strong>${_esc(liveItem.event_name)}</strong>${_catTxt(liveItem)} ${_esc(liveItem.round||'')} · ${liveItem.time}${nextTxt}`;
     } else if (isToday && nextItem) {
