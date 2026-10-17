@@ -3472,7 +3472,7 @@ POST /api/external/event-result-link/batch<br>
             { id:'overview',     group:'현황',      label:'현황',                icon:'chart',    tab:'overview',    loads:['overview'], roleTab:'overview' },
             { id:'comp',         group:'대회',      label:'대회 설정',           icon:'building', loads:['competition'], roleTab:'competition',
               subtabs:[ { label:'기본 정보', items:['card-comp-edit'] }, { label:'위험 구역', items:['card-comp-reset','card-comp-delete'], wrap:{ cls:'admin-card adm-danger', title:'위험 구역', lead:'되돌릴 수 없는 작업입니다. 실행 전 백업을 확인하세요.' } } ] },
-            { id:'intl',         group:'대회',      label:'국제대회 동기화',     icon:'plug',     items:['card-intl'], loads:['competition'], roleTab:'competition', when: c => !!(c && c.sync_source) },
+            { id:'intl',         group:'대회',      label:'국제대회 동기화',     icon:'plug',     items:['card-intl'], loads:['competition'], roleTab:'competition', when: c => !!c },   // 대회를 고르면 항상 (예전엔 출처가 있어야 보여서 처음 설정할 길이 검색뿐이었다 — 2026-10-17)
             { id:'readiness',    group:'대회',      label:'운영 체크리스트',     icon:'check',    items:['card-readiness'], loads:['competition'], roleTab:'competition' },
             { id:'import',       group:'준비',      label:'가져오기',            icon:'upload',   tab:'upload',      loads:['upload'], roleTab:'upload' },
             { id:'athletes',     group:'준비',      label:'선수',                icon:'user',     tab:'athletes',    loads:['athletes'], roleTab:'athletes' },
