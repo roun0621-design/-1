@@ -888,6 +888,7 @@
                         <div class="admin-form-group"><label>종목 코드</label><input id="intl-disc" value="ATH" placeholder="ATH"></div>
                         <div class="admin-form-group"><label>관심 국가</label><input id="intl-spot" value="KOR" placeholder="KOR"></div>
                         <div class="admin-form-group" style="grid-column:span 2;"><label>결과 사이트 주소 (Referer)</label><input id="intl-referer" placeholder="https://results.asiangames2026.org/"></div>
+                        <div class="admin-form-group" style="grid-column:span 2;"><label>실시간 결과 주소 <span class="t-xs t-muted">— 전국체전: 대한육상연맹 result.kaaf.or.kr 대회 페이지 주소를 그대로 (to_cd 포함). 있으면 결과는 여기서 읽는다(레인·풍속·시기까지)</span></label><input id="intl-results-url" placeholder="https://result.kaaf.or.kr/tourInfo/resultInfo.do?reg_year=2026&to_cd=E010031092&gubun=E&domestic=0&resultType=TRM&kind_cd=&tabs_id=toKor"></div>
                         <label style="font-size:12px;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="intl-enabled" checked> 자동 동기화 켜기</label>
                     </div>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">
@@ -903,6 +904,17 @@
                         <span class="t-xs t-muted">xlsx/csv 헤더: <code>영문이름</code>(또는 <code>reg</code>) · <code>한글이름</code> · <code>PB</code> · <code>SB</code> — 영문 이름은 결과 사이트 표기 그대로 (예: WOO Sanghyeok)</span>
                         <input type="file" id="intl-info-file" accept=".xlsx,.xls,.csv" style="font-size:12px;">
                         <button class="btn btn-sm btn-outline" onclick="intlUploadInfo()">반영</button>
+                    </div>
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--gray);">
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                            <span class="t-xs" style="font-weight:700;">전국체전 데일리 조편성 (PDF)</span>
+                            <span class="t-xs t-muted">대한육상연맹이 매일 저녁 내는 '참가선수명단' PDF → 종목·조에 레인/순서. 조는 그대로 두고 선수만 맞춘다(배번은 연맹 번호로). 결과가 있는 종목은 건너뜀.</span>
+                            <input type="file" id="intl-daily-file" accept=".pdf,.txt" style="font-size:12px;">
+                            <button class="btn btn-sm btn-outline" onclick="intlDailyLanes(false)">미리보기</button>
+                            <button class="btn btn-sm btn-primary" onclick="intlDailyLanes(true)">반영</button>
+                            <label class="t-xs" style="display:flex;align-items:center;gap:4px;"><input type="checkbox" id="intl-daily-force"> 결과 있는 종목도</label>
+                        </div>
+                        <div id="intl-daily-report" class="t-xs" style="display:none;margin-top:8px;line-height:1.7;"></div>
                     </div>
                 </div>
                 <div class="admin-card" id="card-undo" style="">
@@ -11434,6 +11446,7 @@ POST /api/external/event-result-link/batch<br>
                     document.getElementById('intl-base').value = d.source.base || ''; document.getElementById('intl-champ').value = d.source.champ || '';
                     document.getElementById('intl-disc').value = d.source.disc || 'ATH'; document.getElementById('intl-spot').value = d.source.spotlight || '';
                     document.getElementById('intl-referer').value = d.source.referer || ''; document.getElementById('intl-enabled').checked = d.source.enabled !== false;
+                    const ru = document.getElementById('intl-results-url'); if (ru) ru.value = (d.source.results && d.source.results.url) || '';
                 }
                 const st = d.state || {}; const c = d.counts || {};
                 const when = v => v ? new Date(v).toLocaleString('ko-KR', { hour12: false }) : '—';
@@ -11442,6 +11455,7 @@ POST /api/external/event-result-link/batch<br>
                     `<div>구조: 종목 <b>${c.events}</b> · 조 <b>${c.heats}</b> · 선수 <b>${c.athletes}</b> · 기록 <b>${c.results}</b> &nbsp; (구조 ${when(st.structure_at)} · 엔트리 ${when(st.entries_at)} · 결과 ${when(st.results_at)})</div>
                      <div>스케줄러: ${d.scheduler && d.scheduler.last_run ? '마지막 실행 ' + when(d.scheduler.last_run) : '아직 실행 전'}${d.scheduler && d.scheduler.last_error ? ' · <span style="color:var(--danger);">' + esc(d.scheduler.last_error) + '</span>' : ''} · ${d.source.enabled === false ? '<b>꺼짐</b>' : '켜짐'}</div>
                      ${st.results ? `<div>마지막 결과 동기화: 확인 ${st.results.checked}조 · 갱신 ${st.results.updated}조 · 기록 ${st.results.results}건</div>` : ''}
+                     ${st.kaaf_stats ? `<div>연맹 실시간 결과(${when(st.kaaf_at)}): 종목표 ${st.kaaf_stats.table_rows}행 · 읽음 ${st.kaaf_stats.checked} · 갱신 ${st.kaaf_stats.updated} · 기록 ${st.kaaf_stats.results}건 · 완료 ${st.kaaf_stats.completed}${(st.kaaf_stats.unmatched || []).length ? ` · <span style="color:#b5541b;">우리 종목과 못 맞춘 행 ${st.kaaf_stats.unmatched.length}: ${esc(st.kaaf_stats.unmatched.slice(0, 6).join(', '))}</span>` : ''}${(st.kaaf_stats.errors || []).length ? ` · <span style="color:var(--danger);">오류 ${esc(st.kaaf_stats.errors[0])}</span>` : ''}</div>` : ''}
                      ${st.entries ? `<div>마지막 엔트리 동기화: 새 출전 <b>${st.entries.added || 0}</b> · 빠짐 <b>${st.entries.removed || 0}</b> · 계주 주자 변경 <b>${st.entries.relay_changed || 0}</b>${(st.entries_changes || []).length ? ` — 우리 선수 변경 ${st.entries_changes.length}건` : ''}</div>` : ''}
                      ${(st.entries_changes || []).length ? `<div style="margin-top:4px;padding:6px 8px;background:#fff8ec;border:1px solid #f0dcb0;border-radius:6px;font-size:12px;">${st.entries_changes.slice(0, 12).map(x => `<div>${esc(when(x.at))} · <b>${x.type === 'added' ? '새 출전' : x.type === 'relay' ? '계주' : '빠짐'}</b> ${esc(x.text)}</div>`).join('')}</div>` : ''}
                      ${unknown.length ? `<div style="color:#b5541b;">형식을 모르는 결과 ${unknown.length}조 — 첫 항목: <code>${esc(unknown[0].key)}</code> ${esc((unknown[0].shape || unknown[0].error || '').slice(0, 160))}</div>` : ''}`;
@@ -11451,9 +11465,29 @@ POST /api/external/event-result-link/batch<br>
             if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
             try {
                 await api('PUT', `/api/admin/intl/${_selectedCompId}/source`, { admin_key: AK(), base: document.getElementById('intl-base').value.trim(), champ: document.getElementById('intl-champ').value.trim(),
-                    disc: document.getElementById('intl-disc').value.trim() || 'ATH', spotlight: document.getElementById('intl-spot').value.trim(), referer: document.getElementById('intl-referer').value.trim(), enabled: document.getElementById('intl-enabled').checked });
+                    disc: document.getElementById('intl-disc').value.trim() || 'ATH', spotlight: document.getElementById('intl-spot').value.trim(), referer: document.getElementById('intl-referer').value.trim(), results_url: (document.getElementById('intl-results-url') || {}).value || '', enabled: document.getElementById('intl-enabled').checked });
                 toast('출처 저장'); loadIntlStatus();
             } catch (e) { toast(e.error || '저장 실패', 'error'); }
+        }
+        // 전국체전 데일리 조편성 PDF → 미리보기/반영 (lib/intl/nsf_daily)
+        async function intlDailyLanes(apply) {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const fi = document.getElementById('intl-daily-file'), box = document.getElementById('intl-daily-report');
+            if (!fi.files[0]) { toast('PDF 파일을 고르세요', 'error'); return; }
+            if (apply && !await uiConfirm('PDF 의 조편성을 반영합니다. 해당 종목의 조 배정(레인)을 PDF 대로 바꿉니다. 계속할까요?')) return;
+            const fd = new FormData(); fd.append('file', fi.files[0]); fd.append('admin_key', AK()); fd.append('apply', apply ? '1' : '0'); fd.append('force', document.getElementById('intl-daily-force').checked ? '1' : '0');
+            toast(apply ? '반영 중…' : '읽는 중…', 'info');
+            try {
+                const res = await fetch(`/api/admin/intl/${_selectedCompId}/daily-lanes`, { method: 'POST', body: fd }); const d = await res.json(); if (!res.ok) throw d;
+                const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                const s = d.stats || {};
+                box.style.display = '';
+                box.innerHTML = `<div><b>${d.apply ? '반영됨' : '미리보기'}</b>: 종목 ${s.events}개 · 조 ${s.heats}개(새 조 ${s.heats_created || 0}) · 선수 ${s.entries}명 · 새 선수 ${s.created || 0} · 가린 이름 복원 ${s.unmasked || 0} · 배번 갱신 ${s.bib_updated || 0} · 건너뜀 ${s.skipped || 0}</div>
+                    ${(d.issues || []).length ? `<div style="color:#b5541b;">${d.issues.slice(0, 10).map(esc).join('<br>')}</div>` : ''}
+                    <div style="max-height:260px;overflow:auto;margin-top:4px;border:1px solid var(--gray-light,#e5e7eb);border-radius:6px;padding:6px 8px;">${(d.sections || []).map(x => `<div>${x.status === '반영' || x.status === '반영 예정' ? '✓' : '<span style="color:#b5541b;">✗</span>'} ${esc(x.label)} — ${esc(x.status)}${x.event ? ` (${x.heats}조 · ${x.entries}명)` : ''}${(x.unmatched || []).length ? ` · <span style="color:#b5541b;">명단에 없음: ${esc(x.unmatched.slice(0, 5).join(', '))}${x.unmatched.length > 5 ? ' …' : ''}</span>` : ''}</div>`).join('')}</div>`;
+                toast(d.apply ? `반영: 종목 ${s.events}개 · 선수 ${s.entries}명` : `미리보기: 종목 ${s.events}개 · 선수 ${s.entries}명`);
+                if (d.apply) { loadIntlStatus(); if (typeof loadEvents === 'function') loadEvents(); }
+            } catch (e) { toast(e.error || '실패', 'error'); }
         }
         async function intlSetup() {
             if (!_selectedCompId) return;
