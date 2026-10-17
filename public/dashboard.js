@@ -910,13 +910,15 @@ function renderHeroSchedule() {
         card.classList.add('live');
         iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#dc2626;" class="ui-emoji"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>';
         titleEl.innerHTML = `<span class="hero-live-dot"></span> LIVE 진행중 ${_heroDayChip(targetDay)}`;
-        const nextTxt = nextItem ? ` · 다음 <strong>${_esc(nextItem.event_name)}</strong> ${nextItem.time}` : '';
-        subEl.innerHTML = `<strong>${_esc(liveItem.event_name)}</strong> ${_esc(liveItem.round||'')} · ${liveItem.time}${nextTxt}`;
+        // 부가 있는 대회(전국체전 등)는 종목명 뒤에 부·성별(category)을 작게 — 같은 '100m'가 부마다 있으니까 (2026-10-17)
+        const _catTxt = it => (it && it.category && /부$/.test(String(it.category).trim()))   // 시간표 category 가 '남자 일반부' 꼴이면(부 있는 대회) 표시 — allEvents 보다 먼저 그려져 _hasDivisions 는 못 쓴다 ? ` <span style="color:var(--text-muted);font-weight:500;">${_esc(it.category)}</span>` : '';
+        const nextTxt = nextItem ? ` · 다음 <strong>${_esc(nextItem.event_name)}</strong>${_catTxt(nextItem)} ${nextItem.time}` : '';
+        subEl.innerHTML = `<strong>${_esc(liveItem.event_name)}</strong>${_catTxt(liveItem)} ${_esc(liveItem.round||'')} · ${liveItem.time}${nextTxt}`;
     } else if (isToday && nextItem) {
         card.classList.remove('live');
         iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
         titleEl.innerHTML = `오늘의 시간표 ${_heroDayChip(targetDay)}`;
-        subEl.innerHTML = `다음 <strong>${_esc(nextItem.event_name)}</strong> ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`;
+        subEl.innerHTML = `다음 <strong>${_esc(nextItem.event_name)}</strong>${_catTxt(nextItem)} ${_esc(nextItem.round||'')} · ${nextItem.time} · 총 ${totalCount}경기`;
     } else {
         card.classList.remove('live');
         iconEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
@@ -1461,6 +1463,7 @@ function renderCategoryTable(groups, label, isLive) {
                 '고등부': { color: '#e65100', bg: '#fff3e0' },
                 '대학부': { color: '#4a148c', bg: '#f3e5f5' },
                 '일반부': { color: '#1b5e20', bg: '#e8f5e9' },
+                '18세이하부': { color: '#e65100', bg: '#fff3e0' },   // 전국체전(고등부 급) — 시간표(common.js)와 같은 색
                 '국제':   { color: '#006064', bg: '#e0f7fa' }
             };
             if (exact[div]) return exact[div];

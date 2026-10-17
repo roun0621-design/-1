@@ -24,6 +24,7 @@ const fetchStub = (calls) => async (source, kind, p) => {
     if (kind === 'detail') {
         if (p.dc === 'A10301' && p.rh === 'A11001') return finishedHtml([{ rank: 1, sido: '울산', name: '김리한', team: '울산스포츠과학고등학교', grade: 1, mark: '10.85', remark: '' }, { rank: 2, sido: '경남', name: '김시훈', team: '경남체육고등학교', grade: 1, mark: '10.91', remark: 'Q' }, { rank: '', sido: '경남', name: '최재혁', team: '경남체육고등학교', grade: 3, mark: 'DNF', remark: '' }]);
         if (p.dc === 'A10307' && p.rh === 'A19000') return finishedHtml([{ rank: 1, sido: '경북', name: '오천미', team: '경북체고', grade: 2, mark: '14:35.20', remark: '' }, { rank: 2, sido: '전남', name: '김오천', team: '전남체고', grade: 3, mark: '14:36.00', remark: '' }]);   // 5000m 결승(조 1개) → 전원 기록 = 완료
+        if (p.dc === 'A10517' && p.rh === 'A19000') return finishedHtml([{ rank: 1, sido: '경기', name: '최십종', team: '경기도청', grade: '', mark: '7,123', remark: '' }, { rank: 2, sido: '서울', name: '김십종', team: '서울시청', grade: '', mark: '6,980', remark: '' }]);   // 10종 총점표
         if (p.cls === 'B1') return finishedHtml([{ rank: 1, sido: '서울', name: '정의진', team: '서울시청', grade: '', mark: '18.52m', remark: '대회신' }]);   // 필드는 '종료' 표시 전엔 진행 중
         return unfinished;
     }
@@ -67,9 +68,13 @@ describe('전국체전 동기화', () => {
         const heats = await db.all('SELECT h.* FROM heat h JOIN event e ON e.id=h.event_id WHERE e.competition_id=? AND e.external_key=? ORDER BY heat_number', fx.comp, 'A10301#preliminary');
         expect(heats.map(h => h.external_key)).toEqual(['A10301/A11001', 'A10301/A11002', 'A10301/A11003', 'A10301/A11004']);
         expect(heats[0].scheduled_at).toBe('2026-10-18T13:25:00+09:00');
-        const tt = await db.get("SELECT * FROM timetable WHERE competition_id=? AND event_name='100m 18세이하부' AND category='남자' AND round='예선' LIMIT 1", fx.comp);
-        expect(tt.time).toBe('13:25'); expect(tt.note).toBe('4조'); expect(tt.event_name).toBe('100m 18세이하부');
+        const tt = await db.get("SELECT * FROM timetable WHERE competition_id=? AND event_name='100m' AND category='남자 18세이하부' AND round='예선' LIMIT 1", fx.comp);
+        expect(tt.time).toBe('13:25'); expect(tt.note).toBe('4조');   // 종목명만, 부·성별은 category 로(화면이 알약) — 노출용 대회와 같은 모양
+        const ttSub = await db.get("SELECT * FROM timetable WHERE competition_id=? AND event_name='100m' AND category='남자 18세이하부' AND round='10종(1)' LIMIT 1", fx.comp);
+        expect(ttSub).toBeTruthy(); expect(ttSub.time).toBe('09:30');
         const dec = await db.get("SELECT * FROM event WHERE competition_id=? AND external_key='A10317'", fx.comp);
+        // 종합경기 부모에도 '결승'(총점표) 조가 있다 — 10/20 일정의 남자일반부 10종
+        expect(await db.get("SELECT h.id FROM heat h JOIN event e ON e.id=h.event_id WHERE e.external_key='A10517' AND h.external_key='A10517/A19000'")).toBeTruthy();
         const subs = await db.all('SELECT name, sort_order FROM event WHERE parent_event_id=? ORDER BY sort_order', dec.id);
         expect(subs.slice(0, 3).map(s => s.name)).toEqual(['[10종] 100m', '[10종] 멀리뛰기', '[10종] 포환던지기']);   // WA 순서
         const mixed = await db.get("SELECT * FROM event WHERE competition_id=? AND external_key='A11513#final'", fx.comp);
@@ -118,6 +123,9 @@ describe('전국체전 동기화', () => {
         expect((await db.get("SELECT round_status FROM event WHERE competition_id=? AND external_key='A10307#final'", fx.comp)).round_status).toBe('completed');   // 결승 한 조 전원 기록
         const fld = await db.get("SELECT e.round_status, r.distance_meters, r.remark FROM result r JOIN heat h ON h.id=r.heat_id JOIN event e ON e.id=h.event_id WHERE e.competition_id=? AND h.external_key LIKE 'B1%' LIMIT 1", fx.comp);
         expect(fld).toMatchObject({ distance_meters: 18.52, remark: '대회신', round_status: 'in_progress' });
+        // 10종 총점표 → 부모 종목 결과(점수), 세부종목 아님
+        const tot = await db.get("SELECT r.distance_meters, e.round_status, e.category FROM result r JOIN heat h ON h.id=r.heat_id JOIN event e ON e.id=h.event_id WHERE h.external_key='A10517/A19000' ORDER BY r.distance_meters DESC LIMIT 1");
+        expect(tot).toMatchObject({ distance_meters: 7123, category: 'combined', round_status: 'in_progress' });
         // 공개 API 로도 보인다
         const api = await request(app).get(`/api/events?competition_id=${fx.comp}`);
         expect(api.body.length).toBeGreaterThan(30);

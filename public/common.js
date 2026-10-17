@@ -2245,6 +2245,7 @@ async function openTimetable(compId) {
                 const exact = {
                     '중등부':{fg:'#1565c0',bg:'#e3f2fd'}, '고등부':{fg:'#e65100',bg:'#fff3e0'},
                     '대학부':{fg:'#6a1b9a',bg:'#f3e5f5'}, '일반부':{fg:'#2e7d32',bg:'#e8f5e9'},
+                    '18세이하부':{fg:'#e65100',bg:'#fff3e0'},   // 전국체전(고등부 급) — 고등부와 같은 색 (2026-10-17)
                     '국제':{fg:'#00695c',bg:'#e0f7fa'},
                 };
                 const raw = (d||'').trim();
