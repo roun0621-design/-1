@@ -1,0 +1,3238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" type="image/x-icon" href="/national/comn/nsi/img/favicon/favicon.ico">
+
+    <link rel="stylesheet" type="text/css" href="/national/comn/nsi/css/content.css?ver=20261017221201">
+    <link rel="stylesheet" href="/national/comn/nsi/css/mainNewTest.css?v=5" />
+    <script src="/national/comn/nsi/js/jquery-2.2.4.min.js"></script>
+    <script src="/national/comn/nsi/js/jquery-ui.min.js"></script>
+    <script src="/national/comn/nsi/js/common_util.js"></script>
+    <script src="//developers.kakao.com/sdk/js/kakao.min.js"></script>
+
+</head>
+
+    
+<script>
+    // 메인(홈)으로
+    function fnHome() {
+        document.location.href = "/national/";
+    }
+    
+
+    //document.oncontextmenu = function(){alert("마우스 우측 버튼은 사용할 수 없습니다.");return false;}
+
+    </script>
+
+<style>
+/*     body, p, span, div, table, tr, td {
+        font-size: 14px;
+    }
+    table {
+        border : 1px solid #cdcdcd;
+    }
+    tr, td {
+        text-align: left;
+    }
+    td {
+        padding: 5px 5px 5px 5px;
+    }
+    .on {
+        font-weight: bold;
+        color: #ff0000;
+    } */
+</style>
+<script>
+    var initBodyHtml;
+    //var raw_url = "https://tnas.sports.or.kr/winter";  // -> 정보제공
+    var raw_url="https://meet.sports.or.kr/national";
+    var urlParam = "/schedule/scheduleClass.do?searchSidoCd=&amp;searchGmDt=20261018&amp;searchClassCd=A1&amp;searchKindCd=&amp;searchDetailClassCd=&amp;searchGmConfirmYn=";
+
+    function movePage(srvlId,srvlKindNm,menuId,menuNm){
+		var frm = findObject("MenuVO");
+		
+		frm.searchMenuId.value = menuId;
+		frm.searchMenuNm.value = menuNm;
+		
+		if(srvlId==''){
+			frm.action = "/national/" + srvlKindNm + ".do";
+		}else{
+			frm.action = "/national/" + srvlId + "/" + srvlKindNm + ".do";
+		}
+
+		frm.submit();
+	}
+
+    function searchPlayer() {
+		let frm = findObject("SearchVO");
+
+        frm.searchKorNm.value = XSSCheck($("#gnb_SearchKorNm").val(),"0");
+        frm.searchClassCd.value = "";
+        frm.searchKindCd.value = "";
+        frm.searchSidoCd.value = "";
+
+		if(frm.searchKorNm.value==""){
+			alert("소속명 또는 이름을 2자 이상 입력해 주십시오.");
+			return;
+		}
+
+		frm.action = "/national/search/player.do";
+		frm.submit();
+	}
+    
+    // function printInner() {
+    //     var val = document.getElementById("print").outerHTML;
+    //     var explain = document.getElementById("explain");
+    //     var w = window.open(val,"미리보기",'scrollbars=yes, width=1200, height=800');
+    //     w.document.write(val);
+    //     w.document.close();
+    // }
+
+    function hidePrint(){
+        $('.searchArea').hide();
+        $('.snsList').hide();
+        $('.mobSns').hide();
+        
+        //$('.btnRight').hide();
+        $('.button-type01').hide();
+        //$("#printFrame").css("display","block");
+    }
+
+    function printInner() {
+        window.print();
+
+        // initBodyHtml = document.body.innerHTML;
+        // hidePrint();
+
+        // var cssLink = document.createElement("link");
+        // cssLink.rel="stylesheet";
+        // cssLink.type="text/css";
+        // cssLink.href="/national/comn/nsi/css/print.css";
+        // window.frames["printFrame"].document.head.appendChild(cssLink);
+        
+        // var body = $("#printFrame").contents().find("body");
+        
+        // var test = document.getElementById('print').cloneNode();
+        // var test2 = document.getElementById('print').innerHTML;
+        // body.append(test2);
+        
+        // setTimeout(function() {
+        //     window.frames["printFrame"].focus();
+        //     window.frames["printFrame"].print();
+        //     document.body.innerHTML = initBodyHtml;
+        // }, 300);
+      
+        /*
+        window.onbeforeprint = beforePrint;
+        window.print();
+        window.onafterprint = afterPrint;
+       */
+        //$('#print .searchArea').show();
+	}
+
+    function keyEvent() {
+		if(event.keyCode == 13) { 
+			search();
+		}
+	}
+
+    function beforePrint(){
+        initBodyHtml = document.body.innerHTML;
+        $('.searchArea').hide();
+        //$('.snsList').hide();
+        $('.mobSns').hide();
+        document.body.innerHTML = document.getElementById('print').innerHTML;
+    }
+
+    function afterPrint(){
+        document.body.innerHTML = initBodyHtml;
+    }
+
+    function shareFacebook(){
+        var facebook_share_url = "https://www.facebook.com/sharer/sharer.php?u=" +encodeURIComponent(raw_url + urlParam);
+        window.open(facebook_share_url,'Share on Facebook','scrollbars=no, width=500, height=500');
+        //window.open(raw_url + urlParam,'_blank','');
+    }  
+
+    function shareTwitter(){
+        var twitter_share_text="정보제공";
+        var twitter_share_url="https://twitter.com/share?text="+twitter_share_text+"&url="+encodeURIComponent(raw_url + urlParam);
+        window.open(twitter_share_url,'Share on Twitter','scrollbars=no, width=500, height=500');
+    }
+
+    function shareYoutube(){
+        var youtube_share_text="정보제공";
+        var youtube_share_url="https://twitter.com/share?text="+youtube_share_text+"&url="+encodeURIComponent(raw_url + urlParam);
+        window.open(youtube_share_url,'Share on Youtube','scrollbars=no, width=500, height=500');
+    }
+    function shareNaverBlog(){
+
+        // var raw_title = encodeURIComponent('정보제공');
+        // var naver_root_url = "http://share.naver.com/web/shareView.nhn?url="
+        // var param = encodeURI(encodeURIComponent(raw_url + urlParam));
+        // var naver_share_url = naver_root_url + param + "&title=" + raw_title;
+        var url = encodeURI(encodeURIComponent(myform.url.value));
+        var title = encodeURI(myform.title.value);
+        var shareURL = "https://share.naver.com/web/shareView?url=" + url + "&title=" + title;
+        window.open(shareURL,'Share on Naver','scrollbars=no, width=500, height=500');    
+    }
+
+    let description = "경기일정.결과 > 종목별 경기일정";
+    
+    if (!Kakao.isInitialized()) {
+            //Kakao.init('e2741fb78b20fa063813d0fe0c6baa12');
+            Kakao.init('c84b270b3d2b8858fcd486706df1cf57');
+    }
+
+    function sendLinkKakao() {
+        
+        Kakao.Link.sendDefault({
+            objectType: 'feed',
+            content: {
+                title: '제107회 전국체육대회 정보제공',
+                imageUrl:
+                'https://www.ulsan.go.kr/s/storyCms/103_sports/images/contents/about03/emblem01.png',
+                imageWidth: 270,
+                imageHeight: 244,
+                link: {
+                    mobileWebUrl: raw_url + urlParam,
+                    webUrl: raw_url + urlParam,
+                    //androidExecutionParams: '',
+                },
+            },
+            buttons: [
+                {
+                    title: description,
+                    link: {
+                    mobileWebUrl: raw_url + urlParam ,
+                    webUrl: raw_url + urlParam,
+                    },
+                },
+            ],
+        });
+    }
+    // Kakao.Link.cleanup();
+    // Kakao.cleanup();
+
+	function XSSCheck(str, level) {
+		if (level == undefined || level == 0) {
+			str = str.replace(/\<|\>|\"|\'|\%|\;|\(|\)|\&|\+|\-/g,"");
+		} else if (level != undefined && level == 1) {
+			str = str.replace(/\</g, "&lt;");
+			str = str.replace(/\>/g, "&gt;");
+		}
+		return str;
+	}
+
+    // 인천,광주,경기
+    $(function(){
+		$('#linkList2').change(function(){
+			window.open(this.value,'_blank','');
+		});	
+	});
+
+    // 0105 searchSelect close
+    $(document).mouseup(function (e){
+        let searchSelect = $(".search-select");
+        if($(".search-item").has(e.target).length === 0){
+            searchSelect.hide();
+        }
+    });
+
+    // 0109 pc, 모바일 구분 
+    const isMobile = () => {
+		try {
+			document.createEvent("TouchEvent");
+			return true;
+		} catch (e) {
+			return false;
+		}
+	};
+
+    //인쇄
+    function printPop() {
+        var obj = window.open("/national/common/printPop.do", "popWin", "width=1300px, height=900px, left=0px, top=0px, scrollbars=auto");
+        obj.focus();
+    }        
+
+    function fnSafeSportDown(gubun){
+        window.open("https://meet.sports.or.kr/national/doc/safeSport.pdf", "_blank");
+    }
+</script>
+
+<title>
+    경기일정.결과 > 종목별 경기일정</title>
+<body onLoad="pageInit();">
+
+    <a href="#content" class="skipToContent">본문으로 바로가기</a>
+    <!-- s: wrap -->
+    <div id="wrap">
+
+        <!-- s: header -->
+        <header id="header" class="header">
+            <div class="globalLink">
+                <div class="inner">
+                    <ul>
+                        <li><a href="https://www.sports.or.kr" target="_blank" title="새창으로 열기">대한체육회</a></li>
+                        <li><a href="https://on.sports.or.kr/index.do" target="_blank" title="새창으로 열기">ON스포츠포털</a></li>
+                        <li><a href="https://g1.sports.or.kr/" target="_blank" title="새창으로 열기">스포츠지원포털</a></li>
+                        <li><a href="https://meet.sports.or.kr/history/event/list.do?searchGubun=G" target="_blank" title="새창으로 열기">역대 전국체육대회</a></li>
+                        <li><a href="https://jejusports.kr/107/index.htm" target="_blank" title="새창으로 열기">개최지 홈페이지</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="headWrap">
+                <div class="inner">
+                    <h1 class="logo">
+                        <a href="/national/main.do"><img src="/national/assets/img/G2026.png" alt="로고"></a>
+                        </h1>
+                    <nav class="gnb">
+                        <h2 class="hideEl">주메뉴</h2>
+                        <ul>
+                            <li >
+                                        <a href="#" onclick="javascript:movePage('event','open','1002','대회개요')">대회개요</a>
+                                    </li>  
+                                <li >
+                                        <a href="#" onclick="javascript:movePage('board','noticeList','1008','공지사항')">공지사항</a>
+                                    </li>  
+                                <li >
+                                        <a href="#" onclick="javascript:movePage('rankall','all','1007','종합득점')">종합득점</a>
+                                    </li>  
+                                <li >
+                                        <a href="#" onclick="javascript:movePage('medal','medalTotal','1003','메달관련')">메달관련</a>
+                                    </li>  
+                                <li >
+                                        <a href="#" onclick="javascript:movePage('newrec','newrecStat','1004','신기록')">신기록</a>
+                                    </li>  
+                                <li class="active">
+                                        <a href="#" onclick="javascript:movePage('schedule','scheduleAll','1005','경기일정.결과')">경기일정·결과</a>
+                                    </li>  
+                                <li >
+                                        <a href="#" onclick="javascript:movePage('search','player','1006','선수.임원검색')">선수·임원검색</a>
+                                    </li>  
+                                <li>
+                                <a href="#" class="btn1" onclick="fnSafeSportDown()" style="color : #32a264;">Safe Sport</a>
+                                </li>
+                        </ul>
+                    </nav>
+                    <div class="head-right">
+                      <button class="mobBtn hideTxt">모바일 메뉴열기 버튼</button>  
+                    </div>    
+                
+                    <form id="myform">
+                        <input type="hidden" id="url" value="https://meet.sports.or.kr/national/schedule/scheduleClass.do?searchSidoCd=&amp;searchGmDt=20261018&amp;searchClassCd=A1&amp;searchKindCd=&amp;searchDetailClassCd=&amp;searchGmConfirmYn="><br/>
+                        <input type="hidden" id="title" value="정보제공"><br/>
+                    </form>
+
+                    
+                    <iframe id="printFrame" name="printFrame" style="width:1240px;display:none;">
+                        <head>
+                            
+                        </head>
+                    </iframe>
+
+                    <!-- s: mobileGNB -->
+                    <div class="moGnb">
+                        <h2 class="hideEl">주메뉴</h2>
+                        <div class="head">
+                            <h3>제107회 전국체육대회<span>The 107th National Sports Festival</span></h3>
+                            <p class="txt01">대회기간 : 2026/10/16(금)  ~ 2026/10/22(목) 7일간</p>
+                            <p class="txt02"><span>대회2일차</span> <span>오늘 : 2026/10/17(토)</span></p> 
+                                </div>
+                        <div class="mobNav">
+                            <ul>
+                                <li>
+                                            <h4>대회개요</h4>
+                                            <ul class="mob-depth">
+                                                <li>
+                                                            <a href="#" onclick="javascript:movePage('event','open','1201','개회사')">개회사</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('event','welcome','1202','환영사')">환영사</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('event','outline','1203','대회개요')">대회개요</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('event','prizeItem','1204','시상내역')">시상내역</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('event','classInfo','1205','종목정보')">종목정보</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('event','venue','1206','경기장')">경기장</a>
+                                                        </li>
+                                                    </ul>
+                                        </li>
+                                    <li>
+                                            <h4>공지사항</h4>
+                                            <ul class="mob-depth">
+                                                <li>
+                                                            <a href="#" onclick="javascript:movePage('board','noticeList','1801','공지사항')">공지사항</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('youtube','list','1803','경기영상')">경기영상</a>
+                                                        </li>
+                                                    </ul>
+                                        </li>
+                                    <li>
+                                            <h4>종합득점</h4>
+                                            <ul class="mob-depth">
+                                                <li>
+                                                            <a href="#" onclick="javascript:movePage('rankall','all','1701','종합순위')">종합순위</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('rankall','classRank','1702','종목별순위')">종목별순위</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('rankall','classPoint','1703','종목별종합득점')">종목별종합득점</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('rankall','detailPoint','1704','세부종목득점')">세부종목득점</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('rankall','sidoPoint','1705','시.도별 집계')">시·도별 집계</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('rankall','sidoClassPoint','1706','시.도 종목별집계')">시·도 종목별집계</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('rankall','kindPointStat','1707','18세이하부 득점')">18세이하부 득점</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('rankall','progress','1708','성취도')">성취도</a>
+                                                        </li>
+                                                    </ul>
+                                        </li>
+                                    <li>
+                                            <h4>메달관련</h4>
+                                            <ul class="mob-depth">
+                                                <li>
+                                                            <a href="#" onclick="javascript:movePage('medal','medalTotal','1301','메달집계')">메달집계</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('medal','medalClass','1302','종목별 메달명세')">종목별 메달명세</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('medal','medalDate','1303','일자별 메달명세')">일자별 메달명세</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('medal','medalSido','1304','시도별 메달명세')">시도별 메달명세</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('medal','medalKingStat','1305','다관왕 집계')">다관왕 집계</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('medal','medalKing','1306','다관왕 명세')">다관왕 명세</a>
+                                                        </li>
+                                                    </ul>
+                                        </li>
+                                    <li>
+                                            <h4>신기록</h4>
+                                            <ul class="mob-depth">
+                                                <li>
+                                                            <a href="#" onclick="javascript:movePage('newrec','newrecStat','1401','신기록 집계')">신기록 집계</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('newrec','newrec','1402','신기록 명세')">신기록 명세</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('newrec','baserec','1403','기준기록안내')">기준기록안내</a>
+                                                        </li>
+                                                    </ul>
+                                        </li>
+                                    <li>
+                                            <h4>경기일정.결과</h4>
+                                            <ul class="mob-depth">
+                                                <li>
+                                                            <a href="#" onclick="javascript:movePage('schedule','scheduleAll','1501','전체 경기일정')">전체 경기일정</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('schedule','scheduleClass','1502','종목별 경기일정')">종목별 경기일정</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('schedule','scheduleDate','1503','일자별 경기일정')">일자별 경기일정</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('schedule','scheduleT','1504','시.도 토너먼트일정')">시·도 토너먼트일정</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('schedule','scheduleR','1505','시.도 기록경기일정')">시·도 기록경기일정</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('schedule','scheduleTDaejin','1506','토너먼트 대진표')">토너먼트 대진표</a>
+                                                        </li>
+                                                    </ul>
+                                        </li>
+                                    <li>
+                                            <h4>선수.임원검색</h4>
+                                            <ul class="mob-depth">
+                                                <li>
+                                                            <a href="#" onclick="javascript:movePage('search','player','1601','선수검색')">선수검색</a>
+                                                        </li>
+                                                    <li>
+                                                            <a href="#" onclick="javascript:movePage('search','staff','1602','임원검색')">임원검색</a>
+                                                        </li>
+                                                    </ul>
+                                        </li>
+                                    <li>
+                                    <a href="#" class="btn1" onclick="fnSafeSportDown()" style="color : #fff;">Safe Sport</a>
+                                </li>
+                            </ul>
+                        </div>  
+                        <!-- 2022.11.22. -->
+                        <!-- <a href="/national/event/open.do" class="moGnbCls hideTxt">모바일 메뉴 닫기</a> -->
+                        <a href="#none" class="moGnbCls hideTxt">모바일 메뉴 닫기</a>
+                    </div>
+                    <!-- e: mobileGNB -->
+                </div>    
+            </div>    
+        </header>
+        <!-- e: header --><script>
+
+</script>
+<form id="MenuVO" method="post">
+		<input type="hidden" name="searchMenuId" value=""/>
+		<input type="hidden" name="searchMenuNm" value=""/>	
+</form>
+
+<!-- <div style="font-weight: bold; font-size:16px;">
+	제107회 전국체육대회D + 3</div>
+<div style="font-weight: bold; font-size:16px;">
+	</div> -->
+
+	<!-- s: content -->
+	<div id="content" class="content">
+		<div class="subBanner">
+			<div class="inner">
+				<h3>경기일정.결과</h3>
+			</div>        
+		</div>
+		<nav class="lnb">
+			<div class="inner">
+				<ul class="lnbList col06">
+					<li  >
+								<a href="#" onClick="javascript:movePage('schedule','scheduleAll','1501','전체 경기일정')">전체 경기일정</a>
+							</li>
+						<li class="active" >
+								<a href="#" onClick="javascript:movePage('schedule','scheduleClass','1502','종목별 경기일정')">종목별 경기일정</a>
+							</li>
+						<li  >
+								<a href="#" onClick="javascript:movePage('schedule','scheduleDate','1503','일자별 경기일정')">일자별 경기일정</a>
+							</li>
+						<li  >
+								<a href="#" onClick="javascript:movePage('schedule','scheduleT','1504','시.도 토너먼트일정')">시·도 토너먼트일정</a>
+							</li>
+						<li  >
+								<a href="#" onClick="javascript:movePage('schedule','scheduleR','1505','시.도 기록경기일정')">시·도 기록경기일정</a>
+							</li>
+						<li  >
+								<a href="#" onClick="javascript:movePage('schedule','scheduleTDaejin','1506','토너먼트 대진표')">토너먼트 대진표</a>
+							</li>
+						</ul>
+			</div>
+		</nav>
+		<div id="print" class="inner">
+			<div class="contTop">
+				<div class="breadcrumb">
+					<span>Home</span>
+					<span>경기일정·결과</span>
+					<span>종목별 경기일정</span>
+				</div>
+				<h4 id="pageTitle">종목별 경기일정</h4>
+				<ul class="snsList">
+					<li onclick="printPop();"><a href="#none"><img src="/national/assets/img/icon_print.svg" alt="프린터"></a></li>
+							</ul>  
+
+</div>
+			
+<!-- 종목별 경기 일정 -->
+
+<script>
+	let classCd 		= "A1";
+	let kindCd 			= "";
+	let detailClassCd 	= "";
+	let gmDt 			= "20261018";
+	let sidoCd 			= "";
+	let playerClassCd 	= "A1";
+	
+	let classNm 		= "";
+	let kindNm 			= "";
+	let detailClassNm 	= "";
+	let sidoNm 			= "";
+
+	$(function(){
+
+		$("#unfinished-match").change(function(){
+			if(this.checked){
+				$(this).attr('value', 'N');
+			}else{
+				$(this).attr('value', 'Y');
+			}
+		});
+
+		if(kindCd==""){
+			$("#detailClassCdBtn").hide();
+		}
+
+	});
+
+	function getClassNm(classCd){
+		let arrClass = [];
+		let result = "";
+		$('input[name=classNm]').each(function(index, item){
+			if(classCd == $(item).val().substring(0,2)){
+				result = $(item).val().substring(3);
+			}
+		});
+		return result;
+	}
+	
+	function getKindCdList(searchClassCd, classNm2){
+		// $(".boardTable01").hide();
+
+		let frm = findObject("SearchVO");
+		if(classNm2 != null){
+			frm.searchClassCd.value 				= searchClassCd;
+			$("#classCdBtn")[0].innerText 			= classNm2;
+			frm.searchKindCd.value 					= "";
+			$("#kindCdBtn")[0].innerText 			= "전체";
+			frm.searchDetailClassCd.value 			= "";
+			$("#detailClassCdBtn")[0].innerText 	= "전체";
+			frm.searchGmDt.value 					= "";
+			$("#gmDtBtn")[0].innerText 				= "전체";
+			
+		}else{
+			frm.searchClassCd.value = searchClassCd = classCd;
+			if(classCd != "") $("#classCdBtn")[0].innerText = getClassNm(classCd);
+		}
+		
+		$(".searchPop").css("display","none");
+		$("body").css("overflow-y", "auto");
+						
+		$.ajax({
+			type : "POST",
+			url:  "/national/schedule/selectKindCdListAjax.do",
+			data : JSON.stringify({searchClassCd : searchClassCd}),
+			dataType: 'json',
+			contentType : "application/json; charset=UTF-8",
+			success: function(data) {
+				if (data.RESULT_CODE == '0000000'){
+					$("#kindCdList").find("li").remove();
+					$("#mob_kindCdList").find("li").remove();
+					let kindAll = "";
+					if(kindCd != ""){
+						kindAll = "";
+					}else{
+						kindAll = "active";
+					}
+
+					//let str = '';
+					let str = '<li onclick="getDetailClassCdList(&#39;&#39;,&#39;전체&#39;);"><a class="'+ kindAll + '" href="javascript:void(0);">전체</a></li>';
+					
+					$.each(data.codeList, function(i){
+						if(kindCd == data.codeList[i].MINOR_CD){
+							str += '<li onclick="getDetailClassCdList(&#39;' + data.codeList[i].MINOR_CD +'&#39;,&#39;' + data.codeList[i].CODE_NM +'&#39;);"><a class="active" href="javascript:void(0);">' + data.codeList[i].CODE_NM + '</a></li>'					
+							if(kindNm==""){
+								kindNm = data.codeList[i].CODE_NM;
+								
+								if(searchClassCd == "07"){
+									$('#classNm').text(classNm2 + " / " + kindNm + "(3x3경기의 경우 예선리그전이 끝난 후 토너먼트일정이 조회됩니다.)");
+								}else{
+									$('#classNm').text(classNm2 + " / " + kindNm);
+								}
+							}
+						}else{
+							str += '<li onclick="getDetailClassCdList(&#39;' + data.codeList[i].MINOR_CD +'&#39;,&#39;' + data.codeList[i].CODE_NM +'&#39;);"><a href="javascript:void(0);">' + data.codeList[i].CODE_NM + '</a></li>'					
+						}
+					});
+					$("#kindCdList").append(str);
+					$("#mob_kindCdList").append(str);
+								
+				}else{
+					alert(data.RESULT_MSG);
+				}
+			},
+			fail : function(result) {
+				alert('데이터 처리중 오류가 발생하였습니다.');
+			},
+			complete : function() {
+				if(kindCd != ""){
+					getDetailClassCdList(kindCd);
+				}else{
+					$("#kindCdBtn")[0].innerText = "전체";
+					getGmDtList();	
+				}
+			}
+		});
+	}
+	
+	function getDetailClassCdList(searchKindCd, kindNm2){
+		// $(".boardTable01").hide();
+
+		let frm = findObject("SearchVO");
+		if(kindNm2!="전체"){
+			$("#detailClassCdBtn").show();
+		}else{
+			$("#detailClassCdBtn").hide();
+		}
+		if(kindNm2!=null){
+			frm.searchKindCd.value 					= searchKindCd;
+			$("#kindCdBtn")[0].innerText 			= kindNm2;
+			frm.searchDetailClassCd.value 			= "";
+			$("#detailClassCdBtn")[0].innerText 	= "전체";
+			frm.searchGmDt.value 					= "";
+			$("#gmDtBtn")[0].innerText 				= "전체";
+			
+		}else{
+			frm.searchKindCd.value = searchKindCd = kindCd;
+			$("#kindCdBtn")[0].innerText = kindNm;
+		}
+		kindCd = "";
+		let searchClassCd = frm.searchClassCd.value;
+		$(".searchPop").css("display","none");
+		$("body").css("overflow-y", "auto");
+		
+		$.ajax({
+			type : "POST",
+			url:  "/national/schedule/selectDetailClassCdListAjax.do",
+			data : JSON.stringify({searchClassCd : searchClassCd, searchKindCd : searchKindCd}),
+			dataType: 'json',
+			contentType : "application/json; charset=UTF-8",
+			success: function(data) {
+				if (data.RESULT_CODE == '0000000'){
+					$("#detailClassCdList").find("li").remove();
+					$("#mob_detailClassCdList").find("li").remove();
+					let detailClassAll = "";
+					if(detailClassCd != ""){
+						detailClassAll = "";
+					}else{
+						detailClassAll = "active";
+					}
+					let str = '';
+					
+					$.each(data.codeList, function(i){
+						if(detailClassCd == data.codeList[i].DETAIL_CLASS_CD){
+							str += '<li onclick="getGmDtList(&#39;' + data.codeList[i].DETAIL_CLASS_CD +'&#39;,&#39;' + data.codeList[i].DETAIL_CLASS_NM +'&#39;,&#39;' + data.codeList[i].MA_TYPE +'&#39;);"><a class="active" href="javascript:void(0);">' + data.codeList[i].DETAIL_CLASS_NM + '</a></li>'					
+							detailClassNm = data.codeList[i].DETAIL_CLASS_NM;
+						}else{
+							str += '<li onclick="getGmDtList(&#39;' + data.codeList[i].DETAIL_CLASS_CD +'&#39;,&#39;' + data.codeList[i].DETAIL_CLASS_NM +'&#39;,&#39;' + data.codeList[i].MA_TYPE +'&#39;);"><a href="javascript:void(0);">' + data.codeList[i].DETAIL_CLASS_NM + '</a></li>'					
+						}
+					});
+					
+					$("#detailClassCdList").append(str);
+					$("#mob_detailClassCdList").append(str);
+				}else{
+					alert(data.RESULT_MSG);
+				}
+			},
+			fail : function(result) {
+				alert('데이터 처리중 오류가 발생하였습니다.');
+			},
+			complete : function() {
+				if(detailClassCd != ""){
+					getGmDtList(detailClassCd);
+				}else{
+					getGmDtList();	
+				}
+			}
+		});
+	}
+
+	function getGmDtList(searchDetailClassCd, detailClassNm2, maType){
+		// $(".boardTable01").hide();
+
+		let frm = findObject("SearchVO");
+		if(searchDetailClassCd == null){
+			searchDetailClassCd = frm.searchDetailClassCd.value = "";
+			$("#detailClassCdBtn")[0].innerText = "전체";
+		}else{
+			if(detailClassNm2 != null){
+				frm.searchDetailClassCd.value 			= searchDetailClassCd;
+				$("#detailClassCdBtn")[0].innerText 	= detailClassNm2;
+				frm.searchGmDt.value 					= "";
+				$("#gmDtBtn")[0].innerText 				= "전체";
+			}else{
+				frm.searchDetailClassCd.value = searchDetailClassCd = detailClassCd;
+				$("#detailClassCdBtn")[0].innerText = detailClassNm;
+			}
+		}
+		detailClassCd = "";
+		$(".searchPop").css("display","none");
+		$("body").css("overflow-y", "auto");
+		let searchClassCd 	= frm.searchClassCd.value;
+		let searchKindCd 	= frm.searchKindCd.value;
+		let searchsidoCd 	= "";
+
+		$.ajax({
+			type : "POST",
+			url:  "/national/schedule/selectGmDtListAjax.do",
+			data : JSON.stringify({searchClassCd : searchClassCd, searchKindCd : searchKindCd, searchDetailClassCd : searchDetailClassCd, searchsidoCd : searchsidoCd, searchPcntGbn: maType}),
+			dataType: 'json',
+			contentType : "application/json; charset=UTF-8",
+			success: function(data) {
+				if (data.RESULT_CODE == '0000000'){
+					$("#gmDtList").find("li").remove();
+					$("#mob_gmDtList").find("li").remove();
+					let gmDtAll = "";
+					if(gmDt != ""){
+						gmDtAll = "";
+					}else{
+						gmDtAll = "active";
+					}
+					let str = '<li onclick="selectGmDt(&#39;&#39;,&#39;전체&#39;);"><a class="' + gmDtAll + '" href="javascript:void(0);">전체</a></li>';
+					
+					$.each(data.codeList, function(i){
+						if(gmDt == data.codeList[i].GM_DT){
+							str += '<li onclick="(&#39;' + data.codeList[i].GM_DT +'&#39;,&#39;' + data.codeList[i].GM_DT +'&#39;);"><a class="active" href="javascript:void(0);">' + data.codeList[i].GM_DT + '</a></li>'					
+						}else{
+							str += '<li onclick="selectGmDt(&#39;' + data.codeList[i].GM_DT +'&#39;,&#39;' + data.codeList[i].GM_DT +'&#39;);"><a href="javascript:void(0);">' + data.codeList[i].GM_DT + '</a></li>'					
+						}
+					});
+					$("#gmDtList").append(str);
+					$("#mob_gmDtList").append(str);
+			
+				}else{
+					alert(data.RESULT_MSG);
+				}
+			},
+			fail : function(result) {
+				alert('데이터 처리중 오류가 발생하였습니다.');
+			},
+			complete : function() {
+				if(gmDt != ""){
+					selectGmDt(gmDt);
+				}else{
+					$("#gmDtBtn")[0].innerText = "전체";
+				}
+			}
+		});
+		
+	}
+
+	function selectGmDt(searchGmDt, searchGmDt2) {
+		// $(".boardTable01").hide();
+
+		let frm = findObject("SearchVO");
+		if(searchGmDt2 != null){
+			frm.searchGmDt.value 		= searchGmDt;
+			$("#gmDtBtn")[0].innerText 	= searchGmDt2;
+		}else{
+			frm.searchGmDt.value 		= gmDt;
+			$("#gmDtBtn")[0].innerText 	= addslashes(gmDt);
+		}
+		gmDt = "";
+		$(".searchPop").css("display","none");
+		$("body").css("overflow-y", "auto");
+	}
+
+	// 1215 kmh addslashes
+	function addslashes(date){
+		if(date.length == 8){
+			date = date.substr(0,4) + "/" + date.substr(4,2) + "/" + date.substr(6,2);
+		}else{
+		}
+		return date;
+	}
+
+	function search() {
+		if(validCheck()){ // 필수조건 
+			let frm = findObject("SearchVO");
+			let cul = "";
+			
+			if($("#unfinished-match").is(":checked")){
+				cul = "Y";
+			}
+		
+			frm.searchGmConfirmYn.value = cul;
+				
+			frm.action = "/national/schedule/scheduleClass.do";
+			frm.submit();
+		}
+	}
+
+	function validCheck(){
+		if($("#classCdBtn").text() == "종목") {
+			alert("종목을 선택하세요.");
+			return false;
+		}
+		
+/*		if($("#kindCdBtn").text() == "종별") {
+			alert("종별을 선택하세요.");
+			return false;
+		}*/
+
+		return true;
+	}
+	
+	/**
+	* 페이지 초기화 작업
+	*/
+	function pageInit() {
+		if(classCd != ""){
+			getKindCdList(classCd, getClassNm(classCd));
+			if(classCd == "07"){
+				$('#classNm').text(getClassNm(classCd) + "(3x3경기의 경우 예선리그전이 끝난 후 토너먼트일정이 조회됩니다.)");
+			}else{
+				$('#classNm').text(getClassNm(classCd));
+			}
+
+			$('#kindCd:eq(2)').attr("selected", "selected");
+		}
+
+		// setTimeout(function() {
+		// 	$(".boardTable01").show();
+        // }, 300);
+	}
+
+	function resultDetail(teamCd, detailClassCd, rhCd) {
+		let frm = findObject("SearchVO");
+
+		let url = "/national/schedule/detailPlayerListAjax.do";
+		
+		$.ajax({
+			type : "POST",
+			url:  url,
+			data : JSON.stringify({searchEntrantTeamCd : teamCd, searchDetailClassCd : detailClassCd, searchRhCd : rhCd}),
+			dataType: 'json',
+			contentType : "application/json; charset=UTF-8",
+			success: function(data) {
+				if (data.RESULT_CODE == '0000000'){
+					$(".playerList").find('tr').remove();
+					$(".startList").find('tr').remove();
+					$(".mob_playerList").find('ul').remove();
+					$(".mob_startList").find('ul').remove();
+
+					/*if(data.playerList == ''){
+						$(".playerList").append("<tr><td colspan='4'>조회된 항목이 없습니다.</td></tr>");
+						//$(".mob_playerList").append("<ul class='box-list'><li><span>조회된 항목이 없습니다.</span></li></ul>");
+					}else{
+						let strAdd = "";
+						let mobStrAdd = "";
+						
+						$.each(data.playerList, function(i){
+							//pc
+							strAdd += "<tr>";
+							if(data.playerList[i].GRADE == null) data.playerList[i].GRADE = '';
+ 
+							strAdd += "<td class='player' onclick='searchPlayerInfo(&#39;" + data.playerList[i].SIDO_CD + "&#39;,&#39;" + playerClassCd + "&#39;,&#39;" + data.playerList[i].KIND_CD + "&#39;,&#39;" + data.playerList[i].KOR_NM + "&#39;,&#39;" + data.playerList[i].TEAM_NM+"&#39;)'>" + data.playerList[i].KOR_NM + "</td>";
+							strAdd += "<td>" + data.playerList[i].EVENT_ATH_NO + "</td>";
+							strAdd += "<td>" +  data.playerList[i].TEAM_NM + "</td>"
+							strAdd += "<td>" +  data.playerList[i].GRADE + "</td>";
+							strAdd += "</tr>";
+							//mobile
+							mobStrAdd += "<ul class='box-list'>";
+							mobStrAdd += "<li><strong>선수명</strong><span>" + data.playerList[i].KOR_NM + "</span></li>";
+							mobStrAdd += "<li><strong>번호</strong><span>" + data.playerList[i].EVENT_ATH_NO + "</span></li>";
+							mobStrAdd += "<li><strong>소속</strong><span>" + data.playerList[i].TEAM_NM + "</span></li>";
+							mobStrAdd += "<li><strong>학년</strong><span>" + data.playerList[i].GRADE + "</span></li>";
+
+						});
+						$(".playerList").append(strAdd);
+						$(".mob_playerList").append(mobStrAdd);					
+					}*/
+
+					if(data.startList != ''){
+						let strAdd = "";
+						let mobStrAdd = "";
+
+						$.each(data.startList, function(i){
+							/* pc */
+							strAdd += "<tr>";
+							if(data.startList[i].GRADE == null) data.startList[i].GRADE = '';
+ 
+							strAdd += "<td class='player' onclick='searchPlayerInfo(&#39;" + data.startList[i].SIDO_CD + "&#39;,&#39;" + playerClassCd + "&#39;,&#39;" + data.startList[i].KIND_CD + "&#39;,&#39;" + data.startList[i].KOR_NM + "&#39;,&#39;" + data.startList[i].TEAM_NM+"&#39;)'>" + data.startList[i].KOR_NM + "</td>";
+							if(data.startList[i].EVENT_ATH_NO == null || data.startList[i].EVENT_ATH_NO == ""){
+								strAdd += "<td></td>";
+							}else{
+								strAdd += "<td>" + data.startList[i].EVENT_ATH_NO + "</td>";
+							}
+							/*strAdd += "<td>" + data.startList[i].EVENT_ATH_NO + "</td>";*/
+							strAdd += "<td>" +  data.startList[i].TEAM_NM + "</td>"
+							strAdd += "<td>" +  data.startList[i].GRADE + "</td>";
+							strAdd += "</tr>";
+							/* mobile */
+							mobStrAdd += "<ul class='box-list'>";
+							mobStrAdd += "<li><strong>선수명</strong><span>" + data.startList[i].KOR_NM + "</span></li>";
+							
+							if(data.startList[i].EVENT_ATH_NO == null || data.startList[i].EVENT_ATH_NO == ""){
+								mobStrAdd += "<li><strong>번호</strong></li>";
+							}else{
+								mobStrAdd += "<li><strong>번호</strong><span>" + data.startList[i].EVENT_ATH_NO + "</span></li>";
+							}
+							/*mobStrAdd += "<li><strong>번호</strong><span>" + data.startList[i].EVENT_ATH_NO + "</span></li>";*/
+							mobStrAdd += "<li><strong>소속</strong><span>" + data.startList[i].TEAM_NM + "</span></li>";
+							mobStrAdd += "<li><strong>학년</strong><span>" + data.startList[i].GRADE + "</span></li>";
+							mobStrAdd += "</ul>"
+
+						});					
+						
+						$(".startList").append(strAdd);
+						$(".mob_startList").append(mobStrAdd);
+
+					}else{
+						$(".startList").append("<tr><td colspan='4'>조회된 항목이 없습니다.</td></tr>");
+						//$(".mob_startList").append("<ul class='box-list'><li><span>조회된 항목이 없습니다.</span></li></ul>");
+					}
+				}
+			},
+			fail : function(result) {
+				alert('데이터 처리중 오류가 발생하였습니다.');
+			},
+			complete : function() {
+			}
+		});
+	}
+</script>
+ 
+	<form id="SearchVO" name="SearchVO" action="/national/schedule/scheduleClass.do?searchSidoCd=&amp;searchGmDt=20261018&amp;searchClassCd=A1&amp;searchKindCd=&amp;searchDetailClassCd=&amp;searchGmConfirmYn=" method="post"><input id="searchMenuId" name="searchMenuId" type="hidden" value="1502"/><input id="searchMenuNm" name="searchMenuNm" type="hidden" value=""/><input id="processMessage" name="processMessage" type="hidden" value=""/><input id="pageIndex" name="pageIndex" type="hidden" value="1"/><input id="searchRhCd" name="searchRhCd" type="hidden" value=""/><input id="searchPcntGbn" name="searchPcntGbn" type="hidden" value=""/><input id="searchClassCd" name="searchClassCd" type="hidden" value="A1"/><input id="searchKindCd" name="searchKindCd" type="hidden" value=""/><input id="searchDetailClassCd" name="searchDetailClassCd" type="hidden" value=""/><input id="searchGmDt" name="searchGmDt" type="hidden" value="20261018"/><input id="searchSidoCd" name="searchSidoCd" type="hidden" value=""/><input id="searchGmConfirmYn" name="searchGmConfirmYn" type="hidden" value=""/><input id="searchKorNm" name="searchKorNm" type="hidden" value=""/><input id="searchTeamNm" name="searchTeamNm" type="hidden" value=""/><div class="match-schedule-sport">   
+			<div class="searchArea">
+				<div class="searchBox01">
+					<button type="button" class="search-sports" id="classCdBtn">종목</button>
+                    <button type="button" class="search-category" id="kindCdBtn">종별</button>
+					<button type="button" class="search-detaile"  id="detailClassCdBtn">세부종목</button>
+                    <button type="button" class="search-date"  id="gmDtBtn">일자</button>
+                    <input type="checkbox" name="" id="unfinished-match" >					
+					<label for="unfinished-match">미종료 경기</label>    
+				</div>
+				<div class="search-item">
+					<!-- 종목 선택 -->
+					<div class="search-select sports-select">
+						<h5>종목 선택</h5>
+						<ul>
+							<input type="hidden" name="classNm" value="18,검도"/>
+								<li class="s18" onclick="getKindCdList(&#39;18&#39;,&#39;검도&#39;)">
+									<a  href="javascript:void(0);">
+										검도</a>
+								</li>
+							<input type="hidden" name="classNm" value="34,골프"/>
+								<li class="s34" onclick="getKindCdList(&#39;34&#39;,&#39;골프&#39;)">
+									<a  href="javascript:void(0);">
+										골프</a>
+								</li>
+							<input type="hidden" name="classNm" value="19,궁도"/>
+								<li class="s19" onclick="getKindCdList(&#39;19&#39;,&#39;궁도&#39;)">
+									<a  href="javascript:void(0);">
+										궁도</a>
+								</li>
+							<input type="hidden" name="classNm" value="32,근대5종"/>
+								<li class="s32" onclick="getKindCdList(&#39;32&#39;,&#39;근대5종&#39;)">
+									<a  href="javascript:void(0);">
+										근대5종</a>
+								</li>
+							<input type="hidden" name="classNm" value="07,농구"/>
+								<li class="s07" onclick="getKindCdList(&#39;07&#39;,&#39;농구&#39;)">
+									<a  href="javascript:void(0);">
+										농구</a>
+								</li>
+							<input type="hidden" name="classNm" value="42,당구"/>
+								<li class="s42" onclick="getKindCdList(&#39;42&#39;,&#39;당구&#39;)">
+									<a  href="javascript:void(0);">
+										당구</a>
+								</li>
+							<input type="hidden" name="classNm" value="44,댄스스포츠"/>
+								<li class="s44" onclick="getKindCdList(&#39;44&#39;,&#39;댄스스포츠&#39;)">
+									<a  href="javascript:void(0);">
+										댄스스포츠</a>
+								</li>
+							<input type="hidden" name="classNm" value="11,럭비"/>
+								<li class="s11" onclick="getKindCdList(&#39;11&#39;,&#39;럭비&#39;)">
+									<a  href="javascript:void(0);">
+										럭비</a>
+								</li>
+							<input type="hidden" name="classNm" value="14,레슬링"/>
+								<li class="s14" onclick="getKindCdList(&#39;14&#39;,&#39;레슬링&#39;)">
+									<a  href="javascript:void(0);">
+										레슬링</a>
+								</li>
+							<input type="hidden" name="classNm" value="30,롤러"/>
+								<li class="s30" onclick="getKindCdList(&#39;30&#39;,&#39;롤러&#39;)">
+									<a  href="javascript:void(0);">
+										롤러</a>
+								</li>
+							<input type="hidden" name="classNm" value="47,바둑"/>
+								<li class="s47" onclick="getKindCdList(&#39;47&#39;,&#39;바둑&#39;)">
+									<a  href="javascript:void(0);">
+										바둑</a>
+								</li>
+							<input type="hidden" name="classNm" value="08,배구"/>
+								<li class="s08" onclick="getKindCdList(&#39;08&#39;,&#39;배구&#39;)">
+									<a  href="javascript:void(0);">
+										배구</a>
+								</li>
+							<input type="hidden" name="classNm" value="26,배드민턴"/>
+								<li class="s26" onclick="getKindCdList(&#39;26&#39;,&#39;배드민턴&#39;)">
+									<a  href="javascript:void(0);">
+										배드민턴</a>
+								</li>
+							<input type="hidden" name="classNm" value="35,보디빌딩"/>
+								<li class="s35" onclick="getKindCdList(&#39;35&#39;,&#39;보디빌딩&#39;)">
+									<a  href="javascript:void(0);">
+										보디빌딩</a>
+								</li>
+							<input type="hidden" name="classNm" value="13,복싱"/>
+								<li class="s13" onclick="getKindCdList(&#39;13&#39;,&#39;복싱&#39;)">
+									<a  href="javascript:void(0);">
+										복싱</a>
+								</li>
+							<input type="hidden" name="classNm" value="29,볼링"/>
+								<li class="s29" onclick="getKindCdList(&#39;29&#39;,&#39;볼링&#39;)">
+									<a  href="javascript:void(0);">
+										볼링</a>
+								</li>
+							<input type="hidden" name="classNm" value="21,사격"/>
+								<li class="s21" onclick="getKindCdList(&#39;21&#39;,&#39;사격&#39;)">
+									<a  href="javascript:void(0);">
+										사격</a>
+								</li>
+							<input type="hidden" name="classNm" value="12,사이클"/>
+								<li class="s12" onclick="getKindCdList(&#39;12&#39;,&#39;사이클&#39;)">
+									<a  href="javascript:void(0);">
+										사이클</a>
+								</li>
+							<input type="hidden" name="classNm" value="43,산악"/>
+								<li class="s43" onclick="getKindCdList(&#39;43&#39;,&#39;산악&#39;)">
+									<a  href="javascript:void(0);">
+										산악</a>
+								</li>
+							<input type="hidden" name="classNm" value="38,세팍타크로"/>
+								<li class="s38" onclick="getKindCdList(&#39;38&#39;,&#39;세팍타크로&#39;)">
+									<a  href="javascript:void(0);">
+										세팍타크로</a>
+								</li>
+							<input type="hidden" name="classNm" value="46,수상스키웨이크보드"/>
+								<li class="s46" onclick="getKindCdList(&#39;46&#39;,&#39;수상스키웨이크보드&#39;)">
+									<a  href="javascript:void(0);">
+										수상스키<br>웨이크보드</a>
+								</li>
+							<input type="hidden" name="classNm" value="D2,수영(경영,다이빙)"/>
+								<li class="sD2" onclick="getKindCdList(&#39;D2&#39;,&#39;수영(경영,다이빙)&#39;)">
+									<a  href="javascript:void(0);">
+										수영(경영,다이빙)</a>
+								</li>
+							<input type="hidden" name="classNm" value="E2,수영(수구)"/>
+								<li class="sE2" onclick="getKindCdList(&#39;E2&#39;,&#39;수영(수구)&#39;)">
+									<a  href="javascript:void(0);">
+										수영(수구)</a>
+								</li>
+							<input type="hidden" name="classNm" value="41,스쿼시"/>
+								<li class="s41" onclick="getKindCdList(&#39;41&#39;,&#39;스쿼시&#39;)">
+									<a  href="javascript:void(0);">
+										스쿼시</a>
+								</li>
+							<input type="hidden" name="classNm" value="22,승마"/>
+								<li class="s22" onclick="getKindCdList(&#39;22&#39;,&#39;승마&#39;)">
+									<a  href="javascript:void(0);">
+										승마</a>
+								</li>
+							<input type="hidden" name="classNm" value="16,씨름"/>
+								<li class="s16" onclick="getKindCdList(&#39;16&#39;,&#39;씨름&#39;)">
+									<a  href="javascript:void(0);">
+										씨름</a>
+								</li>
+							<input type="hidden" name="classNm" value="04,야구소프트볼"/>
+								<li class="s04" onclick="getKindCdList(&#39;04&#39;,&#39;야구소프트볼&#39;)">
+									<a  href="javascript:void(0);">
+										야구소프트볼</a>
+								</li>
+							<input type="hidden" name="classNm" value="20,양궁"/>
+								<li class="s20" onclick="getKindCdList(&#39;20&#39;,&#39;양궁&#39;)">
+									<a  href="javascript:void(0);">
+										양궁</a>
+								</li>
+							<input type="hidden" name="classNm" value="48,에어로빅.힙합"/>
+								<li class="s48" onclick="getKindCdList(&#39;48&#39;,&#39;에어로빅.힙합&#39;)">
+									<a  href="javascript:void(0);">
+										에어로빅.힙합</a>
+								</li>
+							<input type="hidden" name="classNm" value="15,역도"/>
+								<li class="s15" onclick="getKindCdList(&#39;15&#39;,&#39;역도&#39;)">
+									<a  href="javascript:void(0);">
+										역도</a>
+								</li>
+							<input type="hidden" name="classNm" value="31,요트"/>
+								<li class="s31" onclick="getKindCdList(&#39;31&#39;,&#39;요트&#39;)">
+									<a  href="javascript:void(0);">
+										요트</a>
+								</li>
+							<input type="hidden" name="classNm" value="36,우슈"/>
+								<li class="s36" onclick="getKindCdList(&#39;36&#39;,&#39;우슈&#39;)">
+									<a  href="javascript:void(0);">
+										우슈</a>
+								</li>
+							<input type="hidden" name="classNm" value="17,유도"/>
+								<li class="s17" onclick="getKindCdList(&#39;17&#39;,&#39;유도&#39;)">
+									<a  href="javascript:void(0);">
+										유도</a>
+								</li>
+							<input type="hidden" name="classNm" value="C1,육상(로드레이스)"/>
+								<li class="sC1" onclick="getKindCdList(&#39;C1&#39;,&#39;육상(로드레이스)&#39;)">
+									<a  href="javascript:void(0);">
+										육상(로드레이스)</a>
+								</li>
+							<input type="hidden" name="classNm" value="A1,육상(트랙)"/>
+								<li class="sA1" onclick="getKindCdList(&#39;A1&#39;,&#39;육상(트랙)&#39;)">
+									<a class="active" href="javascript:void(0);">
+										육상(트랙)</a>
+								</li>
+							<input type="hidden" name="classNm" value="B1,육상(필드)"/>
+								<li class="sB1" onclick="getKindCdList(&#39;B1&#39;,&#39;육상(필드)&#39;)">
+									<a  href="javascript:void(0);">
+										육상(필드)</a>
+								</li>
+							<input type="hidden" name="classNm" value="06,정구"/>
+								<li class="s06" onclick="getKindCdList(&#39;06&#39;,&#39;정구&#39;)">
+									<a  href="javascript:void(0);">
+										정구</a>
+								</li>
+							<input type="hidden" name="classNm" value="28,조정"/>
+								<li class="s28" onclick="getKindCdList(&#39;28&#39;,&#39;조정&#39;)">
+									<a  href="javascript:void(0);">
+										조정</a>
+								</li>
+							<input type="hidden" name="classNm" value="49,족구"/>
+								<li class="s49" onclick="getKindCdList(&#39;49&#39;,&#39;족구&#39;)">
+									<a  href="javascript:void(0);">
+										족구</a>
+								</li>
+							<input type="hidden" name="classNm" value="51,주짓수"/>
+								<li class="s51" onclick="getKindCdList(&#39;51&#39;,&#39;주짓수&#39;)">
+									<a  href="javascript:void(0);">
+										주짓수</a>
+								</li>
+							<input type="hidden" name="classNm" value="40,철인3종"/>
+								<li class="s40" onclick="getKindCdList(&#39;40&#39;,&#39;철인3종&#39;)">
+									<a  href="javascript:void(0);">
+										철인3종</a>
+								</li>
+							<input type="hidden" name="classNm" value="23,체조"/>
+								<li class="s23" onclick="getKindCdList(&#39;23&#39;,&#39;체조&#39;)">
+									<a  href="javascript:void(0);">
+										체조</a>
+								</li>
+							<input type="hidden" name="classNm" value="03,축구"/>
+								<li class="s03" onclick="getKindCdList(&#39;03&#39;,&#39;축구&#39;)">
+									<a  href="javascript:void(0);">
+										축구</a>
+								</li>
+							<input type="hidden" name="classNm" value="33,카누"/>
+								<li class="s33" onclick="getKindCdList(&#39;33&#39;,&#39;카누&#39;)">
+									<a  href="javascript:void(0);">
+										카누</a>
+								</li>
+							<input type="hidden" name="classNm" value="09,탁구"/>
+								<li class="s09" onclick="getKindCdList(&#39;09&#39;,&#39;탁구&#39;)">
+									<a  href="javascript:void(0);">
+										탁구</a>
+								</li>
+							<input type="hidden" name="classNm" value="27,태권도"/>
+								<li class="s27" onclick="getKindCdList(&#39;27&#39;,&#39;태권도&#39;)">
+									<a  href="javascript:void(0);">
+										태권도</a>
+								</li>
+							<input type="hidden" name="classNm" value="45,택견"/>
+								<li class="s45" onclick="getKindCdList(&#39;45&#39;,&#39;택견&#39;)">
+									<a  href="javascript:void(0);">
+										택견</a>
+								</li>
+							<input type="hidden" name="classNm" value="05,테니스"/>
+								<li class="s05" onclick="getKindCdList(&#39;05&#39;,&#39;테니스&#39;)">
+									<a  href="javascript:void(0);">
+										테니스</a>
+								</li>
+							<input type="hidden" name="classNm" value="25,펜싱"/>
+								<li class="s25" onclick="getKindCdList(&#39;25&#39;,&#39;펜싱&#39;)">
+									<a  href="javascript:void(0);">
+										펜싱</a>
+								</li>
+							<input type="hidden" name="classNm" value="37,핀수영"/>
+								<li class="s37" onclick="getKindCdList(&#39;37&#39;,&#39;핀수영&#39;)">
+									<a  href="javascript:void(0);">
+										핀수영</a>
+								</li>
+							<input type="hidden" name="classNm" value="24,하키"/>
+								<li class="s24" onclick="getKindCdList(&#39;24&#39;,&#39;하키&#39;)">
+									<a  href="javascript:void(0);">
+										하키</a>
+								</li>
+							<input type="hidden" name="classNm" value="50,합기도"/>
+								<li class="s50" onclick="getKindCdList(&#39;50&#39;,&#39;합기도&#39;)">
+									<a  href="javascript:void(0);">
+										합기도</a>
+								</li>
+							<input type="hidden" name="classNm" value="10,핸드볼"/>
+								<li class="s10" onclick="getKindCdList(&#39;10&#39;,&#39;핸드볼&#39;)">
+									<a  href="javascript:void(0);">
+										핸드볼</a>
+								</li>
+							</ul>    
+					</div>  
+					<!-- 종별 선택 -->
+					<div class="search-select category-select">
+						<h5>종별 선택</h5>
+						<ul id="kindCdList">
+						</ul>          
+					</div>   
+					<!-- 세부종목 선택 -->
+					<div class="search-select detailed-select">
+						<h5>세부종목 선택</h5>
+						<ul id="detailClassCdList">
+						</ul>          
+					</div>
+					<!-- 일자 선택 -->
+					<div class="search-select date-select">
+						<h5>일자 선택</h5>
+						<ul id="gmDtList">
+						</ul>          
+					</div>      
+				</div>
+				<div class="btnRight">
+					<button type="button" class="searchBtn" onclick="search();">검색</button>
+				</div>
+			</div>
+		
+
+			<div class="boardTable01" id="printDiv">
+
+				<h5 class="subTit" id="classNm"></h5>
+					<table class="tablesaw" data-tablesaw-mode="stack">
+						<caption>종목별 경기일정</caption>
+						<colgroup>
+							<col style="width:12%">
+							<col style="width:16%">
+							<col style="width:13%">
+							<col style="width:7%">
+							<col style="width:22%">
+							<col style="width:auto">
+							<col style="width:10%">
+						</colgroup>
+						<thead>
+							<tr>
+								<th scope="col" data-tablesaw-priority="1">종별</th>
+								<th scope="col" data-tablesaw-priority="2">세부종목</th>
+								<th scope="col" data-tablesaw-priority="3">경기구분</th>
+								<th scope="col" data-tablesaw-priority="4">상태</th>
+								<th scope="col" data-tablesaw-priority="5">일시</th>
+								<th scope="col" data-tablesaw-priority="6">경기장</th>
+								<th scope="col" data-tablesaw-priority="7">비고</th>
+							</tr>
+						</thead>
+						<tbody>
+							<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10301','A11001','I','R','');" class="bbNone">
+										남자18세이하부</td>
+									<td onclick="openSide('A10301','A11001','I','R','','R');" class="bbNone">
+										100m</td>
+									<td onclick="openSide('A10301','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10301','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10301','A11001','I','R','','R');">
+										2026/10/18&nbsp;13:25&nbsp;~&nbsp;13:40</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10301','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10301','A11002','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10301','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10301','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10301','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10301','A11002','I','R','','R');">
+										2026/10/18&nbsp;13:25&nbsp;~&nbsp;13:40</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10301','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10301','A11003','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10301','A11003','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10301','A11003','I','R','','R');" class="tal">예선3</td>
+									<td onclick="openSide('A10301','A11003','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10301','A11003','I','R','','R');">
+										2026/10/18&nbsp;13:25&nbsp;~&nbsp;13:40</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10301','A11003','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10301','A11004','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10301','A11004','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10301','A11004','I','R','','R');" class="tal">예선4</td>
+									<td onclick="openSide('A10301','A11004','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10301','A11004','I','R','','R');">
+										2026/10/18&nbsp;13:25&nbsp;~&nbsp;13:40</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10301','A11004','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10301','A19000','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10301','A19000','I','R','','R');" >
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10301','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10301','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10301','A19000','I','R','','R');">
+										2026/10/18&nbsp;16:05&nbsp;~&nbsp;16:10</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10301','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10303','A11001','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10303','A11001','I','R','','R');" class="bbNone">
+										400m</td>
+									<td onclick="openSide('A10303','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10303','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10303','A11001','I','R','','R');">
+										2026/10/18&nbsp;14:40&nbsp;~&nbsp;14:55</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10303','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10303','A11002','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10303','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10303','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10303','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10303','A11002','I','R','','R');">
+										2026/10/18&nbsp;14:40&nbsp;~&nbsp;14:55</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10303','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10303','A11003','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10303','A11003','I','R','','R');" class="bbNone">
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10303','A11003','I','R','','R');" class="tal">예선3</td>
+									<td onclick="openSide('A10303','A11003','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10303','A11003','I','R','','R');">
+										2026/10/18&nbsp;14:40&nbsp;~&nbsp;14:55</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10303','A11003','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10303','A11004','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10303','A11004','I','R','','R');" class="bbNone">
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10303','A11004','I','R','','R');" class="tal">예선4</td>
+									<td onclick="openSide('A10303','A11004','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10303','A11004','I','R','','R');">
+										2026/10/18&nbsp;14:40&nbsp;~&nbsp;14:55</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10303','A11004','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10303','A19000','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10303','A19000','I','R','','R');" >
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10303','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10303','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10303','A19000','I','R','','R');">
+										2026/10/18&nbsp;16:40&nbsp;~&nbsp;16:45</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10303','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10307','A19000','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10307','A19000','I','R','','R');" >
+										5000m</td>
+									<td onclick="openSide('A10307','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10307','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10307','A19000','I','R','','R');">
+										2026/10/18&nbsp;11:10&nbsp;~&nbsp;11:30</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10307','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10310','A11001','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10310','A11001','I','R','','R');" class="bbNone">
+										110m허들</td>
+									<td onclick="openSide('A10310','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10310','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10310','A11001','I','R','','R');">
+										2026/10/18&nbsp;12:10&nbsp;~&nbsp;12:20</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10310','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10310','A11002','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10310','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">110m허들</span>
+										</td>
+									<td onclick="openSide('A10310','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10310','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10310','A11002','I','R','','R');">
+										2026/10/18&nbsp;12:10&nbsp;~&nbsp;12:20</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10310','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10310','A11003','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10310','A11003','I','R','','R');" class="bbNone">
+										<span class="mobView">110m허들</span>
+										</td>
+									<td onclick="openSide('A10310','A11003','I','R','','R');" class="tal">예선3</td>
+									<td onclick="openSide('A10310','A11003','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10310','A11003','I','R','','R');">
+										2026/10/18&nbsp;12:10&nbsp;~&nbsp;12:20</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10310','A11003','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10310','A19000','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10310','A19000','I','R','','R');" >
+										<span class="mobView">110m허들</span>
+										</td>
+									<td onclick="openSide('A10310','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10310','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10310','A19000','I','R','','R');">
+										2026/10/18&nbsp;15:20&nbsp;~&nbsp;15:30</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10310','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10317','A10001','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10317','A10001','I','R','','R');" class="bbNone">
+										10종경기</td>
+									<td onclick="openSide('A10317','A10001','I','R','','R');" class="tal">100M</td>
+									<td onclick="openSide('A10317','A10001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10317','A10001','I','R','','R');">
+										2026/10/18&nbsp;09:30&nbsp;~&nbsp;09:40</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10317','A10001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10317','A10002','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10317','A10002','I','R','','R');" class="bbNone">
+										<span class="mobView">10종경기</span>
+										</td>
+									<td onclick="openSide('A10317','A10002','I','R','','R');" class="tal">400M</td>
+									<td onclick="openSide('A10317','A10002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10317','A10002','I','R','','R');">
+										2026/10/18&nbsp;17:45&nbsp;~&nbsp;17:50</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10317','A10002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10317','A10005','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10317','A10005','I','R','','R');" class="bbNone">
+										<span class="mobView">10종경기</span>
+										</td>
+									<td onclick="openSide('A10317','A10005','I','R','','R');" class="tal">높이뛰기</td>
+									<td onclick="openSide('A10317','A10005','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10317','A10005','I','R','','R');">
+										2026/10/18&nbsp;14:00&nbsp;~&nbsp;15:00</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10317','A10005','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10317','A10007','I','R','');" class="bbNone">
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10317','A10007','I','R','','R');" class="bbNone">
+										<span class="mobView">10종경기</span>
+										</td>
+									<td onclick="openSide('A10317','A10007','I','R','','R');" class="tal">멀리뛰기</td>
+									<td onclick="openSide('A10317','A10007','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10317','A10007','I','R','','R');">
+										2026/10/18&nbsp;10:10&nbsp;~&nbsp;11:30</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10317','A10007','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10317','A10008','I','R','');" >
+										<span class="mobView">남자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10317','A10008','I','R','','R');" >
+										<span class="mobView">10종경기</span>
+										</td>
+									<td onclick="openSide('A10317','A10008','I','R','','R');" class="tal">포환던지기</td>
+									<td onclick="openSide('A10317','A10008','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10317','A10008','I','R','','R');">
+										2026/10/18&nbsp;12:30&nbsp;~&nbsp;14:30</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10317','A10008','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10401','A11001','I','R','');" class="bbNone">
+										남자대학부</td>
+									<td onclick="openSide('A10401','A11001','I','R','','R');" class="bbNone">
+										100m</td>
+									<td onclick="openSide('A10401','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10401','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10401','A11001','I','R','','R');">
+										2026/10/18&nbsp;13:00&nbsp;~&nbsp;13:15</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10401','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10401','A11002','I','R','');" class="bbNone">
+										<span class="mobView">남자대학부</span>
+										</td>
+									<td onclick="openSide('A10401','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10401','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10401','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10401','A11002','I','R','','R');">
+										2026/10/18&nbsp;13:00&nbsp;~&nbsp;13:15</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10401','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10401','A11003','I','R','');" class="bbNone">
+										<span class="mobView">남자대학부</span>
+										</td>
+									<td onclick="openSide('A10401','A11003','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10401','A11003','I','R','','R');" class="tal">예선3</td>
+									<td onclick="openSide('A10401','A11003','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10401','A11003','I','R','','R');">
+										2026/10/18&nbsp;13:00&nbsp;~&nbsp;13:15</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10401','A11003','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10401','A19000','I','R','');" class="bbNone">
+										<span class="mobView">남자대학부</span>
+										</td>
+									<td onclick="openSide('A10401','A19000','I','R','','R');" >
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10401','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10401','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10401','A19000','I','R','','R');">
+										2026/10/18&nbsp;15:55&nbsp;~&nbsp;16:00</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10401','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10403','A11001','I','R','');" class="bbNone">
+										<span class="mobView">남자대학부</span>
+										</td>
+									<td onclick="openSide('A10403','A11001','I','R','','R');" class="bbNone">
+										400m</td>
+									<td onclick="openSide('A10403','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10403','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10403','A11001','I','R','','R');">
+										2026/10/18&nbsp;14:20&nbsp;~&nbsp;14:30</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10403','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10403','A11002','I','R','');" class="bbNone">
+										<span class="mobView">남자대학부</span>
+										</td>
+									<td onclick="openSide('A10403','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10403','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10403','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10403','A11002','I','R','','R');">
+										2026/10/18&nbsp;14:20&nbsp;~&nbsp;14:30</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10403','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10403','A19000','I','R','');" class="bbNone">
+										<span class="mobView">남자대학부</span>
+										</td>
+									<td onclick="openSide('A10403','A19000','I','R','','R');" >
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10403','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10403','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10403','A19000','I','R','','R');">
+										2026/10/18&nbsp;16:30&nbsp;~&nbsp;16:35</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10403','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10407','A19000','I','R','');" >
+										<span class="mobView">남자대학부</span>
+										</td>
+									<td onclick="openSide('A10407','A19000','I','R','','R');" >
+										5000m</td>
+									<td onclick="openSide('A10407','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10407','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10407','A19000','I','R','','R');">
+										2026/10/18&nbsp;11:50&nbsp;~&nbsp;12:10</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10407','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10501','A11001','I','R','');" class="bbNone">
+										남자일반부</td>
+									<td onclick="openSide('A10501','A11001','I','R','','R');" class="bbNone">
+										100m</td>
+									<td onclick="openSide('A10501','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10501','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10501','A11001','I','R','','R');">
+										2026/10/18&nbsp;12:50&nbsp;~&nbsp;13:00</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10501','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10501','A11002','I','R','');" class="bbNone">
+										<span class="mobView">남자일반부</span>
+										</td>
+									<td onclick="openSide('A10501','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10501','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10501','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10501','A11002','I','R','','R');">
+										2026/10/18&nbsp;12:50&nbsp;~&nbsp;13:00</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10501','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10501','A11003','I','R','');" class="bbNone">
+										<span class="mobView">남자일반부</span>
+										</td>
+									<td onclick="openSide('A10501','A11003','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10501','A11003','I','R','','R');" class="tal">예선3</td>
+									<td onclick="openSide('A10501','A11003','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10501','A11003','I','R','','R');">
+										2026/10/18&nbsp;12:50&nbsp;~&nbsp;13:00</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10501','A11003','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10501','A19000','I','R','');" class="bbNone">
+										<span class="mobView">남자일반부</span>
+										</td>
+									<td onclick="openSide('A10501','A19000','I','R','','R');" >
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10501','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10501','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10501','A19000','I','R','','R');">
+										2026/10/18&nbsp;15:50&nbsp;~&nbsp;15:55</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10501','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10503','A11001','I','R','');" class="bbNone">
+										<span class="mobView">남자일반부</span>
+										</td>
+									<td onclick="openSide('A10503','A11001','I','R','','R');" class="bbNone">
+										400m</td>
+									<td onclick="openSide('A10503','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10503','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10503','A11001','I','R','','R');">
+										2026/10/18&nbsp;13:55&nbsp;~&nbsp;14:05</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10503','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10503','A11002','I','R','');" class="bbNone">
+										<span class="mobView">남자일반부</span>
+										</td>
+									<td onclick="openSide('A10503','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10503','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10503','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10503','A11002','I','R','','R');">
+										2026/10/18&nbsp;13:55&nbsp;~&nbsp;14:05</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10503','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10503','A19000','I','R','');" class="bbNone">
+										<span class="mobView">남자일반부</span>
+										</td>
+									<td onclick="openSide('A10503','A19000','I','R','','R');" >
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10503','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10503','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10503','A19000','I','R','','R');">
+										2026/10/18&nbsp;16:20&nbsp;~&nbsp;16:25</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10503','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10507','A19000','I','R','');" class="bbNone">
+										<span class="mobView">남자일반부</span>
+										</td>
+									<td onclick="openSide('A10507','A19000','I','R','','R');" >
+										5000m</td>
+									<td onclick="openSide('A10507','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10507','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10507','A19000','I','R','','R');">
+										2026/10/18&nbsp;16:55&nbsp;~&nbsp;17:15</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10507','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10510','A11001','I','R','');" class="bbNone">
+										<span class="mobView">남자일반부</span>
+										</td>
+									<td onclick="openSide('A10510','A11001','I','R','','R');" class="bbNone">
+										110m허들</td>
+									<td onclick="openSide('A10510','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10510','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10510','A11001','I','R','','R');">
+										2026/10/18&nbsp;12:20&nbsp;~&nbsp;12:35</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10510','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10510','A11002','I','R','');" class="bbNone">
+										<span class="mobView">남자일반부</span>
+										</td>
+									<td onclick="openSide('A10510','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">110m허들</span>
+										</td>
+									<td onclick="openSide('A10510','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10510','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10510','A11002','I','R','','R');">
+										2026/10/18&nbsp;12:20&nbsp;~&nbsp;12:35</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10510','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10510','A19000','I','R','');" >
+										<span class="mobView">남자일반부</span>
+										</td>
+									<td onclick="openSide('A10510','A19000','I','R','','R');" >
+										<span class="mobView">110m허들</span>
+										</td>
+									<td onclick="openSide('A10510','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10510','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10510','A19000','I','R','','R');">
+										2026/10/18&nbsp;15:30&nbsp;~&nbsp;15:45</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10510','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10801','A11001','I','R','');" class="bbNone">
+										여자18세이하부</td>
+									<td onclick="openSide('A10801','A11001','I','R','','R');" class="bbNone">
+										100m</td>
+									<td onclick="openSide('A10801','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10801','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10801','A11001','I','R','','R');">
+										2026/10/18&nbsp;13:40&nbsp;~&nbsp;13:55</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10801','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10801','A11002','I','R','');" class="bbNone">
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10801','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10801','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10801','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10801','A11002','I','R','','R');">
+										2026/10/18&nbsp;13:40&nbsp;~&nbsp;13:55</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10801','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10801','A11003','I','R','');" class="bbNone">
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10801','A11003','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10801','A11003','I','R','','R');" class="tal">예선3</td>
+									<td onclick="openSide('A10801','A11003','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10801','A11003','I','R','','R');">
+										2026/10/18&nbsp;13:40&nbsp;~&nbsp;13:55</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10801','A11003','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10801','A19000','I','R','');" class="bbNone">
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10801','A19000','I','R','','R');" >
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10801','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10801','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10801','A19000','I','R','','R');">
+										2026/10/18&nbsp;16:10&nbsp;~&nbsp;16:20</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10801','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10803','A11001','I','R','');" class="bbNone">
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10803','A11001','I','R','','R');" class="bbNone">
+										400m</td>
+									<td onclick="openSide('A10803','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10803','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10803','A11001','I','R','','R');">
+										2026/10/18&nbsp;14:55&nbsp;~&nbsp;15:10</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10803','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10803','A11002','I','R','');" class="bbNone">
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10803','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10803','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10803','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10803','A11002','I','R','','R');">
+										2026/10/18&nbsp;14:55&nbsp;~&nbsp;15:10</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10803','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10803','A11003','I','R','');" class="bbNone">
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10803','A11003','I','R','','R');" class="bbNone">
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10803','A11003','I','R','','R');" class="tal">예선3</td>
+									<td onclick="openSide('A10803','A11003','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10803','A11003','I','R','','R');">
+										2026/10/18&nbsp;14:55&nbsp;~&nbsp;15:10</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10803','A11003','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10803','A19000','I','R','');" class="bbNone">
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10803','A19000','I','R','','R');" >
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10803','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10803','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10803','A19000','I','R','','R');">
+										2026/10/18&nbsp;16:45&nbsp;~&nbsp;16:55</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10803','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10807','A19000','I','R','');" class="bbNone">
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10807','A19000','I','R','','R');" >
+										5000m</td>
+									<td onclick="openSide('A10807','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10807','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10807','A19000','I','R','','R');">
+										2026/10/18&nbsp;11:30&nbsp;~&nbsp;11:50</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10807','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10809','A11001','I','R','');" class="bbNone">
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10809','A11001','I','R','','R');" class="bbNone">
+										100m허들</td>
+									<td onclick="openSide('A10809','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10809','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10809','A11001','I','R','','R');">
+										2026/10/18&nbsp;09:50&nbsp;~&nbsp;10:00</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10809','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10809','A11002','I','R','');" class="bbNone">
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10809','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">100m허들</span>
+										</td>
+									<td onclick="openSide('A10809','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10809','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10809','A11002','I','R','','R');">
+										2026/10/18&nbsp;09:50&nbsp;~&nbsp;10:00</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10809','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10809','A19000','I','R','');" >
+										<span class="mobView">여자18세이하부</span>
+										</td>
+									<td onclick="openSide('A10809','A19000','I','R','','R');" >
+										<span class="mobView">100m허들</span>
+										</td>
+									<td onclick="openSide('A10809','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10809','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10809','A19000','I','R','','R');">
+										2026/10/18&nbsp;15:10&nbsp;~&nbsp;15:20</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10809','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10901','A11001','I','R','');" class="bbNone">
+										여자대학부</td>
+									<td onclick="openSide('A10901','A11001','I','R','','R');" class="bbNone">
+										100m</td>
+									<td onclick="openSide('A10901','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10901','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10901','A11001','I','R','','R');">
+										2026/10/18&nbsp;13:15&nbsp;~&nbsp;13:25</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10901','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10901','A11002','I','R','');" class="bbNone">
+										<span class="mobView">여자대학부</span>
+										</td>
+									<td onclick="openSide('A10901','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10901','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10901','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10901','A11002','I','R','','R');">
+										2026/10/18&nbsp;13:15&nbsp;~&nbsp;13:25</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10901','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10901','A19000','I','R','');" class="bbNone">
+										<span class="mobView">여자대학부</span>
+										</td>
+									<td onclick="openSide('A10901','A19000','I','R','','R');" >
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A10901','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10901','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10901','A19000','I','R','','R');">
+										2026/10/18&nbsp;16:00&nbsp;~&nbsp;16:05</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10901','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10903','A11001','I','R','');" class="bbNone">
+										<span class="mobView">여자대학부</span>
+										</td>
+									<td onclick="openSide('A10903','A11001','I','R','','R');" class="bbNone">
+										400m</td>
+									<td onclick="openSide('A10903','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A10903','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10903','A11001','I','R','','R');">
+										2026/10/18&nbsp;14:30&nbsp;~&nbsp;14:40</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10903','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10903','A11002','I','R','');" class="bbNone">
+										<span class="mobView">여자대학부</span>
+										</td>
+									<td onclick="openSide('A10903','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10903','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A10903','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10903','A11002','I','R','','R');">
+										2026/10/18&nbsp;14:30&nbsp;~&nbsp;14:40</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10903','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A10903','A19000','I','R','');" >
+										<span class="mobView">여자대학부</span>
+										</td>
+									<td onclick="openSide('A10903','A19000','I','R','','R');" >
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A10903','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A10903','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A10903','A19000','I','R','','R');">
+										2026/10/18&nbsp;16:35&nbsp;~&nbsp;16:40</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A10903','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11001','A11001','I','R','');" class="bbNone">
+										여자일반부</td>
+									<td onclick="openSide('A11001','A11001','I','R','','R');" class="bbNone">
+										100m</td>
+									<td onclick="openSide('A11001','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A11001','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11001','A11001','I','R','','R');">
+										2026/10/18&nbsp;12:35&nbsp;~&nbsp;12:50</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11001','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11001','A11002','I','R','');" class="bbNone">
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11001','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A11001','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A11001','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11001','A11002','I','R','','R');">
+										2026/10/18&nbsp;12:35&nbsp;~&nbsp;12:50</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11001','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11001','A19000','I','R','');" class="bbNone">
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11001','A19000','I','R','','R');" >
+										<span class="mobView">100m</span>
+										</td>
+									<td onclick="openSide('A11001','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A11001','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11001','A19000','I','R','','R');">
+										2026/10/18&nbsp;15:45&nbsp;~&nbsp;15:50</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11001','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11003','A11001','I','R','');" class="bbNone">
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11003','A11001','I','R','','R');" class="bbNone">
+										400m</td>
+									<td onclick="openSide('A11003','A11001','I','R','','R');" class="tal">예선1</td>
+									<td onclick="openSide('A11003','A11001','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11003','A11001','I','R','','R');">
+										2026/10/18&nbsp;14:05&nbsp;~&nbsp;14:20</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11003','A11001','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11003','A11002','I','R','');" class="bbNone">
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11003','A11002','I','R','','R');" class="bbNone">
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A11003','A11002','I','R','','R');" class="tal">예선2</td>
+									<td onclick="openSide('A11003','A11002','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11003','A11002','I','R','','R');">
+										2026/10/18&nbsp;14:05&nbsp;~&nbsp;14:20</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11003','A11002','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11003','A11003','I','R','');" class="bbNone">
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11003','A11003','I','R','','R');" class="bbNone">
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A11003','A11003','I','R','','R');" class="tal">예선3</td>
+									<td onclick="openSide('A11003','A11003','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11003','A11003','I','R','','R');">
+										2026/10/18&nbsp;14:05&nbsp;~&nbsp;14:20</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11003','A11003','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11003','A19000','I','R','');" class="bbNone">
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11003','A19000','I','R','','R');" >
+										<span class="mobView">400m</span>
+										</td>
+									<td onclick="openSide('A11003','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A11003','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11003','A19000','I','R','','R');">
+										2026/10/18&nbsp;16:25&nbsp;~&nbsp;16:30</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11003','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11007','A19000','I','R','');" class="bbNone">
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11007','A19000','I','R','','R');" >
+										5000m</td>
+									<td onclick="openSide('A11007','A19000','I','R','','R');" class="tal">결승</td>
+									<td onclick="openSide('A11007','A19000','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11007','A19000','I','R','','R');">
+										2026/10/18&nbsp;17:15&nbsp;~&nbsp;17:35</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11007','A19000','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11016','A10005','I','R','');" class="bbNone">
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11016','A10005','I','R','','R');" class="bbNone">
+										7종경기</td>
+									<td onclick="openSide('A11016','A10005','I','R','','R');" class="tal">높이뛰기</td>
+									<td onclick="openSide('A11016','A10005','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11016','A10005','I','R','','R');">
+										2026/10/18&nbsp;12:00&nbsp;~&nbsp;14:00</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11016','A10005','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11016','A10008','I','R','');" class="bbNone">
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11016','A10008','I','R','','R');" class="bbNone">
+										<span class="mobView">7종경기</span>
+										</td>
+									<td onclick="openSide('A11016','A10008','I','R','','R');" class="tal">포환던지기</td>
+									<td onclick="openSide('A11016','A10008','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11016','A10008','I','R','','R');">
+										2026/10/18&nbsp;14:30&nbsp;~&nbsp;16:00</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11016','A10008','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11016','A10011','I','R','');" class="bbNone">
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11016','A10011','I','R','','R');" class="bbNone">
+										<span class="mobView">7종경기</span>
+										</td>
+									<td onclick="openSide('A11016','A10011','I','R','','R');" class="tal">100M허들</td>
+									<td onclick="openSide('A11016','A10011','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11016','A10011','I','R','','R');">
+										2026/10/18&nbsp;09:40&nbsp;~&nbsp;09:50</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11016','A10011','I','R','','R');">
+										</td>
+								</tr>
+								<input type="hidden" class="winnerGb" value="">
+								<tr>
+									<td onclick="openSide('A11016','A10012','I','R','');" >
+										<span class="mobView">여자일반부</span>
+										</td>
+									<td onclick="openSide('A11016','A10012','I','R','','R');" >
+										<span class="mobView">7종경기</span>
+										</td>
+									<td onclick="openSide('A11016','A10012','I','R','','R');" class="tal">200M</td>
+									<td onclick="openSide('A11016','A10012','I','R','','R');">미종료</td>
+									<td class="tal" onclick="openSide('A11016','A10012','I','R','','R');">
+										2026/10/18&nbsp;17:35&nbsp;~&nbsp;17:45</td>
+									<td class="tal" style="cursor: pointer;">
+										강창학종합경기장
+										&nbsp;&nbsp;&nbsp;<img src="/national/comn/nsi/img/map.svg" onclick="mapSearch('서귀포시 중산간서로 95');">
+									</td>
+									<td onclick="openSide('A11016','A10012','I','R','','R');">
+										</td>
+								</tr>
+								</tbody>
+					</table>
+				</div>									
+		</div>	
+	</form><div id="recordWrap" class="side"></div>	
+	
+	<!-- s: layerPop -->
+		<!-- s: 종목 선택 -->
+		<div id="searchPop01" class="searchPop">
+			<div class="layerCont">
+				<h5>종목 선택</h5>
+				<div class="sports-select">
+					<ul id="mob_classCdList">
+						<li class="s18" onclick="getKindCdList(&#39;18&#39;,&#39;검도&#39;)">
+								<a  href="javascript:void(0);">
+									검도</a>
+							</li>
+						<li class="s34" onclick="getKindCdList(&#39;34&#39;,&#39;골프&#39;)">
+								<a  href="javascript:void(0);">
+									골프</a>
+							</li>
+						<li class="s19" onclick="getKindCdList(&#39;19&#39;,&#39;궁도&#39;)">
+								<a  href="javascript:void(0);">
+									궁도</a>
+							</li>
+						<li class="s32" onclick="getKindCdList(&#39;32&#39;,&#39;근대5종&#39;)">
+								<a  href="javascript:void(0);">
+									근대5종</a>
+							</li>
+						<li class="s07" onclick="getKindCdList(&#39;07&#39;,&#39;농구&#39;)">
+								<a  href="javascript:void(0);">
+									농구</a>
+							</li>
+						<li class="s42" onclick="getKindCdList(&#39;42&#39;,&#39;당구&#39;)">
+								<a  href="javascript:void(0);">
+									당구</a>
+							</li>
+						<li class="s44" onclick="getKindCdList(&#39;44&#39;,&#39;댄스스포츠&#39;)">
+								<a  href="javascript:void(0);">
+									댄스스포츠</a>
+							</li>
+						<li class="s11" onclick="getKindCdList(&#39;11&#39;,&#39;럭비&#39;)">
+								<a  href="javascript:void(0);">
+									럭비</a>
+							</li>
+						<li class="s14" onclick="getKindCdList(&#39;14&#39;,&#39;레슬링&#39;)">
+								<a  href="javascript:void(0);">
+									레슬링</a>
+							</li>
+						<li class="s30" onclick="getKindCdList(&#39;30&#39;,&#39;롤러&#39;)">
+								<a  href="javascript:void(0);">
+									롤러</a>
+							</li>
+						<li class="s47" onclick="getKindCdList(&#39;47&#39;,&#39;바둑&#39;)">
+								<a  href="javascript:void(0);">
+									바둑</a>
+							</li>
+						<li class="s08" onclick="getKindCdList(&#39;08&#39;,&#39;배구&#39;)">
+								<a  href="javascript:void(0);">
+									배구</a>
+							</li>
+						<li class="s26" onclick="getKindCdList(&#39;26&#39;,&#39;배드민턴&#39;)">
+								<a  href="javascript:void(0);">
+									배드민턴</a>
+							</li>
+						<li class="s35" onclick="getKindCdList(&#39;35&#39;,&#39;보디빌딩&#39;)">
+								<a  href="javascript:void(0);">
+									보디빌딩</a>
+							</li>
+						<li class="s13" onclick="getKindCdList(&#39;13&#39;,&#39;복싱&#39;)">
+								<a  href="javascript:void(0);">
+									복싱</a>
+							</li>
+						<li class="s29" onclick="getKindCdList(&#39;29&#39;,&#39;볼링&#39;)">
+								<a  href="javascript:void(0);">
+									볼링</a>
+							</li>
+						<li class="s21" onclick="getKindCdList(&#39;21&#39;,&#39;사격&#39;)">
+								<a  href="javascript:void(0);">
+									사격</a>
+							</li>
+						<li class="s12" onclick="getKindCdList(&#39;12&#39;,&#39;사이클&#39;)">
+								<a  href="javascript:void(0);">
+									사이클</a>
+							</li>
+						<li class="s43" onclick="getKindCdList(&#39;43&#39;,&#39;산악&#39;)">
+								<a  href="javascript:void(0);">
+									산악</a>
+							</li>
+						<li class="s38" onclick="getKindCdList(&#39;38&#39;,&#39;세팍타크로&#39;)">
+								<a  href="javascript:void(0);">
+									세팍타크로</a>
+							</li>
+						<li class="s46" onclick="getKindCdList(&#39;46&#39;,&#39;수상스키웨이크보드&#39;)">
+								<a  href="javascript:void(0);">
+									수상스키<br>웨이크보드</a>
+							</li>
+						<li class="sD2" onclick="getKindCdList(&#39;D2&#39;,&#39;수영(경영,다이빙)&#39;)">
+								<a  href="javascript:void(0);">
+									수영(경영,다이빙)</a>
+							</li>
+						<li class="sE2" onclick="getKindCdList(&#39;E2&#39;,&#39;수영(수구)&#39;)">
+								<a  href="javascript:void(0);">
+									수영(수구)</a>
+							</li>
+						<li class="s41" onclick="getKindCdList(&#39;41&#39;,&#39;스쿼시&#39;)">
+								<a  href="javascript:void(0);">
+									스쿼시</a>
+							</li>
+						<li class="s22" onclick="getKindCdList(&#39;22&#39;,&#39;승마&#39;)">
+								<a  href="javascript:void(0);">
+									승마</a>
+							</li>
+						<li class="s16" onclick="getKindCdList(&#39;16&#39;,&#39;씨름&#39;)">
+								<a  href="javascript:void(0);">
+									씨름</a>
+							</li>
+						<li class="s04" onclick="getKindCdList(&#39;04&#39;,&#39;야구소프트볼&#39;)">
+								<a  href="javascript:void(0);">
+									야구소프트볼</a>
+							</li>
+						<li class="s20" onclick="getKindCdList(&#39;20&#39;,&#39;양궁&#39;)">
+								<a  href="javascript:void(0);">
+									양궁</a>
+							</li>
+						<li class="s48" onclick="getKindCdList(&#39;48&#39;,&#39;에어로빅.힙합&#39;)">
+								<a  href="javascript:void(0);">
+									에어로빅.힙합</a>
+							</li>
+						<li class="s15" onclick="getKindCdList(&#39;15&#39;,&#39;역도&#39;)">
+								<a  href="javascript:void(0);">
+									역도</a>
+							</li>
+						<li class="s31" onclick="getKindCdList(&#39;31&#39;,&#39;요트&#39;)">
+								<a  href="javascript:void(0);">
+									요트</a>
+							</li>
+						<li class="s36" onclick="getKindCdList(&#39;36&#39;,&#39;우슈&#39;)">
+								<a  href="javascript:void(0);">
+									우슈</a>
+							</li>
+						<li class="s17" onclick="getKindCdList(&#39;17&#39;,&#39;유도&#39;)">
+								<a  href="javascript:void(0);">
+									유도</a>
+							</li>
+						<li class="sC1" onclick="getKindCdList(&#39;C1&#39;,&#39;육상(로드레이스)&#39;)">
+								<a  href="javascript:void(0);">
+									육상(로드레이스)</a>
+							</li>
+						<li class="sA1" onclick="getKindCdList(&#39;A1&#39;,&#39;육상(트랙)&#39;)">
+								<a class="active" href="javascript:void(0);">
+									육상(트랙)</a>
+							</li>
+						<li class="sB1" onclick="getKindCdList(&#39;B1&#39;,&#39;육상(필드)&#39;)">
+								<a  href="javascript:void(0);">
+									육상(필드)</a>
+							</li>
+						<li class="s06" onclick="getKindCdList(&#39;06&#39;,&#39;정구&#39;)">
+								<a  href="javascript:void(0);">
+									정구</a>
+							</li>
+						<li class="s28" onclick="getKindCdList(&#39;28&#39;,&#39;조정&#39;)">
+								<a  href="javascript:void(0);">
+									조정</a>
+							</li>
+						<li class="s49" onclick="getKindCdList(&#39;49&#39;,&#39;족구&#39;)">
+								<a  href="javascript:void(0);">
+									족구</a>
+							</li>
+						<li class="s51" onclick="getKindCdList(&#39;51&#39;,&#39;주짓수&#39;)">
+								<a  href="javascript:void(0);">
+									주짓수</a>
+							</li>
+						<li class="s40" onclick="getKindCdList(&#39;40&#39;,&#39;철인3종&#39;)">
+								<a  href="javascript:void(0);">
+									철인3종</a>
+							</li>
+						<li class="s23" onclick="getKindCdList(&#39;23&#39;,&#39;체조&#39;)">
+								<a  href="javascript:void(0);">
+									체조</a>
+							</li>
+						<li class="s03" onclick="getKindCdList(&#39;03&#39;,&#39;축구&#39;)">
+								<a  href="javascript:void(0);">
+									축구</a>
+							</li>
+						<li class="s33" onclick="getKindCdList(&#39;33&#39;,&#39;카누&#39;)">
+								<a  href="javascript:void(0);">
+									카누</a>
+							</li>
+						<li class="s09" onclick="getKindCdList(&#39;09&#39;,&#39;탁구&#39;)">
+								<a  href="javascript:void(0);">
+									탁구</a>
+							</li>
+						<li class="s27" onclick="getKindCdList(&#39;27&#39;,&#39;태권도&#39;)">
+								<a  href="javascript:void(0);">
+									태권도</a>
+							</li>
+						<li class="s45" onclick="getKindCdList(&#39;45&#39;,&#39;택견&#39;)">
+								<a  href="javascript:void(0);">
+									택견</a>
+							</li>
+						<li class="s05" onclick="getKindCdList(&#39;05&#39;,&#39;테니스&#39;)">
+								<a  href="javascript:void(0);">
+									테니스</a>
+							</li>
+						<li class="s25" onclick="getKindCdList(&#39;25&#39;,&#39;펜싱&#39;)">
+								<a  href="javascript:void(0);">
+									펜싱</a>
+							</li>
+						<li class="s37" onclick="getKindCdList(&#39;37&#39;,&#39;핀수영&#39;)">
+								<a  href="javascript:void(0);">
+									핀수영</a>
+							</li>
+						<li class="s24" onclick="getKindCdList(&#39;24&#39;,&#39;하키&#39;)">
+								<a  href="javascript:void(0);">
+									하키</a>
+							</li>
+						<li class="s50" onclick="getKindCdList(&#39;50&#39;,&#39;합기도&#39;)">
+								<a  href="javascript:void(0);">
+									합기도</a>
+							</li>
+						<li class="s10" onclick="getKindCdList(&#39;10&#39;,&#39;핸드볼&#39;)">
+								<a  href="javascript:void(0);">
+									핸드볼</a>
+							</li>
+						</ul>
+				</div>  
+			</div>
+			 <button type="button" class="closeBtn"><img src="/national/assets/img/img_popCls.png" alt="팝업닫기"></button>
+		</div>
+		<!-- e: 종목선택 -->
+
+		<!-- s: 종별 선택 -->
+		<div id="searchPop02" class="searchPop">
+			<div class="layerCont">
+				<h5>종별 선택</h5>
+				<ul id="mob_kindCdList">
+				</ul>          
+			</div>
+			 <button type="button" class="closeBtn"><img src="/national/assets/img/img_popCls.png" alt="팝업닫기"></button>
+		</div>
+		<!-- e: 종별 선택 -->
+
+		<!-- s: 세부종목 선택 -->
+		<div id="searchPop03" class="searchPop">
+			<div class="layerCont">
+				<h5>세부종목 선택</h5>
+				<ul id="mob_detailClassCdList">
+				</ul>            
+			</div>
+			 <button type="button" class="closeBtn"><img src="/national/assets/img/img_popCls.png" alt="팝업닫기"></button>
+		</div>
+		<!-- e: 세부종목 선택 -->
+
+		<!-- s: 일자 선택 -->
+		<div id="searchPop04" class="searchPop">
+			<div class="layerCont">
+				<h5>일자 선택</h5>
+				<ul id="mob_gmDtList">
+				</ul>            
+			</div>
+			 <button type="button" class="closeBtn"><img src="/national/assets/img/img_popCls.png" alt="팝업닫기"></button>
+		</div>
+		<!-- e: 일자 선택 -->
+	<!-- e: layerPop -->
+	
+	</div>
+	<!-- e: inner -->          
+</div>
+<!-- e: content -->
+
+<script>
+    $(function(){
+        $('.modalLayer .modalClose').on('click', function() {
+            $('#layerPop01').css("display","none");
+            $('#layerPop02').css("display","none");
+        });
+    });
+
+    // 외부영역 클릭 시 팝업 닫기
+    $(document).mouseup(function (e){
+        let LayerPopup = $("#layerPop01");
+        if($("#layerPop01").has(e.target).length === 0){
+            LayerPopup.css("display","none");
+        } 
+        let LayerPopup2 = $("#layerPop02");
+        if($("#layerPop02").has(e.target).length === 0){
+            LayerPopup2.css("display","none");
+        }
+    });
+
+    function getPlayerInfo(idNo, classCd, detailClassCd, rhCd){
+
+        $.ajax({
+            type : "POST",
+            url:  "/national/search/selectPlayerInfoAjax.do",
+            data : JSON.stringify({searchIdNo : idNo, searchClassCd:classCd, searchDetailClassCd:detailClassCd, searchRhCd:rhCd}),
+            dataType: 'json',
+            contentType : "application/json; charset=UTF-8",
+            success: function(data) {
+                if (data.RESULT_CODE == '0000000'){
+                    if(idNo.length == 7){ // 선수
+                        $('#layerPop01').css("display","block");
+
+                        let playerInfo = data.playerInfo; // 선수정보
+                        let playerDetailList = data.playerDetailList; // 세부종목 정보
+                        let resultDetailList = data.resultDetailList; // 출전 경기 기록
+                        let resultHistoryList = data.resultHistoryList; // 이전 전국체육대회 참가기록
+                        // 선수정보
+                        $(".player-infor").children("h5").text(playerInfo.KOR_NM);
+                        $(".playerInforList").find("li").remove();
+                        let strInfo = '<li>종목 : '+playerInfo.CLASS_NM+'</li><li>생년 : '+playerInfo.JUMIN_NO+'</li><li>시도 : '+ playerInfo.SIDO_NM+'</li><li>소속/학교 : '+playerInfo.TEAM_NM +'</li><li>종별 : '+ playerInfo.KIND_NM+'</li>';
+                        $(".playerInforList").append(strInfo);
+
+                        // 출전 경기 기록
+                        $(".resultDetailList").find("tr").remove();
+                        let strResult = '';
+                        if(resultDetailList==''){
+                            strResult = '<tr><td colspan="8">조회된 내용이 없습니다.</td></tr>';
+                        }else{
+                            let deatialClassNm = "";
+                            $.each(resultDetailList, function(i){
+                                if(resultDetailList[i].GM_CONFIRM < 2){
+                                }else{
+                                    strResult +='<tr><td class="tal">' + resultDetailList[i].DETAIL_CLASS_NM +'</td>';
+                                    strResult +='<td class="tal">' + resultDetailList[i].RH_NM +'</td>';
+                                    strResult +='<td>종료</td>';
+                                    if(resultDetailList[i].RANK==null) resultDetailList[i].RANK = '';
+                                    strResult +='<td>' + resultDetailList[i].RANK +'</td>';
+                                    // 0104 kmh
+                                    if(resultDetailList[i].MEDAL_NM!=null&& resultDetailList[i].DETAIL_CLASS_NM != deatialClassNm){ 
+                                        strResult +='<td>' + resultDetailList[i].MEDAL_NM +'메달</td>';
+                                    }else{
+                                        strResult +='<td></td>';
+                                    }
+                                    deatialClassNm = resultDetailList[i].DETAIL_CLASS_NM;
+                                    if(resultDetailList[i].REC==null) resultDetailList[i].REC = '';
+                                    strResult +='<td class="tal">' + resultDetailList[i].REC +'</td>';
+                                    if(resultDetailList[i].NEW_REC_NM==null) resultDetailList[i].NEW_REC_NM = '';
+                                    strResult +='<td>' + resultDetailList[i].NEW_REC_NM +'</td>';
+                                    let fmtGmDt = resultDetailList[i].GM_DT;
+                                    if(fmtGmDt.length==8) fmtGmDt = fmtGmDt.substring(0,4) +"/"+ fmtGmDt.substring(4,6) +"/"+ fmtGmDt.substring(6,8);
+                                    strResult +='<td class="tal">' + fmtGmDt +'</td></tr>';
+                                }
+                            });
+                        }
+
+                        $(".resultDetailList").append(strResult);
+
+                        // 이전 전국체육대회 참가기록
+                        $(".resultHistoryList").find("tr").remove();
+                        let strHistory = '';
+                        if(resultHistoryList==null || resultHistoryList==""){
+                            strHistory = '<tr><td colspan="10">조회된 내용이 없습니다.</td></tr>';
+                        }else{
+                            $.each(resultHistoryList, function(i){
+                                strHistory +='<tr><td class="tal">' + resultHistoryList[i].GAME_NM +'</td>';
+                                strHistory +='<td>' + resultHistoryList[i].SIDO_NM +'</td>';
+                                strHistory +='<td class="tal">' + resultHistoryList[i].CLASS_NM +'</td>';
+                                strHistory +='<td class="tal">' + resultHistoryList[i].KIND_NM +'</td>';
+                                strHistory +='<td class="tal">' + resultHistoryList[i].DETAIL_CLASS_NM +'</td>';
+                                if(resultHistoryList[i].RANK==null) resultHistoryList[i].RANK = '';
+                                strHistory +='<td>' + resultHistoryList[i].RANK +'</td>';
+                                if(resultHistoryList[i].MEDAL_NM==null) resultHistoryList[i].MEDAL_NM= '';
+                                strHistory +='<td>' + resultHistoryList[i].MEDAL_NM +'</td>';
+                                if(resultHistoryList[i].REC==null) resultHistoryList[i].REC= '';
+                                strHistory +='<td class="tal">' + resultHistoryList[i].REC +'</td>';
+                                if(resultHistoryList[i].NEW_REC_NM==null) resultHistoryList[i].NEW_REC_NM = '';
+                                strHistory +='<td>' + resultHistoryList[i].NEW_REC_NM +'</td>';
+                                let fmtGmDt = resultHistoryList[i].GM_DT;
+                                if(fmtGmDt.length==8) fmtGmDt = fmtGmDt.substring(0,4) +"/"+ fmtGmDt.substring(4,6) +"/"+ fmtGmDt.substring(6,8);
+                                strHistory +='<td class="tal">' + resultHistoryList[i].GM_DT +'</td></tr>';
+                            });
+                        }
+                        $(".resultHistoryList").append(strHistory);
+                    }else{ // 팀(선수list)
+                        $('#layerPop02').css("display","block");
+                        $("#layerPop02 .modalLayer .modalCont").children().remove();
+                        let strInfo = "<div class='modalTop'><h4>선수정보</h4></div>";
+                        $.each(data.playerList, function(i){
+                            let playerList = data.playerList; // 선수정보
+                            // 선수정보
+                            if(playerList[i].GRADE==null) playerList[i].GRADE = "-";
+                            strInfo += "<div class='player-infor'><h5>"+playerList[i].KOR_NM+"</h5>";
+                            strInfo += "<ul class='playerInforList'><li>소속/학교 : "+playerList[i].TEAM_NM+"</li><li>학년 : "+playerList[i].GRADE+"</li></ul>";
+                            strInfo += "</div>";
+                        })
+                        $("#layerPop02 .modalLayer .modalCont").append(strInfo);
+                    }
+                }else{
+                    alert(data.RESULT_MSG);
+                }
+            },
+            fail : function(result) {
+                alert('데이터 처리중 오류가 발생하였습니다.');
+            },
+            error : function(request, status, error) {
+                console.log("code: " + request.status)
+                console.log("message: " + request.responseText)
+                console.log("error: " + error);
+            },
+            complete : function() {
+            }
+        });
+    }
+
+</script>
+<!-- s: layerPop -->
+<div id="layerPop01" class="modalPop" style="display:none;">
+    <div class="modalLayer">
+        <div class="modalCont">
+            <div class="modalTop">
+                <h4>선수정보</h4>
+            </div>     
+            <div class="player-infor">
+                <h5></h5>
+                <ul class="playerInforList">
+                </ul>
+            </div>    
+            <div class="boardTable01">
+                <h5>경기기록</h5>
+                <table class="tablesaw" data-tablesaw-mode="stack">
+                    <caption>경기기록 내역</caption>
+                    <colgroup>
+                        <col style="width:auto">
+                        <col style="width:19%">
+                        <col style="width:7%">
+                        <col style="width:7%">
+                        <col style="width:8%">
+                        <col style="width:12%">
+                        <col style="width:11%">
+                        <col style="width:13%">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col">세부종목</th>
+                            <th scope="col">경기구분 </th>
+                            <th scope="col">상태</th>
+                            <th scope="col">순위</th>
+                            <th scope="col">메달</th>
+                            <th scope="col">기록</th>
+                            <th scope="col">신기록</th>  
+                            <th scope="col">일자</th>
+                        </tr>
+                    </thead>
+                    <tbody class="resultDetailList">
+                    </tbody>    
+                </table>
+            </div>
+            <div class="boardTable01">
+                <h5>이전 전국체육대회 참가기록</h5><table class="tablesaw" data-tablesaw-mode="stack">
+                    <caption>이전 전국체육대회 참가기록 내역</caption><colgroup>
+                        <col style="width:auto">
+                        <col style="width:6%">
+                        <col style="width:11.5%">
+                        <col style="width:14%">
+                        <col style="width:17%">
+                        <col style="width:6%">
+                        <col style="width:6%">
+                        <col style="width:10%">
+                        <col style="width:7%">
+                        <col style="width:12%">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col">대회명</th>
+                            <th scope="col">시도</th>
+                            <th scope="col">종목</th>
+                            <th scope="col">종별</th>
+                            <th scope="col">세부종목</th>
+                            <th scope="col">순위</th>
+                            <th scope="col">메달</th>
+                            <th scope="col">기록</th>
+                            <th scope="col">신기록</th>
+                            <th scope="col">일자</th>
+                        </tr>
+                    </thead>
+                    <tbody class="resultHistoryList">
+                    </tbody>     
+                </table>
+            </div>
+        </div>
+        <button class="modalClose hideTxt">모달팝업 닫기</button>
+    </div>  
+</div>
+<!-- team-->
+<div id="layerPop02" class="modalPop" style="display:none;">
+    <div class="modalLayer">
+        <div class="modalCont">
+            <div class="modalTop">
+                <h4>선수정보</h4>
+            </div>     
+            <div class="player-infor">
+                <h5></h5>
+                <ul class="playerInforList">
+                </ul>
+            </div>    
+        </div>
+        <button class="modalClose hideTxt">모달팝업 닫기</button>
+    </div>  
+</div>
+<!-- e: layerPop --><footer id="footer" class="footer">
+        <div class="inner">
+            <h3 class="footerLogo">
+                <a href="javascript:void(0)">
+                    제107회 전국체육대회</a>    
+            </h3>
+            <div class="foot-infor">
+                <p>
+                    <span class="address">우) 05540 서울특별시 송파구 올림픽로 424 올림픽회관</span>&nbsp;&nbsp;
+                    <span class="main-phone">대표전화 : 02-2144-8114</span>&nbsp;&nbsp;
+                    <a href="https://www.sports.or.kr/sports/main/contents.do?menuNo=200229" target="_blank">                        
+                        <font color="#0000FF" style="text-decoration: underline; font-weight: bold;">개인정보처리방침</font>
+                    </a>
+                </p>    
+                <ul class="foot-snsList">
+                    <li><a href="https://www.facebook.com/KoreaOlympic" target="_blank"><img src="/national/comn/nsi/img/icon_facebook.svg" alt="페이스북"></a></li>
+                    <li><a href="https://www.youtube.com/channel/UCXU3UhTVOX7w6NhQpzxEeJQ" target="_blank"><img src="/national/comn/nsi/img/icon_youtube.svg" alt="유투브"></a></li>
+                    <li><a href="https://blog.naver.com/sports_7330" target="_blank"><img src="/national/comn/nsi/img/icon_blog.svg" alt="블로그"></a></li>
+                    <li><a href="https://www.instagram.com/ksoc_official" target="_blank"><img src="/national/comn/nsi/img/icon_instagram.svg" alt="인스타그램"></a></li>
+                </ul>
+                <p class="copyright"> ⓒ 대한체육회</p>
+            </div>        
+            <div class="foot-bottom">  
+                <div class="related-agencies">
+                    <select name="" id="linkList2" title="10건씩 보기">
+						<option value="#">시도체육회</option>
+						<option value="http://www.seoulsports.or.kr/">서울특별시체육회</option>
+						<option value="http://www.sports.busan.kr/">부산광역시체육회</option>
+						<option value="http://www.daegusports.or.kr/">대구광역시체육회</option>
+						<option value="http://www.icsports.or.kr/">인천광역시체육회</option>
+						<option value="https://www.gwangjusports.org/">광주광역시체육회</option>
+						<option value="http://www.djsc.or.kr/">대전광역시체육회</option>
+						<option value="http://www.ussc.or.kr/">울산광역시체육회</option>
+						<option value="http://www.sejongsc.or.kr/">세종특별자치시체육회</option>
+						<option value="https://ggsports.gg.go.kr/">경기도체육회</option>
+						<option value="http://www.gwsports.or.kr/">강원특별자치도체육회</option>
+						<option value="http://www.cbsports.or.kr/">충청북도체육회</option>
+						<option value="http://www.cnsports.or.kr/">충청남도체육회</option>
+						<option value="http://www.jbsports.or.kr/">전라북도체육회</option>
+						<option value="http://www.jeonnamsports.or.kr/">전라남도체육회</option>
+						<option value="http://www.gbsports.or.kr/">경상북도체육회</option>
+						<option value="http://www.gnsports.or.kr/">경상남도체육회</option>
+						<option value="http://www.jejusports.or.kr/">제주특별자치도체육회</option>
+					</select>
+                </div> 
+                <ul class="partner">
+                    <li><a href="https://www.sports.or.kr/index.do" target="_blank" title="대한체육회로 이동" class="hideTxt">대한체육회</a></li>
+                    <li><a href="https://www.mcst.go.kr/kor/main.jsp" target="_blank" title="문화체육관광부로 이동" class="hideTxt">문화체육관광부</a></li>
+                    <li><a href="https://www.kspo.or.kr/kspo/main/main.do" target="_blank" title="KSPO 이동" class="hideTxt">KSPO</a></li>
+                    <li><a href="https://g1.sports.or.kr/index.do" target="_blank" title="스포츠지원포털 이동" class="hideTxt">스포츠지원포털</a></li>
+                    <li><a href="https://on.sports.or.kr/index.do" target="_blank" title="온스포츠포털 이동" class="hideTxt">온스포츠포털</a></li>
+                    <li><a href="https://www.sports.or.kr/sports/pgm/sprPbl/list.do?bookYear=2024&menuNo=200033" target="_blank" title="sports1 이동" class="hideTxt">sports1</a></li>
+                    </ul>
+                <p class="txt">국민체육진흥공단(KSPO)의 국민체육진흥기금지원사업입니다.</p>  
+            </div>    
+        </div>    
+
+        <!-- s: topBtn --> 
+        <a href="javascript:void(0);" class="topBtn" title="맨 위로 이동합니다."><img src="/national/assets/img/topBtn.svg" alt="top버튼"></a>
+        <!-- e: topBtn --> 
+    </footer>
+    
+    <div id="snsMPop" class="snsPop">
+        <div class="layerCont">
+            <h5>공유하기</h5>
+            <ul class="mobSnsList">
+                <li>
+                    <a href="javascript:shareFacebook();">
+                        <figure>
+                            <img src="/national/comn/nsi/img/icon_facebook.svg" alt="페이스북 아이콘">
+                            <figcaption>페이스북</figcaption>
+                        </figure>
+                    </a>
+                </li>  
+                <!--
+                <li>
+                    <a href="javascript:shareYoutube();">
+                        <figure>
+                            <img src="/national/comn/nsi/img/icon_youtube.svg" alt="유투브 아이콘">
+                            <figcaption>유투브</figcaption>
+                        </figure>
+                    </a>
+                </li>
+                <li>
+                    <a href="javascript:shareTwitter();">
+                        <figure>
+                            <img src="../assets/img/icon_snsM02.png" alt="트위터 아이콘">
+                            <figcaption>트위터</figcaption>
+                        </figure>
+                    </a>
+                </li>
+                 <li>
+                    <a href="javascript:shareNaverBlog();">
+                        <figure>
+                            <img src="../assets/img/icon_snsM03.png" alt="블로그 아이콘">
+                            <figcaption>블로그</figcaption>
+                        </figure>
+                    </a>
+                </li> -->
+                <li>
+                    <a href="javascript:sendLinkKakao();">
+                        <figure>
+                            <img src="/national/assets/img/kakaoicon_mobile.png" alt="카카오톡 아이콘">
+                            <figcaption>카카오톡</figcaption>
+                        </figure>
+                    </a>
+                </li>
+            </ul>          
+        </div>
+        <button class="popClsBtn"><img src="/national/assets/img/img_popCls.png" alt="팝업닫기"></button>
+    </div>
+
+
+</div>
+<!-- e: wrap -->
+
+<script src="/national/comn/nsi/js/tablesaw.js"></script>
+    <script src="/national/comn/nsi/js/tablesaw-init.js"></script>
+    <script src="/national/comn/nsi/js/feSeries.js"></script>
+    <script src="/national/comn/nsi/js/feCommon.js?v=1"></script>
+    <script type="text/javascript" src="//wcs.pstatic.net/wcslog.js"></script>
+    <script type="text/javascript">
+        if(!wcs_add) var wcs_add = {};
+        
+        wcs_add["wa"] = "1c32a9c623c7770";
+        if(window.wcs) {
+          wcs_do();
+        }
+    </script>
+</body>
+</html>

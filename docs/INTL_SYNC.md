@@ -78,3 +78,11 @@
 - 취소된 예선(2026-09-27): 스타트 리스트(레인)까지 나온 뒤 일정에서 사라진 라운드도, 그 종목의 다음 라운드가 실제로 진행됐으면(명단·기록 있음) 조·레인을 지우고 출전을 옮긴다 — 여자 멀리뛰기 예선.
 - 진출 표시 `qJ`·`qR`(2026-09-28): 이의 제기 인용(J)·재경기(R) 꼬리가 붙은 Q/q 도 진출로 본다(`placing.qualOf`). 남자 4x100m 계주 예선 DQ → 정정 39.33 4위 qJ → '결승 진출'. 결과 정정은 완료된 라운드도 계속 읽어 반영된다.
 - 대회 시간대(2026-09-30): 공식 일정의 시각 문자열에 오프셋(Z, ±hh:mm)이 붙어 있으면 `competition.timezone`(개최지) 으로 환산하고, 없으면(현지시각 표기) 그대로 쓴다(`lib/tz.js hhmmIn/ymdIn`). 스케줄러의 '대회 기간' 판정도 대회 시간대 기준.
+
+## 전국체육대회(대한체육회 meet.sports.or.kr) 동기화 — provider `nsf` (2026-10-17)
+- 출처: 관리자 › 대회 › 국제대회 동기화에서 API 주소 `https://meet.sports.or.kr`(대회 코드는 임의, 기본 NSF2026) 저장 → 주소로 provider 를 `nsf` 로 알아본다. `competition.sync_source = { provider:'nsf', base, champ, classes:['A1','B1','C1'] }`(A1 트랙 · B1 필드 · C1 로드).
+- 모듈: `lib/intl/nsf.js`(파서: 일정 HTML·명단 JSON·결과 HTML, 종목명 정규화 `normEventName`, 코드 체계 주석) + `lib/intl/nsf_sync.js`(DB 반영). `lib/intl/sync.js` 의 setupStructure/syncEntries/syncResults/runOnce 가 provider 가 nsf 면 넘긴다. 스케줄러(60초)는 공용.
+- 구조: 사이트의 `detailClassCd`(종목·부) 하나 = 우리 종목 **부별로 따로**(이름 = 정식명 + 부 접미 `100m 18세이하부` — 저장소 규칙, `lib/eventName.js` 접미 정규식에 `N세이하부`·`대학·일반부` 추가). 라운드 = `rhCd`(A110NN 예선 NN조 · A19000 결승 · A100NN 종합경기 세부종목 → 부모 + 세부종목, sort_order 는 WA 순서라 `waKeysFor` 점수 키가 맞는다). 성별 없는 부(혼성계주 18세이하부/대학부/일반부) = X. 시간표·조 시각은 **시작 시각만**(종료 시각은 쓰지 않음 — 사용자 결정).
+- 엔트리: 사이트 명단은 종목 단위(조별 아님) → 첫 라운드 출전만, 조 배정은 조별 스타트리스트/결과가 나올 때. 선수 barcode `NSF:ID_NO`, team = 시도, federation = 소속(학교), 배번 = 종목 선수번호, 학년. 계주 팀 = 시도당 한 행(`RELAY_NSF:시도:성별`, 혼성은 이름 `시도 혼성`), 주자 relay_member(주자 순서 없음). 같은 명단에 두 부(대학부+일반부)가 섞이면 division 을 `대학·일반부`.
+- 결과: 조 시작 2시간 전~12시간 뒤 창에서 조별 결과 HTML(순위·시도·선수명·소속·학년·기록·신기록/비고) → result(기록·상태 DQ/DNS/DNF/NM·비고). 조 종료 = 일정표 상태 '종료'(10분마다 다시 읽음) 또는 트랙·계주·로드 전원 기록. 필드 시기별·레인·풍속은 사이트가 안 주면 없음(풍속 글자가 있으면 조 풍속). 종합경기 세부종목은 부모 종합표(combined_score, `calcWAPoints` 로 점수).
+- 테스트 `tests/api/68_nsf_sync.test.js`(픽스처 `tests/fixtures/nsf/` — 2026-10-17 실제 페이지). 결과표의 실제 모양은 첫 종목이 끝난 뒤 확인·보정할 것(파서는 머리글 이름으로 열을 찾는다).

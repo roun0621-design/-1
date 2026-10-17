@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" type="image/x-icon" href="/national/comn/nsi/img/favicon/favicon.ico">
+
+    <link rel="stylesheet" type="text/css" href="/national/comn/nsi/css/content.css?ver=20261017220625">
+    <link rel="stylesheet" href="/national/comn/nsi/css/mainNewTest.css?v=5" />
+    <script src="/national/comn/nsi/js/jquery-2.2.4.min.js"></script>
+    <script src="/national/comn/nsi/js/jquery-ui.min.js"></script>
+    <script src="/national/comn/nsi/js/common_util.js"></script>
+    <script src="//developers.kakao.com/sdk/js/kakao.min.js"></script>
+
+</head>
+
+    
+<script>
+    // 메인(홈)으로
+    function fnHome() {
+        document.location.href = "/national/";
+    }
+    
+
+    //document.oncontextmenu = function(){alert("마우스 우측 버튼은 사용할 수 없습니다.");return false;}
+
+    </script>
+
+<style>
+/*     body, p, span, div, table, tr, td {
+        font-size: 14px;
+    }
+    table {
+        border : 1px solid #cdcdcd;
+    }
+    tr, td {
+        text-align: left;
+    }
+    td {
+        padding: 5px 5px 5px 5px;
+    }
+    .on {
+        font-weight: bold;
+        color: #ff0000;
+    } */
+</style>
+<body>
+    <div class="record-match-area">
+        <div class="scoreTop">
+            <span>육상(트랙)&nbsp;>&nbsp;남자18세이하부&nbsp;>&nbsp;100m</span>
+            <span class="pcView">&nbsp;>&nbsp;</span> 
+            <span>예선1</span>
+        </div>
+        <div class="scrollY">    
+            <div class="boardTable01">
+                <table class="tablesaw" data-tablesaw-mode="stack">
+                        <caption>기록경기</caption>
+                        <colgroup>
+                            <col style="width:6%;">
+                            <col style="width:8%;">
+                            <col style="width:15%;">
+                                <col style="width:auto;">
+                                <col style="width:6%;">
+                            <col style="width:15%;">
+                            <col style="width:17%;">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th scope="col">순위</th>
+                                <th scope="col">시도</th>
+                                <th scope="col">선수명</th>
+                                    <th scope="col">소속</th>
+                                    <th scope="col">학년</th>
+                                <th scope="col">기록</th>
+                                <th scope="col">신기록/비고</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                    <td colspan="7" class="no-result">경기가 종료되지 않았습니다.</td>
+                                </tr>
+                        </tbody>
+                </table>
+                <br>
+                    <table class="tablesaw" data-tablesaw-mode="stack">
+                            <caption>기록경기</caption>
+                            <colgroup>
+                                <col style="width:6%;">
+                                <col style="width:8%;">
+                                <col style="width:15%;">
+                                <col style="width:auto;">
+                                <col style="width:6%;">
+                                <col style="width:15%;">
+                                <col style="width:17%;">
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th scope="col">순위</th>
+                                    <th scope="col">시도</th>
+                                    <th scope="col">선수명</th>
+                                    <th scope="col">소속</th>
+                                    <th scope="col">학년</th>
+                                    <th scope="col">기록</th>
+                                    <th scope="col">신기록/비고</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                        <td></td>
+                                        <td>울산</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('07','A1','03','','');">
+                                                김리한</span>
+                                        </td>
+                                        <td class="tal">울산스포츠과학고등학교</td>
+                                        <td>1</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>경남</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('15','A1','03','','');">
+                                                김시훈</span>
+                                        </td>
+                                        <td class="tal">경남체육고등학교</td>
+                                        <td>1</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>경남</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('15','A1','03','','');">
+                                                최재혁</span>
+                                        </td>
+                                        <td class="tal">경남체육고등학교</td>
+                                        <td>3</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>부산</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('02','A1','03','','');">
+                                                이건호</span>
+                                        </td>
+                                        <td class="tal">부산사대부설고등학교</td>
+                                        <td>1</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>부산</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('02','A1','03','','');">
+                                                장정근</span>
+                                        </td>
+                                        <td class="tal">부산사대부설고등학교</td>
+                                        <td>1</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>경기</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('08','A1','03','','');">
+                                                마현서</span>
+                                        </td>
+                                        <td class="tal">경기체육고등학교</td>
+                                        <td>2</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>경기</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('08','A1','03','','');">
+                                                이윤호</span>
+                                        </td>
+                                        <td class="tal">경기모바일과학고등학교</td>
+                                        <td>2</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>인천</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('04','A1','03','','');">
+                                                조백호</span>
+                                        </td>
+                                        <td class="tal">인천체육고등학교</td>
+                                        <td>1</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>인천</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('04','A1','03','','');">
+                                                최준혁</span>
+                                        </td>
+                                        <td class="tal">인천체육고등학교</td>
+                                        <td>1</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>강원</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('09','A1','03','','');">
+                                                박태현</span>
+                                        </td>
+                                        <td class="tal">강원체육고등학교</td>
+                                        <td>2</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>경북</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('14','A1','03','','');">
+                                                신동하</span>
+                                        </td>
+                                        <td class="tal">경북체육고등학교</td>
+                                        <td>3</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>경북</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('14','A1','03','','');">
+                                                조준희</span>
+                                        </td>
+                                        <td class="tal">경북체육고등학교</td>
+                                        <td>2</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>충북</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('10','A1','03','','');">
+                                                이세열</span>
+                                        </td>
+                                        <td class="tal">충북체육고등학교</td>
+                                        <td>1</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>충북</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('10','A1','03','','');">
+                                                차준성</span>
+                                        </td>
+                                        <td class="tal">충북체육고등학교</td>
+                                        <td>3</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>대구</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('03','A1','03','','');">
+                                                박시우</span>
+                                        </td>
+                                        <td class="tal">대구체육고등학교</td>
+                                        <td>1</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>대구</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('03','A1','03','','');">
+                                                이승훈</span>
+                                        </td>
+                                        <td class="tal">대구체육고등학교</td>
+                                        <td>2</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>충남</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('11','A1','03','','');">
+                                                원형진</span>
+                                        </td>
+                                        <td class="tal">충남체육고등학교</td>
+                                        <td>1</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>서울</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('01','A1','03','','');">
+                                                김선우</span>
+                                        </td>
+                                        <td class="tal">서울체육고등학교</td>
+                                        <td>1</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>서울</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('01','A1','03','','');">
+                                                현진우</span>
+                                        </td>
+                                        <td class="tal">서울체육고등학교</td>
+                                        <td>2</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>전남</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('13','A1','03','','');">
+                                                이솔민</span>
+                                        </td>
+                                        <td class="tal">전남체육고등학교</td>
+                                        <td>2</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>전남</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('13','A1','03','','');">
+                                                허정윤</span>
+                                        </td>
+                                        <td class="tal">목포문태고등학교</td>
+                                        <td>3</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>전북</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('12','A1','03','','');">
+                                                이동관</span>
+                                        </td>
+                                        <td class="tal">전북체육고등학교</td>
+                                        <td>2</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>전북</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('12','A1','03','','');">
+                                                최명진</span>
+                                        </td>
+                                        <td class="tal">전북체육고등학교</td>
+                                        <td>3</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>대전</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('06','A1','03','','');">
+                                                이서진</span>
+                                        </td>
+                                        <td class="tal">충남고등학교</td>
+                                        <td>2</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                <tr>
+                                        <td></td>
+                                        <td>대전</td>
+                                        <td class="tal">
+                                            <span onclick="searchPlayerInfo('06','A1','03','','');">
+                                                이세영</span>
+                                        </td>
+                                        <td class="tal">대전체육고등학교</td>
+                                        <td>3</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                </tbody>
+                </table>
+            </div>
+        </div>
+       
+        <button class="closeBtn hideTxt" onclick="closeSide();">닫기</button>
+    </div>
+    <!-- e: 전적 -->
+    <script src="/national/comn/nsi/js/tablesaw.js"></script>
+    <script src="/national/comn/nsi/js/tablesaw-init.js"></script> 
+    <script>
+        function show(element, teamCd, detailClassCd, rhCd) {
+            let trTrigger = $('.record-match-area .boardTable01 table tr');
+            let nel = element.nextElementSibling; 
+            
+            $('.record-match-area .boardTable01 table .hide-record').hide();
+            $(trTrigger).removeClass('active');
+            element.classList.add('active');
+            
+            if(window.innerWidth >= 1025){
+                nel.style.display="table-row";
+            }else {
+                nel.style.display="block";
+            }     
+           
+            resultDetail(teamCd, detailClassCd, rhCd);
+        }  
+
+        $('.record-match-area .boardTable01 table .hide-record').on('click',function(){
+            $(this).hide();
+            $(this).prev('tr').removeClass('active');
+        });
+    </script>
+</body>
+</html>
