@@ -15,7 +15,12 @@ const fetchStub = (calls) => async (source, kind, p) => {
     calls.push(kind);
     if (kind === 'dates') return p.cls === 'A1' ? ['20261018', '20261020'] : ['20261018'];   // 계주(10/20)까지 보려고 트랙은 이틀
     if (kind === 'schedule') { const f = path.join(FX, `sched_${p.cls}_${p.date}.html`); return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '<html></html>'; }
-    if (kind === 'entrants') return entrants[`${p.dc}/${p.rh}`] || { playerList: [] };
+    if (kind === 'entrants') {
+        const j = entrants[`${p.dc}/${p.rh}`] || { playerList: [] };
+        // 같은 선수(ATH_NO 같음)가 다른 종목엔 다른 ID_NO 로 실린다 — 혼성계주 일반부 명단에 김리한을 다른 ID_NO 로 끼워 넣는다
+        if (p.dc === 'A11513') return { ...j, playerList: [...j.playerList, { ID_NO: '0999999', KOR_NM: '김리한', SIDO_NM: '울산', TEAM_NM: '울산스포츠과학고등학교', GRADE: '1', EVENT_ATH_NO: '0152', KIND_CD: '03', ATH_NO: 'MAT073100001' }] };
+        return j;
+    }
     if (kind === 'detail') {
         if (p.dc === 'A10301' && p.rh === 'A11001') return finishedHtml([{ rank: 1, sido: '울산', name: '김리한', team: '울산스포츠과학고등학교', grade: 1, mark: '10.85', remark: '' }, { rank: 2, sido: '경남', name: '김시훈', team: '경남체육고등학교', grade: 1, mark: '10.91', remark: 'Q' }, { rank: '', sido: '경남', name: '최재혁', team: '경남체육고등학교', grade: 3, mark: 'DNF', remark: '' }]);
         if (p.dc === 'A10307' && p.rh === 'A19000') return finishedHtml([{ rank: 1, sido: '경북', name: '오천미', team: '경북체고', grade: 2, mark: '14:35.20', remark: '' }, { rank: 2, sido: '전남', name: '김오천', team: '전남체고', grade: 3, mark: '14:36.00', remark: '' }]);   // 5000m 결승(조 1개) → 전원 기록 = 완료
@@ -78,9 +83,17 @@ describe('전국체전 동기화', () => {
 
     it('엔트리: 선수(시도=팀, 소속=federation, 배번)·첫 라운드 출전, 계주는 시도 팀 + 주자', async () => {
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
+        // 운영에서 이미 생긴 상태 재현: 옛 키(ID_NO)로 만든 같은 사람 두 행('김리한' + '김리한 (학교)') — 동기화가 사람 키로 합쳐야 한다
+        const legacy1 = (await db.run("INSERT INTO athlete (competition_id, name, team, barcode, gender, federation) VALUES (?, '김리한', '울산', 'NSF:0000293', 'M', '울산스포츠과학고등학교')", fx.comp)).lastInsertRowid;
+        const legacy2 = (await db.run("INSERT INTO athlete (competition_id, name, team, barcode, gender, federation) VALUES (?, '김리한 (울산스포츠과학고등학교)', '울산', 'NSF:0999999', 'M', '울산스포츠과학고등학교')", fx.comp)).lastInsertRowid;
+        const mixedEv = await db.get("SELECT id FROM event WHERE competition_id=? AND external_key='A11513#preliminary'", fx.comp);
+        await db.run("INSERT INTO event_entry (event_id, athlete_id, status) VALUES (?,?, 'registered')", mixedEv.id, legacy2);
         const st = await sync.syncEntries(db, comp, { fetch: fetchStub(fx.calls), calc: fx.calc });
         expect(st.entries).toBeGreaterThan(40);
-        const a = await db.get("SELECT * FROM athlete WHERE competition_id=? AND barcode='NSF:0000293'", fx.comp);
+        const a = await db.get("SELECT * FROM athlete WHERE competition_id=? AND barcode='NSF:MAT073100001'", fx.comp);   // 사람 키 = ATH_NO
+        expect((await db.get("SELECT COUNT(*) c FROM athlete WHERE competition_id=? AND name LIKE '김리한%'", fx.comp)).c).toBe(1);   // ID_NO 가 달라도 한 사람, 옛 중복 행은 합쳐짐
+        expect(a.name).toBe('김리한');
+        expect((await db.get("SELECT COUNT(*) c FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.athlete_id=? AND e.external_key IN ('A10301#preliminary','A11513#preliminary')", a.id)).c).toBe(2);
         expect(a).toMatchObject({ name: '김리한', team: '울산', federation: '울산스포츠과학고등학교', bib_number: '0152', gender: 'M', grade: 1 });
         const ee = await db.get("SELECT ee.* FROM event_entry ee JOIN event e ON e.id=ee.event_id WHERE ee.athlete_id=? AND e.external_key='A10301#preliminary'", a.id);
         expect(ee).toBeTruthy();
