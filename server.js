@@ -1360,7 +1360,8 @@ try { db.exec(`ALTER TABLE audit_log ADD COLUMN user_agent TEXT`); } catch(e) {}
 // 주의: 기존 데이터에 이미 중복이 있으면 CREATE UNIQUE INDEX 가 실패하므로
 //       try/catch 로 감싸고, 실패 시 startup log 에 경고만 출력. (사용자가 중복 정리 후 재시작하면 됨)
 try {
-    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_event_top_level ON event(competition_id, name, gender, round_type) WHERE parent_event_id IS NULL`);
+    db.exec(`DROP INDEX IF EXISTS ux_event_top_level`);   // 2026-10-17: 부(division)를 포함한 인덱스로 교체 — 전국체전처럼 같은 종목이 부마다 따로 있는 대회
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_event_top_level_div ON event(competition_id, name, gender, round_type, division) WHERE parent_event_id IS NULL`);
     console.log('[DB Migration] ux_event_top_level UNIQUE 인덱스 생성/확인');
 } catch(e) {
     console.warn('[DB Migration] ux_event_top_level 생성 실패 — 기존 중복 종목이 있을 수 있음:', e.message);

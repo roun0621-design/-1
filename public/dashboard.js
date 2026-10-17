@@ -20,6 +20,7 @@ let _pacingMap = {}; // event_name → pacing config (for W/L Target buttons)
 let _scheduleMap = {}; // event_id → { time, callroom_time, is_today } from timetable
 let _timetableFull = { days: {}, start_date: null }; // 전체 시간표 (히어로 카드 표시용; 모달은 common.js openTimetable 사용)
 let _isDisplayMode = false; // 노출용 대회 모드
+let _hasDivisions = false;  // 부(division)가 있는 대회 — 운영 대회(전국체전 동기화 등)도 제목은 종목명만 두고 부는 알약·필터로 나눈다 (2026-10-17)
 let _displayRoster = []; // 노출용 대회 명단
 let _currentDivision = '전체'; // 부별 필터
 
@@ -297,7 +298,7 @@ function renderFilterButton() {
     const parts = [];
     if (currentGender !== 'ALL') parts.push(_GENDER_LABEL[currentGender] || currentGender);
     if (_catFilter !== 'ALL') parts.push(_CAT_LABEL[_catFilter] || _catFilter);
-    if (_isDisplayMode && _currentDivision && _currentDivision !== '전체') parts.push(_currentDivision);
+    if ((_isDisplayMode || _hasDivisions) && _currentDivision && _currentDivision !== '전체') parts.push(_currentDivision);
     if (_searchQuery && _searchQuery.trim()) parts.push('“' + _searchQuery.trim() + '”');
     const lbl = document.getElementById('dash-filter-lbl'); if (lbl) lbl.textContent = parts.length ? parts.join(' · ') : '전체';
     btn.classList.toggle('on', parts.length > 0);
@@ -321,8 +322,8 @@ function _renderFilterPanel() {
     const catOf = c => c === 'field_distance' || c === 'field_height' ? 'field' : c;
     const cats = ['track', 'field', 'combined', 'relay', 'road'].filter(k => allEvents.some(e => !e.parent_event_id && catOf(e.category) === k));
     if (cats.length > 1) rows.push(`<div class="fr"><div class="k">종목군</div><div class="v">${chip(_catFilter === 'ALL', '전체', "_filterCat('ALL')")}${cats.map(k => chip(_catFilter === k, _CAT_LABEL[k], `_filterCat('${k}')`)).join('')}</div></div>`);
-    // 부 — 노출용 대회(부 탭이 있는 대회)만, 지금 성별에 있는 부
-    if (_isDisplayMode) {
+    // 부 — 부가 있는 대회(노출용·전국체전 동기화 등), 지금 성별에 있는 부
+    if (_isDisplayMode || _hasDivisions) {
         const divs = [...new Set(allEvents.filter(e => !e.parent_event_id && (currentGender === 'ALL' || e.gender === currentGender)).map(e => e.division).filter(Boolean))].sort((a, b) => _divCompareKey(a) - _divCompareKey(b) || a.localeCompare(b));
         if (divs.length) rows.push(`<div class="fr"><div class="k">부</div><div class="v">${chip(_currentDivision === '전체', '전체', "_filterDivision('전체')")}${divs.map(d => chip(_currentDivision === d, d, `_filterDivision('${esc(d).replace(/'/g, '&#39;')}')`)).join('')}</div></div>`);
     }
@@ -725,8 +726,9 @@ async function loadData() {
     // ★ 운영(operation) 대회는 부가 있어도 운영 대시보드(명단→LIVE→결과)로 둔다.
     //    노출 대회는 관리자에서 mode='display' 로 명시하면 위 라인에서 이미 잡힌다.
     //    (mode 가 명시적으로 operation 이 아닌 레거시 대회만 부 기반 자동 노출 유지)
+    _hasDivisions = allEvents.some(e => !e.parent_event_id && e.division && String(e.division).trim());
     if (!_isDisplayMode && _compMode !== 'operation') {
-        const hasDivisions = allEvents.some(e => !e.parent_event_id && e.division);
+        const hasDivisions = _hasDivisions;
         if (hasDivisions) {
             _isDisplayMode = true;
             try {
@@ -978,7 +980,7 @@ const DIVISION_ORDER = [
     '초등부','남초','여초',
     '중등부','남중','여중',
     '고등부','남고','여고',
-    'U18','U18(남)','U18(여)','U18(혼)',
+    'U18','U18(남)','U18(여)','U18(혼)','18세이하부',   // 전국체전 표기 (2026-10-17)
     'U20','U20(남)','U20(여)','U20(혼)',
     '대학부','대학(남)','대학(여)',
     '일반부','일반(남)','일반(여)',
@@ -994,7 +996,7 @@ function _ageGroupScore(d) {
     if (/초/.test(s)) return 100 + gr;
     if (/중/.test(s)) return 200 + gr;
     if (/고/.test(s)) return 300 + gr;
-    if (/U18/i.test(s)) return 350;
+    if (/U18|18세이하/i.test(s)) return 350;
     if (/U20/i.test(s)) return 400;
     if (/대학|대$/.test(s)) return 500;
     if (/일반|실업/.test(s)) return 600;
@@ -1273,7 +1275,7 @@ function renderMatrix() {
         events = events.filter(e => (e.division && e.division.trim()) || e.gender === 'X');
     }
     // Apply division filter for display mode
-    if (_isDisplayMode && _currentDivision !== '전체') {
+    if ((_isDisplayMode || _hasDivisions) && _currentDivision !== '전체') {
         events = events.filter(e => e.division === _currentDivision);
     }
     const categories = [
@@ -1288,7 +1290,7 @@ function renderMatrix() {
     // gender 를 그룹키에 포함해야 '전체' 탭에서 남자 100m / 여자 100m 가 서로 다른 행으로 분리됨
     const eventGroups = {};
     events.forEach(e => {
-        const gKey = _isDisplayMode
+        const gKey = (_isDisplayMode || _hasDivisions)
             ? (e.name + '|' + e.category + '|' + e.gender + '|' + (e.division||''))
             : (e.name + '|' + e.category + '|' + e.gender);
         if (!eventGroups[gKey]) eventGroups[gKey] = { name: e.name, category: e.category, gender: e.gender, division: e.division || '', rounds: [], spotlight: null };
@@ -1476,7 +1478,7 @@ function renderCategoryTable(groups, label, isLive) {
             return { color: '#6a1b9a', bg: '#f3e5f5' };
         }
         const _dc = _divColorOf(g.division);
-        const divBadge = (_isDisplayMode && g.division && _currentDivision === '전체') ? `<span style="font-size:11px;color:${_dc.color};background:${_dc.bg};padding:1px 5px;border-radius:6px;margin-left:4px;font-weight:600;">${g.division}</span>` : '';
+        const divBadge = ((_isDisplayMode || _hasDivisions) && g.division && _currentDivision === '전체') ? `<span style="font-size:11px;color:${_dc.color};background:${_dc.bg};padding:1px 5px;border-radius:6px;margin-left:4px;font-weight:600;">${g.division}</span>` : '';
 
         // ── 카드 상태 배지 (예정 / ● 진행 중(라운드) / 종료) — 모든 카드에 1개 ──
         // 소집 완료 목록(callroomCompletedIds)은 경기 완료 후에도 남으므로, 완료된 라운드는 LIVE 판정에서 제외

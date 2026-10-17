@@ -57,7 +57,8 @@ describe('전국체전 동기화', () => {
         expect(out.events).toBeGreaterThan(30);   // 픽스처는 1일차(10/18) 세 종목군만
         const e100 = await db.all("SELECT * FROM event WHERE competition_id=? AND external_key LIKE 'A10301#%' ORDER BY round_type", fx.comp);
         expect(e100.map(e => e.round_type).sort()).toEqual(['final', 'preliminary']);
-        expect(e100[0]).toMatchObject({ name: '100m 18세이하부', gender: 'M', division: '18세이하부', category: 'track', code: '100' });
+        expect(e100[0]).toMatchObject({ name: '100m', gender: 'M', division: '18세이하부', category: 'track', code: '100' });
+        expect((await db.get("SELECT COUNT(*) c FROM event WHERE competition_id=? AND name='100m' AND gender='M' AND round_type='preliminary'", fx.comp)).c).toBe(3);   // 18세이하·대학·일반 세 부가 같은 이름으로 따로
         const heats = await db.all('SELECT h.* FROM heat h JOIN event e ON e.id=h.event_id WHERE e.competition_id=? AND e.external_key=? ORDER BY heat_number', fx.comp, 'A10301#preliminary');
         expect(heats.map(h => h.external_key)).toEqual(['A10301/A11001', 'A10301/A11002', 'A10301/A11003', 'A10301/A11004']);
         expect(heats[0].scheduled_at).toBe('2026-10-18T13:25:00+09:00');
@@ -65,11 +66,11 @@ describe('전국체전 동기화', () => {
         expect(tt.time).toBe('13:25'); expect(tt.note).toBe('4조'); expect(tt.event_name).toBe('100m 18세이하부');
         const dec = await db.get("SELECT * FROM event WHERE competition_id=? AND external_key='A10317'", fx.comp);
         const subs = await db.all('SELECT name, sort_order FROM event WHERE parent_event_id=? ORDER BY sort_order', dec.id);
-        expect(subs.slice(0, 3).map(s => s.name)).toEqual(['[10종] 100m 18세이하부', '[10종] 멀리뛰기 18세이하부', '[10종] 포환던지기 18세이하부']);   // WA 순서
+        expect(subs.slice(0, 3).map(s => s.name)).toEqual(['[10종] 100m', '[10종] 멀리뛰기', '[10종] 포환던지기']);   // WA 순서
         const mixed = await db.get("SELECT * FROM event WHERE competition_id=? AND external_key='A11513#final'", fx.comp);
-        expect(mixed).toMatchObject({ name: '4X400mR(Mixed) 일반부', gender: 'X', division: '일반부', category: 'relay', code: '4X400X' });
+        expect(mixed).toMatchObject({ name: '4X400mR(Mixed)', gender: 'X', division: '일반부', category: 'relay', code: '4X400X' });
         const road = await db.get("SELECT * FROM event WHERE competition_id=? AND external_key='C10533#final'", fx.comp);
-        expect(road).toMatchObject({ name: '마라톤 일반부', category: 'road', division: '일반부', code: 'MAR' });
+        expect(road).toMatchObject({ name: '마라톤', category: 'road', division: '일반부', code: 'MAR' });
         // 두 번 돌려도 같은 결과
         const again = await sync.setupStructure(db, comp, { fetch: fetchStub(fx.calls), calc: fx.calc });
         expect(again.stats.heats).toBe(0);
