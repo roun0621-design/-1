@@ -186,7 +186,7 @@ describe('전국체전 데일리 조편성 + 연맹 실시간 결과', () => {
         const comp = await db.get('SELECT * FROM competition WHERE id=?', fx.comp);
         const source = JSON.parse(comp.sync_source);
         const tableHtml = `<html><body><div class="Team_wrap" id='html_kor'><table><tbody>
-            ${tableRow('100m', '남자고등학교부', '예선', '경기완료', '13', '11', '1')}
+            ${tableRow('100m', '남자고등학교부', '예선', '순위처리', '13', '11', '1')}
             ${tableRow('100m', '남자고등학교부', '결승', '경기전', '13', '11', '4')}
             ${tableRow('멀리뛰기', '남자일반부', '결승', '경기완료', '15', '23', '4')}
             ${tableRow('10종경기', '남자고등학교부', '결승', '경기완료', '13', '41', '4')}
@@ -239,7 +239,7 @@ describe('전국체전 데일리 조편성 + 연맹 실시간 결과', () => {
         const out2 = await sync.runOnce(db, comp2, { source, fetch: nsfFetch, kaafFetch, calc: fx.calc });
         expect(out2.results.checked).toBe(0); expect(calls).toEqual(['table']);
         const st = JSON.parse((await db.get('SELECT sync_state FROM competition WHERE id=?', fx.comp)).sync_state);
-        expect(st.kaaf['13/11/1']).toMatchObject({ state: '경기완료', written: 5 }); expect(st.kaaf_stats.table_rows).toBe(5);   // 1조 3건 + 2조 2건
+        expect(st.kaaf['13/11/1']).toMatchObject({ state: '순위처리', written: 5 }); expect(st.kaaf['13/11/1'].doneAt).toBeTruthy();   // 트랙 '순위처리' = 기록 다 들어옴 → 완료(정정은 5분마다 다시 읽음) expect(st.kaaf_stats.table_rows).toBe(5);   // 1조 3건 + 2조 2건
         // 결과가 생긴 종목에 데일리를 다시 올리면 건너뛴다 (force 없이)
         const again = await request(app).post(`/api/admin/intl/${fx.comp}/daily-lanes`).field('admin_key', ADMIN).field('apply', '1').attach('file', Buffer.from(DAILY_TEXT), 'daily.txt');
         expect(again.body.sections[0].status).toMatch(/결과가 있어 건너뜀/);

@@ -377,8 +377,10 @@ function updateLiveJumpBadge(n) {
     b.style.display = n > 0 ? '' : 'none';
 }
 function jumpToLive() {
-    const el = document.getElementById('live-pin') || document.querySelector('.live-pin');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // 상단 LIVE 묶음이 없어져(2026-10-18) 목록 안의 첫 진행 중 카드로 (화면 중앙)
+    const live = document.querySelector('#events-container .status-live'); const row = live && live.closest('tr');
+    if (row) _scrollRowTo(row, 'smooth');
+    else { const el = document.getElementById('live-pin'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 }
 
 // ── 카드 전체 터치 → 종목 상세(가장 관련있는 라운드) 열기 ─────────
@@ -906,7 +908,7 @@ function renderHeroSchedule() {
     const iconEl = document.getElementById('hero-icon');
 
     // 부가 있는 대회(전국체전 등)는 종목명 뒤에 부·성별(category)을 작게 — 같은 '100m'가 부마다 있으니까 (2026-10-17)
-    const _catTxt = it => (it && it.category && /부$/.test(String(it.category).trim())) ? ` <span style="color:var(--text-muted);font-weight:500;">${_esc(it.category)}</span>` : '';   // 시간표 category 가 '남자 일반부' 꼴이면(부 있는 대회) 표시 — allEvents 보다 먼저 그려져 _hasDivisions 는 못 쓴다. (2026-10-18: 삼항이 주석 뒤에 있어 true 가 찍히고, const 가 한 분기 안에 있어 '다음 경기' 분기에서 ReferenceError → 대시보드가 로딩 중에 멈춤)
+    const _catTxt = it => (it && it.category && /부$/.test(String(it.category).trim())) ? ` <span class="hero-cat">${_esc(it.category)}</span>` : '';   // 시간표 category 가 '남자 일반부' 꼴이면(부 있는 대회) 흰 알약으로 표시 — allEvents 보다 먼저 그려져 _hasDivisions 는 못 쓴다. (2026-10-18 사용자: 흐린 글씨가 안 보인다 → 알약)
     row.classList.toggle('live', !!liveItem);
     if (liveItem) {
         card.classList.add('live');
@@ -1324,15 +1326,8 @@ function renderMatrix() {
 
     // 종합기록지 버튼 삭제됨 — 관리자 문서 탭에서 다운로드
 
-    // Render LIVE (in_progress) section pinned at top
-    // 종합경기(10종/7종)는 이틀 내내 '진행 중'이라 상단 LIVE 묶음·"진행 중 N" 배지에서 제외 (COMBINED 섹션의 자기 카드에만 상태 표시)
+    // 상단 'LIVE · 진행중인 경기' 묶음은 없앴다(2026-10-18 사용자: 배지가 깜빡이니 중복). 개수 배지·'지금' 스크롤은 그대로 — 종합경기(10종/7종)는 이틀 내내 '진행 중'이라 개수에서 제외
     const liveGroups = allGroups.filter(g => g.catKey !== 'combined' && g.rounds.some(r => r.round_status === 'in_progress'));
-    if (liveGroups.length > 0) {
-        html += `<div class="live-pin" id="live-pin" style="margin-bottom:16px;padding:12px;background:var(--green-light);border:1.5px solid var(--green);border-radius:var(--radius);">
-            <div style="font-family:var(--font-brand);font-size:13px;font-weight:400;color:#B8432A;letter-spacing:1px;margin-bottom:8px;">● LIVE • 진행중인 경기</div>`;
-        html += renderCategoryTable(liveGroups, 'LIVE', true);
-        html += `</div>`;
-    }
 
     // 정렬 토글 (홀짝 버튼) — 종목이 있을 때만
     // 시간표가 하나도 없는 대회는 토글을 숨긴다 (시간별 정렬이 의미 없음)
