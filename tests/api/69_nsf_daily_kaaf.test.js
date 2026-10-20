@@ -138,6 +138,77 @@ describe('전국체전 데일리 조편성 + 연맹 실시간 결과', () => {
         expect(Number((await db.get('SELECT COUNT(*) c FROM heat_entry WHERE heat_id=?', heat1.id)).c)).toBe(4);
     });
 
+    it('혼성 계주: 데일리 "혼성 4X400mR" ↔ 일정 "4X400mR(Mixed)" 를 서로 찾는다', async () => {
+        await db.run("INSERT OR IGNORE INTO event (competition_id, name, category, sort_order, gender, round_type, division) VALUES (?,?,?,?,?,?,?)", fx.comp, '4X400mR(Mixed)', 'relay', 900, 'X', 'final', '18세이하부');
+        const text = `\n▣ 혼성4X400mR (결승)\n1조레인번호성명소속\n3101홍길동서울특별시\n102김영희서울특별시\n4201이철수부산광역시\n202박영희부산광역시\n혼성고등학교부\n`;
+        const p = D.parseDailyText(text);
+        expect(p.sections[0]).toMatchObject({ name: '4X400mR', isRelay: true, gender: 'X', division: '18세이하부', round: 'final' });
+        expect(D.sectionKey(p.sections[0])).toBe('X|18세이하부||4X400mR|final');
+        const pre = await request(app).post(`/api/admin/intl/${fx.comp}/daily-lanes`).field('admin_key', ADMIN).field('apply', '0').attach('file', Buffer.from(text), 'daily.txt');
+        expect(pre.status).toBe(200);
+        expect(pre.body.sections[0]).toMatchObject({ key: 'X|18세이하부||4X400mR|final', status: '반영 예정', mapped: false, heats: 1 });
+        expect(pre.body.sections[0].event.name).toBe('4X400mR(Mixed)');
+        expect(pre.body.sections[0].entries + pre.body.sections[0].unmatched.length).toBe(2);   // 미리보기는 아직 없는 계주 팀을 세지 않고 '명단에 없음' 으로 보여 준다
+        expect(pre.body.events).toBeUndefined();   // 못 찾은 구간이 없으면 종목 목록을 보내지 않는다
+    });
+
+    it('못 찾은 종목은 관리자가 기존 종목에 직접 매칭(event_map): 후보·전체 목록 → 미리보기 → 반영하면 대회에 저장 → 다음 PDF 에도 자동 적용 → 해제', async () => {
+        // 데일리엔 '남자 18세이하부 300m 결승', 우리 구조엔 '남자 대학부 300m' 만 있다 → 못 찾음
+        const r = await db.run("INSERT INTO event (competition_id, name, category, sort_order, gender, round_type, division) VALUES (?,?,?,?,?,?,?)", fx.comp, '300m', 'track', 901, 'M', 'final', '대학부');
+        const target = r.lastInsertRowid;
+        const text = `\n▣ 300m (결승)\n1조레인번호성명소속\n2152김리한울산광역시\n3360김시훈경상남도\n남자고등학교부\n`;
+        const key = 'M|18세이하부||300m|final';
+        const post = (fields) => { let q = request(app).post(`/api/admin/intl/${fx.comp}/daily-lanes`).field('admin_key', ADMIN); for (const [k, v] of Object.entries(fields)) q = q.field(k, v); return q.attach('file', Buffer.from(text), 'daily.txt'); };
+
+        const pre = await post({ apply: '0' });
+        expect(pre.status).toBe(200);
+        const sec = pre.body.sections[0];
+        expect(sec).toMatchObject({ key, status: '종목을 찾지 못함', mapped: false, event: null });
+        expect(pre.body.stats.not_found).toBe(1);
+        expect(sec.candidates.map(c => c.id)).toContain(target);                       // 비슷한 종목(이름 글자) 후보
+        expect(sec.candidates.find(c => c.id === target).label).toBe('남자 대학부 300m 결승');
+        expect(pre.body.events.length).toBeGreaterThan(5);                              // 전체 종목 목록(고르기용)
+        expect(pre.body.events.every(e => e.id && e.label)).toBe(true);
+
+        // 잘못된 event_map
+        expect((await post({ apply: '0', event_map: 'not-json' })).status).toBe(400);
+        expect((await post({ apply: '0', event_map: '[1,2]' })).status).toBe(400);
+
+        // 미리보기 + 직접 매칭 → 그 종목으로 반영 예정, DB 는 그대로
+        const pre2 = await post({ apply: '0', event_map: JSON.stringify({ [key]: target }) });
+        expect(pre2.body.sections[0]).toMatchObject({ status: '반영 예정', mapped: true, heats: 1, entries: 2 });
+        expect(pre2.body.sections[0].event.id).toBe(target);
+        expect(pre2.body.stats.mapped).toBe(1);
+        expect(pre2.body.event_map).toEqual({ [key]: target });
+        expect(Number((await db.get('SELECT COUNT(*) c FROM heat WHERE event_id=?', target)).c)).toBe(0);
+        // 없는 종목 id 를 주면 무시하고 다시 찾는다
+        const bad = await post({ apply: '0', event_map: JSON.stringify({ [key]: 99999999 }) });
+        expect(bad.body.sections[0].status).toBe('종목을 찾지 못함');
+
+        // 반영 → 조·레인이 그 종목에, 매칭은 sync_state.daily_event_map 에 저장
+        const ap = await post({ apply: '1', event_map: JSON.stringify({ [key]: target }) });
+        expect(ap.status).toBe(200);
+        expect(ap.body.sections[0]).toMatchObject({ status: '반영', mapped: true });
+        const rows = await db.all('SELECT he.lane_number, a.name FROM heat_entry he JOIN heat h ON h.id=he.heat_id JOIN event_entry ee ON ee.id=he.event_entry_id JOIN athlete a ON a.id=ee.athlete_id WHERE h.event_id=? ORDER BY he.lane_number', target);
+        expect(rows.map(x => [x.lane_number, x.name])).toEqual([[2, '김리한'], [3, '김시훈']]);
+        const st = JSON.parse((await db.get('SELECT sync_state FROM competition WHERE id=?', fx.comp)).sync_state);
+        expect(st.daily_event_map).toEqual({ [key]: target });
+
+        // 다음 PDF(같은 구간)는 event_map 없이도 저장된 매칭으로
+        const again = await post({ apply: '0' });
+        expect(again.body.sections[0]).toMatchObject({ status: '반영 예정', mapped: true });
+        expect(again.body.sections[0].event.id).toBe(target);
+        expect(again.body.event_map).toEqual({ [key]: target });
+
+        // 해제(null): 저장된 매칭을 무시 → 못 찾음, 반영하면 저장에서도 지운다
+        const off = await post({ apply: '0', event_map: JSON.stringify({ [key]: null }) });
+        expect(off.body.sections[0].status).toBe('종목을 찾지 못함');
+        const offAp = await post({ apply: '1', event_map: JSON.stringify({ [key]: null }) });
+        expect(offAp.body.sections[0].status).toBe('종목을 찾지 못함');
+        const st2 = JSON.parse((await db.get('SELECT sync_state FROM competition WHERE id=?', fx.comp)).sync_state);
+        expect(st2.daily_event_map).toEqual({});
+    });
+
     it('KAAF 파서: 종목표·트랙(풍속·통과)·높이(시기·점프오프)·거리(6시기)·종합(점수·기록)·계주(주자)·장거리(기권·불참)', () => {
         const tb = K.parseEventTable(fs.readFileSync(path.join(KX, 'event_table.html'), 'utf8'));
         expect(tb.length).toBe(33); expect(tb[0]).toMatchObject({ event: '100m', division: '남자고등학교부', round: '예선', state: '경기완료', kind_cd: '13', dc: '11', round_cd: '1', key: '13/11/1' });

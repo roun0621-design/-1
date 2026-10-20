@@ -908,7 +908,7 @@
                     <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--gray);">
                         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                             <span class="t-xs" style="font-weight:700;">전국체전 데일리 조편성 (PDF)</span>
-                            <span class="t-xs t-muted">대한육상연맹이 매일 저녁 내는 '참가선수명단' PDF → 종목·조에 레인/순서. 조는 그대로 두고 선수만 맞춘다(배번은 연맹 번호로). 결과가 있는 종목은 건너뜀.</span>
+                            <span class="t-xs t-muted">대한육상연맹이 매일 저녁 내는 '참가선수명단' PDF → 종목·조에 레인/순서. 조는 그대로 두고 선수만 맞춘다(배번은 연맹 번호로). 결과가 있는 종목은 건너뜀. 못 찾은 종목은 미리보기에서 기존 종목을 직접 골라 매칭.</span>
                             <input type="file" id="intl-daily-file" accept=".pdf,.txt" style="font-size:12px;">
                             <button class="btn btn-sm btn-outline" onclick="intlDailyLanes(false)">미리보기</button>
                             <button class="btn btn-sm btn-primary" onclick="intlDailyLanes(true)">반영</button>
@@ -11470,21 +11470,48 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) { toast(e.error || '저장 실패', 'error'); }
         }
         // 전국체전 데일리 조편성 PDF → 미리보기/반영 (lib/intl/nsf_daily)
+        //   못 찾은 종목은 줄마다 '종목 고르기' 선택 상자 — 고르면 _intlDailyMap { 구간 키 → 종목 id } 에 담아 다시 미리보기, 반영하면 대회에 저장돼 다음 PDF 에도 쓰인다 (2026-10-20)
+        let _intlDailyMap = {};
+        function intlDailyPick(sel) {
+            const key = sel.dataset.key, v = parseInt(sel.value, 10);
+            if (!key) return;
+            if (v) _intlDailyMap[key] = v; else _intlDailyMap[key] = null;   // null = 저장된 매칭도 해제
+            intlDailyLanes(false);
+        }
         async function intlDailyLanes(apply) {
             if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
             const fi = document.getElementById('intl-daily-file'), box = document.getElementById('intl-daily-report');
             if (!fi.files[0]) { toast('PDF 파일을 고르세요', 'error'); return; }
             if (apply && !await uiConfirm('PDF 의 조편성을 반영합니다. 해당 종목의 조 배정(레인)을 PDF 대로 바꿉니다. 계속할까요?')) return;
             const fd = new FormData(); fd.append('file', fi.files[0]); fd.append('admin_key', AK()); fd.append('apply', apply ? '1' : '0'); fd.append('force', document.getElementById('intl-daily-force').checked ? '1' : '0');
+            if (Object.keys(_intlDailyMap).length) fd.append('event_map', JSON.stringify(_intlDailyMap));
             toast(apply ? '반영 중…' : '읽는 중…', 'info');
             try {
                 const res = await fetch(`/api/admin/intl/${_selectedCompId}/daily-lanes`, { method: 'POST', body: fd }); const d = await res.json(); if (!res.ok) throw d;
                 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
                 const s = d.stats || {};
+                if (d.apply) { _intlDailyMap = {}; }   // 반영된 매칭은 서버에 저장됨 — 다음 요청부터는 저장본을 쓴다
+                const allEvents = d.events || [];
+                const picker = (x) => {
+                    const cands = x.candidates || [], candIds = new Set(cands.map(c => c.id));
+                    const opt = e => `<option value="${e.id}">${esc(e.label)}</option>`;
+                    return `<select class="t-xs" data-key="${esc(x.key)}" onchange="intlDailyPick(this)" style="max-width:320px;margin-left:6px;padding:2px 4px;border:1px solid var(--gray,#ccc);border-radius:4px;">
+                        <option value="">— 기존 종목에서 고르기 —</option>
+                        ${cands.length ? `<optgroup label="비슷한 종목">${cands.map(opt).join('')}</optgroup>` : ''}
+                        ${allEvents.length ? `<optgroup label="모든 종목">${allEvents.filter(e => !candIds.has(e.id)).map(opt).join('')}</optgroup>` : ''}
+                    </select>`;
+                };
+                const row = (x) => {
+                    const ok = x.status === '반영' || x.status === '반영 예정';
+                    const notFound = x.status === '종목을 찾지 못함';
+                    const mappedTag = x.mapped && x.event ? ` <span style="color:#1d6b3a;">· 직접 매칭 → ${esc(x.event.name)}${x.event.division ? ' ' + esc(x.event.division) : ''}${d.apply ? '' : ` <a href="#" onclick="_intlDailyMap[${JSON.stringify(x.key).replace(/"/g, '&quot;')}]=null;intlDailyLanes(false);return false;" style="color:#b5541b;">해제</a>`}</span>` : '';
+                    return `<div>${ok ? '✓' : '<span style="color:#b5541b;">✗</span>'} ${esc(x.label)} — ${esc(x.status)}${x.event ? ` (${x.heats}조 · ${x.entries}명)` : ''}${mappedTag}${notFound ? picker(x) : ''}${(x.unmatched || []).length ? ` · <span style="color:#b5541b;">명단에 없음: ${esc(x.unmatched.slice(0, 5).join(', '))}${x.unmatched.length > 5 ? ' …' : ''}</span>` : ''}</div>`;
+                };
                 box.style.display = '';
-                box.innerHTML = `<div><b>${d.apply ? '반영됨' : '미리보기'}</b>: 종목 ${s.events}개 · 조 ${s.heats}개(새 조 ${s.heats_created || 0}) · 선수 ${s.entries}명 · 새 선수 ${s.created || 0} · 가린 이름 복원 ${s.unmasked || 0} · 배번 갱신 ${s.bib_updated || 0} · 건너뜀 ${s.skipped || 0}</div>
+                box.innerHTML = `<div><b>${d.apply ? '반영됨' : '미리보기'}</b>: 종목 ${s.events}개 · 조 ${s.heats}개(새 조 ${s.heats_created || 0}) · 선수 ${s.entries}명 · 새 선수 ${s.created || 0} · 가린 이름 복원 ${s.unmasked || 0} · 배번 갱신 ${s.bib_updated || 0}${s.mapped ? ` · 직접 매칭 ${s.mapped}` : ''} · 건너뜀 ${s.skipped || 0}</div>
+                    ${s.not_found ? `<div style="color:#b5541b;">종목을 찾지 못한 구간 ${s.not_found}개 — 줄마다 기존 종목을 고르면 바로 다시 미리보기합니다. 고른 매칭은 '반영' 때 대회에 저장돼 다음 PDF 에도 쓰입니다.</div>` : ''}
                     ${(d.issues || []).length ? `<div style="color:#b5541b;">${d.issues.slice(0, 10).map(esc).join('<br>')}</div>` : ''}
-                    <div style="max-height:260px;overflow:auto;margin-top:4px;border:1px solid var(--gray-light,#e5e7eb);border-radius:6px;padding:6px 8px;">${(d.sections || []).map(x => `<div>${x.status === '반영' || x.status === '반영 예정' ? '✓' : '<span style="color:#b5541b;">✗</span>'} ${esc(x.label)} — ${esc(x.status)}${x.event ? ` (${x.heats}조 · ${x.entries}명)` : ''}${(x.unmatched || []).length ? ` · <span style="color:#b5541b;">명단에 없음: ${esc(x.unmatched.slice(0, 5).join(', '))}${x.unmatched.length > 5 ? ' …' : ''}</span>` : ''}</div>`).join('')}</div>`;
+                    <div style="max-height:260px;overflow:auto;margin-top:4px;border:1px solid var(--gray-light,#e5e7eb);border-radius:6px;padding:6px 8px;">${(d.sections || []).map(row).join('')}</div>`;
                 toast(d.apply ? `반영: 종목 ${s.events}개 · 선수 ${s.entries}명` : `미리보기: 종목 ${s.events}개 · 선수 ${s.entries}명`);
                 if (d.apply) { loadIntlStatus(); if (typeof loadEvents === 'function') loadEvents(); }
             } catch (e) { toast(e.error || '실패', 'error'); }
