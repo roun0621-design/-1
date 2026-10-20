@@ -221,6 +221,15 @@ describe('전국체전 데일리 조편성 + 연맹 실시간 결과', () => {
         const hj = K.parseResultPage(fs.readFileSync(path.join(KX, 'result_height.html'), 'utf8'));
         expect(hj.heats[0].kind).toBe('height'); expect(hj.heats[0].rows[0]).toMatchObject({ rank: 1, order: 3, bib: '00380', name: '하도훈', team: '대전체육고등학교', mark: '1.90' });
         expect(hj.heats[0].rows[0].heights.filter(h => !h.jumpoff).map(h => `${h.height}:${h.marks}`)).toEqual(['1.75:-', '1.8:O', '1.85:O', '1.9:XXO', '1.95:XXX']);
+        // 높이가 13칸을 넘어 머리글 둘째 줄·선수 둘째 행으로 이어진 표(전국체전 10종 장대높이뛰기 2.20…3.90 / 4.00…4.80, 2026-10-20) — 둘째 줄의 높이·시기까지 읽는다
+        const pv = K.parseResultPage(fs.readFileSync(path.join(KX, 'result_height_wrap.html'), 'utf8'));
+        expect(pv.event).toBe('장대높이뛰기(10종)'); expect(pv.heats[0].kind).toBe('height');
+        const pvRows = pv.heats[0].rows, bestO = r => Math.max(0, ...r.heights.filter(h => !h.jumpoff && /O/.test(h.marks)).map(h => h.height));
+        expect(pvRows[0]).toMatchObject({ rank: 1, name: '최동휘', mark: '4.60' });
+        expect(pvRows[0].heights.map(h => h.height)).toEqual([2.2, 2.4, 3.2, 3.4, 3.6, 3.7, 3.8, 3.9, 4, 4.1, 4.2, 4.3, 4.4, 4.6, 4.8]);
+        expect(pvRows[0].heights.slice(8).map(h => h.marks)).toEqual(['-', '-', 'O', '-', 'XO', 'XXO', 'XXX']);
+        for (const r of pvRows.filter(r => /^\d/.test(r.mark))) expect(bestO(r)).toBe(parseFloat(r.mark));   // 넘은 최고 높이 = 표의 기록
+        const nm = pvRows.find(r => r.name === '이승현'); expect(K.statusOf(nm.mark, nm.remark)).toBe('NM'); expect(bestO(nm)).toBe(0);
         const sp = K.parseResultPage(fs.readFileSync(path.join(KX, 'result_distance.html'), 'utf8'));
         expect(sp.heats[0].kind).toBe('distance'); expect(sp.heats[0].rows[1]).toMatchObject({ rank: 2, name: '이수환', attempts: ['16.44', '17.19', '16.92', '17.22', 'X', 'X'], mark: '17.22' });
         const dec = K.parseResultPage(fs.readFileSync(path.join(KX, 'result_combined.html'), 'utf8'));
