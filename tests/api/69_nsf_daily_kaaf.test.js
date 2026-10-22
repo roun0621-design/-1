@@ -288,7 +288,14 @@ describe('전국체전 데일리 조편성 + 연맹 실시간 결과', () => {
             throw new Error('unexpected ' + row.key);
         };
         const applied = [];
+        // 데일리 PDF 가 만든(external_key 없는) 빈 9조 — 사이트 결과표엔 1·2조뿐이니 완료 때 지워져야 한다 (공식 일정의 1~4조는 external_key 가 있어 남는다)
+        const orphan = await db.run('INSERT INTO heat (event_id, heat_number) VALUES (?, 9)', fx.ev100.id);
+        const orphanEntry = await db.get('SELECT id FROM event_entry WHERE event_id=? LIMIT 1', fx.ev100.id);
+        await db.run('INSERT INTO heat_entry (heat_id, event_entry_id, lane_number) VALUES (?,?,9)', orphan.lastInsertRowid, orphanEntry.id);
         const out = await sync.runOnce(db, comp, { source, fetch: nsfFetch, kaafFetch, calc: fx.calc, onApplied: a => applied.push(a) });
+        expect(await db.get('SELECT id FROM heat WHERE id=?', orphan.lastInsertRowid)).toBeFalsy();
+        expect(out.results.empty_heats_removed).toBe(1);
+        expect((await db.all('SELECT heat_number FROM heat WHERE event_id=? ORDER BY heat_number', fx.ev100.id)).map(h => h.heat_number)).toEqual([1, 2, 3, 4]);   // 공식 일정의 조(external_key)는 그대로
         const res = out.results;
         expect(res.table_rows).toBe(5); expect(res.checked).toBe(3); expect(res.updated).toBe(3); expect(res.completed).toBe(3);
         expect(res.unmatched).toEqual(['남자초등부 100m 결승']);
