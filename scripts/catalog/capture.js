@@ -13,6 +13,7 @@ const ids = JSON.parse(fs.readFileSync(IDSP, 'utf8'));
 const PORT = 3350, BASE = `http://localhost:${PORT}`, ADMIN = 'testadmin1234';
 const DESK = { width: 1440, height: 900, deviceScaleFactor: 1 }, MOB = { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const FAKE_NOW = (() => { const d = new Date(); d.setHours(12, 14, 0, 0); return d.getTime(); })();   // 오늘 12:14 — W 100m 결승(12:10) 진행 중, 다음 200m 결승(12:40)
 
 async function startServer() {
     const env = { ...process.env, SQLITE_PATH: DBP, DB_BACKEND: 'sqlite', PORT: String(PORT), NODE_ENV: 'test', ADMIN_PW: ADMIN, OPERATION_KEY: 'testopkey', INTL_SYNC: 'off', AUTH_RATE_LIMIT_MAX: '5000' };
@@ -23,8 +24,8 @@ async function startServer() {
 }
 
 const SHOTS = [
-    { name: 'dashboard_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3500 },
-    { name: 'dashboard_mobile', url: `/dashboard.html?comp=${ids.comp}`, vp: MOB, wait: 3500 },
+    { name: 'dashboard_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3500, action: async p => { await sleep(1200); await p.evaluate(() => window.scrollTo(0, 0)); await sleep(500); } },   // '지금' 카드 자동 스크롤(0.3초 뒤)이 끝난 다음 맨 위(히어로)로
+    { name: 'dashboard_mobile', url: `/dashboard.html?comp=${ids.comp}`, vp: MOB, wait: 3500, action: async p => { await sleep(1200); await p.evaluate(() => window.scrollTo(0, 0)); await sleep(500); } },   // '지금' 카드 자동 스크롤(0.3초 뒤)이 끝난 다음 맨 위(히어로)로
     { name: 'results_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3000, action: async p => { await p.evaluate(id => openResult(id), ids.m100f); await sleep(2500); } },
     { name: 'results_mobile', url: `/dashboard.html?comp=${ids.comp}`, vp: MOB, wait: 3000, action: async p => { await p.evaluate(id => openResult(id), ids.m100f); await sleep(2500); } },
     { name: 'monitor_desktop', url: `/monitor.html?comp=${ids.comp}`, vp: DESK, wait: 3500 },
@@ -43,7 +44,7 @@ const SHOTS = [
     { name: 'home_two_comps_desktop', url: `/index.html`, vp: DESK, wait: 4000 },
     { name: 'final_generated_desktop', url: `/record.html?comp=${ids.comp}&event_id=${ids.m200s}`, vp: DESK, wait: 4000, role: 'admin',
       action: async p => { await p.evaluate(async (eid) => { const r = await API.createFinalWithGroups(eid, 1); state.events = await API.getAllEvents(getCompetitionId()); renderMatrix(); if (r.final_event_id) await showLaneAssignmentReview(r.final_event_id, r.count); }, ids.m200s); await sleep(2500); } },
-    { name: 'dashboard_ja_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3500, lang: 'ja' },
+    { name: 'dashboard_ja_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3500, lang: 'ja', action: async p => { await sleep(1200); await p.evaluate(() => window.scrollTo(0, 0)); await sleep(500); } },   // '지금' 카드 자동 스크롤(0.3초 뒤)이 끝난 다음 맨 위(히어로)로
 ];
 
 const AUDIT = () => {
@@ -75,10 +76,14 @@ const AUDIT = () => {
             const errors = [];
             page.on('pageerror', e => errors.push('PAGEERROR ' + String(e.message || e).slice(0, 200)));
             page.on('console', m => { if (m.type() === 'error') { const t = m.text(); if (!/google-analytics|gtag|\/api\/sse|ERR_ABORTED|favicon/.test(t)) errors.push(t.slice(0, 200)); } });
-            await page.evaluateOnNewDocument((lang, comp, role, key) => {
+            await page.evaluateOnNewDocument((lang, comp, role, key, fakeNow) => {
+                // 브라우저 시계를 오늘 12:14 로 — 시간표가 주간 고정이라 LIVE/NEXT 판정이 촬영 시각과 무관하게 같다
+                try { const Real = Date; const delta = fakeNow - Real.now();
+                    class FakeDate extends Real { constructor(...a) { if (a.length) super(...a); else super(Real.now() + delta); } static now() { return Real.now() + delta; } }
+                    window.Date = FakeDate; } catch (e) {}
                 try { localStorage.setItem('pace_lang', lang); localStorage.setItem('pace_competition_id', String(comp)); sessionStorage.setItem('pr_splash', '1'); localStorage.setItem('pace_ga_consent', 'denied'); localStorage.setItem('pace_sort_mode_' + comp, 'time');
                     if (role) { localStorage.setItem('pace_admin_key', key); localStorage.setItem('pace_role', role); localStorage.setItem('pace_judge_name', 'Kenji Sato'); } } catch (e) {}
-            }, s.lang || 'en', ids.comp, s.role || '', ADMIN);
+            }, s.lang || 'en', ids.comp, s.role || '', ADMIN, FAKE_NOW);
             try {
                 await page.goto(BASE + s.url, { waitUntil: 'networkidle2', timeout: 30000 });
                 await sleep(s.wait || 3000);
@@ -90,7 +95,21 @@ const AUDIT = () => {
             } catch (e) { report[s.name] = { url: s.url, errors: [...errors, 'CAPTURE ' + e.message], hangul: [] }; console.log(`ERR ${s.name}: ${e.message.slice(0, 120)}`); }
             await ctx.close();
         }
-        // (b) 결과지 PDF 1페이지 → PNG (sips)
+        // (3) W 100m 결승 공식 결과지 — 남은 2명 기록을 심판 API 로 넣어 완결한 뒤 종목별 결과지 PDF 1페이지 (모든 화면 컷 뒤에)
+        try {
+            const heats = await (await fetch(`${BASE}/api/heats?event_id=${ids.w100f}`)).json(); const hid = heats[0].id;
+            const rows = await (await fetch(`${BASE}/api/results?heat_id=${hid}`)).json(); const have = new Set(rows.map(r => r.event_entry_id));
+            const ents = await (await fetch(`${BASE}/api/events/${ids.w100f}/entries`)).json();
+            let t = 12.02;
+            for (const e of (Array.isArray(ents) ? ents : ents.entries || [])) { const eid = e.event_entry_id || e.id; if (have.has(eid)) continue; await fetch(`${BASE}/api/results/upsert`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ heat_id: hid, event_entry_id: eid, time_seconds: t, admin_key: ADMIN }) }); t += 0.09; }
+            const r = await fetch(`${BASE}/api/documents/result-sheet/${ids.w100f}?lang=en&key=${ADMIN}`);
+            const pdfPath = path.join(OUT, 'results_sheet_W100mF.pdf'); fs.writeFileSync(pdfPath, Buffer.from(await r.arrayBuffer()));
+            const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'ql-')); execSync(`qlmanage -t -s 2400 -o "${tmp}" "${pdfPath}" >/dev/null 2>&1`);
+            fs.copyFileSync(path.join(tmp, path.basename(pdfPath) + '.png'), path.join(OUT, 'en', 'results_sheet_W100mF.png'));
+            report.results_sheet_W100mF = { url: `/api/documents/result-sheet/${ids.w100f}?lang=en`, errors: r.ok ? [] : ['HTTP ' + r.status], hangul: [], note: 'official result sheet, W 100m Final, qlmanage 2400px' };
+            console.log('OK results_sheet_W100mF', r.status);
+        } catch (e) { report.results_sheet_W100mF = { errors: ['sheet ' + e.message], hangul: [] }; console.log('ERR sheet', e.message); }
+        // (b) 결과지 PDF 1페이지 → PNG
         try {
             const r = await fetch(`${BASE}/api/documents/full-record/${ids.comp}/pdf?lang=en&gender=M&key=${ADMIN}`);
             const pdfPath = path.join(OUT, 'results_book_M.pdf'); fs.writeFileSync(pdfPath, Buffer.from(await r.arrayBuffer()));
@@ -112,11 +131,11 @@ const AUDIT = () => {
         'overlay-scoreboard_desktop': 'Broadcast scoreboard overlay (OBS)', 'overlay-lower-third_desktop': 'Lower third — 1st place pop-up',
         auditlog_desktop: '(c) Audit log — operation log with category filters, date range, CSV', conflict_toast_desktop: '(d) Two judges editing the same mark — conflict toast (server 409 → reload latest)',
         home_two_comps_desktop: '(e) Home — two competitions running at once (LIVE cards)', final_generated_desktop: '(a) Final auto-generated from semifinal — WA lane draw review (Q/q qualifiers, reasons)',
-        dashboard_ja_desktop: '(f) Dashboard in Japanese UI', results_pdf_page1: '(b) Results book PDF — page 1 (Men), rendered at 2400px',
+        dashboard_ja_desktop: '(f) Dashboard in Japanese UI', results_pdf_page1: '(b) Results book PDF — page 1 (Men), rendered at 2400px', results_sheet_W100mF: 'Official result sheet — W 100m Final (header: competition · event · round · date/time · wind, Rank/Lane/Bib/Name/Team/Mark/Remarks, Recorder · Chief Judge · Chief Recorder signatures)',
     };
     const lines = ['# NODE catalog screenshots (English UI) — ' + new Date().toISOString().slice(0, 10), '',
         `- Source: scratch SQLite server (PORT ${PORT}), **fictional** competition \`2026 Seoul International Athletics Meeting\` (+ \`2026 Busan Coastal Invitational\` for the two-competition shots). All names, teams and venues are fictional English — nothing to mask.`,
-        '- Desktop 1440×900, mobile 390×844 @2x. UI language `en` (`localStorage.pace_lang=en`); one shot in `ja`.', '- Seed: `scripts/catalog/seed.js`, capture: `scripts/catalog/capture.js`. `report.json` lists console errors and any visible Hangul per shot (all empty).', '',
+        '- Desktop 1440×900, mobile 390×844 @2x. UI language `en` (`localStorage.pace_lang=en`); one shot in `ja`. Browser clock fixed at 12:14 (timetable 09:00–17:30).', '- Seed: `scripts/catalog/seed.js`, capture: `scripts/catalog/capture.js`. `report.json` lists console errors and any visible Hangul per shot (all empty).', '',
         '| File | URL | Shows |', '|---|---|---|'];
     for (const [k, v] of Object.entries(report)) lines.push(`| en/${k}.png | ${v.url || ''} | ${DESC[k] || ''} |`);
     fs.writeFileSync(path.join(OUT, 'INDEX.md'), lines.join('\n') + '\n');

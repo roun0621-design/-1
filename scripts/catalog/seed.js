@@ -135,26 +135,27 @@ const r2 = v => Math.round(v * 100) / 100;
                 await db.run('INSERT INTO combined_score (event_entry_id, sub_event_name, sub_event_order, raw_record, wa_points) VALUES (?,?,?,?,?)', pe, nm, i + 1, raw, pts); } }
     }
     ids.mdec = mdec; ids.decSubs = subIds;
-    // ── 시간표(오늘, 촬영 시각 기준 상대 시간 — 히어로 카드가 '4시간 지나면 종료' 규칙으로 숨지 않게) ──
-    const hm = off => { const d = new Date(now0 + off * 60000); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-    const rows = [[-170, '100m', 'Men', '예선', m100p, 'track'], [-150, '멀리뛰기', 'Women', '결승', wlj, 'field'], [-130, '100m', 'Women', '예선', w100p, 'track'], [-100, '200m', 'Men', '준결승', m200s, 'track'],
-        [-95, '높이뛰기', 'Men', '결승', mhj, 'field'], [-90, '100m', 'Men', '결승', m100f, 'track'], [-45, '4X100mR', 'Men', '결승', mrel, 'track'], [-6, '100m', 'Women', '결승', w100f, 'track'], [22, '200m', 'Men', '결승', null, 'track']];
-    for (const [off, name, cat, round, eid, sec] of rows) await tt(1, sec, hm(off), name, cat, round, eid, d0);
-    const DEC_OFF = [-160, -120, -75, -40, 10, 16, 24, 30, 36, 42];
-    for (let i = 0; i < SUBS.length; i++) await tt(1, SUBS[i][1] === 'track' ? 'track' : 'field', hm(DEC_OFF[i]), SUBS[i][0], 'Men', `10종(${i + 1})`, mdec, d0);   // 세부종목 줄은 부모 종목에 건다(전국체전 동기화와 같은 모양)
+    // ── 시간표(오늘 09:00~17:30 고정 — 촬영은 capture.js 가 브라우저 시계를 12:14 로 맞춘다) ──
+    const rows = [['09:30', '100m', 'Men', '예선', m100p, 'track'], ['10:00', '높이뛰기', 'Men', '결승', mhj, 'field'], ['10:10', '100m', 'Women', '예선', w100p, 'track'], ['10:40', '200m', 'Men', '준결승', m200s, 'track'],
+        ['11:00', '멀리뛰기', 'Women', '결승', wlj, 'field'], ['11:20', '4X100mR', 'Men', '결승', mrel, 'track'], ['11:40', '100m', 'Men', '결승', m100f, 'track'], ['12:10', '100m', 'Women', '결승', w100f, 'track'], ['12:40', '200m', 'Men', '결승', null, 'track']];
+    for (const [time, name, cat, round, eid, sec] of rows) await tt(1, sec, time, name, cat, round, eid, d0);
+    const DEC_T = ['09:00', '09:45', '10:30', '11:15', '12:30', '13:30', '14:15', '15:00', '16:00', '17:15'];
+    for (let i = 0; i < SUBS.length; i++) await tt(1, SUBS[i][1] === 'track' ? 'track' : 'field', DEC_T[i], SUBS[i][0], 'Men', `10종(${i + 1})`, mdec, d0);   // 세부종목 줄은 부모 종목에 건다(전국체전 동기화와 같은 모양)
     // ── 둘째 대회(홈 '두 대회 동시 운영' 카드용): 종목 몇 개 ──
     { const e1 = await mkEvent({ name: '800m', category: 'track', gender: 'F', round_type: 'final', round_status: 'in_progress', cid: comp2 }); const e2 = await mkEvent({ name: '포환던지기', category: 'field_distance', gender: 'M', round_type: 'final', round_status: 'completed', cid: comp2 }); const e3 = await mkEvent({ name: '5000m', category: 'track', gender: 'M', round_type: 'final', round_status: 'created', cid: comp2 });
       const hid = await heat(e1, 1); for (let i = 0; i < 8; i++) { const a = await mkAthlete('F', comp2); const ee = await entry(e1, a.id, 'checked_in'); await lane(hid, ee, i + 1); if (i < 4) await res(hid, ee, r2(124 + rnd() * 6), null); }
       const hid2 = await heat(e2, 1); for (let i = 0; i < 6; i++) { const a = await mkAthlete('M', comp2); const ee = await entry(e2, a.id, 'checked_in'); await lane(hid2, ee, i + 1); for (let at = 1; at <= 3; at++) await res(hid2, ee, null, r2(15 + rnd() * 3), '', '', at); }
       void e3; }
     // ── 운영 로그(영문) ──
-    const now = Date.now(); const log = async (min, msg, cat, by) => db.run('INSERT INTO operation_log (competition_id, message, category, performed_by, created_at) VALUES (?,?,?,?,?)', comp, msg, cat, by, new Date(now - min * 60000).toISOString().replace('T', ' ').slice(0, 19));
+    const now = new Date(d0 + 'T12:12:00').getTime();   // 촬영 시계(12:14) 기준
+    const log = async (min, msg, cat, by) => db.run('INSERT INTO operation_log (competition_id, message, category, performed_by, created_at) VALUES (?,?,?,?,?)', comp, msg, cat, by, new Date(now - min * 60000).toISOString().replace('T', ' ').slice(0, 19));
     const L = [[2, 'Result saved: W 100m Final · lane 6 · 11.58 (+0.7)', 'record', 'Judge · Kenji Sato'], [3, 'Result saved: W 100m Final · lane 5 · 11.52 (+0.7)', 'record', 'Judge · Kenji Sato'], [4, 'Wind set: W 100m Final · +0.7', 'record', 'Judge · Kenji Sato'],
         [6, 'Call room: W 100m Final · 8/8 checked in', 'callroom', 'Call room · Arisa Tanaka'], [9, 'Round completed: M 100m Final (official)', 'completion', 'Chief Judge'], [11, 'Result corrected: M 100m Final · lane 3 · 10.41 → 10.38', 'record', 'Chief Judge'],
         [14, 'Final created: M 200m · 8 athletes (Q6 + q2) · WA serpentine seeding', 'round', 'Chief Judge'], [16, 'Qualification approved: M 200m Semifinal', 'round', 'Chief Judge'], [21, 'Long Jump W · attempt 4 started (top 8)', 'record', 'Judge · Lucas Meyer'],
         [25, 'High Jump M · bar raised to 2.18', 'record', 'Judge · Somchai P.'], [33, 'Call room: M 200m Semifinal · 16/16 checked in', 'callroom', 'Call room · Arisa Tanaka'], [40, 'Undo: result deleted M 100m Heat 2 · lane 4 (duplicate entry)', 'revert', 'admin'],
         [52, 'Timetable updated: W 100m Final 12:00 → 12:10', 'admin', 'admin'], [70, 'Operation key issued: Judges (expires today 20:00)', 'admin', 'admin'], [95, 'Athlete list imported: 64 athletes · 12 teams', 'admin', 'admin']];
     for (const [min, msg, cat, by] of L) await log(min, msg, cat, by);
+    await db.run("UPDATE event_entry SET status='checked_in', status_updated_at=? WHERE event_id IN (SELECT id FROM event WHERE round_status='completed')", d0 + 'T09:00:00');   // 끝난 종목은 전원 소집 완료
     // 스코어보드 키(전광판 매칭 경고가 안 뜨게) + 운영키 한 개(심판 키 경고가 안 뜨게)
     for (const h of await db.all('SELECT h.id, h.heat_number, e.name, e.gender, e.round_type, (SELECT COUNT(*) FROM heat x WHERE x.event_id=e.id) n FROM heat h JOIN event e ON e.id=h.event_id'))
         await db.run('UPDATE heat SET scoreboard_key=? WHERE id=?', `${h.gender}-${h.name.replace(/\s/g, '')}-${h.round_type}${Number(h.n) > 1 ? '-' + h.heat_number : ''}`, h.id);
