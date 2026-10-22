@@ -162,7 +162,7 @@
             }
             list.innerHTML = logs.map(l => {
                 const dt = new Date(l.created_at + 'Z');
-                const timeStr = dt.toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const _lg = (window.PaceI18n && PaceI18n.getLang && PaceI18n.getLang()) || 'ko'; const timeStr = dt.toLocaleString(_lg === 'en' ? 'en-US' : _lg === 'ja' ? 'ja-JP' : 'ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });   // 보는 언어의 로케일 (2026-10-22)
                 return `<div class="oplog-entry cat-${l.category}">
                     <span class="oplog-time">${timeStr}</span>
                     <span class="oplog-cat cat-${l.category}">${catLabels[l.category] || l.category}</span>

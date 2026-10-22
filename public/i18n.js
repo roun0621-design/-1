@@ -14,7 +14,7 @@
     'use strict';
 
     var STORAGE_KEY = 'pace_lang';
-    var DICT_VERSION = (window.PACE_I18N_VERSION || '19');
+    var DICT_VERSION = (window.PACE_I18N_VERSION || '20');   // 2026-10-22: 뒤로/앞으로·글씨·메달·감사 로그 배지·레인 배정 사유·관리자 라운드 툴팁
     var LANGS = [
         { code: 'ko', label: '한국어', short: 'KO' },
         { code: 'en', label: 'English', short: 'EN' },
@@ -280,6 +280,9 @@
         ensureDict(lang, function () {
             translateAll(lang);
             try { document.documentElement.lang = lang; document.documentElement.setAttribute('data-lang', lang); } catch (e) {}
+            // 언어 버튼 툴팁은 보는 언어로 ('한국어' 가 영문 화면에 남지 않게 — 2026-10-22)
+            try { var NM = { ko: { ko: '한국어', en: 'English', ja: '日本語' }, en: { ko: 'Korean', en: 'English', ja: 'Japanese' }, ja: { ko: '韓国語', en: '英語', ja: '日本語' } }[lang] || {};
+                document.querySelectorAll('#pace-lang-switcher button[data-lang]').forEach(function (b) { var c = b.getAttribute('data-lang'); if (NM[c]) b.setAttribute('title', NM[c]); }); } catch (e) {}
             updateSwitcherActive(lang);
             try { window.dispatchEvent(new CustomEvent('pace:langchange', { detail: { lang: lang } })); } catch (e) {}
         });
@@ -301,7 +304,7 @@
         box.appendChild(globe);
         LANGS.forEach(function (l) {
             var b = document.createElement('button');
-            b.type = 'button'; b.textContent = l.short; b.setAttribute('data-lang', l.code); b.setAttribute('title', l.label);
+            b.type = 'button'; b.textContent = l.short; b.setAttribute('data-lang', l.code); b.setAttribute('title', (({ en: { ko: 'Korean', en: 'English', ja: 'Japanese' }, ja: { ko: '韓国語', en: '英語', ja: '日本語' } })[getLang()] || {})[l.code] || l.label);   // 보는 언어로 (2026-10-22)
             b.style.cssText = 'border:0;background:transparent;cursor:pointer;font-size:11px;font-weight:700;padding:2px 6px;border-radius:999px;line-height:1.3;transition:all .15s;color:' + (inline ? '#6b7280' : '#cdd3df');
             b.addEventListener('click', function () { setLang(l.code); });
             box.appendChild(b);

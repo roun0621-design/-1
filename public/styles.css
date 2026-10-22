@@ -190,6 +190,7 @@ a, button, [role="button"], .btn, .tab, .nav-link,
 }
 .page-title-bar h2 { font-size: 17px; font-weight: 800; }
 .page-title-bar .page-sub { font-size: 11px; color: var(--text-muted); font-family: var(--font-brand); }
+html[data-lang="en"] .page-sub, html[data-lang="ja"] .page-sub { display: none; }   /* 제목이 번역되면 영문 부제가 두 번 보여서 (2026-10-22) */
 .back-link {
     display: inline-flex; align-items: center; gap: 4px;
     color: var(--gray-dark); font-size: 12px; font-weight: 600;
