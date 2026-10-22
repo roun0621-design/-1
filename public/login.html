@@ -7,20 +7,20 @@
     <meta name="description" content="PACE RISE 운영진/관리자 로그인">
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
-    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
-    <meta name="theme-color" content="#b79f58">
-    <link rel="stylesheet" href="styles.css?v=72">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
+    <meta name="theme-color" content="#F4F3EF">
+    <link rel="stylesheet" href="styles.css?v=81">
     <link rel="stylesheet" href="/lib/responsive.css?v=1">
     <style>
         :root {
-            --brand-gold: #b79f58;
-            --brand-dark: #1a1f2b;
+            --brand-gold: #C24A2E;
+            --brand-dark: #0E0E10;
         }
         body {
             min-height: 100vh;
             margin: 0;
             background:
-                radial-gradient(ellipse 800px 600px at 20% 0%, rgba(183,159,88,0.08), transparent),
+                radial-gradient(ellipse 800px 600px at 20% 0%, rgba(194,74,46,0.08), transparent),
                 radial-gradient(ellipse 600px 500px at 100% 100%, rgba(26,31,43,0.06), transparent),
                 #f7f5f0;
             display: flex;
@@ -35,7 +35,7 @@
             border-radius: 16px;
             box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 32px rgba(26,31,43,0.08);
             padding: 32px 30px 26px;
-            border: 1px solid rgba(183,159,88,0.18);
+            border: 1px solid rgba(194,74,46,0.18);
         }
         .login-header { text-align: center; margin-bottom: 22px; }
         .login-header .brand {
@@ -45,7 +45,8 @@
             color: var(--brand-dark);
             margin-bottom: 4px;
         }
-        .login-header .brand .accent { color: var(--brand-gold); }
+        .login-header .brand { display:inline-flex; align-items:baseline; gap:8px; }
+        .login-header .brand .brand-node { font-family: var(--font-brand, 'Audiowide', sans-serif); font-size: 13px; letter-spacing: 1.5px; color: var(--brand-dark); }
         .login-header .sub { font-size: 13px; color: #7a7066; letter-spacing: 1px; }
 
         /* ── 패널 (운영진/심판 메인) ── */
@@ -68,7 +69,7 @@
             outline: none;
             border-color: var(--brand-gold);
             background: #fff;
-            box-shadow: 0 0 0 3px rgba(183,159,88,0.15);
+            box-shadow: 0 0 0 3px rgba(194,74,46,0.15);
         }
         .field input::placeholder { color: #b8aea0; }
 
@@ -76,7 +77,7 @@
             margin-top: 6px;
             width: 100%;
             padding: 13px 20px;
-            background: linear-gradient(135deg, var(--brand-dark) 0%, #2a3340 100%);
+            background: var(--brand-dark);
             color: #fff;
             border: none;
             border-radius: 10px;
@@ -108,7 +109,7 @@
             color: #8a7e6f;
             line-height: 1.6;
             padding: 8px 10px;
-            background: rgba(183,159,88,0.06);
+            background: rgba(194,74,46,0.06);
             border-radius: 6px;
             border-left: 3px solid var(--brand-gold);
         }
@@ -165,8 +166,8 @@
             display: none;
             margin-top: 12px;
             padding: 14px;
-            background: linear-gradient(180deg, rgba(183,159,88,0.06) 0%, rgba(183,159,88,0.02) 100%);
-            border: 1px solid rgba(183,159,88,0.25);
+            background: #FBF1EE;
+            border: 1px solid rgba(194,74,46,0.25);
             border-radius: 10px;
             flex-direction: column;
             gap: 12px;
@@ -184,13 +185,13 @@
             background: #fff;
         }
         .admin-panel .btn-login {
-            background: linear-gradient(135deg, var(--brand-gold) 0%, #c8b06e 100%);
+            background: var(--brand-gold);
             color: #fff;
             padding: 11px 18px;
             font-size: 13.5px;
             min-height: 42px;
         }
-        .admin-panel .btn-login:hover { box-shadow: 0 4px 14px rgba(183,159,88,0.35); }
+        .admin-panel .btn-login:hover { box-shadow: 0 4px 14px rgba(194,74,46,0.35); }
         .admin-panel .panel-title {
             font-size: 12px;
             font-weight: 700;
@@ -245,7 +246,7 @@
     <div class="login-wrap">
         <div class="login-card">
             <div class="login-header">
-                <div class="brand">PACE <span class="accent">RISE</span></div>
+                <div class="brand"><img class="brand-wordmark" src="/brand/wordmark.svg" alt="PACE RISE" style="height:28px;width:auto;"><span class="brand-node">Node</span></div>
                 <div class="sub">로그인</div>
             </div>
 
@@ -283,7 +284,7 @@
             <div class="admin-toggle-row">
                 <button type="button" class="admin-toggle-btn" id="admin-toggle-btn" aria-expanded="false" aria-controls="panel-jwt">
                     관리자·매니저 로그인
-                    <span class="badge-new">NEW</span>
+
                     <span class="chev">▼</span>
                 </button>
 
@@ -416,20 +417,20 @@
                 //   - 프론트엔드(common.js, admin.html, index.html 등)가 권한 판정을
                 //     localStorage.pace_role 로 하고 있어서, 이 값이 없으면
                 //     관리자로 JWT 로그인해도 UI 가 viewer 로 동작 (기능 다 막힘)
-                //   - admin 권한의 password 평문은 절대 LS 에 저장하지 않음 (보안)
-                //   - pace_admin_key 는 비워둠 → 키가 필요한 API 호출 경로는 점진적으로
-                //     PaceAuth.authFetch() / Authorization: Bearer 로 마이그레이션 예정
-                //   - 단, 현재 admin.html 의 일부 핸들러가 pace_admin_key 를 직접
-                //     요구하므로, 임시방편으로 password 를 그대로 저장 (사용자가 이미
-                //     로그인 폼에 입력했으므로 동일 세션 내 노출이라 위험도 동등)
-                //     → TODO: 다음 단계에서 모든 admin API 호출을 JWT 헤더로 전환
+                //   - 비밀번호 평문은 저장하지 않는다 (2026-09). 서버의 JWT 브리지가 로그인 쿠키(pr_access)를 보고
+                //     레거시 키 검사를 통과시켜 주므로, 기존 코드가 요구하는 pace_admin_key 에는 비밀이 아닌 표식만 둔다.
                 // ─────────────────────────────────────────────────────────────
-                const role = (data.user && data.user.role) || 'admin';
+                const rawRole = (data.user && data.user.role) || 'admin';
+                const role = rawRole === 'operator' ? 'operation' : rawRole;   // 레거시 UI 역할명과 맞춤
                 localStorage.setItem('pace_role', role);
                 localStorage.setItem('pace_judge_name', (data.user && (data.user.display_name || data.user.username)) || username);
-                // password 를 pace_admin_key 에 저장 — 기존 admin API 호환을 위해 (임시)
-                // 서버측 isAdminKey() 가 bcrypt.compareSync(key, ACCESS_KEYS.adminHash) 하므로 평문 필요
-                localStorage.setItem('pace_admin_key', password);
+                localStorage.setItem('pace_admin_key', 'jwt-session');
+                try { localStorage.setItem('pr_refresh_at', String(Date.now())); } catch (e) {}
+                if (data.weak_password) {
+                    showMsg('error', '비밀번호가 너무 짧거나 흔한 값입니다. 비밀번호 변경 화면으로 이동합니다…');
+                    setTimeout(() => { location.href = '/account.html?weak=1'; }, 1200);
+                    return;
+                }
                 showMsg('success', `${data.user.display_name || data.user.username} 으로 로그인되었습니다. 이동합니다...`);
                 redirectAfterLogin();
             } catch (e) {
@@ -489,5 +490,6 @@
             }
         })();
     </script>
+    <script src="/i18n.js?v=7"></script>
 </body>
 </html>

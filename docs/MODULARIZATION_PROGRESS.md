@@ -86,3 +86,76 @@ require('./lib/routes/<domain>')(app, { db, isAdminKey, opLog });
 ```
 
 다음 사이클 목표: 누적 10% (≈1,750 lines, ≈28 routes)
+
+### ✅ qualifications 추출 (6/10)
+
+| 모듈 | 라우트 수 | 의존성 |
+|------|---------|--------|
+| qualifications.js | 3 | db, isOperationKey |
+
+- 동작 동일 추출 (인증 없음 — 심판 화면용, 운영 정책상 키 미요구)
+- GET `/api/qualifications`는 dashboard/results 조회용
+
+### ✅ field_card_import 신규 모듈 (9/15)
+
+server.js 에서 추출한 것이 아니라 처음부터 모듈로 작성 (`lib/routes/field_card_import.js`, 4 라우트).
+- 파서/계산/검산은 `lib/fieldCardImport.js` 순수 함수로 분리 → DB 없이 단위 테스트 (`tests/lib/fieldCardImport.test.js`)
+- deps: `db, isAdminKey, opLog, broadcastSSE, audit, upload, recx{normBib,divToken,genderOf,round}, runRecordCompareHook`
+- `recx` 는 server.js 의 기록 엑셀 가져오기 정규화 헬퍼(`_recx*`)를 그대로 주입 — 종별/성별/라운드 해석 규칙 단일화
+- `runRecordCompareHook` 은 `lib/routes/results.js` 의 mount 반환값으로 노출 (신기록 감지 경로 재사용)
+- 문서: `docs/FIELD_CARD_IMPORT.md`
+- 사진 → 서버 AI 전사(`/api/field-card/transcribe`)는 `lib/fieldCardVision.js` 가 Claude API 호출과 카드 JSON → 시트 변환을 담당하고, 라우트는 같은 모듈에 있음. 의존성 `@anthropic-ai/sdk` 추가 (9/15)
+
+### ✅ heat_assignment 추출 (2026-09-18)
+- `lib/routes/heat_assignment.js` — 조편성 미리보기/적용 2라우트 + 파서·정규화 헬퍼 (867줄). deps: db, upload, isAdminKey, opLog, normalizeDivisionLabel, resolveFedEventName, guessEventCategory, autoLinkDisplayTimetable
+- 회귀: tests/flows/01_yecheon_pipeline(30건), tests/api/25_heat_assignment_round_sync. server.js 15,372 → 14,509줄
+
+### ✅ timing_import 추출 (2026-09-18)
+- `lib/routes/timing_import.js` — .lif/기록 xlsx/.txt 가져오기 5라우트 + 파서·매칭 헬퍼 (891줄). 반환 `{ recx }` 를 field_card_import 가 공유. server.js 14,509 → 13,714줄
+
+### ✅ pdf_documents 추출 (2026-09-18)
+- `lib/routes/pdf_documents.js` — 스타트리스트·결과지(+PNG)·ID카드 PDF 3라우트 + 글꼴/표/머리글 헬퍼 (1,658줄). deps: db, getDocTemplate, orderByBibSql, PORT. server.js 13,714 → 12,060줄
+
+### ✅ event_records 추출 (2026-09-18)
+- `lib/routes/event_records.js` — 종목별 기록표 4라우트 + 부 마스터 5라우트 (254줄). server.js 12,060 → 11,810줄
+
+### ✅ callroom 추출 (2026-09-18)
+- `lib/routes/callroom.js` — 소집 출석·완료·경기 완료 6라우트 (328줄). 반환 `{ syncCombinedSubEventCheckin }`. server.js 11,810 → 11,490줄
+- 남은 큰 덩어리: admin 48 · events(생성·조·레인) 20여 (display 는 2026-09-22 추출 완료)
+- 급조 코드(record-fieldpad.js): 인라인 입력 모드는 이미 제거됐고 키패드 모듈이 4개 함수만 감싼다. 브라우저 테스트가 없어 본체 병합은 보류(모듈로 유지)
+
+### ✅ 종목 매칭 통합 — `lib/eventMatch.js` (2026-09-22)
+- 시간표 자동연결(`lib/routes/timetable.js autoLinkTimetable`), 계측 파일 .lif/.txt/기록 xlsx(`lib/routes/timing_import.js _recxResolveHeat`), 노출용 시간표(`server.js autoLinkDisplayTimetable`)가 각자 갖던 `norm()`·종별 해석·후보 고르기를 한 모듈로. `normEvt`(공백·콤마·×·대소문자), `parseCategory`, `combinedParentName`, `divToken`, `findEvents`(정확한 이름 우선 → 접두는 옵션, 라운드 폴백 옵션, 부 토큰 좁히기, 부 라벨 엄격 옵션), `pickByGender`.
+- 판정이 바뀐 곳: 노출용 시간표도 이제 콤마를 지운다('10,000m' = '10000m'). 나머지는 기존 동작 그대로(테스트 `tests/rules/13_event_match` 9건 + 기존 가져오기·자동연결 테스트).
+
+### ✅ 브라우저 렌더 테스트 — `tests/browser/` (2026-09-22)
+- `BROWSER_TESTS=1 npm run test:browser` (기본 `npm test` 는 건너뜀). 서버를 임시 포트로 띄우고 puppeteer 로 홈·대시보드·결과·소집실·기록입력을 360/768/1024px 에서 열어 JS 예외·CSP 거부·가로 넘침·핵심 요소를 검사, 스크린샷은 `tests/browser/shots/`(git 무시).
+- 첫 실행에서 잡은 결함: 관심 국가 없는 일반 대회에서 히어로 '대표팀 명단' 반쪽이 보임(`hidden` 을 `.hero-schedule{display:flex}` 가 덮음) → `[hidden]{display:none !important}`.
+
+### ✅ display 추출 (2026-09-22)
+- `lib/routes/display.js` — 노출용 대회 25 라우트 + `autoLinkDisplayTimetable`·`autoMatchDisplayRoster`(반환값). server.js 11,734 → 9,842줄.
+- deps: db, upload, XLSX, fs, isAdminKey, isOperationKey, opLog, normalizeDivisionLabel, parseJongbyul/parseJongbyulNormalized/parseDisplayRound, excelTimeToHHMM, cleanTimetableEventName, guessEventCategory(다른 모듈도 쓰므로 server.js 에 잔류), timetableRoutes(`autoLinkTimetable` 폴백).
+- 주의: `autoLinkDisplayTimetable` 은 server.js 의 종목 생성·수정·라운드 완료 라우트와 heat_assignment 모듈이 부른다 → heat_assignment 에는 늦게 바인딩되는 래퍼로 넘긴다(마운트 순서 TDZ). 모듈 안 상대 require 는 `../eventMatch`.
+- 남은 큰 덩어리: admin 48 · events 20 · documents 6.
+
+### ✅ admin 계열 5개 모듈 추출 (2026-09-22) — server.js 9,842 → 8,150줄
+| 모듈 | 라우트 | deps 특이점 |
+|---|---|---|
+| `admin_backup.js` | reset-db · backup · db-backup status/trigger · full-backup download/preview/restore (7) | BACKUP_DIR·performBackup·backupS3·_applyJwtBridge·multer |
+| `admin_keys.js` | change-keys · current-keys · operation-keys ×5 · registered-judges · site-config ×2 (11) | ACCESS_KEYS(참조 공유)·운영키 캐시 헬퍼·securityCheck |
+| `admin_events.js` | 공개 선수 조회 ×2 · 선수 CRUD/출전 ×7 · 종목 CRUD/자동정렬/영상 URL ×8 · 조 관리 ×4 · force-status (24) | `_normalizeAthletePhone`·`_normalizeGrade`·`_normEvtName`·`autoSortCompetitionEvents` 를 반환값으로 server.js 가 다시 바인딩(연맹 업로드가 씀). `autoLinkDisplayTimetable` 은 display 모듈이 뒤에서 마운트되므로 늦게 바인딩되는 래퍼 |
+| `event_duplicates.js` | event-duplicates 진단/정리/병합 (3) | db·isAdminKey·opLog |
+| `event_record_admin.js` | event-record-matching · normalize-all · relink · all-candidates (4) | normalizeEventNameServer(recordCompare)·_divisionCodeFor |
+| `external_keys.js` | external-keys 발급/목록/폐기/로그 (4) | _generateApiKey·_hashApiKey·_keyPrefix |
+- 추출 도구: 블록의 자유 변수를 server.js 최상위 정의에서 자동으로 골라 deps 로, 블록 안 정의 중 밖에서 쓰는 이름은 반환값으로. 마운트 행보다 뒤에 정의되는 dep 은 래퍼로 늦게 바인딩(TDZ).
+- 남은 admin 인라인: brand-image · security-status · verify · heats/update-entries · heat-entry/set-group (각자 다른 도메인 옆에 있어 그대로 둠). 남은 큰 덩어리: events 20 · documents 6.
+
+### ✅ 종목·조 핵심 조회와 라운드 4개 모듈 추출 (2026-09-22) — server.js 8,150 → 7,150줄
+| 모듈 | 라우트 | 비고 |
+|---|---|---|
+| `events_read.js` | events 목록/상세/엔트리/조 배정 조회, heats 목록/엔트리 (6) | 대시보드·기록입력·소집이 읽는 핵심 조회. deps db·orderByBibSql |
+| `heat_meta.js` | 조 풍속/이름/전광판 키, 라이브 결과, 높이 시도 저장/삭제 (7) | results 모듈 뒤·combined_scores 앞 — 등록 순서 유지 |
+| `entry_meta.js` | 바코드 조회, 출전 상태/메모/수동 순위, 종목 소집 메모 (6) | `syncCombinedSubEventCheckin` 은 callroom 모듈이 바로 뒤에서 마운트 → 늦게 바인딩 |
+| `rounds.js` | 결승/준결승 생성, 레인 배정 조회, 종목 삭제(+`_undoSnapshotEvent` 반환), 세부종목 CRUD·정렬·선수 동기화, 레인 일괄 수정/배정, 전체 결과 (14) | `autoLinkDisplayTimetable` 늦게 바인딩 |
+- 등록 순서를 지키려고 results·combined_scores·callroom·qualifications 마운트 사이의 네 덩어리를 각각 제자리에서 모듈로 바꿨다(합치지 않음).
+- 남은 인라인 라우트: documents 6 · public 4 · external 4 · scoreboard 3 · athletes 업로드 3 · events/upload · 기타 단건들. server.js 는 부팅·미들웨어·DB·공용 헬퍼·WS·연맹 업로드가 주.

@@ -20,6 +20,14 @@ module.exports = async function () {
 
     process.env.SQLITE_PATH = testDbPath;
     process.env.DB_BACKEND = 'sqlite';      // 명시적 강제 (postgres 환경 충돌 방지)
+    // PostgreSQL 경로 검증: TEST_DB_BACKEND=postgres TEST_DATABASE_URL=postgres://user@host:port/<템플릿DB> npm test
+    //   템플릿 DB 에 db/schema.pg.sql 이 적용돼 있어야 한다. 파일마다 템플릿에서 DB 를 복제해 쓴다(tests/setup/test-env.js).
+    if ((process.env.TEST_DB_BACKEND || '').toLowerCase() === 'postgres') {
+        if (!process.env.TEST_DATABASE_URL) throw new Error('TEST_DB_BACKEND=postgres 에는 TEST_DATABASE_URL 이 필요합니다');
+        process.env.DB_BACKEND = 'postgres';
+        process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+        console.log(`[test] PostgreSQL 경로: ${process.env.TEST_DATABASE_URL.replace(/:[^:@/]+@/, ':***@')}`);
+    }
     process.env.NODE_ENV = 'test';
     process.env.PORT = '0';                  // supertest 가 ephemeral 포트 사용
 
@@ -27,12 +35,24 @@ module.exports = async function () {
     process.env.ADMIN_ID = process.env.ADMIN_ID || 'admin';
     process.env.ADMIN_PW = process.env.ADMIN_PW || 'testadmin1234';
     process.env.OPERATION_KEY = process.env.OPERATION_KEY || 'testopkey';
+    // 전 테스트가 한 IP(127.0.0.1)에서 로그인 API 를 호출 → 운영 한도(30/분)에 걸려 간헐 실패하지 않게 상향
+    process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX || '5000';
 
     // 디버깅용 로그 (테스트 출력에 1회만 보임)
     console.log(`[test] SQLITE_PATH = ${testDbPath}`);
 
     // 종료 시 정리
     return async () => {
+        // PG: 파일별로 복제한 DB 정리
+        if ((process.env.TEST_DB_BACKEND || '').toLowerCase() === 'postgres') {
+            try {
+                const { execSync } = require('child_process');
+                const u = new URL(process.env.TEST_DATABASE_URL);
+                const admin = `${u.protocol}//${u.username}${u.password ? ':' + u.password : ''}@${u.hostname}:${u.port || 5432}/postgres`;
+                const names = execSync(`psql "${admin}" -tAc "SELECT datname FROM pg_database WHERE datname LIKE 'prtest_%'"`, { encoding: 'utf8' }).split('\n').map(x => x.trim()).filter(Boolean);
+                for (const n of names) execSync(`psql "${admin}" -qc "DROP DATABASE IF EXISTS \"${n}\""`, { stdio: 'ignore' });
+            } catch (e) { console.warn('[test] PG 복제 DB 정리 실패:', e.message); }
+        }
         try {
             // tmpDir 전체 삭제
             fs.rmSync(tmpDir, { recursive: true, force: true });

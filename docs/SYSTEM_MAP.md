@@ -113,6 +113,9 @@ server.js
     ↓ lib/fullRecordExcel.js / lib/fullRecordPdf.js
     ↓ (DB에서 데이터 조회)
 PDF/Excel 파일 응답
+
+GET /api/documents/kjaf-record/:compId/excel  → lib/kjafRecordSheet.js  (한국중·고육상연맹 종합기록지, 2026-09 Phase 7-①)
+    시트 묶음(남중/여중/N학년부/믹스릴레이/신기록현황)은 종목의 division 으로 결정 (planSheets). 결승 라운드만, 순위 8칸, 승인된 신기록만 CR/DR/KR.
 ```
 
 ---
@@ -181,7 +184,7 @@ html2canvas-pro.min.js      → 결과지 스크린샷
 
 ## 6. 죽은 코드 / 정리 대상 식별
 
-### 🗑️ Tier 1 — 즉시 삭제 가능 (영향 없음)
+### 🗑️ Tier 1 — 즉시 삭제 가능 (영향 없음) — 2026-09-18 정리 완료(`_convert.js`, `download_server.py`, `db_import/`, `public/test-*.lif`, `i18n-demo.html` 포함)
 
 | 항목 | 위치 | 이유 |
 |---|---|---|
@@ -432,3 +435,60 @@ await db.transaction(async () => {
 - 단위 테스트 28/28 ✅
 - 동시쓰기 250/250 ✅
 - 에러 로그 0건 ✅
+
+## 대회 시간대 (2026-09-30)
+- `competition.timezone`(IANA, 기본 `Asia/Seoul`) — 관리자 대회 설정·홈 '대회 추가'에서 지정. 검증 `lib/tz.js isValidTz`.
+- 서버: '오늘' 판정은 전부 `TZ.todayIn(TZ.compTz(comp))` — 자동 상태 전환(`competitions.js autoUpdateCompetitionStatus`, 대회마다 따로), 종료 잠금(`isCompetitionEnded`), 대회 재개, 운영 체크리스트, 시간표 `is_today`·`/today`·업로드의 '지난 날' 보존, 국제대회 동기화 기간 판정. 날짜 더하기는 `TZ.shiftYmd`(서버 시간대 무관).
+- 로그·백업 파일명의 `kstNow()` 는 서버 기본 시간대(`APP_TZ`, 기본 Asia/Seoul) — 대회와 무관.
+- 화면: `API.getCompetition` 이 `window.PACE_TZ` 를 채우고, `paceNow()`(common.js)가 대회 시간대의 오늘·현재 분을 준다 — 소집 시간창(−10/+5분), 대시보드 '지금'·NEXT·히어로 일차 전환, 시간표 창 일차 자동 선택, 종료 대회 진입 차단.
+
+## 종목 코드 (2026-09-30, 해외 대회 대비 B2)
+- `event.code`(NULL 허용) — `lib/eventCatalog.js` 사전의 코드(`100`·`110H`·`3000SC`·`5000W`·`LJ`·`SP`·`DEC`·`4X100`·`4X400X`(혼성 계주)·`HM`·`MAR`·`20KW` …). `event.name`(한글 정식명 + 부 접미)은 그대로 두고 코드를 옆에 채운다.
+- 채우는 곳: 관리자 종목 생성·종목 xlsx 업로드·연맹 통합 업로드·국제 동기화·준결승/결승 생성(부모 코드 복사)·혼성 세부종목 생성. 그 밖의 경로(노출용 대회·조편성 업로드·복제)는 부팅 `backfillEventCodes()` 와 `GET /api/events` 의 lazy 채움이 잡는다. 사전에 없는 이름은 NULL.
+- 이름 → 코드 매핑 `codeOf()`: `recordKey` 정규화(라운드·성별·부 접미·콤마·단위) → 사전(한글·영문·약어·연맹·Bornan 표기 별칭) → 낱말 단위 부분 일치(글자 단위 아님 — '4x400m' 안의 '400m' 오인 방지).
+- 쓰는 곳: `GET /api/events` 의 `code`·`name_en`(영문 표시명, B3 영문 UI 의 기준), 풍속 규제 판정(`recordCompare.isWindAffectedEvent` 가 코드도 본다). 정렬(`sortIndex`)·문서·오버레이는 아직 이름 기준 — B3/B5 에서 코드로 옮긴다.
+- 라벨 사전 `lib/labels.js`(라운드·라운드 상태·대회 상태·성별·종목군·엔트리 상태·상태코드·진출 표기·기록 종류·학교급, ko/en) + `division_master.label_en`(비우면 성별·학교급·학년으로 자동). `GET /api/labels?lang=en|ko` 가 사전 + 종목 사전(`events`) + 부(`divisions`, `division_by_ko`)를 한 번에 준다(5분 캐시) — B3 영문 UI 가 여기서 표기를 고른다.
+
+## 다국어 (2026-09-30, B3)
+- `public/i18n.js` v2: 한국어 원문이 키인 사전(`public/locales/en.json`·`ja.json`, 각 ≈3,680항목)으로 전 페이지(오버레이·open·privacy 제외)의 DOM 텍스트·속성·문서 제목을 실시간 번역(MutationObserver). 언어는 `localStorage.pace_lang` → 없으면 브라우저 언어(ko/ja/그 밖엔 en). 대회명은 `competition.name_en/name_ja`(관리자 대회 설정) 를 `/api/labels` 의 `text` 로 받아 사전에 합친다. 선수명은 EN/JA 에서 라틴 이름 우선(`dashboard.js _dispName`).
+- 도구 `scripts/i18n/`: `extract.js`(원문 추출·통계·누락), `parts/<lang>_*.json`(번역 조각), `build.js`(자동 항목 + 조각 + `locales/<lang>.overrides.json` → 사전), `GLOSSARY.md`. 새 한국어 문장을 넣었으면 extract → 번역 → build, 사전이 바뀌면 `i18n.js` 의 `DICT_VERSION` 올리기. 자세한 건 `docs/I18N_GUIDE.md`.
+
+## 조직 — 멀티테넌시 1단계 (2026-10-01, docs/MULTI_TENANCY_PLAN.md)
+- `organization` 테이블(slug·국가·기본 시간대·기본 언어·전용 도메인·사이트 이름·브랜드·settings_json). 기본 조직 id 1 (`ORG_DEFAULT_SLUG`, 기본 `pace-rise`)은 부팅 때 자동 생성, 기존 대회·계정은 전부 조직 1.
+- `lib/org.js` `createResolver(() => db)` → `app.use(ORG.middleware())` 가 요청마다 `req.org` 를 둔다: `?org=`/`x-org` → 전용 도메인 → 서브도메인 첫 라벨 == slug → 기본 조직. 60초 캐시, 조직 변경 시 `invalidate()`.
+- 조직 스코프가 들어간 곳: `lib/routes/competitions.js`(목록·recent·by-federation·조회·생성·복제·`/api/event/:slug` — 다른 조직 대회는 404, 새 대회 시간대 기본값 = 조직), `lib/routes/home_popups.js`(`home_popup.organization_id`), `lib/routes/admin_keys.js` `/api/site-config`(기본 조직은 `system_config site_*`, 다른 조직은 `organization.settings_json`; 응답에 `org` 요약 포함).
+- **운영 관측 라이트** `lib/observe.js` (2026-10-12): Express 500·uncaught·rejection 을 링 버퍼(200)+`logs/errors.log` 에, `/api` 지연·5xx·느린 요청 집계. `GET /api/admin/server-status`(관리자) → 관리자 › 현황 '서버 상태' 카드(DB 응답·가동·메모리·WS 연결·p50/p95·24h 오류·최근 오류). Sentry 같은 외부 서비스는 미연동.
+- **GA 동의** (2026-10-12): 페이지의 gtag 스니펫 → `<script src="/ga.js">`. 서버가 `req.org.country` 가 EU/EEA·GB·CH 면 `PACE_GA_NEEDS_CONSENT=true` 로 내려 동의(localStorage `pace_ga_consent`) 전엔 gtag 를 싣지 않고, common.js 가 하단 동의 배너를 띄운다. 그 외(KR 등)는 예전처럼 바로 싣는다. 오버레이는 GA 없음.
+- **오버레이 4K/세로**: `?scale=2`, `?layout=vertical` (SCOREBOARD_API_GUIDE.md §9).
+- 2026-10-12 묶음: **5종경기 채점** `waKeysFor(parentEvent)`(server.js, results/combined_scores 에 주입 — 5종은 전용 키, WA 표에 M_800m·F_100m 추가) · **개인정보 삭제** `POST /api/admin/athletes/:id/anonymize`(admin_events.js, 관리자 키, 기록 보존·감사 로그) · **오버레이 브랜드** `overlay-scoreboard/lower-third.html` 이 `/api/competitions/:id` 의 `brand_color_point`/`brand_logo_path` 를 `--ov-point`·푸터 로고로. 테스트 `tests/api/66_pentathlon_gdpr.test.js`.
+- `lib/intl/nsf.js` + `lib/intl/nsf_sync.js` (2026-10-17): **전국체육대회 동기화**(대한체육회 meet.sports.or.kr — 일정 HTML·명단 JSON·결과 HTML 읽기, provider `nsf`, `lib/intl/sync.js` 가 위임). 종목은 부별 접미 이름(`100m 18세이하부`), 시작 시각만, 혼성계주 X. `docs/INTL_SYNC.md` 끝 절. 테스트 68.
+- `lib/mailer.js` + `lib/routes/email.js` (D12, 2026-10-12): **이메일 발송** — 조직별 `email_config`(SMTP, 시뮬레이션), `email_log`; `GET/POST /api/admin/email/config`, `POST /api/admin/email/test`, `POST /api/admin/email/send-certificates`(문자 일괄과 같은 대상 규칙, 선수 `athlete.email` 로 기록증 링크 `/c/:token`), `GET /api/admin/email/log`. 관리자 › 알림 › 이메일 서브탭, 선수 드로어 이메일 칸, 국제 양식 `Email` 열. **문자 어댑터 Twilio** — `sms_config.provider='twilio'`(user_id=Account SID, api_key=Auth Token, sender_number=+번호), `smsSender.toE164`/`isValidMobile(phone, provider)`. 테스트 `tests/api/65_email_twilio.test.js`.
+- `lib/routes/public_v1.js` (2026-10-12): **공개 읽기 API v1** `/api/v1/competitions[/:id[/events|/athletes|/results/latest]]`, `/api/v1/events/:id[/startlist|/results]`, `/api/v1/openapi.json`(키 없이). 인증·조직/대회 범위·분당 한도·호출 로그는 외부 API 키(`externalApiAuth`, `_checkCompetitionScope`) 공용, 순위는 `getEventResultsForCert`(상장·기록지와 같은 규칙). 개인정보 미포함. 문서 `docs/PUBLIC_API_V1.md`, 테스트 `tests/api/64_public_v1.test.js`.
+- `lib/routes/organizations.js`: `GET /api/org`(공개), `GET/POST/PUT /api/admin/organizations`(기본 조직의 관리자 키만). 관리자 › 시스템 › 조직 화면(`card-organizations`, 플랫폼 관리자만 보임), 홈은 기본 조직이 아니면 사이트 이름을 조직 이름으로.
+- 2단계(2026-10-02): `event_record`·`competition_series`·`federation_list`·`division_master`(0=공용)·`certificate_template`·`award_docx_template`·`sms_config`(조직별 행, `lib/smsConfig.js`)·`push_*`·`external_api_key` 에 `organization_id`; `joint_group.competition_id`. 기록 감지(`lib/recordCompare.js` `findEventRecord(..., orgId)`)·문서(`fullRecordExcel`·`pdf_documents`)·국제 동기화는 대회의 `organization_id` 로 기록표를 본다.
+- 3단계(2026-10-09): `lib/reqContext.js`(AsyncLocalStorage 로 요청 조직 전달) → `_opKeyLookup`·기본 운영키·기록위원 키가 조직을 본다; 로그인·JWT 브리지·계정 관리(`admin_users.js`)·운영키 관리(`admin_keys.js`)·되돌리기 조직 검사; **조직 가드 미들웨어**(server.js, 쓰기 가드 뒤) — 요청이 가리키는 대회가 다른 조직이면 404.
+- 4단계(2026-10-09): WebSocket 업그레이드 때 호스트로 조직을 정해 `ws._orgId` — 다른 조직 대회 구독·조회는 `{type:'error'}`, 대회 메시지는 구독한 소켓에만(`_wsForward`·`broadcastToScoreboard`). `COOKIE_DOMAIN` 옵션. `Dockerfile`·`docker-compose.yml`·`docs/DEPLOY_DOCKER.md`.
+- 아직 전역(플랫폼 관리자만): 백업 ZIP, 대회 없는 `audit_log`/`operation_log` 행.
+
+## 국제 양식 엔트리 가져오기 (2026-10-09, B4)
+- `lib/routes/entry_import_intl.js`: `GET /api/entries/intl/template.xlsx`, `POST /api/entries/intl/preview|import`(multer `file`, `competition_id`, `name_order=given-family|family-given`, `skip_errors`). 머리글 별칭 표 `H`, 성별·생년월일 파서, CSV 는 UTF-8 로 읽음(`XLSX.read(type:'string')`).
+- 종목은 `EventCatalog.codeOf()` → 사전 한글 정식명 + `code` 로 저장(결승 1조), 선수는 배번 → 이름|소속|성별 순으로 기존 매칭, 기존 행은 빈 칸만 채움. `athlete.family_name/given_name` 컬럼 추가.
+- 관리자 › 가져오기 › 1단계 세그먼트 '국제 양식 (영문 CSV·엑셀)' — `previewIntl()/importIntl()`.
+
+## 문서 영문판 (2026-10-09, B5)
+- `lib/docLabels.js`: `docLabels(lang)` 라벨 묶음 + `compName/eventName/genderLabel/roundLabel/fontName/normLang`. `generateFullRecordExcel(db, comp, gender, getDocTemplate, lang)`, `generateFullRecordPdf(db, comp, gender, lang)`, `generateComprehensiveByDivision(db, comp, lang)`, `lib/routes/pdf_documents.js` 의 start-list·result-sheet·png·ad-card 는 `reqLang(req)`.
+- 라우트의 `lang` 은 `?lang=` → 없으면 `req.org.default_lang`(ja 는 en) → ko. ko 출력은 바이트 동일(검증됨). 종목 매칭·정렬에 쓰는 한글 이름 표는 그대로.
+
+## 계측 워처·자동 조편성 (2026-10-09, C1·C2)
+- `scripts/timing-watcher/watch.js`: 계측 PC 에서 돌리는 폴더 워처(`npm run timing-watch -- --dir … --server … --key … --comp …`). `/api/scoreboard/preview` 로 판정(`judge()`) 후 `/api/scoreboard/import` 또는 `/api/timing-txt/import` 적용; done/review/failed 폴더. 테스트 `tests/api/61_timing_watcher.test.js`(실제 포트로 서버 띄워 processFile 호출). 문서 `docs/TIMING_WATCHER.md`.
+  - **에이전트(2026-10-10)**: 같은 파일을 `scripts/timing-watcher/build-agent.sh` 가 `@yao-pkg/pkg` 로 실행 파일(`dist/timing-agent/<os>/PaceRise-TimingAgent/` — exe + `config.json` + `inbox/` + 시작·자동시작 bat, zip)로 묶는다. 실행 파일 옆 `config.json`(server/key/competition_id/dir/mode/…)을 읽고 dir 이 비면 옆의 `inbox/` 를 감시 → 폴더에 넣기만 하면 올라간다. 30초마다 `POST /api/timing-agent/ping`(운영키) → 메모리 Map → `GET /api/timing-agent/status?competition_id=` → 관리자 가져오기 › 계측 › .lif 카드 위에 "계측 에이전트 ○○ 연결됨 · 적용/확인/실패 건수"(`sbAgentStatus()`, 20초 폴링). `dist/` 는 git 에 안 들어간다.
+- `lib/routes/auto_seed.js`: `POST /api/events/:id/auto-seed` — 엔트리 SB/PB(`parseRecordValue`) 순위 → `serpentine()` 지그재그 + 같은 소속 교환 → `waAssignLanesBulk` 레인 → 기존 조 삭제 후 재생성(`generateScoreboardKey`), 기록 있으면 `force`. 관리자 종목 드로어 조 탭 옆 '자동 조편성'(`emAutoSeedOpen/Preview/Apply`). 테스트 `tests/api/60_auto_seed.test.js`.
+
+## PB/SB 자동 누적 (2026-10-09, C4)
+- `lib/pbsb.js`: `updateEntryMarks(db, event)` — 종목 완료(`POST /api/events/:id/complete`, `lib/routes/callroom.js`) 때 자동 호출. 트랙·도로 MIN(time), 필드 거리 MAX, 높이 MAX(O); 상태 코드 있는 결과·풍속 +2.0 초과(`EventCatalog.isWindAffected`) 제외; `event_entry.personal_best/season_best` 가 더 좋을 때만 갱신(SB 는 대회 연도 기준), 선수가 한 종목만 뛰면 `athlete` 행도. `carryOverMarks(db, comp)` — 같은 조직·이전 대회·같은 선수(이름+성별+생년월일, 생년월일 없으면 소속)·같은 종목 코드의 PB/SB 를 빈 엔트리에.
+- 라우트 `lib/routes/pbsb.js`: `POST /api/events/:id/marks/update`, `POST /api/competitions/:id/marks/carry-over`. 관리자 선수 화면 '이전 대회 기록 불러오기'. 테스트 `tests/api/62_pbsb.test.js`.
+
+## 참가기준기록·승상 높이표·건타임·동시 편집 보호 (2026-10-09, C5·C6)
+- `event.entry_standard / target_time / height_progression`(관리자 종목 드로어, `PUT /api/admin/events/:id`). 대시보드 소집 명단(`loadRosterModalData`)에 기준·타깃 줄 + 엔트리 기록(SB→PB)이 기준을 넘으면 '기준' 배지; PDF 스타트리스트에도 한 줄. 기록 입력(`record.js`)은 `height_progression` 으로 바 높이 목록을 미리 채운다.
+- `result.gun_time`(도로 종목 건타임; `time_seconds` 는 넷타임) — 기록 입력 도로 표에 건타임 열(`saveGunTime`), `/api/results/upsert` 가 `gun_time` 을 받는다.
+- 낙관적 락: `/api/results/upsert` 에 `expected_updated_at` 을 보내면 서버 `updated_at` 과 다를 때 409 `CONFLICT_STALE`(server_value 포함). `record.js` 는 트랙·필드 저장에 `_expUpd()` 로 붙이고 409 면 최신으로 새로 고침(`_onStale`). 보내지 않으면 예전처럼 마지막 저장이 이긴다(가져오기·동기화 경로).
