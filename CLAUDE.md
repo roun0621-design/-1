@@ -83,8 +83,38 @@ Static pages in `public/` (no framework, no bundler) — `record.html`+`record.j
 - `docs/EXTERNAL_API.md`, `SCOREBOARD_API_GUIDE.md`, `FIELD_EVENT_GUIDE.md` — API/feature references.
 - `db/schema.sql` / `db/schema.pg.sql` — table definitions (30+ tables).
 
-## 대회 기간 인계 (2026-09 아시안게임)
-다른 맥에서 이어서 작업할 때는 먼저 `docs/HANDOFF_AG2026.md` 를 읽는다 — 운영 대회 id, 지금까지 결과, 매일 만드는 인스타 데일리 카드 절차(`scripts/intl-daily-cards/`), 진행 중인 iOS 푸시 작업이 정리돼 있다.
+## 작업 현황 — 맥미니·맥북 공용 인계 (단계 끝날 때마다 갱신하고 커밋)
+사용자는 두 대의 맥을 번갈아 쓴다. 로컬 메모리(`~/.claude/projects/…/memory/`)는 기기마다 따로라 믿지 말고, **사실은 이 절**에 둔다.
+- **새 세션은 항상 `git pull` 먼저, 그 다음 이 절을 읽고 시작한다.** "우리 어디까지 작업했어?" 류 질문엔 이 절(+ `git log -15 --oneline`)만 보고 바로 이어서 답한다.
+- 한 단계(기능·수정 묶음)가 끝날 때마다 **완료·주요 결정·다음 할 일**을 여기 갱신해 코드와 같은 커밋(또는 바로 다음 커밋)으로 **커밋하고 push까지** 한다. 날짜는 절대 날짜로.
+- 긴 역사는 각 문서(`docs/INTL_SYNC.md`, `docs/MULTI_TENANCY_PLAN.md`, `docs/DESIGN_SYSTEM.md` §0, `docs/HANDOFF_AG2026.md`)에 있고, 여기는 요약만.
+
+### 개요
+Pace Rise **Node** — 대한육상연맹·시도연맹·학교 대회용 육상 대회 운영 OS. 운영 서버 `https://pace-rise-node.com`(EC2 52.79.132.6, PostgreSQL, PM2 `pacerise`), 배포는 **사용자가** `./scripts/deploy.sh genspark_ai_developer`. 작업 브랜치 `genspark_ai_developer`. 조직(멀티테넌시) › 대회 › 종목·라운드·조 › 기록 → 대시보드·오버레이·문서(PDF/엑셀)·푸시·앱(iOS/Android PWA). 외부 동기화: 국제대회(Bornan)·전국체전(대한체육회 + 대한육상연맹). 클로드가 못 하는 것: 앱스토어 제출/업로드, 운영 DB 직접 접근, 서버 로그 읽기 — 사용자가 한다.
+
+### 완료 (최신순)
+- **2026-10-17~20 전국체전**(10/18~21 제주, 운영 대회 id 65): 대한체육회 구조·엔트리 동기화(`lib/intl/nsf*.js`) + 연맹 데일리 조편성 PDF 가져오기(`nsf_daily.js`, 관리자 수동 종목 매칭 10/20) + 연맹 실시간 결과(`kaaf*.js`, 10/20 장대높이뛰기 둘째 줄 파서) + 대시보드 보정(로딩 멈춤 `_catTxt`, 상단 LIVE 묶음 삭제, 10종이 다음 날 칸에 가던 것, 히어로 부 알약). 테스트 68·69. **대회는 끝났고 사후 점검은 아직.**
+- 2026-10-13 멀티테넌시 운영 개통: Gabia 와일드카드 DNS, 서버 `pacerise-add-domain`(LE 인증서/nginx), `demo.pace-rise-node.com` + 조직 demo.
+- 2026-10-12 밀린 작업 일괄: 공개 API v1(`lib/routes/public_v1.js`), 이메일(`lib/mailer.js`)+Twilio, 5종 점수, GDPR 익명화, 오버레이 브랜드/4K/세로, 관측(`lib/observe.js`), GA 동의, 타이밍 PC 에이전트 폴더(`scripts/timing-watcher/`), 브랜드 마무리(헤더 B안·스플래시·심볼 워터마크·푸터 워드마크), 모바일 결과 행 overflow. 카탈로그 초안 `NODE_CATALOG_SOURCE.md`(**미커밋 유지**).
+- 2026-10-09~10 새 브랜드(타탄 #C24A2E·브레이크 심볼, 골드 폐기), 관리자 재설계, C1~C6(계측 워처·자동 조편성 등), 국제 양식 가져오기, 문서 영문판.
+- 2026-10-01~09 멀티테넌시 코드 1~4단계(조직·대회·마스터·설정·계정·운영키·조직 가드·WS·Docker).
+- 2026-09-23~29 나고야 아시안게임 동기화(Bornan, 대회 63, 완료) — `docs/HANDOFF_AG2026.md`.
+- 2026-09-21 중고연맹 도입 Phase 7. 앱: iOS 1.1 판매 중, 1.2(빌드5, 새 아이콘) 10/12 심사 제출, Play v4 aab 빌드됨(콘솔 업로드는 사용자).
+
+### 주요 결정 (사용자)
+- 종목 이름은 정식명(`100m`)만, 부(18세이하·대학·일반)는 `division` 칸 → 화면 알약/탭. 시간표는 **시작 시각만**. 전국체전 10종·7종 대학부는 대회에 없음(일반부에 포함) → 그대로 둔다.
+- 전국체전 결과는 **연맹 result.kaaf.or.kr 우선**, 종목표가 비면 대한체육회 폴백. '순위처리'도 완료(종합 총점표는 '경기완료'만), 끝난 행도 3시간 동안 5분마다 재읽기(정정 반영). 데일리 PDF는 변환 없이 그대로 업로드, 배번은 연맹 번호.
+- 대시보드 상단 'LIVE 묶음' 없음(배지·깜빡임·NEXT로 충분). Node에선 브랜드 색 규칙을 유연하게 — 무분별하지만 않으면 색 사용 OK(`docs/DESIGN_SYSTEM.md` §0).
+- 멀티테넌시 C안(한 서버, 조직 칸막이). 과금·가입은 미정. 문자는 기록증만, 푸시는 FCM.
+- WA-readiness 우선순위: 인프라 > 유지보수 > 국제화 > 공정성.
+
+### 다음 할 일
+1. 전국체전 사후: 운영 65 `/api/admin/intl/65/status`의 unmatched·errors 점검, 대회 `status=completed`, 재사용 메모를 `docs/INTL_SYNC.md`에.
+2. (결정 대기) 일반부 10종·7종에 대학생이 섞인 걸 알약 '대학·일반부'로 표시할지.
+3. 카탈로그: 사용자 입력(가격·회사 정보·로고 허가) 받으면 `NODE_CATALOG_SOURCE.md` 완성.
+4. 앱: iOS 1.2 심사 결과 확인, Play v4 콘솔 업로드(사용자).
+5. 멀티테넌시 제품 결정(과금·가입 흐름), 옛 `pacerise-api`(/api/v1) 정리.
+6. 남은 큰 것: C7 벤더 포맷(샘플 필요), cluster/Redis, 오버레이 커스터마이징.
 
 ## 디자인 틀 (반드시 따를 것)
 화면·문구·아이콘·글자 크기·색·버튼·레이아웃을 새로 만들거나 고칠 때는 먼저 `docs/DESIGN_SYSTEM.md` 를 읽고 그 규칙대로 한다. 사용자가 디자인 수정을 요청하면 코드와 함께 그 문서(§0 요청 이력 + 해당 절)를 갱신한다. 동작 규칙은 `docs/UX_RULES.md`.
