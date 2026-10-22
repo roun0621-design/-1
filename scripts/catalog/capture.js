@@ -24,8 +24,8 @@ async function startServer() {
 }
 
 const SHOTS = [
-    { name: 'dashboard_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3500, action: async p => { await sleep(1200); await p.evaluate(() => window.scrollTo(0, 0)); await sleep(500); } },   // '지금' 카드 자동 스크롤(0.3초 뒤)이 끝난 다음 맨 위(히어로)로
-    { name: 'dashboard_mobile', url: `/dashboard.html?comp=${ids.comp}`, vp: MOB, wait: 3500, action: async p => { await sleep(1200); await p.evaluate(() => window.scrollTo(0, 0)); await sleep(500); } },   // '지금' 카드 자동 스크롤(0.3초 뒤)이 끝난 다음 맨 위(히어로)로
+    { name: 'dashboard_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3500, action: async p => { await sleep(1200); await p.evaluate(() => { window.scrollTo(0, 0); const r = document.getElementById('events-scroll-region'); if (r) r.scrollTop = 0; }); await sleep(500); } },   // '지금' 카드 자동 스크롤(0.3초 뒤)이 끝난 다음 맨 위(히어로)로 — 폰은 안쪽 스크롤 영역
+    { name: 'dashboard_mobile', url: `/dashboard.html?comp=${ids.comp}`, vp: MOB, wait: 3500, action: async p => { await sleep(1200); await p.evaluate(() => { window.scrollTo(0, 0); const r = document.getElementById('events-scroll-region'); if (r) r.scrollTop = 0; }); await sleep(500); } },   // '지금' 카드 자동 스크롤(0.3초 뒤)이 끝난 다음 맨 위(히어로)로 — 폰은 안쪽 스크롤 영역
     { name: 'results_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3000, action: async p => { await p.evaluate(id => openResult(id), ids.m100f); await sleep(2500); } },
     { name: 'results_mobile', url: `/dashboard.html?comp=${ids.comp}`, vp: MOB, wait: 3000, action: async p => { await p.evaluate(id => openResult(id), ids.m100f); await sleep(2500); } },
     { name: 'monitor_desktop', url: `/monitor.html?comp=${ids.comp}`, vp: DESK, wait: 3500 },
@@ -44,7 +44,7 @@ const SHOTS = [
     { name: 'home_two_comps_desktop', url: `/index.html`, vp: DESK, wait: 4000 },
     { name: 'final_generated_desktop', url: `/record.html?comp=${ids.comp}&event_id=${ids.m200s}`, vp: DESK, wait: 4000, role: 'admin',
       action: async p => { await p.evaluate(async (eid) => { const r = await API.createFinalWithGroups(eid, 1); state.events = await API.getAllEvents(getCompetitionId()); renderMatrix(); if (r.final_event_id) await showLaneAssignmentReview(r.final_event_id, r.count); }, ids.m200s); await sleep(2500); } },
-    { name: 'dashboard_ja_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3500, lang: 'ja', action: async p => { await sleep(1200); await p.evaluate(() => window.scrollTo(0, 0)); await sleep(500); } },   // '지금' 카드 자동 스크롤(0.3초 뒤)이 끝난 다음 맨 위(히어로)로
+    { name: 'dashboard_ja_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3500, lang: 'ja', action: async p => { await sleep(1200); await p.evaluate(() => { window.scrollTo(0, 0); const r = document.getElementById('events-scroll-region'); if (r) r.scrollTop = 0; }); await sleep(500); } },   // '지금' 카드 자동 스크롤(0.3초 뒤)이 끝난 다음 맨 위(히어로)로 — 폰은 안쪽 스크롤 영역
 ];
 
 const AUDIT = () => {
