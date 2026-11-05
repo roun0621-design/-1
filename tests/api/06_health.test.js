@@ -48,6 +48,17 @@ describe('보안 헤더 (CSP, 2026-09)', () => {
         expect(csp).toContain('https://www.gstatic.com'); expect(csp).toContain('https://www.youtube.com'); expect(csp).toContain('https://fonts.gstatic.com');
         expect(r.headers['x-frame-options']).toBe('SAMEORIGIN');
     });
+
+    it('frame-src 에 blob: 이 있다 — 관리자 상장 미리보기 모달이 받은 PDF 를 blob 주소로 iframe 에 넣는다 (2026-11-05, 빠지면 크롬이 프레임을 막아 빈 회색 화면)', async () => {
+        const request = require('supertest');
+        const { app } = require('../../server.js');
+        const r = await request(app).get('/admin.html');
+        const csp = r.headers['content-security-policy'] || '';
+        const frameSrc = (csp.match(/(?:^|;)\s*frame-src ([^;]*)/) || [])[1] || '';
+        expect(frameSrc.split(/\s+/)).toContain('blob:');        // img-src 의 blob: 과 헷갈리지 않게 frame-src 지시어만 본다
+        expect(frameSrc).toContain("'self'");
+        expect(csp).toContain("object-src 'none'");           // 완화하지 않았다 — blob PDF 는 frame-src 만 있으면 뜬다
+    });
 });
 
 describe('GET 키는 헤더로 (URL 쿼리 없이)', () => {

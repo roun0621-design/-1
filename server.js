@@ -269,6 +269,8 @@ let _bootDone = false;
 //   외부 출처(스크립트·연결·프레임)는 실제 쓰는 호스트만 — GA·Firebase(푸시)·Google Fonts·YouTube 임베드.
 //   object-src 'none' · base-uri 'self' · frame-ancestors 'self'(다른 사이트가 우리 화면을 iframe 으로 감싸지 못함; OBS 브라우저 소스는 iframe 이 아니라 영향 없음)
 //   새 외부 출처를 쓰면 여기에 추가한다 (브라우저 콘솔 'Refused to …' 로 바로 드러난다).
+//   frame-src 의 blob: 은 관리자 상장·기록증 미리보기 모달용 — 받은 PDF 를 blob 주소로 iframe 에 넣는다. 빠지면 크롬이 프레임을 막아
+//   빈 회색 화면(찡그린 문서 아이콘)만 보인다(2026-11-05). 최상위 창(새 창)·서버 주소 PDF(/c/:token)는 frame-src 와 무관.
 const CSP_DIRECTIVES = {
     defaultSrc: ["'self'"],
     scriptSrc: ["'self'", "'unsafe-inline'", 'https://www.googletagmanager.com', 'https://www.gstatic.com', 'https://*.google-analytics.com'],
@@ -278,7 +280,7 @@ const CSP_DIRECTIVES = {
     imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
     mediaSrc: ["'self'", 'blob:', 'data:'],
     connectSrc: ["'self'", 'ws:', 'wss:', 'https://*.google-analytics.com', 'https://*.analytics.google.com', 'https://*.googletagmanager.com', 'https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.google.com'],
-    frameSrc: ["'self'", 'https://www.youtube.com', 'https://youtube.com', 'https://www.youtube-nocookie.com'],
+    frameSrc: ["'self'", 'blob:', 'https://www.youtube.com', 'https://youtube.com', 'https://www.youtube-nocookie.com'],   // blob: — 관리자 상장 미리보기 모달(blob PDF → iframe)
     frameAncestors: ["'self'"],
     workerSrc: ["'self'", 'blob:'],
     manifestSrc: ["'self'"],
