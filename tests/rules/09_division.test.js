@@ -53,15 +53,16 @@ describe('divisionCodeFor — 종목의 부 라벨 + 성별 → 부 마스터 �
     });
 });
 
-describe('gradeDivisionSeed — 초3~6 · 중1~3 · 고1~3 × 남녀 = 20', () => {
+describe('gradeDivisionSeed — 초1~6 · 중1~3 · 고1~3 × 남녀 = 24 (초1·2 는 2026-11-05 유소년 학년별 대회용)', () => {
     it('코드·라벨·정렬', () => {
         const rows = gradeDivisionSeed();
-        expect(rows).toHaveLength(20);
-        expect(rows.map(r => r[0])).toEqual(expect.arrayContaining(['M_ELEM3', 'M_ELEM6', 'M_MID1', 'M_HIGH3', 'F_ELEM3', 'F_MID2', 'F_HIGH1']));
+        expect(rows).toHaveLength(24);
+        expect(rows.map(r => r[0])).toEqual(expect.arrayContaining(['M_ELEM1', 'M_ELEM3', 'M_ELEM6', 'M_MID1', 'M_HIGH3', 'F_ELEM2', 'F_ELEM3', 'F_MID2', 'F_HIGH1']));
+        expect(rows.find(r => r[0] === 'F_ELEM1')).toEqual(['F_ELEM1', '여자초등1학년부', 'F', 'ELEM', 111, 1]);
         const m1 = rows.find(r => r[0] === 'M_MID1');
         expect(m1).toEqual(['M_MID1', '남자중학1학년부', 'M', 'MID', 21, 1]);
-        expect(new Set(rows.map(r => r[0])).size).toBe(20);
-        expect(new Set(rows.map(r => r[4])).size).toBe(20);     // 정렬값 중복 없음
+        expect(new Set(rows.map(r => r[0])).size).toBe(24);
+        expect(new Set(rows.map(r => r[4])).size).toBe(24);     // 정렬값 중복 없음 (초1=11 … 초6=16, 중1=21 …)
         // 마스터 라벨로도 코드가 풀린다
         const masters = rows.map(([code, label_ko, gender, school_level, , grade]) => ({ code, label_ko, gender, school_level, grade }));
         expect(divisionCodeFor('고2학년부', 'F', masters)).toBe('F_HIGH2');

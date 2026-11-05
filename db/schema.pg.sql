@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS "competition" (
     "timezone" TEXT NOT NULL DEFAULT 'Asia/Seoul',   -- 대회 시간대(IANA, lib/tz.js)
     "name_en" TEXT DEFAULT '',                     -- 대회명 영문·일문 (2026-09-30)
     "name_ja" TEXT DEFAULT '',
+    "sms_template" TEXT NOT NULL DEFAULT '',          -- 대회별 문자 문구 (2026-11-05)
     "sync_source" TEXT DEFAULT NULL,      -- 국제대회 동기화 출처 JSON {provider, base, champ, disc, lang}
     "sync_state" TEXT DEFAULT NULL,       -- 마지막 동기화 상태 JSON
     CHECK (status IN ('upcoming','active','completed'))
@@ -673,6 +674,25 @@ CREATE TABLE IF NOT EXISTS "certificate_issue_log" (
     "issued_by" TEXT NOT NULL DEFAULT '',
     "note" TEXT NOT NULL DEFAULT ''
 );
+
+-- 상장 링크 발급 기록 (2026-11-05) — lib/certLink.js, 공개 라우트 GET /c/:token
+CREATE TABLE IF NOT EXISTS "cert_link" (
+    "id" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "token" TEXT NOT NULL UNIQUE,
+    "competition_id" BIGINT NOT NULL,
+    "event_id" BIGINT NOT NULL,
+    "athlete_id" BIGINT NOT NULL,
+    "athlete_name" TEXT NOT NULL DEFAULT '',
+    "bib_number" TEXT NOT NULL DEFAULT '',
+    "team" TEXT NOT NULL DEFAULT '',
+    "event_name" TEXT NOT NULL DEFAULT '',
+    "channel" TEXT NOT NULL DEFAULT 'sms',
+    "created_at" TEXT NOT NULL DEFAULT NOW(),
+    "opened_count" BIGINT NOT NULL DEFAULT 0,
+    "last_opened_at" TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cert_link_comp ON cert_link(competition_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cert_link_athlete ON cert_link(event_id, athlete_id);
 
 -- ============================================================
 -- 문자(SMS) 시스템 — Aligo + Simulation

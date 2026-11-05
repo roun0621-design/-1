@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS competition (
     timezone TEXT NOT NULL DEFAULT 'Asia/Seoul',     -- 대회 시간대(IANA) — '오늘'·소집 시간창·자동 상태 전환 기준 (lib/tz.js)
     name_en TEXT DEFAULT '',                         -- 대회명 영문·일문 (화면 언어가 EN/JA 면 이 이름으로, 비우면 한글 그대로) (2026-09-30)
     name_ja TEXT DEFAULT '',
+    sms_template TEXT NOT NULL DEFAULT '',           -- 대회별 문자 문구 (비우면 조직 문자 설정의 기본 문구, 2026-11-05)
     sync_source TEXT DEFAULT NULL,                   -- 국제대회 동기화 출처 JSON {provider, base, champ, disc, lang} (lib/intl)
     sync_state TEXT DEFAULT NULL                     -- 마지막 동기화 상태 JSON
 );
@@ -380,3 +381,22 @@ CREATE TABLE IF NOT EXISTS award_docx_template (
     config TEXT NOT NULL,
     updated_at TEXT
 );
+
+-- 상장 링크 발급 기록 (2026-11-05) — 문자·이메일의 /c/<token>. 난수 토큰 + 발급 때 선수 스냅샷(명단이 바뀌면 남의 상장이 열리지 않게). lib/certLink.js
+CREATE TABLE IF NOT EXISTS cert_link (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,
+    competition_id INTEGER NOT NULL,
+    event_id INTEGER NOT NULL,
+    athlete_id INTEGER NOT NULL,
+    athlete_name TEXT NOT NULL DEFAULT '',
+    bib_number TEXT NOT NULL DEFAULT '',
+    team TEXT NOT NULL DEFAULT '',
+    event_name TEXT NOT NULL DEFAULT '',
+    channel TEXT NOT NULL DEFAULT 'sms',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    opened_count INTEGER NOT NULL DEFAULT 0,
+    last_opened_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cert_link_comp ON cert_link(competition_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cert_link_athlete ON cert_link(event_id, athlete_id);

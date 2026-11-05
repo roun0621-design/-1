@@ -2753,6 +2753,16 @@ POST /api/external/event-result-link/batch<br>
                     </div>
                     <p class="t-xs t-muted" style="margin:-4px 0 10px;">기록이 없는(미출전) 선수는 자동 제외됩니다. 조를 지정하면 그 조만, 중복 방지를 켜면 같은 종목에서 이미 받은 선수는 다시 보내지 않습니다.</p>
                     <div style="margin-bottom:10px;">
+                        <label class="t-xs" style="font-weight:600;">이 대회 문자 문구 <span id="sms-batch-tpl-source" class="t-muted" style="font-weight:400;"></span></label>
+                        <textarea id="sms-batch-template" rows="4" oninput="_smsBatchTplStats()" placeholder="비우면 '문자 설정'의 기본 문구로 보냅니다" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;font-family:inherit;font-size:12px;"></textarea>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+                            <span class="t-xs t-muted">변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {competition_name} {cert_url} {heat_label} {heat} · 보이는 문구 그대로 발송됩니다</span>
+                            <span id="sms-batch-tpl-bytes" class="t-xs t-muted"></span>
+                            <button class="btn btn-xs btn-outline" type="button" onclick="saveSmsCompTemplate()">이 대회에 저장</button>
+                            <button class="btn btn-xs btn-outline" type="button" onclick="resetSmsCompTemplate()">기본 문구로</button>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:10px;">
                         <label class="t-xs" style="font-weight:600;">발송 대상 종목</label>
                         <div id="sms-batch-event-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--gray);border-radius:6px;padding:8px;font-size:12px;background:#f8f9fa;">대회를 선택하면 종목이 표시됩니다.</div>
                         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
@@ -2784,9 +2794,12 @@ POST /api/external/event-result-link/batch<br>
                 <!-- D. 발송 이력 -->
                 <div class="admin-card" id="card-sms-log">
                     <h4>발송 이력</h4>
-                    <div style="margin-bottom:8px;">
+                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+                        <input type="text" id="sms-link-inspect" placeholder="상장 링크 진단 — 문자의 링크(https://…/c/…)를 붙여 넣으세요" style="flex:1;min-width:260px;padding:6px;border:1px solid var(--gray);border-radius:6px;font-size:12px;">
+                        <button class="btn btn-xs btn-outline" type="button" onclick="inspectCertLink()">링크 진단</button>
                         <button class="btn btn-xs btn-outline" onclick="loadSmsLog()">새로고침</button>
                     </div>
+                    <div id="sms-link-inspect-result" class="t-xs" style="margin-bottom:8px;line-height:1.6;"></div>
                     <div id="sms-log-list" style="max-height:400px;overflow-y:auto;font-size:12px;">로딩 중...</div>
                 </div>
 
@@ -12387,6 +12400,7 @@ POST /api/external/event-result-link/batch<br>
             const root = document.getElementById('sms-batch-event-list');
             if (!root) return;
             if (!_selectedCompId) { root.innerHTML = '<span class="t-muted">대회를 먼저 선택하세요.</span>'; return; }
+            loadSmsCompTemplate();   // 대회별 문자 문구도 같이 (2026-11-05)
             try {
                 const [data, summ] = await Promise.all([
                     fetch(`/api/events?competition_id=${_selectedCompId}`).then(r => r.json()),
@@ -12456,6 +12470,64 @@ POST /api/external/event-result-link/batch<br>
             if (scopeWrap) scopeWrap.style.display = (mode === 'finisher') ? 'none' : '';
         }
 
+        // ── 대회별 문자 문구 (2026-11-05): 비우면 문자 설정의 기본 문구. 화면에 보이는 문구 그대로 발송된다.
+        function _smsBatchTplStats() {
+            const ta = document.getElementById('sms-batch-template'); const el = document.getElementById('sms-batch-tpl-bytes'); if (!ta || !el) return;
+            const msg = ta.value || ''; const b = _bytesUtf8(msg); const t = _detectMsgType(msg);
+            el.textContent = msg ? `${b} bytes · ${t} · 예상 ${t === 'LMS' ? 35 : 13}원/건` : '';
+        }
+        async function loadSmsCompTemplate() {
+            const ta = document.getElementById('sms-batch-template'); const src = document.getElementById('sms-batch-tpl-source'); if (!ta || !_selectedCompId) return;
+            try {
+                const r = await fetch(`/api/admin/sms/competition-template?competition_id=${_selectedCompId}`, { headers: { 'x-admin-key': AK() } });
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || '');
+                ta.value = d.effective || '';
+                if (src) src.textContent = d.source === 'competition' ? '— 이 대회 전용 문구' : '— 문자 설정의 기본 문구 (고쳐서 저장하면 이 대회 전용)';
+                _smsBatchTplStats();
+            } catch (e) { if (src) src.textContent = ''; }
+        }
+        async function saveSmsCompTemplate() {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const ta = document.getElementById('sms-batch-template');
+            try {
+                const r = await fetch('/api/admin/sms/competition-template', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_key: AK(), competition_id: _selectedCompId, template: ta.value }) });
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || '저장 실패');
+                toast('이 대회 문자 문구를 저장했습니다', 'success'); loadSmsCompTemplate();
+            } catch (e) { toast('저장 실패: ' + e.message, 'error'); }
+        }
+        async function resetSmsCompTemplate() {
+            if (!_selectedCompId) return;
+            if (!await uiConfirm('이 대회 전용 문구를 지우고 문자 설정의 기본 문구로 되돌릴까요?')) return;
+            try {
+                const r = await fetch('/api/admin/sms/competition-template', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_key: AK(), competition_id: _selectedCompId, template: '' }) });
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || '실패');
+                toast('기본 문구로 되돌렸습니다', 'success'); loadSmsCompTemplate();
+            } catch (e) { toast('실패: ' + e.message, 'error'); }
+        }
+        // ── 상장 링크 진단 (2026-11-05): 문자로 보낸 링크를 붙여 넣으면 누구 것인지·지금 열리는지·발송 이력을 보여 준다
+        async function inspectCertLink() {
+            const inp = document.getElementById('sms-link-inspect'); const out = document.getElementById('sms-link-inspect-result'); if (!inp || !out) return;
+            const v = (inp.value || '').trim(); if (!v) { toast('링크를 붙여 넣으세요', 'error'); return; }
+            out.textContent = '확인 중...';
+            try {
+                const r = await fetch(`/api/admin/cert-links/inspect?token=${encodeURIComponent(v)}`, { headers: { 'x-admin-key': AK() } });
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || '실패');
+                if (!d.ok) { out.innerHTML = `<b style="color:#a00;">열 수 없는 링크</b> — ${_esc(d.message || '')}`; return; }
+                const verdict = d.verdict === 'ok' ? '<b style="color:var(--green);">지금 열림</b>'
+                    : d.verdict === 'changed' ? `<b style="color:#a00;">닫힘 — 선수 정보가 바뀜</b> (${_esc(d.why || '')})`
+                    : '<b style="color:#a00;">닫힘 — 종목이나 선수가 없음</b>';
+                const when = t => _esc(String(t || '').slice(0, 16).replace('T', ' '));
+                const lines = [
+                    `${d.kind === 'db' ? '새 링크(발급 기록 있음)' : '옛 서명 링크(발급 기록 없음)'} · ${_esc((d.competition || {}).name || '대회?')} › ${_esc((d.event || {}).name || '종목?')}`,
+                    d.issued ? `발급 때: ${_esc(d.issued.athlete_name)} ${_esc(d.issued.team || '')} 배번 ${_esc(d.issued.bib_number || '-')} · ${when(d.issued.created_at)} · 열람 ${d.issued.opened_count || 0}회` : '',
+                    d.current_athlete ? `지금 그 번호의 선수: ${_esc(d.current_athlete.name)} ${_esc(d.current_athlete.team || '')} 배번 ${_esc(d.current_athlete.bib_number || '-')}${d.in_event ? '' : ' (이 종목에 없음)'}` : '지금 그 번호의 선수: 없음',
+                    `판정: ${verdict}`,
+                    `발송 이력 ${d.sms.length}건` + (d.sms.length ? ': ' + d.sms.slice(0, 5).map(x => `${when(x.sent_at)} ${_esc(x.phone)} ${_esc(x.status)}`).join(' / ') : ''),
+                ].filter(Boolean);
+                out.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+            } catch (e) { out.innerHTML = `<span style="color:#a00;">실패: ${_esc(e.message)}</span>`; }
+        }
+
         async function dryRunSmsBatch() {
             // 백엔드 발송 직전 단계 시뮬레이션 — 그냥 sim_mode가 켜져 있으면 OK, 아니면 임시로 forcing
             const cfg = await fetch(`/api/admin/sms/config?admin_key=${encodeURIComponent(AK())}`).then(r => r.json()).catch(() => ({}));
@@ -12501,6 +12573,7 @@ POST /api/external/event-result-link/batch<br>
                         skip_sent: skipSent,
                         triggered_by: 'cert_batch',
                         force_real: forceReal,
+                        template: ((document.getElementById('sms-batch-template') || {}).value || '').trim() || undefined,   // 화면 문구 그대로 (비우면 서버가 대회 → 조직 기본 순)
                     })
                 });
                 const data = await res.json();

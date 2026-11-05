@@ -1,6 +1,6 @@
 /**
  * 학년 단위 부 + 선수 학년 + 부별 기록(DR) 감지 — Phase 7-② (2026-09)
- *   - 부 마스터에 학년 부 20행이 시드되고(/api/divisions 에 grade), 기본 부처럼 삭제 불가
+ *   - 부 마스터에 학년 부 24행이 시드되고(/api/divisions 에 grade), 기본 부처럼 삭제 불가 (초1·2 는 2026-11-05 추가)
  *   - DR: 종목의 부가 '중등부'·'중1학년부' 라벨이어도 부 마스터 코드로 풀려 부별 기록이 감지된다
  *     (전에는 event.division 이 'M_MID' 같은 코드와 글자 그대로 같을 때만 감지 → 관리자 화면에서 만든 종목은 한 번도 감지 안 됨)
  *   - 선수 학년: 등록·수정 API, 명단 업로드의 '학년' 열
@@ -16,18 +16,30 @@ beforeAll(async () => {
 });
 
 describe('부 마스터 — 학년 단위 부', () => {
-    it('/api/divisions 에 M_MID1·F_ELEM6 등 20행이 grade 와 함께 있다', async () => {
+    it('/api/divisions 에 M_MID1·F_ELEM6·M_ELEM1 등 24행이 grade 와 함께 있다', async () => {
         const r = await request(app).get('/api/divisions');
         expect(r.status).toBe(200);
         const byCode = Object.fromEntries(r.body.map(d => [d.code, d]));
         expect(byCode.M_MID1).toMatchObject({ label_ko: '남자중학1학년부', gender: 'M', school_level: 'MID', grade: 1 });
         expect(byCode.F_ELEM6).toMatchObject({ gender: 'F', school_level: 'ELEM', grade: 6 });
+        // 초등 1·2학년 (2026-11-05): 유소년 학년별 대회('남자초등부 1학년 (5~7세 포함)')
+        expect(byCode.M_ELEM1).toMatchObject({ label_ko: '남자초등1학년부', gender: 'M', school_level: 'ELEM', grade: 1 });
+        expect(byCode.F_ELEM2).toMatchObject({ label_ko: '여자초등2학년부', gender: 'F', school_level: 'ELEM', grade: 2 });
         expect(byCode.M_MID.grade == null).toBe(true);
-        expect(r.body.filter(d => d.grade != null)).toHaveLength(20);
+        expect(r.body.filter(d => d.grade != null)).toHaveLength(24);
         // 정렬: 중학부 바로 뒤에 중1·중2·중3
         const codes = r.body.map(d => d.code);
         expect(codes.indexOf('M_MID1')).toBe(codes.indexOf('M_MID') + 1);
         expect(codes.indexOf('M_MID3')).toBe(codes.indexOf('M_MID') + 3);
+        expect(codes.indexOf('M_ELEM1')).toBe(codes.indexOf('M_ELEM') + 1);
+        expect(codes.indexOf('M_ELEM6')).toBe(codes.indexOf('M_ELEM') + 6);
+    });
+    it("프로그램 표기 '남자초등부 1학년 (5~7세 포함)'·시간표 표기 '남초 6' 도 학년으로 읽는다 (2026-11-05)", () => {
+        const { parseGradeLabel } = require('../../lib/division');
+        expect(parseGradeLabel('남자초등부 1학년 (5~7세 포함)')).toEqual({ level: 'ELEM', grade: 1 });
+        expect(parseGradeLabel('여자초등부 2학년')).toEqual({ level: 'ELEM', grade: 2 });
+        expect(parseGradeLabel('남초 6')).toEqual({ level: 'ELEM', grade: 6 });
+        expect(parseGradeLabel('초등부')).toBeNull();
     });
     it('학년 부는 삭제할 수 없고(부팅 때 다시 시드), 새 부에 grade 를 줄 수 있다', async () => {
         const d = await request(app).delete('/api/admin/divisions/M_MID1').send({ admin_key: ADMIN });

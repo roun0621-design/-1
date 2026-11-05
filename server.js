@@ -886,6 +886,27 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_issue_log (
 )`); } catch(e) {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue_log(competition_id, issued_at DESC)`); } catch(e) {}
 
+// 상장 링크 발급 기록 (2026-11-05) — 문자·이메일로 보낸 /c/<token> 링크. 난수 토큰 + 발급 때 선수 이름·배번 스냅샷.
+//   예전 HMAC 서명 토큰은 (대회:종목:선수) 번호만 담아 ① 서버 키가 바뀌면 전부 죽고 ② 명단을 다시 올려 번호가 다른 선수에게 가면 남의 상장이 열렸다.
+//   공개 라우트 GET /c/:token 은 이 표의 스냅샷과 지금 선수를 비교해 다르면 열지 않는다. 옛 토큰('.' 포함)도 계속 받는다(lib/certLink.js).
+try { db.exec(`CREATE TABLE IF NOT EXISTS cert_link (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,              -- base64url 난수 22자 ('.' 없음 → 옛 서명 토큰과 구분)
+    competition_id INTEGER NOT NULL,
+    event_id INTEGER NOT NULL,
+    athlete_id INTEGER NOT NULL,
+    athlete_name TEXT NOT NULL DEFAULT '',   -- 발급 시점 스냅샷
+    bib_number TEXT NOT NULL DEFAULT '',
+    team TEXT NOT NULL DEFAULT '',
+    event_name TEXT NOT NULL DEFAULT '',
+    channel TEXT NOT NULL DEFAULT 'sms',     -- sms | email
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    opened_count INTEGER NOT NULL DEFAULT 0,
+    last_opened_at TEXT
+)`); } catch(e) { console.error('[DB] cert_link create error:', e.message); }
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_cert_link_comp ON cert_link(competition_id, created_at DESC)`); } catch(e) {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_cert_link_athlete ON cert_link(event_id, athlete_id)`); } catch(e) {}
+
 // athlete.phone 컬럼 추가 (SMS 발송용)
 try { db.exec(`ALTER TABLE athlete ADD COLUMN phone TEXT NOT NULL DEFAULT ''`); } catch(e) { /* already exists */ }
 try { db.exec(`ALTER TABLE athlete ADD COLUMN email TEXT NOT NULL DEFAULT ''`); } catch(e) { /* 이메일 발송(D12, 2026-10-12) */ }
@@ -1037,13 +1058,7 @@ if (!db.isAsync) {
 // (2026-09) 이 시드는 예전에 SQLite 전용 블록 안에 들어 있어 PG 에서는 기본 상장 양식이 생성되지 않았다 → 블록 밖으로 이동
 // 기본 상장 템플릿 시드 (최초 1회) — 시상장 + 완주증
 // SQLite/PostgreSQL 양쪽에서 동작하도록 통합 db API 사용 (비동기)
-_bootTasks.push((async () => {
-    try {
-        // 기본 조직의 상장 양식 4종 — 비어 있을 때만 (lib/certificateTemplates.js, 새 조직 생성 때도 같은 함수)
-        const n = await require('./lib/certificateTemplates').seedDefaultTemplates(db, 1, 'ko');
-        if (n) console.log(`[DB] certificate_template seeded (${n} templates)`);
-    } catch(e) { console.error('[DB] certificate_template seed error:', e.message); }
-})());
+// (2026-11-05) 기본 상장 양식 시드는 아래쪽 '_migrateOpKeysToHash' 바로 앞으로 옮겼다 — 여기서 바로 돌면 organization_id 열이 생기기 전이라 새 DB 첫 부팅마다 실패했다.
 // Add heat_name to heat (custom display name, e.g. "준결1조", "A조")
 try { db.exec(`ALTER TABLE heat ADD COLUMN heat_name TEXT DEFAULT NULL`); } catch(e) {}
 // Add scoreboard_key to heat (전광판 매칭키, e.g. "남자실업부 100m 예선 1조")
@@ -1403,6 +1418,7 @@ try { db.exec(`ALTER TABLE competition ADD COLUMN name_en TEXT DEFAULT ''`); } c
 try { db.exec(`ALTER TABLE competition ADD COLUMN name_ja TEXT DEFAULT ''`); } catch(e) {}
 // competition.manual_status_lock: 관리자가 '대회 재개'로 수동 상태변경한 경우 1 — 날짜 기반 자동 상태갱신(active→completed)을 막아 재잠금을 방지
 try { db.exec(`ALTER TABLE competition ADD COLUMN manual_status_lock INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
+try { db.exec(`ALTER TABLE competition ADD COLUMN sms_template TEXT NOT NULL DEFAULT ''`); } catch(e) {}   // 대회별 문자 문구 — 비우면 조직 문자 설정의 기본 문구 (2026-11-05)
 // event.division: 중등부/고등부/대학부/일반부/국제/U20
 try { db.exec(`ALTER TABLE event ADD COLUMN division TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 // event.result_url: 외부 결과 링크 URL (노출용 대회에서 사용)
@@ -1841,6 +1857,25 @@ if (db.isAsync) {
             )`); } catch(e) { console.error('[PG migration] certificate_issue_log error:', e.message); }
             try { await db.run(`CREATE INDEX IF NOT EXISTS idx_cert_log_comp ON certificate_issue_log(competition_id, issued_at DESC)`); } catch(e) {}
 
+            // 상장 링크 발급 기록 (2026-11-05, SQLite 쪽 주석 참고)
+            try { await db.run(`CREATE TABLE IF NOT EXISTS cert_link (
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                token TEXT NOT NULL UNIQUE,
+                competition_id BIGINT NOT NULL,
+                event_id BIGINT NOT NULL,
+                athlete_id BIGINT NOT NULL,
+                athlete_name TEXT NOT NULL DEFAULT '',
+                bib_number TEXT NOT NULL DEFAULT '',
+                team TEXT NOT NULL DEFAULT '',
+                event_name TEXT NOT NULL DEFAULT '',
+                channel TEXT NOT NULL DEFAULT 'sms',
+                created_at TEXT NOT NULL DEFAULT NOW(),
+                opened_count BIGINT NOT NULL DEFAULT 0,
+                last_opened_at TEXT
+            )`); } catch(e) { console.error('[PG migration] cert_link error:', e.message); }
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_cert_link_comp ON cert_link(competition_id, created_at DESC)`); } catch(e) {}
+            try { await db.run(`CREATE INDEX IF NOT EXISTS idx_cert_link_athlete ON cert_link(event_id, athlete_id)`); } catch(e) {}
+
             try { await db.run(`CREATE TABLE IF NOT EXISTS sms_config (
                 id BIGINT PRIMARY KEY CHECK (id = 1),
                 provider TEXT NOT NULL DEFAULT 'aligo',
@@ -1960,6 +1995,7 @@ if (db.isAsync) {
             await pgIdempotentAddCol('competition', 'timezone', `TEXT NOT NULL DEFAULT 'Asia/Seoul'`);
             await pgIdempotentAddCol('competition', 'name_en', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'name_ja', `TEXT DEFAULT ''`);
+            await pgIdempotentAddCol('competition', 'sms_template', `TEXT NOT NULL DEFAULT ''`);   // 대회별 문자 문구 (2026-11-05)
             // 조직(organization) — 멀티테넌시 1단계 (2026-10-01)
             try {
                 await db.run(`CREATE TABLE IF NOT EXISTS "organization" (
@@ -2187,6 +2223,18 @@ async function _migrateOpKeysToHash() {
     } catch (e) { console.error('[opkey] 해시 마이그레이션 실패:', e.message); }
 }
 if (!db.isAsync) _loadOpKeyCacheSync();
+// 기본 조직의 상장 양식 4종 — 비어 있을 때만 (lib/certificateTemplates.js, 새 조직 생성 때도 같은 함수)
+//   위의 동기 마이그레이션(certificate_template.organization_id 등)과 앞서 등록된 부팅 태스크(PG 마이그레이션)가 끝난 뒤에 돈다.
+//   예전엔 파일 앞쪽에서 바로 실행돼 새 DB 첫 부팅마다 'no such column: organization_id' 로 실패하고 두 번째 부팅에야 시드됐다(테스트 DB 는 늘 비어 있었다, 2026-11-05).
+{
+    const _priorBoot = Promise.allSettled(_bootTasks.slice());
+    _bootTasks.push(_priorBoot.then(async () => {
+        try {
+            const n = await require('./lib/certificateTemplates').seedDefaultTemplates(db, 1, 'ko');
+            if (n) console.log(`[DB] certificate_template seeded (${n} templates)`);
+        } catch (e) { console.error('[DB] certificate_template seed error:', e.message); }
+    }));
+}
 _bootTasks.push(_migrateOpKeysToHash().then(() => _reloadOpKeyCacheAsync()));
 // 다른 인스턴스·DB 직접 수정으로 폐기된 운영키가 재시작 전까지 살아있지 않도록 1분마다 다시 읽는다
 setInterval(() => { _reloadOpKeyCacheAsync().catch(() => {}); }, 60 * 1000).unref();
