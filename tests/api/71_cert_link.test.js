@@ -8,7 +8,9 @@
  *   공개 라우트는 지금 선수와 다르면 410 으로 닫는다. 옛 토큰은 계속 받되 문자 발송 시각과 선수 행 생성 시각을 대조한다.
  */
 const request = require('supertest');
+const pdfParse = require('pdf-parse');
 const { buildCertToken } = require('../../lib/certLink');
+const getPdf = url => request(app).get(url).buffer(true).parse((res, cb) => { const chunks = []; res.on('data', c => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks))); });
 let app, db; const ADMIN = 'testadmin1234'; const fx = {}; const stamp = Date.now();
 
 beforeAll(async () => {
@@ -89,6 +91,37 @@ describe('링크 진단 (관리자)', () => {
         const bad = await request(app).get('/api/admin/cert-links/inspect').query({ admin_key: ADMIN, token: 'x.y' });
         expect(bad.status).toBe(200); expect(bad.body.ok).toBe(false);
         expect((await request(app).get('/api/admin/cert-links/inspect').query({ token: fx.token })).status).toBe(403);
+    });
+});
+
+describe('대회별 문자 링크 상장 양식 (입상 / 그 외)', () => {
+    it('고르기 전엔 자동(기본 시상장), 기록증 양식을 고르면 1위도 그 양식으로 열린다', async () => {
+        fx.recTpl = (await db.run("INSERT INTO certificate_template (competition_id, name, kind, title_text, body_template, organization_id) VALUES (NULL, 'RECTPL71', 'record', '기 록 증', '{athlete_name}', 1)")).lastInsertRowid;
+        let g = await request(app).get('/api/admin/sms/competition-template').query({ admin_key: ADMIN, competition_id: fx.comp });
+        expect(g.status).toBe(200); expect(g.body.cert_tpl_award_id).toBeNull(); expect(g.body.auto_award && g.body.auto_award.kind).toBe('award');
+        expect(g.body.templates.some(t => t.id === fx.recTpl)).toBe(true);
+        let pdf = await pdfParse((await getPdf(`/c/${fx.token}`)).body);
+        expect(pdf.info.Title.startsWith('RECTPL71')).toBe(false);
+
+        const p = await request(app).post('/api/admin/sms/competition-template').send({ admin_key: ADMIN, competition_id: fx.comp, cert_tpl_award_id: fx.recTpl, cert_tpl_other_id: fx.recTpl });
+        expect(p.status).toBe(200); expect(p.body.cert_tpl_award_id).toBe(fx.recTpl);
+        g = await request(app).get('/api/admin/sms/competition-template').query({ admin_key: ADMIN, competition_id: fx.comp });
+        expect(g.body.cert_tpl_award_id).toBe(fx.recTpl); expect(g.body.cert_tpl_other_id).toBe(fx.recTpl);
+        pdf = await pdfParse((await getPdf(`/c/${fx.token}`)).body);
+        expect(pdf.info.Title.startsWith('RECTPL71')).toBe(true);
+        expect(pdf.text.replace(/\s+/g, '')).toContain('기록증');
+        // 진단에도 어떤 양식이 쓰일지 나온다
+        const ins = await request(app).get('/api/admin/cert-links/inspect').query({ admin_key: ADMIN, token: fx.token });
+        expect(ins.body.template).toMatchObject({ id: fx.recTpl, source: 'competition', slot: 'award' });
+    });
+    it('없는 양식 id 는 400, 비우면 다시 자동', async () => {
+        expect((await request(app).post('/api/admin/sms/competition-template').send({ admin_key: ADMIN, competition_id: fx.comp, cert_tpl_award_id: 99999999 })).status).toBe(400);
+        const p = await request(app).post('/api/admin/sms/competition-template').send({ admin_key: ADMIN, competition_id: fx.comp, cert_tpl_award_id: null, cert_tpl_other_id: '' });
+        expect(p.status).toBe(200); expect(p.body.cert_tpl_award_id).toBeNull(); expect(p.body.cert_tpl_other_id).toBeNull();
+        const pdf = await pdfParse((await getPdf(`/c/${fx.token}`)).body);
+        expect(pdf.info.Title.startsWith('RECTPL71')).toBe(false);
+        const ins = await request(app).get('/api/admin/cert-links/inspect').query({ admin_key: ADMIN, token: fx.token });
+        expect(ins.body.template && ins.body.template.source).toBe('auto');
     });
 });
 

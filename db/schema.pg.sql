@@ -106,6 +106,8 @@ CREATE TABLE IF NOT EXISTS "competition" (
     "name_en" TEXT DEFAULT '',                     -- 대회명 영문·일문 (2026-09-30)
     "name_ja" TEXT DEFAULT '',
     "sms_template" TEXT NOT NULL DEFAULT '',          -- 대회별 문자 문구 (2026-11-05)
+    "cert_tpl_award_id" BIGINT,                       -- 문자 링크 상장 양식: 입상(1~3위)용, NULL=자동
+    "cert_tpl_other_id" BIGINT,                       -- 문자 링크 상장 양식: 그 외 완주자용, NULL=자동
     "sync_source" TEXT DEFAULT NULL,      -- 국제대회 동기화 출처 JSON {provider, base, champ, disc, lang}
     "sync_state" TEXT DEFAULT NULL,       -- 마지막 동기화 상태 JSON
     CHECK (status IN ('upcoming','active','completed'))

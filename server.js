@@ -1419,6 +1419,8 @@ try { db.exec(`ALTER TABLE competition ADD COLUMN name_ja TEXT DEFAULT ''`); } c
 // competition.manual_status_lock: 관리자가 '대회 재개'로 수동 상태변경한 경우 1 — 날짜 기반 자동 상태갱신(active→completed)을 막아 재잠금을 방지
 try { db.exec(`ALTER TABLE competition ADD COLUMN manual_status_lock INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 try { db.exec(`ALTER TABLE competition ADD COLUMN sms_template TEXT NOT NULL DEFAULT ''`); } catch(e) {}   // 대회별 문자 문구 — 비우면 조직 문자 설정의 기본 문구 (2026-11-05)
+try { db.exec(`ALTER TABLE competition ADD COLUMN cert_tpl_award_id INTEGER`); } catch(e) {}   // 문자 링크 상장 양식 — 입상(1~3위)용. NULL=자동(★기본 시상장) (2026-11-05)
+try { db.exec(`ALTER TABLE competition ADD COLUMN cert_tpl_other_id INTEGER`); } catch(e) {}   // 문자 링크 상장 양식 — 그 외 완주자용. NULL=자동(★기본 완주증)
 // event.division: 중등부/고등부/대학부/일반부/국제/U20
 try { db.exec(`ALTER TABLE event ADD COLUMN division TEXT NOT NULL DEFAULT ''`); } catch(e) {}
 // event.result_url: 외부 결과 링크 URL (노출용 대회에서 사용)
@@ -1996,6 +1998,8 @@ if (db.isAsync) {
             await pgIdempotentAddCol('competition', 'name_en', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'name_ja', `TEXT DEFAULT ''`);
             await pgIdempotentAddCol('competition', 'sms_template', `TEXT NOT NULL DEFAULT ''`);   // 대회별 문자 문구 (2026-11-05)
+            await pgIdempotentAddCol('competition', 'cert_tpl_award_id', `BIGINT`);   // 문자 링크 상장 양식 — 입상(1~3위)
+            await pgIdempotentAddCol('competition', 'cert_tpl_other_id', `BIGINT`);   // 문자 링크 상장 양식 — 그 외 완주자
             // 조직(organization) — 멀티테넌시 1단계 (2026-10-01)
             try {
                 await db.run(`CREATE TABLE IF NOT EXISTS "organization" (
