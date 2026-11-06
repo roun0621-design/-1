@@ -2528,6 +2528,7 @@ POST /api/external/event-result-link/batch<br>
                                 <label><input type="checkbox" id="cert-edit-show-team" checked> 소속</label>
                                 <label><input type="checkbox" id="cert-edit-show-date" checked> 날짜</label>
                                 <label><input type="checkbox" id="cert-edit-show-body" checked> 본문 <span class="t-muted">(기록증 증명 문구)</span></label>
+                                <label><input type="checkbox" id="cert-edit-show-bib" checked> 배번 <span class="t-muted">(기록증)</span></label>
                             </div>
                         </div>
                     </div>
@@ -12018,6 +12019,7 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('cert-edit-show-team').checked = t ? !!t.show_athlete_team : true;
             document.getElementById('cert-edit-show-date').checked = t ? !!t.show_date : true;
             document.getElementById('cert-edit-show-body').checked = t ? (t.show_body == null ? true : !!Number(t.show_body)) : true;
+            document.getElementById('cert-edit-show-bib').checked = t ? (t.show_bib == null ? true : !!Number(t.show_bib)) : true;
             document.getElementById('cert-edit-signer-inline').value = (t && Number(t.signer_inline) === 1) ? '1' : '0';
             const _fs = Math.round(((t && t.font_scale) ? Number(t.font_scale) : 1) * 100), _ls = Math.round(((t && t.logo_scale) ? Number(t.logo_scale) : 1) * 100);
             document.getElementById('cert-edit-font-scale').value = _fs;
@@ -12128,6 +12130,7 @@ POST /api/external/event-result-link/batch<br>
                 show_athlete_team: document.getElementById('cert-edit-show-team').checked ? 1 : 0,
                 show_date: document.getElementById('cert-edit-show-date').checked ? 1 : 0,
                 show_body: document.getElementById('cert-edit-show-body').checked ? 1 : 0,
+                show_bib: document.getElementById('cert-edit-show-bib').checked ? 1 : 0,
                 signer_inline: document.getElementById('cert-edit-signer-inline').value === '1' ? 1 : 0,
                 font_scale: (parseInt(document.getElementById('cert-edit-font-scale').value, 10) || 100) / 100,
                 logo_scale: (parseInt(document.getElementById('cert-edit-logo-scale').value, 10) || 100) / 100,

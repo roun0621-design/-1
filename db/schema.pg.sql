@@ -661,6 +661,7 @@ CREATE TABLE IF NOT EXISTS "certificate_template" (
     "accent_color" TEXT NOT NULL DEFAULT '#7a3a00',
     "panel_opacity" DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     "show_body" BIGINT NOT NULL DEFAULT 1,              -- 본문(기록증 증명 문구) 표시 (2026-11-06)
+    "show_bib" BIGINT NOT NULL DEFAULT 1,               -- 기록증 메타 줄 배번 표시 (2026-11-06)
     "signer_inline" BIGINT NOT NULL DEFAULT 0,          -- 발급자 '단체명 직책 이름' 한 줄 (2026-11-06)
     "font_scale" DOUBLE PRECISION NOT NULL DEFAULT 1.0, -- 글자 크기 배율 1~1.3 (2026-11-06)
     "logo_scale" DOUBLE PRECISION NOT NULL DEFAULT 1.0, -- 좌·우 로고 배율 0.5~2 (2026-11-06)

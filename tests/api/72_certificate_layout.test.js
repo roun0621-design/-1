@@ -1,9 +1,9 @@
 /**
  * 상장·기록증 PDF — 배치 옵션 (2026-11-06, 경기도육상연맹 요청)
  *
- * 고객 요청 5건: 증명 문구 삭제 · '기록증' 제목을 대회명 자리까지 내리고 전체를 아래로 가운데 · 글씨 키우기 · 로고 키우기 · 발급자 한 줄.
+ * 고객 요청: 증명 문구 삭제 · 배번 삭제 · '기록증' 제목을 대회명 자리까지 내리고 전체를 아래로 가운데 · 글씨 키우기 · 로고 키우기 · 발급자 한 줄.
  *   → 기록증은 내용 블록을 로고 줄 아래 ~ 카드 하단의 세로 가운데에 놓는다(기본 변경).
- *   → certificate_template.show_body / signer_inline / font_scale / logo_scale (양식 편집기 옵션, 기본값은 예전 출력과 같다).
+ *   → certificate_template.show_body / show_bib / signer_inline / font_scale / logo_scale (양식 편집기 옵션, 기본값은 예전 출력과 같다).
  * 검증은 PDF 콘텐츠 스트림(글자 Tm 위치·Tf 크기, 이미지 cm 폭)과 pdf-parse 본문으로 한다.
  */
 const zlib = require('zlib');
@@ -85,6 +85,17 @@ describe('기록증 — show_body (증명 문구 삭제)', () => {
     });
 });
 
+describe('기록증 — show_bib (배번 삭제)', () => {
+    it('기본은 메타 줄에 "배번 254"가 있고, show_bib=0 이면 빠진다 (나머지 메타는 그대로)', async () => {
+        const flat = async b => (await pdfParse(b)).text.replace(/\s+/g, '');
+        const on = await flat((await render({ kind: 'record', ...SIGN })).buf);
+        const off = await flat((await render({ kind: 'record', ...SIGN, show_bib: 0 })).buf);
+        expect(on).toContain('배번254');
+        expect(off).not.toContain('배번');
+        expect(off).toContain('남자·초3학년부·한국초등학교');
+    });
+});
+
 describe('기록증 — signer_inline (발급자 한 줄)', () => {
     it('기본은 단체명 / 직책 이름 두 줄(18pt 2개), signer_inline=1 이면 한 줄(18pt 1개)에 이름이 다 들어간다', async () => {
         const two = await render({ kind: 'record', ...SIGN });
@@ -138,20 +149,20 @@ describe('양식 API — 새 컬럼 저장·기본값·범위', () => {
         const r = await post({});
         expect(r.status).toBe(200);
         const t = r.body.template;
-        expect(Number(t.show_body)).toBe(1); expect(Number(t.signer_inline)).toBe(0);
+        expect(Number(t.show_body)).toBe(1); expect(Number(t.show_bib)).toBe(1); expect(Number(t.signer_inline)).toBe(0);
         expect(Number(t.font_scale)).toBe(1); expect(Number(t.logo_scale)).toBe(1);
     });
     it('값을 주면 저장되고, PUT 은 준 것만 바꾸며 범위 밖은 잘라낸다', async () => {
-        const r = await post({ show_body: 0, signer_inline: 1, font_scale: 1.25, logo_scale: 1.6 });
+        const r = await post({ show_body: 0, show_bib: 0, signer_inline: 1, font_scale: 1.25, logo_scale: 1.6 });
         expect(r.status).toBe(200);
         let t = r.body.template;
-        expect(Number(t.show_body)).toBe(0); expect(Number(t.signer_inline)).toBe(1);
+        expect(Number(t.show_body)).toBe(0); expect(Number(t.show_bib)).toBe(0); expect(Number(t.signer_inline)).toBe(1);
         expect(Number(t.font_scale)).toBeCloseTo(1.25, 5); expect(Number(t.logo_scale)).toBeCloseTo(1.6, 5);
         const u = await request(app).put(`/api/admin/certificate-templates/${t.id}`).send({ admin_key: ADMIN, font_scale: 9, logo_scale: 0.1 });
         expect(u.status).toBe(200);
         t = u.body.template;
         expect(Number(t.font_scale)).toBeCloseTo(1.3, 5); expect(Number(t.logo_scale)).toBeCloseTo(0.5, 5);
-        expect(Number(t.show_body)).toBe(0); expect(Number(t.signer_inline)).toBe(1);   // 안 준 것은 그대로
+        expect(Number(t.show_body)).toBe(0); expect(Number(t.show_bib)).toBe(0); expect(Number(t.signer_inline)).toBe(1);   // 안 준 것은 그대로
         const g = await request(app).get(`/api/admin/certificate-templates/${t.id}`).query({ admin_key: ADMIN });
         expect(Number(g.body.template.font_scale)).toBeCloseTo(1.3, 5);
     });

@@ -859,6 +859,7 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_template (
     accent_color TEXT NOT NULL DEFAULT '#7a3a00',         -- 강조 색(기록값·종목 강조)
     panel_opacity REAL NOT NULL DEFAULT 1.0,              -- 기록 패널 투명도(0.2~1.0, 낮추면 뒤 워터마크가 비침)
     show_body INTEGER NOT NULL DEFAULT 1,                 -- 본문(기록증 증명 문구) 표시 (2026-11-06)
+    show_bib INTEGER NOT NULL DEFAULT 1,                  -- 기록증 메타 줄 배번 표시 (2026-11-06)
     signer_inline INTEGER NOT NULL DEFAULT 0,             -- 발급자 '단체명 직책 이름' 한 줄 (2026-11-06)
     font_scale REAL NOT NULL DEFAULT 1.0,                 -- 글자 크기 배율 1~1.3 (2026-11-06)
     logo_scale REAL NOT NULL DEFAULT 1.0,                 -- 좌·우 로고 배율 0.5~2 (2026-11-06)
@@ -877,6 +878,7 @@ try { db.exec(`ALTER TABLE certificate_template ADD COLUMN accent_color TEXT NOT
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN panel_opacity REAL NOT NULL DEFAULT 1.0`); } catch(e) {}
 // 양식 배치 옵션 — 본문 표시·발급자 한 줄·글자/로고 배율 (2026-11-06, lib/certificatePdf.js)
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN show_body INTEGER NOT NULL DEFAULT 1`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN show_bib INTEGER NOT NULL DEFAULT 1`); } catch(e) {}
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN signer_inline INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN font_scale REAL NOT NULL DEFAULT 1.0`); } catch(e) {}
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN logo_scale REAL NOT NULL DEFAULT 1.0`); } catch(e) {}
@@ -1851,6 +1853,7 @@ if (db.isAsync) {
                 accent_color TEXT NOT NULL DEFAULT '#7a3a00',
                 panel_opacity DOUBLE PRECISION NOT NULL DEFAULT 1.0,
                 show_body BIGINT NOT NULL DEFAULT 1,
+                show_bib BIGINT NOT NULL DEFAULT 1,
                 signer_inline BIGINT NOT NULL DEFAULT 0,
                 font_scale DOUBLE PRECISION NOT NULL DEFAULT 1.0,
                 logo_scale DOUBLE PRECISION NOT NULL DEFAULT 1.0,
@@ -2095,6 +2098,7 @@ if (db.isAsync) {
             await pgIdempotentAddCol('certificate_template', 'panel_opacity', `DOUBLE PRECISION NOT NULL DEFAULT 1.0`);
             // 양식 배치 옵션 (2026-11-06)
             await pgIdempotentAddCol('certificate_template', 'show_body', `BIGINT NOT NULL DEFAULT 1`);
+            await pgIdempotentAddCol('certificate_template', 'show_bib', `BIGINT NOT NULL DEFAULT 1`);
             await pgIdempotentAddCol('certificate_template', 'signer_inline', `BIGINT NOT NULL DEFAULT 0`);
             await pgIdempotentAddCol('certificate_template', 'font_scale', `DOUBLE PRECISION NOT NULL DEFAULT 1.0`);
             await pgIdempotentAddCol('certificate_template', 'logo_scale', `DOUBLE PRECISION NOT NULL DEFAULT 1.0`);
