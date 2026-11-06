@@ -1,15 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<!-- Google Analytics 4 -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-3PRW9G7KVQ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-3PRW9G7KVQ');
-</script>
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
     <title>PACE RISE Lower Third Overlay</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -31,15 +23,15 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
 
-        .lt-accent { height: 3px; background: linear-gradient(90deg, #b79f58, #6b6b6b); }
+        .lt-accent { height: 3px; background: var(--ov-point, #C24A2E); }
 
         .lt-content { padding: 14px 24px; display: flex; align-items: center; gap: 18px; }
 
         .lt-bib {
             font-family: 'Audiowide', sans-serif; font-size: 28px; font-weight: 900;
-            color: #fff; background: rgba(183,159,88,0.2); border-radius: 8px;
+            color: #fff; background: color-mix(in srgb, var(--ov-point, #C24A2E) 20%, transparent); border-radius: 8px;
             width: 60px; height: 52px; display: flex; align-items: center; justify-content: center;
-            border: 1px solid rgba(183,159,88,0.3);
+            border: 1px solid rgba(194,74,46,0.3);
         }
 
         .lt-info { flex: 1; }
@@ -50,12 +42,15 @@
         .lt-record { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 26px; font-weight: 800; color: #4ade80; }
         .lt-rank { font-size: 11px; color: #fbbf24; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
 
+        /* 세로 화면: 좌우 여백만 남기고 꽉 채운다 — ?layout=vertical (2026-10-12) */
+        body.v .lower-third { left: 4vw; right: 4vw; bottom: 6vh; min-width: 0; max-width: none; }
         .lt-event-bar {
             display: flex; align-items: center; justify-content: space-between;
             padding: 6px 24px; background: rgba(0,0,0,0.3);
         }
         .lt-event-name { font-size: 11px; color: #64748b; font-weight: 600; letter-spacing: 0.5px; }
-        .lt-brand { font-family: 'Audiowide', sans-serif; font-size: 9px; color: #4a5568; letter-spacing: 1px; }
+        .lt-brand { font-family: 'Audiowide', sans-serif; font-size: 9px; color: #F4F3EF; opacity: .7; letter-spacing: 1px; display:inline-flex; align-items:center; }
+        .lt-brand img { height: 10px; width: auto; }
 
         .hidden { display: none; }
     </style>
@@ -77,7 +72,7 @@
         </div>
         <div class="lt-event-bar">
             <span class="lt-event-name" id="lt-event">-</span>
-            <span class="lt-brand">PACE RISE</span>
+            <span class="lt-brand" id="lt-brand"><img src="/brand/wordmark-white.svg" alt="PACE RISE"></span>
         </div>
     </div>
 </div>
@@ -85,6 +80,17 @@
 <script>
 const params = new URLSearchParams(window.location.search);
 const compId = params.get('comp');
+// 4K 송출은 ?scale=2, 세로 화면은 ?layout=vertical — 2026-10-12
+(function () { const sc = parseFloat(params.get('scale') || '1'); if (sc > 0 && sc !== 1) document.body.style.zoom = String(sc); if ((params.get('layout') || '') === 'vertical') document.body.classList.add('v'); })();
+// 대회 브랜드(포인트색·로고) 반영 — 2026-10-12
+if (compId) fetch(`/api/competitions/${compId}`).then(r => r.ok ? r.json() : null).then(c => {
+    if (!c) return;
+    const point = c.brand_color_point || (c.brand && c.brand.point) || '';
+    if (/^#[0-9a-f]{6}$/i.test(point)) document.documentElement.style.setProperty('--ov-point', point);
+    const logo = c.brand_logo_path || (c.brand && c.brand.logo) || '';
+    const el = document.getElementById('lt-brand');
+    if (el && logo) el.innerHTML = `<img src="${logo.replace(/"/g, '')}" alt="" style="height:12px;">`;
+}).catch(() => {});
 let ws = null;
 let currentData = null;
 let displayTimer = null;
@@ -122,10 +128,11 @@ function showLatestResult(data) {
     const isTrack = data.event.category === 'track' || data.event.category === 'relay' || data.event.category === 'road';
 
     // Find entries with records, sort by rank
-    const withRecords = data.entries.filter(e => e.record != null && e.status_code !== 'DNS' && e.status_code !== 'DNF');
+    // 실격(DQ)·기권·결장은 제외 — 예전엔 DQ 선수가 기록이 있으면 '1st PLACE' 로 떴다. 순위는 서버가 계산한 rank 를 쓴다
+    const withRecords = data.entries.filter(e => e.record != null && !e.status_code && e.rank != null);
     if (withRecords.length === 0) return;
 
-    withRecords.sort((a, b) => isTrack ? a.record - b.record : b.record - a.record);
+    withRecords.sort((a, b) => a.rank - b.rank);
 
     // Show the leader
     const leader = withRecords[0];
@@ -134,7 +141,7 @@ function showLatestResult(data) {
     document.getElementById('lt-bib').textContent = leader.bib_number || '-';
     document.getElementById('lt-name').textContent = leader.name || '-';
     document.getElementById('lt-team').textContent = leader.team || '';
-    document.getElementById('lt-record').textContent = formatTime(leader.record, isTrack);
+    document.getElementById('lt-record').textContent = leader.record_text || formatTime(leader.record, isTrack);
     document.getElementById('lt-rank').textContent = '1st PLACE';
 
     const gL = data.event.gender === 'M' ? 'Men' : data.event.gender === 'F' ? 'Women' : 'Mixed';

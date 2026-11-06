@@ -1,15 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<!-- Google Analytics 4 -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-3PRW9G7KVQ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-3PRW9G7KVQ');
-</script>
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
     <title>PACE RISE Scoreboard Overlay</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -27,11 +19,11 @@
 
         .sb-header {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 20px; background: linear-gradient(135deg, #1a5d3a, #b79f58);
+            padding: 10px 20px; background: #0E0E10; border-bottom: 2px solid var(--ov-point, #C24A2E);
         }
         .sb-event-name { font-family: 'Audiowide', sans-serif; font-size: 16px; color: #fff; letter-spacing: 1px; }
         .sb-heat-info { font-size: 12px; color: rgba(255,255,255,0.8); font-weight: 600; }
-        .sb-wind { font-size: 11px; color: #a5d6c1; font-weight: 500; }
+        .sb-wind { font-size: 11px; color: #C9C6BF; font-weight: 500; }
         .sb-joint-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-left: 8px; }
 
         .sb-body { padding: 0; }
@@ -41,7 +33,7 @@
             transition: background 0.3s;
         }
         .sb-row:last-child { border-bottom: none; }
-        .sb-row.highlight { background: rgba(183,159,88,0.15); }
+        .sb-row.highlight { background: color-mix(in srgb, var(--ov-point, #C24A2E) 15%, transparent); }
         .sb-row.dns { opacity: 0.4; }
 
         .sb-lane { font-size: 14px; color: #6b7b8d; font-weight: 700; text-align: center; }
@@ -67,9 +59,16 @@
             display: flex; align-items: center; justify-content: space-between;
             padding: 6px 20px; background: rgba(0,0,0,0.3); font-size: 9px; color: #556; letter-spacing: 0.5px;
         }
-        .sb-brand { font-family: 'Audiowide', sans-serif; color: #4a5; }
+        .sb-brand { font-family: 'Audiowide', sans-serif; color: #C9C6BF; display:inline-flex; align-items:center; gap:6px; }
+        .sb-brand img { height: 14px; width: auto; }
 
         .sb-empty { padding: 40px; text-align: center; color: #556; font-size: 14px; }
+        /* 세로(9:16) LED·세로 화면: 폭을 화면에 맞추고 열을 줄인다 — ?layout=vertical (2026-10-12) */
+        body.v .scoreboard { width: 92vw; max-width: 640px; bottom: 4vh; }
+        body.v .sb-row { grid-template-columns: 36px 48px 1fr 96px 56px; padding: 8px 12px; }
+        body.v .sb-header, body.v .sb-footer { padding-left: 12px; padding-right: 12px; }
+        body.v .sb-event-name { font-size: 14px; }
+        body.v .sb-record { font-size: 16px; }
 
         /* Status indicator */
         .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
@@ -92,7 +91,7 @@
     </div>
     <div class="sb-footer">
         <span><span class="status-dot" id="status-dot"></span><span id="status-text">Connecting</span></span>
-        <span class="sb-brand">PACE RISE</span>
+        <span class="sb-brand" id="sb-brand"><img src="/brand/wordmark-white.svg" alt="PACE RISE"></span>
     </div>
 </div>
 
@@ -101,6 +100,17 @@ const FED_LABELS = { 'KTFL': '실업', 'KUAF': '대학' };
 
 const params = new URLSearchParams(window.location.search);
 const compId = params.get('comp');
+// 4K 송출은 ?scale=2 (OBS 브라우저 소스 3840×2160), 세로 화면은 ?layout=vertical — 2026-10-12
+(function () { const sc = parseFloat(params.get('scale') || '1'); if (sc > 0 && sc !== 1) document.body.style.zoom = String(sc); if ((params.get('layout') || '') === 'vertical') document.body.classList.add('v'); })();
+// 대회 브랜드(포인트색·로고, 관리자 › 대회 설정 › 브랜드) 를 오버레이 색·푸터에 반영 — 없으면 기본 타탄 + PACE RISE 워드마크 (2026-10-12)
+if (compId) fetch(`/api/competitions/${compId}`).then(r => r.ok ? r.json() : null).then(c => {
+    if (!c) return;
+    const point = c.brand_color_point || (c.brand && c.brand.point) || '';
+    if (/^#[0-9a-f]{6}$/i.test(point)) document.documentElement.style.setProperty('--ov-point', point);
+    const logo = c.brand_logo_path || (c.brand && c.brand.logo) || '';
+    const el = document.getElementById('sb-brand');
+    if (el && logo) el.innerHTML = `<img src="${logo.replace(/"/g, '')}" alt="" style="height:16px;">`;
+}).catch(() => {});
 let ws = null;
 let reconnectTimer = null;
 
@@ -121,7 +131,7 @@ function connect() {
         try {
             const msg = JSON.parse(e.data);
             if (msg.type === 'scoreboard_state') renderScoreboard(msg.data);
-            if (msg.type === 'scoreboard_result_update' || msg.type === 'scoreboard_wind_update' || msg.type === 'scoreboard_event_status_changed') {
+            if (/^scoreboard_(result_update|wind_update|height_update|event_status_changed|event_completed|heat_update)$/.test(msg.type)) {
                 if (compId) ws.send(JSON.stringify({ type: 'request_current', competition_id: compId }));
             }
         } catch(e) {}
@@ -146,10 +156,11 @@ function renderScoreboard(data) {
     }
 
     const evt = data.event;
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const gL = evt.gender === 'M' ? 'Men' : evt.gender === 'F' ? 'Women' : 'Mixed';
     const roundL = { preliminary: 'Prelim', semifinal: 'Semi', final: 'Final' }[evt.round_type] || '';
     
-    let titleHtml = `${gL} ${evt.name}`;
+    let titleHtml = `${gL} ${esc(evt.name)}`;
     if (data.is_joint) {
         titleHtml += ' <span class="sb-joint-badge" style="background:#f59e0b;color:#000;">JOINT</span>';
     }
@@ -166,44 +177,37 @@ function renderScoreboard(data) {
         return;
     }
 
-    const isTrack = evt.category === 'track' || evt.category === 'relay' || evt.category === 'road';
     const isJoint = data.is_joint;
+    // 순위·기록 표기는 서버가 공용 규칙으로 계산해 보낸다(동률 = 같은 순위, 실격·기권은 순위 없음). 화면은 그대로 보여주기만 한다.
     const sorted = [...data.entries].sort((a, b) => {
-        const aS = a.status_code === 'DNS' || a.status_code === 'DNF';
-        const bS = b.status_code === 'DNS' || b.status_code === 'DNF';
-        if (aS && !bS) return 1;
-        if (!aS && bS) return -1;
-        if (a.record == null && b.record == null) return (a.lane_number || 0) - (b.lane_number || 0);
-        if (a.record == null) return 1;
-        if (b.record == null) return -1;
-        return isTrack ? a.record - b.record : b.record - a.record;
+        const ar = a.rank != null ? a.rank : Infinity, br = b.rank != null ? b.rank : Infinity;
+        if (ar !== br) return ar - br;
+        const aS = !!a.status_code, bS = !!b.status_code;
+        if (aS !== bS) return aS ? 1 : -1;
+        if (aS && bS) { const o = { NM: 1, DNF: 2, DQ: 3, DNS: 4 }; const d = (o[a.status_code] || 9) - (o[b.status_code] || 9); if (d) return d; }   // 공용 규칙(public/lib/ranking.js)과 같은 순서
+        return (a.lane_number || 0) - (b.lane_number || 0);
     });
 
-    let rank = 0;
-    const html = sorted.map((e, i) => {
-        const special = e.status_code === 'DNS' || e.status_code === 'DNF' || e.status_code === 'DQ';
-        if (!special && e.record != null) rank++;
+    const html = sorted.map(e => {
+        const special = !!e.status_code;
+        const rank = e.rank;
         const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
-        const recStr = special ? e.status_code : (e.record != null ? formatTime(e.record, isTrack) : '');
-        
-        // Federation badge for joint events
+        const recStr = special ? esc(e.status_code) : esc(e.record_text || '');
         let fedBadge = '';
         if (isJoint && e.federation) {
             const fedCode = e.federation;
             const fedClass = FED_LABELS[fedCode] ? fedCode : 'default';
-            const fedText = FED_LABELS[fedCode] || fedCode;
-            fedBadge = `<span class="sb-fed-badge ${fedClass}">${fedText}</span>`;
+            fedBadge = `<span class="sb-fed-badge ${esc(fedClass)}">${esc(FED_LABELS[fedCode] || fedCode)}</span>`;
         }
-        
-        return `<div class="sb-row ${special ? 'dns' : ''} ${rank <= 3 && !special ? 'highlight' : ''}">
-            <div class="sb-rank ${rankClass}">${special ? '' : (e.record != null ? rank : '')}</div>
-            <div class="sb-bib">${e.bib_number || ''}</div>
+        return `<div class="sb-row ${special ? 'dns' : ''} ${rank != null && rank <= 3 ? 'highlight' : ''}">
+            <div class="sb-rank ${rankClass}">${rank != null ? rank : ''}</div>
+            <div class="sb-bib">${esc(e.bib_number)}</div>
             <div class="sb-name-team">
-                <div class="sb-name">${e.name || ''}${fedBadge}</div>
-                <div class="sb-team">${e.team || ''}</div>
+                <div class="sb-name">${esc(e.name)}${fedBadge}</div>
+                <div class="sb-team">${esc(e.team)}</div>
             </div>
             <div class="sb-record ${special ? 'dns-mark' : ''}">${recStr}</div>
-            <div class="sb-lane">Lane ${e.lane_number || '-'}</div>
+            <div class="sb-lane">Lane ${esc(e.lane_number || '-')}</div>
         </div>`;
     }).join('');
 
