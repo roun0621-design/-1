@@ -2451,7 +2451,7 @@ POST /api/external/event-result-link/batch<br>
                             </select>
                         </div>
                         <div style="grid-column:1 / -1;">
-                            <label class="t-xs">본문 (변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {date} {competition_name})</label>
+                            <label class="t-xs">본문 (변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {date} {competition_name}) <span class="t-muted">· 기록증은 증명 문구, 비우면 기본 문구 · 아예 빼려면 아래 표시 옵션 '본문' 해제</span></label>
                             <textarea id="cert-edit-body" rows="5" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;font-family:inherit;"></textarea>
                         </div>
                         <div>
@@ -2465,6 +2465,23 @@ POST /api/external/event-result-link/batch<br>
                         <div>
                             <label class="t-xs">발급자 이름</label>
                             <input type="text" id="cert-edit-signer-name" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">발급자 배치</label>
+                            <select id="cert-edit-signer-inline" style="width:100%;padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                <option value="0">두 줄 (단체명 / 직책 이름)</option>
+                                <option value="1">한 줄 (단체명 직책 이름)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="t-xs">글자 크기 <b><span id="cert-edit-font-scale-val">100</span>%</b> <span class="t-muted">(제목·이름·본문·발급자 함께 · 기록증은 전체가 세로 가운데, 한 장에 안 들어가면 자동으로 조금 줄어듦)</span></label>
+                            <input type="range" id="cert-edit-font-scale" min="100" max="130" step="5" value="100"
+                                   oninput="document.getElementById('cert-edit-font-scale-val').textContent=this.value" style="width:100%;height:32px;">
+                        </div>
+                        <div>
+                            <label class="t-xs">로고 크기 <b><span id="cert-edit-logo-scale-val">100</span>%</b> <span class="t-muted">(좌·우 로고)</span></label>
+                            <input type="range" id="cert-edit-logo-scale" min="50" max="200" step="10" value="100"
+                                   oninput="document.getElementById('cert-edit-logo-scale-val').textContent=this.value" style="width:100%;height:32px;">
                         </div>
                         <div>
                             <label class="t-xs">테두리 스타일</label>
@@ -2510,6 +2527,7 @@ POST /api/external/event-result-link/batch<br>
                                 <label><input type="checkbox" id="cert-edit-show-record" checked> 기록값</label>
                                 <label><input type="checkbox" id="cert-edit-show-team" checked> 소속</label>
                                 <label><input type="checkbox" id="cert-edit-show-date" checked> 날짜</label>
+                                <label><input type="checkbox" id="cert-edit-show-body" checked> 본문 <span class="t-muted">(기록증 증명 문구)</span></label>
                             </div>
                         </div>
                     </div>
@@ -2517,7 +2535,7 @@ POST /api/external/event-result-link/batch<br>
                     <!-- 이미지 업로드 (양식 저장 후 활성화) -->
                     <div id="cert-images-section" style="margin-top:14px;border-top:1px solid #eee;padding-top:12px;display:none;">
                         <h5 style="margin-bottom:8px;">이미지 업로드</h5>
-                        <p class="t-xs t-muted" style="margin-bottom:10px;">권장: PNG (배경 투명), 정사각형. 로고 60×60pt, 인장 50×50pt로 출력됩니다.</p>
+                        <p class="t-xs t-muted" style="margin-bottom:10px;">권장: PNG (배경 투명). 로고는 기본 60pt(기록증 50pt)이고 위 '로고 크기'로 최대 2배, 인장은 50pt(기록증 44pt)이며 글자 크기를 따라 커집니다.</p>
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
                             <div>
                                 <label class="t-xs" style="font-weight:600;">좌측 로고</label>
@@ -11999,6 +12017,13 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('cert-edit-show-record').checked = t ? !!t.show_record_value : true;
             document.getElementById('cert-edit-show-team').checked = t ? !!t.show_athlete_team : true;
             document.getElementById('cert-edit-show-date').checked = t ? !!t.show_date : true;
+            document.getElementById('cert-edit-show-body').checked = t ? (t.show_body == null ? true : !!Number(t.show_body)) : true;
+            document.getElementById('cert-edit-signer-inline').value = (t && Number(t.signer_inline) === 1) ? '1' : '0';
+            const _fs = Math.round(((t && t.font_scale) ? Number(t.font_scale) : 1) * 100), _ls = Math.round(((t && t.logo_scale) ? Number(t.logo_scale) : 1) * 100);
+            document.getElementById('cert-edit-font-scale').value = _fs;
+            document.getElementById('cert-edit-font-scale-val').textContent = _fs;
+            document.getElementById('cert-edit-logo-scale').value = _ls;
+            document.getElementById('cert-edit-logo-scale-val').textContent = _ls;
             // 이미지 섹션 — 기존 양식만
             const imgSec = document.getElementById('cert-images-section');
             const imgSecDis = document.getElementById('cert-images-section-disabled');
@@ -12102,6 +12127,10 @@ POST /api/external/event-result-link/batch<br>
                 show_record_value: document.getElementById('cert-edit-show-record').checked ? 1 : 0,
                 show_athlete_team: document.getElementById('cert-edit-show-team').checked ? 1 : 0,
                 show_date: document.getElementById('cert-edit-show-date').checked ? 1 : 0,
+                show_body: document.getElementById('cert-edit-show-body').checked ? 1 : 0,
+                signer_inline: document.getElementById('cert-edit-signer-inline').value === '1' ? 1 : 0,
+                font_scale: (parseInt(document.getElementById('cert-edit-font-scale').value, 10) || 100) / 100,
+                logo_scale: (parseInt(document.getElementById('cert-edit-logo-scale').value, 10) || 100) / 100,
                 paper_orientation: 'portrait',
                 font_family: 'NanumSquare',
                 watermark_opacity: parseFloat(document.getElementById('cert-edit-wm-opacity').value) || 0.07,
