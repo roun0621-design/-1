@@ -2586,7 +2586,15 @@ POST /api/external/event-result-link/batch<br>
                                 <input type="range" id="cert-edit-wm-scale" min="15" max="90" step="5" value="45"
                                        oninput="document.getElementById('cert-edit-wm-scale-val').textContent=this.value" style="width:160px;">
                             </label>
-                            <span class="t-xs t-muted">가운데 배치 · 진하기 2~30%, 옅을수록 본문이 잘 읽힘 · 기록증은 기록 칸 위에도 비침</span>
+                            <label class="t-xs" style="display:flex;flex-direction:column;gap:2px;">
+                                워터마크 위치 <span class="t-muted">(기록증)</span>
+                                <select id="cert-edit-wm-anchor" style="padding:6px;border:1px solid var(--gray);border-radius:6px;">
+                                    <option value="panel">기록 칸 가운데 (기본)</option>
+                                    <option value="fit">기록 칸 안에 맞춤</option>
+                                    <option value="page">종이 가운데</option>
+                                </select>
+                            </label>
+                            <span class="t-xs t-muted">진하기 2~30%, 옅을수록 본문이 잘 읽힘 · 기록증은 기록 칸을 기준으로 놓이고 칸 위에도 비침 · 상장은 종이 가운데</span>
                         </div>
                     </div>
                     <div id="cert-images-section-disabled" style="margin-top:14px;border-top:1px solid #eee;padding-top:12px;font-size:12px;color:var(--text-muted);">
@@ -12036,6 +12044,7 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('cert-edit-wm-opacity-val').textContent = Math.round(wmOp * 100);
             document.getElementById('cert-edit-wm-scale').value = wmSc;
             document.getElementById('cert-edit-wm-scale-val').textContent = wmSc;
+            document.getElementById('cert-edit-wm-anchor').value = (t && ['panel', 'fit', 'page'].includes(String(t.watermark_anchor))) ? String(t.watermark_anchor) : 'panel';
             if (t) {
                 imgSec.style.display = '';
                 imgSecDis.style.display = 'none';
@@ -12138,6 +12147,7 @@ POST /api/external/event-result-link/batch<br>
                 font_family: 'NanumSquare',
                 watermark_opacity: parseFloat(document.getElementById('cert-edit-wm-opacity').value) || 0.07,
                 watermark_scale: (parseInt(document.getElementById('cert-edit-wm-scale').value, 10) || 45) / 100,
+                watermark_anchor: document.getElementById('cert-edit-wm-anchor').value || 'panel',
                 // 이미지 경로(로고/인장/워터마크)는 업로드 시 DB에 저장됨 —
                 // 미리보기/저장에 현재 저장된 값 동봉(없으면 미리보기에서 이미지가 안 보임)
                 ...(function () {

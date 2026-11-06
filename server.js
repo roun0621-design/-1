@@ -863,6 +863,7 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_template (
     signer_inline INTEGER NOT NULL DEFAULT 0,             -- 발급자 '단체명 직책 이름' 한 줄 (2026-11-06)
     font_scale REAL NOT NULL DEFAULT 1.0,                 -- 글자 크기 배율 1~1.3 (2026-11-06)
     logo_scale REAL NOT NULL DEFAULT 1.0,                 -- 좌·우 로고 배율 0.5~2 (2026-11-06)
+    watermark_anchor TEXT NOT NULL DEFAULT 'panel',       -- 기록증 워터마크 기준 위치 panel(기록 칸)/fit/page (2026-11-06)
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`); } catch(e) { console.error('[DB] certificate_template create error:', e.message); }
@@ -882,6 +883,7 @@ try { db.exec(`ALTER TABLE certificate_template ADD COLUMN show_bib INTEGER NOT 
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN signer_inline INTEGER NOT NULL DEFAULT 0`); } catch(e) {}
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN font_scale REAL NOT NULL DEFAULT 1.0`); } catch(e) {}
 try { db.exec(`ALTER TABLE certificate_template ADD COLUMN logo_scale REAL NOT NULL DEFAULT 1.0`); } catch(e) {}
+try { db.exec(`ALTER TABLE certificate_template ADD COLUMN watermark_anchor TEXT NOT NULL DEFAULT 'panel'`); } catch(e) {}
 
 try { db.exec(`CREATE TABLE IF NOT EXISTS certificate_issue_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1857,6 +1859,7 @@ if (db.isAsync) {
                 signer_inline BIGINT NOT NULL DEFAULT 0,
                 font_scale DOUBLE PRECISION NOT NULL DEFAULT 1.0,
                 logo_scale DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+                watermark_anchor TEXT NOT NULL DEFAULT 'panel',
                 created_at TEXT NOT NULL DEFAULT NOW(),
                 updated_at TEXT NOT NULL DEFAULT NOW()
             )`); } catch(e) { console.error('[PG migration] certificate_template error:', e.message); }
@@ -2102,6 +2105,7 @@ if (db.isAsync) {
             await pgIdempotentAddCol('certificate_template', 'signer_inline', `BIGINT NOT NULL DEFAULT 0`);
             await pgIdempotentAddCol('certificate_template', 'font_scale', `DOUBLE PRECISION NOT NULL DEFAULT 1.0`);
             await pgIdempotentAddCol('certificate_template', 'logo_scale', `DOUBLE PRECISION NOT NULL DEFAULT 1.0`);
+            await pgIdempotentAddCol('certificate_template', 'watermark_anchor', `TEXT NOT NULL DEFAULT 'panel'`);
             // qualification_selection: qualification_type
             await pgIdempotentAddCol('qualification_selection', 'qualification_type', `TEXT DEFAULT ''`);
             // record_breaking_log: wind
