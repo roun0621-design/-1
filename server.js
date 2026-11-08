@@ -5422,6 +5422,8 @@ require('./lib/routes/competition_series')(app, { db, isAdminKey, opLog });
 require('./lib/routes/records')(app, { db, isAdminKey, opLog });
 // 기록표 엑셀 일괄 업로드 (NR/DR/CR) — /api/records/bulk-preview, /api/records/bulk-import
 require('./lib/routes/records_bulk')(app, { db, isAdminKey, opLog, upload, XLSX, guessEventCategory });
+// 결과 문자용 결과표 가져오기 (2026-11-08): 주최가 주는 '이름·전화번호·소속·종목·기록' 엑셀 → 선수·종목·조·기록 → 문자 일괄 발송 — lib/routes/result_sheet_import.js
+require('./lib/routes/result_sheet_import')(app, { db, isAdminKey, opLog, broadcastSSE, upload });
 
 // ============================================================
 // RECORD BREAKS (신기록 승인 큐) — lib/routes/record_breaks.js 로 추출

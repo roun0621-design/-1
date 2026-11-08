@@ -2739,6 +2739,18 @@ POST /api/external/event-result-link/batch<br>
                 </div>
 
                 <!-- C. 일괄 발송 -->
+                <!-- 결과표 가져오기 (문자 발송용, 2026-11-08): 주최가 운영하고 우리는 문자만 보내는 대회 — 이름·전화번호·소속·종목·기록 파일 → 선수·종목·기록 -->
+                <div class="admin-card" id="card-result-sheet">
+                    <h4 style="color:#7a5a20;">결과표 가져오기 (문자 발송용)</h4>
+                    <p class="t-xs t-muted" style="margin-bottom:8px;">주최가 준 결과 파일(xlsx·csv)을 올리면 선수·종목·기록을 한 번에 만듭니다. 한 줄 = 선수 한 명의 한 종목 결과. 열은 머리글 이름으로 찾습니다: <b>이름 · 전화번호 · 소속 · 종목 · 기록</b> (+ 부별 · 성별 · 라운드 · 조 · 순위 · 비고는 있으면 씀). 종목 칸에 '남초6 100m 예선'처럼 부별·라운드가 같이 있어도 됩니다. 그다음 아래 '일괄 발송'에서 종목을 골라 보냅니다.</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <input type="file" id="rs-file" accept=".xlsx,.xls,.csv" style="font-size:12px;">
+                        <button class="btn btn-sm btn-outline" onclick="resultSheetRun(false)">미리보기</button>
+                        <button class="btn btn-sm btn-primary" onclick="resultSheetRun(true)">반영</button>
+                        <span id="rs-status" class="t-xs" style="font-weight:600;"></span>
+                    </div>
+                    <div id="rs-report" class="t-xs" style="display:none;margin-top:8px;line-height:1.7;"></div>
+                </div>
                 <div class="admin-card" id="card-sms-batch" style="">
                     <h4 style="color:#7a5a20;">일괄 발송 (결과 · 상장 링크)</h4>
                     <p class="t-xs t-muted" style="margin-bottom:10px;">대회·종목·순위 범위를 선택해 선수에게 결과 안내 + 상장 다운로드 링크 SMS를 보냅니다.</p>
@@ -12601,6 +12613,33 @@ POST /api/external/event-result-link/batch<br>
             } catch (e) { out.innerHTML = `<span style="color:#a00;">실패: ${_esc(e.message)}</span>`; }
         }
 
+        // 결과표 가져오기 (문자 발송용) — lib/routes/result_sheet_import.js
+        async function resultSheetRun(apply) {
+            if (!_selectedCompId) { toast('대회를 먼저 선택하세요', 'error'); return; }
+            const fi = document.getElementById('rs-file'), box = document.getElementById('rs-report'), st = document.getElementById('rs-status');
+            if (!fi.files[0]) { toast('결과 파일을 고르세요', 'error'); return; }
+            if (apply && !await uiConfirm('파일의 결과를 이 대회에 넣습니다. 파일에 있는 선수·종목의 기록만 바꾸고, 없는 것은 건드리지 않습니다. 계속할까요?')) return;
+            const fd = new FormData(); fd.append('file', fi.files[0]); fd.append('admin_key', AK()); fd.append('competition_id', _selectedCompId);
+            st.textContent = apply ? '반영 중…' : '읽는 중…';
+            try {
+                const res = await fetch(`/api/admin/result-sheet/${apply ? 'import' : 'preview'}`, { method: 'POST', body: fd }); const d = await res.json(); if (!res.ok) throw d;
+                const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                const s = d.stats || {};
+                box.style.display = '';
+                const head = apply
+                    ? `<div><b>반영됨</b>: 기록 ${d.results}건 · 종목 ${(d.groups || []).length}개(새 종목 ${d.events_created}) · 새 선수 ${d.athletes_created}명 · 전화 갱신 ${d.phone_updated}${d.skipped ? ` · <span style="color:#b5541b;">건너뜀 ${d.skipped}</span>` : ''}</div>`
+                    : `<div><b>미리보기</b>: 행 ${s.rows} · 종목 ${s.events}개(새로 만들 종목 ${s.events_new}) · 선수 ${s.athletes}명(새 선수 ${s.athletes_new}) · 문자 보낼 수 있는 행 <b>${s.sendable}</b>${s.no_phone ? ` · <span style="color:#b5541b;">전화 없음 ${s.no_phone}</span>` : ''}${s.with_issues ? ` · <span style="color:#b5541b;">확인 필요 ${s.with_issues}</span>` : ''}</div>`;
+                const hdr = d.header ? `<div class="t-muted">읽은 열: ${Object.entries(d.header).map(([k, v]) => `${esc(v)}→${esc({ name: '이름', phone: '전화', team: '소속', event: '종목', record: '기록', division: '부별', gender: '성별', round: '라운드', heat: '조', rank: '순위', remark: '비고' }[k] || k)}`).join(' · ')}</div>` : '';
+                const groups = (d.groups || []).map(g => `<div>${g.writable === g.count ? '✓' : '<span style="color:#b5541b;">△</span>'} ${esc(g.label)} — ${g.count}명${g.writable !== g.count ? ` (넣을 수 있는 ${g.writable}명)` : ''}${g.event ? '' : ' · <span style="color:#1d6b3a;">새 종목</span>'}</div>`).join('');
+                const bad = (d.rows || []).filter(r => r.issues && r.issues.length).slice(0, 40).map(r => `<div style="color:#b5541b;">${r.line}행 ${esc(r.name || '(이름 없음)')} ${esc(r.label)} ${esc(r.record || '')} — ${esc(r.issues.join(', '))}</div>`).join('');
+                box.innerHTML = `${head}${hdr}${(d.issues || []).map(x => `<div style="color:#b5541b;">${esc(x)}</div>`).join('')}
+                    <div style="max-height:220px;overflow:auto;margin-top:4px;border:1px solid var(--gray-light,#e5e7eb);border-radius:6px;padding:6px 8px;">${groups || '<span class="t-muted">읽은 종목이 없습니다</span>'}</div>
+                    ${bad ? `<div style="max-height:200px;overflow:auto;margin-top:4px;border:1px solid #f0dcb0;background:#fff8ec;border-radius:6px;padding:6px 8px;">${bad}${(d.rows || []).filter(r => r.issues && r.issues.length).length > 40 ? '<div>…</div>' : ''}</div>` : ''}`;
+                st.textContent = apply ? '반영 완료' : '';
+                toast(apply ? `반영: 기록 ${d.results}건` : `미리보기: 행 ${s.rows} · 보낼 수 있는 ${s.sendable}`);
+                if (apply) { if (typeof loadSmsBatchEvents === 'function') loadSmsBatchEvents(); if (typeof loadEvents === 'function') loadEvents(); if (typeof loadAthletes === 'function') loadAthletes(); }
+            } catch (e) { st.textContent = ''; toast(e.error || '실패', 'error'); }
+        }
         async function dryRunSmsBatch() {
             // 백엔드 발송 직전 단계 시뮬레이션 — 그냥 sim_mode가 켜져 있으면 OK, 아니면 임시로 forcing
             const cfg = await fetch(`/api/admin/sms/config?admin_key=${encodeURIComponent(AK())}`).then(r => r.json()).catch(() => ({}));
