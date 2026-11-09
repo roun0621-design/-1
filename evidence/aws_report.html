@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="fonts/audiowide_face.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif; background:#eef1f5; color:#1a2233; padding:40px; width:2000px; }
+  .header { background:linear-gradient(135deg,#232f3e,#37475a); color:#fff; padding:38px 44px; border-radius:16px; margin-bottom:30px; }
+  .header h1 { font-size:38px; margin-bottom:10px; }
+  .header h1 .aws { color:#ff9900; }
+  .header p { font-size:18px; color:#c9d4e0; }
+  .meta { display:flex; gap:14px; margin-top:18px; flex-wrap:wrap; }
+  .meta span { background:rgba(255,255,255,0.13); padding:8px 16px; border-radius:20px; font-size:15px; }
+  .section { background:#fff; border-radius:16px; padding:28px 32px; box-shadow:0 2px 14px rgba(20,40,80,0.07); margin-bottom:26px; }
+  .stitle { font-size:23px; font-weight:700; color:#232f3e; margin-bottom:18px; display:flex; align-items:center; gap:11px; }
+  .stitle .num { background:#ff9900; color:#232f3e; width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:16px; font-weight:800; }
+  /* architecture diagram */
+  .arch { background:#f7f9fb; border:2px dashed #c2cdd9; border-radius:14px; padding:30px; }
+  .cloud-label { display:inline-block; background:#232f3e; color:#ff9900; font-weight:700; padding:6px 16px; border-radius:8px; font-size:15px; margin-bottom:8px; }
+  .region { border:2px solid #00a4a6; border-radius:12px; padding:22px; margin-top:14px; position:relative; }
+  .region-tag { position:absolute; top:-13px; left:18px; background:#fff; color:#00a4a6; font-weight:700; padding:2px 12px; font-size:14px; border:1px solid #00a4a6; border-radius:6px; }
+  .tier { display:flex; gap:20px; align-items:stretch; justify-content:center; flex-wrap:wrap; }
+  .arrow { display:flex; align-items:center; font-size:30px; color:#ff9900; font-weight:800; }
+  .box { background:#fff; border:2px solid #d5dde8; border-radius:12px; padding:18px 20px; min-width:230px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.05); }
+  .box .ico { font-size:34px; margin-bottom:8px; }
+  .box .svc { font-weight:800; color:#232f3e; font-size:17px; margin-bottom:4px; }
+  .box .desc { font-size:13px; color:#5a6b82; line-height:1.5; }
+  .box.ec2 { border-color:#ff9900; }
+  .box.db { border-color:#3b7ddd; }
+  .box.user { border-color:#7b61ff; }
+  table { width:100%; border-collapse:collapse; font-size:15px; }
+  th,td { text-align:left; padding:11px 14px; border-bottom:1px solid #e4e9f0; }
+  th { background:#f5f7fa; color:#232f3e; }
+  .ok { background:#fff3e0; color:#e65100; padding:3px 10px; border-radius:10px; font-weight:700; font-size:13px; }
+  .guide { background:#fff8e1; border-left:4px solid #ff9900; padding:18px 22px; border-radius:8px; font-size:15px; line-height:1.9; }
+  .guide b { color:#e65100; }
+  .guide ol { margin-left:22px; }
+  .footer { text-align:center; color:#7a8aa0; font-size:14px; margin-top:24px; padding-top:18px; border-top:1px solid #d5dde8; }
+
+  /* ===== WHITE/BLACK THEME OVERRIDE (회사 표준) ===== */
+  body { background:#ffffff !important; color:#111111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:'Noto Sans CJK KR','NanumSquare','Malgun Gothic',sans-serif !important; }
+  .brand, .mono-bd { font-family:'Audiowide',sans-serif !important; letter-spacing:0.5px; }
+  .header { background:#ffffff !important; color:#000000 !important; border:1.5px solid #111111 !important; border-radius:8px !important; }
+  .header h1 { color:#000000 !important; }
+  .header p { color:#333333 !important; }
+  .header .meta span { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  .header::before { content:''; display:block; position:absolute; }
+  .section, .stat, .wrap { background:#ffffff !important; color:#111111 !important; border:1px solid #d9d9d9 !important; box-shadow:none !important; }
+  .stitle, .section-title, .stitle .num, .section-title .num { color:#000000 !important; }
+  .stitle .num, .section-title .num, .toc .no, .no { background:#111111 !important; color:#ffffff !important; font-family:'Audiowide',sans-serif !important; }
+  th { background:#f2f2f2 !important; color:#000000 !important; }
+  td, th { border-color:#dddddd !important; }
+  .chip { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  pre, .health { background:#f7f7f7 !important; color:#111111 !important; border:1px solid #cccccc !important; }
+  pre .c { color:#888888 !important; }
+  pre .k { color:#000000 !important; font-weight:700; }
+  .health .lbl { color:#555555 !important; }
+  .note { background:#ffffff !important; border-left:4px solid #111111 !important; border:1px solid #111111 !important; color:#222222 !important; }
+  .footer { color:#555555 !important; border-top:1px solid #cccccc !important; }
+  .shot { border:1px solid #cccccc !important; }
+  .shot .cap, .ba-label, .ba-label.before, .ba-label.after, .imp-head .badge,
+  .cloud-label, .region-tag, .tag.real, .tag.guide, .badge {
+     background:#111111 !important; color:#ffffff !important; border-color:#111111 !important; }
+  .ba-label.before { background:#777777 !important; }
+  .imp-head { background:#f2f2f2 !important; color:#000000 !important; }
+  .stat .num, .stat-num { color:#000000 !important; }
+  td .ok, .ok { background:#111111 !important; color:#ffffff !important; }
+  .arch { background:#fafafa !important; border:1.5px dashed #999999 !important; }
+  /* 잔여 컬러 토큰 무력화: AWS/HTTPS/전후비교 등 */
+  .header h1 .aws { color:#000000 !important; }
+  .box, .box.ec2, .box.db, .box.user { background:#ffffff !important; border:1.5px solid #111111 !important; box-shadow:none !important; }
+  .box .svc { color:#000000 !important; }
+  .box .desc { color:#444444 !important; }
+  .region { border:1.5px solid #111111 !important; }
+  .region-tag { background:#ffffff !important; color:#111111 !important; border:1px solid #111111 !important; }
+  .cloud-label { background:#111111 !important; color:#ffffff !important; }
+  .arrow { color:#111111 !important; }
+  .guide { background:#ffffff !important; border-left:4px solid #111111 !important; border:1px solid #111111 !important; }
+  .guide b { color:#000000 !important; }
+  .ok { background:#111111 !important; color:#ffffff !important; }
+  .flow { background:#f7f7f7 !important; color:#222222 !important; }
+  .head { background:#ffffff !important; color:#000000 !important; border-bottom:1.5px solid #111111 !important; }
+  tfoot td { background:#f2f2f2 !important; color:#000000 !important; border-top:1.5px solid #111111 !important; }
+  td.t { color:#000000 !important; }
+  .ba-label.after, .imp-head .badge, .badge { background:#111111 !important; color:#ffffff !important; }
+
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>② <span class="aws">AWS</span> 클라우드 구성도 및 콘솔 캡처 가이드</h1>
+    <p><span class="brand">PACE RISE : Node</span> — AWS 서울 리전(ap-northeast-2) 배포 아키텍처</p>
+    <div class="meta">
+      <span>리전: ap-northeast-2 (서울)</span>
+      <span>DB: PostgreSQL (SQLite 이관 완료)</span>
+      <span>HTTPS: Let's Encrypt</span>
+      <span>작성일: 2026-06-16</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">1</span> 시스템 아키텍처 구성도</div>
+    <div class="arch">
+      <span class="cloud-label">☁ AWS Cloud</span>
+      <div class="region">
+        <span class="region-tag">Region: ap-northeast-2 (Seoul)</span>
+        <div class="tier">
+          <div class="box user">
+            <div class="ico">👥</div>
+            <div class="svc">사용자 / 운영진</div>
+            <div class="desc">웹 브라우저 · Android 앱<br>(TWA · com.pacerise.node)</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="box">
+            <div class="ico">🔒</div>
+            <div class="svc">HTTPS (443)</div>
+            <div class="desc">Let's Encrypt SSL<br>도메인 라우팅<br><span class="brand">pace-rise-node.com</span></div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="box ec2">
+            <div class="ico">🖥️</div>
+            <div class="svc">EC2 (애플리케이션)</div>
+            <div class="desc">Node.js 20 + Express<br>13.125.200.206 / 52.79.132.6<br>(웹서버 + WebSocket)</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="box db">
+            <div class="ico">🗄️</div>
+            <div class="svc">PostgreSQL DB</div>
+            <div class="desc">34개 테이블 · 7,075행<br>SQLite → PG 이관 완료<br>(RDS 또는 EC2 내장)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:14px;color:#7a8aa0;margin-top:12px;">
+      ※ 본 구성도는 실측된 정보(AWS 서울 리전 IP 대역 13.125.x / 52.79.x, HTTPS 적용, PostgreSQL 이관 완료)를 기반으로 작성되었습니다.
+      세부 서비스 명칭(RDS/EC2/ALB 등)은 실제 콘솔 화면(아래 가이드)으로 확정·보완하시기 바랍니다.
+    </p>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">2</span> 실측된 AWS 배포 증거</div>
+    <table>
+      <tr><th>항목</th><th>측정값</th><th>판정</th></tr>
+      <tr><td>운영 시스템 도메인</td><td><span class="brand">pace-rise-node.com</span> → 52.79.132.6</td><td><span class="ok">AWS 서울 (52.79.x)</span></td></tr>
+      <tr><td>공식 홈페이지 도메인</td><td><span class="brand">pace-rise.com</span> → 13.125.200.206</td><td><span class="ok">AWS 서울 (13.125.x)</span></td></tr>
+      <tr><td>HTTPS / SSL</td><td>Let's Encrypt 유효 인증서</td><td><span class="ok">적용됨</span></td></tr>
+      <tr><td>데이터베이스</td><td>PostgreSQL 15 (34테이블/7,075행)</td><td><span class="ok">이관 완료</span></td></tr>
+    </table>
+    <p style="font-size:14px;color:#7a8aa0;margin-top:10px;">※ IP 대역 13.125.0.0 / 52.79.0.0 은 AWS ap-northeast-2(서울) 공식 할당 대역입니다.</p>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><span class="num">3</span> AWS 콘솔 캡처 가이드 (직접 캡처용)</div>
+    <div class="guide">
+      AWS 콘솔 화면은 계정 보유자(본인)만 접근 가능하므로 <b>직접 캡처</b>가 필요합니다. 아래 화면들을 캡처하면 충실한 증빙이 됩니다:
+      <ol>
+        <li><b>EC2 인스턴스 목록</b> — EC2 → 인스턴스 → 실행 중 인스턴스(이름·타입·퍼블릭 IP·서울 리전이 보이도록)</li>
+        <li><b>RDS 데이터베이스</b> (RDS 사용 시) — RDS → 데이터베이스 → PostgreSQL 엔진·상태(Available) 화면</li>
+        <li><b>보안 그룹 / 인바운드 규칙</b> — 443(HTTPS), 80, 5432(DB) 포트 규칙</li>
+        <li><b>리전 표시</b> — 콘솔 우측 상단 "서울 (ap-northeast-2)" 가 보이도록</li>
+        <li>(선택) <b>VPC / 로드밸런서 / Route 53</b> 사용 시 해당 화면</li>
+      </ol>
+      <b>Tip:</b> 각 화면 우측 상단의 <b>리전(서울)</b> 과 계정/리소스 식별자가 함께 보이도록 캡처하세요.
+      민감정보(계정 ID 전체, 비밀키)는 가려도 무방합니다.
+    </div>
+  </div>
+
+  <div class="footer">
+    구성도는 실측 데이터 기반으로 작성되었으며, 콘솔 상세 화면은 계정 보유자가 직접 캡처하여 보완합니다. &nbsp;|&nbsp; <span class="brand">PACE RISE : Node</span>
+  </div>
+</body>
+</html>

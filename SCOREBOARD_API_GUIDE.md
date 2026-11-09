@@ -362,3 +362,11 @@ UPDATE heat SET wind = '-0.3 m/s' WHERE id = 1365;
 - [ ] `result.wind`는 **숫자** (REAL) — 필드 종목 시도별 풍속만 해당
 - [ ] UPSERT 시 기존 데이터 판별: `heat_id + event_entry_id + attempt_number IS NULL`
 - [ ] `scoreboard_key`에 "N조" 접미사가 없으면 결승 단일 조이므로 "1조" 자동 추가됨
+
+## 9. 방송 오버레이 옵션 (2026-10-12)
+`/overlay-scoreboard.html?comp=<대회id>` · `/overlay-lower-third.html?comp=<대회id>` (OBS 브라우저 소스)
+| 파라미터 | 뜻 |
+|---|---|
+| `scale=2` | 4K(3840×2160) 송출용 2배 확대. 1.5 등 소수도 됨 |
+| `layout=vertical` | 세로 화면(9:16 LED·세로 모니터) — 전광판은 폭을 화면에 맞추고 열을 줄이며, 로어서드는 좌우 여백만 남기고 채운다 |
+| (자동) | 대회 설정 › 브랜드의 **포인트색**이 헤더 선·강조 행·배번 칸에, **로고**가 푸터에 들어간다. 없으면 타탄 + PACE RISE 워드마크 |

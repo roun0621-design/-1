@@ -20,20 +20,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Competition ended check removed — callroom stays accessible
     // so admin/ROUNKIM accounts can still operate after competition ends
     renderPageNav('callroom');
+    { const ic = document.getElementById('cr-batch-ic'); if (ic && window.PaceIcons) ic.innerHTML = PaceIcons.svg('speaker', { style: 'margin-right:6px' }); }
     // [정책] 종료된 대회 + 운영진(operation) → 진입 차단
     if (typeof guardEndedCompForOperation === 'function') await guardEndedCompForOperation('callroom');
     // Parallel: comp selector + info bar + events load simultaneously
-    const [, , events] = await Promise.all([
-        renderCompSelector('callroom'),
-        renderCompInfoBar(),
-        API.getAllEvents(getCompetitionId())
-    ]);
+    uiState('callroom-matrix-container', 'loading', { title: '종목을 불러오는 중…' });
+    let events;
+    try {
+        [, , events] = await Promise.all([
+            renderCompSelector('callroom'),
+            renderCompInfoBar(),
+            API.getAllEvents(getCompetitionId())
+        ]);
+    } catch (e) {
+        uiState('callroom-matrix-container', 'error', { title: '종목을 불러오지 못했습니다', hint: (e && (e.error || e.message)) || '네트워크나 서버 상태를 확인하세요.' });
+        throw e;
+    }
     allEvents = events;
     // Load timetable schedule
     try { _crScheduleMap = await fetch('/api/timetable/' + getCompetitionId() + '/event-schedule').then(r => r.json()) || {}; } catch(e) { _crScheduleMap = {}; }
     setupGenderTabs();
     renderMatrix();
     renderAuditLog();
+    if (typeof registerShortcuts === 'function') registerShortcuts('소집실', [['Enter', '바코드/배번 칸에서 스캔 처리'], ['Esc', '선수 추가·주자 창 닫기']]);
 
     const urlEventId = getParam('event_id');
     if (urlEventId) {
@@ -105,9 +114,9 @@ function renderMatrix() {
             const schedEvt = fin ? _crScheduleMap[fin.id] : (semi ? _crScheduleMap[semi.id] : (prelim ? _crScheduleMap[prelim.id] : null));
             let timeBadge = '';
             if (schedEvt && schedEvt.time) {
-                const tColor = schedEvt.is_today ? '#b79f58' : '#999';
+                const tColor = schedEvt.is_today ? '#C24A2E' : '#999';
                 const crBadge = isCallRoomWindow(schedEvt.callroom_time, schedEvt.scheduled_date) ? ' <span class="ico-callroom">Call Room</span>' : '';
-                timeBadge = `<span style="font-size:9px;color:${tColor};padding:1px 4px;border-radius:4px;background:${schedEvt.is_today ? '#f8f4ea' : '#f5f5f5'};margin-left:3px;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
+                timeBadge = `<span style="font-size:11px;color:${tColor};padding:1px 4px;border-radius:4px;background:${schedEvt.is_today ? '#F6E4DF' : '#f5f5f5'};margin-left:3px;font-variant-numeric:tabular-nums;" title="${schedEvt.callroom_time ? '소집 ' + schedEvt.callroom_time : ''}">${schedEvt.time}</span>${crBadge}`;
             }
             html += `<tr>
                 <td class="rec-matrix-event">${g.name}${timeBadge}</td>
@@ -130,12 +139,12 @@ function renderMatrix() {
                     const parentKey = 'cr-subs-' + (parentIds[0] || g.name);
                     const doneCount = subOrder.filter(sn => subGroups[sn].some(r => r.round_status === 'completed' || r.round_status === 'in_progress')).length;
                     html += `<tr class="combined-sub-toggle-row">
-                        <td colspan="4" style="padding:4px 8px;background:linear-gradient(135deg,#f8f4ea,#faf6ec);border-left:3px solid #8a7640;">
+                        <td colspan="4" style="padding:4px 8px;background:#F6E4DF;border-left:3px solid #B8432A;">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <button onclick="toggleCombinedSubs('${parentKey}')" class="btn btn-sm btn-ghost" style="font-size:11px;padding:2px 10px;" id="toggle-btn-${parentKey}">
                                     ▼ 세부종목 ${subOrder.length}개
                                 </button>
-                                <span style="font-size:10px;color:#8a7640;font-weight:600;">${doneCount}/${subOrder.length} 진행</span>
+                                <span style="font-size:10px;color:#B8432A;font-weight:600;">${doneCount}/${subOrder.length} 진행</span>
                             </div>
                         </td>
                     </tr>`;
@@ -149,7 +158,7 @@ function renderMatrix() {
                         const prefix = isLast ? '└' : '├';
                         const seStatus = (seFin || sePrelim || seSemi);
                         const statusDot = seStatus ? (
-                            seStatus.round_status === 'completed' ? '<span style="color:#9a8548;">●</span>' :
+                            seStatus.round_status === 'completed' ? '<span style="color:#B8432A;">●</span>' :
                             seStatus.round_status === 'in_progress' ? '<span style="color:#f59e0b;">●</span>' :
                             '<span style="color:#d1d5db;">○</span>'
                         ) : '<span style="color:#d1d5db;">○</span>';
@@ -170,7 +179,9 @@ function renderMatrix() {
         html += `</tbody></table></div>`;
     });
 
-    if (!html) html = '<div class="empty-state">해당 성별의 종목이 없습니다.</div>';
+    if (!html) html = allEvents.filter(e => !e.parent_event_id).length
+        ? uiStateHtml('empty', { title: '이 성별의 종목이 없습니다', hint: '위의 성별 탭을 바꿔 보세요.' })
+        : uiStateHtml('empty', { title: '소집할 종목이 없습니다', hint: '관리자에서 종목·조편성을 올리면 여기에 나타납니다.' });
     container.innerHTML = html;
 }
 
@@ -200,7 +211,7 @@ function renderCallroomBtn(evt, suffix) {
     }
     return `<a class="round-btn ${cls}${activeClass} rec-round-btn" href="javascript:void(0)"
         data-event-id="${evt.id}" onclick="selectCallroomEventSafe(${evt.id})"
-        title="${roundLabel} ${suffix}">${roundLabel} ${suffix}</a>`;
+        title="${roundLabel} ${suffix}">${suffix}</a>`;
 }
 
 function getRoundStatusClass(evt) {
@@ -277,8 +288,8 @@ async function selectCallroomEvent(eventId) {
                         ${subEvents.filter((s,i) => i < day1Max).map(s => `<span style="background:#f0f0f0;color:#6b6b6b;padding:2px 8px;border-radius:10px;font-size:11px;">${s.name.replace(/\[.*?\]\s*/, '')}</span>`).join('')}
                     </div>
                     <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
-                        <span style="font-size:11px;font-weight:700;color:#8b1a2a;margin-right:4px;">Day2:</span>
-                        ${subEvents.filter((s,i) => i >= day1Max).map(s => `<span style="background:#f0e0e4;color:#8b1a2a;padding:2px 8px;border-radius:10px;font-size:11px;">${s.name.replace(/\[.*?\]\s*/, '')}</span>`).join('')}
+                        <span style="font-size:11px;font-weight:700;color:#8E2A6B;margin-right:4px;">Day2:</span>
+                        ${subEvents.filter((s,i) => i >= day1Max).map(s => `<span style="background:#F1E3EC;color:#8E2A6B;padding:2px 8px;border-radius:10px;font-size:11px;">${s.name.replace(/\[.*?\]\s*/, '')}</span>`).join('')}
                     </div>
                 </div>`;
             }
@@ -292,7 +303,7 @@ async function selectCallroomEvent(eventId) {
         const jointData = await api('GET', `/api/joint-groups/by-event/${eventId}`);
         if (jointData && jointData.length > 0) {
             _crJointGroup = jointData[0]; // Use first group
-            const fedColors = ['#6b6b6b', '#dc2626', '#9a8548', '#ea580c', '#8a7640'];
+            const fedColors = ['#6b6b6b', '#dc2626', '#1F7A6D', '#ea580c', '#B8432A'];
             const memberBadges = _crJointGroup.members.map((m, i) => {
                 const color = fedColors[i % fedColors.length];
                 const isCurrent = m.event_id === eventId;
@@ -300,7 +311,7 @@ async function selectCallroomEvent(eventId) {
             }).join(' ');
             jointInfoHtml = `<div style="margin-bottom:12px;padding:10px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:var(--radius);border-left:4px solid #f59e0b;font-size:12px;">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                    <span style="font-size:11px;font-weight:700;color:#b79f58;">LINK</span>
+                    <span style="font-size:11px;font-weight:700;color:#B8432A;">LINK</span>
                     <strong>합동 종목</strong>
                     <span style="font-size:10px;color:#92400e;">스코어보드 키: ${_crJointGroup.joint_scoreboard_key || '-'}</span>
                 </div>
@@ -325,7 +336,7 @@ async function selectCallroomEvent(eventId) {
         <!-- Event-level memo (인쇄 시 제목 하단에 큰 글씨로 표시) -->
         <div style="margin:8px 0 12px;padding:10px 14px;background:linear-gradient(135deg,#f0f0f0,#d8d8d8);border-radius:8px;border-left:4px solid #6b6b6b;">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-                <span style="font-size:12px;font-weight:700;color:#8a7640;">MEMO</span>
+                <span style="font-size:12px;font-weight:700;color:#B8432A;">MEMO</span>
                 <label style="font-size:15px;font-weight:700;color:#6b6b6b;">소집 메모</label>
                 <span style="font-size:11px;color:#888;">(인쇄 시 종목 제목 하단에 큰 글씨로 출력됩니다)</span>
                 <span id="event-memo-status" style="font-size:11px;color:#999;margin-left:auto;"></span>
@@ -532,7 +543,7 @@ async function loadCallroomHeatData() {
         const fedColors = { };
         if (hasJoint) {
             const feds = [...new Set(allDisplayEntries.map(e => e._federation))];
-            const colors = ['#6b6b6b', '#dc2626', '#9a8548', '#ea580c', '#8a7640', '#0891b2'];
+            const colors = ['#6b6b6b', '#dc2626', '#1F7A6D', '#ea580c', '#B8432A', '#0891b2'];
             feds.forEach((f, i) => { fedColors[f] = colors[i % colors.length]; });
         }
 
@@ -560,9 +571,9 @@ async function loadCallroomHeatData() {
             <tbody>
                 ${allDisplayEntries.map(e => {
                     const groupLabel = hasSubGroup ? (e.sub_group || '—') : '';
-                    const groupTd = hasSubGroup ? `<td><span style="font-size:11px;font-weight:700;color:${groupLabel==='A'?'#6b6b6b':groupLabel==='B'?'#8b1a2a':'var(--text-muted)'}">${groupLabel}</span></td>` : '';
+                    const groupTd = hasSubGroup ? `<td><span style="font-size:11px;font-weight:700;color:${groupLabel==='A'?'#6b6b6b':groupLabel==='B'?'#8E2A6B':'var(--text-muted)'}">${groupLabel}</span></td>` : '';
                     let smallNum = e.lane_number || '';
-                    const fedBadge = hasJoint ? `<td><span style="background:${fedColors[e._federation] || '#888'};color:#fff;padding:0 4px;border-radius:3px;font-size:9px;font-weight:600;">${e._federation}</span></td>` : '';
+                    const fedBadge = hasJoint ? `<td><span style="background:${fedColors[e._federation] || '#888'};color:#fff;padding:0 4px;border-radius:3px;font-size:11px;font-weight:600;">${e._federation}</span></td>` : '';
                     const jointRowStyle = e._isJoint ? 'background:#fffbeb;' : '';
                     return `<tr data-entry-id="${e.event_entry_id}" class="${e.status === 'checked_in' ? 'row-checked-in' : e.status === 'no_show' ? 'row-no-show' : ''}" style="${jointRowStyle}">
                     ${fedBadge}
@@ -917,7 +928,7 @@ async function showRelayMembers(teamName) {
         window._relayAvailableAthletes = availableAthletes;
         window._relayEventEntryId = eventEntryId;
         window._relayTeamName = teamName;
-    } catch (err) { alert('선수 명단 로드 실패: ' + (err.error || err.message)); }
+    } catch (err) { uiAlert('선수 명단 로드 실패: ' + (err.error || err.message)); }
 }
 
 function _renderRelayAddList(list, eventEntryId, teamName) {
@@ -973,7 +984,7 @@ async function applyRelayReorder(teamName) {
         // Refresh modal to show new order
         document.getElementById('relay-members-modal')?.remove();
         await showRelayMembers(teamName);
-    } catch(e) { alert('순서 변경 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('순서 변경 실패: ' + (e.error || e.message)); }
 }
 
 async function addRelayMemberToTeam(eventEntryId, athleteId, teamName) {
@@ -987,18 +998,18 @@ async function addRelayMemberToTeam(eventEntryId, athleteId, teamName) {
         // Refresh modal only (not the background)
         document.getElementById('relay-members-modal')?.remove();
         await showRelayMembers(teamName);
-    } catch(e) { alert('추가 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('추가 실패: ' + (e.error || e.message)); }
 }
 
 async function removeRelayMemberFromTeam(eventEntryId, athleteId, teamName) {
-    if (!confirm('이 선수를 릴레이 팀에서 제거하시겠습니까?')) return;
+    if (!await uiConfirm('이 선수를 릴레이 팀에서 제거하시겠습니까?')) return;
     try {
         await api('DELETE', '/api/relay-members', { event_entry_id: eventEntryId, athlete_id: athleteId });
         showToast('릴레이 멤버 제거 완료');
         // Refresh modal only (background refreshes on close)
         document.getElementById('relay-members-modal')?.remove();
         await showRelayMembers(teamName);
-    } catch(e) { alert('제거 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('제거 실패: ' + (e.error || e.message)); }
 }
 
 // changeRelayMemberOrder is no longer called on individual input change.
@@ -1010,7 +1021,7 @@ async function changeRelayMemberOrder(eventEntryId, athleteId, newLeg, teamName)
     try {
         await api('PUT', '/api/relay-members/order', { event_entry_id: eventEntryId, members: [{ athlete_id: athleteId, leg_order: leg }] });
         showToast(`주자 순서 → ${leg}번으로 변경`);
-    } catch(e) { alert('순서 변경 실패: ' + (e.error || e.message)); }
+    } catch(e) { uiAlert('순서 변경 실패: ' + (e.error || e.message)); }
 }
 
 // ============================================================
@@ -1081,7 +1092,7 @@ async function doAddAthlete(athleteId) {
         const row = document.getElementById(`add-ath-row-${athleteId}`);
         if (row) { row.style.opacity = '0.3'; row.querySelector('button').disabled = true; row.querySelector('button').textContent = '추가됨'; }
         await loadCallroomHeatData();
-    } catch (e) { alert('추가 실패: ' + (e.error || '')); }
+    } catch (e) { uiAlert('추가 실패: ' + (e.error || '')); }
 }
 
 // ============================================================
@@ -1171,7 +1182,7 @@ onSSE('entry_status', async (data) => {
     const row = document.querySelector(`tr[data-entry-id="${data.event_entry_id}"]`);
     if (row) {
         row.style.transition = 'background-color 0.5s ease';
-        row.style.backgroundColor = newStatus === 'checked_in' ? 'rgba(183,159,88,0.25)' : newStatus === 'no_show' ? 'rgba(244,67,54,0.25)' : 'rgba(255,193,7,0.25)';
+        row.style.backgroundColor = newStatus === 'checked_in' ? 'rgba(194,74,46,0.25)' : newStatus === 'no_show' ? 'rgba(244,67,54,0.25)' : 'rgba(255,193,7,0.25)';
         setTimeout(() => { row.style.backgroundColor = ''; }, 1200);
     }
 });
@@ -1216,7 +1227,7 @@ async function printCallroom(mode) {
     // 대회명과 시간표 시간을 함께 표시. 합동종목은 모든 대회명 함께 표시.
     let compNamesLabel = '';
     try {
-        const comps = await API.getCompetitions();
+        const comps = await API.getAllCompetitionsAdmin();   // 이름 표시용 — 숨긴 대회도 포함
         const jointGroup = window._crJointGroup || null;
         if (jointGroup && Array.isArray(jointGroup.members) && jointGroup.members.length > 1) {
             // 합동 종목: 모든 대회 표시 (각 대회별 짧은 라벨/소속연맹 우선)
@@ -1302,7 +1313,7 @@ async function printCallroom(mode) {
             // 그룹 헤더 (A/B 가 있을 때만)
             if (hasSubGroup) {
                 const groupLabel = grp ? `${grp} 그룹` : '미지정';
-                tablesHtml += `<div style="margin-top:8px;padding:4px 8px;background:#f0f0f0;border-left:4px solid ${grp==='A'?'#555':grp==='B'?'#8b1a2a':'#bbb'};font-size:13px;font-weight:700;">
+                tablesHtml += `<div style="margin-top:8px;padding:4px 8px;background:#f0f0f0;border-left:4px solid ${grp==='A'?'#555':grp==='B'?'#8E2A6B':'#bbb'};font-size:13px;font-weight:700;">
                     ${groupLabel}
                     <span style="font-size:11px;font-weight:400;color:#666;margin-left:8px;">
                         출석 ${gIn}/${gTotal} | 결석 ${gNS}
@@ -1324,7 +1335,7 @@ async function printCallroom(mode) {
                     ${grpEntries.map((e, i) => `<tr>
                         <td><strong>${e.lane_number || ''}</strong></td>
                         <td><strong>${bib(e.bib_number)}</strong></td>
-                        ${hasSubGroup ? `<td><strong style="color:${e.sub_group==='A'?'#555':e.sub_group==='B'?'#8b1a2a':'#999'};">${e.sub_group || '—'}</strong></td>` : ''}
+                        ${hasSubGroup ? `<td><strong style="color:${e.sub_group==='A'?'#555':e.sub_group==='B'?'#8E2A6B':'#999'};">${e.sub_group || '—'}</strong></td>` : ''}
                         <td style="text-align:left;">${e.name}</td>
                         <td style="text-align:left;font-size:11px;">${e.team || ''}</td>
                         <td>${e.status === 'checked_in' ? '출석' : e.status === 'no_show' ? '결석' : '—'}</td>
@@ -1401,7 +1412,7 @@ async function printCallroom(mode) {
 // ============================================================
 async function exportCallroomExcel() {
     if (!crSelectedEvent || !crHeats || crHeats.length === 0) return;
-    if (typeof XLSX === 'undefined') { alert('엑셀 라이브러리를 불러올 수 없습니다.'); return; }
+    if (typeof XLSX === 'undefined') { uiAlert('엑셀 라이브러리를 불러올 수 없습니다.'); return; }
 
     const evt = crSelectedEvent;
     const gL = { M: '남자', F: '여자', X: '혼성' }[evt.gender] || '';
@@ -1412,7 +1423,7 @@ async function exportCallroomExcel() {
     // ─── 자동 헤더: 대회명 + 종목/부/라운드 + 시간표 시각 ─────────────────
     let compNamesLabel = '';
     try {
-        const comps = await API.getCompetitions();
+        const comps = await API.getAllCompetitionsAdmin();   // 이름 표시용 — 숨긴 대회도 포함
         const jointGroup = window._crJointGroup || null;
         if (jointGroup && Array.isArray(jointGroup.members) && jointGroup.members.length > 1) {
             const labels = jointGroup.members.map(m => {
@@ -1538,4 +1549,98 @@ async function exportCallroomExcel() {
     XLSX.utils.book_append_sheet(wb, ws, '소집명단');
     const fileName = `소집_${evt.name}_${gL}_${roundLabel}.xlsx`;
     XLSX.writeFile(wb, fileName);
+}
+
+// ============================================================
+// 일괄 소집 (부별 · 다중선택 소집완료 / 되돌리기)
+// ============================================================
+function openBatchCallroom() {
+    if (document.getElementById('batch-callroom-modal')) return;
+    const evts = (allEvents || []).filter(e => !e.parent_event_id);
+    if (evts.length === 0) { uiAlert('등록된 종목이 없습니다.'); return; }
+    const gL = g => g === 'M' ? '남' : g === 'F' ? '여' : '혼성';
+    const rL = r => ({ preliminary: '예선', semifinal: '준결승', final: '결승' }[r] || r);
+    const stat = e => e.round_status === 'completed'
+        ? '<span style="color:#9ca3af;font-size:11px;">경기완료</span>'
+        : e.round_status === 'in_progress'
+            ? '<span style="color:#f59e0b;font-size:11px;font-weight:700;">진행중</span>'
+            : '<span style="color:#16a34a;font-size:11px;">소집전</span>';
+    // 부(division)별 그룹핑
+    const groups = {}; const order = [];
+    evts.forEach(e => { const d = e.division || '(부 없음)'; if (!groups[d]) { groups[d] = []; order.push(d); } groups[d].push(e); });
+    let body = '';
+    order.forEach((div, gi) => {
+        const list = groups[div];
+        const divId = 'bcg-' + gi;
+        body += `<div style="margin-bottom:8px;border:1px solid #eee;border-radius:8px;overflow:hidden;">
+          <div style="padding:7px 12px;background:#F6E4DF;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:700;font-size:13px;cursor:pointer;">
+              <input type="checkbox" class="bc-divall" onclick="bcToggleDiv(this,'${divId}')"> ${div}
+              <span style="color:#999;font-weight:400;font-size:11px;">${list.length}종목</span>
+            </label>
+          </div><div>`;
+        list.forEach(e => {
+            const dis = e.round_status === 'completed';
+            body += `<label style="display:flex;align-items:center;gap:8px;padding:5px 14px;font-size:12px;border-top:1px solid #f5f5f5;${dis ? 'opacity:.55;' : 'cursor:pointer;'}">
+              <input type="checkbox" class="bc-evt ${divId}" value="${e.id}" ${dis ? 'disabled' : ''} onchange="bcCount()">
+              <span style="flex:1;">${e.name} <span style="color:#777;">· ${gL(e.gender)} ${rL(e.round_type)}</span></span>
+              ${stat(e)}
+            </label>`;
+        });
+        body += `</div></div>`;
+    });
+    const m = document.createElement('div');
+    m.id = 'batch-callroom-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:14px;';
+    m.innerHTML = `<div style="background:#fff;border-radius:12px;width:min(560px,97vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+      <div style="padding:13px 18px;background:#F6E4DF;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-weight:800;font-size:15px;color:#B8432A;">${PaceIcons.svg('speaker', { style: 'margin-right:6px' })}일괄 소집</div>
+        <button onclick="closeBatchCallroom()" style="border:none;background:none;font-size:22px;line-height:1;cursor:pointer;color:#999;">&times;</button>
+      </div>
+      <div style="padding:9px 14px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <input id="bc-judge" placeholder="판정관/운영자 이름(선택)" style="flex:1;min-width:140px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+        <button class="btn btn-sm btn-ghost" onclick="bcSelectAll(true)">전체선택</button>
+        <button class="btn btn-sm btn-ghost" onclick="bcSelectAll(false)">해제</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:10px 12px;background:#fcfcfc;">${body}</div>
+      <div style="padding:12px 16px;border-top:1px solid #eee;display:flex;align-items:center;gap:8px;">
+        <span id="bc-count" style="font-size:13px;color:#666;font-weight:700;">0개 선택</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-outline" style="border-color:#B4232C;color:#B4232C;" onclick="bcRun('revert')">되돌리기</button>
+        <button class="btn btn-primary" onclick="bcRun('complete')">소집완료</button>
+      </div>
+    </div>`;
+    document.body.appendChild(m);
+    bcCount();
+}
+function closeBatchCallroom() { const m = document.getElementById('batch-callroom-modal'); if (m) m.remove(); }
+function bcToggleDiv(el, divId) { document.querySelectorAll('#batch-callroom-modal .bc-evt.' + divId + ':not(:disabled)').forEach(cb => cb.checked = el.checked); bcCount(); }
+function bcSelectAll(v) {
+    document.querySelectorAll('#batch-callroom-modal .bc-evt:not(:disabled)').forEach(cb => cb.checked = v);
+    document.querySelectorAll('#batch-callroom-modal .bc-divall').forEach(cb => cb.checked = v);
+    bcCount();
+}
+function bcCount() { const n = document.querySelectorAll('#batch-callroom-modal .bc-evt:checked').length; const el = document.getElementById('bc-count'); if (el) el.textContent = n + '개 선택'; }
+async function bcRun(mode) {
+    const ids = [...document.querySelectorAll('#batch-callroom-modal .bc-evt:checked')].map(cb => parseInt(cb.value));
+    if (!ids.length) { uiAlert('종목을 선택하세요.'); return; }
+    const judge = (document.getElementById('bc-judge') && document.getElementById('bc-judge').value || '').trim();
+    const lab = mode === 'complete' ? '소집완료' : '소집 되돌리기';
+    if (!await uiConfirm(`선택한 ${ids.length}개 종목을 일괄 ${lab} 하시겠습니까?`)) return;
+    const url = mode === 'complete' ? '/api/events/callroom-complete-batch' : '/api/events/callroom-revert-batch';
+    try {
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_ids: ids, judge_name: judge }) }).then(x => x.json());
+        if (r.error) { uiAlert(r.error); return; }
+        const cnt = mode === 'complete' ? r.completed : r.reverted;
+        const blk = (r.skipped || r.blocked || []);
+        let msg = `${cnt}개 종목 ${lab} 완료`;
+        if (blk.length) {
+            const reasons = { not_found: '없음', completed: '경기완료', not_in_progress: '진행중 아님', has_results: '기록있음' };
+            msg += `\n제외 ${blk.length}개 (${blk.map(b => reasons[b.reason] || b.reason).join(', ')})`;
+        }
+        uiAlert(msg);
+        closeBatchCallroom();
+        allEvents = await API.getAllEvents(getCompetitionId());
+        renderMatrix();
+    } catch (e) { uiAlert('오류: ' + e.message); }
 }
