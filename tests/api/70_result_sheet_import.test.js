@@ -115,4 +115,47 @@ describe('결과표 가져오기 (문자 발송용)', () => {
         const dup = await request(app).post('/api/admin/sms/batch-send').send({ admin_key: ADMIN, competition_id: fx.comp, event_ids: prelimIds, rank_scope: 'heat', rank_from: 1, rank_to: 99, include_finishers: true });
         expect(dup.body.total).toBe(0); expect(dup.body.skipped_already_sent).toBe(3);
     });
+
+    // 2026-11-09 주최가 실제로 보낸 양식: 1행 제목(병합) · 2행 머리글 '순·소속·학년·선수명·선수성별·종목·기록·연락처·비고'
+    it('주최 양식(기록증 발급 명단): 선수성별 열, 순(일련번호)은 순위가 아님, 1/1000초·분:초·NmNN 기록, 문자 못 가는 번호 표시', async () => {
+        const H2 = ['순', '소속', '학년', '선수명', '선수성별', '종목', '기록', '연락처', '비고'];
+        const rows = [
+            [1, '가나초', '초1', '김하나', '남', '60m', '11.009', '01011112222', ''],
+            [2, '가나초', '초1', '이두리', '여', '60m', '12.50', '010-3333-4444', ''],
+            [3, '다라초', '초5', '박세나', '여', '600m', '1:56.54', '0101234567', ''],       // 010 + 7자리 — 한 자리 빠짐
+            [4, '다라초', '초5', '최네오', '남', '멀리뛰기', '2m97', '0311234567', ''],       // 유선
+            [5, '다라초', '초5', '최네오', '남', '높이뛰기', '1m25', '0311234567', ''],
+            [6, '가나초', '초1', '정오름', '남', '60m', '11.50', '01055550001', ''],          // 남자 초1 60m 에 넷 — '완주자 전원' 모드가 4위에게도 가는지
+            [7, '마바초', '초1', '한누리', '남', '60m', '11.80', '01055550002', ''],
+            [8, '마바초', '초1', '오다온', '남', '60m', '12.10', '01055550003', ''],
+        ];
+        const mk = rs => { const ws = XLSX.utils.aoa_to_sheet([['2026 유소년 기초종목 육상페스티벌 기록증발급명단'], H2, ...rs]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '기록증발급'); return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }); };
+        const b = mk(rows);
+        const p = R.parseResultSheet(b);
+        expect(p.header).toMatchObject({ name: '선수명', gender: '선수성별', division: '학년', phone: '연락처', team: '소속', event: '종목', record: '기록', remark: '비고' });
+        expect(p.header.rank).toBeUndefined();
+        expect(p.rows.slice(0, 5).map(r => r.label)).toEqual(['남자 초등부 1학년 60m 결승', '여자 초등부 1학년 60m 결승', '여자 초등부 5학년 600m 결승', '남자 초등부 5학년 멀리뛰기 결승', '남자 초등부 5학년 높이뛰기 결승']);
+        expect(p.rows[0]).toMatchObject({ value: 11.009, rank: null, issues: [] });
+        expect(p.rows[2].value).toBe(116.54); expect(p.rows[2].issues.join()).toMatch(/한 자리가 빠진/);
+        expect(p.rows[3].value).toBe(2.97); expect(p.rows[3].issues.join()).toMatch(/유선 번호/);
+        expect(p.rows[4]).toMatchObject({ value: 1.25, eventKey: { category: 'field_height', gender: 'M' } });
+        expect(R.isMobile('01012345678')).toBe(true); expect(R.isMobile('0101234567')).toBe(false); expect(R.isMobile('0111234567')).toBe(true); expect(R.isMobile('0311234567')).toBe(false);
+        const pre = await post('/api/admin/result-sheet/preview', b, { competition_id: fx.comp });
+        expect(pre.status).toBe(200);
+        expect(pre.body.stats).toMatchObject({ rows: 8, events: 5, sendable: 5, bad_phone: 3, with_issues: 3, no_phone: 0 });
+
+        // 반영 뒤 일괄 발송: 문자를 못 받는 번호(유선·자리 빠짐)는 시도하지 않고 invalid_phone 으로 돌려준다
+        const comp2 = (await request(app).post('/api/competitions').send({ admin_key: ADMIN, name: '기록증 발급 명단 (번호 고쳐 다시 올리기)', start_date: '2026-11-07', end_date: '2026-11-07', venue: '성남' })).body.id;
+        expect((await post('/api/admin/result-sheet/import', b, { competition_id: comp2 })).body).toMatchObject({ results: 8, athletes_created: 7, events_created: 5 });
+        // 화면의 발송 모드 '완주자 전원'이 보내는 모양 그대로: mode=finisher, 순위 범위는 숨겨진 1~3, '순위 외 완주자도'는 꺼짐 → 그래도 4위까지 전원
+        const send = () => request(app).post('/api/admin/sms/batch-send').send({ admin_key: ADMIN, competition_id: comp2, event_ids: [], mode: 'finisher', rank_from: 1, rank_to: 3, include_finishers: false });
+        const s1 = await send();
+        expect(s1.body.total).toBe(5); expect(s1.body.invalid_phone).toHaveLength(3);
+        // 주최가 번호를 고쳐 준 뒤 같은 파일을 다시 올리면: 그 선수의 전화만 바뀐다 ('박세나 (다라초)' 같은 둘째 행이 생기지 않는다) → 다시 보내면 그 사람만 나간다
+        const fixed = mk(rows.map(r => (r[3] === '박세나' ? [...r.slice(0, 7), '010-1234-5678', ''] : r)));
+        expect((await post('/api/admin/result-sheet/import', fixed, { competition_id: comp2 })).body).toMatchObject({ results: 8, athletes_created: 0, phone_updated: 1, events_created: 0 });
+        expect(await db.all("SELECT name, phone FROM athlete WHERE competition_id=? AND name LIKE '박세나%'", comp2)).toEqual([{ name: '박세나', phone: '01012345678' }]);
+        const s2 = await send();
+        expect(s2.body.total).toBe(1); expect(s2.body.skipped_already_sent).toBe(5); expect(s2.body.invalid_phone).toHaveLength(2);
+    });
 });

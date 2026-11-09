@@ -13,6 +13,8 @@ describe('번호 정규화·검증', () => {
         expect(SMS.normalizePhone('+82 10-1234-5678')).toBe('01012345678'); expect(SMS.normalizePhone('821012345678')).toBe('01012345678');
         expect(SMS.normalizePhone('010-1234-5678')).toBe('01012345678');
         expect(SMS.isValidMobile('010-1234-5678')).toBe(true); expect(SMS.isValidMobile('02-123-4567')).toBe(false); expect(SMS.isValidMobile('')).toBe(false); expect(SMS.isValidMobile('1234')).toBe(false);
+        // 010 은 11자리뿐 — 한 자리 빠진 '010-123-4567' 은 발송 대상에서 뺀다. 옛 011·016~019 는 10자리도 유효 (2026-11-09)
+        expect(SMS.isValidMobile('010-123-4567')).toBe(false); expect(SMS.isValidMobile('011-123-4567')).toBe(true); expect(SMS.isValidMobile('031-123-4567')).toBe(false);
     });
     it('형식이 아닌 번호는 발송하지 않고 400', async () => {
         const r = await send({ phone: '02-123-4567' });
