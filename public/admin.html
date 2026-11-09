@@ -3562,7 +3562,7 @@ POST /api/external/event-result-link/batch<br>
             { id:'certs',        group:'결과 · 문서', label:'상장 · 기록증',      icon:'award',    loads:['certificates'], roleTab:'certificates', rest:'certificates',
               subtabs:[ { label:'발급', items:['card-cert-issue'] }, { label:'양식', items:['card-cert-pdf-templates','card-award-docx'] }, { label:'이력', items:['card-cert-log'] } ] },
             { id:'notify',       group:'결과 · 문서', label:'알림 (푸시 · 문자)', icon:'message',  loads:['sms'], roleTab:'sms', rest:'sms',
-              subtabs:[ { label:'푸시 공지', items:['card-notify-push'] }, { label:'문자 설정', items:['card-sms-config'] }, { label:'문자 발송', items:['card-sms-test','card-sms-batch'] }, { label:'이메일', items:['card-email-config','card-email-send'] }, { label:'이력', items:['card-sms-log','card-email-log'] } ] },
+              subtabs:[ { label:'푸시 공지', items:['card-notify-push'] }, { label:'문자 설정', items:['card-sms-config'] }, { label:'문자 발송', items:['card-sms-test','card-result-sheet','card-sms-batch'] }, { label:'이메일', items:['card-email-config','card-email-send'] }, { label:'이력', items:['card-sms-log','card-email-log'] } ] },
             { id:'access',       group:'시스템',    label:'사용자 · 키',         icon:'key',      loads:['users','judges','settings','extapi'], roleTab:'judges',
               subtabs:[ { label:'계정', tab:'users' }, { label:'심판 운영키', tab:'judges' }, { label:'기본 키 · 기록위원 키', items:['card-default-keys','card-record-officer-key'] }, { label:'외부 API', tab:'extapi' } ] },
             { id:'pacing',       group:'시스템',    label:'페이싱 라이트',       icon:'traffic',  tab:'pacing',      loads:['pacing'], roleTab:'pacing' },
