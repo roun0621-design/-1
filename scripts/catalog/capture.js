@@ -1,14 +1,15 @@
 'use strict';
 /**
  * 카탈로그 스크린샷 촬영 (2026-10-22) — seed.js 로 만든 가상 대회 DB 를 서버로 띄우고 헤드리스 크롬으로 찍는다
- *   node scripts/catalog/capture.js <sqlite> <ids.json> <출력 폴더>
+ *   node scripts/catalog/capture.js <sqlite> <ids.json> <출력 폴더> [언어=en]
+ *   언어를 ja 로 주면 같은 컷을 일본어 UI 로 <출력 폴더>/ja/ 에 찍는다(일문 카탈로그용, report.ja.json · INDEX.ja.md). 문서 PDF 는 영문판 그대로(docLabels: ja → en).
  *   데스크톱 1440×900 · 모바일 390×844@2x, UI 언어 en(일본어 컷 1장은 ja). 운영자 화면은 PC 만, 관전 화면은 모바일도.
  *   report.json: 컷마다 url·콘솔 오류·화면에 보이는 한글(sel·text·visible) — 한글은 전부 빈 배열이어야 한다.
  */
 const fs = require('fs'), path = require('path'), { spawn, execSync } = require('child_process');
 const puppeteer = require('puppeteer');
-const [,, DBP, IDSP, OUT] = process.argv;
-if (!DBP || !IDSP || !OUT) { console.error('usage: capture.js <sqlite> <ids.json> <out dir>'); process.exit(1); }
+const [,, DBP, IDSP, OUT, LANG = 'en'] = process.argv;
+if (!DBP || !IDSP || !OUT) { console.error('usage: capture.js <sqlite> <ids.json> <out dir> [lang=en]'); process.exit(1); }
 const ids = JSON.parse(fs.readFileSync(IDSP, 'utf8'));
 const PORT = 3350, BASE = `http://localhost:${PORT}`, ADMIN = 'testadmin1234';
 const DESK = { width: 1440, height: 900, deviceScaleFactor: 1 }, MOB = { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
@@ -45,6 +46,7 @@ const SHOTS = [
     { name: 'final_generated_desktop', url: `/record.html?comp=${ids.comp}&event_id=${ids.m200s}`, vp: DESK, wait: 4000, role: 'admin',
       action: async p => { await p.evaluate(async (eid) => { const r = await API.createFinalWithGroups(eid, 1); state.events = await API.getAllEvents(getCompetitionId()); renderMatrix(); if (r.final_event_id) await showLaneAssignmentReview(r.final_event_id, r.count); }, ids.m200s); await sleep(2500); } },
     { name: 'dashboard_ja_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3500, lang: 'ja', action: async p => { await sleep(1200); await p.evaluate(() => { window.scrollTo(0, 0); const r = document.getElementById('events-scroll-region'); if (r) r.scrollTop = 0; }); await sleep(500); } },   // '지금' 카드 자동 스크롤(0.3초 뒤)이 끝난 다음 맨 위(히어로)로 — 폰은 안쪽 스크롤 영역
+    { name: 'dashboard_en_desktop', url: `/dashboard.html?comp=${ids.comp}`, vp: DESK, wait: 3500, lang: 'en', action: async p => { await sleep(1200); await p.evaluate(() => { window.scrollTo(0, 0); const r = document.getElementById('events-scroll-region'); if (r) r.scrollTop = 0; }); await sleep(500); } },   // 일문판(ja) 촬영 때만 — '보는 사람이 언어를 바꾼다' 컷
 ];
 
 const AUDIT = () => {
@@ -64,12 +66,12 @@ const AUDIT = () => {
 };
 
 (async () => {
-    fs.mkdirSync(path.join(OUT, 'en'), { recursive: true });
+    fs.mkdirSync(path.join(OUT, LANG), { recursive: true });
     const server = await startServer();
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--lang=en-US'] });
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', LANG === 'ja' ? '--lang=ja-JP' : '--lang=en-US'] });
     const report = {};
     try {
-        for (const s of SHOTS) {
+        for (const s of SHOTS.filter(x => !x.lang || x.lang !== LANG)) {   // 다른 언어 컷(dashboard_ja)은 그 언어로 전부 찍을 땐 뺀다
             const ctx = await browser.createBrowserContext();
             const page = await ctx.newPage();
             await page.setViewport(s.vp);
@@ -83,12 +85,12 @@ const AUDIT = () => {
                     window.Date = FakeDate; } catch (e) {}
                 try { localStorage.setItem('pace_lang', lang); localStorage.setItem('pace_competition_id', String(comp)); sessionStorage.setItem('pr_splash', '1'); localStorage.setItem('pace_ga_consent', 'denied'); localStorage.setItem('pace_sort_mode_' + comp, 'time');
                     if (role) { localStorage.setItem('pace_admin_key', key); localStorage.setItem('pace_role', role); localStorage.setItem('pace_judge_name', 'Kenji Sato'); } } catch (e) {}
-            }, s.lang || 'en', ids.comp, s.role || '', ADMIN, FAKE_NOW);
+            }, s.lang || LANG, ids.comp, s.role || '', ADMIN, FAKE_NOW);
             try {
                 await page.goto(BASE + s.url, { waitUntil: 'networkidle2', timeout: 30000 });
                 await sleep(s.wait || 3000);
                 if (s.action) await s.action(page);
-                await page.screenshot({ path: path.join(OUT, 'en', s.name + '.png') });
+                await page.screenshot({ path: path.join(OUT, LANG, s.name + '.png') });
                 const hangul = await page.evaluate(AUDIT);
                 report[s.name] = { url: s.url, errors, hangul };
                 console.log(`OK ${s.name}  hangul=${hangul.filter(h => h.visible).length}${errors.length ? '  errors=' + errors.length : ''}`);
@@ -102,27 +104,27 @@ const AUDIT = () => {
             const ents = await (await fetch(`${BASE}/api/events/${ids.w100f}/entries`)).json();
             let t = 12.02;
             for (const e of (Array.isArray(ents) ? ents : ents.entries || [])) { const eid = e.event_entry_id || e.id; if (have.has(eid)) continue; await fetch(`${BASE}/api/results/upsert`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ heat_id: hid, event_entry_id: eid, time_seconds: t, admin_key: ADMIN }) }); t += 0.09; }
-            const r = await fetch(`${BASE}/api/documents/result-sheet/${ids.w100f}?lang=en&key=${ADMIN}`);
+            const r = await fetch(`${BASE}/api/documents/result-sheet/${ids.w100f}?lang=${LANG}&key=${ADMIN}`);
             const pdfPath = path.join(OUT, 'results_sheet_W100mF.pdf'); fs.writeFileSync(pdfPath, Buffer.from(await r.arrayBuffer()));
             const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'ql-')); execSync(`qlmanage -t -s 2400 -o "${tmp}" "${pdfPath}" >/dev/null 2>&1`);
-            fs.copyFileSync(path.join(tmp, path.basename(pdfPath) + '.png'), path.join(OUT, 'en', 'results_sheet_W100mF.png'));
+            fs.copyFileSync(path.join(tmp, path.basename(pdfPath) + '.png'), path.join(OUT, LANG, 'results_sheet_W100mF.png'));
             report.results_sheet_W100mF = { url: `/api/documents/result-sheet/${ids.w100f}?lang=en`, errors: r.ok ? [] : ['HTTP ' + r.status], hangul: [], note: 'official result sheet, W 100m Final, qlmanage 2400px' };
             console.log('OK results_sheet_W100mF', r.status);
         } catch (e) { report.results_sheet_W100mF = { errors: ['sheet ' + e.message], hangul: [] }; console.log('ERR sheet', e.message); }
         // (b) 결과지 PDF 1페이지 → PNG
         try {
-            const r = await fetch(`${BASE}/api/documents/full-record/${ids.comp}/pdf?lang=en&gender=M&key=${ADMIN}`);
+            const r = await fetch(`${BASE}/api/documents/full-record/${ids.comp}/pdf?lang=${LANG}&gender=M&key=${ADMIN}`);
             const pdfPath = path.join(OUT, 'results_book_M.pdf'); fs.writeFileSync(pdfPath, Buffer.from(await r.arrayBuffer()));
             // macOS 퀵룩으로 1페이지를 2400px 로 그린다 (sips 는 72dpi 라 흐림)
             const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'ql-')); execSync(`qlmanage -t -s 2400 -o "${tmp}" "${pdfPath}" >/dev/null 2>&1`);
-            fs.copyFileSync(path.join(tmp, path.basename(pdfPath) + '.png'), path.join(OUT, 'en', 'results_pdf_page1.png'));
+            fs.copyFileSync(path.join(tmp, path.basename(pdfPath) + '.png'), path.join(OUT, LANG, 'results_pdf_page1.png'));
             report.results_pdf_page1 = { url: `/api/documents/full-record/${ids.comp}/pdf?lang=en&gender=M`, errors: r.ok ? [] : ['HTTP ' + r.status], hangul: [], note: 'PDF page 1 rendered by qlmanage (2400px)' };
             console.log('OK results_pdf_page1', r.status, r.headers.get('content-type'));
         } catch (e) { report.results_pdf_page1 = { errors: ['PDF ' + e.message], hangul: [] }; console.log('ERR pdf', e.message); }
     } finally {
         await browser.close(); server.kill();
     }
-    fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2));
+    fs.writeFileSync(path.join(OUT, LANG === 'en' ? 'report.json' : `report.${LANG}.json`), JSON.stringify(report, null, 2));
     const DESC = {
         dashboard_desktop: 'Spectator dashboard — LIVE hero (W 100m Final), time-sorted event table, gender tabs', dashboard_mobile: 'Mobile dashboard — symbol + Node header, LIVE hero, cards',
         results_desktop: 'M 100m Final results — medals, CR/PB/SB tags, DNF row, wind', results_mobile: 'Mobile results sheet', monitor_desktop: 'Venue monitor — two competitions as tabs, checked-in / completed cards, totals',
@@ -133,12 +135,12 @@ const AUDIT = () => {
         home_two_comps_desktop: '(e) Home — two competitions running at once (LIVE cards)', final_generated_desktop: '(a) Final auto-generated from semifinal — WA lane draw review (Q/q qualifiers, reasons)',
         dashboard_ja_desktop: '(f) Dashboard in Japanese UI', results_pdf_page1: '(b) Results book PDF — page 1 (Men), rendered at 2400px', results_sheet_W100mF: 'Official result sheet — W 100m Final (header: competition · event · round · date/time · wind, Rank/Lane/Bib/Name/Team/Mark/Remarks, Recorder · Chief Judge · Chief Recorder signatures)',
     };
-    const lines = ['# NODE catalog screenshots (English UI) — ' + new Date().toISOString().slice(0, 10), '',
+    const lines = [`# NODE catalog screenshots (${LANG === 'ja' ? 'Japanese' : 'English'} UI) — ` + new Date().toISOString().slice(0, 10), '',
         `- Source: scratch SQLite server (PORT ${PORT}), **fictional** competition \`2026 Seoul International Athletics Meeting\` (+ \`2026 Busan Coastal Invitational\` for the two-competition shots). All names, teams and venues are fictional English — nothing to mask.`,
-        '- Desktop 1440×900, mobile 390×844 @2x. UI language `en` (`localStorage.pace_lang=en`); one shot in `ja`. Browser clock fixed at 12:14 (timetable 09:00–17:30).', '- Seed: `scripts/catalog/seed.js`, capture: `scripts/catalog/capture.js`. `report.json` lists console errors and any visible Hangul per shot (all empty).', '',
+        '- Desktop 1440×900, mobile 390×844 @2x. UI language `' + LANG + '` (`localStorage.pace_lang`)' + (LANG === 'en' ? '; one shot in `ja`' : '') + '. Browser clock fixed at 12:14 (timetable 09:00–17:30).', '- Seed: `scripts/catalog/seed.js`, capture: `scripts/catalog/capture.js`. `report.json` lists console errors and any visible Hangul per shot (all empty).', '',
         '| File | URL | Shows |', '|---|---|---|'];
-    for (const [k, v] of Object.entries(report)) lines.push(`| en/${k}.png | ${v.url || ''} | ${DESC[k] || ''} |`);
-    fs.writeFileSync(path.join(OUT, 'INDEX.md'), lines.join('\n') + '\n');
+    for (const [k, v] of Object.entries(report)) lines.push(`| ${LANG}/${k}.png | ${v.url || ''} | ${DESC[k] || ''} |`);
+    fs.writeFileSync(path.join(OUT, LANG === 'en' ? 'INDEX.md' : `INDEX.${LANG}.md`), lines.join('\n') + '\n');
     const bad = Object.entries(report).filter(([, v]) => v.hangul.some(h => h.visible));
     console.log(`\nhangul visible: ${bad.length ? bad.map(([k, v]) => k + '(' + v.hangul.filter(h => h.visible).length + ')').join(', ') : 'none'}`);
 })().catch(e => { console.error(e); process.exit(1); });
