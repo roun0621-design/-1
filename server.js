@@ -488,6 +488,7 @@ async function _extractCompetitionIdFromRequest(req) {
                 'results': 'SELECT e.competition_id AS competition_id FROM result r JOIN heat h ON h.id=r.heat_id JOIN event e ON e.id=h.event_id WHERE r.id=?',
                 'height-attempts': 'SELECT e.competition_id AS competition_id FROM height_attempt ha JOIN heat h ON h.id=ha.heat_id JOIN event e ON e.id=h.event_id WHERE ha.id=?',
                 'joint-groups': 'SELECT competition_id FROM joint_group WHERE id=?',
+                'pacing': 'SELECT competition_id FROM pacing_config WHERE id=?',   // 목록(위 정규식)에는 있는데 조회문이 빠져 있었다 — 다른 조직의 설정·WaveLight 파일이 id 로 열리지 않게 (2026-11-20)
             }[mPath[1]];
             if (SQL) { try { const r = await db.get(SQL, id); if (r && r.competition_id) return r.competition_id; } catch (e) { /* 테이블/열이 없으면 아래 단계로 */ } }
         }

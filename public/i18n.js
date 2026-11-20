@@ -14,7 +14,7 @@
     'use strict';
 
     var STORAGE_KEY = 'pace_lang';
-    var DICT_VERSION = (window.PACE_I18N_VERSION || '20');   // 2026-10-22: 뒤로/앞으로·글씨·메달·감사 로그 배지·레인 배정 사유·관리자 라운드 툴팁
+    var DICT_VERSION = (window.PACE_I18N_VERSION || '21');   // 2026-11-20: 페이싱 라이트 부 선택 · WaveLight 파일 내려받기
     var LANGS = [
         { code: 'ko', label: '한국어', short: 'KO' },
         { code: 'en', label: 'English', short: 'EN' },

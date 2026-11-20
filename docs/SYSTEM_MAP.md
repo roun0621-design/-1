@@ -491,6 +491,12 @@ await db.transaction(async () => {
 - `lib/pbsb.js`: `updateEntryMarks(db, event)` — 종목 완료(`POST /api/events/:id/complete`, `lib/routes/callroom.js`) 때 자동 호출. 트랙·도로 MIN(time), 필드 거리 MAX, 높이 MAX(O); 상태 코드 있는 결과·풍속 +2.0 초과(`EventCatalog.isWindAffected`) 제외; `event_entry.personal_best/season_best` 가 더 좋을 때만 갱신(SB 는 대회 연도 기준), 선수가 한 종목만 뛰면 `athlete` 행도. `carryOverMarks(db, comp)` — 같은 조직·이전 대회·같은 선수(이름+성별+생년월일, 생년월일 없으면 소속)·같은 종목 코드의 PB/SB 를 빈 엔트리에.
 - 라우트 `lib/routes/pbsb.js`: `POST /api/events/:id/marks/update`, `POST /api/competitions/:id/marks/carry-over`. 관리자 선수 화면 '이전 대회 기록 불러오기'. 테스트 `tests/api/62_pbsb.test.js`.
 
+## 페이싱 라이트 → WaveLight 시스템 파일 (2026-11-20)
+- `lib/pacingExport.js`: 설정(pacing_config › pacing_color › pacing_segment) → `.pc2`. 색 한 줄 = 파일 하나, 내용은 JSON 배열 `[{"step-distance": "1000", "step-pace": 180.0}, …]`(조명이 가는 거리 m · 그 구간 시간 초), 표기는 운영사 예시 파일과 글자 단위로 같게. 평지 종목은 구간 그대로(1000m 3분 = 한 칸, 구간이 나뉘어 있으면 구간마다). **3000m 장애물만** 조명 거리로 바꾼다: 물웅덩이 구간은 조명 100m 동안 선수가 121.41m 를 뛰므로 250 → (100 + 300)×6 → 100 → 100 의 15구간(합 2850m), 0.01초 올림 — 예시 7개(11:30~12:00)가 그대로 나온다(`STEEPLE_3000`, 400m 트랙 기준 고정값). 2000m 장애물은 보정 없이 구간 그대로.
+- 파일 이름(영문만): `<종목>_<성별>[_<부>]_<기록>_<색>.pc2`. 종목은 `lib/eventCatalog` 코드(`10000m` · `3000mSC` · `10000mW` · `Decathlon`), 부는 `lib/division.parseDivision`(Univ · Senior · High2 · U20 …).
+- 라우트(`lib/routes/pacing.js`, 조회와 같은 공개 범위): `GET /api/pacing/:id/wavelight` — `?list=1` 파일 목록·건너뛴 색(랩타임 빈 구간), `?color=green` 파일 하나, 없으면 그 종목 zip · `GET /api/pacing/wavelight.zip?competition_id=` 대회 전체. 조직·종료 가드의 id 조회문에 `pacing` 추가(목록에는 있고 조회문이 빠져 있었음).
+- **부별 설정**: 설정 키(`pacing_config.event_name`)가 `10,000m (남)`(공통) 또는 `10,000m (남) [대학부]`. 스키마는 그대로(키 문자열만). 관리자 › 페이싱 라이트에 '부 선택' 줄, 대시보드 Target 버튼은 부별 → 공통 → 옛 키(성별 없음) 순으로 찾는다. 키에 부가 없어도 그 종목·성별의 부가 대회에 하나뿐이면 파일 이름에 그 부를 쓴다. 테스트 `tests/api/73_pacing_wavelight.test.js`.
+
 ## 참가기준기록·승상 높이표·건타임·동시 편집 보호 (2026-10-09, C5·C6)
 - `event.entry_standard / target_time / height_progression`(관리자 종목 드로어, `PUT /api/admin/events/:id`). 대시보드 소집 명단(`loadRosterModalData`)에 기준·타깃 줄 + 엔트리 기록(SB→PB)이 기준을 넘으면 '기준' 배지; PDF 스타트리스트에도 한 줄. 기록 입력(`record.js`)은 `height_progression` 으로 바 높이 목록을 미리 채운다.
 - `result.gun_time`(도로 종목 건타임; `time_seconds` 는 넷타임) — 기록 입력 도로 표에 건타임 열(`saveGunTime`), `/api/results/upsert` 가 `gun_time` 을 받는다.

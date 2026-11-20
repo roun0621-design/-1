@@ -1398,7 +1398,8 @@ function renderCategoryTable(groups, label, isLive) {
         // 종목명 앞 작은 성별 배지 (남/여/혼)
         const _badgeText = _rowGender === 'M' ? '남' : _rowGender === 'F' ? '여' : '혼';
         const genderBadge = `<span class="gender-badge" data-g="${_rowGender}" aria-label="${_gLabel}">${_badgeText}</span>`;
-        const pacingCfg = _pacingMap[g.name + ' (' + _gLabel + ')'] || _pacingMap[g.name];
+        // 부별 설정('10,000m (남) [대학부]')이 있으면 그것, 없으면 공통('10,000m (남)') (2026-11-20)
+        const pacingCfg = (g.division && _pacingMap[g.name + ' (' + _gLabel + ') [' + g.division + ']']) || _pacingMap[g.name + ' (' + _gLabel + ')'] || _pacingMap[g.name];
         const _pacingKey = pacingCfg ? pacingCfg.event_name : g.name;
         const wlCell = pacingCfg ? `<span class="round-btn" style="background:#f0f9ff;color:#6b6b6b;border:1px solid #c0c0c0;cursor:pointer;font-size:11px;padding:3px 6px;white-space:nowrap;" onclick="openPacingPopup('${_pacingKey.replace(/'/g, "\\'")}')">Target</span>` : '';
 
@@ -3374,7 +3375,7 @@ function openPacingPopup(eventName) {
     }
 
     panel.innerHTML = `<div class="result-panel-header">
-        <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> ${eventName} W/L Target</h3>
+        <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> ${String(eventName).replace(/\s*\[(.+)\]\s*$/, ' · $1')} W/L Target</h3>
         ${prCloseBtn('closePacingPopup()', { cls: 'result-panel-close' })}
     </div><div class="result-panel-body">${html}</div>`;
     overlay.classList.add('show'); if (!overlay.classList.contains('locked')) { overlay.classList.add('locked'); if (window.lockBodyScroll) lockBodyScroll(); }

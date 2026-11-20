@@ -39,6 +39,7 @@
 
 /* ── 버튼 4종: Primary(골드) / Secondary(아웃라인) / Tertiary(텍스트) / Destructive(빨강). 높이 32px, 표 안 28px ── */
 .admin-main .btn { min-height: 32px; padding: 0 14px; font-size: 13px; font-weight: 600; border-radius: var(--adm-radius-sm); line-height: 1.2; white-space: nowrap; box-shadow: none; }
+.admin-main a.btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }   /* 내려받기 링크를 버튼 모양으로 — 밑줄 없이 (2026-11-20 WaveLight 파일) */
 .admin-main .btn:hover:not(:disabled) { transform: none; box-shadow: none; }
 .admin-main .btn-sm, .admin-main .btn-xs { min-height: 28px; padding: 0 10px; font-size: 12px; }
 .admin-main .btn-primary { background: var(--adm-primary); color: #fff; }

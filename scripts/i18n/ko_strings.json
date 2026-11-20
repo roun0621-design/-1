@@ -164,7 +164,7 @@
   ]
  },
  "이메일": {
-  "count": 2,
+  "count": 5,
   "files": [
    "account.html",
    "admin.html"
@@ -364,6 +364,66 @@
    "admin.html"
   ]
  },
+ "{0}일 {1}시간": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "{0}시간 {1}분": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "{0}분": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "${kv('데이터베이스',": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ")} ${kv('가동 시간',": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ")} ${kv('메모리',": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ")} ${kv('실시간 연결',": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ")} ${kv('API 요청',": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ")} ${kv('오류',": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "최근 오류 {0}건": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "전체 종목": {
   "count": 3,
   "files": [
@@ -411,7 +471,7 @@
   ]
  },
  "배번": {
-  "count": 25,
+  "count": 26,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -422,7 +482,7 @@
   ]
  },
  "이름": {
-  "count": 13,
+  "count": 14,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -431,7 +491,7 @@
   ]
  },
  "성별": {
-  "count": 22,
+  "count": 23,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -440,7 +500,7 @@
   ]
  },
  "소속": {
-  "count": 63,
+  "count": 64,
   "files": [
    "admin.html",
    "callroom.js",
@@ -481,7 +541,7 @@
   ]
  },
  "남": {
-  "count": 46,
+  "count": 47,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -495,7 +555,7 @@
   ]
  },
  "여": {
-  "count": 46,
+  "count": 47,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -527,14 +587,26 @@
    "admin.html"
   ]
  },
+ "(기록증 이메일 발송용)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "학년": {
   "count": 7,
   "files": [
    "admin.html"
   ]
  },
+ "개인정보 삭제 요청 처리 — 이름을 비공개로 바꾸고 연락처·이메일·생년월일을 지웁니다. 기록은 남습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "저장": {
-  "count": 20,
+  "count": 21,
   "files": [
    "admin.html",
    "display-manage.html",
@@ -547,6 +619,12 @@
   "files": [
    "admin.html",
    "display-manage.html"
+  ]
+ },
+ "개인정보 삭제": {
+  "count": 1,
+  "files": [
+   "admin.html"
   ]
  },
  "출전 종목": {
@@ -662,6 +740,12 @@
    "record.js"
   ]
  },
+ "\"{0}\" 선수의 개인정보를 삭제할까요?\\n이름은 '비공개 선수'로 바뀌고 연락처·이메일·생년월일·바코드가 지워집니다. 기록·순위는 그대로 남으며 되돌릴 수 없습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "\"{0}\" 선수를 삭제하시겠습니까?": {
   "count": 1,
   "files": [
@@ -693,7 +777,7 @@
   ]
  },
  "전체": {
-  "count": 46,
+  "count": 48,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -732,7 +816,7 @@
   ]
  },
  "종목": {
-  "count": 23,
+  "count": 25,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -925,7 +1009,7 @@
   ]
  },
  "혼성": {
-  "count": 62,
+  "count": 63,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -949,7 +1033,7 @@
   ]
  },
  "라운드": {
-  "count": 14,
+  "count": 15,
   "files": [
    "admin.html",
    "common.js",
@@ -1192,7 +1276,7 @@
   ]
  },
  "미리보기": {
-  "count": 18,
+  "count": 22,
   "files": [
    "admin.html"
   ]
@@ -1262,7 +1346,7 @@
   ]
  },
  "상태": {
-  "count": 28,
+  "count": 29,
   "files": [
    "admin.html",
    "callroom.js",
@@ -1638,6 +1722,30 @@
    "admin.html"
   ]
  },
+ "{0}구간": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "받기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "랩타임이 빈 구간이 있어 파일을 만들지 않았습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이 종목 모두 받기 (ZIP)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "랩타임": {
   "count": 1,
   "files": [
@@ -1742,6 +1850,36 @@
    "callroom.js"
   ]
  },
+ "{0}초 전": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "{0}분 전": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "{0}시간 전": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "계측 에이전트": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "적용 {0} / 확인 필요 {1} / 실패 {2}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "스코어보드 키:": {
   "count": 1,
   "files": [
@@ -1755,7 +1893,7 @@
   ]
  },
  "순위": {
-  "count": 34,
+  "count": 36,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -1778,7 +1916,7 @@
   ]
  },
  "기록": {
-  "count": 36,
+  "count": 37,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -3107,6 +3245,18 @@
    "admin.html"
   ]
  },
+ "선택": {
+  "count": 6,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "개 라운드{0}": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
  "구조: 종목": {
   "count": 1,
   "files": [
@@ -3143,7 +3293,55 @@
    "admin.html"
   ]
  },
+ "우리 종목과 못 맞춘 행 {0}: {1}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "오류 {0}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "— 우리 선수 변경 {0}건": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "— 기존 종목에서 고르기 —": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "· 직접 매칭 → {0}{1}${d.apply ? '' :": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ": 종목 {0}개 · 조 {1}개(새 조 {2}) · 선수 {3}명 · 새 선수 {4} · 가린 이름 복원 {5} · 배번 갱신 {6}${s.mapped ?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ": ''} · 건너뜀 {0}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "반영: 종목 {0}개 · 선수 {1}명": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "미리보기: 종목 {0}개 · 선수 {1}명": {
   "count": 1,
   "files": [
    "admin.html"
@@ -3183,18 +3381,6 @@
    "admin.html"
   ]
  },
- "선택": {
-  "count": 5,
-  "files": [
-   "admin.html"
-  ]
- },
- "개 라운드{0}": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
  "상장_{0}종목.docx": {
   "count": 1,
   "files": [
@@ -3203,6 +3389,38 @@
  },
  "양식 편집: {0}": {
   "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "대상 {0}명 — 보냄 {1} · 시뮬레이션 {2} · 실패 {3} · 이메일 없음 {4} · 이미 보냄 {5}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "시각": {
+  "count": 3,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "받는 주소": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "선수": {
+  "count": 10,
+  "files": [
+   "admin.html",
+   "callroom-monitor.html",
+   "monitor.html"
+  ]
+ },
+ "제목": {
+  "count": 5,
   "files": [
    "admin.html"
   ]
@@ -3220,6 +3438,120 @@
   ]
  },
  "{0}조{1}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "{0} bytes · {1} · 예상 {2}원/건": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "자동{0}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "열 수 없는 링크": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "닫힘 — 선수 정보가 바뀜": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "{0} · {1}).name || '대회?')} › {2}).name || '종목?')}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "발급 때: {0} {1} 배번 {2} · {3} · 열람 {4}회": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "지금 그 번호의 선수: {0} {1} 배번 {2}{3}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "판정: {0}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "열면 쓰일 양식: {0} [{1}] · {2}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "발송 이력 {0}건": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "실패: {0}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "반영됨": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ": 기록 {0}건 · 종목 {1}개(새 종목 {2}) · 새 선수 {3}명 · 전화 갱신 {4}${d.skipped ?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ": 행 {0} · 종목 {1}개(새로 만들 종목 {2}) · 선수 {3}명(새 선수 {4}) · 문자 보낼 수 있는 행": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "읽은 열: ${Object.entries(d.header).map(([k, v]) =>": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "{0} {1} — {2}명${g.writable !== g.count ?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "{0}행 {1} {2} {3} — {4}": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "반영: 기록 {0}건": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "미리보기: 행 {0} · 보낼 수 있는 {1}": {
   "count": 1,
   "files": [
    "admin.html"
@@ -3323,7 +3655,7 @@
   ]
  },
  "대회를 먼저 선택하세요": {
-  "count": 30,
+  "count": 34,
   "files": [
    "admin.html",
    "common.js"
@@ -3439,7 +3771,7 @@
   ]
  },
  "실패": {
-  "count": 15,
+  "count": 19,
   "files": [
    "admin.html",
    "display-manage.html"
@@ -3460,7 +3792,7 @@
   ]
  },
  "로딩 중...": {
-  "count": 9,
+  "count": 10,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -3562,7 +3894,7 @@
   ]
  },
  "실패:": {
-  "count": 7,
+  "count": 8,
   "files": [
    "admin.html",
    "display-manage.html"
@@ -4220,14 +4552,6 @@
    "admin.html"
   ]
  },
- "선수": {
-  "count": 9,
-  "files": [
-   "admin.html",
-   "callroom-monitor.html",
-   "monitor.html"
-  ]
- },
  "종목 · 조편성": {
   "count": 1,
   "files": [
@@ -4352,7 +4676,7 @@
   ]
  },
  "계정": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -4411,8 +4735,57 @@
    "admin.html"
   ]
  },
+ "권한 없음": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "데이터베이스": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "가동 시간": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "메모리": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "실시간 연결": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "API 요청": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "오류": {
+  "count": 6,
+  "files": [
+   "admin.html",
+   "dashboard.js"
+  ]
+ },
+ "서버 상태를 불러오지 못했습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "남자": {
-  "count": 43,
+  "count": 44,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -4431,7 +4804,7 @@
   ]
  },
  "여자": {
-  "count": 43,
+  "count": 44,
   "files": [
    "admin.html",
    "callroom-monitor.html",
@@ -4453,13 +4826,6 @@
   "count": 1,
   "files": [
    "admin.html"
-  ]
- },
- "오류": {
-  "count": 5,
-  "files": [
-   "admin.html",
-   "dashboard.js"
   ]
  },
  "주의": {
@@ -4553,7 +4919,7 @@
   ]
  },
  "저장 실패": {
-  "count": 16,
+  "count": 18,
   "files": [
    "admin.html",
    "event-record.html",
@@ -4568,7 +4934,7 @@
   ]
  },
  "조": {
-  "count": 30,
+  "count": 31,
   "files": [
    "admin.html",
    "callroom.js",
@@ -4642,6 +5008,24 @@
  },
  "선수 추가 완료": {
   "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "비공개 선수": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "개인정보를 삭제했습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "처리 실패": {
+  "count": 1,
   "files": [
    "admin.html"
   ]
@@ -5701,6 +6085,19 @@
    "display-manage.html"
   ]
  },
+ ". 종목 선택 (트랙 800m 이상 + 종합경기)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "공통": {
+  "count": 2,
+  "files": [
+   "admin.html",
+   "common.js"
+  ]
+ },
  "해당 성별의 트랙 종목(800m 이상) 또는 혼성 종목이 없습니다.": {
   "count": 1,
   "files": [
@@ -5708,6 +6105,30 @@
   ]
  },
  "설정된 종목이 없습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "저장하면 WaveLight 파일을 받을 수 있습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "파일 목록을 불러오지 못했습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "3000m 장애물은 물웅덩이 구간을 조명 거리로 바꿔 15구간으로 나갑니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "랩타임이 입력된 색이 없습니다.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -5733,7 +6154,7 @@
   ]
  },
  "비고": {
-  "count": 23,
+  "count": 24,
   "files": [
    "admin.html",
    "dashboard.js",
@@ -5827,6 +6248,36 @@
   "files": [
    "admin.html",
    "callroom.js"
+  ]
+ },
+ "계측 에이전트: 연결된 PC 없음 — 계측 PC 에 에이전트 폴더를 두면(docs/TIMING_WATCHER.md) 결과 파일이 자동으로 올라옵니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "연결됨": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "끊김": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "확인 모드": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "자동 모드": {
+  "count": 1,
+  "files": [
+   "admin.html"
   ]
  },
  "파싱 중...": {
@@ -6183,7 +6634,7 @@
   ]
  },
  "(이름 없음)": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -6350,14 +6801,14 @@
    "admin.html"
   ]
  },
- "업로드됨": {
-  "count": 1,
+ "등록됨": {
+  "count": 3,
   "files": [
    "admin.html"
   ]
  },
- "등록됨": {
-  "count": 2,
+ "업로드됨": {
+  "count": 1,
   "files": [
    "admin.html"
   ]
@@ -6369,7 +6820,7 @@
   ]
  },
  "저장 실패:": {
-  "count": 8,
+  "count": 11,
   "files": [
    "admin.html",
    "record.js"
@@ -7333,6 +7784,18 @@
    "dashboard.js"
   ]
  },
+ "해당 조건의 종목이 없습니다.": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "(미선택 시 대회 전체 결승)": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
  "출처가 없습니다 — 위에 API 주소·대회 코드를 넣고 저장하세요.": {
   "count": 1,
   "files": [
@@ -7383,6 +7846,60 @@
  },
  "출처 저장": {
   "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "PDF 파일을 고르세요": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "PDF 의 조편성을 반영합니다. 해당 종목의 조 배정(레인)을 PDF 대로 바꿉니다. 계속할까요?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "반영 중…": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "읽는 중…": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "비슷한 종목": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "모든 종목": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "반영": {
+  "count": 5,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "반영 예정": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "종목을 찾지 못함": {
+  "count": 1,
   "files": [
    "admin.html"
   ]
@@ -7599,19 +8116,19 @@
   ]
  },
  "완주증": {
-  "count": 3,
+  "count": 5,
   "files": [
    "admin.html"
   ]
  },
  "단체상": {
-  "count": 3,
+  "count": 5,
   "files": [
    "admin.html"
   ]
  },
  "시상장": {
-  "count": 3,
+  "count": 5,
   "files": [
    "admin.html"
   ]
@@ -7635,7 +8152,7 @@
   ]
  },
  "기록증": {
-  "count": 3,
+  "count": 5,
   "files": [
    "admin.html",
    "event-record.html"
@@ -7661,18 +8178,6 @@
  },
  "대회를 먼저 선택하세요.": {
   "count": 2,
-  "files": [
-   "admin.html"
-  ]
- },
- "해당 조건의 종목이 없습니다.": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "(미선택 시 대회 전체 결승)": {
-  "count": 1,
   "files": [
    "admin.html"
   ]
@@ -7830,13 +8335,104 @@
    "admin.html"
   ]
  },
- "API 키 입력": {
+ "(설정됨) 변경 시에만 입력": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "SMTP 비밀번호": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
  "설정됨": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이메일 설정 로드 실패:": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "저장됨": {
+  "count": 7,
+  "files": [
+   "admin.html",
+   "record.js"
+  ]
+ },
+ "받을 주소를 입력하세요": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "시뮬레이션으로 기록했습니다 (실제 발송 없음)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "보냈습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "시험 발송 실패:": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "대회를 선택하면 종목이 나옵니다.": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "발송완료": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "종목을 불러오지 못했습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "발송 중…": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "발송 실패:": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "발송 이력이 없습니다.": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이력을 불러오지 못했습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "API 키 입력": {
   "count": 1,
   "files": [
    "admin.html"
@@ -7852,13 +8448,6 @@
   "count": 1,
   "files": [
    "admin.html"
-  ]
- },
- "저장됨": {
-  "count": 6,
-  "files": [
-   "admin.html",
-   "record.js"
   ]
  },
  "홍길동": {
@@ -7945,13 +8534,163 @@
    "admin.html"
   ]
  },
- "발송완료": {
+ "✓발송": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
- "✓발송": {
+ "— 이 대회 전용 문구": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "— 문자 설정의 기본 문구 (고쳐서 저장하면 이 대회 전용)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "· 이 대회 전용": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "문자 링크 상장 양식을 저장했습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이 대회 문자 문구를 저장했습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이 대회 전용 문구를 지우고 문자 설정의 기본 문구로 되돌릴까요?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기본 문구로 되돌렸습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "링크를 붙여 넣으세요": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "확인 중...": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "지금 열림": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "닫힘 — 종목이나 선수가 없음": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "새 링크(발급 기록 있음)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "옛 서명 링크(발급 기록 없음)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "대회?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "종목?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "(이 종목에 없음)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "지금 그 번호의 선수: 없음": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이 대회가 고른 양식": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "자동": {
+  "count": 3,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "결과 파일을 고르세요": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "파일의 결과를 이 대회에 넣습니다. 파일에 있는 선수·종목의 기록만 바꾸고, 없는 것은 건드리지 않습니다. 계속할까요?": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "전화": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "부별": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "새 종목": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "읽은 종목이 없습니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "반영 완료": {
   "count": 1,
   "files": [
    "admin.html"
@@ -7982,12 +8721,6 @@
   ]
  },
  "메모": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "발송 이력이 없습니다.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -8035,12 +8768,6 @@
    "admin.html"
   ]
  },
- "발송 중…": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
  "발송 실패": {
   "count": 2,
   "files": [
@@ -8055,12 +8782,6 @@
   ]
  },
  "공지 발송:": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "발송 실패:": {
   "count": 1,
   "files": [
    "admin.html"
@@ -8166,11 +8887,17 @@
   ]
  },
  "새로고침": {
-  "count": 15,
+  "count": 16,
   "files": [
    "admin.html",
    "common.js",
    "display-manage.html"
+  ]
+ },
+ "https://back.results.asiangames2026.org 또는 https://meet.sports.or.kr": {
+  "count": 1,
+  "files": [
+   "admin.html"
   ]
  },
  "일정 → 종목·라운드·조·시간표 + 엔트리(선수·계주 팀). 여러 번 눌러도 안전": {
@@ -8515,25 +9242,67 @@
    "admin.html"
   ]
  },
- "알리고 사이트 ID": {
+ "알리고 사이트 ID 또는 Twilio Account SID": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
  "비워두면 기존 값 유지": {
+  "count": 2,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "01012345678 또는 +12025550123": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
  "대회 사무국": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
  },
  "테스트 메시지": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "비우면 '문자 설정'의 기본 문구로 보냅니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "상장 링크 진단 — 문자의 링크(https://…/c/…)를 붙여 넣으세요": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "SMTP 로그인 계정": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "시험 발송 받을 주소": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "시뮬레이션 모드여도 이 한 통은 실제로 보냅니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "시뮬레이션 모드여도 이번 일괄은 실제로 보냅니다": {
   "count": 1,
   "files": [
    "admin.html"
@@ -8636,7 +9405,7 @@
   ]
  },
  "불러오는 중…": {
-  "count": 9,
+  "count": 10,
   "files": [
    "admin.html",
    "common.js",
@@ -8651,6 +9420,12 @@
   ]
  },
  "최근 활동": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "서버 상태": {
   "count": 1,
   "files": [
    "admin.html"
@@ -8956,12 +9731,6 @@
  },
  "실패만": {
   "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "시각": {
-  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -9430,12 +10199,6 @@
   "files": [
    "admin.html",
    "display-manage.html"
-  ]
- },
- "부별": {
-  "count": 1,
-  "files": [
-   "admin.html"
   ]
  },
  "· 시트 이름": {
@@ -9973,6 +10736,18 @@
    "admin.html"
   ]
  },
+ "— 국제대회 결과 API 또는 전국체전": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "(대회 코드 NSF2026, 트랙·필드·로드 자동)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "대회 코드": {
   "count": 1,
   "files": [
@@ -9992,6 +10767,18 @@
   ]
  },
  "결과 사이트 주소 (Referer)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "실시간 결과 주소": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "— 전국체전: 대한육상연맹 result.kaaf.or.kr 대회 페이지 주소를 그대로 (to_cd 포함). 있으면 결과는 여기서 읽는다(레인·풍속·시기까지)": {
   "count": 1,
   "files": [
    "admin.html"
@@ -10069,7 +10856,19 @@
    "admin.html"
   ]
  },
- "반영": {
+ "전국체전 데일리 조편성 (PDF)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "대한육상연맹이 매일 저녁 내는 '참가선수명단' PDF → 종목·조에 레인/순서. 조는 그대로 두고 선수만 맞춘다(배번은 연맹 번호로). 결과가 있는 종목은 건너뜀. 못 찾은 종목은 미리보기에서 기존 종목을 직접 골라 매칭.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "결과 있는 종목도": {
   "count": 1,
   "files": [
    "admin.html"
@@ -10768,12 +11567,6 @@
    "admin.html"
   ]
  },
- "제목": {
-  "count": 4,
-  "files": [
-   "admin.html"
-  ]
- },
  "부제목": {
   "count": 1,
   "files": [
@@ -11034,7 +11827,43 @@
    "admin.html"
   ]
  },
- "외부 시스템(예: OpenClaw on Mac mini)이 노출용(display) 대회 종목에 결과/영상 링크를 자동 등록할 때 사용하는 API 키를 발급/회수합니다.": {
+ "외부 시스템이 쓰는 API 키를 발급/회수합니다 —": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "읽기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ": 전광판·방송·결과 사이트용 공개 읽기 API v1(": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "명세": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ", 문서 docs/PUBLIC_API_V1.md) ·": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "쓰기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ ": 노출용(display) 대회 종목에 결과/영상 링크 자동 등록.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -11052,7 +11881,7 @@
    "admin.html"
   ]
  },
- "되며, 이후에는 prefix만 확인 가능합니다. 안전한 곳에 보관하세요.": {
+ "되며, 이후에는 prefix만 확인 가능합니다. 특정 대회 전용으로 발급하면 그 대회만 읽습니다.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -11240,6 +12069,12 @@
    "admin.html"
   ]
  },
+ "2. 부 선택": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "2. 종목 선택 (트랙 800m 이상 + 종합경기)": {
   "count": 1,
   "files": [
@@ -11247,6 +12082,12 @@
   ]
  },
  "설정된 페이싱 종목이 없습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "대회 전체 WaveLight 파일 (ZIP)": {
   "count": 1,
   "files": [
    "admin.html"
@@ -11265,6 +12106,18 @@
   ]
  },
  "상단 공지 (대시보드 팝업에 표시됨)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "WaveLight 파일": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "저장된 내용으로 만듭니다. 색 한 줄이 파일 하나입니다.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -11439,9 +12292,10 @@
   ]
  },
  "거부": {
-  "count": 1,
+  "count": 2,
   "files": [
-   "admin.html"
+   "admin.html",
+   "common.js"
   ]
  },
  "대회 시리즈 마스터": {
@@ -12285,13 +13139,13 @@
   ]
  },
  "결승 전체선택": {
-  "count": 1,
+  "count": 3,
   "files": [
    "admin.html"
   ]
  },
  "전체 해제": {
-  "count": 2,
+  "count": 3,
   "files": [
    "admin.html"
   ]
@@ -12411,7 +13265,7 @@
   ]
  },
  "본문": {
-  "count": 2,
+  "count": 3,
   "files": [
    "admin.html"
   ]
@@ -12657,6 +13511,12 @@
    "admin.html"
   ]
  },
+ "· 기록증은 증명 문구, 비우면 기본 문구 · 아예 빼려면 아래 표시 옵션 '본문' 해제": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "발급 단체명": {
   "count": 1,
   "files": [
@@ -12670,6 +13530,48 @@
   ]
  },
  "발급자 이름": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "발급자 배치": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "두 줄 (단체명 / 직책 이름)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "한 줄 (단체명 직책 이름)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "글자 크기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "(제목·이름·본문·발급자 함께 · 기록증은 전체가 세로 가운데, 한 장에 안 들어가면 자동으로 조금 줄어듦)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "로고 크기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "(좌·우 로고)": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12718,18 +13620,18 @@
   ]
  },
  "(기록증)": {
+  "count": 3,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기록 패널 진하기": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
- "기록 패널 투명도": {
-  "count": 1,
-  "files": [
-   "admin.html"
-  ]
- },
- "(낮추면 뒤 워터마크 비침)": {
+ "(기록증 · 낮추면 종이 바탕이 비침)": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12783,13 +13685,19 @@
    "admin.html"
   ]
  },
+ "(기록증 증명 문구)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
  "이미지 업로드": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
- "권장: PNG (배경 투명), 정사각형. 로고 60×60pt, 인장 50×50pt로 출력됩니다.": {
+ "권장: PNG (배경 투명). 로고는 기본 60pt(기록증 50pt)이고 위 '로고 크기'로 최대 2배, 인장은 50pt(기록증 44pt)이며 글자 크기를 따라 커집니다.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12807,7 +13715,7 @@
    "admin.html"
   ]
  },
- "워터마크 투명도": {
+ "워터마크 진하기": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12819,7 +13727,31 @@
    "admin.html"
   ]
  },
- "옅을수록 본문 가독성↑ · 중앙 배치": {
+ "워터마크 위치": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기록 칸 가운데 (기본)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기록 칸 안에 맞춤": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "종이 가운데": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "진하기 2~30%, 옅을수록 본문이 잘 읽힘 · 기록증은 기록 칸을 기준으로 놓이고 칸 위에도 비침 · 상장은 종이 가운데": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12910,7 +13842,7 @@
   ]
  },
  "시뮬레이션 모드": {
-  "count": 1,
+  "count": 3,
   "files": [
    "admin.html"
   ]
@@ -12921,19 +13853,31 @@
    "admin.html"
   ]
  },
- "알리고(Aligo)": {
+ "알리고(Aligo) — 국내": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
- "알리고 User ID": {
+ "Twilio — 해외(국제 번호 +…)": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
- "발신 번호 (사전 등록)": {
+ "(알리고 사이트 ID / Twilio Account SID)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "발신 번호": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "(알리고 사전 등록 번호 / Twilio 번호 +1…)": {
   "count": 1,
   "files": [
    "admin.html"
@@ -12994,7 +13938,7 @@
   ]
  },
  "발송": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -13006,6 +13950,30 @@
   ]
  },
  "체크하면 시뮬레이션 모드여도 이 테스트 1건은 실제로 발송됩니다(요금 발생). API Key·발신번호 저장 필수.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "결과표 가져오기 (문자 발송용)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "주최가 준 결과 파일(xlsx·csv)을 올리면 선수·종목·기록을 한 번에 만듭니다. 한 줄 = 선수 한 명의 한 종목 결과. 열은 머리글 이름으로 찾습니다:": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이름 · 전화번호 · 소속 · 종목 · 기록": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "(+ 부별 · 성별 · 라운드 · 조 · 순위 · 비고는 있으면 씀). 종목 칸에 '남초6 100m 예선'처럼 부별·라운드가 같이 있어도 됩니다. 그다음 아래 '일괄 발송'에서 종목을 골라 보냅니다.": {
   "count": 1,
   "files": [
    "admin.html"
@@ -13030,7 +13998,7 @@
   ]
  },
  "완주자 전원": {
-  "count": 1,
+  "count": 2,
   "files": [
    "admin.html"
   ]
@@ -13065,13 +14033,49 @@
    "admin.html"
   ]
  },
- "발송 대상 종목": {
+ "이 대회 문자 문구": {
   "count": 1,
   "files": [
    "admin.html"
   ]
  },
- "전체 선택": {
+ "변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {competition_name} {cert_url} {heat_label} {heat} · 보이는 문구 그대로 발송됩니다": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이 대회에 저장": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기본 문구로": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "문자 링크 상장 양식 — 입상(1~3위)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "문자 링크 상장 양식 — 그 외 완주자": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "고르면 바로 저장됩니다. '자동'은 PDF 상장 양식 목록에서 ★기본인 시상장·완주증. 전원 기록증으로 보내려면 두 칸 모두 기록증 양식을 고르세요. 양식은 상장·기록증 › PDF 상장 양식에서 만듭니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "발송 대상 종목": {
   "count": 1,
   "files": [
    "admin.html"
@@ -13108,6 +14112,121 @@
   ]
  },
  "발송 이력": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "링크 진단": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이메일 발송 설정 (SMTP)": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "회사 메일(SMTP)이나 SendGrid·SES 같은 서비스의 SMTP 주소를 넣습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "가 켜져 있으면 실제로 보내지 않고 이력만 남깁니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "SMTP 호스트": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "포트": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "비밀번호": {
+  "count": 3,
+  "files": [
+   "admin.html",
+   "login.html"
+  ]
+ },
+ "보내는 주소": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "보내는 이름": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기본 제목 (변수: {athlete_name} {team} {event_name} {rank_label} {record_value} {competition_name} {cert_url} {org_name})": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기본 본문": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "시험 발송": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "실제로 보내기": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "기록증 이메일 발송": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "선수 정보의": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이 있는 선수에게 종목 결과와 기록증 링크를 보냅니다(문자 일괄 발송과 같은 대상 규칙). 종목을 고르지 않으면 모든 결승 종목.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이미 보낸 선수 건너뜀": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "실제로 발송": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "이메일 발송 이력": {
   "count": 1,
   "files": [
    "admin.html"
@@ -14590,12 +15709,6 @@
    "common.js"
   ]
  },
- "공통": {
-  "count": 1,
-  "files": [
-   "common.js"
-  ]
- },
  "이 도움말": {
   "count": 1,
   "files": [
@@ -14718,6 +15831,13 @@
    "common.js"
   ]
  },
+ "18세이하부": {
+  "count": 3,
+  "files": [
+   "common.js",
+   "dashboard.js"
+  ]
+ },
  "트랙 경기": {
   "count": 1,
   "files": [
@@ -14792,6 +15912,24 @@
   ]
  },
  "이 브라우저에서는 끌어다 놓기를 쓸 수 없습니다 — 파일 선택 버튼을 이용하세요": {
+  "count": 1,
+  "files": [
+   "common.js"
+  ]
+ },
+ "이 사이트는 이용 통계를 위해 Google Analytics 쿠키를 씁니다. 동의하면 통계가 수집되고, 거부해도 모든 기능을 쓸 수 있습니다.": {
+  "count": 1,
+  "files": [
+   "common.js"
+  ]
+ },
+ "개인정보 처리방침": {
+  "count": 1,
+  "files": [
+   "common.js"
+  ]
+ },
+ "동의": {
   "count": 1,
   "files": [
    "common.js"
@@ -15067,13 +16205,19 @@
    "dashboard.js"
   ]
  },
- "{0} · {1} · 총 {2}경기": {
-  "count": 2,
+ "{0} {1} · {2} · 총 {3}경기": {
+  "count": 1,
   "files": [
    "dashboard.js"
   ]
  },
  "시간표 {0}": {
+  "count": 1,
+  "files": [
+   "dashboard.js"
+  ]
+ },
+ "{0} · {1} · 총 {2}경기": {
   "count": 1,
   "files": [
    "dashboard.js"
@@ -15098,12 +16242,6 @@
   ]
  },
  "시간별": {
-  "count": 1,
-  "files": [
-   "dashboard.js"
-  ]
- },
- "● LIVE • 진행중인 경기": {
   "count": 1,
   "files": [
    "dashboard.js"
@@ -18434,12 +19572,6 @@
    "login.html"
   ]
  },
- "비밀번호": {
-  "count": 2,
-  "files": [
-   "login.html"
-  ]
- },
  "로그인 — PACE RISE": {
   "count": 1,
   "files": [
@@ -18888,12 +20020,6 @@
   ]
  },
  "5. 이용자의 권리": {
-  "count": 1,
-  "files": [
-   "privacy.html"
-  ]
- },
- "이용자(또는 법정대리인)는 본인의 개인정보에 대해 열람·정정·삭제·처리정지를 요청할 수 있으며, 푸시 알림은 앱/기기 설정에서 언제든지 해제할 수 있습니다. 요청은 아래 연락처로 하실 수 있습니다.": {
   "count": 1,
   "files": [
    "privacy.html"

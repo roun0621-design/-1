@@ -1466,12 +1466,20 @@ POST /api/external/event-result-link/batch<br>
                             <button class="btn btn-sm btn-outline" id="pacing-gender-F" onclick="switchPacingGender('F')" style="font-weight:700;min-width:80px;font-size:14px;padding:8px 16px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><circle cx="12" cy="9" r="6"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="9" y1="19" x2="15" y2="19"/></svg> 여자</button>
                         </div>
                     </div>
+                    <!-- 부 선택 — 대회에 부가 있을 때만 보인다. '공통'은 부를 가리지 않는 설정 (2026-11-20) -->
+                    <div id="pacing-division-row" style="margin-bottom:14px;display:none;">
+                        <label class="t-label">2.  부 선택</label>
+                        <div id="pacing-division-btns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                    </div>
                     <div style="margin-bottom:14px;">
-                        <label class="t-label">2.  종목 선택 (트랙 800m 이상 + 종합경기)</label>
+                        <label class="t-label" id="pacing-event-label">2.  종목 선택 (트랙 800m 이상 + 종합경기)</label>
                         <div id="pacing-event-btns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
                     </div>
                     <input type="hidden" id="pacing-event-select" value="">
                     <div id="pacing-configs-list" class="t-md t-muted">설정된 페이싱 종목이 없습니다.</div>
+                    <div id="pacing-wl-all" style="display:none;margin-top:10px;">
+                        <a id="pacing-wl-all-link" class="btn btn-sm btn-outline" href="#" download><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 대회 전체 WaveLight 파일 (ZIP)</a>
+                    </div>
                 </div>
 
                 <!-- Pacing Editor (visible when an event is selected) -->
@@ -1493,6 +1501,13 @@ POST /api/external/event-result-link/batch<br>
                         <!-- 4-color side-by-side table rendered here -->
                         <div id="pacing-grid-container"></div>
                         <div id="pacing-dist-warning" style="margin-top:6px;"></div>
+                    </div>
+
+                    <!-- WaveLight 시스템 파일(.pc2) — 색 한 줄이 파일 하나 (2026-11-20, lib/pacingExport.js) -->
+                    <div class="admin-card">
+                        <h4 style="margin:0 0 4px;">WaveLight 파일 <span class="t-sm t-muted">.pc2</span></h4>
+                        <p class="adm-lead" style="margin:0 0 10px;">저장된 내용으로 만듭니다. 색 한 줄이 파일 하나입니다.</p>
+                        <div id="pacing-wl-files"></div>
                     </div>
 
                     <!-- Seconds conversion tool -->
@@ -6923,7 +6938,11 @@ POST /api/external/event-result-link/batch<br>
         let _pacingCurrentEvent = null;
         let _pacingEditData = null;
         let _pacingGender = 'M';
-        let _pacingTrackEvents = []; // [{name, genders: Set}]
+        let _pacingDivision = '';    // '' = 공통(부를 가리지 않는 설정). 부를 고르면 설정 키가 '10,000m (남) [대학부]' 가 된다 (2026-11-20)
+        let _pacingTrackEvents = []; // [{name, genders: Set, divs: {M:Set, F:Set}}]
+        const _pKeySuffix = /\s*\((남|여|혼성)\)(\s*\[.+\])?\s*$/;
+        function _pKey(name) { return `${name} (${_pacingGender === 'M' ? '남' : '여'})` + (_pacingDivision ? ` [${_pacingDivision}]` : ''); }
+        function _pKeyDivision(key) { const m = String(key || '').match(/\[(.+)\]\s*$/); return m ? m[1] : ''; }
 
         // 확대 모드 (고령 사용자 대응) — transform:scale() 방식
         const ZOOM_LEVELS = [
@@ -6979,12 +6998,12 @@ POST /api/external/event-result-link/batch<br>
 
         function _pEvtDist(name) {
             if (!name) return 0;
-            const clean = name.replace(/\s*\((남|여|혼성)\)\s*$/, '');
+            const clean = name.replace(_pKeySuffix, '');
             const m = clean.replace(/,/g,'').match(/(\d+)m/i);
             return m ? parseInt(m[1]) : 0;
         }
         function _pDefSegs(name) {
-            const clean = name.replace(/\s*\((남|여|혼성)\)\s*$/, '');
+            const clean = name.replace(_pKeySuffix, '');
             for (const [k, v] of Object.entries(PACING_DEFAULTS)) {
                 if (clean.replace(/\s/g,'').includes(k.replace(/\s/g,''))) return v.segs;
             }
@@ -7028,10 +7047,12 @@ POST /api/external/event-result-link/batch<br>
                 });
                 const map = {};
                 eligible.forEach(e => {
-                    if (!map[e.name]) map[e.name] = { genders: new Set(), category: e.category };
+                    if (!map[e.name]) map[e.name] = { genders: new Set(), category: e.category, divs: {} };
                     map[e.name].genders.add(e.gender);
+                    const dv = (e.division || '').trim();
+                    if (dv) (map[e.name].divs[e.gender] = map[e.name].divs[e.gender] || new Set()).add(dv);
                 });
-                _pacingTrackEvents = Object.entries(map).map(([name, data]) => ({ name, genders: data.genders, category: data.category }));
+                _pacingTrackEvents = Object.entries(map).map(([name, data]) => ({ name, genders: data.genders, category: data.category, divs: data.divs }));
                 // Sort: track by distance, combined at end
                 _pacingTrackEvents.sort((a, b) => {
                     if (a.category === 'combined' && b.category !== 'combined') return 1;
@@ -7042,6 +7063,7 @@ POST /api/external/event-result-link/batch<br>
                 });
             } catch(e) {}
             renderPacingGenderBtns();
+            renderPacingDivisionBtns();
             renderPacingEventBtns();
             renderPacingConfigsList();
             if (_pacingCurrentEvent) {
@@ -7063,17 +7085,39 @@ POST /api/external/event-result-link/batch<br>
         function switchPacingGender(g) {
             _pacingGender = g;
             renderPacingGenderBtns();
+            renderPacingDivisionBtns();
             renderPacingEventBtns();
             renderPacingConfigsList();
+        }
+
+        // 부 선택 — 이 성별의 페이싱 대상 종목에 달린 부를 모은다. 부가 없는 대회는 줄 자체를 숨긴다.
+        function _pacingDivisions() {
+            const set = new Set();
+            _pacingTrackEvents.forEach(e => { const d = e.divs && e.divs[_pacingGender]; if (d) d.forEach(x => set.add(x)); });
+            return [...set].sort((a, b) => a.localeCompare(b, 'ko'));
+        }
+        function renderPacingDivisionBtns() {
+            const divs = _pacingDivisions();
+            const row = document.getElementById('pacing-division-row');
+            if (_pacingDivision && !divs.includes(_pacingDivision)) _pacingDivision = '';
+            row.style.display = divs.length ? '' : 'none';
+            document.getElementById('pacing-event-label').textContent = (divs.length ? '3' : '2') + '.  종목 선택 (트랙 800m 이상 + 종합경기)';
+            const btn = (val, label) => `<button class="btn btn-sm${_pacingDivision === val ? '' : ' btn-outline'}" style="font-size:13px;padding:8px 16px;border-radius:8px;font-weight:600;" onclick="switchPacingDivision('${val.replace(/'/g, "\\'")}')">${label}</button>`;
+            document.getElementById('pacing-division-btns').innerHTML = btn('', '공통') + divs.map(d => btn(d, escapeHtml(d))).join('');
+        }
+        function switchPacingDivision(d) {
+            _pacingDivision = d;
+            renderPacingDivisionBtns();
+            renderPacingEventBtns();
         }
 
         function renderPacingEventBtns() {
             const gLabel = _pacingGender === 'M' ? '남' : '여';
             const wrap = document.getElementById('pacing-event-btns');
-            const available = _pacingTrackEvents.filter(e => e.genders.has(_pacingGender));
+            const available = _pacingTrackEvents.filter(e => e.genders.has(_pacingGender) && (!_pacingDivision || (e.divs && e.divs[_pacingGender] && e.divs[_pacingGender].has(_pacingDivision))));
             if (!available.length) { wrap.innerHTML = '<span class="t-md t-muted">해당 성별의 트랙 종목(800m 이상) 또는 혼성 종목이 없습니다.</span>'; return; }
             wrap.innerHTML = available.map(e => {
-                const key = `${e.name} (${gLabel})`;
+                const key = _pKey(e.name);
                 const hasConfig = _pacingConfigs.some(c => c.event_name === key);
                 const isActive = _pacingCurrentEvent === key;
                 let btnClass = 'btn btn-sm';
@@ -7110,6 +7154,12 @@ POST /api/external/event-result-link/batch<br>
             // Filter configs by current gender
             const filtered = _pacingConfigs.filter(c => c.event_name.includes(`(${gLabel})`));
             if (!filtered.length) { wrap.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">설정된 종목이 없습니다.</div>'; return; }
+            // 대회 전체 묶음 — 성별과 무관하게 저장된 설정이 하나라도 있으면
+            const allWrap = document.getElementById('pacing-wl-all');
+            if (allWrap) {
+                allWrap.style.display = _pacingConfigs.length ? '' : 'none';
+                document.getElementById('pacing-wl-all-link').href = `/api/pacing/wavelight.zip?competition_id=${_selectedCompId}`;
+            }
             wrap.innerHTML = filtered.map(cfg => {
                 const dots = cfg.colors.map(c => {
                     const cm = PACING_COLORS.find(x=>x.key===c.color_key) || {hex:'#ccc'};
@@ -7124,10 +7174,42 @@ POST /api/external/event-result-link/batch<br>
 
         function selectPacingConfig(name) {
             _pacingCurrentEvent = name;
+            _pacingDivision = _pKeyDivision(name);      // 목록에서 고른 설정의 부로 맞춘다
             const cfg = _pacingConfigs.find(c => c.event_name === name);
             if (cfg) loadPacingEditor(cfg);
             renderPacingConfigsList();
+            renderPacingDivisionBtns();
             renderPacingEventBtns();
+        }
+
+        // WaveLight 파일 목록 — 저장된 설정에서 서버가 만든 파일 이름 그대로 보여 주고, 누르면 그 파일을 받는다
+        const _PACING_DL_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="ui-emoji"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+        async function renderPacingWaveLight() {
+            const box = document.getElementById('pacing-wl-files');
+            if (!box) return;
+            const id = _pacingEditData && _pacingEditData.id;
+            if (!id) { box.innerHTML = '<div class="t-md t-muted">저장하면 WaveLight 파일을 받을 수 있습니다.</div>'; return; }
+            let d;
+            try { d = await api('GET', `/api/pacing/${id}/wavelight?list=1`); } catch (e) { box.innerHTML = '<div class="t-md t-muted">파일 목록을 불러오지 못했습니다.</div>'; return; }
+            if (!_pacingEditData || _pacingEditData.id !== id) return;      // 그 사이 다른 종목을 골랐다
+            const rows = (d.files || []).map(f => {
+                const pc = PACING_COLORS.find(p => p.key === f.color_key) || { hex: '#ccc', label: f.color_key };
+                return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eee;">
+                    <span style="background:${pc.hex};width:12px;height:12px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.2);flex-shrink:0;"></span>
+                    <span style="font-family:monospace;font-size:13px;word-break:break-all;">${escapeHtml(f.filename)}</span>
+                    <span class="t-sm t-muted" style="white-space:nowrap;">${f.steps}구간</span>
+                    <a class="btn btn-sm btn-outline" style="margin-left:auto;white-space:nowrap;" href="/api/pacing/${id}/wavelight?color=${encodeURIComponent(f.color_key)}" download="${escapeHtml(f.filename)}">${_PACING_DL_ICON}<span>받기</span></a>
+                </div>`;
+            }).join('');
+            const skipped = (d.skipped || []).map(s => {
+                const pc = PACING_COLORS.find(p => p.key === s.color_key) || { label: s.color_key };
+                return `<div class="t-sm" style="color:var(--danger);margin-top:6px;"><b>${escapeHtml(pc.label)}</b> <span>랩타임이 빈 구간이 있어 파일을 만들지 않았습니다.</span></div>`;
+            }).join('');
+            const steeple = (d.files || []).some(f => f.converted === 'steeple')
+                ? '<div class="t-sm t-muted" style="margin-top:6px;">3000m 장애물은 물웅덩이 구간을 조명 거리로 바꿔 15구간으로 나갑니다.</div>' : '';
+            const all = (d.files || []).length > 1
+                ? `<div style="margin-top:10px;"><a class="btn btn-sm btn-outline" href="/api/pacing/${id}/wavelight" download>${_PACING_DL_ICON}<span>이 종목 모두 받기 (ZIP)</span></a></div>` : '';
+            box.innerHTML = (rows || (skipped ? '' : '<div class="t-md t-muted">랩타임이 입력된 색이 없습니다.</div>')) + skipped + steeple + all;
         }
 
         function addPacingEvent() {
@@ -7149,6 +7231,7 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('pacing-notice').value = '';
             renderPacingGrid();
             renderPacingConfigsList();
+            renderPacingWaveLight();
         }
 
         function loadPacingEditor(cfg) {
@@ -7180,6 +7263,7 @@ POST /api/external/event-result-link/batch<br>
             document.getElementById('pacing-editor-title').textContent = cfg.event_name + ' 페이싱 설정';
             document.getElementById('pacing-notice').value = cfg.notice || '';
             renderPacingGrid();
+            renderPacingWaveLight();
         }
 
         // ---- Side-by-side grid rendering ----
