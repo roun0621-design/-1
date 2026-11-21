@@ -5,6 +5,7 @@
  *   docs/wavelight/protocol.html  →  WaveLight_프로토콜_분석서.pdf
  *   docs/wavelight/design.html    →  WaveLight_연동_구조_설계서.pdf
  *   본문은 HTML 조각(제목·표·그림), 여기서 표지·글꼴·쪽 번호를 입혀 A4 세로 PDF 로 낸다(헤드리스 크롬).
+ *   표지에는 작성일 · 작성자 · 회사명을 넣지 않는다 (사용자 요청 2026-11-21) — 제목 · 부제 · 문서 버전 · 대상 장비만.
  *   node scripts/wavelight-docs/build.js [출력 폴더]      (기본: ~/Desktop/WaveLight_증빙_2026-11-21/문서)
  */
 const fs = require('fs');
@@ -32,7 +33,6 @@ html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html, body { background:#fff; }
 body { margin:0; font: 10.5pt/1.65 'Pretendard Std', 'Apple SD Gothic Neo', sans-serif; color:#0E0E10; }
 .cover { height: 250mm; display:flex; flex-direction:column; justify-content:center; page-break-after: always; }
-.cover .brand { font-weight:700; font-size:11pt; letter-spacing:.08em; color:#C24A2E; margin-bottom:28mm; }
 .cover h1 { font-size:26pt; line-height:1.25; margin:0 0 6mm; }
 .cover .sub { font-size:12pt; color:#6D6A64; margin:0 0 28mm; }
 .cover table { width:auto; font-size:10.5pt; border:0; } .cover td { border:0; padding:1.2mm 8mm 1.2mm 0; } .cover td:first-child { color:#6D6A64; }
@@ -59,8 +59,8 @@ svg text { font-family:'Pretendard Std', sans-serif; }
     for (const d of DOCS) {
         const body = fs.readFileSync(path.join(ROOT, 'docs', 'wavelight', d.src), 'utf8');
         const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>${d.title}</title><style>${CSS}</style></head><body>
-<section class="cover"><div class="brand">PACE RISE : Node</div><h1>${d.title}</h1><p class="sub">${d.sub}</p>
-<table><tr><td>문서 버전</td><td>1.0</td></tr><tr><td>작성일</td><td>2026년 11월 21일</td></tr><tr><td>대상 장비</td><td>Wavelight event tool 5.0 (하드웨어 5.00, 한 바퀴 조명 400개)</td></tr><tr><td>작성</td><td>PACE RISE</td></tr></table></section>
+<section class="cover"><h1>${d.title}</h1><p class="sub">${d.sub}</p>
+<table><tr><td>문서 버전</td><td>1.0</td></tr><tr><td>대상 장비</td><td>Wavelight event tool 5.0 (하드웨어 5.00, 한 바퀴 조명 400개)</td></tr></table></section>
 ${body}</body></html>`;
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: 'networkidle0' });
