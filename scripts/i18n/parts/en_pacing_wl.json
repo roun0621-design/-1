@@ -9,7 +9,10 @@
   "{0}구간": "{0} steps",
   "받기": "Download",
   "랩타임이 빈 구간이 있어 파일을 만들지 않았습니다.": "Some segments have no lap time, so no file was made.",
-  "3000m 장애물은 물웅덩이 구간을 조명 거리로 바꿔 15구간으로 나갑니다.": "3000m Steeplechase is exported as 15 steps, with the water-jump section converted to light distance.",
   "이 종목 모두 받기 (ZIP)": "Download all for this event (ZIP)",
-  "랩타임이 입력된 색이 없습니다.": "No colour has lap times yet."
+  "랩타임이 입력된 색이 없습니다.": "No colour has lap times yet.",
+  "3000m 장애물은 물웅덩이 구간을 조명 거리로 바꿔서 나갑니다.": "3000m Steeplechase is exported with the water-jump section converted to light distance.",
+  "WaveLight 프로그램이 받는 범위에 맞춰 일부 구간을 합치거나 나눴습니다. 전체 거리와 기록은 같습니다.": "Some steps were merged or split to fit what the WaveLight program accepts. Total distance and time are unchanged.",
+  "전체가 19초보다 짧은 줄은 WaveLight 프로그램에 넣을 수 없습니다.": "A line shorter than 19 seconds in total cannot be loaded into the WaveLight program.",
+  "구간이 56개를 넘는 파일은 WaveLight 프로그램에서 'Add a new row' 를 먼저 눌러 칸을 늘린 뒤 불러와야 합니다.": "For a file with more than 56 steps, press 'Add a new row' in the WaveLight program first, then load the file."
 }

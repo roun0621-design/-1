@@ -6122,7 +6122,25 @@
    "admin.html"
   ]
  },
- "3000m 장애물은 물웅덩이 구간을 조명 거리로 바꿔 15구간으로 나갑니다.": {
+ "3000m 장애물은 물웅덩이 구간을 조명 거리로 바꿔서 나갑니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "WaveLight 프로그램이 받는 범위에 맞춰 일부 구간을 합치거나 나눴습니다. 전체 거리와 기록은 같습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "전체가 19초보다 짧은 줄은 WaveLight 프로그램에 넣을 수 없습니다.": {
+  "count": 1,
+  "files": [
+   "admin.html"
+  ]
+ },
+ "구간이 56개를 넘는 파일은 WaveLight 프로그램에서 'Add a new row' 를 먼저 눌러 칸을 늘린 뒤 불러와야 합니다.": {
   "count": 1,
   "files": [
    "admin.html"

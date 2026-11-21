@@ -1,0 +1,51 @@
+# WaveLight 연동 — 프로그램 분석과 에이전트 (2026-11-21)
+
+사용자가 이 맥과 같은 네트워크에 WaveLight 컨트롤러를 연결해 준 뒤(`http://192.168.1.240:5001/wavelight`), 프로그램이 브라우저에 내려 주는 화면 코드를 **읽기만** 해서 정리했다. 조명이 켜지거나 설정이 바뀌는 요청은 실제 장비에 보내지 않았다. 검증은 내려받은 화면 코드를 그대로 쓴 가짜 컨트롤러(로컬)에서 했다.
+
+범위(사용자 결정 2026-11-20): 실시간 동기화·통합 운영 콘솔은 만들지 않는다. 전송은 에이전트 방식.
+
+## 1. 프로그램이 무엇인가
+- 컨트롤러 안에서 도는 작은 웹 서버(Flask, Python 3.4)가 화면을 준다. 제목 `Wavelight event tool`, 화면 코드 버전 5.0, 하드웨어 버전 5.00, 한 바퀴 조명 400개(조명 1개 = 1m). **로그인·키가 없다** — 같은 네트워크의 누구나 명령을 보낼 수 있다.
+- 화면은 줄(runner) 10개. 줄마다 이름·색·Mute·Pilot·출발선(Startline)·구간 6칸(meter / time)·반복·Start·Cancel·Complex.
+- 이 장비의 시간 단위는 **구간 전체 초**(`wavelight.js`: `useSecondsInTotalPatameter = true`). 우리 `.pc2` 의 `step-pace`(그 구간에 걸리는 초)와 같다 → **평지 종목 형식은 확정**(전에는 장애물 예시에서 추정).
+
+## 2. 파일(.pc2)은 어디서 읽나
+- **폴더가 없다.** 파일은 Complex 버튼 → 팝업 창(`/workoutPopup`) → `Load file` 로 **브라우저가** 읽고, `Confirm` 을 누르면 그 줄에 붙는다. 컨트롤러에 저장되지 않는다(화면을 새로 고치면 사라진다).
+- 형식: JSON 배열 `[{"step-distance": "<정수 m>", "step-pace": <초>}]`. `JSON.parse` 라 공백·소수점 표기는 무관. 프로그램이 직접 저장하는 파일은 공백 없는 `JSON.stringify` 꼴.
+- **Confirm 때의 검사**(팝업은 값을 '400m 당 초'로 보고 검사한다 — 장비 설정과 어긋난 옛 검사):
+  - `초 × 2.5 / 60 < 0.8` → 거부. 즉 **한 구간이 19.2초 미만이면 창이 안 닫힌다**(칸이 빨개짐).
+  - `초 × 2.5 × 거리 > 16,777,000` → 거부. 예: 10,000m 를 한 구간(1,850초)으로 넣으면 거부. 5,000m × 900초는 통과.
+  - 구간 칸은 56개. 넘는 구간은 `Add a new row` 를 먼저 누르지 않으면 **조용히 잘린다**.
+- 그래서 `lib/pacingExport.js` `fitForProgram` 이 파일을 그 범위로 맞춘다: 긴 구간은 같은 빠르기로 나누고(10,000m → 5,000m 둘), 19.2초 미만 구간은 빠르기가 더 비슷한 이웃과 합친다(남자 3000m 장애물 8:30 의 마지막 100m 17초 → 앞 구간과 합쳐 200m 37.64초). 전체 거리·기록은 그대로. 예시 파일 7개(11:30~12:00)는 해당 없음 → 글자 단위로 그대로.
+
+## 3. 컨트롤러 명령 (화면이 보내는 HTTP)
+| 주소 | 하는 일 | 본문 |
+|---|---|---|
+| `GET /command09` | 상태(5초마다) | 응답: 숫자 60개 |
+| `POST /command06` | 줄 시작(Start) | `{ runnerArrayNumber, Steps:[{NumberOfLamps, Duration}], colourNumber, startingDelay, startingDelayInSeconds, isHideEnabled, isPilotEnabled }` |
+| `POST /command08` | 줄 취소(Cancel) | `{ runnerArrayNumber }` |
+| `POST /command12` | Fire(대기 중인 줄 출발) | 없음 |
+| `POST /command10` | 조명 전원·밝기 | `{ lampsOnOff, lampPower }` |
+| `POST /command14` · `/command17` | 진행 중 Mute · Pilot | `{ runnerArrayNumber, isHideEnabled / isPilotEnabled }` |
+| `POST /sendRawDataInHex` | 아래쪽 버튼(전체 점등·램프 테스트) | `{ rawDataInHex }` |
+| `GET /loadSettingsFromAFile` | 사용자 지정 출발선 | `{"customStartingLineLampNumbers": ["351"]}` |
+
+- `Steps`: `NumberOfLamps` = 조명 수(= m), `Duration` = 밀리초. 한계는 조명 수 16비트, 시간 24비트(≈16,777초).
+- `colourNumber`: 0 초록 · 1 파랑 · 2 흰색 · 3 빨강.
+- `startingDelay`: 출발선의 조명 번호. 화면의 보기는 400 → 0 · 300 → 100 · 200 → 200 · 100 → 300 · 1500 → 100 · 1 Mile → 391 · 2 Mile → 381 · 4 Mile → 363 · 사용자 지정. 규칙은 **결승선에서 끝나도록** `(400 − 조명 거리 % 400) % 400`. 3000m 장애물(조명 2850m)은 350 — 이 장비의 사용자 지정 값이 351 이라 현장에서 맞춘 장애물 출발선으로 본다.
+- `startingDelayInSeconds`: **255 = 출발 신호 대기**(화면의 Wait for shotgun), 0 = 바로 출발.
+- 상태 60바이트: [0..9] 줄 1~10(0 비어 있음 · 2 출발 신호 대기 → Fire 버튼 켜짐 · 그 밖 진행 중) · [10] 조명 전원 · [11..14] 버전 글자 · [15..16] 한 바퀴 조명 수 · [25] 밝기 · [43] 온도 · [44] 선 전력×10 · [58..59] 앞 58바이트의 합.
+- 주의: **화면을 여는 것만으로** 조명 전원이 꺼져 있으면 `command10 {lampsOnOff: 0}` 이 한 번 나간다(화면 코드의 동작). 분석할 때 실제 화면을 자동 브라우저로 열지 않은 이유.
+
+## 4. 우리 쪽
+- `GET /api/pacing/wavelight.json?competition_id=` — 종목마다 파일 내용(프로그램 범위에 맞춘 것) + `controller: { colourNumber, startLamp, steps }`(합치지 않은 원래 구간) + `rev`(지문).
+- `scripts/wavelight-agent/` — WaveLight 와 같은 네트워크의 PC 에서 띄우는 에이전트(외부 패키지 없음, `build-agent.sh` 로 실행 파일 묶음 → `dist/wavelight-agent/`).
+  1. **폴더 맞추기**: 10초마다 위 주소를 받아 `wavelight/` 폴더의 `.pc2` 를 최신으로. 자기가 만든 파일만 지운다.
+  2. **컨트롤러에 올리기**: 이 PC 의 `http://localhost:5010` 보내기 화면에서 종목 옆 '올리기' → 색마다 빈 줄에 `command06` 을 **항상 255(출발 신호 대기)** 로. 출발(Fire)·전원·밝기는 보내지 않는다. '올린 줄 취소'는 에이전트가 올린 줄만 `command08`.
+  - 올리기 전 확인: 상태 합 검사, 한 바퀴 400(398)개, 빈 줄 수. 보내기 화면의 POST 는 전용 머리글 + 같은 주소(Origin)만 받는다(다른 웹 페이지가 몰래 부르지 못하게).
+- 테스트 `tests/api/74_wavelight_agent.test.js`(가짜 컨트롤러).
+
+## 5. 확인한 것 / 아직 못 한 것
+- 확인(로컬, 제조사 화면 코드 그대로): 우리 파일 7가지가 Load file → Confirm 을 통과하고 Start 때 나가는 값이 맞다. 에이전트가 올린 줄이 제조사 화면에서 빨간 줄(Start 꺼짐 · Cancel 켜짐)과 Fire 켜짐으로 보인다.
+- **아직 못 한 것: 실제 장비에 올려 보기.** 사용자 승인 뒤 한 번 — 줄 하나를 대기로 올리고(조명 전원을 끈 상태 권장) 상태가 2 로 바뀌는지 본 다음 취소. 그 다음 조명을 켜고 Fire 까지는 사용자가 현장에서.
+- 모르는 것: 대기 중인 줄이 조명에 어떻게 보이는지(출발선에 한 점이 켜지는지), 2000m 장애물의 조명 거리(보정 없이 낸다), 다른 경기장 장비의 설정(초/400m 방식이면 값의 뜻이 달라진다 — 에이전트는 화면 설정을 읽지 않으므로 다른 장비에 붙일 때는 `static/js/wavelight.js` 를 먼저 본다).

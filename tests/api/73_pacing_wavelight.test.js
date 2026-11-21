@@ -51,7 +51,8 @@ describe('페이싱 라이트 → WaveLight 파일', () => {
         expect(one('3000m 장애물 (여)', [[3000, 700]]).files[0].content).toBe(SAMPLE_1140);
         const split = one('3000mSC (남)', [[1000, 190], [1000, 185], [1000, 180]]).files[0];
         const steps = JSON.parse(split.content);
-        expect(steps).toHaveLength(15); expect(split.converted).toBe('steeple');
+        // 마지막 100m 가 18초(19.2초 미만)라 프로그램이 받도록 앞 구간과 합쳐진다 → 14구간 (74_wavelight_agent 참고)
+        expect(steps).toHaveLength(14); expect(split.converted).toBe('steeple'); expect(split.notes).toEqual(['merged']);
         expect(steps.reduce((a, s) => a + Number(s['step-distance']), 0)).toBe(2850);
         expect(Math.abs(steps.reduce((a, s) => a + s['step-pace'], 0) - 555)).toBeLessThan(0.2);
         expect(split.filename).toBe('3000mSC_Men_9-15_Green.pc2');

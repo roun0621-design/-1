@@ -14,7 +14,7 @@
     'use strict';
 
     var STORAGE_KEY = 'pace_lang';
-    var DICT_VERSION = (window.PACE_I18N_VERSION || '21');   // 2026-11-20: 페이싱 라이트 부 선택 · WaveLight 파일 내려받기
+    var DICT_VERSION = (window.PACE_I18N_VERSION || '22');   // 2026-11-21: WaveLight 프로그램 범위에 맞춘 구간 안내
     var LANGS = [
         { code: 'ko', label: '한국어', short: 'KO' },
         { code: 'en', label: 'English', short: 'EN' },

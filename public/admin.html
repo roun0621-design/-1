@@ -7206,10 +7206,18 @@ POST /api/external/event-result-link/batch<br>
                 return `<div class="t-sm" style="color:var(--danger);margin-top:6px;"><b>${escapeHtml(pc.label)}</b> <span>랩타임이 빈 구간이 있어 파일을 만들지 않았습니다.</span></div>`;
             }).join('');
             const steeple = (d.files || []).some(f => f.converted === 'steeple')
-                ? '<div class="t-sm t-muted" style="margin-top:6px;">3000m 장애물은 물웅덩이 구간을 조명 거리로 바꿔 15구간으로 나갑니다.</div>' : '';
+                ? '<div class="t-sm t-muted" style="margin-top:6px;">3000m 장애물은 물웅덩이 구간을 조명 거리로 바꿔서 나갑니다.</div>' : '';
+            // WaveLight 프로그램은 19초보다 짧은 구간·너무 긴 구간을 받지 않는다 → 서버가 합치거나 나눠서 낸다(lib/pacingExport.js fitForProgram)
+            const hasNote = n => (d.files || []).some(f => (f.notes || []).includes(n));
+            const fitted = (hasNote('merged') || hasNote('split'))
+                ? '<div class="t-sm t-muted" style="margin-top:6px;">WaveLight 프로그램이 받는 범위에 맞춰 일부 구간을 합치거나 나눴습니다. 전체 거리와 기록은 같습니다.</div>' : '';
+            const tooShort = hasNote('too_short')
+                ? '<div class="t-sm" style="color:var(--danger);margin-top:6px;">전체가 19초보다 짧은 줄은 WaveLight 프로그램에 넣을 수 없습니다.</div>' : '';
+            const many = hasNote('many_steps')
+                ? '<div class="t-sm" style="color:var(--danger);margin-top:6px;">구간이 56개를 넘는 파일은 WaveLight 프로그램에서 \'Add a new row\' 를 먼저 눌러 칸을 늘린 뒤 불러와야 합니다.</div>' : '';
             const all = (d.files || []).length > 1
                 ? `<div style="margin-top:10px;"><a class="btn btn-sm btn-outline" href="/api/pacing/${id}/wavelight" download>${_PACING_DL_ICON}<span>이 종목 모두 받기 (ZIP)</span></a></div>` : '';
-            box.innerHTML = (rows || (skipped ? '' : '<div class="t-md t-muted">랩타임이 입력된 색이 없습니다.</div>')) + skipped + steeple + all;
+            box.innerHTML = (rows || (skipped ? '' : '<div class="t-md t-muted">랩타임이 입력된 색이 없습니다.</div>')) + skipped + steeple + fitted + tooShort + many + all;
         }
 
         function addPacingEvent() {
