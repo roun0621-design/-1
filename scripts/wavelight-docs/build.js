@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * WaveLight 연동 문서 2종 → PDF (2026-11-21)
+ * WaveLight 연동 문서 2종 → PDF
  *   docs/wavelight/protocol.html  →  WaveLight_프로토콜_분석서.pdf
  *   docs/wavelight/design.html    →  WaveLight_연동_구조_설계서.pdf
  *   본문은 HTML 조각(제목·표·그림), 여기서 표지·글꼴·쪽 번호를 입혀 A4 세로 PDF 로 낸다(헤드리스 크롬).
- *   표지에는 작성일 · 작성자 · 회사명을 넣지 않는다 (사용자 요청 2026-11-21) — 제목 · 부제 · 문서 버전 · 대상 장비만.
- *   node scripts/wavelight-docs/build.js [출력 폴더]      (기본: ~/Desktop/WaveLight_증빙_2026-11-21/문서)
+ *   표지에는 작성일 · 작성자 · 회사명을 넣지 않는다(사용자 요청) — 제목 · 부제 · 문서 버전 · 대상 장비만.
+ *   날짜는 어디에도 넣지 않는다(사용자 요청 — 제출 자료의 날짜 비공개): 본문·표지에 날짜 없음, PDF 속성의 만든 날짜·고친 날짜도 지운다.
+ *   node scripts/wavelight-docs/build.js [출력 폴더]      (기본: ~/Desktop/WaveLight_증빙/문서)
  */
 const fs = require('fs');
 const path = require('path');
@@ -15,7 +16,7 @@ const { pathToFileURL } = require('url');
 const puppeteer = require('puppeteer');
 
 const ROOT = path.join(__dirname, '..', '..');
-const OUT = process.argv[2] || path.join(os.homedir(), 'Desktop', 'WaveLight_증빙_2026-11-21', '문서');
+const OUT = process.argv[2] || path.join(os.homedir(), 'Desktop', 'WaveLight_증빙', '문서');
 const FONT = f => pathToFileURL(path.join(ROOT, 'scripts', 'catalog', 'fonts', f)).href;
 
 const DOCS = [
@@ -71,7 +72,12 @@ ${body}</body></html>`;
             headerTemplate: '<span></span>',
             footerTemplate: `<div style="width:100%;font-size:8px;color:#8A867E;padding:0 18mm;display:flex;justify-content:space-between;font-family:sans-serif"><span>${d.title}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
         });
-        const pages = (fs.readFileSync(out).toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+        // PDF 속성의 날짜(/CreationDate · /ModDate)를 같은 길이의 빈칸으로 덮는다 — 길이가 같아 파일 구조(위치 표)는 그대로
+        let raw = fs.readFileSync(out).toString('latin1');
+        raw = raw.replace(/\/(CreationDate|ModDate)\s*\([^)]*\)/g, m => ' '.repeat(m.length));
+        fs.writeFileSync(out, Buffer.from(raw, 'latin1'));
+        if (/CreationDate|ModDate|20\d\d[01]\d[0-3]\d/.test(raw.slice(raw.lastIndexOf('/Producer') - 400))) console.warn('  경고: PDF 속성에 날짜가 남아 있을 수 있습니다');
+        const pages = (raw.match(/\/Type\s*\/Page[^s]/g) || []).length;
         console.log('→', out, `(${pages}쪽)`);
         if (process.argv.includes('--png')) {
             await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1.5 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * WaveLight 에이전트 · 운영 콘솔 (2026-11-21) — 계측 에이전트(scripts/timing-watcher)를 거꾸로 쓴 꼴
+ * WaveLight 에이전트 · 운영 콘솔 — 계측 에이전트(scripts/timing-watcher)를 거꾸로 쓴 꼴
  *   WaveLight 컨트롤러와 같은 네트워크에 있는 PC 에서 띄워 둔다. 하는 일:
  *     1) 폴더 맞추기 — 서버(관리 › 페이싱 라이트)에 저장된 내용을 주기적으로 받아 wavelight 폴더의 .pc2 를 최신으로 맞춘다.
  *        (프로그램의 Complex › Load file 로 손으로 넣을 때 쓰는 파일. 에이전트가 만든 파일만 지우고, 다른 파일은 건드리지 않는다)

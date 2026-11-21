@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# WaveLight 에이전트 실행 파일 묶기 (2026-11-21) — 계측 에이전트(scripts/timing-watcher/build-agent.sh)와 같은 방식
+# WaveLight 에이전트 실행 파일 묶기 — 계측 에이전트(scripts/timing-watcher/build-agent.sh)와 같은 방식
 #   scripts/wavelight-agent/agent.js 를 @yao-pkg/pkg 로 Windows(x64)·macOS(arm64) 실행 파일로 만들고,
 #   WaveLight PC 에 폴더째 복사하면 되는 꾸러미(dist/wavelight-agent/<os>/)를 zip 으로 묶는다.
 #   사용: bash scripts/wavelight-agent/build-agent.sh [win|mac|all]   (기본 all)
