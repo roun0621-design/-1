@@ -22,7 +22,7 @@ const path = require('path');
 const http = require('http');
 const PAGE = require('./page');
 
-const AGENT_VERSION = '1.0.0';
+const AGENT_VERSION = '1.0.1';
 function baseDir() { return process.pkg ? path.dirname(process.execPath) : __dirname; }
 const CONFIG_TEMPLATE = {
     server: 'https://pace-rise-node.com',
@@ -120,14 +120,18 @@ async function ctlFetch(cfg, pathName, body) {
         return await r.text();
     } finally { clearTimeout(t); }
 }
+// 읽기(GET)는 한 번 더 해 본다 — 컨트롤러 웹 서버는 한 번에 요청 하나만 받아서, WaveLight 화면의 5초 확인과 겹치면 가끔 끊긴다. 올리기(POST)는 다시 보내지 않는다.
+async function ctlGet(cfg, pathName) {
+    try { return await ctlFetch(cfg, pathName); } catch (e) { await new Promise(r => setTimeout(r, 300)); return ctlFetch(cfg, pathName); }
+}
 async function readStatus(cfg) {
-    const s = parseStatus(JSON.parse(await ctlFetch(cfg, '/command09')));
+    const s = parseStatus(JSON.parse(await ctlGet(cfg, '/command09')));
     if (!s) throw new Error('컨트롤러 응답을 읽을 수 없습니다');
     return s;
 }
 /** 컨트롤러에 저장된 '사용자 지정 출발선' 조명 번호들 (없으면 []) */
 async function readCustomStartLamps(cfg) {
-    try { return (JSON.parse(await ctlFetch(cfg, '/loadSettingsFromAFile')).customStartingLineLampNumbers || []).map(n => parseInt(n, 10)).filter(n => n >= 0 && n < 400); } catch (e) { return []; }
+    try { return (JSON.parse(await ctlGet(cfg, '/loadSettingsFromAFile')).customStartingLineLampNumbers || []).map(n => parseInt(n, 10)).filter(n => n >= 0 && n < 400); } catch (e) { return []; }
 }
 
 /**
