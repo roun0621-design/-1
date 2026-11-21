@@ -101,7 +101,7 @@ function parseStatus(arr) {
     let sum = 0; for (let i = 0; i <= 57; i++) sum += arr[i];
     if (sum !== arr[58] * 256 + arr[59]) return null;
     return {
-        slots: arr.slice(0, 10),                         // 줄 1~10: 0 비어 있음 · 2 출발 신호 대기 · 그 밖 진행 중
+        slots: arr.slice(0, 10),                         // 줄 1~10: 0 비어 있음 · 2 출발 신호 대기 · 1 진행 중(끝나면 스스로 0)
         lampsOn: arr[10] !== 0,
         version: String.fromCharCode(...arr.slice(11, 15)),
         lampsInRound: arr[15] * 256 + arr[16],
