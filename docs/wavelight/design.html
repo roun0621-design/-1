@@ -1,0 +1,145 @@
+<!-- WaveLight 연동 구조 설계서 — 본문 조각. 조판은 scripts/wavelight-docs/build.js (표지·글꼴·쪽 번호). 사실의 원본은 docs/WAVELIGHT.md -->
+
+<h2>1. 목적과 범위</h2>
+<table>
+  <tr><th style="width:30%">구현 항목</th><th>설계 내용</th></tr>
+  <tr><td>페이싱 시나리오 자동 생성 · 전송 모듈</td><td>운영 시스템에 종목과 목표 기록(구간별 랩타임)을 입력하면 컨트롤러가 받는 페이싱 프로그램(구간 · 색 · 출발선)을 자동으로 만들고, 현장 PC 의 에이전트가 컨트롤러에 전송한다. 줄마다 파일을 불러오고 색과 출발선을 맞추던 수동 설정을 대체한다.</td></tr>
+  <tr><td>실시간 동기화 제어 · 통합 운영 콘솔</td><td>운영 시스템의 경기 진행 상태와 컨트롤러의 조명 줄 상태를 한 화면에 보여 주고, 둘이 맞는지 판정한다. 경기가 진행 중이 되면 해당 종목을 자동으로 올릴 수 있고, 출발 · 취소를 같은 화면에서 한다.</td></tr>
+</table>
+<p>컨트롤러의 통신 방식은 별도 문서 「WaveLight 컨트롤러 프로토콜 분석서」에 정리했다. 이 문서는 그 위에 얹은 구조를 설명한다.</p>
+
+<h2>2. 전체 구조</h2>
+<figure>
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="b" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#0E0E10"/></marker></defs>
+  <g font-size="12">
+    <rect x="6" y="20" width="184" height="210" rx="8" fill="#F4F3EF" stroke="#D6D3CB"/><text x="18" y="40" font-weight="600">운영 서버 (인터넷)</text>
+    <rect x="18" y="52" width="160" height="46" rx="5" fill="#fff" stroke="#0E0E10"/><text x="98" y="72" text-anchor="middle">관리 화면</text><text x="98" y="88" text-anchor="middle" font-size="10" fill="#6D6A64">종목 · 목표 기록 입력</text>
+    <rect x="18" y="110" width="160" height="46" rx="5" fill="#fff" stroke="#0E0E10"/><text x="98" y="130" text-anchor="middle">자동 생성 모듈</text><text x="98" y="146" text-anchor="middle" font-size="10" fill="#6D6A64">구간 변환 · 출발선 계산</text>
+    <rect x="18" y="168" width="160" height="46" rx="5" fill="#fff" stroke="#0E0E10"/><text x="98" y="188" text-anchor="middle">경기 진행 상태</text><text x="98" y="204" text-anchor="middle" font-size="10" fill="#6D6A64">예정 · 진행 중 · 완료</text>
+
+    <rect x="268" y="20" width="184" height="210" rx="8" fill="#F4F3EF" stroke="#D6D3CB"/><text x="280" y="40" font-weight="600">현장 PC</text>
+    <rect x="280" y="52" width="160" height="62" rx="5" fill="#fff" stroke="#0E0E10"/><text x="360" y="74" text-anchor="middle">에이전트</text><text x="360" y="90" text-anchor="middle" font-size="10" fill="#6D6A64">받기 · 전송 · 상태 확인</text><text x="360" y="104" text-anchor="middle" font-size="10" fill="#6D6A64">기록 파일</text>
+    <rect x="280" y="130" width="160" height="46" rx="5" fill="#fff" stroke="#C24A2E"/><text x="360" y="150" text-anchor="middle">통합 운영 콘솔</text><text x="360" y="166" text-anchor="middle" font-size="10" fill="#6D6A64">브라우저 (이 PC 전용)</text>
+    <rect x="280" y="186" width="160" height="30" rx="5" fill="#fff" stroke="#D6D3CB"/><text x="360" y="205" text-anchor="middle" font-size="11">.pc2 파일 폴더</text>
+
+    <rect x="530" y="20" width="184" height="210" rx="8" fill="#F4F3EF" stroke="#D6D3CB"/><text x="542" y="40" font-weight="600">WaveLight</text>
+    <rect x="542" y="52" width="160" height="62" rx="5" fill="#fff" stroke="#0E0E10"/><text x="622" y="78" text-anchor="middle">컨트롤러</text><text x="622" y="94" text-anchor="middle" font-size="10" fill="#6D6A64">줄 10개</text>
+    <rect x="542" y="150" width="160" height="46" rx="5" fill="#fff" stroke="#0E0E10"/><text x="622" y="178" text-anchor="middle">트랙 조명 400개</text>
+
+    <line x1="178" y1="76" x2="278" y2="76" stroke="#0E0E10" marker-end="url(#b)"/><text x="229" y="68" text-anchor="middle" font-size="9.5">받기 (5초)</text>
+    <line x1="440" y1="70" x2="540" y2="70" stroke="#0E0E10" marker-end="url(#b)"/><text x="491" y="62" text-anchor="middle" font-size="9.5">전송 · 출발 · 취소</text>
+    <line x1="542" y1="98" x2="442" y2="98" stroke="#0E0E10" marker-end="url(#b)"/><text x="491" y="112" text-anchor="middle" font-size="9.5">상태 (1초)</text>
+    <line x1="360" y1="130" x2="360" y2="116" stroke="#0E0E10" marker-end="url(#b)"/>
+    <line x1="622" y1="114" x2="622" y2="148" stroke="#0E0E10" marker-end="url(#b)"/>
+  </g>
+</svg>
+<figcaption>그림 1. 구성 요소와 흐름. 현장 PC 는 인터넷(운영 서버)과 컨트롤러 네트워크에 함께 연결된다.</figcaption>
+</figure>
+
+<table>
+  <tr><th style="width:24%">구성 요소</th><th style="width:30%">위치</th><th>역할</th></tr>
+  <tr><td>자동 생성 모듈</td><td><code>lib/pacingExport.js</code><br><code>lib/routes/pacing.js</code></td><td>저장된 페이싱 설정을 컨트롤러 프로그램과 <code>.pc2</code> 파일로 변환. 에이전트용 주소 <code>GET /api/pacing/wavelight.json</code></td></tr>
+  <tr><td>에이전트</td><td><code>scripts/wavelight-agent/agent.js</code></td><td>서버에서 받기, 폴더 맞추기, 컨트롤러 전송 · 출발 · 취소, 상태 확인, 기록</td></tr>
+  <tr><td>통합 운영 콘솔</td><td><code>scripts/wavelight-agent/page.js</code></td><td>에이전트가 현장 PC 에서 띄우는 화면(<code>http://localhost:5010</code>)</td></tr>
+</table>
+<p>에이전트는 설치가 필요 없는 실행 파일 하나로 묶어 배포한다(Windows · macOS). 설정은 대회 번호와 컨트롤러 주소 두 가지다.</p>
+
+<h2>3. 페이싱 프로그램 자동 생성</h2>
+<h3>3.1 입력</h3>
+<p>관리 화면 › 페이싱 라이트에서 성별 · 부 · 종목을 고르고, 색(초록 · 빨강 · 흰색 · 파랑)마다 구간 거리와 랩타임을 입력한다. 구간이 하나면 목표 기록 하나만 넣으면 된다. 부(대학부 · 일반부 등)마다 따로 둘 수 있다.</p>
+<h3>3.2 변환 규칙</h3>
+<table>
+  <tr><th style="width:26%">규칙</th><th>내용</th></tr>
+  <tr><td>색 한 줄 = 프로그램 하나</td><td>구간 거리 → 조명 수(1m = 1개), 랩타임 → 밀리초. 구간은 입력한 그대로.</td></tr>
+  <tr><td>3000m 장애물 환산</td><td>물웅덩이 구간은 선수가 121.41m 를 달리는 동안 조명이 100m 를 간다. 250 → (100 + 300) × 6 → 100 → 100 의 15구간(조명 2,850m)으로 나누고 입력한 빠르기를 구간마다 나눠 담는다. 운영사 예시 파일 7개와 글자 단위로 일치한다.</td></tr>
+  <tr><td>출발선 계산</td><td>결승선에서 끝나도록 <code>(400 − 조명 거리 % 400) % 400</code>. 800m → 0, 1500m → 100, 3000m · 5000m → 200, 3000m 장애물 → 350. 컨트롤러에 사용자 지정 출발선이 3m 안쪽에 저장되어 있으면 그 값을 쓴다(현장에서 맞춘 값 우선). 운영자가 콘솔에서 고칠 수 있다.</td></tr>
+  <tr><td>색 번호</td><td>초록 0 · 파랑 1 · 흰색 2 · 빨강 3</td></tr>
+  <tr><td>파일(.pc2) 범위 맞추기</td><td>손으로 불러올 때를 위한 파일은 프로그램 화면의 제한에 맞춘다: 19.2초 미만 구간은 빠르기가 비슷한 이웃 구간과 합치고, 너무 긴 구간은 같은 빠르기로 나눈다. 전체 거리 · 기록은 같다. 컨트롤러에 직접 보내는 값은 이 제한이 없어 원래 구간 그대로다.</td></tr>
+  <tr><td>파일 이름</td><td>영문만: <code>&lt;종목&gt;_&lt;성별&gt;[_&lt;부&gt;]_&lt;기록&gt;_&lt;색&gt;.pc2</code> (예: <code>3000mSC_Men_Senior_9-05_Green.pc2</code>)</td></tr>
+</table>
+
+<h2>4. 전송 흐름</h2>
+<figure>
+<svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="c" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#0E0E10"/></marker></defs>
+  <g font-size="12" text-anchor="middle">
+    <text x="90" y="18" font-weight="600">운영 서버</text><text x="290" y="18" font-weight="600">에이전트</text><text x="460" y="18" font-weight="600">콘솔(운영자)</text><text x="640" y="18" font-weight="600">컨트롤러</text>
+    <g stroke="#D6D3CB"><line x1="90" y1="26" x2="90" y2="292"/><line x1="290" y1="26" x2="290" y2="292"/><line x1="460" y1="26" x2="460" y2="292"/><line x1="640" y1="26" x2="640" y2="292"/></g>
+    <g stroke="#0E0E10" fill="none">
+      <line x1="290" y1="50" x2="92" y2="50" marker-end="url(#c)"/><line x1="90" y1="68" x2="288" y2="68" marker-end="url(#c)" stroke-dasharray="4 3"/>
+      <line x1="460" y1="104" x2="292" y2="104" marker-end="url(#c)"/>
+      <line x1="290" y1="126" x2="638" y2="126" marker-end="url(#c)"/><line x1="640" y1="144" x2="292" y2="144" marker-end="url(#c)" stroke-dasharray="4 3"/>
+      <line x1="290" y1="166" x2="638" y2="166" marker-end="url(#c)"/><line x1="640" y1="184" x2="292" y2="184" marker-end="url(#c)" stroke-dasharray="4 3"/>
+      <line x1="460" y1="216" x2="292" y2="216" marker-end="url(#c)"/><line x1="290" y1="234" x2="638" y2="234" marker-end="url(#c)"/>
+      <line x1="290" y1="262" x2="638" y2="262" marker-end="url(#c)"/><line x1="640" y1="280" x2="292" y2="280" marker-end="url(#c)" stroke-dasharray="4 3"/>
+    </g>
+    <g font-size="10.5" fill="#0E0E10">
+      <text x="190" y="44">프로그램 · 경기 상태 받기 (5초)</text><text x="190" y="82">종목별 프로그램, 라운드 상태</text>
+      <text x="375" y="98">올리기 (종목 선택)</text>
+      <text x="465" y="120">상태 확인 → 색마다 빈 줄에 command06 (255 = 대기)</text><text x="465" y="158">200 ACK</text>
+      <text x="465" y="178">command09 → 줄 상태 2(출발 신호 대기)</text>
+      <text x="375" y="210">Fire</text><text x="465" y="228">command12</text>
+      <text x="465" y="256">command09 (1초마다)</text><text x="465" y="294">1(진행 중) … 끝나면 0</text>
+    </g>
+  </g>
+</svg>
+<figcaption>그림 2. 전송과 출발의 순서. 점선은 응답.</figcaption>
+</figure>
+<p>'자동 올리기'를 켜 두면 운영자의 '올리기' 대신, 서버에서 받은 경기 상태가 '진행 중'으로 바뀌는 순간 에이전트가 같은 전송을 한다. 출발은 어느 경우에도 운영자의 Fire 또는 출발 신호 장치로만 한다.</p>
+
+<h2>5. 경기 진행 상태와 조명의 동기화</h2>
+<h3>5.1 두 상태의 출처</h3>
+<table>
+  <tr><th style="width:22%">상태</th><th style="width:30%">출처</th><th>값</th></tr>
+  <tr><td>경기 진행 상태</td><td>운영 시스템의 종목 라운드 상태(5초마다)</td><td>예정 → 진행 중(소집 완료부터 경기 중) → 완료, 시간표의 시작 시각</td></tr>
+  <tr><td>조명 줄 상태</td><td>컨트롤러 상태 조회(1초마다)</td><td>줄마다 비어 있음 · 출발 신호 대기 · 진행 중</td></tr>
+</table>
+<h3>5.2 판정</h3>
+<table>
+  <tr><th style="width:30%">경기</th><th style="width:30%">조명</th><th>콘솔 표시</th></tr>
+  <tr><td>A 종목 진행 중</td><td>A 종목 대기</td><td>맞음 — "조명이 출발 신호를 기다립니다"</td></tr>
+  <tr><td>A 종목 진행 중</td><td>A 종목 진행 중</td><td>맞음 — "경기와 조명이 함께 진행 중입니다"</td></tr>
+  <tr><td>A 종목 진행 중</td><td>올라간 줄 없음</td><td>어긋남 — "조명이 올라가 있지 않습니다"</td></tr>
+  <tr><td>A 종목 진행 중</td><td>B 종목이 올라가 있음</td><td>어긋남 — "경기는 A 인데 조명은 B"</td></tr>
+  <tr><td>진행 중인 경기 없음</td><td>진행 중</td><td>어긋남 — "진행 중인 경기가 없습니다"</td></tr>
+  <tr><td>진행 중인 경기 없음</td><td>올라간 줄 없음</td><td>다음 페이싱 종목과 시작 시각 안내</td></tr>
+</table>
+<h3>5.3 진행 표시와 종료</h3>
+<p>출발 시각(콘솔의 Fire, 또는 다른 곳에서 출발해 상태가 '진행 중'으로 바뀐 순간)부터의 경과 시간으로 줄마다 진행 막대와 현재 구간(예: 2 / 4)을 표시한다. 프로그램이 끝나 컨트롤러가 줄을 비우면 에이전트가 이를 알아채 목록에서 지우고 "끝남 — 출발 뒤 1:48.2 (목표 1:48)" 과 같이 기록한다.</p>
+
+<h2>6. 통합 운영 콘솔 화면</h2>
+<table>
+  <tr><th style="width:22%">영역</th><th>내용</th></tr>
+  <tr><td>경기와 조명</td><td>5.2 의 판정 한 문장, 진행 중인 경기, 대기 · 진행 중인 줄 수, Fire, 올린 줄 모두 취소, 자동 올리기 선택</td></tr>
+  <tr><td>연결</td><td>서버 수신 상태, 컨트롤러 연결 · 조명 수 · 버전, 조명 전원 · 밝기, 파일 폴더</td></tr>
+  <tr><td>조명 줄</td><td>줄 1 ~ 10 의 상태 · 색 · 종목 · 목표 기록 · 경과 · 진행 막대 · 구간 · 출발선 · 줄별 취소</td></tr>
+  <tr><td>종목</td><td>경기 순서대로(진행 중 → 예정 시각 순 → 완료) 종목과 색별 목표 기록, 출발선 조명 입력, 구간 보기(자동 생성된 프로그램의 구간표), 올리기</td></tr>
+  <tr><td>기록</td><td>최근 기록과 기록 파일 위치</td></tr>
+</table>
+
+<h2>7. 안전 설계</h2>
+<ul>
+  <li><b>올리는 것만으로는 출발하지 않는다.</b> 전송은 항상 '출발 신호 대기'로 하고, 출발은 사람이 한다. 자동 올리기도 대기까지만 한다.</li>
+  <li>조명 전원 · 밝기는 건드리지 않는다. 취소는 이 콘솔에서 올린 줄만 한다. WaveLight 화면에서 올린 줄은 표시만 한다.</li>
+  <li>전송 전에 확인한다: 상태 응답의 검사 합, 한 바퀴 조명 400개, 빈 줄 수. 모자라면 아무것도 보내지 않는다.</li>
+  <li>컨트롤러 조작(올리기 · Fire · 취소)은 한 번에 하나씩 순서대로 처리한다.</li>
+  <li>전송 요청은 다시 보내지 않는다(중복 전송 방지). 상태 조회만 한 번 더 시도한다.</li>
+  <li>콘솔은 그 PC 에서만 열리고, 다른 웹 페이지가 보낸 요청은 받지 않는다.</li>
+  <li>인터넷이 끊기면 마지막으로 받은 내용으로 계속 운영할 수 있다.</li>
+</ul>
+
+<h2>8. 기록</h2>
+<p>에이전트는 한 일을 날짜별 파일(<code>logs/wavelight-agent-YYYY-MM-DD.log</code>)에 남긴다: 서버 수신, 경기 상태 변화, 전송(줄 · 색 · 기록 · 구간 수 · 조명 거리 · 컨트롤러 응답), 전송 뒤 줄 상태, Fire, 종료(출발 뒤 걸린 시간과 목표), 취소.</p>
+<pre>[2026-11-21 18:36:25] 올리기 시작(자동): 800m Men Senior — 3줄 · 출발선 조명 0 · 출발 신호 대기
+[2026-11-21 18:36:25]   줄 1 초록 1:48 (4구간 · 조명 800m · 108.00초) → 컨트롤러 응답 200 ACK
+[2026-11-21 18:36:26] 올리기 완료: 800m Men Senior — 줄 1 상태 2(출발 신호 대기) · … · 조명 전원 켜짐
+[2026-11-21 18:36:31] Fire: 줄 1 · 2 · 3 → 컨트롤러 응답 200 빈 응답 · 진행 중 3줄
+[2026-11-21 18:38:19] 끝남: 줄 1 초록 · 800m Men Senior — 출발 뒤 1:48.20 (목표 1:48)</pre>
+
+<h2>9. 검증과 한계</h2>
+<ul>
+  <li>자동 시험: 변환 규칙, 프로그램 범위 맞추기, 전송 · 출발 · 취소, 경기 상태 판정, 자동 올리기를 모의 컨트롤러로 시험한다(<code>tests/api/73_pacing_wavelight.test.js</code>, <code>74_wavelight_agent.test.js</code>).</li>
+  <li>실제 장비(2026-11-21): 1500m 3색 전송 · 취소, 800m 3색 자동 올리기 → Fire → 완주. 세 줄이 목표 기록(1:48 · 1:51 · 1:54)에 맞춰 끝났다.</li>
+  <li>한계: 컨트롤러는 조명의 현재 위치를 알려 주지 않으므로 진행 막대는 출발 시각과 프로그램으로 계산한 값이다. 출발 시각을 콘솔 밖에서 알아챌 때는 상태 확인 주기(1초)만큼 오차가 있다. 출발선 위치는 400m 트랙 기준 계산값이며 경기장마다 현장 확인이 필요하다.</li>
+</ul>

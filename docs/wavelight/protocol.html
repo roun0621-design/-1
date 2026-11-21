@@ -1,0 +1,109 @@
+<!-- WaveLight 컨트롤러 프로토콜 분석서 — 본문 조각. 조판은 scripts/wavelight-docs/build.js (표지·글꼴·쪽 번호). 사실의 원본은 docs/WAVELIGHT.md -->
+
+<h2>1. 분석 개요</h2>
+<table>
+  <tr><th style="width:24%">항목</th><th>내용</th></tr>
+  <tr><td>분석 목적</td><td>대회 운영 시스템(PACE RISE : Node)에 저장한 페이싱 설정을 WaveLight 컨트롤러에 자동으로 전송하고, 경기 진행 상태와 조명 상태를 함께 관리하기 위해 컨트롤러가 받는 통신 방식을 파악한다.</td></tr>
+  <tr><td>분석 대상</td><td>WaveLight 컨트롤러의 운영 화면 "Wavelight event tool" (화면 코드 버전 5.0, 하드웨어 버전 5.00, 한 바퀴 조명 400개)</td></tr>
+  <tr><td>접속 방식</td><td>컨트롤러와 같은 네트워크의 PC 에서 <code>http://&lt;컨트롤러 주소&gt;:5001/wavelight</code></td></tr>
+  <tr><td>분석 방법</td><td>① 컨트롤러가 브라우저에 내려 주는 화면 코드(HTML · JavaScript) 열람 ② 상태 조회 응답 관찰 ③ 화면 코드를 그대로 옮긴 모의 컨트롤러에서 동작 재현 ④ 실제 장비에 시험 송신(대기 · 취소 · 출발)</td></tr>
+  <tr><td>분석 일자</td><td>2026년 11월 21일</td></tr>
+</table>
+
+<h2>2. 컨트롤러의 구성</h2>
+<ul>
+  <li>컨트롤러 안에 작은 웹 서버가 있고(포트 5001), 운영자는 브라우저로 운영 화면을 연다. 화면에서 누르는 버튼은 모두 이 웹 서버로 가는 HTTP 요청이다.</li>
+  <li><b>로그인이나 키가 없다.</b> 같은 네트워크에 있는 PC 는 누구나 같은 요청을 보낼 수 있다. 따라서 별도의 장비 개조 없이 소프트웨어만으로 연동할 수 있다.</li>
+  <li>화면에는 조명 줄이 10개 있다. 줄마다 색, 출발선, 구간(거리 · 시간)을 정해 출발시킨다. 한 줄이 페이스 하나에 해당한다.</li>
+  <li>웹 서버는 한 번에 요청 하나씩 처리한다. 화면은 5초마다 상태를 조회한다.</li>
+</ul>
+
+<h2>3. 통신 인터페이스</h2>
+<table>
+  <tr><th style="width:27%">주소</th><th style="width:22%">기능</th><th>요청 본문 (JSON)</th></tr>
+  <tr><td><code>GET /command09</code></td><td>상태 조회</td><td>없음. 응답은 숫자 60개의 배열(5장)</td></tr>
+  <tr><td><code>POST /command06</code></td><td>줄 시작(프로그램 전송)</td><td>줄 번호 · 구간 목록 · 색 · 출발선 · 출발 방식(4장)</td></tr>
+  <tr><td><code>POST /command08</code></td><td>줄 취소</td><td><code>{ "runnerArrayNumber": 줄 번호 }</code></td></tr>
+  <tr><td><code>POST /command12</code></td><td>출발(Fire)</td><td>없음. 출발 신호를 기다리는 줄이 모두 출발</td></tr>
+  <tr><td><code>POST /command10</code></td><td>조명 전원 · 밝기</td><td><code>{ "lampsOnOff": 0|1, "lampPower": 0~100 }</code></td></tr>
+  <tr><td><code>POST /command14</code>, <code>/command17</code></td><td>진행 중 숨김 · 파일럿</td><td><code>{ "runnerArrayNumber", "isHideEnabled" | "isPilotEnabled" }</code></td></tr>
+  <tr><td><code>GET /loadSettingsFromAFile</code></td><td>사용자 지정 출발선</td><td>응답 예: <code>{"customStartingLineLampNumbers": ["351"]}</code></td></tr>
+</table>
+<p class="small">요청 머리글은 <code>Content-Type: application/json;charset=UTF-8</code>. 연동에는 위 표의 앞 네 가지와 마지막 한 가지만 쓴다.</p>
+
+<h2>4. 프로그램 전송 메시지 (command06)</h2>
+<pre>{
+  "runnerArrayNumber": 1,                 // 줄 번호 1~10
+  "Steps": [                              // 구간 목록 — 순서대로 진행
+    { "NumberOfLamps": 400, "Duration": 60000 },
+    { "NumberOfLamps": 400, "Duration": 61000 }
+  ],
+  "colourNumber": 0,                      // 색
+  "startingDelay": 100,                   // 출발선의 조명 번호
+  "startingDelayInSeconds": 255,          // 255 = 출발 신호 대기, 0 = 바로 출발
+  "isHideEnabled": 0,
+  "isPilotEnabled": 0
+}</pre>
+<table>
+  <tr><th style="width:28%">항목</th><th>뜻과 규칙</th></tr>
+  <tr><td><code>Steps[].NumberOfLamps</code></td><td>그 구간에 조명이 가는 거리. 조명 1개가 1m. 16비트(최대 약 65,000).</td></tr>
+  <tr><td><code>Steps[].Duration</code></td><td>그 구간에 걸리는 시간(밀리초). 24비트(최대 약 16,777초).</td></tr>
+  <tr><td><code>colourNumber</code></td><td>0 초록 · 1 파랑 · 2 흰색 · 3 빨강</td></tr>
+  <tr><td><code>startingDelay</code></td><td>결승선을 0 으로 한 출발선 조명 번호. 결승선에서 끝나려면 <code>(400 − 조명 거리 % 400) % 400</code>. 화면의 보기: 400 → 0, 300 → 100, 200 → 200, 100 → 300, 1500 → 100, 1마일 → 391, 2마일 → 381.</td></tr>
+  <tr><td><code>startingDelayInSeconds</code></td><td>255 로 보내면 줄이 출발 신호를 기다리는 상태가 되고, 이후 <code>/command12</code>(Fire) 또는 출발 신호 장치로 출발한다.</td></tr>
+</table>
+<p>응답은 HTTP 200 과 본문 1바이트(ACK, <code>0x06</code>)이다.</p>
+
+<h2>5. 상태 응답 (command09)</h2>
+<p>숫자 60개의 배열이다. 마지막 두 칸이 앞 58칸의 합(상위 · 하위 바이트)이므로, 합이 맞지 않는 응답은 버린다.</p>
+<table>
+  <tr><th style="width:18%">위치</th><th>내용</th></tr>
+  <tr><td>0 ~ 9</td><td>줄 1 ~ 10 의 상태 — <b>0 비어 있음 · 2 출발 신호 대기 · 1 진행 중</b></td></tr>
+  <tr><td>10</td><td>조명 전원 (0 꺼짐)</td></tr>
+  <tr><td>11 ~ 14</td><td>하드웨어 버전 글자 (예: <code>5.00</code>)</td></tr>
+  <tr><td>15 ~ 16</td><td>한 바퀴 조명 수 (예: 400)</td></tr>
+  <tr><td>25</td><td>조명 밝기(%)</td></tr>
+  <tr><td>43, 44</td><td>온도, 선 전력(×0.1)</td></tr>
+  <tr><td>58 ~ 59</td><td>검사 합</td></tr>
+</table>
+
+<figure>
+<svg viewBox="0 0 720 120" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#0E0E10"/></marker></defs>
+  <g font-size="13" text-anchor="middle">
+    <rect x="20" y="38" width="150" height="44" rx="6" fill="#fff" stroke="#0E0E10"/><text x="95" y="65">0 비어 있음</text>
+    <rect x="285" y="38" width="150" height="44" rx="6" fill="#fff" stroke="#0E0E10"/><text x="360" y="65">2 출발 신호 대기</text>
+    <rect x="550" y="38" width="150" height="44" rx="6" fill="#C24A2E" stroke="#C24A2E"/><text x="625" y="65" fill="#fff">1 진행 중</text>
+    <line x1="170" y1="52" x2="283" y2="52" stroke="#0E0E10" marker-end="url(#a)"/><text x="227" y="44" font-size="11">command06 (255)</text>
+    <line x1="285" y1="70" x2="172" y2="70" stroke="#0E0E10" marker-end="url(#a)"/><text x="227" y="88" font-size="11">command08</text>
+    <line x1="435" y1="60" x2="548" y2="60" stroke="#0E0E10" marker-end="url(#a)"/><text x="492" y="52" font-size="11">command12 (Fire)</text>
+    <path d="M625,82 C625,116 95,116 95,84" fill="none" stroke="#0E0E10" marker-end="url(#a)"/><text x="360" y="112" font-size="11">프로그램이 끝나면 스스로 비워짐 (또는 command08)</text>
+  </g>
+</svg>
+<figcaption>그림 1. 줄 상태의 변화</figcaption>
+</figure>
+
+<h2>6. 프로그램 파일(.pc2)</h2>
+<ul>
+  <li>화면의 Complex 창에서 <code>Load file</code> 로 읽는 파일이다. 조명 한 줄이 파일 하나이며 내용은 JSON 배열이다: <code>[{"step-distance": "400", "step-pace": 60.0}, …]</code> — 거리(m)와 그 구간의 시간(초).</li>
+  <li>파일은 브라우저가 읽을 뿐 컨트롤러에 저장되지 않는다. 즉 <b>파일을 넣어 두면 자동으로 읽히는 폴더는 없다.</b> 자동 전송은 4장의 메시지로 해야 한다.</li>
+  <li>Complex 창을 닫을 때(Confirm) 다음 구간이 있으면 창이 닫히지 않는다: <b>한 구간이 19.2초 미만</b>이거나, <b>초 × 거리 × 2.5 가 16,777,000 을 넘는</b> 구간(예: 10,000m 를 한 구간으로). 구간 칸은 56개이다.</li>
+</ul>
+
+<h2>7. 실제 장비 확인 결과 (2026-11-21)</h2>
+<table>
+  <tr><th style="width:30%">시험</th><th style="width:32%">보낸 것</th><th>관찰</th></tr>
+  <tr><td>한 줄 전송 후 취소</td><td>줄 1, 1000m 180초, 초록, 출발선 200, 대기</td><td>응답 200(ACK), 상태 2 → 취소 후 0</td></tr>
+  <tr><td>한 줄 전송 후 출발</td><td>줄 1, 400m 60초 → Fire</td><td>상태 2 → 1, 출발 뒤 56~61초 사이에 스스로 0. 조명 점등 육안 확인</td></tr>
+  <tr><td>세 줄 전송 후 취소</td><td>1500m, 3색(3:48 · 3:53 · 3:58), 4구간, 출발선 100</td><td>세 줄 모두 응답 200(ACK), 상태 2</td></tr>
+  <tr><td>세 줄 전송 후 출발 · 완주</td><td>800m, 3색(1:48 · 1:51 · 1:54), 4구간 → Fire</td><td>세 줄 상태 1, 출발 뒤 1:48.2 · 1:51.2 · 1:54.2 에 차례로 0 (상태 확인 주기 1초)</td></tr>
+</table>
+
+<h2>8. 연동할 때의 유의 사항</h2>
+<ul>
+  <li>인증이 없으므로 컨트롤러 네트워크에는 운영 PC 만 연결한다.</li>
+  <li>운영 화면을 여는 것만으로 조명 전원이 꺼져 있으면 <code>/command10</code>(전원 끔)이 한 번 나간다. 연동 프로그램은 화면을 열지 않고 필요한 요청만 보낸다.</li>
+  <li>시간 단위는 장비 설정에 따른다. 이 장비는 "구간 전체 초" 방식이다. 다른 장비에 연결할 때는 설정 파일(<code>static/js/wavelight.js</code>)을 먼저 확인한다.</li>
+  <li>3000m 장애물은 물웅덩이 구간에서 선수가 달리는 거리(121.41m)와 조명이 가는 거리(100m)가 달라, 조명 기준 2,850m · 15구간으로 환산한다. 출발선은 계산값 350 이며 이 장비에는 사용자 지정 출발선 351 이 저장되어 있다.</li>
+  <li>2000m 장애물의 환산 거리와 400개가 아닌 조명 구성은 확인하지 않았다.</li>
+</ul>

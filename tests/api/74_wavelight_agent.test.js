@@ -33,6 +33,7 @@ function fakeController() {
             const body = b ? JSON.parse(b) : {}; posts.push({ url: req.url, body, type: req.headers['content-type'] });
             if (req.url === '/command06') slots[body.runnerArrayNumber - 1] = body.startingDelayInSeconds === 255 ? 2 : 1;
             if (req.url === '/command08') slots[body.runnerArrayNumber - 1] = 0;
+            if (req.url === '/command12') for (let i = 0; i < 10; i++) if (slots[i] === 2) slots[i] = 1;      // Fire: 대기 → 진행
             res.end('[]');
         });
     });
@@ -47,6 +48,8 @@ describe('WaveLight 프로그램 범위 · 에이전트', () => {
         const save = async (event_name, colors) => (await request(app).post('/api/pacing').send({ admin_key: ADMIN, competition_id: fx.comp, event_name, notice: '', colors })).body.id;
         fx.cSC = await save('3000mSC (남)', [{ color_key: 'green', segments: segs([[3000, 510]]) }, { color_key: 'red', segments: segs([[3000, 525]]) }]);
         fx.c10k = await save('10,000m (남) [대학부]', [{ color_key: 'blue', segments: segs([[10000, 1850]]) }, { color_key: 'white', segments: segs([[10000, 0]]) }]);
+        await db.run("INSERT INTO event (competition_id, name, category, gender, division, round_type, round_status, sort_order) VALUES (?,?, 'track', 'M', '', 'final', 'created', 1)", fx.comp, '3000mSC');
+        fx.evSC = (await db.get("SELECT id FROM event WHERE competition_id=? AND name='3000mSC'", fx.comp)).id;
         fx.ctl = await fakeController();
         fx.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-agent-'));
         fx.web = await new Promise(r => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
@@ -143,7 +146,7 @@ describe('WaveLight 프로그램 범위 · 에이전트', () => {
         await A.syncOnce(fx.cfg);
         fx.page = await A.startPage(fx.cfg);
         const base = 'http://127.0.0.1:' + fx.page.address().port;
-        expect(await (await fetch(base + '/')).text()).toContain('WaveLight 보내기');
+        expect(await (await fetch(base + '/')).text()).toContain('WaveLight 운영 콘솔');
         const st = await (await fetch(base + '/api/state')).json();
         expect(st.controller.lampsInRound).toBe(400); expect(st.events.find(e => e.id === fx.cSC).start_lamp).toBe(351);
         const n = fx.ctl.posts.length;
@@ -151,5 +154,70 @@ describe('WaveLight 프로그램 범위 · 에이전트', () => {
         expect(no.status).toBe(403);
         const cross = await fetch(base + '/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-PaceRise-Agent': '1', Origin: 'https://example.com' }, body: JSON.stringify({ event_id: fx.cSC }) });
         expect(cross.status).toBe(403); expect(fx.ctl.posts.length).toBe(n);
+    });
+
+    it('콘솔 — Fire 로 출발, 끝나면 스스로 비워지는 것을 알아챔, 한 일은 기록 파일에', async () => {
+        fx.ctl.slots.fill(0); A.lines.clear(); A.LOG.dir = path.join(fx.dir, 'logs');
+        const sc = (await A.fetchPlan(fx.cfg)).events.find(e => e.id === fx.cSC);
+        expect(await A.fire(fx.cfg, { settleMs: 0 })).toMatchObject({ ok: false, error: '출발 신호를 기다리는 줄이 없습니다' });
+        await A.sendEvent(fx.cfg, sc, { settleMs: 0 });
+        const f = await A.fire(fx.cfg, { settleMs: 0 });
+        expect(f).toMatchObject({ ok: true, started: [1, 2] });
+        expect(fx.ctl.posts.filter(x => x.url === '/command12')).toHaveLength(1);
+        const st = await A.publicState(fx.cfg);
+        expect(st.lines[0]).toMatchObject({ slot: 1, state: 1, mine: true, label: '3000mSC Men', color_key: 'green', steps: 15, step: 1, start_lamp: 351 });
+        expect(st.lines[0].fired_at).toBeGreaterThan(0); expect(st.lines[4]).toEqual({ slot: 5, state: 0, mine: false });
+        expect(st.events.find(e => e.id === fx.cSC).files[0].steps).toHaveLength(15);          // 구간 보기용
+        for (const l of A.lines.values()) l.sentAt -= 5000;
+        fx.ctl.slots[0] = 0; fx.ctl.slots[1] = 0;                                              // 컨트롤러가 스스로 비움(끝남)
+        await A.readStatus(fx.cfg);
+        expect(A.lines.size).toBe(0);
+        const logs = fs.readdirSync(path.join(fx.dir, 'logs'));
+        expect(logs).toHaveLength(1); expect(logs[0]).toMatch(/^wavelight-agent-\d{4}-\d{2}-\d{2}\.log$/);
+        const text = fs.readFileSync(path.join(fx.dir, 'logs', logs[0]), 'utf8');
+        expect(text).toMatch(/올리기 시작: 3000mSC Men — 2줄 · 출발선 조명 351 · 출발 신호 대기/);
+        expect(text).toMatch(/줄 1 초록 8:30 \(15구간 · 조명 2850m · 509\.98초\) → 컨트롤러 응답 200/);
+        expect(text).toMatch(/올리기 완료: 3000mSC Men — 줄 1 상태 2\(출발 신호 대기\) · 줄 2 상태 2\(출발 신호 대기\)/);
+        expect(text).toMatch(/Fire: 줄 1 · 2 → 컨트롤러 응답 200/);
+        expect(text).toMatch(/끝남: 줄 1 초록 · 3000mSC Men — 출발 뒤/);
+        // 올리는 도중에 Fire 가 들어와도 올리기가 끝난 뒤에 처리된다
+        A.lines.clear(); const m = fx.ctl.posts.length;
+        const both = await Promise.all([A.serial(() => A.sendEvent(fx.cfg, sc, { settleMs: 60 })), A.serial(() => A.fire(fx.cfg, { settleMs: 0 }))]);
+        expect(both[0].lines.map(l => l.state)).toEqual([2, 2]); expect(both[1].started).toEqual([1, 2]);
+        expect(fx.ctl.posts.slice(m).map(x => x.url)).toEqual(['/command06', '/command06', '/command12']);
+        fx.ctl.slots.fill(0); A.lines.clear();
+        A.LOG.dir = '';
+    });
+
+    it('콘솔 — 경기 진행 상태와 맞춰 보기: rounds · 한 문장 · 진행 중으로 바뀌는 순간 자동 올리기', async () => {
+        const url = '/api/pacing/wavelight.json?competition_id=' + fx.comp;
+        const p1 = (await request(app).get(url)).body;
+        const sc1 = p1.events.find(e => e.id === fx.cSC);
+        expect(sc1.rounds).toEqual([{ event_id: fx.evSC, round_type: 'final', division: '', status: 'created', time: null, date: null }]);
+        expect(p1.events.find(e => e.id === fx.c10k).rounds).toEqual([]);                        // 대회에 그 종목이 없으면 빈 목록
+        expect(A.raceOf(sc1)).toMatchObject({ status: 'next', text: '결승 예정' });
+        expect(A.syncSummary(p1, [])).toMatchObject({ level: 'idle', next_id: fx.cSC });
+        expect(A.syncSummary(p1, [{ event_id: fx.cSC, state: 2 }]).level).toBe('ok');
+        await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", fx.evSC);
+        const p2 = (await request(app).get(url)).body;
+        expect(p2.rev).toBe(p1.rev);                                                           // 경기 상태는 파일 지문에 들어가지 않는다
+        expect(A.raceOf(p2.events.find(e => e.id === fx.cSC))).toMatchObject({ status: 'live', text: '결승 진행 중' });
+        expect(A.syncSummary(p2, [])).toMatchObject({ level: 'warn' }); expect(A.syncSummary(p2, []).text).toContain('조명이 올라가 있지 않습니다');
+        expect(A.syncSummary(p2, [{ event_id: fx.cSC, state: 2 }])).toMatchObject({ level: 'ok', text: '3000mSC Men — 조명이 출발 신호를 기다립니다' });
+        expect(A.syncSummary(p2, [{ event_id: fx.cSC, state: 1 }])).toMatchObject({ level: 'ok', text: '3000mSC Men — 경기와 조명이 함께 진행 중입니다' });
+        expect(A.syncSummary(p2, [{ event_id: fx.c10k, state: 2 }]).level).toBe('warn');          // 다른 종목이 올라가 있음
+        // 자동 올리기 — 상태가 바뀌는 순간에만, 한 번만
+        await db.run("UPDATE event SET round_status='created' WHERE id=?", fx.evSC);
+        fx.ctl.slots.fill(0); A.lines.clear();
+        await A.syncOnce(fx.cfg); A.state.auto = true;
+        const n = fx.ctl.posts.length;
+        await A.syncOnce(fx.cfg); expect(fx.ctl.posts.length).toBe(n);
+        await db.run("UPDATE event SET round_status='in_progress' WHERE id=?", fx.evSC);
+        await A.syncOnce(fx.cfg);
+        expect(fx.ctl.posts.slice(n).map(x => x.url)).toEqual(['/command06', '/command06']);
+        expect([...A.lines.keys()]).toEqual([1, 2]); expect(fx.ctl.slots.slice(0, 2)).toEqual([2, 2]);   // 대기까지만 — 출발은 사람이
+        await A.syncOnce(fx.cfg); expect(fx.ctl.posts.length).toBe(n + 2);
+        expect((await A.publicState(fx.cfg)).sync).toMatchObject({ level: 'ok' });
+        A.state.auto = false; await A.cancelSent(fx.cfg);
     });
 });
